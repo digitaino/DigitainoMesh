@@ -11,7 +11,8 @@ settings:
     SWIFT_VERSION: "6.2"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "RU9VTBSCM5"
+    CODE_SIGN_STYLE: Automatic
 
 packages:
   MeshCore:
@@ -94,10 +95,10 @@ targets:
       configs:
         Debug:
           INFOPLIST_FILE: PocketMesh/Info-Debug.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app.debug
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh
         Release:
           INFOPLIST_FILE: PocketMesh/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh
 
   PocketMeshTests:
     type: bundle.unit-test
@@ -130,10 +131,10 @@ targets:
       configs:
         Debug:
           INFOPLIST_FILE: PocketMeshWidgets/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app.debug.widgets
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.widgets
         Release:
           INFOPLIST_FILE: PocketMeshWidgets/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app.widgets
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.widgets
 
 schemes:
   PocketMesh:
