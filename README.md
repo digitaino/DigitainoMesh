@@ -1,30 +1,15 @@
-# PocketMesh
+# PocketMesh (Fork)
 
-An unofficial MeshCore client built for iOS in Swift.   
-Disclaimer: Built entirely with AI.
+A personal fork of [PocketMesh](https://github.com/Avi0n/PocketMesh), an unofficial MeshCore client built for iOS in Swift.
 
-Join the beta on TestFlight or sideload using unsigned IPA files under [Releases](https://github.com/Avi0n/PocketMesh/releases).
+> **Note:** This is an independent fork. For the official app, TestFlight beta, and releases, visit the [upstream repository](https://github.com/Avi0n/PocketMesh).
 
-<a href="https://testflight.apple.com/join/YjGNDTaE">
-  <img src="https://img.shields.io/badge/Download_on-TestFlight-0D96F6?style=for-the-badge&logo=apple&logoColor=white" alt="Download on TestFlight">
-</a>
+## Fork Additions
 
-## Screenshots
+Features added in this fork on top of upstream:
 
-<table>
-  <tr>
-    <td><img width="200" alt="Chats" src="https://github.com/user-attachments/assets/1f6e061e-646d-4c1f-b813-6539df64e4f5"/></td>
-    <td><img width="200" alt="Conversation" src="https://github.com/user-attachments/assets/d0fc7070-e9bd-4514-ab71-55fead4718e8"/></td>
-    <td><img width="200" alt="Contacts" src="https://github.com/user-attachments/assets/96b77a6e-33a5-43c5-a112-e970fcb379a2"/></td>
-    <td><img width="200" alt="Map" src="https://github.com/user-attachments/assets/af759be6-65ae-406c-ae62-ca44cfd468d6"/></td>
-  </tr>
-  <tr>
-    <td><img width="200" alt="Settings" src="https://github.com/user-attachments/assets/f14b9d53-57b0-4a0c-9767-a0542d841d64"/></td>
-    <td><img width="200" alt="Line of Sight" src="https://github.com/user-attachments/assets/f59652d9-81b1-4ceb-964b-cd2cd9ff7f49"/></td>
-    <td><img width="200" alt="LoS Analysis" src="https://github.com/user-attachments/assets/e3f47192-682d-4e6a-88ca-b06be0f60e17"/></td>
-    <td><img width="200" alt="RX Log" src="https://github.com/user-attachments/assets/24a7abc7-9dcc-4139-95a6-eada068b5dcd"/></td>
-  </tr>
-</table>
+- **Message Route Map** — Visualize the geographic path a specific message took through mesh repeaters on an interactive map with hop-by-hop detail
+- **Traffic Map** — Aggregate received RF packets over selectable time windows (1h, 24h, 7d, all time) and visualize mesh traffic patterns with sized/colored bubble annotations on repeaters and weighted route lines between hops
 
 ## Features
 
@@ -52,11 +37,13 @@ Join the beta on TestFlight or sideload using unsigned IPA files under [Releases
 - Map layers (standard, satellite, hybrid)
 
 ### Network Tools
-- **Trace Path** - Route through specific repeaters with option to save paths
-- **Line of Sight** - Terrain analysis with Fresnel zone and RF parameters
-- **RX Log** - Live packet capture
-- **Noise Floor Monitor** - Live dBm chart with signal quality stats
-- **CLI Terminal** - Remote command-line access to repeaters
+- **Trace Path** — Route through specific repeaters with option to save paths
+- **Line of Sight** — Terrain analysis with Fresnel zone and RF parameters
+- **Message Route Map** — Geographic visualization of a message's path through repeaters *(fork)*
+- **Traffic Map** — Mesh traffic heatmap with repeater bubbles and route lines *(fork)*
+- **RX Log** — Live packet capture
+- **Noise Floor Monitor** — Live dBm chart with signal quality stats
+- **CLI Terminal** — Remote command-line access to repeaters
 
 ### Remote Node Management
 - Repeater status (battery, uptime, neighbors, telemetry)
@@ -75,23 +62,21 @@ Join the beta on TestFlight or sideload using unsigned IPA files under [Releases
 - Location sharing controls
 - Config import/export
 
-
 ## Requirements
 
--   **iOS 18.0+**
--   **Xcode 26.0+**
--   **MeshCore-compatible hardware**
+- **iOS 18.0+**
+- **Xcode 26.0+**
+- **MeshCore-compatible hardware**
 
 ## Getting Started
 
-1.  Install [XcodeGen](https://github.com/yonaskolb/XcodeGen).
-2.  Run `xcodegen generate`.
-3.  Open `PocketMesh.xcodeproj`.
+1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+2. Run `xcodegen generate`.
+3. Open `PocketMesh.xcodeproj`.
 
 For more details, see the [Development Guide](docs/Development.md).
 
-  
 ## License
 
-PocketMesh - GNU General Public License v3.0   
-Swift MeshCore - MIT
+PocketMesh — GNU General Public License v3.0
+Swift MeshCore — MIT
