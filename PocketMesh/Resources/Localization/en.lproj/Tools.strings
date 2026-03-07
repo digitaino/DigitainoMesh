@@ -709,3 +709,53 @@
 
 /* Accessibility value for completion suggestions - %lld is count, %@ is selected */
 "tools.cli.completionSuggestionsValue" = "%lld available, %@ selected";
+
+// MARK: - Traffic Map
+
+/* Location: ToolsView.swift - Tool selection label */
+"tools.trafficMap" = "Traffic Map";
+
+/* Location: TrafficHeatmapView.swift - No data state title */
+"tools.trafficMap.noData" = "No Traffic Data";
+
+/* Location: TrafficHeatmapView.swift - No data state description */
+"tools.trafficMap.noDataDescription" = "No packets found in the selected time period.";
+
+/* Location: TrafficHeatmapView.swift - No located repeaters state */
+"tools.trafficMap.noLocatedRepeaters" = "No Located Repeaters";
+
+/* Location: TrafficHeatmapView.swift - No located repeaters description */
+"tools.trafficMap.noLocatedRepeatersDescription" = "None of the repeaters in the traffic data have GPS coordinates.";
+
+/* Location: TrafficHeatmapView.swift - Summary banner, %lld repeaters, %lld segments, %lld packets */
+"tools.trafficMap.summary" = "%lld repeaters · %lld segments · %lld packets";
+
+/* Location: TrafficHeatmapView.swift - Time period label */
+"tools.trafficMap.timePeriod" = "Time Period";
+
+/* Location: TrafficHeatmapViewModel.swift - Time period: last hour */
+"tools.trafficMap.period.lastHour" = "Last Hour";
+
+/* Location: TrafficHeatmapViewModel.swift - Time period: last 24 hours */
+"tools.trafficMap.period.last24Hours" = "Last 24 Hours";
+
+/* Location: TrafficHeatmapViewModel.swift - Time period: last 7 days */
+"tools.trafficMap.period.last7Days" = "Last 7 Days";
+
+/* Location: TrafficHeatmapViewModel.swift - Time period: all time */
+"tools.trafficMap.period.allTime" = "All Time";
+
+/* Location: TrafficHeatmapView.swift - Center on data button accessibility */
+"tools.trafficMap.centerOnData" = "Center on data";
+
+/* Location: TrafficBubblePinView.swift - Bubble detail: packet count */
+"tools.trafficMap.packets" = "Packets: %lld";
+
+/* Location: TrafficBubblePinView.swift - Bubble detail: average SNR */
+"tools.trafficMap.avgSnr" = "Avg SNR: %@ dB";
+
+/* Location: TrafficBubblePinView.swift - Bubble detail: last seen */
+"tools.trafficMap.lastSeen" = "Last seen: %@";
+
+/* Location: TrafficBubblePinView.swift - Accessibility: repeater bubble */
+"tools.trafficMap.bubbleAccessibility" = "%@, %lld packets, signal %@";

@@ -11,6 +11,7 @@ struct ToolsView: View {
         case rxLog
         case noiseFloor
         case nodeDiscovery
+        case trafficMap
         case cli
 
         var title: String {
@@ -20,6 +21,7 @@ struct ToolsView: View {
             case .rxLog: L10n.Tools.Tools.rxLog
             case .noiseFloor: L10n.Tools.Tools.noiseFloor
             case .nodeDiscovery: L10n.Tools.Tools.nodeDiscovery
+            case .trafficMap: L10n.Tools.Tools.trafficMap
             case .cli: L10n.Tools.Tools.cli
             }
         }
@@ -31,12 +33,13 @@ struct ToolsView: View {
             case .rxLog: "waveform.badge.magnifyingglass"
             case .noiseFloor: "waveform"
             case .nodeDiscovery: "dot.radiowaves.left.and.right"
+            case .trafficMap: "map.circle"
             case .cli: "terminal"
             }
         }
 
         var requiresRadio: Bool {
-            self != .lineOfSight
+            self != .lineOfSight && self != .trafficMap
         }
     }
 
@@ -168,6 +171,7 @@ struct ToolsView: View {
         case .rxLog: RxLogView()
         case .noiseFloor: NoiseFloorView()
         case .nodeDiscovery: NodeDiscoveryView()
+        case .trafficMap: TrafficHeatmapView()
         case .cli: CLIToolView()
         }
     }
@@ -180,6 +184,7 @@ struct ToolsView: View {
         case .rxLog: RxLogView()
         case .noiseFloor: NoiseFloorView()
         case .nodeDiscovery: NodeDiscoveryView()
+        case .trafficMap: TrafficHeatmapView()
         case .cli: CLIToolView()
         case .none: ContentUnavailableView(L10n.Tools.Tools.selectTool, systemImage: "wrench.and.screwdriver")
         }

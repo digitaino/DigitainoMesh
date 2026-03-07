@@ -131,6 +131,21 @@ extension PersistenceStore {
         try modelContext.save()
     }
 
+    /// Fetch RX log entries for a device since a given date, most recent first.
+    public func fetchRxLogEntries(deviceID: UUID, since: Date) throws -> [RxLogEntryDTO] {
+        let targetDeviceID = deviceID
+        let cutoff = since
+        let descriptor = FetchDescriptor<RxLogEntry>(
+            predicate: #Predicate {
+                $0.deviceID == targetDeviceID &&
+                $0.receivedAt >= cutoff
+            },
+            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)]
+        )
+        let entries = try modelContext.fetch(descriptor)
+        return entries.map { RxLogEntryDTO(from: $0) }
+    }
+
     /// Fetch RX log entries for a device, most recent first.
     public func fetchRxLogEntries(deviceID: UUID, limit: Int = 500) throws -> [RxLogEntryDTO] {
         let targetDeviceID = deviceID

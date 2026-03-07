@@ -3744,6 +3744,8 @@ public enum L10n {
       public static let title = L10n.tr("Tools", "tools.title", fallback: "Tools")
       /// Location: ToolsView.swift - Tool selection label
       public static let tracePath = L10n.tr("Tools", "tools.tracePath", fallback: "Trace Path")
+      /// Location: ToolsView.swift - Tool selection label
+      public static let trafficMap = L10n.tr("Tools", "tools.trafficMap", fallback: "Traffic Map")
       public enum Cli {
         /// Location: CLIToolView.swift - Command cancelled
         public static let cancelled = L10n.tr("Tools", "tools.cli.cancelled", fallback: "Command cancelled")
@@ -4254,6 +4256,50 @@ public enum L10n {
           public static let failed = L10n.tr("Tools", "tools.rxLog.filter.failed", fallback: "Failed")
           /// Location: RxLogViewModel.swift - Route filter: flood only
           public static let floodOnly = L10n.tr("Tools", "tools.rxLog.filter.floodOnly", fallback: "Flood Only")
+        }
+      }
+      public enum TrafficMap {
+        /// Location: TrafficBubblePinView.swift - Bubble detail: average SNR
+        public static func avgSnr(_ p1: Any) -> String {
+          return L10n.tr("Tools", "tools.trafficMap.avgSnr", String(describing: p1), fallback: "Avg SNR: %@ dB")
+        }
+        /// Location: TrafficBubblePinView.swift - Accessibility: repeater bubble
+        public static func bubbleAccessibility(_ p1: Any, _ p2: Int, _ p3: Any) -> String {
+          return L10n.tr("Tools", "tools.trafficMap.bubbleAccessibility", String(describing: p1), p2, String(describing: p3), fallback: "%@, %lld packets, signal %@")
+        }
+        /// Location: TrafficHeatmapView.swift - Center on data button accessibility
+        public static let centerOnData = L10n.tr("Tools", "tools.trafficMap.centerOnData", fallback: "Center on data")
+        /// Location: TrafficBubblePinView.swift - Bubble detail: last seen
+        public static func lastSeen(_ p1: Any) -> String {
+          return L10n.tr("Tools", "tools.trafficMap.lastSeen", String(describing: p1), fallback: "Last seen: %@")
+        }
+        /// Location: TrafficHeatmapView.swift - No data state title
+        public static let noData = L10n.tr("Tools", "tools.trafficMap.noData", fallback: "No Traffic Data")
+        /// Location: TrafficHeatmapView.swift - No data state description
+        public static let noDataDescription = L10n.tr("Tools", "tools.trafficMap.noDataDescription", fallback: "No packets found in the selected time period.")
+        /// Location: TrafficHeatmapView.swift - No located repeaters state
+        public static let noLocatedRepeaters = L10n.tr("Tools", "tools.trafficMap.noLocatedRepeaters", fallback: "No Located Repeaters")
+        /// Location: TrafficHeatmapView.swift - No located repeaters description
+        public static let noLocatedRepeatersDescription = L10n.tr("Tools", "tools.trafficMap.noLocatedRepeatersDescription", fallback: "None of the repeaters in the traffic data have GPS coordinates.")
+        /// Location: TrafficBubblePinView.swift - Bubble detail: packet count
+        public static func packets(_ p1: Int) -> String {
+          return L10n.tr("Tools", "tools.trafficMap.packets", p1, fallback: "Packets: %lld")
+        }
+        /// Location: TrafficHeatmapView.swift - Summary banner, %lld repeaters, %lld segments, %lld packets
+        public static func summary(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
+          return L10n.tr("Tools", "tools.trafficMap.summary", p1, p2, p3, fallback: "%lld repeaters · %lld segments · %lld packets")
+        }
+        /// Location: TrafficHeatmapView.swift - Time period label
+        public static let timePeriod = L10n.tr("Tools", "tools.trafficMap.timePeriod", fallback: "Time Period")
+        public enum Period {
+          /// Location: TrafficHeatmapViewModel.swift - Time period: all time
+          public static let allTime = L10n.tr("Tools", "tools.trafficMap.period.allTime", fallback: "All Time")
+          /// Location: TrafficHeatmapViewModel.swift - Time period: last 24 hours
+          public static let last24Hours = L10n.tr("Tools", "tools.trafficMap.period.last24Hours", fallback: "Last 24 Hours")
+          /// Location: TrafficHeatmapViewModel.swift - Time period: last 7 days
+          public static let last7Days = L10n.tr("Tools", "tools.trafficMap.period.last7Days", fallback: "Last 7 Days")
+          /// Location: TrafficHeatmapViewModel.swift - Time period: last hour
+          public static let lastHour = L10n.tr("Tools", "tools.trafficMap.period.lastHour", fallback: "Last Hour")
         }
       }
     }
