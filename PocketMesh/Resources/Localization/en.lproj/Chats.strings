@@ -800,6 +800,26 @@
 /* Location: MessagePathSheet.swift - Fallback name when device name unavailable */
 "chats.path.receiver.you" = "You";
 
+// MARK: - Message Route Map
+
+/* Location: MessageRouteMapSheet.swift - Navigation title */
+"chats.path.routeMap.title" = "Message Route";
+
+/* Location: MessagePathContent.swift - Button to view route on map */
+"chats.path.routeMap.viewOnMap" = "View Route on Map";
+
+/* Location: MessageRouteMapSheet.swift - Info banner hop count - %d is number of hops */
+"chats.path.routeMap.hops" = "%d hops";
+
+/* Location: MessageRouteMapSheet.swift - Empty state title when no GPS data available */
+"chats.path.routeMap.empty.title" = "No Location Data";
+
+/* Location: MessageRouteMapSheet.swift - Empty state description */
+"chats.path.routeMap.empty.description" = "None of the repeaters in this path have GPS coordinates";
+
+/* Location: MessageRouteMapSheet.swift - Accessibility label for center on route button */
+"chats.path.routeMap.centerOnRoute" = "Center on route";
+
 // MARK: - Repeat Details Sheet
 
 /* Location: RepeatDetailsSheet.swift - Empty state title */

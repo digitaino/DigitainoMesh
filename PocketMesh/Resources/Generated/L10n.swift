@@ -639,6 +639,24 @@ public enum L10n {
           /// Location: MessagePathSheet.swift - Fallback name when device name unavailable
           public static let you = L10n.tr("Chats", "chats.path.receiver.you", fallback: "You")
         }
+        public enum RouteMap {
+          /// Location: MessageRouteMapSheet.swift - Accessibility label for center on route button
+          public static let centerOnRoute = L10n.tr("Chats", "chats.path.routeMap.centerOnRoute", fallback: "Center on route")
+          /// Location: MessageRouteMapSheet.swift - Info banner hop count - %d is number of hops
+          public static func hops(_ p1: Int) -> String {
+            return L10n.tr("Chats", "chats.path.routeMap.hops", p1, fallback: "%d hops")
+          }
+          /// Location: MessageRouteMapSheet.swift - Navigation title
+          public static let title = L10n.tr("Chats", "chats.path.routeMap.title", fallback: "Message Route")
+          /// Location: MessagePathContent.swift - Button to view route on map
+          public static let viewOnMap = L10n.tr("Chats", "chats.path.routeMap.viewOnMap", fallback: "View Route on Map")
+          public enum Empty {
+            /// Location: MessageRouteMapSheet.swift - Empty state description
+            public static let description = L10n.tr("Chats", "chats.path.routeMap.empty.description", fallback: "None of the repeaters in this path have GPS coordinates")
+            /// Location: MessageRouteMapSheet.swift - Empty state title when no GPS data available
+            public static let title = L10n.tr("Chats", "chats.path.routeMap.empty.title", fallback: "No Location Data")
+          }
+        }
         public enum Section {
           /// Location: MessagePathSheet.swift - Section header for path
           public static let header = L10n.tr("Chats", "chats.path.section.header", fallback: "Path")

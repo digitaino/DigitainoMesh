@@ -12,6 +12,7 @@ struct MessagePathContent: View {
     let userLocation: CLLocation?
 
     @State private var copyHapticTrigger = 0
+    @State private var showingRouteMap = false
 
     /// Path hops chunked by hash size, each as (hashData, hexString) pair
     private var pathHops: [(data: Data, hex: String)] {
@@ -85,6 +86,21 @@ struct MessagePathContent: View {
                 }
                 .padding(.top, 8)
                 .sensoryFeedback(.success, trigger: copyHapticTrigger)
+
+                // View Route on Map
+                Button {
+                    showingRouteMap = true
+                } label: {
+                    Label(
+                        L10n.Chats.Chats.Path.RouteMap.viewOnMap,
+                        systemImage: "map"
+                    )
+                }
+                .buttonStyle(.borderless)
+                .padding(.top, 4)
+                .sheet(isPresented: $showingRouteMap) {
+                    MessageRouteMapSheet(message: message)
+                }
             }
         }
     }
