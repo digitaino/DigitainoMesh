@@ -126,6 +126,7 @@ enum RouteAggregator {
             }
 
             // Build per-segment traffic from consecutive hops
+            guard route.hops.count >= 2 else { continue }
             for i in 0..<(route.hops.count - 1) {
                 let a = route.hops[i]
                 let b = route.hops[i + 1]

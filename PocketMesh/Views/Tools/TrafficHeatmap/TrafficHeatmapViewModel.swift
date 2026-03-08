@@ -199,6 +199,7 @@ final class TrafficHeatmapViewModel {
             }
 
             // Build segment traffic from consecutive located hops
+            guard locatedHops.count >= 2 else { continue }
             for i in 0..<(locatedHops.count - 1) {
                 let a = locatedHops[i]
                 let b = locatedHops[i + 1]

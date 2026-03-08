@@ -41,13 +41,13 @@ final class PathLineRenderer: MKPolylineRenderer {
     }
 
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
-        // Save state before super.draw() which may clip the context
-        context.saveGState()
         super.draw(mapRect, zoomScale: zoomScale, in: context)
-        context.restoreGState()
 
         guard showArrowhead,
               let pathOverlay = overlay as? PathLineOverlay else { return }
+
+        // Reset clip path so the arrowhead can draw outside the polyline stroke area
+        context.resetClip()
 
         let arrowColor = strokeColor ?? .systemGray
         ArrowheadDrawing.drawArrowhead(
