@@ -266,8 +266,29 @@ extension ConnectionManager {
 
         // Prevent concurrent connection attempts
         if connectionState == .connecting {
-            logger.info("Connection already in progress, ignoring request for \(deviceID)")
-            return
+            let currentDeviceID = connectingDeviceID ?? reconnectionCoordinator.reconnectingDeviceID
+
+            if currentDeviceID == deviceID {
+                if connectingDeviceID == nil {
+                    // Auto-reconnect same device — refresh UI timeout
+                    connectionIntent = .wantsConnection(forceFullSync: forceFullSync)
+                    persistIntent()
+                    reconnectionCoordinator.restartTimeout(deviceID: deviceID)
+                }
+                logger.info("Connection already in progress for \(deviceID.uuidString.prefix(8)), ignoring")
+                return
+            }
+
+            // Different device — cancel current and fall through
+            logger.info("Cancelling connection to \(currentDeviceID?.uuidString.prefix(8) ?? "unknown") to connect to \(deviceID.uuidString.prefix(8))")
+            connectingDeviceID = nil
+            reconnectionCoordinator.cancelTimeout()
+            reconnectionCoordinator.clearReconnectingDevice()
+            cancelResyncLoop()
+            stopReconnectionWatchdog()
+            await cleanupResources()
+            await transport.disconnect()
+            connectionState = .disconnected
         }
 
         // Handle already-connected cases
@@ -336,6 +357,7 @@ extension ConnectionManager {
 
         // Set connecting state for immediate UI feedback
         connectionState = .connecting
+        connectingDeviceID = deviceID
 
         logger.info("Connecting to device: \(deviceID)")
 
@@ -359,15 +381,20 @@ extension ConnectionManager {
             // Attempt connection with retry
             try await connectWithRetry(deviceID: deviceID, maxAttempts: 4)
         } catch {
-            // Differentiate cancellation in logs
+            guard connectingDeviceID == deviceID else {
+                logger.info("Connection to \(deviceID.uuidString.prefix(8)) superseded")
+                throw error
+            }
             if error is CancellationError {
                 logger.info("Connection cancelled")
             } else {
                 logger.warning("Connection failed: \(error.localizedDescription)")
             }
+            connectingDeviceID = nil
             connectionState = .disconnected
             throw error
         }
+        connectingDeviceID = nil
     }
 
     /// Disconnects from the current device.
@@ -394,6 +421,7 @@ extension ConnectionManager {
         // Cancel any pending auto-reconnect timeout and clear device identity
         reconnectionCoordinator.cancelTimeout()
         reconnectionCoordinator.clearReconnectingDevice()
+        connectingDeviceID = nil
 
         // Cancel any WiFi reconnection in progress
         cancelWiFiReconnection()
@@ -587,7 +615,7 @@ extension ConnectionManager {
         async let existingDeviceResult = newServices.dataStore.fetchDevice(id: deviceID)
         async let autoAddConfigResult = newSession.getAutoAddConfig()
         let existingDevice = try? await existingDeviceResult
-        let autoAddConfig = (try? await autoAddConfigResult) ?? 0
+        let autoAddConfig = (try? await autoAddConfigResult) ?? MeshCore.AutoAddConfig(bitmask: 0)
 
         let repeatFreqRanges: [MeshCore.FrequencyRange] = deviceCapabilities.clientRepeat
             ? (try? await newSession.getRepeatFreq()) ?? []

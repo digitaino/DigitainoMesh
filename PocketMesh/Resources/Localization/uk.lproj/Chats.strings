@@ -154,7 +154,7 @@
 "chats.contactInfo.hasLocation" = "Має місцезнаходження";
 
 /* Location: ChatView.swift - Input bar placeholder for direct messages */
-"chats.input.placeholder.directMessage" = "Особисте повідомлення";
+"chats.input.placeholder.directMessage" = "Пряме повідомлення";
 
 // MARK: - Channel Chat View
 
@@ -678,6 +678,8 @@
 
 /* Location: ChatInputBar.swift - Accessibility hint when message is empty */
 "chats.input.typeFirst" = "Спочатку введи повідомлення";
+"chats.input.encrypted" = "Зашифровано";
+"chats.input.notEncrypted" = "Не зашифровано";
 
 // MARK: - Message Path Sheet
 

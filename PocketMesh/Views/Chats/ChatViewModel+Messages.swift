@@ -449,6 +449,8 @@ extension ChatViewModel {
             LinkPreviewService.extractFirstURL(from: text)
         }.value
 
+        cachedURLs[messageID] = detectedURL
+
         guard let index = displayItemIndexByID[messageID] else { return }
         let item = displayItems[index]
         displayItems[index] = MessageDisplayItem(
@@ -706,63 +708,67 @@ extension ChatViewModel {
         return nil
     }
 
-    /// Load last message previews for all conversations
+    /// Load last message previews for all conversations.
+    /// Uses batch fetch methods to minimize actor hops (2 hops instead of N).
     func loadLastMessagePreviews() async {
         guard let dataStore else { return }
 
-        // Load contact message previews
-        for contact in conversations {
+        // Batch fetch contact message previews (single actor hop)
+        if !conversations.isEmpty {
             do {
-                // Fetch extra messages in case recent ones are reactions
-                let messages = try await dataStore.fetchMessages(contactID: contact.id, limit: 10)
+                let contactMessages = try await dataStore.fetchLastMessages(contactIDs: conversations.map(\.id), limit: 10)
+                for contact in conversations {
+                    guard let messages = contactMessages[contact.id] else { continue }
 
-                // Find the last non-reaction message (skip outgoing reactions unless failed)
-                let lastMessage = messages.last { message in
-                    guard message.direction == .outgoing,
-                          ReactionParser.parseDM(message.text) != nil else {
-                        return true
+                    // Find the last non-reaction message (skip outgoing reactions unless failed)
+                    let lastMessage = messages.last { message in
+                        guard message.direction == .outgoing,
+                              ReactionParser.parseDM(message.text) != nil else {
+                            return true
+                        }
+                        return message.status == .failed
                     }
-                    return message.status == .failed
-                }
 
-                if let lastMessage {
-                    lastMessageCache[contact.id] = lastMessage
+                    if let lastMessage {
+                        lastMessageCache[contact.id] = lastMessage
+                    }
                 }
             } catch {
-                // Silently ignore errors for preview loading
+                logger.warning("Failed to load contact message previews: \(error)")
             }
         }
 
-        // Load channel message previews (filter out blocked senders)
-        let blockedNames = await syncCoordinator?.blockedSenderNames() ?? []
-        for channel in channels {
+        // Batch fetch channel message previews (single actor hop)
+        if !channels.isEmpty {
+            let blockedNames = await syncCoordinator?.blockedSenderNames() ?? []
             do {
-                // Fetch extra messages in case recent ones are from blocked senders
-                let messages = try await dataStore.fetchMessages(deviceID: channel.deviceID, channelIndex: channel.index, limit: 20)
+                let channelParams = channels.map { (deviceID: $0.deviceID, channelIndex: $0.index, id: $0.id) }
+                let channelMessages = try await dataStore.fetchLastChannelMessages(channels: channelParams, limit: 20)
+                for channel in channels {
+                    guard let messages = channelMessages[channel.id] else { continue }
 
-                // Filter out messages from blocked senders and outgoing reactions
-                let lastMessage = messages.last { message in
-                    // Skip blocked senders
-                    if let senderName = message.senderNodeName,
-                       blockedNames.contains(senderName) {
-                        return false
+                    // Filter out messages from blocked senders and outgoing reactions
+                    let lastMessage = messages.last { message in
+                        if let senderName = message.senderNodeName,
+                           blockedNames.contains(senderName) {
+                            return false
+                        }
+                        if message.direction == .outgoing,
+                           ReactionParser.parse(message.text) != nil,
+                           message.status != .failed {
+                            return false
+                        }
+                        return true
                     }
-                    // Skip outgoing reactions (unless failed)
-                    if message.direction == .outgoing,
-                       ReactionParser.parse(message.text) != nil,
-                       message.status != .failed {
-                        return false
-                    }
-                    return true
-                }
 
-                if let lastMessage {
-                    lastMessageCache[channel.id] = lastMessage
-                } else {
-                    lastMessageCache.removeValue(forKey: channel.id)
+                    if let lastMessage {
+                        lastMessageCache[channel.id] = lastMessage
+                    } else {
+                        lastMessageCache.removeValue(forKey: channel.id)
+                    }
                 }
             } catch {
-                // Silently ignore errors for preview loading
+                logger.warning("Failed to load channel message previews: \(error)")
             }
         }
     }
@@ -907,16 +913,29 @@ extension ChatViewModel {
     // MARK: - Display Items
 
     /// Build display items with pre-computed properties.
+    /// Uses cached URL results for previously processed messages and defers
+    /// async detection for new messages to avoid blocking the main actor.
     func buildDisplayItems() {
         messagesByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
 
-        let urls = messages.map { LinkPreviewService.extractFirstURL(from: $0.text) }
+        var uncachedMessageIDs: [(UUID, String)] = []
 
         displayItems = messages.enumerated().map { index, message in
             // Compute all display flags in single pass to avoid redundant array lookups
             let previous: MessageDTO? = index > 0 ? messages[index - 1] : nil
             let flags = Self.computeDisplayFlags(for: message, previous: previous)
-            let url = urls[index]
+
+            // Use cached URL if available, otherwise nil (async detection below)
+            let url: URL?
+            if let cached = cachedURLs[message.id] {
+                url = cached
+            } else if previewStates[message.id] != nil || loadedPreviews[message.id] != nil {
+                // Message already had a preview fetched — URL was already detected
+                url = nil
+            } else {
+                url = nil
+                uncachedMessageIDs.append((message.id, message.text))
+            }
 
             return MessageDisplayItem(
                 messageID: message.id,
@@ -941,6 +960,19 @@ extension ChatViewModel {
 
         // Build O(1) index lookup
         displayItemIndexByID = Dictionary(uniqueKeysWithValues: displayItems.enumerated().map { ($0.element.messageID, $0.offset) })
+
+        // Async URL detection for messages without cached results
+        if !uncachedMessageIDs.isEmpty {
+            let messagesToDetect = uncachedMessageIDs
+            Task {
+                for (messageID, text) in messagesToDetect {
+                    await updateURLForDisplayItem(messageID: messageID, text: text)
+                }
+            }
+        }
+
+        // Pre-decode legacy preview images off the main thread
+        decodeLegacyPreviewImages()
     }
 
     /// Get full message DTO for a display item.

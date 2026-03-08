@@ -504,6 +504,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "Коли сховище заповнене, замінити найстаріший необраний вузол";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Макс. відстань хопів";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "Без обмежень";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Тільки прямі";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 хоп";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d хопів";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Вузли за межами обраної відстані хопів не будуть додані автоматично.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -977,6 +995,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "GPS пристрою";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "GPS пристрою";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "Увімкнути GPS пристрою";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "Вмикає або вимикає вбудований GPS радіостанції. Збереження місцезнаходження вручну на мапі вимикає GPS пристрою.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Публічний доступ";

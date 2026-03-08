@@ -4,6 +4,7 @@ import PocketMeshServices
 struct RoomConversationRow: View {
     @Environment(\.appState) private var appState
     let session: RemoteNodeSessionDTO
+    var referenceDate: Date?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -27,7 +28,7 @@ struct RoomConversationRow: View {
                     }
 
                     if let date = session.lastMessageDate {
-                        ConversationTimestamp(date: date)
+                        ConversationTimestamp(date: date, referenceDate: referenceDate)
                     }
                 }
 

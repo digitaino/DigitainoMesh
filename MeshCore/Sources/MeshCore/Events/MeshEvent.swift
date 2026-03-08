@@ -108,7 +108,7 @@ public enum MeshEvent: Sendable {
     /// Indicates that auto-add configuration was received.
     ///
     /// Emitted in response to ``MeshCoreSession/getAutoAddConfig()``.
-    case autoAddConfig(UInt8)
+    case autoAddConfig(AutoAddConfig)
 
     /// Indicates that allowed repeat frequency ranges were received.
     ///
@@ -1050,6 +1050,21 @@ public struct DiscoverResponse: Sendable, Equatable {
         self.pathLength = pathLength
         self.tag = tag
         self.publicKey = publicKey
+    }
+}
+
+/// Auto-add configuration received from the device.
+///
+/// Bundles the bitmask (which node types to auto-add) with the max hops filter.
+public struct AutoAddConfig: Sendable, Equatable {
+    /// Bitmask controlling auto-add behavior (0x01=overwrite, 0x02=contacts, 0x04=repeaters, 0x08=rooms).
+    public let bitmask: UInt8
+    /// Maximum hops for auto-add filtering. 0 = no limit, 1 = direct only, N = up to N-1 hops (max 64).
+    public let maxHops: UInt8
+
+    public init(bitmask: UInt8, maxHops: UInt8 = 0) {
+        self.bitmask = bitmask
+        self.maxHops = maxHops
     }
 }
 

@@ -82,6 +82,8 @@ actor MockPersistenceStore: PersistenceStoreProtocol {
     func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? { nil }
     func fetchMessages(contactID: UUID, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
     func fetchMessages(deviceID: UUID, channelIndex: UInt8, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
+    func fetchLastMessages(contactIDs: [UUID], limit: Int) throws -> [UUID: [MessageDTO]] { [:] }
+    func fetchLastChannelMessages(channels: [(deviceID: UUID, channelIndex: UInt8, id: UUID)], limit: Int) throws -> [UUID: [MessageDTO]] { [:] }
     func deleteMessagesForContact(contactID: UUID) async throws {}
     func updateMessageStatus(id: UUID, status: MessageStatus) async throws {}
     func updateMessageAck(id: UUID, ackCode: UInt32, status: MessageStatus, roundTripTime: UInt32?) async throws {}

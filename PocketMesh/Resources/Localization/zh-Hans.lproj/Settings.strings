@@ -491,6 +491,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "当存储已满时，替换最旧的非收藏节点";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "最大跳数距离";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "无限制";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "仅直连";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 跳";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d 跳";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "超出所选跳数距离的节点将不会被自动添加。";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -708,6 +726,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "设备 GPS";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "设备 GPS";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "启用设备 GPS";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "打开或关闭无线电的内置 GPS。保存手动地图位置将关闭设备 GPS。";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "公开分享";

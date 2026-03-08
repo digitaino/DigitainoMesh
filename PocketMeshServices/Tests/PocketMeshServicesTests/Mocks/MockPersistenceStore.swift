@@ -68,6 +68,28 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         return messages.values.first { $0.ackCode == ackCode }
     }
 
+    public func fetchLastMessages(contactIDs: [UUID], limit: Int) throws -> [UUID: [MessageDTO]] {
+        if let error = stubbedFetchMessageError { throw error }
+        var result: [UUID: [MessageDTO]] = [:]
+        for contactID in contactIDs {
+            let filtered = messages.values.filter { $0.contactID == contactID }
+                .sorted { $0.timestamp < $1.timestamp }
+            result[contactID] = Array(filtered.prefix(limit))
+        }
+        return result
+    }
+
+    public func fetchLastChannelMessages(channels: [(deviceID: UUID, channelIndex: UInt8, id: UUID)], limit: Int) throws -> [UUID: [MessageDTO]] {
+        if let error = stubbedFetchMessageError { throw error }
+        var result: [UUID: [MessageDTO]] = [:]
+        for channel in channels {
+            let filtered = messages.values.filter { $0.deviceID == channel.deviceID && $0.channelIndex == channel.channelIndex }
+                .sorted { $0.timestamp < $1.timestamp }
+            result[channel.id] = Array(filtered.prefix(limit))
+        }
+        return result
+    }
+
     public func fetchMessages(contactID: UUID, limit: Int, offset: Int) async throws -> [MessageDTO] {
         if let error = stubbedFetchMessageError {
             throw error

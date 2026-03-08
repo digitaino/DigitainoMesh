@@ -18,8 +18,8 @@ final class CLICompletionEngine {
     private static let repeaterCommands = [
         "ver", "board", "clock", "clkreboot",
         "neighbors", "get", "set", "password",
-        "log", "reboot", "advert", "setperm", "tempradio", "neighbor.remove",
-        "region", "gps", "powersaving", "clear"
+        "log", "reboot", "advert", "advert.zerohop", "setperm", "tempradio", "neighbor.remove",
+        "region", "gps", "powersaving", "clear", "discover.neighbors"
     ]
 
     private static let sessionSubcommands = ["list", "local"]
@@ -51,8 +51,13 @@ final class CLICompletionEngine {
         "rxdelay", "txdelay", "direct.txdelay",
         "bridge.enabled", "bridge.delay", "bridge.source",
         "bridge.baud", "bridge.secret", "bridge.type",
-        "adc.multiplier", "public.key", "prv.key", "role", "freq"
+        "adc.multiplier", "public.key", "prv.key", "role", "freq",
+        "path.hash.mode", "loop.detect", "bootloader.ver"
     ]
+
+    private static let pathHashModeValues = ["0", "1", "2"]
+
+    private static let loopDetectValues = ["off", "minimal", "moderate", "strict"]
 
     // MARK: - Node Names
 
@@ -107,9 +112,13 @@ final class CLICompletionEngine {
             return completeFirstArg(for: command, prefix: prefix)
 
         case "get", "set":
-            // Only complete parameter name (first arg)
-            guard argPosition == 1 else { return [] }
-            return Self.getSetParams.filter { $0.hasPrefix(prefix) }.sorted()
+            if argPosition == 1 {
+                return Self.getSetParams.filter { $0.hasPrefix(prefix) }.sorted()
+            }
+            if command == "set", argPosition == 2, parts.count >= 2 {
+                return completeSetValue(param: parts[1].lowercased(), prefix: parts.count > 2 ? parts[2].lowercased() : "")
+            }
+            return []
 
         case "gps":
             return completeGpsArgs(argPosition: argPosition, parts: parts, prefix: prefix)
@@ -160,6 +169,17 @@ final class CLICompletionEngine {
 
     private func completeLoginArgs(prefix: String) -> [String] {
         return nodeNames.filter { $0.lowercased().hasPrefix(prefix) }.sorted()
+    }
+
+    private func completeSetValue(param: String, prefix: String) -> [String] {
+        switch param {
+        case "path.hash.mode":
+            return Self.pathHashModeValues.filter { $0.hasPrefix(prefix) }.sorted()
+        case "loop.detect":
+            return Self.loopDetectValues.filter { $0.hasPrefix(prefix) }.sorted()
+        default:
+            return []
+        }
     }
 
     private func completeGpsArgs(argPosition: Int, parts: [String], prefix: String) -> [String] {

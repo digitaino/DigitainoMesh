@@ -643,9 +643,9 @@ public enum PacketBuilder: Sendable {
     }
 
     /// Builds a packet to set the auto-add configuration.
-    /// - Parameter config: The bitmask (0x01=overwrite, 0x02=contacts, 0x04=repeaters, 0x08=rooms)
-    public static func setAutoAddConfig(_ config: UInt8) -> Data {
-        Data([CommandCode.setAutoAddConfig.rawValue, config])
+    /// - Parameter config: The auto-add configuration (bitmask + max hops).
+    public static func setAutoAddConfig(_ config: AutoAddConfig) -> Data {
+        Data([CommandCode.setAutoAddConfig.rawValue, config.bitmask, config.maxHops])
     }
 
     /// Builds a getSelfTelemetry command to request current sensor data from the device.

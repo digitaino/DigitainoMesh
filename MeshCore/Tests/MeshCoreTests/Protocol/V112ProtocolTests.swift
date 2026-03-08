@@ -194,23 +194,30 @@ struct V112ProtocolTests {
 
     @Test("setAutoAddConfig packet builder")
     func setAutoAddConfigPacketBuilder() {
-        let packet = PacketBuilder.setAutoAddConfig(0x0F)
+        let packet = PacketBuilder.setAutoAddConfig(AutoAddConfig(bitmask: 0x0F))
 
-        #expect(packet == Data([0x3A, 0x0F]))
+        #expect(packet == Data([0x3A, 0x0F, 0x00]))
     }
 
     @Test("setAutoAddConfig all bits set")
     func setAutoAddConfigAllBitsSet() {
-        let packet = PacketBuilder.setAutoAddConfig(0xFF)
+        let packet = PacketBuilder.setAutoAddConfig(AutoAddConfig(bitmask: 0xFF))
 
-        #expect(packet == Data([0x3A, 0xFF]))
+        #expect(packet == Data([0x3A, 0xFF, 0x00]))
     }
 
     @Test("setAutoAddConfig zero bits")
     func setAutoAddConfigZeroBits() {
-        let packet = PacketBuilder.setAutoAddConfig(0x00)
+        let packet = PacketBuilder.setAutoAddConfig(AutoAddConfig(bitmask: 0x00))
 
-        #expect(packet == Data([0x3A, 0x00]))
+        #expect(packet == Data([0x3A, 0x00, 0x00]))
+    }
+
+    @Test("setAutoAddConfig with maxHops")
+    func setAutoAddConfigWithMaxHops() {
+        let packet = PacketBuilder.setAutoAddConfig(AutoAddConfig(bitmask: 0x0F, maxHops: 3))
+
+        #expect(packet == Data([0x3A, 0x0F, 0x03]))
     }
 
     // MARK: - Auto-Add Config Response Parser Tests
@@ -227,14 +234,29 @@ struct V112ProtocolTests {
         #expect(ResponseCode.autoAddConfig.category == .device)
     }
 
-    @Test("autoAddConfig parses valid payload")
-    func autoAddConfigParsesValidPayload() {
+    @Test("autoAddConfig parses single-byte payload with default maxHops")
+    func autoAddConfigParsesSingleBytePayload() {
         let packet = Data([0x19, 0x0F])
 
         let event = PacketParser.parse(packet)
 
         if case .autoAddConfig(let config) = event {
-            #expect(config == 0x0F)
+            #expect(config.bitmask == 0x0F)
+            #expect(config.maxHops == 0)
+        } else {
+            Issue.record("Expected .autoAddConfig event, got \(event)")
+        }
+    }
+
+    @Test("autoAddConfig parses two-byte payload with maxHops")
+    func autoAddConfigParsesTwoBytePayload() {
+        let packet = Data([0x19, 0x0F, 0x05])
+
+        let event = PacketParser.parse(packet)
+
+        if case .autoAddConfig(let config) = event {
+            #expect(config.bitmask == 0x0F)
+            #expect(config.maxHops == 5)
         } else {
             Issue.record("Expected .autoAddConfig event, got \(event)")
         }
@@ -253,14 +275,15 @@ struct V112ProtocolTests {
         }
     }
 
-    @Test("autoAddConfig ignores extra bytes")
+    @Test("autoAddConfig ignores extra bytes beyond maxHops")
     func autoAddConfigIgnoresExtraBytes() {
-        let packet = Data([0x19, 0x0E, 0xFF, 0xFF])
+        let packet = Data([0x19, 0x0E, 0x03, 0xFF, 0xFF])
 
         let event = PacketParser.parse(packet)
 
         if case .autoAddConfig(let config) = event {
-            #expect(config == 0x0E)
+            #expect(config.bitmask == 0x0E)
+            #expect(config.maxHops == 3)
         } else {
             Issue.record("Expected .autoAddConfig event, got \(event)")
         }

@@ -339,6 +339,10 @@ public enum L10n {
         public static func characterCount(_ p1: Int, _ p2: Int) -> String {
           return L10n.tr("Chats", "chats.input.characterCount", p1, p2, fallback: "%d of %d characters")
         }
+        /// Location: ChatInputBar.swift - Accessibility label for encrypted indicator
+        public static let encrypted = L10n.tr("Chats", "chats.input.encrypted", fallback: "Encrypted")
+        /// Location: ChatInputBar.swift - Accessibility label for not encrypted indicator
+        public static let notEncrypted = L10n.tr("Chats", "chats.input.notEncrypted", fallback: "Not encrypted")
         /// Location: ChatInputBar.swift - Accessibility hint when over character limit - %d is characters to remove
         public static func removeCharacters(_ p1: Int) -> String {
           return L10n.tr("Chats", "chats.input.removeCharacters", p1, fallback: "Remove %d characters to send")
@@ -355,7 +359,7 @@ public enum L10n {
         public static let typeFirst = L10n.tr("Chats", "chats.input.typeFirst", fallback: "Type a message first")
         public enum Placeholder {
           /// Location: ChatView.swift - Input bar placeholder for direct messages
-          public static let directMessage = L10n.tr("Chats", "chats.input.placeholder.directMessage", fallback: "Private Message")
+          public static let directMessage = L10n.tr("Chats", "chats.input.placeholder.directMessage", fallback: "Direct Message")
         }
       }
       public enum JoinFromMessage {
@@ -2140,6 +2144,8 @@ public enum L10n {
       public static let continueDemo = L10n.tr("Onboarding", "deviceScan.continueDemo", fallback: "Continue in Demo Mode")
       /// Location: DeviceScanView.swift - Button for troubleshooting
       public static let deviceNotAppearing = L10n.tr("Onboarding", "deviceScan.deviceNotAppearing", fallback: "Device not appearing?")
+      /// Location: DeviceScanView.swift - Button to retry connection after other-app conflict
+      public static let retryConnection = L10n.tr("Onboarding", "deviceScan.retryConnection", fallback: "Retry Connection")
       /// Location: DeviceScanView.swift - Subtitle with pairing instructions
       public static let subtitle = L10n.tr("Onboarding", "deviceScan.subtitle", fallback: "Make sure your MeshCore device is powered on and nearby")
       /// Location: DeviceScanView.swift - Screen title for device pairing
@@ -3430,7 +3436,7 @@ public enum L10n {
       public static let sharingPublicly = L10n.tr("Settings", "location.sharingPublicly", fallback: "Sharing publicly")
       public enum DeviceGps {
         /// Footer for device GPS controls
-        public static let footer = L10n.tr("Settings", "location.deviceGps.footer", fallback: "Turns the radio's built-in GPS on or off. Saving a manual map location turns Device GPS off and leaves it off.")
+        public static let footer = L10n.tr("Settings", "location.deviceGps.footer", fallback: "Turns the radio's built-in GPS on or off. Saving a manual map location turns Device GPS off.")
         /// Section header for device GPS controls
         public static let header = L10n.tr("Settings", "location.deviceGps.header", fallback: "Device GPS")
         /// Toggle label for device GPS power
@@ -3508,6 +3514,8 @@ public enum L10n {
       public static let autoAddRoomServers = L10n.tr("Settings", "nodes.autoAddRoomServers", fallback: "Room Servers")
       /// Section header for nodes settings
       public static let header = L10n.tr("Settings", "nodes.header", fallback: "Nodes")
+      /// Picker label for max hop distance
+      public static let maxHops = L10n.tr("Settings", "nodes.maxHops", fallback: "Max Hop Distance")
       /// Toggle label for overwrite oldest
       public static let overwriteOldest = L10n.tr("Settings", "nodes.overwriteOldest", fallback: "Overwrite Oldest")
       /// Description for overwrite oldest toggle
@@ -3529,6 +3537,20 @@ public enum L10n {
       public enum AutoAddTypes {
         /// Section header for auto-add types
         public static let header = L10n.tr("Settings", "nodes.autoAddTypes.header", fallback: "Auto-Add Types")
+      }
+      public enum MaxHops {
+        /// Direct only option (0 hops)
+        public static let directOnly = L10n.tr("Settings", "nodes.maxHops.directOnly", fallback: "Direct Only")
+        /// Footer text when hop limit is active
+        public static let footerActive = L10n.tr("Settings", "nodes.maxHops.footerActive", fallback: "Nodes beyond the selected hop distance will not be auto-added.")
+        /// Plural hops format string
+        public static func hops(_ p1: Int) -> String {
+          return L10n.tr("Settings", "nodes.maxHops.hops", p1, fallback: "%d Hops")
+        }
+        /// No limit option
+        public static let noLimit = L10n.tr("Settings", "nodes.maxHops.noLimit", fallback: "No Limit")
+        /// Singular 1 hop option
+        public static let oneHop = L10n.tr("Settings", "nodes.maxHops.oneHop", fallback: "1 Hop")
       }
       public enum StaleCleanup {
         /// Threshold option: number of days (%d = day count)

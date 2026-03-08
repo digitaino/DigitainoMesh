@@ -60,13 +60,19 @@ struct MessageDisplayState {
     var showDirectionGap: Bool = false
     var showSenderName: Bool = true
     var showNewMessagesDivider: Bool = false
+    var detectedURL: URL?
     var previewState: PreviewLoadState = .idle
     var loadedPreview: LinkPreviewDataDTO?
     var isImageURL: Bool = false
     var decodedImage: UIImage?
+    var decodedPreviewImage: UIImage?
+    var decodedPreviewIcon: UIImage?
     var isGIF: Bool = false
     var showInlineImages: Bool = false
     var autoPlayGIFs: Bool = true
+    var showIncomingPath: Bool = false
+    var showIncomingHopCount: Bool = false
+    var formattedText: AttributedString?
 }
 
 /// Callbacks for message bubble interactions
@@ -168,7 +174,7 @@ struct UnifiedMessageBubble: View {
 
                     // Malware warning (always shown, regardless of preview settings)
                     if displayState.previewState == .malwareWarning,
-                       let url = LinkPreviewService.extractFirstURL(from: message.text) {
+                       let url = displayState.detectedURL {
                         MalwareWarningCard(url: url)
                     }
 
@@ -203,7 +209,7 @@ struct UnifiedMessageBubble: View {
         .onAppear {
             // Request preview/image fetch when cell becomes visible
             // ViewModel handles deduplication and cancellation
-            if displayState.previewState == .idle && detectedURL != nil && message.linkPreviewURL == nil {
+            if displayState.previewState == .idle && displayState.detectedURL != nil && message.linkPreviewURL == nil {
                 callbacks.onRequestPreviewFetch?()
             }
         }
@@ -220,10 +226,6 @@ struct UnifiedMessageBubble: View {
 
     private var senderColor: Color {
         AppColors.NameColor.color(for: senderName, highContrast: colorSchemeContrast == .increased)
-    }
-
-    private var detectedURL: URL? {
-        LinkPreviewService.extractFirstURL(from: message.text)
     }
 
     private var accessibilityMessageLabel: String {
@@ -251,9 +253,6 @@ private struct BubbleContent: View {
     let displayState: MessageDisplayState
     let callbacks: MessageBubbleCallbacks
 
-    @AppStorage("showIncomingPath") private var showIncomingPath = false
-    @AppStorage("showIncomingHopCount") private var showIncomingHopCount = false
-
     private var textColor: Color {
         message.isOutgoing ? .white : .primary
     }
@@ -273,14 +272,14 @@ private struct BubbleContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                MessageText(message.text, baseColor: textColor, currentUserName: deviceName)
+                MessageText(message.text, baseColor: textColor, isOutgoing: message.isOutgoing, currentUserName: deviceName, precomputedText: displayState.formattedText)
 
-                if !message.isOutgoing && (showIncomingHopCount && !isDirect || showIncomingPath) {
+                if !message.isOutgoing && (displayState.showIncomingHopCount && !isDirect || displayState.showIncomingPath) {
                     HStack(spacing: 4) {
-                        if showIncomingHopCount && !isDirect {
+                        if displayState.showIncomingHopCount && !isDirect {
                             BubbleHopCountFooter(pathLength: message.pathLength)
                         }
-                        if showIncomingPath {
+                        if displayState.showIncomingPath {
                             BubblePathFooter(message: message)
                         }
                     }
@@ -307,10 +306,6 @@ private struct BubbleEmbeddedImageContent: View {
     let displayState: MessageDisplayState
     let callbacks: MessageBubbleCallbacks
 
-    private var detectedURL: URL? {
-        LinkPreviewService.extractFirstURL(from: message.text)
-    }
-
     var body: some View {
         switch displayState.previewState {
         case .loaded:
@@ -326,7 +321,7 @@ private struct BubbleEmbeddedImageContent: View {
             }
 
         case .loading, .idle:
-            if detectedURL != nil {
+            if displayState.detectedURL != nil {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
@@ -369,10 +364,6 @@ private struct BubbleLinkPreviewContent: View {
 
     @Environment(\.openURL) private var openURL
 
-    private var detectedURL: URL? {
-        LinkPreviewService.extractFirstURL(from: message.text)
-    }
-
     var body: some View {
         switch displayState.previewState {
         case .loaded:
@@ -381,14 +372,14 @@ private struct BubbleLinkPreviewContent: View {
                 LinkPreviewCard(
                     url: url,
                     title: preview.title,
-                    imageData: preview.imageData,
-                    iconData: preview.iconData,
+                    image: displayState.decodedPreviewImage,
+                    icon: displayState.decodedPreviewIcon,
                     onTap: { openURL(url) }
                 )
             }
 
         case .loading:
-            if let url = detectedURL {
+            if let url = displayState.detectedURL {
                 LinkPreviewLoadingCard(url: url)
             }
 
@@ -396,7 +387,7 @@ private struct BubbleLinkPreviewContent: View {
             EmptyView()
 
         case .disabled:
-            if let url = detectedURL {
+            if let url = displayState.detectedURL {
                 TapToLoadPreview(
                     url: url,
                     isLoading: false,
@@ -413,11 +404,11 @@ private struct BubbleLinkPreviewContent: View {
                 LinkPreviewCard(
                     url: url,
                     title: message.linkPreviewTitle,
-                    imageData: message.linkPreviewImageData,
-                    iconData: message.linkPreviewIconData,
+                    image: displayState.decodedPreviewImage,
+                    icon: displayState.decodedPreviewIcon,
                     onTap: { openURL(url) }
                 )
-            } else if let url = detectedURL {
+            } else if let url = displayState.detectedURL {
                 // URL detected, waiting for fetch - show loading
                 LinkPreviewLoadingCard(url: url)
             }

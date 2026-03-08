@@ -510,6 +510,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "Wanneer de opslag vol is, het oudste niet-favoriete knooppunt vervangen";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Max. hopafstand";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "Geen limiet";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Alleen direct";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 hop";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d hops";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Knooppunten voorbij de geselecteerde hopafstand worden niet automatisch toegevoegd.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -983,6 +1001,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "Apparaat GPS";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "Apparaat GPS";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "Apparaat GPS inschakelen";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "Schakelt de ingebouwde GPS van de radio in of uit. Het opslaan van een handmatige kaartlocatie schakelt de apparaat GPS uit.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Openbaar delen";

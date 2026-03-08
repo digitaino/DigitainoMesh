@@ -21,6 +21,28 @@ extension PersistenceStore {
 
     // MARK: - Message Operations
 
+    /// Batch fetch last messages for multiple contacts in a single actor-isolated call.
+    /// Runs N fetches with zero suspension points between them, avoiding N actor hops.
+    public func fetchLastMessages(contactIDs: [UUID], limit: Int) throws -> [UUID: [MessageDTO]] {
+        var result: [UUID: [MessageDTO]] = [:]
+        result.reserveCapacity(contactIDs.count)
+        for contactID in contactIDs {
+            result[contactID] = try fetchMessages(contactID: contactID, limit: limit)
+        }
+        return result
+    }
+
+    /// Batch fetch last messages for multiple channels in a single actor-isolated call.
+    /// Runs N fetches with zero suspension points between them, avoiding N actor hops.
+    public func fetchLastChannelMessages(channels: [(deviceID: UUID, channelIndex: UInt8, id: UUID)], limit: Int) throws -> [UUID: [MessageDTO]] {
+        var result: [UUID: [MessageDTO]] = [:]
+        result.reserveCapacity(channels.count)
+        for channel in channels {
+            result[channel.id] = try fetchMessages(deviceID: channel.deviceID, channelIndex: channel.channelIndex, limit: limit)
+        }
+        return result
+    }
+
     /// Fetch messages for a contact
     public func fetchMessages(contactID: UUID, limit: Int = 50, offset: Int = 0) throws -> [MessageDTO] {
         let targetContactID: UUID? = contactID

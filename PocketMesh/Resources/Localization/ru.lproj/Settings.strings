@@ -504,6 +504,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "Когда хранилище заполнено, заменить старейший неизбранный узел";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Макс. расстояние хопов";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "Без ограничений";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Только прямые";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 хоп";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d хопов";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Узлы за пределами выбранного расстояния хопов не будут добавлены автоматически.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -977,6 +995,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "GPS устройства";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "GPS устройства";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "Включить GPS устройства";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "Включает или выключает встроенный GPS радиостанции. Сохранение местоположения вручную на карте выключает GPS устройства.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Публичный доступ";

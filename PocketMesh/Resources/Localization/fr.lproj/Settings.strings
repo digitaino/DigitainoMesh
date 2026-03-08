@@ -504,6 +504,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "Lorsque le stockage est plein, remplacer le nœud non favori le plus ancien";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Distance max. de sauts";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "Aucune limite";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Direct uniquement";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 saut";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d sauts";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Les nœuds au-delà de la distance de sauts sélectionnée ne seront pas ajoutés automatiquement.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -977,6 +995,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "GPS de l'appareil";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "GPS de l'appareil";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "Activer le GPS de l'appareil";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "Active ou désactive le GPS intégré de la radio. L'enregistrement d'un emplacement manuel sur la carte désactive le GPS de l'appareil.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Partage public";

@@ -504,6 +504,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "Gdy pamięć jest pełna, zastąp najstarszy nieulubiony węzeł";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Maks. odległość skoków";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "Bez limitu";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Tylko bezpośrednio";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 skok";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d skoków";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Węzły przekraczające wybraną odległość skoków nie zostaną automatycznie dodane.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -977,6 +995,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "GPS urządzenia";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "GPS urządzenia";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "Włącz GPS urządzenia";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "Włącza lub wyłącza wbudowany GPS radia. Zapisanie ręcznej lokalizacji na mapie wyłącza GPS urządzenia.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Udostępnianie publiczne";

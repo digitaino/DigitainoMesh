@@ -72,11 +72,14 @@ final class LinkPreviewService: Sendable {
         return nil
     }
 
+    /// Cached mention regex to avoid re-creating on every call
+    private static let mentionRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: MentionUtilities.mentionPattern)
+    }()
+
     /// Extracts ranges of all mentions in the text (format: @[name])
     private static func extractMentionRanges(from text: String) -> [NSRange] {
-        guard let regex = try? NSRegularExpression(pattern: MentionUtilities.mentionPattern) else {
-            return []
-        }
+        guard let regex = mentionRegex else { return [] }
         let range = NSRange(text.startIndex..., in: text)
         return regex.matches(in: text, range: range).map(\.range)
     }

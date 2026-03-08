@@ -4,6 +4,7 @@ import PocketMeshServices
 struct ConversationRow: View {
     let contact: ContactDTO
     let viewModel: ChatViewModel
+    var referenceDate: Date?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -30,7 +31,7 @@ struct ConversationRow: View {
                     }
 
                     if let date = contact.lastMessageDate {
-                        ConversationTimestamp(date: date)
+                        ConversationTimestamp(date: date, referenceDate: referenceDate)
                     }
                 }
 

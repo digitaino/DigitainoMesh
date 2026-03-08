@@ -122,6 +122,12 @@ public extension Channel {
         !secret.allSatisfy { $0 == 0 }
     }
 
+    /// Whether this channel uses meaningful encryption (private channels only).
+    /// Public channels (index 0) and hashtag channels use publicly-derivable keys.
+    var isEncryptedChannel: Bool {
+        !isPublicChannel && !name.hasPrefix("#")
+    }
+
     /// Updates from a protocol ChannelInfo
     func update(from info: ChannelInfo) {
         self.name = info.name
@@ -220,5 +226,11 @@ public struct ChannelDTO: Sendable, Equatable, Identifiable, Hashable {
 
     public var hasSecret: Bool {
         !secret.allSatisfy { $0 == 0 }
+    }
+
+    /// Whether this channel uses meaningful encryption (private channels only).
+    /// Public channels (index 0) and hashtag channels use publicly-derivable keys.
+    public var isEncryptedChannel: Bool {
+        !isPublicChannel && !name.hasPrefix("#")
     }
 }

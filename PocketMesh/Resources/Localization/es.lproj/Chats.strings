@@ -155,7 +155,7 @@
 "chats.contactInfo.hasLocation" = "Tiene ubicación";
 
 /* Location: ChatView.swift - Input bar placeholder for direct messages */
-"chats.input.placeholder.directMessage" = "Mensaje privado";
+"chats.input.placeholder.directMessage" = "Mensaje directo";
 
 // MARK: - Channel Chat View
 
@@ -684,6 +684,8 @@
 
 /* Location: ChatInputBar.swift - Accessibility hint when message is empty */
 "chats.input.typeFirst" = "Escribe un mensaje primero";
+"chats.input.encrypted" = "Cifrado";
+"chats.input.notEncrypted" = "No cifrado";
 
 // MARK: - Message Path Sheet
 

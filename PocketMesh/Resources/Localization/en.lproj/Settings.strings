@@ -510,6 +510,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "When storage is full, replace the oldest non-favorite node";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Max Hop Distance";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "No Limit";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Direct Only";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 Hop";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d Hops";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Nodes beyond the selected hop distance will not be auto-added.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -752,7 +770,7 @@
 "location.deviceGps.toggle" = "Enable Device GPS";
 
 /* Footer for device GPS controls */
-"location.deviceGps.footer" = "Turns the radio's built-in GPS on or off. Saving a manual map location turns Device GPS off and leaves it off.";
+"location.deviceGps.footer" = "Turns the radio's built-in GPS on or off. Saving a manual map location turns Device GPS off.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Sharing publicly";

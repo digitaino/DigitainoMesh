@@ -37,6 +37,14 @@ public protocol PersistenceStoreProtocol: Actor {
     /// Fetch messages for a channel
     func fetchMessages(deviceID: UUID, channelIndex: UInt8, limit: Int, offset: Int) async throws -> [MessageDTO]
 
+    /// Batch fetch last messages for multiple contacts in a single actor call.
+    /// Avoids N actor hops when loading message previews for the conversation list.
+    func fetchLastMessages(contactIDs: [UUID], limit: Int) throws -> [UUID: [MessageDTO]]
+
+    /// Batch fetch last messages for multiple channels in a single actor call.
+    /// Each tuple contains (deviceID, channelIndex, id) where id is used as the dictionary key.
+    func fetchLastChannelMessages(channels: [(deviceID: UUID, channelIndex: UInt8, id: UUID)], limit: Int) throws -> [UUID: [MessageDTO]]
+
     /// Finds a channel message matching a parsed reaction within a timestamp window
     func findChannelMessageForReaction(
         deviceID: UUID,

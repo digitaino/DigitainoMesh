@@ -43,11 +43,15 @@ public enum ConnectionError: LocalizedError {
 public enum PairingError: LocalizedError {
     /// ASK pairing succeeded but BLE connection failed (e.g., wrong PIN)
     case connectionFailed(deviceID: UUID, underlying: Error)
+    /// ASK pairing succeeded but device is connected to another app
+    case deviceConnectedToOtherApp(deviceID: UUID)
 
     public var errorDescription: String? {
         switch self {
         case .connectionFailed(_, let underlying):
             return "Connection failed: \(underlying.localizedDescription)"
+        case .deviceConnectedToOtherApp:
+            return "Device is connected to another app."
         }
     }
 
@@ -55,6 +59,8 @@ public enum PairingError: LocalizedError {
     public var deviceID: UUID? {
         switch self {
         case .connectionFailed(let deviceID, _):
+            return deviceID
+        case .deviceConnectedToOtherApp(let deviceID):
             return deviceID
         }
     }
@@ -208,6 +214,10 @@ public final class ConnectionManager {
 
     /// The user's connection intent. Replaces shouldBeConnected, userExplicitlyDisconnected, and pendingForceFullSync.
     var connectionIntent: ConnectionIntent = .none
+
+    /// The device being actively connected via connect(to:).
+    /// Nil during auto-reconnect (tracked by reconnectionCoordinator.reconnectingDeviceID instead).
+    var connectingDeviceID: UUID?
 
     // MARK: - Callbacks
 
@@ -711,7 +721,7 @@ public final class ConnectionManager {
         deviceID: UUID,
         selfInfo: MeshCore.SelfInfo,
         capabilities: MeshCore.DeviceCapabilities,
-        autoAddConfig: UInt8,
+        autoAddConfig: MeshCore.AutoAddConfig,
         existingDevice: DeviceDTO? = nil,
         connectionMethods: [ConnectionMethod] = []
     ) -> Device {
@@ -747,7 +757,8 @@ public final class ConnectionManager {
             preRepeatSpreadingFactor: existingDevice?.preRepeatSpreadingFactor,
             preRepeatCodingRate: existingDevice?.preRepeatCodingRate,
             manualAddContacts: selfInfo.manualAddContacts,
-            autoAddConfig: autoAddConfig,
+            autoAddConfig: autoAddConfig.bitmask,
+            autoAddMaxHops: autoAddConfig.maxHops,
             multiAcks: selfInfo.multiAcks,
             telemetryModeBase: selfInfo.telemetryModeBase,
             telemetryModeLoc: selfInfo.telemetryModeLocation,
@@ -797,6 +808,7 @@ public final class ConnectionManager {
     func cleanupConnection() async {
         logger.info("[BLE] cleanupConnection: state → .disconnected")
         connectionState = .disconnected
+        connectingDeviceID = nil
         connectedDevice = nil
         allowedRepeatFreqRanges = []
         await cleanupResources()
@@ -839,7 +851,8 @@ public final class ConnectionManager {
     internal func setTestState(
         connectionState: ConnectionState? = nil,
         currentTransportType: TransportType?? = nil,
-        connectionIntent: ConnectionIntent? = nil
+        connectionIntent: ConnectionIntent? = nil,
+        connectingDeviceID: UUID?? = nil
     ) {
         suppressInvariantChecks = true
         defer { suppressInvariantChecks = false }
@@ -852,6 +865,9 @@ public final class ConnectionManager {
         }
         if let intent = connectionIntent {
             self.connectionIntent = intent
+        }
+        if let deviceID = connectingDeviceID {
+            self.connectingDeviceID = deviceID
         }
     }
     #endif

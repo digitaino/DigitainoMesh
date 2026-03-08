@@ -504,6 +504,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "Cuando el almacenamiento está lleno, reemplazar el nodo no favorito más antiguo";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Distancia máx. de saltos";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "Sin límite";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Solo directo";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 salto";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d saltos";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Los nodos que superen la distancia de saltos seleccionada no se añadirán automáticamente.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -977,6 +995,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "GPS del dispositivo";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "GPS del dispositivo";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "Activar GPS del dispositivo";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "Activa o desactiva el GPS integrado del radio. Guardar una ubicación manual del mapa desactiva el GPS del dispositivo.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Compartiendo públicamente";

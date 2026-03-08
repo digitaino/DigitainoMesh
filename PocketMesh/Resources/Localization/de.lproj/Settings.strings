@@ -504,6 +504,24 @@
 /* Description for overwrite oldest toggle */
 "nodes.overwriteOldestDescription" = "Bei vollem Speicher den ältesten nicht favorisierten Knoten ersetzen";
 
+/* Picker label for max hop distance */
+"nodes.maxHops" = "Max. Hop-Distanz";
+
+/* No limit option */
+"nodes.maxHops.noLimit" = "Kein Limit";
+
+/* Direct only option (0 hops) */
+"nodes.maxHops.directOnly" = "Nur direkt";
+
+/* Singular 1 hop option */
+"nodes.maxHops.oneHop" = "1 Hop";
+
+/* Plural hops format string */
+"nodes.maxHops.hops" = "%d Hops";
+
+/* Footer text when hop limit is active */
+"nodes.maxHops.footerActive" = "Knoten jenseits der ausgewählten Hop-Distanz werden nicht automatisch hinzugefügt.";
+
 
 // MARK: - Auto-Remove Old Nodes Section
 
@@ -977,6 +995,15 @@
 
 /* GPS source option: device GPS */
 "location.gpsSource.device" = "Geräte-GPS";
+
+/* Section header for device GPS controls */
+"location.deviceGps.header" = "Geräte-GPS";
+
+/* Toggle label for device GPS power */
+"location.deviceGps.toggle" = "Geräte-GPS aktivieren";
+
+/* Footer for device GPS controls */
+"location.deviceGps.footer" = "Schaltet das eingebaute GPS des Funkgeräts ein oder aus. Das Speichern eines manuellen Kartenstandorts schaltet das Geräte-GPS aus.";
 
 /* Detail text when location is being shared publicly */
 "location.sharingPublicly" = "Öffentlich teilen";

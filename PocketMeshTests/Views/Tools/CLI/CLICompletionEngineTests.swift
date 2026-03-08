@@ -380,6 +380,75 @@ struct CLICompletionEngineTests {
         #expect(suggestions.isEmpty)
     }
 
+    // MARK: - v1.14.0 New Commands
+
+    @Test("advert.zerohop appears in remote session suggestions")
+    func advertZerohopAppearsInRemote() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "advert", isLocal: false)
+
+        #expect(suggestions.contains("advert"))
+        #expect(suggestions.contains("advert.zerohop"))
+    }
+
+    @Test("discover.neighbors appears in remote session suggestions")
+    func discoverNeighborsAppearsInRemote() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "disc", isLocal: false)
+
+        #expect(suggestions.contains("discover.neighbors"))
+    }
+
+    @Test("New get/set params appear in completions")
+    func newGetSetParamsAppear() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "get ", isLocal: false)
+
+        #expect(suggestions.contains("path.hash.mode"))
+        #expect(suggestions.contains("loop.detect"))
+        #expect(suggestions.contains("bootloader.ver"))
+    }
+
+    @Test("set loop.detect suggests values")
+    func setLoopDetectSuggestsValues() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "set loop.detect ", isLocal: false)
+
+        #expect(suggestions == ["minimal", "moderate", "off", "strict"])
+    }
+
+    @Test("set path.hash.mode suggests values")
+    func setPathHashModeSuggestsValues() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "set path.hash.mode ", isLocal: false)
+
+        #expect(suggestions == ["0", "1", "2"])
+    }
+
+    @Test("set loop.detect returns empty after value complete")
+    func setLoopDetectReturnsEmptyAfterValue() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "set loop.detect off ", isLocal: false)
+
+        #expect(suggestions.isEmpty)
+    }
+
+    @Test("get loop.detect returns empty after param (no value completion for get)")
+    func getLoopDetectNoValueCompletion() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "get loop.detect ", isLocal: false)
+
+        #expect(suggestions.isEmpty)
+    }
+
+    @Test("set loop.detect filters values by prefix")
+    func setLoopDetectFiltersPrefix() {
+        let engine = createEngine()
+        let suggestions = engine.completions(for: "set loop.detect m", isLocal: false)
+
+        #expect(suggestions == ["minimal", "moderate"])
+    }
+
     @Test("Uppercase GPS advert still suggests values")
     func uppercaseGpsAdvertSuggestsValues() {
         let engine = createEngine()

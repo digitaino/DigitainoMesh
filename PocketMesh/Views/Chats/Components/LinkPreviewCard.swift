@@ -5,8 +5,8 @@ import PocketMeshServices
 struct LinkPreviewCard: View {
     let url: URL
     let title: String?
-    let imageData: Data?
-    let iconData: Data?
+    let image: UIImage?
+    let icon: UIImage?
     let onTap: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -28,8 +28,8 @@ struct LinkPreviewCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
                 // Hero image (if available)
-                if let imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
+                if let image {
+                    Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(maxHeight: 150)
@@ -39,8 +39,8 @@ struct LinkPreviewCard: View {
                 // Title and domain
                 HStack(spacing: 8) {
                     // Icon or globe fallback
-                    if let iconData, let uiImage = UIImage(data: iconData) {
-                        Image(uiImage: uiImage)
+                    if let icon {
+                        Image(uiImage: icon)
                             .resizable()
                             .frame(width: 16, height: 16)
                             .clipShape(.rect(cornerRadius: 4))
@@ -82,8 +82,8 @@ struct LinkPreviewCard: View {
     LinkPreviewCard(
         url: URL(string: "https://apple.com/iphone")!,
         title: "iPhone 16 Pro - Apple",
-        imageData: nil,
-        iconData: nil,
+        image: nil,
+        icon: nil,
         onTap: {}
     )
     .padding()
@@ -93,8 +93,8 @@ struct LinkPreviewCard: View {
     LinkPreviewCard(
         url: URL(string: "https://example.com/article")!,
         title: "An Interesting Article About Technology",
-        imageData: nil,
-        iconData: nil,
+        image: nil,
+        icon: nil,
         onTap: {}
     )
     .padding()

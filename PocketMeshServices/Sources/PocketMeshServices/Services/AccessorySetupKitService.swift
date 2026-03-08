@@ -69,30 +69,6 @@ public final class AccessorySetupKitService {
         }
     }
 
-    // MARK: - Discovery Descriptors
-
-    /// Bluetooth name prefixes for supported MeshCore devices
-    /// Each prefix must have a matching entry in NSAccessorySetupBluetoothNames in Info.plist
-    private static let supportedNamePrefixes = [
-        // Primary MeshCore firmware prefix
-        "MeshCore-",
-        // Third-party/legacy firmware prefixes
-        "Whisper-", "WisCore",
-        // nRF52 board BSP defaults (devices may advertise these when firmware name isn't set)
-        "XIAO", "elecrow", "HT-n5262", "Seeed", "BQ",
-        "ProMicro", "Keepteen", "Meshtiny", "T1000-E-BOOT",
-        "me25ls01-BOOT", "NRF52 DK",
-    ]
-
-    private var discoveryDescriptors: [ASDiscoveryDescriptor] {
-        Self.supportedNamePrefixes.map { prefix in
-            let descriptor = ASDiscoveryDescriptor()
-            descriptor.bluetoothServiceUUID = CBUUID(string: BLEServiceUUID.nordicUART)
-            descriptor.bluetoothNameSubstring = prefix
-            return descriptor
-        }
-    }
-
     // MARK: - Session Management
 
     /// Activate the AccessorySetupKit session
@@ -248,16 +224,19 @@ public final class AccessorySetupKitService {
             }
         }
 
-        // Create picker display items for each supported device type
-        // Each item has its own descriptor with a different name prefix filter
+        // Single display item filtered by service UUID only.
+        // Supported device names are declared in Info.plist (NSAccessorySetupBluetoothNames)
+        // for system-level authorization; the picker deduplicates by device.
         let productImage = createGenericProductImage()
-        let displayItems = discoveryDescriptors.map { descriptor in
+        let descriptor = ASDiscoveryDescriptor()
+        descriptor.bluetoothServiceUUID = CBUUID(string: BLEServiceUUID.nordicUART)
+        let displayItems = [
             ASPickerDisplayItem(
                 name: "MeshCore Device",
                 productImage: productImage,
                 descriptor: descriptor
             )
-        }
+        ]
 
         return try await withCheckedThrowingContinuation { continuation in
             self.pickerContinuation = continuation

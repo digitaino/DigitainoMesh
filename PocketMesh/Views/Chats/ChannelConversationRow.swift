@@ -5,6 +5,7 @@ struct ChannelConversationRow: View {
     private typealias Strings = L10n.Chats.Chats.Row
     let channel: ChannelDTO
     let viewModel: ChatViewModel
+    var referenceDate: Date?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -28,7 +29,7 @@ struct ChannelConversationRow: View {
                     }
 
                     if let date = channel.lastMessageDate {
-                        ConversationTimestamp(date: date)
+                        ConversationTimestamp(date: date, referenceDate: referenceDate)
                     }
                 }
 

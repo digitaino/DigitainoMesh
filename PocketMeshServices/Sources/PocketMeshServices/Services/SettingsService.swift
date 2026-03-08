@@ -288,7 +288,7 @@ public struct DeviceGPSState: Sendable, Equatable {
 /// Events emitted by SettingsService when device settings change.
 public enum SettingsEvent: Sendable {
     case deviceUpdated(MeshCore.SelfInfo)
-    case autoAddConfigUpdated(UInt8)
+    case autoAddConfigUpdated(MeshCore.AutoAddConfig)
     case clientRepeatUpdated(Bool)
     case pathHashModeUpdated(UInt8)
     case allowedRepeatFreqUpdated([MeshCore.FrequencyRange])
@@ -522,7 +522,7 @@ public actor SettingsService {
         let scaledLatSent = Int32(latitude * 1_000_000)
         let scaledLonSent = Int32(longitude * 1_000_000)
         
-        // DEBUG: Log when attempting to clear location
+        // log when attempting to clear location
         let isClearingLocation = scaledLatSent == 0 && scaledLonSent == 0
         logger.debug("[Location] setLocationVerified called - lat: \(latitude), lon: \(longitude), isClearing: \(isClearingLocation)")
 
@@ -542,7 +542,6 @@ public actor SettingsService {
         guard latDiff <= tolerance && lonDiff <= tolerance else {
             logger.error("[Location] Verification failed - sent: (\(scaledLatSent), \(scaledLonSent)), received: (\(scaledLatReceived), \(scaledLonReceived)), diff: (lat=\(latDiff), lon=\(lonDiff))")
             
-            // DEBUG: Additional context for clearing location failure
             if isClearingLocation {
                 logger.warning("[Location] Clear location failed - device reports non-zero coordinates. Device may have active GPS or firmware doesn't support (0,0).")
             }
@@ -701,7 +700,7 @@ public actor SettingsService {
     // MARK: - Auto-Add Config
 
     /// Get auto-add configuration from device
-    public func getAutoAddConfig() async throws -> UInt8 {
+    public func getAutoAddConfig() async throws -> MeshCore.AutoAddConfig {
         do {
             return try await session.getAutoAddConfig()
         } catch let error as MeshCoreError {
@@ -741,7 +740,7 @@ public actor SettingsService {
     }
 
     /// Set auto-add configuration on device
-    public func setAutoAddConfig(_ config: UInt8) async throws {
+    public func setAutoAddConfig(_ config: MeshCore.AutoAddConfig) async throws {
         do {
             try await session.setAutoAddConfig(config)
         } catch let error as MeshCoreError {
@@ -750,15 +749,15 @@ public actor SettingsService {
     }
 
     /// Set auto-add configuration with verification
-    public func setAutoAddConfigVerified(_ config: UInt8) async throws -> UInt8 {
+    public func setAutoAddConfigVerified(_ config: MeshCore.AutoAddConfig) async throws -> MeshCore.AutoAddConfig {
         try await setAutoAddConfig(config)
 
         let actualConfig = try await getAutoAddConfig()
 
         guard actualConfig == config else {
             throw SettingsServiceError.verificationFailed(
-                expected: "config=\(config)",
-                actual: "config=\(actualConfig)"
+                expected: "bitmask=\(config.bitmask), maxHops=\(config.maxHops)",
+                actual: "bitmask=\(actualConfig.bitmask), maxHops=\(actualConfig.maxHops)"
             )
         }
 

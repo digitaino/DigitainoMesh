@@ -144,14 +144,14 @@ extension PacketParser {
             return Parsers.TuningParamsResponse.parse(payload)
 
         case .autoAddConfig:
-            // Single byte bitmask
             guard payload.count >= 1 else {
                 return .parseFailure(
                     data: payload,
                     reason: "AutoAddConfig response too short: \(payload.count) < 1"
                 )
             }
-            return .autoAddConfig(payload[0])
+            let maxHops: UInt8 = payload.count >= 2 ? payload[1] : 0
+            return .autoAddConfig(AutoAddConfig(bitmask: payload[0], maxHops: maxHops))
 
         case .allowedRepeatFreq:
             return Parsers.AllowedRepeatFreq.parse(payload)
