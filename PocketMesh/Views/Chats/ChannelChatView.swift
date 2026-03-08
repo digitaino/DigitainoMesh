@@ -565,6 +565,12 @@ struct ChannelChatView: View {
             let mention = MentionUtilities.createMention(for: contact.name)
             viewModel.composingText.replaceSubrange(range, with: mention + " ")
         }
+
+        // Reset keyboard to alphabetic layout (user was on symbols to type @)
+        isInputFocused = false
+        DispatchQueue.main.async {
+            isInputFocused = true
+        }
     }
 }
 
