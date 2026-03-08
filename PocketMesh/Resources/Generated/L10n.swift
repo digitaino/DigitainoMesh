@@ -292,6 +292,26 @@ public enum L10n {
         /// Location: ChatsView.swift - Filter option for unread conversations
         public static let unread = L10n.tr("Chats", "chats.filter.unread", fallback: "Unread")
       }
+      public enum HeardRepeats {
+        public enum Map {
+          /// Location: HeardRepeatsMapSheet.swift - Accessibility label for center on data button
+          public static let centerOnData = L10n.tr("Chats", "chats.heardRepeats.map.centerOnData", fallback: "Center on data")
+          /// Location: HeardRepeatsMapSheet.swift - Summary banner - %lld repeats, %lld repeaters
+          public static func summary(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Chats", "chats.heardRepeats.map.summary", p1, p2, fallback: "%lld repeats · %lld repeaters")
+          }
+          /// Location: HeardRepeatsMapSheet.swift - Navigation title
+          public static let title = L10n.tr("Chats", "chats.heardRepeats.map.title", fallback: "Repeat Coverage")
+          /// Location: MessageActionsSheet.swift - Button to open repeats map
+          public static let viewOnMap = L10n.tr("Chats", "chats.heardRepeats.map.viewOnMap", fallback: "View Repeats on Map")
+          public enum Empty {
+            /// Location: HeardRepeatsMapSheet.swift - Empty state description
+            public static let description = L10n.tr("Chats", "chats.heardRepeats.map.empty.description", fallback: "None of the repeaters in the heard repeats have GPS coordinates.")
+            /// Location: HeardRepeatsMapSheet.swift - Empty state title
+            public static let title = L10n.tr("Chats", "chats.heardRepeats.map.empty.title", fallback: "No Location Data")
+          }
+        }
+      }
       public enum ImageViewer {
         /// Location: FullScreenImageViewer.swift - Close button label
         public static let close = L10n.tr("Chats", "chats.imageViewer.close", fallback: "Close")
@@ -1083,6 +1103,8 @@ public enum L10n {
         public static let routeDirect = L10n.tr("Contacts", "contacts.detail.routeDirect", fallback: "Route: Direct")
         /// Location: ContactDetailView.swift - Purpose: Accessibility label for flood route
         public static let routeFlood = L10n.tr("Contacts", "contacts.detail.routeFlood", fallback: "Route: Flood")
+        /// Location: ContactDetailView.swift - Purpose: Route Map button label in network path section
+        public static let routeMap = L10n.tr("Contacts", "contacts.detail.routeMap", fallback: "Route Map")
         /// Location: ContactDetailView.swift - Purpose: Accessibility label prefix for route
         public static func routePrefix(_ p1: Any) -> String {
           return L10n.tr("Contacts", "contacts.detail.routePrefix", String(describing: p1), fallback: "Route: %@")
@@ -1508,6 +1530,30 @@ public enum L10n {
         /// Location: ContactRowView.swift - Purpose: Hops count display
         public static func hops(_ p1: Int) -> String {
           return L10n.tr("Contacts", "contacts.route.hops", p1, fallback: "%d hops")
+        }
+      }
+      public enum RouteMap {
+        /// Location: ContactRouteMapSheet.swift - Purpose: Accessibility label for center on data button
+        public static let centerOnData = L10n.tr("Contacts", "contacts.routeMap.centerOnData", fallback: "Center on data")
+        /// Location: ContactRouteMapSheet.swift - Purpose: Accessibility label for find path button
+        public static let findPath = L10n.tr("Contacts", "contacts.routeMap.findPath", fallback: "Find Path")
+        /// Location: ContactRouteMapSheet.swift - Purpose: Summary banner - %lld in, %lld out, %lld repeaters
+        public static func summary(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
+          return L10n.tr("Contacts", "contacts.routeMap.summary", p1, p2, p3, fallback: "%lld in · %lld out · %lld repeaters")
+        }
+        /// Location: ContactRouteMapSheet.swift - Purpose: Navigation title for per-contact route map
+        public static let title = L10n.tr("Contacts", "contacts.routeMap.title", fallback: "Route History")
+        public enum Empty {
+          /// Location: ContactRouteMapSheet.swift - Purpose: Empty state description
+          public static let description = L10n.tr("Contacts", "contacts.routeMap.empty.description", fallback: "No messages with path data found for this contact.")
+          /// Location: ContactRouteMapSheet.swift - Purpose: Empty state title when no DMs with path data
+          public static let title = L10n.tr("Contacts", "contacts.routeMap.empty.title", fallback: "No Route Data")
+        }
+        public enum NoLocation {
+          /// Location: ContactRouteMapSheet.swift - Purpose: Empty state description for no GPS
+          public static let description = L10n.tr("Contacts", "contacts.routeMap.noLocation.description", fallback: "None of the repeaters in the route data have GPS coordinates.")
+          /// Location: ContactRouteMapSheet.swift - Purpose: Empty state title when repeaters have no GPS
+          public static let title = L10n.tr("Contacts", "contacts.routeMap.noLocation.title", fallback: "No Located Repeaters")
         }
       }
       public enum Row {

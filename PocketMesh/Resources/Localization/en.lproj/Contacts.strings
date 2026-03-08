@@ -1067,3 +1067,32 @@
 
 /* Location: TracePathViewModel.swift - Purpose: Path name with multiple endpoints (abbreviated) */
 "contacts.pathName.multipleEndpoints" = "%@ → ... → %@";
+
+// MARK: - Contact Route Map
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Navigation title for per-contact route map */
+"contacts.routeMap.title" = "Route History";
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Summary banner - %lld in, %lld out, %lld repeaters */
+"contacts.routeMap.summary" = "%lld in · %lld out · %lld repeaters";
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Empty state title when no DMs with path data */
+"contacts.routeMap.empty.title" = "No Route Data";
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Empty state description */
+"contacts.routeMap.empty.description" = "No messages with path data found for this contact.";
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Empty state title when repeaters have no GPS */
+"contacts.routeMap.noLocation.title" = "No Located Repeaters";
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Empty state description for no GPS */
+"contacts.routeMap.noLocation.description" = "None of the repeaters in the route data have GPS coordinates.";
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Accessibility label for center on data button */
+"contacts.routeMap.centerOnData" = "Center on data";
+
+/* Location: ContactRouteMapSheet.swift - Purpose: Accessibility label for find path button */
+"contacts.routeMap.findPath" = "Find Path";
+
+/* Location: ContactDetailView.swift - Purpose: Route Map button label in network path section */
+"contacts.detail.routeMap" = "Route Map";

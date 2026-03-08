@@ -2,29 +2,33 @@ import MapKit
 import SwiftUI
 import PocketMeshServices
 
-/// Sheet presenting a map view of the geographic route a message took through mesh repeaters.
-struct MessageRouteMapSheet: View {
+/// Sheet presenting a map view of heard repeat paths for a single outgoing message.
+/// Shows each repeat's return path from repeaters back to the user, with SNR-based
+/// coloring on segments and traffic bubbles on repeaters.
+struct HeardRepeatsMapSheet: View {
     @Environment(\.appState) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    let message: MessageDTO
+    let repeats: [MessageRepeatDTO]
+    let contacts: [ContactDTO]
+    let discoveredNodes: [DiscoveredNodeDTO]
 
-    @State private var mapViewModel = MessageRouteMapViewModel()
+    @State private var viewModel = HeardRepeatsMapViewModel()
 
     var body: some View {
         NavigationStack {
             ZStack {
-                if mapViewModel.isLoading {
+                if viewModel.isLoading {
                     ProgressView()
-                } else if !mapViewModel.hasLocatedHops {
-                    emptyState
+                } else if !viewModel.hasLocatedRepeaters {
+                    noDataState
                 } else {
                     mapContent
-                    infoBanner
+                    summaryBanner
                     mapToolbar
                 }
             }
-            .navigationTitle(L10n.Chats.Chats.Path.RouteMap.title)
+            .navigationTitle(L10n.Chats.Chats.HeardRepeats.Map.title)
             .navigationBarTitleDisplayMode(.inline)
             .liquidGlassToolbarBackground()
             .toolbar {
@@ -34,18 +38,17 @@ struct MessageRouteMapSheet: View {
             }
         }
         .task {
-            guard let services = appState.services else { return }
             // Ensure we have a location before loading so lines can connect to the user
             if appState.locationService.currentLocation == nil,
                appState.locationService.isAuthorized {
                 try? await appState.locationService.requestCurrentLocation(timeout: .seconds(5))
             }
-            await mapViewModel.loadRoute(
-                message: message,
-                services: services,
-                deviceID: message.deviceID,
+            viewModel.load(
+                repeats: repeats,
+                contacts: contacts,
+                discoveredNodes: discoveredNodes,
                 userLocation: appState.locationService.currentLocation,
-                receiverName: appState.connectedDevice?.nodeName
+                userName: appState.connectedDevice?.nodeName
                     ?? L10n.Chats.Chats.Path.Receiver.you
             )
         }
@@ -54,31 +57,30 @@ struct MessageRouteMapSheet: View {
     // MARK: - Map Content
 
     private var mapContent: some View {
-        MessageRouteMapMKMapView(
-            repeaterAnnotations: mapViewModel.repeaterAnnotations,
-            endpointAnnotations: mapViewModel.endpointAnnotations,
-            lineOverlays: mapViewModel.lineOverlays,
-            mapType: mapViewModel.mapType,
-            showLabels: mapViewModel.showLabels,
-            pathState: mapViewModel.pathState,
-            hashLabels: mapViewModel.hashLabels,
-            cameraRegion: $mapViewModel.cameraRegion,
-            cameraRegionVersion: mapViewModel.cameraRegionVersion
+        HeardRepeatsMapMKMapView(
+            repeaterAnnotations: viewModel.repeaterAnnotations,
+            endpointAnnotations: viewModel.endpointAnnotations,
+            lineOverlays: viewModel.lineOverlays,
+            mapType: viewModel.mapType,
+            showLabels: viewModel.showLabels,
+            pathState: viewModel.pathState,
+            hashLabels: viewModel.hashLabels,
+            lastHopSNR: viewModel.lastHopSNR,
+            cameraRegion: $viewModel.cameraRegion,
+            cameraRegionVersion: viewModel.cameraRegionVersion
         )
         .ignoresSafeArea()
     }
 
-    // MARK: - Info Banner
+    // MARK: - Summary Banner
 
-    private var infoBanner: some View {
+    private var summaryBanner: some View {
         VStack {
             HStack {
-                Text(L10n.Chats.Chats.Path.RouteMap.hops(mapViewModel.locatedHopCount))
-
-                if let snr = message.snr {
-                    Text("•")
-                    Text("SNR \(snr, format: .number.precision(.fractionLength(1))) dB")
-                }
+                Text(L10n.Chats.Chats.HeardRepeats.Map.summary(
+                    viewModel.repeatCount,
+                    viewModel.locatedRepeaterCount
+                ))
             }
             .font(.subheadline.weight(.medium))
             .padding(.horizontal, 16)
@@ -92,11 +94,11 @@ struct MessageRouteMapSheet: View {
 
     // MARK: - Empty State
 
-    private var emptyState: some View {
+    private var noDataState: some View {
         ContentUnavailableView(
-            L10n.Chats.Chats.Path.RouteMap.Empty.title,
+            L10n.Chats.Chats.HeardRepeats.Map.Empty.title,
             systemImage: "map",
-            description: Text(L10n.Chats.Chats.Path.RouteMap.Empty.description)
+            description: Text(L10n.Chats.Chats.HeardRepeats.Map.Empty.description)
         )
     }
 
@@ -110,32 +112,32 @@ struct MessageRouteMapSheet: View {
                 MapControlsToolbar(
                     onLocationTap: {
                         if let location = appState.locationService.currentLocation {
-                            mapViewModel.cameraRegion = MKCoordinateRegion(
+                            viewModel.cameraRegion = MKCoordinateRegion(
                                 center: location.coordinate,
                                 span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
                             )
-                            mapViewModel.cameraRegionVersion += 1
+                            viewModel.cameraRegionVersion += 1
                         } else {
                             appState.locationService.requestLocation()
                         }
                     },
-                    showingLayersMenu: $mapViewModel.showingLayersMenu
+                    showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
                     // Labels toggle
                     Button {
-                        mapViewModel.showLabels.toggle()
+                        viewModel.showLabels.toggle()
                     } label: {
                         Image(systemName: "character.textbox")
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(mapViewModel.showLabels ? .blue : .primary)
+                            .foregroundStyle(viewModel.showLabels ? .blue : .primary)
                             .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
 
-                    // Center on route
+                    // Center on data
                     Button {
-                        mapViewModel.centerOnRoute()
+                        viewModel.centerOnData()
                     } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                             .font(.system(size: 17, weight: .medium))
@@ -144,21 +146,21 @@ struct MessageRouteMapSheet: View {
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Chats.Chats.Path.RouteMap.centerOnRoute)
+                    .accessibilityLabel(L10n.Chats.Chats.HeardRepeats.Map.centerOnData)
                 }
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if mapViewModel.showingLayersMenu {
+            if viewModel.showingLayersMenu {
                 LayersMenu(
-                    selection: $mapViewModel.mapStyleSelection,
-                    isPresented: $mapViewModel.showingLayersMenu
+                    selection: $viewModel.mapStyleSelection,
+                    isPresented: $viewModel.showingLayersMenu
                 )
                 .padding(.trailing, 16)
                 .padding(.bottom, 160)
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.3), value: mapViewModel.showingLayersMenu)
+        .animation(.spring(response: 0.3), value: viewModel.showingLayersMenu)
     }
 }

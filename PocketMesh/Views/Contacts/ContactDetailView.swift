@@ -744,6 +744,8 @@ private struct ContactNetworkPathSection: View {
     let pathViewModel: PathManagementViewModel
     let onRefreshContact: () -> Void
 
+    @State private var showingRouteMap = false
+
     // Computed property for path display with resolved names
     private var pathDisplayWithNames: String {
         let pathData = currentContact.outPath
@@ -874,6 +876,13 @@ private struct ContactNetworkPathSection: View {
             }
             .radioDisabled(for: appState.connectionState)
 
+            // Route Map button
+            Button {
+                showingRouteMap = true
+            } label: {
+                Label(L10n.Contacts.Contacts.Detail.routeMap, systemImage: "map")
+            }
+
             // Reset Path button (destructive, disabled when already flood)
             Button(role: .destructive) {
                 Task {
@@ -895,6 +904,9 @@ private struct ContactNetworkPathSection: View {
             Text(L10n.Contacts.Contacts.Detail.networkPath)
         } footer: {
             Text(networkPathFooterText)
+        }
+        .sheet(isPresented: $showingRouteMap) {
+            ContactRouteMapSheet(contact: currentContact)
         }
     }
 }

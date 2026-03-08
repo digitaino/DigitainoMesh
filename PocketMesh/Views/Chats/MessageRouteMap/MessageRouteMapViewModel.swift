@@ -30,6 +30,8 @@ final class MessageRouteMapViewModel {
     private(set) var repeaterAnnotations: [RepeaterAnnotation] = []
     /// Pre-computed path info keyed by repeater UUID
     private(set) var pathState: [UUID: PathInfo] = [:]
+    /// Compact hex hash labels keyed by repeater UUID (e.g., "A3", "A37F")
+    private(set) var hashLabels: [UUID: String] = [:]
     /// Whether at least two located points exist (enough to draw a route)
     private(set) var hasLocatedHops: Bool = false
     /// Total number of intermediate hops with location data
@@ -37,6 +39,8 @@ final class MessageRouteMapViewModel {
 
     struct PathInfo {
         let hopIndex: Int
+        /// Position in the overall route sequence for label alternation
+        let routeIndex: Int
     }
 
     // MARK: - Private State
@@ -75,6 +79,8 @@ final class MessageRouteMapViewModel {
         receiverName: String
     ) {
         var points: [(coordinate: CLLocationCoordinate2D, name: String)] = []
+        /// Running index across the entire route sequence for label alternation
+        var routeIndex = 0
 
         // Sender location
         if let senderKeyPrefix = message.senderKeyPrefix,
@@ -86,8 +92,9 @@ final class MessageRouteMapViewModel {
             )
             points.append((coord, senderContact.displayName))
             endpointAnnotations.append(
-                RouteEndpointAnnotation(type: .sender, coordinate: coord, name: senderContact.displayName)
+                RouteEndpointAnnotation(type: .sender, coordinate: coord, name: senderContact.displayName, routeIndex: routeIndex)
             )
+            routeIndex += 1
         }
 
         // Intermediate hops
@@ -110,7 +117,9 @@ final class MessageRouteMapViewModel {
 
             points.append((coord, match.displayName))
             repeaterAnnotations.append(RepeaterAnnotation(repeater: match))
-            pathState[match.id] = PathInfo(hopIndex: hopIndex)
+            pathState[match.id] = PathInfo(hopIndex: hopIndex, routeIndex: routeIndex)
+            hashLabels[match.id] = hop.hexString()
+            routeIndex += 1
         }
 
         locatedHopCount = hopIndex
@@ -120,7 +129,7 @@ final class MessageRouteMapViewModel {
             let coord = userLocation.coordinate
             points.append((coord, receiverName))
             endpointAnnotations.append(
-                RouteEndpointAnnotation(type: .receiver, coordinate: coord, name: receiverName)
+                RouteEndpointAnnotation(type: .receiver, coordinate: coord, name: receiverName, routeIndex: routeIndex)
             )
         }
 

@@ -13,6 +13,8 @@ final class RouteEndpointPinView: MKAnnotationView {
     private let triangleImageView = UIImageView()
     private var nameLabel: UILabel?
     private var nameLabelContainer: UIView?
+    private var nameLabelPositionConstraint: NSLayoutConstraint?
+    private var currentLabelPosition: TracePathRepeaterPinView.LabelPosition = .above
 
     // MARK: - Initialization
 
@@ -86,7 +88,11 @@ final class RouteEndpointPinView: MKAnnotationView {
 
     // MARK: - Configuration
 
-    func configure(for endpoint: RouteEndpointAnnotation, showLabel: Bool) {
+    func configure(
+        for endpoint: RouteEndpointAnnotation,
+        showLabel: Bool,
+        labelPosition: TracePathRepeaterPinView.LabelPosition = .above
+    ) {
         switch endpoint.endpointType {
         case .sender:
             circleView.backgroundColor = .systemTeal
@@ -99,7 +105,7 @@ final class RouteEndpointPinView: MKAnnotationView {
         }
 
         if showLabel, let name = endpoint.title {
-            showNameLabel(name)
+            showNameLabel(name, position: labelPosition)
         } else {
             hideNameLabel()
         }
@@ -112,7 +118,7 @@ final class RouteEndpointPinView: MKAnnotationView {
 
     // MARK: - Name Label
 
-    private func showNameLabel(_ name: String) {
+    private func showNameLabel(_ name: String, position: TracePathRepeaterPinView.LabelPosition = .above) {
         if nameLabelContainer == nil {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
             blur.translatesAutoresizingMaskIntoConstraints = false
@@ -137,16 +143,38 @@ final class RouteEndpointPinView: MKAnnotationView {
                 label.bottomAnchor.constraint(equalTo: blur.bottomAnchor, constant: -4),
                 label.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 8),
                 label.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -8),
-                blur.centerXAnchor.constraint(equalTo: circleView.centerXAnchor),
-                blur.bottomAnchor.constraint(equalTo: circleView.topAnchor, constant: -4)
+                blur.centerXAnchor.constraint(equalTo: circleView.centerXAnchor)
             ])
 
             nameLabelContainer = blur
             nameLabel = label
+            currentLabelPosition = position
+            applyLabelPositionConstraint(position, container: blur)
+        } else if position != currentLabelPosition {
+            currentLabelPosition = position
+            if let container = nameLabelContainer {
+                nameLabelPositionConstraint?.isActive = false
+                applyLabelPositionConstraint(position, container: container)
+            }
         }
 
         nameLabel?.text = name
         nameLabelContainer?.isHidden = false
+    }
+
+    private func applyLabelPositionConstraint(
+        _ position: TracePathRepeaterPinView.LabelPosition,
+        container: UIView
+    ) {
+        let constraint: NSLayoutConstraint
+        switch position {
+        case .above:
+            constraint = container.bottomAnchor.constraint(equalTo: circleView.topAnchor, constant: -4)
+        case .below:
+            constraint = container.topAnchor.constraint(equalTo: triangleImageView.bottomAnchor, constant: 4)
+        }
+        constraint.isActive = true
+        nameLabelPositionConstraint = constraint
     }
 
     private func hideNameLabel() {
@@ -158,6 +186,9 @@ final class RouteEndpointPinView: MKAnnotationView {
     override func prepareForReuse() {
         super.prepareForReuse()
         hideNameLabel()
+        nameLabelPositionConstraint?.isActive = false
+        nameLabelPositionConstraint = nil
+        currentLabelPosition = .above
         accessibilityLabel = nil
     }
 }

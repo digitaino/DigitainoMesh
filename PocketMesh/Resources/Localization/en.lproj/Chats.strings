@@ -1004,3 +1004,23 @@
 
 /* Location: MalwareWarningCard.swift - Accessibility label - %@ is domain */
 "chats.malwareWarning.accessibility" = "Warning: link to %@ flagged as suspicious";
+
+// MARK: - Heard Repeats Map
+
+/* Location: HeardRepeatsMapSheet.swift - Navigation title */
+"chats.heardRepeats.map.title" = "Repeat Coverage";
+
+/* Location: MessageActionsSheet.swift - Button to open repeats map */
+"chats.heardRepeats.map.viewOnMap" = "View Repeats on Map";
+
+/* Location: HeardRepeatsMapSheet.swift - Summary banner - %lld repeats, %lld repeaters */
+"chats.heardRepeats.map.summary" = "%lld repeats · %lld repeaters";
+
+/* Location: HeardRepeatsMapSheet.swift - Empty state title */
+"chats.heardRepeats.map.empty.title" = "No Location Data";
+
+/* Location: HeardRepeatsMapSheet.swift - Empty state description */
+"chats.heardRepeats.map.empty.description" = "None of the repeaters in the heard repeats have GPS coordinates.";
+
+/* Location: HeardRepeatsMapSheet.swift - Accessibility label for center on data button */
+"chats.heardRepeats.map.centerOnData" = "Center on data";

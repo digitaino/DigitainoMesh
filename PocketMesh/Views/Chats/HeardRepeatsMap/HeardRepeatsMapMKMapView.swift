@@ -1,17 +1,22 @@
 import MapKit
-import SwiftUI
 import PocketMeshServices
+import SwiftUI
 
-/// Read-only UIViewRepresentable for displaying a message's geographic route on a map.
-/// Simplified variant of `TracePathMKMapView` without interactive path building.
-struct MessageRouteMapMKMapView: UIViewRepresentable {
+/// UIViewRepresentable for the heard repeats map.
+/// Displays repeater pins with hex hash labels for outbound chain hops,
+/// neutral-colored line overlays between consecutive hops (with arrowheads),
+/// SNR-colored last-hop lines from the heard repeater to the user, and
+/// a receiver endpoint pin at the user's location.
+struct HeardRepeatsMapMKMapView: UIViewRepresentable {
     let repeaterAnnotations: [RepeaterAnnotation]
     let endpointAnnotations: [RouteEndpointAnnotation]
     let lineOverlays: [PathLineOverlay]
     let mapType: MKMapType
     let showLabels: Bool
-    let pathState: [UUID: MessageRouteMapViewModel.PathInfo]
+    let pathState: [UUID: HeardRepeatsMapViewModel.PathInfo]
     let hashLabels: [UUID: String]
+    /// SNR quality for last-hop overlays (keyed by overlay segmentIndex)
+    let lastHopSNR: [Int: SNRQuality]
 
     @Binding var cameraRegion: MKCoordinateRegion?
     let cameraRegionVersion: Int
@@ -42,6 +47,7 @@ struct MessageRouteMapMKMapView: UIViewRepresentable {
         coordinator.pathState = pathState
         coordinator.showLabels = showLabels
         coordinator.hashLabels = hashLabels
+        coordinator.lastHopSNR = lastHopSNR
 
         mapView.mapType = mapType
 
@@ -81,9 +87,7 @@ struct MessageRouteMapMKMapView: UIViewRepresentable {
 
         // Update visible pin views
         for annotation in mapView.annotations.compactMap({ $0 as? RepeaterAnnotation }) {
-            guard let view = mapView.view(for: annotation) as? TracePathRepeaterPinView else {
-                continue
-            }
+            guard let view = mapView.view(for: annotation) as? TracePathRepeaterPinView else { continue }
             let info = pathState[annotation.repeater.id]
             let labelPos: TracePathRepeaterPinView.LabelPosition = ((info?.routeIndex ?? 0) % 2 == 0) ? .above : .below
             view.configure(
@@ -98,11 +102,8 @@ struct MessageRouteMapMKMapView: UIViewRepresentable {
         }
 
         for annotation in mapView.annotations.compactMap({ $0 as? RouteEndpointAnnotation }) {
-            guard let view = mapView.view(for: annotation) as? RouteEndpointPinView else {
-                continue
-            }
-            let labelPos: TracePathRepeaterPinView.LabelPosition = (annotation.routeIndex % 2 == 0) ? .above : .below
-            view.configure(for: annotation, showLabel: showLabels, labelPosition: labelPos)
+            guard let view = mapView.view(for: annotation) as? RouteEndpointPinView else { continue }
+            view.configure(for: annotation, showLabel: showLabels)
         }
     }
 
@@ -133,9 +134,10 @@ struct MessageRouteMapMKMapView: UIViewRepresentable {
     class Coordinator: NSObject, MKMapViewDelegate {
         var setCameraRegion: (MKCoordinateRegion?) -> Void
 
-        var pathState: [UUID: MessageRouteMapViewModel.PathInfo] = [:]
+        var pathState: [UUID: HeardRepeatsMapViewModel.PathInfo] = [:]
         var showLabels: Bool = true
         var hashLabels: [UUID: String] = [:]
+        var lastHopSNR: [Int: SNRQuality] = [:]
 
         var isUpdatingFromSwiftUI = false
         var lastAppliedRegion: MKCoordinateRegion?
@@ -172,8 +174,7 @@ struct MessageRouteMapMKMapView: UIViewRepresentable {
                     annotation: annotation,
                     reuseIdentifier: RouteEndpointPinView.reuseIdentifier
                 )
-                let labelPos: TracePathRepeaterPinView.LabelPosition = (endpointAnnotation.routeIndex % 2 == 0) ? .above : .below
-                view.configure(for: endpointAnnotation, showLabel: showLabels, labelPosition: labelPos)
+                view.configure(for: endpointAnnotation, showLabel: showLabels)
                 view.canShowCallout = true
                 return view
             }
@@ -210,6 +211,28 @@ struct MessageRouteMapMKMapView: UIViewRepresentable {
             if let pathOverlay = overlay as? PathLineOverlay {
                 let renderer = PathLineRenderer(overlay: pathOverlay)
                 renderer.showArrowhead = true
+
+                // Check if this is a last-hop overlay (has SNR data)
+                if let snrQuality = lastHopSNR[pathOverlay.segmentIndex] {
+                    // Color by SNR quality
+                    switch snrQuality {
+                    case .excellent, .good:
+                        renderer.strokeColor = .systemGreen
+                    case .fair:
+                        renderer.strokeColor = .systemYellow
+                    case .poor, .veryPoor:
+                        renderer.strokeColor = .systemRed
+                    case .unknown:
+                        renderer.strokeColor = .systemGray
+                    }
+                    renderer.lineWidth = 4
+                } else {
+                    // Neutral outbound chain
+                    renderer.strokeColor = .systemBlue
+                    renderer.lineWidth = 3
+                    renderer.lineDashPattern = [8, 4]
+                }
+
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)

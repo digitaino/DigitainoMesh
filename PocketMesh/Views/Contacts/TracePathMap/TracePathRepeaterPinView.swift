@@ -7,6 +7,12 @@ final class TracePathRepeaterPinView: MKAnnotationView {
     static let reuseIdentifier = "TracePathRepeaterPinView"
     static let clusteringID = "repeater"
 
+    /// Where to position the name label relative to the pin
+    enum LabelPosition {
+        case above
+        case below
+    }
+
     // MARK: - Tap Handling
 
     var onTap: (() -> Void)?
@@ -20,6 +26,8 @@ final class TracePathRepeaterPinView: MKAnnotationView {
     private var numberBadge: UILabel?
     private var nameLabel: UILabel?
     private var nameLabelContainer: UIView?
+    private var nameLabelPositionConstraint: NSLayoutConstraint?
+    private var currentLabelPosition: LabelPosition = .above
 
     // MARK: - Initialization
 
@@ -119,12 +127,16 @@ final class TracePathRepeaterPinView: MKAnnotationView {
 
     // MARK: - Configuration
 
+    /// - Parameter overrideLabel: When non-nil, displayed instead of the repeater's full name.
+    ///   Used by `MessageRouteMapMKMapView` to show compact hex hash labels.
     func configure(
         for repeater: ContactDTO,
         inPath: Bool,
         hopIndex: Int?,
         isLastHop: Bool,
-        showLabel: Bool
+        showLabel: Bool,
+        labelPosition: LabelPosition = .above,
+        overrideLabel: String? = nil
     ) {
         // Clustering: in-path pins are always visible, others cluster
         if inPath {
@@ -147,7 +159,8 @@ final class TracePathRepeaterPinView: MKAnnotationView {
 
         // Update name label
         if showLabel {
-            showNameLabel(repeater.displayName)
+            let labelText = overrideLabel ?? repeater.displayName
+            showNameLabel(labelText, position: labelPosition)
         } else {
             hideNameLabel()
         }
@@ -208,7 +221,7 @@ final class TracePathRepeaterPinView: MKAnnotationView {
 
     // MARK: - Name Label
 
-    private func showNameLabel(_ name: String) {
+    private func showNameLabel(_ name: String, position: LabelPosition = .above) {
         if nameLabelContainer == nil {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
             blur.translatesAutoresizingMaskIntoConstraints = false
@@ -226,22 +239,42 @@ final class TracePathRepeaterPinView: MKAnnotationView {
             label.textAlignment = .center
             blur.contentView.addSubview(label)
 
-            // Internal + position constraints (all set once at creation time)
+            // Internal + centering constraints (position constraint added separately)
             NSLayoutConstraint.activate([
                 label.topAnchor.constraint(equalTo: blur.topAnchor, constant: 4),
                 label.bottomAnchor.constraint(equalTo: blur.bottomAnchor, constant: -4),
                 label.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 8),
                 label.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -8),
-                blur.centerXAnchor.constraint(equalTo: circleView.centerXAnchor),
-                blur.bottomAnchor.constraint(equalTo: circleView.topAnchor, constant: -4)
+                blur.centerXAnchor.constraint(equalTo: circleView.centerXAnchor)
             ])
 
             nameLabelContainer = blur
             nameLabel = label
+            currentLabelPosition = position
+            applyLabelPositionConstraint(position, container: blur)
+        } else if position != currentLabelPosition {
+            // Reposition if the label position changed
+            currentLabelPosition = position
+            if let container = nameLabelContainer {
+                nameLabelPositionConstraint?.isActive = false
+                applyLabelPositionConstraint(position, container: container)
+            }
         }
 
         nameLabel?.text = name
         nameLabelContainer?.isHidden = false
+    }
+
+    private func applyLabelPositionConstraint(_ position: LabelPosition, container: UIView) {
+        let constraint: NSLayoutConstraint
+        switch position {
+        case .above:
+            constraint = container.bottomAnchor.constraint(equalTo: circleView.topAnchor, constant: -4)
+        case .below:
+            constraint = container.topAnchor.constraint(equalTo: triangleImageView.bottomAnchor, constant: 4)
+        }
+        constraint.isActive = true
+        nameLabelPositionConstraint = constraint
     }
 
     private func hideNameLabel() {
@@ -256,6 +289,9 @@ final class TracePathRepeaterPinView: MKAnnotationView {
         selectionRing.isHidden = true
         hideNumberBadge()
         hideNameLabel()
+        nameLabelPositionConstraint?.isActive = false
+        nameLabelPositionConstraint = nil
+        currentLabelPosition = .above
         accessibilityLabel = nil
         accessibilityHint = nil
         clusteringIdentifier = Self.clusteringID

@@ -389,6 +389,8 @@ private struct ActionsExpandedContent: View {
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
 
+    @State private var showingRepeatsMap = false
+
     var body: some View {
         if availability.canShowRepeatDetails {
             RepeatDetailsContent(
@@ -397,6 +399,24 @@ private struct ActionsExpandedContent: View {
                 discoveredNodes: discoveredNodes,
                 userLocation: appState.locationService.currentLocation
             )
+
+            if let repeats, !repeats.isEmpty {
+                Button {
+                    showingRepeatsMap = true
+                } label: {
+                    Label(L10n.Chats.Chats.HeardRepeats.Map.viewOnMap, systemImage: "map")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .padding(.top, 8)
+                .sheet(isPresented: $showingRepeatsMap) {
+                    HeardRepeatsMapSheet(
+                        repeats: repeats,
+                        contacts: contacts,
+                        discoveredNodes: discoveredNodes
+                    )
+                }
+            }
         } else if availability.canViewPath {
             MessagePathContent(
                 message: message,

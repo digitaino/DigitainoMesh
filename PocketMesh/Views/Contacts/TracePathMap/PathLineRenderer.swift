@@ -6,6 +6,9 @@ import UIKit
 /// rather than calling updateAppearance on existing renderers
 final class PathLineRenderer: MKPolylineRenderer {
 
+    /// When true, draws a directional arrowhead at the midpoint of the segment.
+    var showArrowhead = false
+
     override init(overlay: any MKOverlay) {
         super.init(overlay: overlay)
         configureAppearance()
@@ -35,5 +38,26 @@ final class PathLineRenderer: MKPolylineRenderer {
             lineWidth = 3
             lineDashPattern = [4, 4]  // Different pattern for accessibility
         }
+    }
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        // Save state before super.draw() which may clip the context
+        context.saveGState()
+        super.draw(mapRect, zoomScale: zoomScale, in: context)
+        context.restoreGState()
+
+        guard showArrowhead,
+              let pathOverlay = overlay as? PathLineOverlay else { return }
+
+        let arrowColor = strokeColor ?? .systemGray
+        ArrowheadDrawing.drawArrowhead(
+            from: pathOverlay.startCoordinate,
+            to: pathOverlay.endCoordinate,
+            color: arrowColor,
+            lineWidth: lineWidth,
+            zoomScale: zoomScale,
+            in: context,
+            renderer: self
+        )
     }
 }
