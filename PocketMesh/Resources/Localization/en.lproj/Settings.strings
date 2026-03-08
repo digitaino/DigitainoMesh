@@ -270,6 +270,12 @@
 /* Link to GitHub repository */
 "about.github" = "GitHub";
 
+/* Fork attribution footer text */
+"about.forkAttribution" = "DigitainoMesh is an unofficial fork of PocketMesh by Avi0n.";
+
+/* Link to upstream PocketMesh GitHub */
+"about.upstreamGithub" = "PocketMesh (Upstream)";
+
 
 // MARK: - Advanced Radio Section
 

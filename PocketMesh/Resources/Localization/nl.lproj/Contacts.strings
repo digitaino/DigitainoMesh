@@ -432,7 +432,7 @@
 "contacts.qr.title" = "Contact delen";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Share subject */
-"contacts.qr.shareSubject" = "PocketMesh-contact";
+"contacts.qr.shareSubject" = "DigitainoMesh-contact";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Copy button when not copied */
 "contacts.qr.copy" = "Kopiëren";

@@ -26,7 +26,7 @@ struct AboutSection: View {
             }
             .foregroundStyle(.primary)
 
-            Link(destination: URL(string: "https://github.com/Avi0n/PocketMesh")!) {
+            Link(destination: URL(string: "https://github.com/digitaino/PocketMesh")!) {
                 HStack {
                     TintedLabel(L10n.Settings.About.github, systemImage: "chevron.left.forwardslash.chevron.right")
                     Spacer()
@@ -37,8 +37,21 @@ struct AboutSection: View {
             }
             .foregroundStyle(.primary)
 
+            Link(destination: URL(string: "https://github.com/Avi0n/PocketMesh")!) {
+                HStack {
+                    TintedLabel(L10n.Settings.About.upstreamGithub, systemImage: "arrow.triangle.branch")
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .foregroundStyle(.primary)
+
         } header: {
             Text(L10n.Settings.About.header)
+        } footer: {
+            Text(L10n.Settings.About.forkAttribution)
         }
     }
 }

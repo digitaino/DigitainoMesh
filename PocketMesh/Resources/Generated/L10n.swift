@@ -1424,7 +1424,7 @@ public enum L10n {
         /// Location: ContactQRShareSheet.swift - Purpose: Share button
         public static let share = L10n.tr("Contacts", "contacts.qr.share", fallback: "Share")
         /// Location: ContactQRShareSheet.swift - Purpose: Share subject
-        public static let shareSubject = L10n.tr("Contacts", "contacts.qr.shareSubject", fallback: "PocketMesh Contact")
+        public static let shareSubject = L10n.tr("Contacts", "contacts.qr.shareSubject", fallback: "DigitainoMesh Contact")
         /// Location: ContactQRShareSheet.swift - Purpose: Navigation title
         public static let title = L10n.tr("Contacts", "contacts.qr.title", fallback: "Share Contact")
       }
@@ -2215,7 +2215,7 @@ public enum L10n {
       /// Location: RadioPresetOnboardingView.swift - Button to skip radio setup
       public static let skip = L10n.tr("Onboarding", "radioPreset.skip", fallback: "Skip")
       /// Location: RadioPresetOnboardingView.swift - Subtitle with instructions and Discord link
-      public static let subtitle = L10n.tr("Onboarding", "radioPreset.subtitle", fallback: "You can change these settings at any time in PocketMesh's Settings. If you're not sure which preset to use, ask in the [MeshCore Discord](https://meshcore.co.uk/contact.html)")
+      public static let subtitle = L10n.tr("Onboarding", "radioPreset.subtitle", fallback: "You can change these settings at any time in DigitainoMesh's Settings. If you're not sure which preset to use, ask in the [MeshCore Discord](https://meshcore.co.uk/contact.html)")
       /// Location: RadioPresetOnboardingView.swift - Screen title for radio settings
       public static let title = L10n.tr("Onboarding", "radioPreset.title", fallback: "Radio Settings")
     }
@@ -2263,7 +2263,7 @@ public enum L10n {
       /// Location: WelcomeView.swift - Subtitle describing the app
       public static let subtitle = L10n.tr("Onboarding", "welcome.subtitle", fallback: "Unofficial MeshCore client for iOS")
       /// Location: WelcomeView.swift - App title displayed on welcome screen
-      public static let title = L10n.tr("Onboarding", "welcome.title", fallback: "PocketMesh")
+      public static let title = L10n.tr("Onboarding", "welcome.title", fallback: "DigitainoMesh")
       public enum Feature {
         public enum Community {
           /// Location: WelcomeView.swift - Feature description for community network
@@ -2764,12 +2764,16 @@ public enum L10n {
       return L10n.tr("Settings", "version", String(describing: p1), fallback: "v%@")
     }
     public enum About {
+      /// Fork attribution footer text
+      public static let forkAttribution = L10n.tr("Settings", "about.forkAttribution", fallback: "DigitainoMesh is an unofficial fork of PocketMesh by Avi0n.")
       /// Link to GitHub repository
       public static let github = L10n.tr("Settings", "about.github", fallback: "GitHub")
       /// Section header for about links
       public static let header = L10n.tr("Settings", "about.header", fallback: "About")
       /// Link to MeshCore online map
       public static let onlineMap = L10n.tr("Settings", "about.onlineMap", fallback: "MeshCore Online Map")
+      /// Link to upstream PocketMesh GitHub
+      public static let upstreamGithub = L10n.tr("Settings", "about.upstreamGithub", fallback: "PocketMesh (Upstream)")
       /// Link to MeshCore website
       public static let website = L10n.tr("Settings", "about.website", fallback: "MeshCore Website")
     }
@@ -3936,7 +3940,7 @@ public enum L10n {
         /// Location: CLIToolViewModel.swift - Welcome banner line 3
         public static let welcomeHint = L10n.tr("Tools", "tools.cli.welcomeHint", fallback: "Type 'help' for available commands.")
         /// Location: CLIToolViewModel.swift - Welcome banner line 1
-        public static let welcomeLine1 = L10n.tr("Tools", "tools.cli.welcomeLine1", fallback: "PocketMesh CLI")
+        public static let welcomeLine1 = L10n.tr("Tools", "tools.cli.welcomeLine1", fallback: "DigitainoMesh CLI")
       }
       public enum LineOfSight {
         /// Location: LineOfSightView.swift - Additional height label

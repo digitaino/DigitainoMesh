@@ -10,6 +10,8 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleDisplayName</key>
+	<string>DigitainoMesh</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
@@ -57,13 +59,13 @@
 		<string>Bluetooth</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>PocketMesh uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app.</string>
+	<string>DigitainoMesh uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>PocketMesh uses Bluetooth to connect to MeshCore radio devices for mesh messaging.</string>
+	<string>DigitainoMesh uses Bluetooth to connect to MeshCore radio devices for mesh messaging.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>PocketMesh needs camera access to scan channel QR codes.</string>
+	<string>DigitainoMesh needs camera access to scan channel QR codes.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>PocketMesh uses your location to share coordinates with mesh contacts.</string>
+	<string>DigitainoMesh uses your location to share coordinates with mesh contacts.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
