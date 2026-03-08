@@ -98,6 +98,7 @@ struct ChatView: View {
                     ? (appState.connectedDevice?.nodeName ?? "Me")
                     : contact.displayName,
                 recentEmojis: recentEmojisStore.recentEmojis,
+                senderContact: nil,
                 onAction: { action in
                     handleMessageAction(action, for: message)
                 }

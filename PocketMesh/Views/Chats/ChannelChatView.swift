@@ -33,6 +33,7 @@ struct ChannelChatView: View {
     @State private var isDividerVisible = false
 
     @State private var selectedMessageForActions: MessageDTO?
+    @State private var contactDetailContact: ContactDTO?
     @State private var blockSenderContext: BlockSenderContext?
     @State private var recentEmojisStore = RecentEmojisStore()
     @State private var imageViewerData: ImageViewerData?
@@ -97,11 +98,23 @@ struct ChannelChatView: View {
                     ? (appState.connectedDevice?.nodeName ?? "Me")
                     : (message.senderNodeName ?? L10n.Chats.Chats.Message.Sender.unknown),
                 recentEmojis: recentEmojisStore.recentEmojis,
+                senderContact: resolveSenderContact(for: message),
                 onAction: { action in
                     handleMessageAction(action, for: message)
+                },
+                onDirectMessage: { contact in
+                    appState.navigation.navigateToChat(with: contact)
+                },
+                onViewContact: { contact in
+                    contactDetailContact = contact
                 }
             )
             .environment(\.horizontalSizeClass, horizontalSizeClass)
+        }
+        .sheet(item: $contactDetailContact) { contact in
+            NavigationStack {
+                ContactDetailView(contact: contact)
+            }
         }
         .sheet(item: $blockSenderContext) { context in
             BlockSenderSheet(
@@ -440,6 +453,29 @@ struct ChannelChatView: View {
 
         // Refresh chat list previews
         await services.syncCoordinator.notifyConversationsChanged()
+    }
+
+    // MARK: - Sender Contact Resolution
+
+    private func resolveSenderContact(for message: MessageDTO) -> ContactDTO? {
+        guard !message.isOutgoing else { return nil }
+
+        // Try key prefix match first (most reliable)
+        if let prefix = message.senderKeyPrefix {
+            if let contact = viewModel.allContacts.first(where: { contact in
+                contact.publicKey.count >= prefix.count &&
+                Array(contact.publicKey.prefix(prefix.count)) == Array(prefix)
+            }) {
+                return contact
+            }
+        }
+
+        // Fall back to name match against real contacts
+        if let senderName = message.senderNodeName, !senderName.isEmpty {
+            return viewModel.allContacts.first { $0.name == senderName }
+        }
+
+        return nil
     }
 
     // MARK: - Message Actions

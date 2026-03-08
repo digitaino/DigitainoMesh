@@ -21,10 +21,13 @@ struct MessageActionsSheet: View {
     let message: MessageDTO
     let senderName: String
     let recentEmojis: [String]
+    let senderContact: ContactDTO?
     let onAction: (MessageAction) -> Void
+    var onDirectMessage: ((ContactDTO) -> Void)?
+    var onViewContact: ((ContactDTO) -> Void)?
 
     private var availability: MessageActionAvailability {
-        MessageActionAvailability(message: message)
+        MessageActionAvailability(message: message, senderContact: senderContact)
     }
 
     private func performAction(_ action: MessageAction) {
@@ -54,7 +57,16 @@ struct MessageActionsSheet: View {
         VStack(spacing: 0) {
             ActionsPreviewHeader(
                 message: message,
-                senderName: senderName
+                senderName: senderName,
+                senderContact: senderContact,
+                onViewContact: { contact in
+                    dismiss()
+                    // Delay to let sheet dismiss before navigating
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        onViewContact?(contact)
+                    }
+                }
             )
 
             Divider()
@@ -73,7 +85,15 @@ struct MessageActionsSheet: View {
                         }
                         ActionsButtonsSection(
                             availability: availability,
-                            onSelectAction: performAction
+                            senderContact: senderContact,
+                            onSelectAction: performAction,
+                            onDirectMessage: { contact in
+                                dismiss()
+                                Task {
+                                    try? await Task.sleep(for: .milliseconds(300))
+                                    onDirectMessage?(contact)
+                                }
+                            }
                         )
                         ActionsDetailsSection(
                             message: message,
@@ -137,6 +157,8 @@ struct MessageActionsSheet: View {
 private struct ActionsPreviewHeader: View {
     let message: MessageDTO
     let senderName: String
+    let senderContact: ContactDTO?
+    let onViewContact: ((ContactDTO) -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -145,6 +167,25 @@ private struct ActionsPreviewHeader: View {
               let keyPrefix = message.senderKeyPrefix,
               let firstByte = keyPrefix.first else { return nil }
         return String(format: "%02X", firstByte)
+    }
+
+    @ViewBuilder
+    private var senderNameLabel: some View {
+        if let contact = senderContact, let onViewContact {
+            Button {
+                onViewContact(contact)
+            } label: {
+                Text(senderName)
+                    .font(.subheadline)
+                    .bold()
+                    .foregroundStyle(.tint)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Text(senderName)
+                .font(.subheadline)
+                .bold()
+        }
     }
 
     var body: some View {
@@ -157,9 +198,7 @@ private struct ActionsPreviewHeader: View {
                             .foregroundStyle(.secondary)
                             .monospaced()
                     }
-                    Text(senderName)
-                        .font(.subheadline)
-                        .bold()
+                    senderNameLabel
                     Spacer()
                     ActionsTimestampLabel(message: message)
                 }
@@ -172,9 +211,7 @@ private struct ActionsPreviewHeader: View {
                                 .foregroundStyle(.secondary)
                                 .monospaced()
                         }
-                        Text(senderName)
-                            .font(.subheadline)
-                            .bold()
+                        senderNameLabel
                     }
                     ActionsTimestampLabel(message: message)
                 }
@@ -219,7 +256,9 @@ private struct ActionsEmojiSection: View {
 
 private struct ActionsButtonsSection: View {
     let availability: MessageActionAvailability
+    let senderContact: ContactDTO?
     let onSelectAction: (MessageAction) -> Void
+    let onDirectMessage: ((ContactDTO) -> Void)?
 
     var body: some View {
         if availability.canReply {
@@ -227,6 +266,14 @@ private struct ActionsButtonsSection: View {
                 title: L10n.Chats.Chats.Message.Action.reply,
                 icon: "arrowshape.turn.up.left",
                 action: { onSelectAction(.reply) }
+            )
+        }
+
+        if availability.canDirectMessage, let contact = senderContact {
+            ActionButton(
+                title: L10n.Chats.Chats.Message.Action.directMessage,
+                icon: "paperplane",
+                action: { onDirectMessage?(contact) }
             )
         }
 
@@ -552,7 +599,7 @@ private struct ActionInfoRow: View {
         message: MessageDTO(from: message),
         senderName: "My Device",
         recentEmojis: RecentEmojisStore.defaultEmojis,
-
+        senderContact: nil,
         onAction: { print("Action: \($0)") }
     )
 }
@@ -572,7 +619,7 @@ private struct ActionInfoRow: View {
         message: MessageDTO(from: message),
         senderName: "Alice",
         recentEmojis: RecentEmojisStore.defaultEmojis,
-
+        senderContact: nil,
         onAction: { print("Action: \($0)") }
     )
 }

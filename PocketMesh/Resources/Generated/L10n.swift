@@ -498,6 +498,8 @@ public enum L10n {
           public static let delete = L10n.tr("Chats", "chats.message.action.delete", fallback: "Delete")
           /// Location: UnifiedMessageBubble.swift - Context menu submenu label
           public static let details = L10n.tr("Chats", "chats.message.action.details", fallback: "Details")
+          /// Location: MessageActionsSheet.swift - Context menu action to direct message sender
+          public static let directMessage = L10n.tr("Chats", "chats.message.action.directMessage", fallback: "Direct Message")
           /// Location: UnifiedMessageBubble.swift - Context menu action to view repeat details
           public static let repeatDetails = L10n.tr("Chats", "chats.message.action.repeatDetails", fallback: "Repeat Details")
           /// Location: UnifiedMessageBubble.swift - Context menu action to reply

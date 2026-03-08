@@ -132,16 +132,20 @@ extension ConnectionManager: BLEReconnectionDelegate {
         await onConnectionReady?()
         await performInitialSync(deviceID: deviceID, services: newServices, context: "[BLE] iOS auto-reconnect")
 
-        // User may have disconnected while sync was in progress
-        guard connectionIntent.wantsConnection else { return }
+        // User may have disconnected or connection lost while sync was in progress
+        guard connectionIntent.wantsConnection, services != nil else { return }
 
         await syncDeviceTimeIfNeeded()
-        guard connectionIntent.wantsConnection else { return }
+        guard connectionIntent.wantsConnection, services != nil else { return }
 
         // Re-authenticate room sessions that were connected before BLE loss
         let sessionIDs = sessionsAwaitingReauth
         sessionsAwaitingReauth = []
         await newServices.remoteNodeService.handleBLEReconnection(sessionIDs: sessionIDs)
+
+        // Verify services still valid after awaits — a concurrent disconnection
+        // during reconnect can clear services while this function is suspended
+        guard connectionIntent.wantsConnection, services != nil else { return }
 
         currentTransportType = .bluetooth
         connectionState = .ready

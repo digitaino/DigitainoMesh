@@ -571,6 +571,9 @@
 /* Location: UnifiedMessageBubble.swift - Context menu action to reply */
 "chats.message.action.reply" = "Reply";
 
+/* Location: MessageActionsSheet.swift - Context menu action to direct message sender */
+"chats.message.action.directMessage" = "Direct Message";
+
 /* Location: UnifiedMessageBubble.swift - Context menu action to copy */
 "chats.message.action.copy" = "Copy";
 
