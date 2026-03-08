@@ -435,10 +435,10 @@ extension ChatViewModel {
             await updateURLForDisplayItem(messageID: messageID, text: text)
         }
 
-        // Add sender to channelSenders if new (for channel messages)
+        // Add sender to channelSenders if new and update sender order (for channel messages)
         if let senderName = message.senderNodeName,
            let deviceID = currentChannel?.deviceID {
-            addChannelSenderIfNew(senderName, deviceID: deviceID)
+            addChannelSenderIfNew(senderName, deviceID: deviceID, timestamp: message.timestamp)
         }
     }
 

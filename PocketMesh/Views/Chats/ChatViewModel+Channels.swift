@@ -248,17 +248,21 @@ extension ChatViewModel {
         logger.info("Built \(self.channelSenders.count) synthetic contacts from channel senders")
     }
 
-    /// Add a channel sender as a synthetic contact if not already tracked.
+    /// Add a channel sender as a synthetic contact if not already tracked,
+    /// and update `channelSenderOrder` with the message timestamp.
     /// Used for incremental additions when new messages arrive.
-    func addChannelSenderIfNew(_ name: String, deviceID: UUID) {
+    func addChannelSenderIfNew(_ name: String, deviceID: UUID, timestamp: UInt32) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty,
-              trimmed.count <= 128,
-              !contactNameSet.contains(trimmed),
-              !channelSenderNames.contains(trimmed) else { return }
+        guard !trimmed.isEmpty, trimmed.count <= 128 else { return }
 
-        channelSenderNames.insert(trimmed)
-        channelSenders.append(makeSyntheticContact(name: trimmed, deviceID: deviceID))
+        // Always update sender order with the latest timestamp
+        channelSenderOrder[trimmed] = max(timestamp, channelSenderOrder[trimmed] ?? 0)
+
+        // Add synthetic contact only for non-contact senders not yet tracked
+        if !contactNameSet.contains(trimmed), !channelSenderNames.contains(trimmed) {
+            channelSenderNames.insert(trimmed)
+            channelSenders.append(makeSyntheticContact(name: trimmed, deviceID: deviceID))
+        }
     }
 
     /// Create a synthetic ContactDTO for a channel sender not in contacts.
