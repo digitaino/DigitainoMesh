@@ -17,21 +17,35 @@ struct MentionSuggestionView: View {
         return min(totalHeight, maxHeight)
     }
 
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(contacts.prefix(maxSuggestions)) { contact in
-                    Button {
-                        onSelect(contact)
-                    } label: {
-                        MentionSuggestionRow(contact: contact)
-                    }
-                    .buttonStyle(.plain)
+    /// Reversed so the most relevant contact (most recent sender) is at the
+    /// bottom of the list, closest to the text input and the user's thumb.
+    private var displayContacts: [ContactDTO] {
+        Array(contacts.prefix(maxSuggestions).reversed())
+    }
 
-                    if contact.id != contacts.prefix(maxSuggestions).last?.id {
-                        Divider()
-                            .padding(.leading, 44)
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(displayContacts) { contact in
+                        Button {
+                            onSelect(contact)
+                        } label: {
+                            MentionSuggestionRow(contact: contact)
+                        }
+                        .buttonStyle(.plain)
+
+                        if contact.id != displayContacts.last?.id {
+                            Divider()
+                                .padding(.leading, 44)
+                        }
                     }
+                }
+            }
+            .onAppear {
+                // Scroll to the bottom so the most relevant contact is visible
+                if let last = displayContacts.last {
+                    proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
         }
