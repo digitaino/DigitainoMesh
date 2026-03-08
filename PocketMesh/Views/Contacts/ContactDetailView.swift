@@ -88,6 +88,8 @@ struct ContactDetailView: View {
     @State private var navigateToSettings = false
     // QR sharing state
     @State private var showQRShareSheet = false
+    // Route map state
+    @State private var showingRouteMap = false
     // Ping state
     @State private var isPinging = false
     @State private var pingResult: PingResult?
@@ -145,6 +147,7 @@ struct ContactDetailView: View {
             ContactNetworkPathSection(
                 currentContact: currentContact,
                 pathViewModel: pathViewModel,
+                showingRouteMap: $showingRouteMap,
                 onRefreshContact: { Task { await refreshContact() } }
             )
 
@@ -223,6 +226,9 @@ struct ContactDetailView: View {
         }
         .sheet(isPresented: $pathViewModel.showingPathEditor) {
             PathEditingSheet(viewModel: pathViewModel, contact: currentContact)
+        }
+        .sheet(isPresented: $showingRouteMap) {
+            ContactRouteMapSheet(contact: currentContact)
         }
         .alert(L10n.Contacts.Contacts.Detail.Alert.pathError, isPresented: $pathViewModel.showError) {
             Button(L10n.Contacts.Contacts.Common.ok, role: .cancel) { }
@@ -742,9 +748,8 @@ private struct ContactNetworkPathSection: View {
 
     let currentContact: ContactDTO
     let pathViewModel: PathManagementViewModel
+    @Binding var showingRouteMap: Bool
     let onRefreshContact: () -> Void
-
-    @State private var showingRouteMap = false
 
     // Computed property for path display with resolved names
     private var pathDisplayWithNames: String {
@@ -904,9 +909,6 @@ private struct ContactNetworkPathSection: View {
             Text(L10n.Contacts.Contacts.Detail.networkPath)
         } footer: {
             Text(networkPathFooterText)
-        }
-        .sheet(isPresented: $showingRouteMap) {
-            ContactRouteMapSheet(contact: currentContact)
         }
     }
 }

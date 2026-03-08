@@ -148,7 +148,27 @@ final class ContactRouteMapViewModel {
 
             inboundCount = inCount
             outboundCount = outCount
-            hasData = !filteredMessages.isEmpty
+
+            // Fallback: if no messages had per-message path data, use the
+            // contact's current outPath (the route shown on the contact detail).
+            if routes.isEmpty, !contact.isFloodRouted, contact.pathHopCount > 0 {
+                let currentPathHops = RouteAggregator.resolvePath(
+                    pathNodes: contact.outPath.prefix(contact.pathByteLength),
+                    hashSize: contact.pathHashSize,
+                    contacts: repeaters,
+                    discoveredNodes: discoveredNodes,
+                    userLocation: userLocation
+                )
+                if !currentPathHops.isEmpty {
+                    var fullHops: [RouteAggregator.LocatedHop] = []
+                    if let userHop { fullHops.append(userHop) }
+                    fullHops.append(contentsOf: currentPathHops)
+                    if let contactHop { fullHops.append(contactHop) }
+                    routes.append((hops: fullHops, snr: nil, direction: .unspecified))
+                }
+            }
+
+            hasData = !filteredMessages.isEmpty || !routes.isEmpty
 
             // Synthetic keys used for endpoints — exclude from bubble annotations
             let syntheticKeys: Set<Data> = [
