@@ -3,9 +3,14 @@ import SwiftUI
 /// First screen of onboarding - introduces the app
 struct WelcomeView: View {
     @Environment(\.appState) private var appState
+    @Environment(\.openURL) private var openURL
+
+    private var isTestFlightBuild: Bool {
+        Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+    }
 
     var body: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: 32) {
             Spacer()
 
             // Animated mesh visualization
@@ -13,7 +18,7 @@ struct WelcomeView: View {
                 .padding(.horizontal)
 
             // App title
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 Text(L10n.Onboarding.Welcome.title)
                     .font(.largeTitle)
                     .bold()
@@ -21,9 +26,13 @@ struct WelcomeView: View {
                 Text(L10n.Onboarding.Welcome.subtitle)
                     .font(.title3)
                     .foregroundStyle(.secondary)
-            }
 
-            Spacer()
+                // Fork attribution
+                Text("A fork of [PocketMesh](https://github.com/Avi0n/PocketMesh)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .tint(.secondary)
+            }
 
             // Features list
             VStack(alignment: .leading, spacing: 20) {
@@ -42,6 +51,42 @@ struct WelcomeView: View {
             .padding(.horizontal)
 
             Spacer()
+
+            // Feedback & contact
+            VStack(spacing: 8) {
+                if isTestFlightBuild {
+                    Label {
+                        Text("Send feedback via TestFlight or email [mesh@digitaino.com](mailto:mesh@digitaino.com)")
+                            .font(.caption)
+                    } icon: {
+                        Image(systemName: "envelope.fill")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.secondary)
+                } else {
+                    Label {
+                        Text("Feedback: [mesh@digitaino.com](mailto:mesh@digitaino.com)")
+                            .font(.caption)
+                    } icon: {
+                        Image(systemName: "envelope.fill")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    openURL(URL(string: "https://github.com/digitaino/PocketMesh")!)
+                } label: {
+                    Label {
+                        Text("GitHub")
+                            .font(.caption)
+                    } icon: {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                            .font(.caption)
+                    }
+                }
+                .foregroundStyle(.secondary)
+            }
 
             // Continue button
             Button {
