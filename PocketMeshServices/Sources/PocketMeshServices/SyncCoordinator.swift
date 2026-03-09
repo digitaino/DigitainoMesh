@@ -144,6 +144,10 @@ public actor SyncCoordinator {
     /// Callback when a reaction is received for a channel message
     var onReactionReceived: (@Sendable (_ messageID: UUID, _ summary: String) async -> Void)?
 
+    /// Provider for the phone's current GPS coordinates (latitude, longitude).
+    /// Set by the app layer so incoming messages can record the user's location at receive time.
+    var userLocationProvider: (@Sendable () async -> (latitude: Double, longitude: Double)?)?
+
     // MARK: - Initialization
 
     public init() {}
@@ -186,6 +190,14 @@ public actor SyncCoordinator {
             self.onContactsChanged = onContactsChanged
             self.onConversationsChanged = onConversationsChanged
         }
+    }
+
+    /// Sets the provider for the phone's current GPS coordinates.
+    /// Called by the app layer so incoming messages can store where the user was at receive time.
+    public func setUserLocationProvider(
+        _ provider: @escaping @Sendable () async -> (latitude: Double, longitude: Double)?
+    ) {
+        userLocationProvider = provider
     }
 
     /// Sets callbacks for message events (used by AppState for MessageEventBroadcaster)

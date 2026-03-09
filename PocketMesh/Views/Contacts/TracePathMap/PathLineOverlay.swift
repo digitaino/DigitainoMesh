@@ -10,6 +10,7 @@ final class PathLineOverlay: MKPolyline {
         case good      // Solid green (SNR >= 5)
         case medium    // Solid yellow (SNR -5 to 5)
         case weak      // Solid red (SNR < -5)
+        case gap       // Dashed orange (unlocated hops skipped)
 
         init(snr: Double) {
             if snr >= 5 {

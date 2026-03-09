@@ -37,6 +37,11 @@ final class PathLineRenderer: MKPolylineRenderer {
             strokeColor = UIColor.systemRed
             lineWidth = 3
             lineDashPattern = [4, 4]  // Different pattern for accessibility
+
+        case .gap:
+            strokeColor = UIColor.systemOrange
+            lineWidth = 2
+            lineDashPattern = [4, 8]  // Wider gaps to suggest missing nodes
         }
     }
 

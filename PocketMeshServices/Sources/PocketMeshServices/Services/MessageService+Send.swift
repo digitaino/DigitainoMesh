@@ -41,6 +41,7 @@ extension MessageService {
 
         let messageID = UUID()
         let timestamp = UInt32(Date().timeIntervalSince1970)
+        let userLoc = await currentUserLocation()
 
         // Save message to store as pending first
         let messageDTO = createOutgoingMessage(
@@ -50,7 +51,9 @@ extension MessageService {
             text: text,
             timestamp: timestamp,
             textType: textType,
-            replyToID: replyToID
+            replyToID: replyToID,
+            userLatitude: userLoc?.latitude,
+            userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
 
@@ -139,6 +142,7 @@ extension MessageService {
 
         let messageID = UUID()
         let timestamp = UInt32(Date().timeIntervalSince1970)
+        let userLoc = await currentUserLocation()
 
         // Save message to store as pending first
         let messageDTO = createOutgoingMessage(
@@ -148,7 +152,9 @@ extension MessageService {
             text: text,
             timestamp: timestamp,
             textType: textType,
-            replyToID: replyToID
+            replyToID: replyToID,
+            userLatitude: userLoc?.latitude,
+            userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
 
@@ -205,6 +211,7 @@ extension MessageService {
 
         let messageID = UUID()
         let timestamp = UInt32(Date().timeIntervalSince1970)
+        let userLoc = await currentUserLocation()
 
         let messageDTO = createOutgoingMessage(
             id: messageID,
@@ -213,7 +220,9 @@ extension MessageService {
             text: text,
             timestamp: timestamp,
             textType: textType,
-            replyToID: replyToID
+            replyToID: replyToID,
+            userLatitude: userLoc?.latitude,
+            userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
 
@@ -524,6 +533,7 @@ extension MessageService {
 
         let messageID = UUID()
         let timestamp = UInt32(Date().timeIntervalSince1970)
+        let userLoc = await currentUserLocation()
 
         // Save message to store as pending first
         let messageDTO = createOutgoingChannelMessage(
@@ -532,7 +542,9 @@ extension MessageService {
             channelIndex: channelIndex,
             text: text,
             timestamp: timestamp,
-            textType: textType
+            textType: textType,
+            userLatitude: userLoc?.latitude,
+            userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
 
@@ -654,7 +666,9 @@ extension MessageService {
         text: String,
         timestamp: UInt32,
         textType: TextType,
-        replyToID: UUID?
+        replyToID: UUID?,
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil
     ) -> MessageDTO {
         let message = Message(
             id: id,
@@ -665,7 +679,9 @@ extension MessageService {
             directionRawValue: MessageDirection.outgoing.rawValue,
             statusRawValue: MessageStatus.pending.rawValue,
             textTypeRawValue: textType.rawValue,
-            replyToID: replyToID
+            replyToID: replyToID,
+            userLatitude: userLatitude,
+            userLongitude: userLongitude
         )
         return MessageDTO(from: message)
     }
@@ -676,7 +692,9 @@ extension MessageService {
         channelIndex: UInt8,
         text: String,
         timestamp: UInt32,
-        textType: TextType
+        textType: TextType,
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil
     ) -> MessageDTO {
         let message = Message(
             id: id,
@@ -686,7 +704,9 @@ extension MessageService {
             timestamp: timestamp,
             directionRawValue: MessageDirection.outgoing.rawValue,
             statusRawValue: MessageStatus.pending.rawValue,
-            textTypeRawValue: textType.rawValue
+            textTypeRawValue: textType.rawValue,
+            userLatitude: userLatitude,
+            userLongitude: userLongitude
         )
         return MessageDTO(from: message)
     }

@@ -238,6 +238,17 @@ public final class AppState {
         // Store syncCoordinator reference
         syncCoordinator = services.syncCoordinator
 
+        // Provide the phone's GPS to services so messages can record the user's
+        // location at send/receive time for accurate route map visualizations.
+        let locationProvider: @Sendable () async -> (latitude: Double, longitude: Double)? = { [weak self] in
+            await MainActor.run {
+                guard let loc = self?.locationService.currentLocation else { return nil }
+                return (latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude)
+            }
+        }
+        await services.syncCoordinator.setUserLocationProvider(locationProvider)
+        await services.messageService.setUserLocationProvider(locationProvider)
+
         await wireDataChangeCallbacks(services: services)
         wireSettingsEventStream(services: services)
         await wireDeviceUpdateCallbacks(services: services)

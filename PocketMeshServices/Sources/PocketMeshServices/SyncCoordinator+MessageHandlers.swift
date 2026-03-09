@@ -82,6 +82,9 @@ extension SyncCoordinator {
             let hasSelfMention = !selfNodeName.isEmpty &&
                 MentionUtilities.containsSelfMention(in: message.text, selfName: selfNodeName)
 
+            // Capture the phone's current GPS so route maps show where the user was
+            let userLoc = await self.userLocationProvider?()
+
             let messageDTO = MessageDTO(
                 id: UUID(),
                 deviceID: deviceID,
@@ -107,6 +110,8 @@ extension SyncCoordinator {
                 maxRetryAttempts: 0,
                 containsSelfMention: hasSelfMention,
                 mentionSeen: false,
+                userLatitude: userLoc?.latitude,
+                userLongitude: userLoc?.longitude,
                 timestampCorrected: timestampCorrected,
                 senderTimestamp: timestampCorrected ? timestamp : nil
             )
@@ -223,6 +228,9 @@ extension SyncCoordinator {
                 senderNodeName != selfNodeName &&
                 MentionUtilities.containsSelfMention(in: messageText, selfName: selfNodeName)
 
+            // Capture the phone's current GPS so route maps show where the user was
+            let userLoc = await self.userLocationProvider?()
+
             let messageDTO = MessageDTO(
                 id: UUID(),
                 deviceID: deviceID,
@@ -248,6 +256,8 @@ extension SyncCoordinator {
                 maxRetryAttempts: 0,
                 containsSelfMention: hasSelfMention,
                 mentionSeen: false,
+                userLatitude: userLoc?.latitude,
+                userLongitude: userLoc?.longitude,
                 timestampCorrected: timestampCorrected,
                 senderTimestamp: timestampCorrected ? timestamp : nil
             )

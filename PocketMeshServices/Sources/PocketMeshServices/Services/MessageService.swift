@@ -174,6 +174,10 @@ public actor MessageService {
     /// Handler for routing change events (contactID, isFlood)
     var routingChangedHandler: (@Sendable (UUID, Bool) async -> Void)?
 
+    /// Provider for the phone's current GPS coordinates (latitude, longitude).
+    /// Set by the app layer so outgoing messages can record the user's location at send time.
+    private var userLocationProvider: (@Sendable () async -> (latitude: Double, longitude: Double)?)?
+
     /// Task for periodic ACK expiry checking
     var ackCheckTask: Task<Void, Never>?
 
@@ -211,6 +215,19 @@ public actor MessageService {
     /// - Parameter service: The contact service to use
     public func setContactService(_ service: ContactService) {
         self.contactService = service
+    }
+
+    /// Sets the provider for the phone's current GPS coordinates.
+    /// Called by the app layer so outgoing messages can store where the user was at send time.
+    public func setUserLocationProvider(
+        _ provider: @escaping @Sendable () async -> (latitude: Double, longitude: Double)?
+    ) {
+        userLocationProvider = provider
+    }
+
+    /// Returns the current user location from the provider, if set.
+    func currentUserLocation() async -> (latitude: Double, longitude: Double)? {
+        await userLocationProvider?()
     }
 
     /// Whether a contact service has been wired via `setContactService`.

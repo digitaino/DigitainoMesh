@@ -1,3 +1,4 @@
+import CoreLocation
 import MapKit
 import SwiftUI
 import PocketMeshServices
@@ -40,11 +41,19 @@ struct MessageRouteMapSheet: View {
                appState.locationService.isAuthorized {
                 try? await appState.locationService.requestCurrentLocation(timeout: .seconds(5))
             }
+            // Prefer the GPS stored on the message (where user was at send/receive time)
+            // over the phone's current location, so route maps show historical position.
+            let userLocation: CLLocation? = if let lat = message.userLatitude,
+                                               let lon = message.userLongitude {
+                CLLocation(latitude: lat, longitude: lon)
+            } else {
+                appState.locationService.currentLocation
+            }
             await mapViewModel.loadRoute(
                 message: message,
                 services: services,
                 deviceID: message.deviceID,
-                userLocation: appState.locationService.currentLocation,
+                userLocation: userLocation,
                 receiverName: appState.connectedDevice?.nodeName
                     ?? L10n.Chats.Chats.Path.Receiver.you
             )
@@ -74,6 +83,16 @@ struct MessageRouteMapSheet: View {
         VStack {
             HStack {
                 Text(L10n.Chats.Chats.Path.RouteMap.hops(mapViewModel.locatedHopCount))
+
+                let unlocatedCount = mapViewModel.totalHopCount - mapViewModel.locatedHopCount
+                if unlocatedCount > 0 {
+                    Text("•")
+                    Label(
+                        "\(unlocatedCount) unlocated",
+                        systemImage: "location.slash"
+                    )
+                    .foregroundStyle(.orange)
+                }
 
                 if let snr = message.snr {
                     Text("•")

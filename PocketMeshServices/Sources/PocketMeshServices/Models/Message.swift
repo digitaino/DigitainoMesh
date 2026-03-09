@@ -123,6 +123,12 @@ public final class Message {
     /// Whether the user has scrolled to see this mention (for tracking unread mentions)
     public var mentionSeen: Bool = false
 
+    /// Phone GPS latitude when this message was sent or received (nil for older messages)
+    public var userLatitude: Double?
+
+    /// Phone GPS longitude when this message was sent or received (nil for older messages)
+    public var userLongitude: Double?
+
     /// Whether the timestamp was corrected due to sender clock being invalid
     public var timestampCorrected: Bool = false
 
@@ -171,6 +177,8 @@ public final class Message {
         linkPreviewFetched: Bool = false,
         containsSelfMention: Bool = false,
         mentionSeen: Bool = false,
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil,
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
         reactionSummary: String? = nil
@@ -206,6 +214,8 @@ public final class Message {
         self.linkPreviewFetched = linkPreviewFetched
         self.containsSelfMention = containsSelfMention
         self.mentionSeen = mentionSeen
+        self.userLatitude = userLatitude
+        self.userLongitude = userLongitude
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary
@@ -288,6 +298,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
     public let linkPreviewFetched: Bool
     public let containsSelfMention: Bool
     public let mentionSeen: Bool
+    public let userLatitude: Double?
+    public let userLongitude: Double?
     public let timestampCorrected: Bool
     public let senderTimestamp: UInt32?
     public let reactionSummary: String?
@@ -324,6 +336,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.linkPreviewFetched = message.linkPreviewFetched
         self.containsSelfMention = message.containsSelfMention
         self.mentionSeen = message.mentionSeen
+        self.userLatitude = message.userLatitude
+        self.userLongitude = message.userLongitude
         self.timestampCorrected = message.timestampCorrected
         self.senderTimestamp = message.senderTimestamp
         self.reactionSummary = message.reactionSummary
@@ -362,6 +376,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         linkPreviewFetched: Bool = false,
         containsSelfMention: Bool = false,
         mentionSeen: Bool = false,
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil,
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
         reactionSummary: String? = nil
@@ -397,6 +413,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.linkPreviewFetched = linkPreviewFetched
         self.containsSelfMention = containsSelfMention
         self.mentionSeen = mentionSeen
+        self.userLatitude = userLatitude
+        self.userLongitude = userLongitude
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary

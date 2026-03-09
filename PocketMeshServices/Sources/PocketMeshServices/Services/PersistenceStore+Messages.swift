@@ -297,6 +297,8 @@ extension PersistenceStore {
             deduplicationKey: nil,
             containsSelfMention: dto.containsSelfMention,
             mentionSeen: dto.mentionSeen,
+            userLatitude: dto.userLatitude,
+            userLongitude: dto.userLongitude,
             timestampCorrected: dto.timestampCorrected,
             senderTimestamp: dto.senderTimestamp
         )

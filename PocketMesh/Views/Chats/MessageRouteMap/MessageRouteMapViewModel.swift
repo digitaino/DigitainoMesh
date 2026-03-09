@@ -36,6 +36,8 @@ final class MessageRouteMapViewModel {
     private(set) var hasLocatedHops: Bool = false
     /// Total number of intermediate hops with location data
     private(set) var locatedHopCount: Int = 0
+    /// Total number of intermediate hops in the path (located + unlocated)
+    private(set) var totalHopCount: Int = 0
 
     struct PathInfo {
         let hopIndex: Int
@@ -67,7 +69,7 @@ final class MessageRouteMapViewModel {
             logger.error("Failed to load contacts: \(error.localizedDescription)")
         }
 
-        buildRoute(message: message, userLocation: userLocation, receiverName: receiverName)
+        buildRoute(message: message, userLocation: userLocation, receiverName: receiverName, snr: message.snr)
         isLoading = false
     }
 
@@ -76,9 +78,10 @@ final class MessageRouteMapViewModel {
     private func buildRoute(
         message: MessageDTO,
         userLocation: CLLocation?,
-        receiverName: String
+        receiverName: String,
+        snr: Double?
     ) {
-        var points: [(coordinate: CLLocationCoordinate2D, name: String)] = []
+        var points: [(coordinate: CLLocationCoordinate2D, name: String, hasGap: Bool)] = []
         /// Running index across the entire route sequence for label alternation
         var routeIndex = 0
 
@@ -90,7 +93,7 @@ final class MessageRouteMapViewModel {
                 latitude: senderContact.latitude,
                 longitude: senderContact.longitude
             )
-            points.append((coord, senderContact.displayName))
+            points.append((coord, senderContact.displayName, false))
             endpointAnnotations.append(
                 RouteEndpointAnnotation(type: .sender, coordinate: coord, name: senderContact.displayName, routeIndex: routeIndex)
             )
@@ -100,11 +103,17 @@ final class MessageRouteMapViewModel {
         // Intermediate hops
         let pathHops = parsePathHops(from: message)
         var hopIndex = 0
+        /// Number of consecutive unlocated hops since the last located point.
+        /// Used to decide whether to draw a gap-style (dashed) line segment.
+        var pendingUnlocatedCount = 0
 
         for hop in pathHops {
-            guard let match = RepeaterResolver.bestMatch(
+            let match = RepeaterResolver.bestMatch(
                 for: hop, in: repeaters, userLocation: userLocation
-            ), match.hasLocation else {
+            )
+
+            guard let match, match.hasLocation else {
+                pendingUnlocatedCount += 1
                 continue
             }
 
@@ -113,21 +122,32 @@ final class MessageRouteMapViewModel {
                 latitude: match.latitude,
                 longitude: match.longitude
             )
-            guard CLLocationCoordinate2DIsValid(coord) else { continue }
+            guard CLLocationCoordinate2DIsValid(coord) else {
+                pendingUnlocatedCount += 1
+                continue
+            }
 
-            points.append((coord, match.displayName))
+            // If there were unlocated hops before this located hop, mark the
+            // gap so the line segment between the previous located point and
+            // this one uses a gap style.
+            let hasGap = pendingUnlocatedCount > 0
+            pendingUnlocatedCount = 0
+
+            points.append((coord, match.displayName, hasGap))
             repeaterAnnotations.append(RepeaterAnnotation(repeater: match))
             pathState[match.id] = PathInfo(hopIndex: hopIndex, routeIndex: routeIndex)
             hashLabels[match.id] = hop.hexString()
             routeIndex += 1
         }
 
+        totalHopCount = pathHops.count
         locatedHopCount = hopIndex
 
         // Receiver location (user's current GPS)
         if let userLocation {
             let coord = userLocation.coordinate
-            points.append((coord, receiverName))
+            let receiverHasGap = pendingUnlocatedCount > 0
+            points.append((coord, receiverName, receiverHasGap))
             endpointAnnotations.append(
                 RouteEndpointAnnotation(type: .receiver, coordinate: coord, name: receiverName, routeIndex: routeIndex)
             )
@@ -135,12 +155,35 @@ final class MessageRouteMapViewModel {
 
         hasLocatedHops = points.count >= 2
 
-        // Build line overlays between consecutive points
-        for i in 0..<(points.count - 1) {
+        // Build line overlays between consecutive points.
+        // When the destination point has `hasGap`, the segment spans over
+        // one or more unlocated hops — use the `.gap` style to indicate this.
+        // The last segment (ending at the receiver) uses the message's SNR
+        // for signal quality coloring, matching the heard-repeats map style.
+        let segmentCount = points.count - 1
+        for i in 0..<segmentCount {
+            let isLastSegment = i == segmentCount - 1
+            let nextPoint = points[i + 1]
+            let quality: PathLineOverlay.SignalQuality
+            let segmentSNR: Double
+
+            if nextPoint.hasGap {
+                quality = .gap
+                segmentSNR = 0
+            } else if isLastSegment, let snr {
+                quality = PathLineOverlay.SignalQuality(snr: snr)
+                segmentSNR = snr
+            } else {
+                quality = .untraced
+                segmentSNR = 0
+            }
+
             let overlay = PathLineOverlay.line(
                 from: points[i].coordinate,
-                to: points[i + 1].coordinate,
-                segmentIndex: i
+                to: nextPoint.coordinate,
+                segmentIndex: i,
+                signalQuality: quality,
+                snr: segmentSNR
             )
             lineOverlays.append(overlay)
         }
