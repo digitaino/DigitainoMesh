@@ -56,6 +56,7 @@ extension MessageService {
             userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
+        requestLocationPatch(messageID: messageID)
 
         // Single send attempt
         do {
@@ -157,6 +158,7 @@ extension MessageService {
             userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
+        requestLocationPatch(messageID: messageID)
 
         // Notify caller that message is saved
         await onMessageCreated?(messageDTO)
@@ -225,6 +227,7 @@ extension MessageService {
             userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
+        requestLocationPatch(messageID: messageID)
 
         return messageDTO
     }
@@ -547,6 +550,7 @@ extension MessageService {
             userLongitude: userLoc?.longitude
         )
         try await dataStore.saveMessage(messageDTO)
+        requestLocationPatch(messageID: messageID)
 
         do {
             try await session.sendChannelMessage(

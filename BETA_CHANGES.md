@@ -13,6 +13,12 @@
   - **Hex Short** — Shows the 2-byte public key prefix (e.g. "A1B2") for quick identification without cluttering the map
   - **Full Name** — Shows the repeater's display name with MapKit's adaptive collision avoidance
 
+## GPS Location Accuracy
+
+- **Non-blocking GPS** — Sending a message no longer waits for a GPS fix. The message is sent immediately with whatever cached location is available. A fresh GPS request is kicked off in the background, and the message's coordinates are silently patched once the fix arrives. This means route maps should always show your actual position at send/receive time, even if the phone's GPS was cold or stale.
+
+  **How to test:** Send a message from a known location, then open the message route map. Verify the sender pin (teal) matches where you actually were, not some old cached position. Try sending right after opening the app (cold GPS) — the pin should still land correctly after a few seconds.
+
 ## Welcome Screen
 
 - Added fork attribution and feedback links to the onboarding welcome screen

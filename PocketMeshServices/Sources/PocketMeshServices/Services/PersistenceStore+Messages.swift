@@ -421,6 +421,24 @@ extension PersistenceStore {
         }
     }
 
+    /// Updates the user GPS coordinates on an existing message.
+    /// Used by the post-send location patch to replace stale cached coordinates
+    /// with a fresh GPS fix.
+    public func updateMessageUserLocation(id: UUID, latitude: Double, longitude: Double) throws {
+        let targetID = id
+        let predicate = #Predicate<Message> { message in
+            message.id == targetID
+        }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
+
+        if let message = try modelContext.fetch(descriptor).first {
+            message.userLatitude = latitude
+            message.userLongitude = longitude
+            try modelContext.save()
+        }
+    }
+
     /// Update link preview data for a message
     public func updateMessageLinkPreview(
         id: UUID,

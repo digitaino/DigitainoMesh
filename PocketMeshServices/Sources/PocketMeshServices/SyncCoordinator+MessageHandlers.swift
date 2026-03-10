@@ -140,6 +140,12 @@ extension SyncCoordinator {
             do {
                 try await services.dataStore.saveMessage(messageDTO)
 
+                // Request background GPS patch for this message
+                let patchHandler = await self.locationPatchHandler
+                if let patchHandler {
+                    Task { await patchHandler(messageDTO.id) }
+                }
+
                 // Index DM message for reaction targeting
                 if let contact {
                     let pendingMatches = await services.reactionService.indexDMMessage(
@@ -288,6 +294,12 @@ extension SyncCoordinator {
 
             do {
                 try await services.dataStore.saveMessage(messageDTO)
+
+                // Request background GPS patch for this message
+                let patchHandler = await self.locationPatchHandler
+                if let patchHandler {
+                    Task { await patchHandler(messageDTO.id) }
+                }
 
                 // Index message for reaction matching and process any pending reactions
                 // Use original timestamp for indexing so pending reactions can match

@@ -3,6 +3,7 @@ import SwiftData
 import UserNotifications
 import PocketMeshServices
 import MeshCore
+import CoreLocation
 import OSLog
 import TipKit
 import UIKit
@@ -240,14 +241,47 @@ public final class AppState {
 
         // Provide the phone's GPS to services so messages can record the user's
         // location at send/receive time for accurate route map visualizations.
+        // Returns cached location immediately — never blocks message sending.
         let locationProvider: @Sendable () async -> (latitude: Double, longitude: Double)? = { [weak self] in
-            await MainActor.run {
-                guard let loc = self?.locationService.currentLocation else { return nil }
-                return (latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude)
-            }
+            guard let self else { return nil }
+            let loc: CLLocation? = await MainActor.run { self.locationService.currentLocation }
+            guard let loc else { return nil }
+            return (latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude)
         }
         await services.syncCoordinator.setUserLocationProvider(locationProvider)
         await services.messageService.setUserLocationProvider(locationProvider)
+
+        // After a message is saved, request a fresh GPS fix in the background and
+        // patch the message's coordinates if the cached location was stale or nil.
+        let patchDataStore = services.dataStore
+        let locationPatchHandler: @Sendable (UUID) async -> Void = { [weak self] messageID in
+            guard let self else { return }
+
+            // Read cached location age on the main actor
+            let cachedAge: TimeInterval? = await MainActor.run {
+                self.locationService.currentLocation.map { abs($0.timestamp.timeIntervalSinceNow) }
+            }
+
+            // If cached location is fresh (< 30s), no patch needed
+            if let age = cachedAge, age < 30 { return }
+
+            // Fire background task to get fresh GPS and patch
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let freshLoc = try await self.locationService.requestCurrentLocation(timeout: .seconds(10))
+                    try await patchDataStore.updateMessageUserLocation(
+                        id: messageID,
+                        latitude: freshLoc.coordinate.latitude,
+                        longitude: freshLoc.coordinate.longitude
+                    )
+                } catch {
+                    // Fresh GPS unavailable — cached location (if any) was already saved
+                }
+            }
+        }
+        await services.messageService.setLocationPatchHandler(locationPatchHandler)
+        await services.syncCoordinator.setLocationPatchHandler(locationPatchHandler)
 
         await wireDataChangeCallbacks(services: services)
         wireSettingsEventStream(services: services)

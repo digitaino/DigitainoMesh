@@ -178,6 +178,11 @@ public actor MessageService {
     /// Set by the app layer so outgoing messages can record the user's location at send time.
     private var userLocationProvider: (@Sendable () async -> (latitude: Double, longitude: Double)?)?
 
+    /// Handler called after a message is saved, passing the message ID.
+    /// The app layer uses this to request a fresh GPS fix in the background
+    /// and patch the message's coordinates if the cached location was stale.
+    private var locationPatchHandler: (@Sendable (UUID) async -> Void)?
+
     /// Task for periodic ACK expiry checking
     var ackCheckTask: Task<Void, Never>?
 
@@ -225,9 +230,22 @@ public actor MessageService {
         userLocationProvider = provider
     }
 
+    /// Sets the handler called after a message is saved to patch its GPS coordinates.
+    public func setLocationPatchHandler(
+        _ handler: @escaping @Sendable (UUID) async -> Void
+    ) {
+        locationPatchHandler = handler
+    }
+
     /// Returns the current user location from the provider, if set.
     func currentUserLocation() async -> (latitude: Double, longitude: Double)? {
         await userLocationProvider?()
+    }
+
+    /// Triggers the location patch handler for a saved message.
+    func requestLocationPatch(messageID: UUID) {
+        guard let handler = locationPatchHandler else { return }
+        Task { await handler(messageID) }
     }
 
     /// Whether a contact service has been wired via `setContactService`.

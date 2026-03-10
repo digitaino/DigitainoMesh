@@ -148,6 +148,10 @@ public actor SyncCoordinator {
     /// Set by the app layer so incoming messages can record the user's location at receive time.
     var userLocationProvider: (@Sendable () async -> (latitude: Double, longitude: Double)?)?
 
+    /// Handler called after an incoming message is saved, passing the message ID.
+    /// The app layer uses this to request a fresh GPS fix and patch the message's coordinates.
+    var locationPatchHandler: (@Sendable (UUID) async -> Void)?
+
     // MARK: - Initialization
 
     public init() {}
@@ -198,6 +202,13 @@ public actor SyncCoordinator {
         _ provider: @escaping @Sendable () async -> (latitude: Double, longitude: Double)?
     ) {
         userLocationProvider = provider
+    }
+
+    /// Sets the handler called after a message is saved to patch its GPS coordinates.
+    public func setLocationPatchHandler(
+        _ handler: @escaping @Sendable (UUID) async -> Void
+    ) {
+        locationPatchHandler = handler
     }
 
     /// Sets callbacks for message events (used by AppState for MessageEventBroadcaster)
