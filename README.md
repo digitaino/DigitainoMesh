@@ -26,7 +26,7 @@ Features and fixes added in this fork on top of upstream:
 
 1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 2. Run `xcodegen generate`.
-3. Open `PocketMesh.xcodeproj`.
+3. Open `MC1.xcodeproj`.
 
 For more details, see the [Development Guide](docs/Development.md).
 
