@@ -19,6 +19,10 @@ private let logger = Logger(subsystem: "com.pocketmesh", category: "HeardRepeats
 /// - An SNR-colored `PathLineOverlay` from each "last repeater" to the user's
 ///   location — this is the only hop where we have actual signal data
 /// - A receiver endpoint pin at the user's location
+///
+/// Supports cycling through individual repeats via `showNextRepeat()` /
+/// `showPreviousRepeat()`. When `selectedRepeatIndex` is nil, all repeats
+/// are shown aggregated (the default).
 @MainActor @Observable
 final class HeardRepeatsMapViewModel {
 
@@ -61,6 +65,25 @@ final class HeardRepeatsMapViewModel {
     private(set) var repeatCount: Int = 0
     private(set) var locatedRepeaterCount: Int = 0
 
+    // MARK: - Repeat Cycling
+
+    /// nil = show all repeats aggregated, 0..<N = show single repeat
+    private(set) var selectedRepeatIndex: Int?
+
+    /// Whether there are enough located repeats to cycle through
+    var canCycleRepeats: Bool { resolvedRepeats.count >= 2 }
+
+    // MARK: - Resolved Data (for rebuilding display without re-resolving)
+
+    struct ResolvedRepeat {
+        let repeatDTO: MessageRepeatDTO
+        let hops: [(contact: ContactDTO, coordinate: CLLocationCoordinate2D)]
+    }
+
+    private var resolvedRepeats: [ResolvedRepeat] = []
+    private var storedUserLocation: CLLocation?
+    private var storedUserName: String = ""
+
     // MARK: - Load
 
     func load(
@@ -74,16 +97,12 @@ final class HeardRepeatsMapViewModel {
 
         let repeaters = contacts.filter { $0.type == .repeater }
         repeatCount = repeats.count
+        storedUserLocation = userLocation
+        storedUserName = userName
+        selectedRepeatIndex = nil
 
-        // Track unique repeaters by public key to avoid duplicate pins
-        var seenRepeaters: [Data: ContactDTO] = [:]
-        var allLineOverlays: [PathLineOverlay] = []
-        var allPathState: [UUID: PathInfo] = [:]
-
-        var allLastHopSNR: [Int: SNRQuality] = [:]
-        var routeIndex = 0
-        var segmentIndex = 0
-        var locatedRepeatCount = 0
+        // Phase 1: Resolve all repeats
+        var resolved: [ResolvedRepeat] = []
 
         for repeatDTO in repeats {
             guard !repeatDTO.pathNodes.isEmpty else { continue }
@@ -94,8 +113,7 @@ final class HeardRepeatsMapViewModel {
             )
             guard !hashes.isEmpty else { continue }
 
-            // Resolve all hops to located contacts
-            var resolvedHops: [(contact: ContactDTO, hash: Data, coordinate: CLLocationCoordinate2D)] = []
+            var resolvedHops: [(contact: ContactDTO, coordinate: CLLocationCoordinate2D)] = []
 
             for hash in hashes {
                 guard let match = RepeaterResolver.bestMatch(
@@ -108,75 +126,73 @@ final class HeardRepeatsMapViewModel {
                 )
                 guard CLLocationCoordinate2DIsValid(coord) else { continue }
 
-                resolvedHops.append((contact: match, hash: hash, coordinate: coord))
+                resolvedHops.append((contact: match, coordinate: coord))
             }
 
             guard !resolvedHops.isEmpty else { continue }
-            locatedRepeatCount += 1
-
-            // Register unique repeater pins
-            for (hopIdx, hop) in resolvedHops.enumerated() {
-                if seenRepeaters[hop.contact.publicKey] == nil {
-                    seenRepeaters[hop.contact.publicKey] = hop.contact
-                    allPathState[hop.contact.id] = PathInfo(hopIndex: hopIdx + 1, routeIndex: routeIndex)
-                    routeIndex += 1
-                }
-            }
-
-            // Draw outbound chain: consecutive hops
-            for i in 0..<(resolvedHops.count - 1) {
-                let overlay = PathLineOverlay.line(
-                    from: resolvedHops[i].coordinate,
-                    to: resolvedHops[i + 1].coordinate,
-                    segmentIndex: segmentIndex
-                )
-                allLineOverlays.append(overlay)
-                segmentIndex += 1
-            }
-
-            // Draw last-hop → user (SNR-colored)
-            if let userLocation {
-                let lastHop = resolvedHops.last!
-                let overlay = PathLineOverlay.line(
-                    from: lastHop.coordinate,
-                    to: userLocation.coordinate,
-                    segmentIndex: segmentIndex
-                )
-                allLineOverlays.append(overlay)
-                allLastHopSNR[segmentIndex] = SNRQuality(snr: repeatDTO.snr)
-                segmentIndex += 1
-            }
+            resolved.append(ResolvedRepeat(repeatDTO: repeatDTO, hops: resolvedHops))
         }
 
-        // Build annotations
-        repeaterAnnotations = seenRepeaters.values.map { RepeaterAnnotation(repeater: $0) }
-        pathState = allPathState
+        resolvedRepeats = resolved
 
-        lineOverlays = allLineOverlays
-        lastHopSNR = allLastHopSNR
-        locatedRepeaterCount = seenRepeaters.count
-        hasLocatedRepeaters = !seenRepeaters.isEmpty
+        // Phase 2: Build display data for current selection (all)
+        rebuildDisplayData()
 
-        // User endpoint
-        if let userLocation, hasLocatedRepeaters {
-            endpointAnnotations = [
-                RouteEndpointAnnotation(
-                    type: .receiver,
-                    coordinate: userLocation.coordinate,
-                    name: userName,
-                    routeIndex: routeIndex
-                )
-            ]
-        } else {
-            endpointAnnotations = []
-        }
-
-        if hasLocatedRepeaters {
-            centerOnData()
-        }
-
-        logger.debug("Heard repeats map: \(self.repeatCount) repeats, \(locatedRepeatCount) with location, \(self.locatedRepeaterCount) unique repeaters")
+        logger.debug("Heard repeats map: \(self.repeatCount) repeats, \(self.resolvedRepeats.count) with location, \(self.locatedRepeaterCount) unique repeaters")
         isLoading = false
+    }
+
+    // MARK: - Repeat Navigation
+
+    func showNextRepeat() {
+        guard canCycleRepeats else { return }
+        if let current = selectedRepeatIndex {
+            if current + 1 < resolvedRepeats.count {
+                selectedRepeatIndex = current + 1
+            } else {
+                selectedRepeatIndex = nil // wrap to "All"
+            }
+        } else {
+            selectedRepeatIndex = 0
+        }
+        rebuildDisplayData()
+        centerOnData()
+    }
+
+    func showPreviousRepeat() {
+        guard canCycleRepeats else { return }
+        if let current = selectedRepeatIndex {
+            if current > 0 {
+                selectedRepeatIndex = current - 1
+            } else {
+                selectedRepeatIndex = nil // wrap to "All"
+            }
+        } else {
+            selectedRepeatIndex = resolvedRepeats.count - 1
+        }
+        rebuildDisplayData()
+        centerOnData()
+    }
+
+    /// Summary text for the selected single repeat (e.g. "Repeat 2 of 5 · 12.3 dB · 2 hops")
+    var selectedRepeatSummary: String {
+        guard let index = selectedRepeatIndex,
+              index < resolvedRepeats.count else { return "" }
+
+        let resolved = resolvedRepeats[index]
+        let repeatNum = index + 1
+        let total = resolvedRepeats.count
+        let hopCount = resolved.hops.count
+
+        let snrText: String
+        if let snr = resolved.repeatDTO.snr {
+            snrText = String(format: "%.1f dB", snr)
+        } else {
+            snrText = "— dB"
+        }
+
+        let hopWord = hopCount == 1 ? "hop" : "hops"
+        return "Repeat \(repeatNum) of \(total) · \(snrText) · \(hopCount) \(hopWord)"
     }
 
     // MARK: - Camera
@@ -214,6 +230,83 @@ final class HeardRepeatsMapViewModel {
     }
 
     // MARK: - Private
+
+    private func rebuildDisplayData() {
+        let repeatsToShow: [ResolvedRepeat]
+        if let index = selectedRepeatIndex, index < resolvedRepeats.count {
+            repeatsToShow = [resolvedRepeats[index]]
+        } else {
+            repeatsToShow = resolvedRepeats
+        }
+
+        var seenRepeaters: [Data: ContactDTO] = [:]
+        var allLineOverlays: [PathLineOverlay] = []
+        var allPathState: [UUID: PathInfo] = [:]
+        var allLastHopSNR: [Int: SNRQuality] = [:]
+        var routeIndex = 0
+        var segmentIndex = 0
+
+        for resolved in repeatsToShow {
+            // Register unique repeater pins
+            for (hopIdx, hop) in resolved.hops.enumerated() {
+                if seenRepeaters[hop.contact.publicKey] == nil {
+                    seenRepeaters[hop.contact.publicKey] = hop.contact
+                    allPathState[hop.contact.id] = PathInfo(hopIndex: hopIdx + 1, routeIndex: routeIndex)
+                    routeIndex += 1
+                }
+            }
+
+            // Draw outbound chain: consecutive hops
+            for i in 0..<(resolved.hops.count - 1) {
+                let overlay = PathLineOverlay.line(
+                    from: resolved.hops[i].coordinate,
+                    to: resolved.hops[i + 1].coordinate,
+                    segmentIndex: segmentIndex
+                )
+                allLineOverlays.append(overlay)
+                segmentIndex += 1
+            }
+
+            // Draw last-hop → user (SNR-colored)
+            if let userLocation = storedUserLocation {
+                let lastHop = resolved.hops.last!
+                let overlay = PathLineOverlay.line(
+                    from: lastHop.coordinate,
+                    to: userLocation.coordinate,
+                    segmentIndex: segmentIndex
+                )
+                allLineOverlays.append(overlay)
+                allLastHopSNR[segmentIndex] = SNRQuality(snr: resolved.repeatDTO.snr)
+                segmentIndex += 1
+            }
+        }
+
+        // Build annotations
+        repeaterAnnotations = seenRepeaters.values.map { RepeaterAnnotation(repeater: $0) }
+        pathState = allPathState
+        lineOverlays = allLineOverlays
+        lastHopSNR = allLastHopSNR
+        locatedRepeaterCount = seenRepeaters.count
+        hasLocatedRepeaters = !seenRepeaters.isEmpty
+
+        // User endpoint
+        if let userLocation = storedUserLocation, hasLocatedRepeaters {
+            endpointAnnotations = [
+                RouteEndpointAnnotation(
+                    type: .receiver,
+                    coordinate: userLocation.coordinate,
+                    name: storedUserName,
+                    routeIndex: routeIndex
+                )
+            ]
+        } else {
+            endpointAnnotations = []
+        }
+
+        if hasLocatedRepeaters, selectedRepeatIndex == nil {
+            centerOnData()
+        }
+    }
 
     private func clearDisplayData() {
         repeaterAnnotations = []

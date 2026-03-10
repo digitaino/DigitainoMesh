@@ -75,19 +75,50 @@ struct HeardRepeatsMapSheet: View {
 
     private var summaryBanner: some View {
         VStack {
-            HStack {
-                Text(L10n.Chats.Chats.HeardRepeats.Map.summary(
-                    viewModel.repeatCount,
-                    viewModel.locatedRepeaterCount
-                ))
+            HStack(spacing: 4) {
+                if viewModel.canCycleRepeats {
+                    Button {
+                        viewModel.showPreviousRepeat()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if viewModel.selectedRepeatIndex != nil {
+                    Text(viewModel.selectedRepeatSummary)
+                } else {
+                    Text(L10n.Chats.Chats.HeardRepeats.Map.summary(
+                        viewModel.repeatCount,
+                        viewModel.locatedRepeaterCount
+                    ))
+                }
+
+                if viewModel.canCycleRepeats {
+                    Button {
+                        viewModel.showNextRepeat()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .font(.subheadline.weight(.medium))
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .liquidGlass(in: .capsule)
+            .animation(.easeInOut(duration: 0.2), value: viewModel.selectedRepeatIndex)
 
             Spacer()
         }
