@@ -17,7 +17,7 @@ final class MessageRouteMapViewModel {
     /// Incremented when code intentionally moves the camera
     var cameraRegionVersion = 0
     var mapStyleSelection: MapStyleSelection = .standard
-    var showLabels: Bool = true
+    var labelMode: AnnotationLabelMode = .name
     var showingLayersMenu: Bool = false
 
     var mapType: MKMapType { mapStyleSelection.mkMapType }
@@ -30,8 +30,7 @@ final class MessageRouteMapViewModel {
     private(set) var repeaterAnnotations: [RepeaterAnnotation] = []
     /// Pre-computed path info keyed by repeater UUID
     private(set) var pathState: [UUID: PathInfo] = [:]
-    /// Compact hex hash labels keyed by repeater UUID (e.g., "A3", "A37F")
-    private(set) var hashLabels: [UUID: String] = [:]
+
     /// Whether at least two located points exist (enough to draw a route)
     private(set) var hasLocatedHops: Bool = false
     /// Total number of intermediate hops with location data
@@ -136,7 +135,6 @@ final class MessageRouteMapViewModel {
             points.append((coord, match.displayName, hasGap))
             repeaterAnnotations.append(RepeaterAnnotation(repeater: match))
             pathState[match.id] = PathInfo(hopIndex: hopIndex, routeIndex: routeIndex)
-            hashLabels[match.id] = hop.hexString()
             routeIndex += 1
         }
 

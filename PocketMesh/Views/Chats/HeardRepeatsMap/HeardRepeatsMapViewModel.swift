@@ -27,7 +27,7 @@ final class HeardRepeatsMapViewModel {
     var cameraRegion: MKCoordinateRegion?
     var cameraRegionVersion = 0
     var mapStyleSelection: MapStyleSelection = .standard
-    var showLabels: Bool = true
+    var labelMode: AnnotationLabelMode = .name
     var showingLayersMenu: Bool = false
 
     var mapType: MKMapType { mapStyleSelection.mkMapType }
@@ -43,8 +43,7 @@ final class HeardRepeatsMapViewModel {
     private(set) var repeaterAnnotations: [RepeaterAnnotation] = []
     /// Path info keyed by repeater UUID (hop index, route index for label alternation)
     private(set) var pathState: [UUID: PathInfo] = [:]
-    /// Compact hex hash labels keyed by repeater UUID
-    private(set) var hashLabels: [UUID: String] = [:]
+
     /// Neutral-colored outbound path overlays + SNR-colored last-hop overlays
     private(set) var lineOverlays: [PathLineOverlay] = []
     /// SNR quality for last-hop overlays, keyed by overlay segmentIndex
@@ -80,7 +79,7 @@ final class HeardRepeatsMapViewModel {
         var seenRepeaters: [Data: ContactDTO] = [:]
         var allLineOverlays: [PathLineOverlay] = []
         var allPathState: [UUID: PathInfo] = [:]
-        var allHashLabels: [UUID: String] = [:]
+
         var allLastHopSNR: [Int: SNRQuality] = [:]
         var routeIndex = 0
         var segmentIndex = 0
@@ -120,7 +119,6 @@ final class HeardRepeatsMapViewModel {
                 if seenRepeaters[hop.contact.publicKey] == nil {
                     seenRepeaters[hop.contact.publicKey] = hop.contact
                     allPathState[hop.contact.id] = PathInfo(hopIndex: hopIdx + 1, routeIndex: routeIndex)
-                    allHashLabels[hop.contact.id] = hop.hash.hexString()
                     routeIndex += 1
                 }
             }
@@ -153,7 +151,7 @@ final class HeardRepeatsMapViewModel {
         // Build annotations
         repeaterAnnotations = seenRepeaters.values.map { RepeaterAnnotation(repeater: $0) }
         pathState = allPathState
-        hashLabels = allHashLabels
+
         lineOverlays = allLineOverlays
         lastHopSNR = allLastHopSNR
         locatedRepeaterCount = seenRepeaters.count
@@ -220,7 +218,7 @@ final class HeardRepeatsMapViewModel {
     private func clearDisplayData() {
         repeaterAnnotations = []
         pathState = [:]
-        hashLabels = [:]
+
         lineOverlays = []
         lastHopSNR = [:]
         endpointAnnotations = []

@@ -77,7 +77,6 @@ struct TrafficHeatmapView: View {
             bubbleAnnotations: viewModel.bubbleAnnotations,
             segmentOverlays: viewModel.segmentOverlays,
             mapType: viewModel.mapType,
-            showLabels: viewModel.showLabels,
             cameraRegion: $viewModel.cameraRegion,
             cameraRegionVersion: viewModel.cameraRegionVersion
         )
@@ -94,6 +93,9 @@ struct TrafficHeatmapView: View {
                 viewModel.totalPacketsAnalyzed
             ))
             .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .liquidGlass(in: .capsule)
@@ -142,18 +144,6 @@ struct TrafficHeatmapView: View {
                     },
                     showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
-                    // Labels toggle
-                    Button {
-                        viewModel.showLabels.toggle()
-                    } label: {
-                        Image(systemName: "character.textbox")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(viewModel.showLabels ? .blue : .primary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-
                     // Center on data
                     Button {
                         viewModel.centerOnData()

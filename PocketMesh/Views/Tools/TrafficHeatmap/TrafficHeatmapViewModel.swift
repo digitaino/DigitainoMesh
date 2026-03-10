@@ -44,7 +44,6 @@ final class TrafficHeatmapViewModel {
     var cameraRegion: MKCoordinateRegion?
     var cameraRegionVersion = 0
     var mapStyleSelection: MapStyleSelection = .standard
-    var showLabels: Bool = true
     var showingLayersMenu: Bool = false
 
     var mapType: MKMapType { mapStyleSelection.mkMapType }

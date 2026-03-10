@@ -16,7 +16,7 @@ final class TracePathMapViewModel {
     /// Incremented when code intentionally moves the camera (not from user gesture sync)
     var cameraRegionVersion = 0
     var mapStyleSelection: MapStyleSelection = .standard
-    var showLabels: Bool = true
+    var labelMode: AnnotationLabelMode = .name
     var showingLayersMenu: Bool = false
 
     /// Tracks whether initial centering on repeaters has been performed

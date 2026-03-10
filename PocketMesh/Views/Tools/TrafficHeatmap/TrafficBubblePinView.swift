@@ -4,6 +4,7 @@ import UIKit
 
 /// Custom annotation view that renders a sized, colored circle representing
 /// repeater traffic volume and average signal quality.
+/// Names are shown via native MapKit callouts (tap to see), not custom labels.
 final class TrafficBubblePinView: MKAnnotationView {
     static let reuseIdentifier = "TrafficBubblePinView"
 
@@ -16,8 +17,6 @@ final class TrafficBubblePinView: MKAnnotationView {
 
     private let bubbleView = UIView()
     private let countLabel = UILabel()
-    private var nameLabel: UILabel?
-    private var nameLabelContainer: UIView?
 
     private var sizeConstraintWidth: NSLayoutConstraint?
     private var sizeConstraintHeight: NSLayoutConstraint?
@@ -88,7 +87,7 @@ final class TrafficBubblePinView: MKAnnotationView {
 
     // MARK: - Configuration
 
-    func configure(for annotation: TrafficBubbleAnnotation, showLabel: Bool) {
+    func configure(for annotation: TrafficBubbleAnnotation) {
         let size = Self.minSize + (Self.maxSize - Self.minSize) * annotation.normalizedTraffic
         sizeConstraintWidth?.constant = size
         sizeConstraintHeight?.constant = size
@@ -99,13 +98,6 @@ final class TrafficBubblePinView: MKAnnotationView {
 
         // Count text
         countLabel.text = formatCount(annotation.packetCount)
-
-        // Name label
-        if showLabel {
-            showNameLabel(annotation.name)
-        } else {
-            hideNameLabel()
-        }
 
         // Accessibility
         isAccessibilityElement = true
@@ -139,54 +131,10 @@ final class TrafficBubblePinView: MKAnnotationView {
         return "\(count)"
     }
 
-    // MARK: - Name Label
-
-    private func showNameLabel(_ name: String) {
-        if nameLabelContainer == nil {
-            let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
-            blur.translatesAutoresizingMaskIntoConstraints = false
-            blur.layer.cornerRadius = 8
-            blur.layer.masksToBounds = true
-            addSubview(blur)
-
-            let label = UILabel()
-            label.translatesAutoresizingMaskIntoConstraints = false
-            let font = UIFont.systemFont(
-                ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                weight: .medium
-            )
-            label.font = UIFontMetrics(forTextStyle: .caption2).scaledFont(for: font)
-            label.adjustsFontForContentSizeCategory = true
-            label.textColor = .label
-            label.textAlignment = .center
-            blur.contentView.addSubview(label)
-
-            NSLayoutConstraint.activate([
-                label.topAnchor.constraint(equalTo: blur.topAnchor, constant: 4),
-                label.bottomAnchor.constraint(equalTo: blur.bottomAnchor, constant: -4),
-                label.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -8),
-                blur.centerXAnchor.constraint(equalTo: bubbleView.centerXAnchor),
-                blur.bottomAnchor.constraint(equalTo: bubbleView.topAnchor, constant: -4)
-            ])
-
-            nameLabelContainer = blur
-            nameLabel = label
-        }
-
-        nameLabel?.text = name
-        nameLabelContainer?.isHidden = false
-    }
-
-    private func hideNameLabel() {
-        nameLabelContainer?.isHidden = true
-    }
-
     // MARK: - Reuse
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        hideNameLabel()
         accessibilityLabel = nil
     }
 }

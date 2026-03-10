@@ -96,7 +96,7 @@ struct ContactRouteMapSheet: View {
             endpointAnnotations: viewModel.endpointAnnotations,
             segmentOverlays: viewModel.segmentOverlays,
             mapType: viewModel.mapType,
-            showLabels: viewModel.showLabels,
+            labelMode: viewModel.labelMode,
             cameraRegion: $viewModel.cameraRegion,
             cameraRegionVersion: viewModel.cameraRegionVersion
         )
@@ -115,6 +115,9 @@ struct ContactRouteMapSheet: View {
                 ))
             }
             .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .liquidGlass(in: .capsule)
@@ -163,13 +166,13 @@ struct ContactRouteMapSheet: View {
                     },
                     showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
-                    // Labels toggle
+                    // Label mode toggle
                     Button {
-                        viewModel.showLabels.toggle()
+                        viewModel.labelMode = viewModel.labelMode.next
                     } label: {
-                        Image(systemName: "character.textbox")
+                        Image(systemName: viewModel.labelMode.iconName)
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(viewModel.showLabels ? .blue : .primary)
+                            .foregroundStyle(viewModel.labelMode != .hidden ? .blue : .primary)
                             .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }

@@ -102,7 +102,7 @@ struct TracePathMapView: View {
             lineOverlays: mapViewModel.lineOverlays,
             badgeAnnotations: mapViewModel.badgeAnnotations,
             mapType: mapViewModel.mapType,
-            showLabels: mapViewModel.showLabels,
+            labelMode: mapViewModel.labelMode,
             cameraRegion: $mapViewModel.cameraRegion,
             cameraRegionVersion: mapViewModel.cameraRegionVersion,
             pathState: { mapViewModel.pathState },
@@ -133,6 +133,9 @@ struct TracePathMapView: View {
                 }
             }
             .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .liquidGlass(in: .capsule)
@@ -248,18 +251,17 @@ struct TracePathMapView: View {
                     },
                     showingLayersMenu: $mapViewModel.showingLayersMenu
                 ) {
-                    // Labels toggle
+                    // Label mode toggle
                     Button {
-                        mapViewModel.showLabels.toggle()
+                        mapViewModel.labelMode = mapViewModel.labelMode.next
                     } label: {
-                        Image(systemName: "character.textbox")
+                        Image(systemName: mapViewModel.labelMode.iconName)
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(mapViewModel.showLabels ? .blue : .primary)
+                            .foregroundStyle(mapViewModel.labelMode != .hidden ? .blue : .primary)
                             .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(mapViewModel.showLabels ? L10n.Contacts.Contacts.Trace.Map.hideLabels : L10n.Contacts.Contacts.Trace.Map.showLabels)
 
                     // Center on path
                     if mapViewModel.hasPath {

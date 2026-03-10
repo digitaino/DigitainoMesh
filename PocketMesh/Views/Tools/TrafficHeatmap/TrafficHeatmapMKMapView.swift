@@ -7,7 +7,6 @@ struct TrafficHeatmapMKMapView: UIViewRepresentable {
     let bubbleAnnotations: [TrafficBubbleAnnotation]
     let segmentOverlays: [TrafficSegmentOverlay]
     let mapType: MKMapType
-    let showLabels: Bool
 
     @Binding var cameraRegion: MKCoordinateRegion?
     let cameraRegionVersion: Int
@@ -30,8 +29,6 @@ struct TrafficHeatmapMKMapView: UIViewRepresentable {
 
         coordinator.isUpdatingFromSwiftUI = true
         defer { coordinator.isUpdatingFromSwiftUI = false }
-
-        coordinator.showLabels = showLabels
 
         mapView.mapType = mapType
 
@@ -63,7 +60,7 @@ struct TrafficHeatmapMKMapView: UIViewRepresentable {
         // Update visible pin views
         for annotation in mapView.annotations.compactMap({ $0 as? TrafficBubbleAnnotation }) {
             guard let view = mapView.view(for: annotation) as? TrafficBubblePinView else { continue }
-            view.configure(for: annotation, showLabel: showLabels)
+            view.configure(for: annotation)
         }
     }
 
@@ -93,8 +90,6 @@ struct TrafficHeatmapMKMapView: UIViewRepresentable {
     @MainActor
     class Coordinator: NSObject, MKMapViewDelegate {
         var setCameraRegion: (MKCoordinateRegion?) -> Void
-
-        var showLabels: Bool = true
 
         var isUpdatingFromSwiftUI = false
         var lastAppliedRegion: MKCoordinateRegion?
@@ -131,7 +126,7 @@ struct TrafficHeatmapMKMapView: UIViewRepresentable {
                     annotation: annotation,
                     reuseIdentifier: TrafficBubblePinView.reuseIdentifier
                 )
-                view.configure(for: bubbleAnnotation, showLabel: showLabels)
+                view.configure(for: bubbleAnnotation)
                 return view
             }
 

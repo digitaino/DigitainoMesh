@@ -62,10 +62,9 @@ struct HeardRepeatsMapSheet: View {
             endpointAnnotations: viewModel.endpointAnnotations,
             lineOverlays: viewModel.lineOverlays,
             mapType: viewModel.mapType,
-            showLabels: viewModel.showLabels,
             pathState: viewModel.pathState,
-            hashLabels: viewModel.hashLabels,
             lastHopSNR: viewModel.lastHopSNR,
+            labelMode: viewModel.labelMode,
             cameraRegion: $viewModel.cameraRegion,
             cameraRegionVersion: viewModel.cameraRegionVersion
         )
@@ -83,6 +82,9 @@ struct HeardRepeatsMapSheet: View {
                 ))
             }
             .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .liquidGlass(in: .capsule)
@@ -123,13 +125,13 @@ struct HeardRepeatsMapSheet: View {
                     },
                     showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
-                    // Labels toggle
+                    // Label mode toggle
                     Button {
-                        viewModel.showLabels.toggle()
+                        viewModel.labelMode = viewModel.labelMode.next
                     } label: {
-                        Image(systemName: "character.textbox")
+                        Image(systemName: viewModel.labelMode.iconName)
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(viewModel.showLabels ? .blue : .primary)
+                            .foregroundStyle(viewModel.labelMode != .hidden ? .blue : .primary)
                             .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }

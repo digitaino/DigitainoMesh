@@ -9,7 +9,7 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
     let endpointAnnotations: [RouteEndpointAnnotation]
     let segmentOverlays: [TrafficSegmentOverlay]
     let mapType: MKMapType
-    let showLabels: Bool
+    let labelMode: AnnotationLabelMode
 
     @Binding var cameraRegion: MKCoordinateRegion?
     let cameraRegionVersion: Int
@@ -25,7 +25,7 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
         )
         mapView.register(
             RouteEndpointPinView.self,
-            forAnnotationViewWithReuseIdentifier: RouteEndpointPinView.reuseIdentifier
+            forAnnotationViewWithReuseIdentifier: RouteEndpointPinView.reuseID
         )
 
         return mapView
@@ -37,12 +37,13 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
         coordinator.isUpdatingFromSwiftUI = true
         defer { coordinator.isUpdatingFromSwiftUI = false }
 
-        coordinator.showLabels = showLabels
+        coordinator.labelMode = labelMode
 
         mapView.mapType = mapType
 
         updateAnnotations(in: mapView, coordinator: coordinator)
         updateOverlays(in: mapView, coordinator: coordinator)
+        updateLabelMode(in: mapView, coordinator: coordinator)
         updateRegion(in: mapView, coordinator: coordinator)
     }
 
@@ -74,18 +75,6 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
             mapView.removeAnnotations(currentEndpoints)
             mapView.addAnnotations(endpointAnnotations)
         }
-
-        // Update visible pin views
-        for annotation in mapView.annotations.compactMap({ $0 as? TrafficBubbleAnnotation }) {
-            guard let view = mapView.view(for: annotation) as? TrafficBubblePinView else { continue }
-            view.configure(for: annotation, showLabel: showLabels)
-        }
-
-        for annotation in mapView.annotations.compactMap({ $0 as? RouteEndpointAnnotation }) {
-            guard let view = mapView.view(for: annotation) as? RouteEndpointPinView else { continue }
-            let labelPos: TracePathRepeaterPinView.LabelPosition = (annotation.routeIndex % 2 == 0) ? .above : .below
-            view.configure(for: annotation, showLabel: showLabels, labelPosition: labelPos)
-        }
     }
 
     private func updateOverlays(in mapView: MKMapView, coordinator: Coordinator) {
@@ -97,6 +86,17 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
         let existingSegments = mapView.overlays.compactMap { $0 as? TrafficSegmentOverlay }
         mapView.removeOverlays(existingSegments)
         mapView.addOverlays(segmentOverlays)
+    }
+
+    private func updateLabelMode(in mapView: MKMapView, coordinator: Coordinator) {
+        guard labelMode != coordinator.lastLabelMode else { return }
+        coordinator.lastLabelMode = labelMode
+
+        for annotation in mapView.annotations {
+            if let view = mapView.view(for: annotation) as? RouteEndpointPinView {
+                view.applyTitleMode(labelMode)
+            }
+        }
     }
 
     private func updateRegion(in mapView: MKMapView, coordinator: Coordinator) {
@@ -115,7 +115,8 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
     class Coordinator: NSObject, MKMapViewDelegate {
         var setCameraRegion: (MKCoordinateRegion?) -> Void
 
-        var showLabels: Bool = true
+        var labelMode: AnnotationLabelMode = .name
+        var lastLabelMode: AnnotationLabelMode = .name
 
         var isUpdatingFromSwiftUI = false
         var lastAppliedRegion: MKCoordinateRegion?
@@ -146,15 +147,13 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
 
             if let endpointAnnotation = annotation as? RouteEndpointAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: RouteEndpointPinView.reuseIdentifier,
+                    withIdentifier: RouteEndpointPinView.reuseID,
                     for: annotation
                 ) as? RouteEndpointPinView ?? RouteEndpointPinView(
                     annotation: annotation,
-                    reuseIdentifier: RouteEndpointPinView.reuseIdentifier
+                    reuseIdentifier: RouteEndpointPinView.reuseID
                 )
-                let labelPos: TracePathRepeaterPinView.LabelPosition = (endpointAnnotation.routeIndex % 2 == 0) ? .above : .below
-                view.configure(for: endpointAnnotation, showLabel: showLabels, labelPosition: labelPos)
-                view.canShowCallout = true
+                view.configure(for: endpointAnnotation, titleMode: labelMode)
                 return view
             }
 
@@ -166,7 +165,7 @@ struct ContactRouteMapMKMapView: UIViewRepresentable {
                     annotation: annotation,
                     reuseIdentifier: TrafficBubblePinView.reuseIdentifier
                 )
-                view.configure(for: bubbleAnnotation, showLabel: showLabels)
+                view.configure(for: bubbleAnnotation)
                 return view
             }
 

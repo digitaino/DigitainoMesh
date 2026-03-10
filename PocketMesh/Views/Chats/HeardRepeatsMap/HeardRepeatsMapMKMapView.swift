@@ -3,7 +3,7 @@ import PocketMeshServices
 import SwiftUI
 
 /// UIViewRepresentable for the heard repeats map.
-/// Displays repeater pins with hex hash labels for outbound chain hops,
+/// Displays repeater pins for outbound chain hops,
 /// neutral-colored line overlays between consecutive hops (with arrowheads),
 /// SNR-colored last-hop lines from the heard repeater to the user, and
 /// a receiver endpoint pin at the user's location.
@@ -12,11 +12,10 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
     let endpointAnnotations: [RouteEndpointAnnotation]
     let lineOverlays: [PathLineOverlay]
     let mapType: MKMapType
-    let showLabels: Bool
     let pathState: [UUID: HeardRepeatsMapViewModel.PathInfo]
-    let hashLabels: [UUID: String]
     /// SNR quality for last-hop overlays (keyed by overlay segmentIndex)
     let lastHopSNR: [Int: SNRQuality]
+    let labelMode: AnnotationLabelMode
 
     @Binding var cameraRegion: MKCoordinateRegion?
     let cameraRegionVersion: Int
@@ -28,11 +27,11 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
 
         mapView.register(
             TracePathRepeaterPinView.self,
-            forAnnotationViewWithReuseIdentifier: TracePathRepeaterPinView.reuseIdentifier
+            forAnnotationViewWithReuseIdentifier: TracePathRepeaterPinView.reuseID
         )
         mapView.register(
             RouteEndpointPinView.self,
-            forAnnotationViewWithReuseIdentifier: RouteEndpointPinView.reuseIdentifier
+            forAnnotationViewWithReuseIdentifier: RouteEndpointPinView.reuseID
         )
 
         return mapView
@@ -45,14 +44,14 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
         defer { coordinator.isUpdatingFromSwiftUI = false }
 
         coordinator.pathState = pathState
-        coordinator.showLabels = showLabels
-        coordinator.hashLabels = hashLabels
         coordinator.lastHopSNR = lastHopSNR
+        coordinator.labelMode = labelMode
 
         mapView.mapType = mapType
 
         updateAnnotations(in: mapView, coordinator: coordinator)
         updateOverlays(in: mapView, coordinator: coordinator)
+        updateLabelMode(in: mapView, coordinator: coordinator)
         updateRegion(in: mapView, coordinator: coordinator)
     }
 
@@ -73,6 +72,9 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
 
         let existingRepeaterIDs = currentRepeaterIDs.subtracting(Set(repeatersToRemove.map { $0.repeater.id }))
         let repeatersToAdd = repeaterAnnotations.filter { !existingRepeaterIDs.contains($0.repeater.id) }
+        for annotation in repeatersToAdd {
+            annotation.applyLabelMode(labelMode)
+        }
         mapView.addAnnotations(repeatersToAdd)
 
         // Update endpoint annotations
@@ -83,27 +85,6 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
         if newEndpointIdentities != currentEndpointIdentities {
             mapView.removeAnnotations(currentEndpoints)
             mapView.addAnnotations(endpointAnnotations)
-        }
-
-        // Update visible pin views
-        for annotation in mapView.annotations.compactMap({ $0 as? RepeaterAnnotation }) {
-            guard let view = mapView.view(for: annotation) as? TracePathRepeaterPinView else { continue }
-            let info = pathState[annotation.repeater.id]
-            let labelPos: TracePathRepeaterPinView.LabelPosition = ((info?.routeIndex ?? 0) % 2 == 0) ? .above : .below
-            view.configure(
-                for: annotation.repeater,
-                inPath: true,
-                hopIndex: info?.hopIndex,
-                isLastHop: false,
-                showLabel: showLabels,
-                labelPosition: labelPos,
-                overrideLabel: hashLabels[annotation.repeater.id]
-            )
-        }
-
-        for annotation in mapView.annotations.compactMap({ $0 as? RouteEndpointAnnotation }) {
-            guard let view = mapView.view(for: annotation) as? RouteEndpointPinView else { continue }
-            view.configure(for: annotation, showLabel: showLabels)
         }
     }
 
@@ -116,6 +97,22 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
         let existingPathOverlays = mapView.overlays.compactMap { $0 as? PathLineOverlay }
         mapView.removeOverlays(existingPathOverlays)
         mapView.addOverlays(lineOverlays)
+    }
+
+    private func updateLabelMode(in mapView: MKMapView, coordinator: Coordinator) {
+        guard labelMode != coordinator.lastLabelMode else { return }
+        coordinator.lastLabelMode = labelMode
+
+        for annotation in mapView.annotations {
+            if let repeaterAnnotation = annotation as? RepeaterAnnotation {
+                repeaterAnnotation.applyLabelMode(labelMode)
+            }
+            if let view = mapView.view(for: annotation) as? TracePathRepeaterPinView {
+                view.applyTitleMode(labelMode)
+            } else if let view = mapView.view(for: annotation) as? RouteEndpointPinView {
+                view.applyTitleMode(labelMode)
+            }
+        }
     }
 
     private func updateRegion(in mapView: MKMapView, coordinator: Coordinator) {
@@ -135,9 +132,9 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
         var setCameraRegion: (MKCoordinateRegion?) -> Void
 
         var pathState: [UUID: HeardRepeatsMapViewModel.PathInfo] = [:]
-        var showLabels: Bool = true
-        var hashLabels: [UUID: String] = [:]
         var lastHopSNR: [Int: SNRQuality] = [:]
+        var labelMode: AnnotationLabelMode = .name
+        var lastLabelMode: AnnotationLabelMode = .name
 
         var isUpdatingFromSwiftUI = false
         var lastAppliedRegion: MKCoordinateRegion?
@@ -168,38 +165,33 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
 
             if let endpointAnnotation = annotation as? RouteEndpointAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: RouteEndpointPinView.reuseIdentifier,
+                    withIdentifier: RouteEndpointPinView.reuseID,
                     for: annotation
                 ) as? RouteEndpointPinView ?? RouteEndpointPinView(
                     annotation: annotation,
-                    reuseIdentifier: RouteEndpointPinView.reuseIdentifier
+                    reuseIdentifier: RouteEndpointPinView.reuseID
                 )
-                view.configure(for: endpointAnnotation, showLabel: showLabels)
-                view.canShowCallout = true
+                view.configure(for: endpointAnnotation, titleMode: labelMode)
                 return view
             }
 
             if let repeaterAnnotation = annotation as? RepeaterAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: TracePathRepeaterPinView.reuseIdentifier,
+                    withIdentifier: TracePathRepeaterPinView.reuseID,
                     for: annotation
                 ) as? TracePathRepeaterPinView ?? TracePathRepeaterPinView(
                     annotation: annotation,
-                    reuseIdentifier: TracePathRepeaterPinView.reuseIdentifier
+                    reuseIdentifier: TracePathRepeaterPinView.reuseID
                 )
 
                 let info = pathState[repeaterAnnotation.repeater.id]
-                let labelPos: TracePathRepeaterPinView.LabelPosition = ((info?.routeIndex ?? 0) % 2 == 0) ? .above : .below
                 view.configure(
                     for: repeaterAnnotation.repeater,
                     inPath: true,
                     hopIndex: info?.hopIndex,
                     isLastHop: false,
-                    showLabel: showLabels,
-                    labelPosition: labelPos,
-                    overrideLabel: hashLabels[repeaterAnnotation.repeater.id]
+                    titleMode: labelMode
                 )
-                view.canShowCallout = true
 
                 return view
             }

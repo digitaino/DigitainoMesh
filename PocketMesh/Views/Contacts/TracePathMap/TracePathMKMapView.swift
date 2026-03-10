@@ -8,7 +8,7 @@ struct TracePathMKMapView: UIViewRepresentable {
     let lineOverlays: [PathLineOverlay]
     let badgeAnnotations: [StatsBadgeAnnotation]
     let mapType: MKMapType
-    let showLabels: Bool
+    let labelMode: AnnotationLabelMode
 
     @Binding var cameraRegion: MKCoordinateRegion?
     let cameraRegionVersion: Int
@@ -25,7 +25,7 @@ struct TracePathMKMapView: UIViewRepresentable {
         // Register annotation views
         mapView.register(
             TracePathRepeaterPinView.self,
-            forAnnotationViewWithReuseIdentifier: TracePathRepeaterPinView.reuseIdentifier
+            forAnnotationViewWithReuseIdentifier: TracePathRepeaterPinView.reuseID
         )
         mapView.register(
             TracePathClusterView.self,
@@ -49,7 +49,7 @@ struct TracePathMKMapView: UIViewRepresentable {
         let pathState = pathState()
         coordinator.pathState = pathState
         coordinator.onRepeaterTap = onRepeaterTap
-        coordinator.showLabels = showLabels
+        coordinator.labelMode = labelMode
 
         // Update map type
         mapView.mapType = mapType
@@ -62,6 +62,9 @@ struct TracePathMKMapView: UIViewRepresentable {
 
         // Update badge annotations (with change detection)
         updateBadgeAnnotations(in: mapView, coordinator: coordinator)
+
+        // Update label mode on visible views
+        updateLabelMode(in: mapView, coordinator: coordinator)
 
         // Update region only when explicitly requested (version changed)
         if cameraRegionVersion != coordinator.lastAppliedRegionVersion,
@@ -95,7 +98,11 @@ struct TracePathMKMapView: UIViewRepresentable {
         // Add new
         let existingIDs = currentIDs.subtracting(Set(toRemove.map { $0.repeater.id }))
         let toAdd = repeaters.filter { !existingIDs.contains($0.id) }
-            .map { RepeaterAnnotation(repeater: $0) }
+            .map { repeater -> RepeaterAnnotation in
+                let annotation = RepeaterAnnotation(repeater: repeater)
+                annotation.applyLabelMode(labelMode)
+                return annotation
+            }
         mapView.addAnnotations(toAdd)
 
         // Determine which annotations changed path membership and need re-adding
@@ -126,7 +133,7 @@ struct TracePathMKMapView: UIViewRepresentable {
                 inPath: info.inPath,
                 hopIndex: info.hopIndex,
                 isLastHop: info.isLastHop,
-                showLabel: showLabels
+                titleMode: labelMode
             )
         }
     }
@@ -153,6 +160,20 @@ struct TracePathMKMapView: UIViewRepresentable {
         mapView.addAnnotations(badgeAnnotations)
     }
 
+    private func updateLabelMode(in mapView: MKMapView, coordinator: Coordinator) {
+        guard labelMode != coordinator.lastLabelMode else { return }
+        coordinator.lastLabelMode = labelMode
+
+        for annotation in mapView.annotations {
+            if let repeaterAnnotation = annotation as? RepeaterAnnotation {
+                repeaterAnnotation.applyLabelMode(labelMode)
+            }
+            if let view = mapView.view(for: annotation) as? TracePathRepeaterPinView {
+                view.applyTitleMode(labelMode)
+            }
+        }
+    }
+
     // MARK: - Coordinator
 
     @MainActor
@@ -161,7 +182,8 @@ struct TracePathMKMapView: UIViewRepresentable {
 
         var pathState: [UUID: TracePathMapViewModel.RepeaterPathInfo] = [:]
         var onRepeaterTap: ((ContactDTO) -> Void)?
-        var showLabels: Bool = true
+        var labelMode: AnnotationLabelMode = .name
+        var lastLabelMode: AnnotationLabelMode = .name
 
         var isUpdatingFromSwiftUI = false
         var lastAppliedRegion: MKCoordinateRegion?
@@ -211,11 +233,11 @@ struct TracePathMKMapView: UIViewRepresentable {
 
             if let repeaterAnnotation = annotation as? RepeaterAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: TracePathRepeaterPinView.reuseIdentifier,
+                    withIdentifier: TracePathRepeaterPinView.reuseID,
                     for: annotation
                 ) as? TracePathRepeaterPinView ?? TracePathRepeaterPinView(
                     annotation: annotation,
-                    reuseIdentifier: TracePathRepeaterPinView.reuseIdentifier
+                    reuseIdentifier: TracePathRepeaterPinView.reuseID
                 )
 
                 let info = pathState[repeaterAnnotation.repeater.id]
@@ -226,7 +248,7 @@ struct TracePathMKMapView: UIViewRepresentable {
                     inPath: info.inPath,
                     hopIndex: info.hopIndex,
                     isLastHop: info.isLastHop,
-                    showLabel: showLabels
+                    titleMode: labelMode
                 )
 
                 view.onTap = { [weak self] in
@@ -307,10 +329,28 @@ final class RepeaterAnnotation: NSObject, MKAnnotation {
         CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
     }
 
-    var title: String? { repeater.displayName }
+    /// Mutable title — swapped between display name and hex short by the coordinator.
+    dynamic var title: String?
+
+    /// Short hex identifier derived from the public key prefix (e.g. "A1B2").
+    let hexShortName: String
 
     init(repeater: ContactDTO) {
         self.repeater = repeater
+        self.title = repeater.displayName
+        self.hexShortName = repeater.publicKey.prefix(2).map { String(format: "%02X", $0) }.joined()
         super.init()
+    }
+
+    /// Sets the title to match the given label mode.
+    func applyLabelMode(_ mode: AnnotationLabelMode) {
+        switch mode {
+        case .hidden:
+            break // titleVisibility handles hiding; title content doesn't matter
+        case .hexShort:
+            title = hexShortName
+        case .name:
+            title = repeater.displayName
+        }
     }
 }

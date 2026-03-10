@@ -68,9 +68,8 @@ struct MessageRouteMapSheet: View {
             endpointAnnotations: mapViewModel.endpointAnnotations,
             lineOverlays: mapViewModel.lineOverlays,
             mapType: mapViewModel.mapType,
-            showLabels: mapViewModel.showLabels,
             pathState: mapViewModel.pathState,
-            hashLabels: mapViewModel.hashLabels,
+            labelMode: mapViewModel.labelMode,
             cameraRegion: $mapViewModel.cameraRegion,
             cameraRegionVersion: mapViewModel.cameraRegionVersion
         )
@@ -100,6 +99,9 @@ struct MessageRouteMapSheet: View {
                 }
             }
             .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .liquidGlass(in: .capsule)
@@ -140,13 +142,13 @@ struct MessageRouteMapSheet: View {
                     },
                     showingLayersMenu: $mapViewModel.showingLayersMenu
                 ) {
-                    // Labels toggle
+                    // Label mode toggle
                     Button {
-                        mapViewModel.showLabels.toggle()
+                        mapViewModel.labelMode = mapViewModel.labelMode.next
                     } label: {
-                        Image(systemName: "character.textbox")
+                        Image(systemName: mapViewModel.labelMode.iconName)
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(mapViewModel.showLabels ? .blue : .primary)
+                            .foregroundStyle(mapViewModel.labelMode != .hidden ? .blue : .primary)
                             .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
