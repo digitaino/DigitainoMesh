@@ -80,6 +80,7 @@ struct MessageBubbleCallbacks {
     var onRetry: (() -> Void)?
     var onReaction: ((String) -> Void)?
     var onLongPress: (() -> Void)?
+    var onReply: (() -> Void)?
     var onImageTap: (() -> Void)?
     var onRetryImageFetch: (() -> Void)?
     var onRequestPreviewFetch: (() -> Void)?
@@ -100,6 +101,14 @@ struct UnifiedMessageBubble: View {
 
     @State private var showingReactionDetails = false
     @State private var longPressTriggered = false
+    @State private var swipeOffset: CGFloat = 0
+    @State private var swipeTriggered = false
+    @State private var hasPassedThreshold = false
+    /// Whether this drag has been committed as a horizontal swipe (vs vertical scroll)
+    @State private var isSwipeActive = false
+
+    /// Minimum horizontal drag distance to trigger reply
+    private let swipeThreshold: CGFloat = 60
 
     init(
         message: MessageDTO,
@@ -155,7 +164,7 @@ struct UnifiedMessageBubble: View {
                         longPressTriggered.toggle()
                         callbacks.onLongPress?()
                     }
-                    .sensoryFeedback(.impact(weight: .medium), trigger: longPressTriggered)
+                    .sensoryFeedback(.impact(weight: .heavy, intensity: 0.8), trigger: longPressTriggered)
 
                     // Reaction badges (for messages with reactions)
                     if let summary = message.reactionSummary, !summary.isEmpty {
@@ -195,11 +204,26 @@ struct UnifiedMessageBubble: View {
                         )
                     }
                 }
+                .offset(x: swipeOffset)
+                .simultaneousGesture(swipeToReplyGesture)
+                .sensoryFeedback(.impact(weight: .medium), trigger: swipeTriggered)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(accessibilityMessageLabel)
 
                 if !message.isOutgoing {
                     Spacer(minLength: 40)
+                }
+            }
+            // Reply indicator (stays at fixed position while bubble slides right)
+            .overlay(alignment: .leading) {
+                if canSwipeToReply && swipeOffset > 0 {
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(hasPassedThreshold ? .blue : .secondary)
+                        .opacity(min(1, swipeOffset / swipeThreshold))
+                        .scaleEffect(hasPassedThreshold ? 1.0 : 0.7)
+                        .animation(.snappy(duration: 0.15), value: hasPassedThreshold)
+                        .padding(.leading, 16)
                 }
             }
         }
@@ -241,8 +265,57 @@ struct UnifiedMessageBubble: View {
         return label
     }
 
-    // MARK: - Helpers
+    // MARK: - Swipe to Reply
 
+    /// Only incoming messages support swipe-to-reply
+    private var canSwipeToReply: Bool {
+        !message.isOutgoing && callbacks.onReply != nil
+    }
+
+    private var swipeToReplyGesture: some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+            .onChanged { value in
+                guard canSwipeToReply else { return }
+                let dx = value.translation.width
+                let dy = value.translation.height
+
+                // If not yet committed, decide based on direction
+                if !isSwipeActive {
+                    // Need enough movement to decide
+                    guard abs(dx) > 10 || abs(dy) > 10 else { return }
+                    // Only commit if clearly horizontal-right
+                    if dx > 0 && abs(dx) > abs(dy) * 1.5 {
+                        isSwipeActive = true
+                    } else {
+                        // Vertical or leftward — ignore entirely
+                        return
+                    }
+                }
+
+                // Committed horizontal swipe: apply offset with rubber-band
+                let clamped = min(max(dx, 0), 100)
+                swipeOffset = clamped
+
+                // Haptic tick when crossing threshold
+                let pastThreshold = clamped >= swipeThreshold
+                if pastThreshold != hasPassedThreshold {
+                    hasPassedThreshold = pastThreshold
+                    if pastThreshold {
+                        swipeTriggered.toggle()
+                    }
+                }
+            }
+            .onEnded { _ in
+                if hasPassedThreshold {
+                    callbacks.onReply?()
+                }
+                withAnimation(.snappy(duration: 0.2)) {
+                    swipeOffset = 0
+                }
+                hasPassedThreshold = false
+                isSwipeActive = false
+            }
+    }
 }
 
 // MARK: - Extracted Views

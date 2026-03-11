@@ -1,6 +1,6 @@
 import MapKit
 import SwiftUI
-import PocketMeshServices
+import MC1Services
 
 /// Read-only UIViewRepresentable for displaying a message's geographic route on a map.
 /// Simplified variant of `TracePathMKMapView` without interactive path building.

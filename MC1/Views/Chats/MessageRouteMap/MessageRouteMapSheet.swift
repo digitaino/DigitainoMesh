@@ -1,7 +1,7 @@
 import CoreLocation
 import MapKit
 import SwiftUI
-import PocketMeshServices
+import MC1Services
 
 /// Sheet presenting a map view of the geographic route a message took through mesh repeaters.
 struct MessageRouteMapSheet: View {

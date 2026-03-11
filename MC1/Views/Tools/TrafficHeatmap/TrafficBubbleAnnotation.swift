@@ -1,5 +1,5 @@
 import MapKit
-import PocketMeshServices
+import MC1Services
 
 /// Map annotation representing a repeater node with aggregated traffic data.
 final class TrafficBubbleAnnotation: NSObject, MKAnnotation {

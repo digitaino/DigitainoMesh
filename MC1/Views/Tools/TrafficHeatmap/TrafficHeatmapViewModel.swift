@@ -2,7 +2,7 @@ import CoreLocation
 import MapKit
 import MeshCore
 import os.log
-import PocketMeshServices
+import MC1Services
 
 private let logger = Logger(subsystem: "com.pocketmesh", category: "TrafficHeatmap")
 

@@ -64,7 +64,11 @@ struct ChatView: View {
             selectedMessageForActions: $selectedMessageForActions,
             imageViewerData: $imageViewerData,
             onMentionSeen: { await markMentionSeen(messageID: $0) },
-            onScrollToMention: { scrollToNextMention() }
+            onScrollToMention: { scrollToNextMention() },
+            onReply: { message in
+                let replyText = buildReplyText(for: message)
+                setReplyText(replyText)
+            }
         )
             .safeAreaInset(edge: .bottom, spacing: 8) {
                 inputBar
@@ -440,6 +444,7 @@ private struct ChatMessagesContent: View {
     @Binding var imageViewerData: ImageViewerData?
     let onMentionSeen: (UUID) async -> Void
     let onScrollToMention: () -> Void
+    let onReply: (MessageDTO) -> Void
 
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var hasDismissedDividerFAB = false
@@ -562,6 +567,7 @@ private struct ChatMessagesContent: View {
                         Task { await viewModel.retryMessage(message) }
                     },
                     onLongPress: { selectedMessageForActions = message },
+                    onReply: !message.isOutgoing ? { onReply(message) } : nil,
                     onImageTap: {
                         if let data = viewModel.imageData(for: message.id) {
                             imageViewerData = ImageViewerData(

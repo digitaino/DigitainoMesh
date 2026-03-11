@@ -1,7 +1,7 @@
 import CoreLocation
 import Foundation
 import Testing
-@testable import PocketMesh
+@testable import MC1
 
 // MARK: - Hop Hash Parsing
 

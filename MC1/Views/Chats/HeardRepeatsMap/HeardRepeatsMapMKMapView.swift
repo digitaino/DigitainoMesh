@@ -1,5 +1,5 @@
 import MapKit
-import PocketMeshServices
+import MC1Services
 import SwiftUI
 
 /// UIViewRepresentable for the heard repeats map.

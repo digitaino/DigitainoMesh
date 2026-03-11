@@ -1,6 +1,6 @@
 import MapKit
 import SwiftUI
-import PocketMeshServices
+import MC1Services
 
 /// Sheet presenting a map view of the aggregated route history for a specific contact.
 /// Shows inbound (blue) and outbound (green) DM paths with directional arrowheads,

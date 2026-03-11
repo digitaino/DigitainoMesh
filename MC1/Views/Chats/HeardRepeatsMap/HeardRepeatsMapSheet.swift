@@ -1,6 +1,6 @@
 import MapKit
 import SwiftUI
-import PocketMeshServices
+import MC1Services
 
 /// Sheet presenting a map view of heard repeat paths for a single outgoing message.
 /// Shows each repeat's return path from repeaters back to the user, with SNR-based

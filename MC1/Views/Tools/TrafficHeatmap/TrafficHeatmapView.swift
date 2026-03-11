@@ -1,6 +1,6 @@
 import MapKit
 import SwiftUI
-import PocketMeshServices
+import MC1Services
 
 /// Tool view that displays aggregated mesh traffic patterns on a map.
 /// Shows bubble annotations on repeaters (sized by traffic volume, colored by signal quality)

@@ -1,8 +1,8 @@
-# PocketMesh (Fork)
+# DigitainoMesh (Fork)
 
-A personal fork of [PocketMesh](https://github.com/Avi0n/PocketMesh), an unofficial MeshCore client built for iOS in Swift.
+A personal fork of [MeshCore One (MC1)](https://github.com/AviAn-Tech/MC1), an unofficial MeshCore client built for iOS in Swift. Previously known as PocketMesh.
 
-> **Note:** This is an independent fork. For the official app, TestFlight beta, and releases, visit the [upstream repository](https://github.com/Avi0n/PocketMesh).
+> **Note:** This is an independent fork. For the official app, TestFlight beta, and releases, visit the [upstream repository](https://github.com/AviAn-Tech/MC1).
 
 ## Fork Additions
 
@@ -32,5 +32,5 @@ For more details, see the [Development Guide](docs/Development.md).
 
 ## License
 
-PocketMesh — GNU General Public License v3.0
+MeshCore One — GNU General Public License v3.0
 Swift MeshCore — MIT

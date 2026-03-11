@@ -377,7 +377,11 @@ struct ChannelChatView: View {
             imageViewerData: $imageViewerData,
             onMentionSeen: { await markMentionSeen(messageID: $0) },
             onScrollToMention: { scrollToNextMention() },
-            onRetryMessage: { retryMessage($0) }
+            onRetryMessage: { retryMessage($0) },
+            onReply: { message in
+                let replyText = buildReplyText(for: message)
+                setReplyText(replyText)
+            }
         )
     }
 
@@ -599,6 +603,7 @@ private struct ChannelMessagesContent: View {
     let onMentionSeen: (UUID) async -> Void
     let onScrollToMention: () -> Void
     let onRetryMessage: (MessageDTO) -> Void
+    let onReply: (MessageDTO) -> Void
 
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var hasDismissedDividerFAB = false
@@ -726,6 +731,7 @@ private struct ChannelMessagesContent: View {
                         Task { await viewModel.sendReaction(emoji: emoji, to: message) }
                     },
                     onLongPress: { selectedMessageForActions = message },
+                    onReply: !message.isOutgoing ? { onReply(message) } : nil,
                     onImageTap: {
                         if let data = viewModel.imageData(for: message.id) {
                             imageViewerData = ImageViewerData(
