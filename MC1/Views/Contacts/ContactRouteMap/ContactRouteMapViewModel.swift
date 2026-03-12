@@ -1,9 +1,23 @@
 import CoreLocation
 import MapKit
+import SwiftUI
 import MC1Services
 import os.log
 
 private let logger = Logger(subsystem: "com.pocketmesh", category: "ContactRouteMap")
+
+/// Plain data model for sender/receiver endpoint markers on the contact route map.
+struct RouteEndpointData: Identifiable {
+    enum EndpointType {
+        case sender
+        case receiver
+    }
+
+    let id: String
+    let endpointType: EndpointType
+    let coordinate: CLLocationCoordinate2D
+    let name: String
+}
 
 /// View model for the per-contact route history map.
 /// Aggregates inbound and outbound DM paths for a specific contact
@@ -13,17 +27,9 @@ final class ContactRouteMapViewModel {
 
     // MARK: - Map State
 
-    var cameraRegion: MKCoordinateRegion?
-    var cameraRegionVersion = 0
+    var cameraPosition: MapCameraPosition = .automatic
     var mapStyleSelection: MapStyleSelection = .standard
-    var labelMode: AnnotationLabelMode = .name
     var showingLayersMenu: Bool = false
-
-    var mapType: MKMapType { mapStyleSelection.mkMapType }
-
-    // MARK: - Time Period (reuses TrafficHeatmapViewModel.TimePeriod)
-
-    var selectedPeriod: TrafficHeatmapViewModel.TimePeriod = .allTime
 
     // MARK: - Data State
 
@@ -34,8 +40,8 @@ final class ContactRouteMapViewModel {
     // MARK: - Map Display Data
 
     private(set) var bubbleAnnotations: [TrafficBubbleAnnotation] = []
-    private(set) var segmentOverlays: [TrafficSegmentOverlay] = []
-    private(set) var endpointAnnotations: [RouteEndpointAnnotation] = []
+    private(set) var segmentData: [TrafficSegmentData] = []
+    private(set) var endpointAnnotations: [RouteEndpointData] = []
 
     // MARK: - Stats
 
@@ -63,24 +69,28 @@ final class ContactRouteMapViewModel {
             let discoveredNodes = try await dataStore.fetchDiscoveredNodes(deviceID: deviceID)
             let repeaters = contacts.filter { $0.type == .repeater }
 
-            // Fetch all DM messages for this contact (use a large limit)
+            // Fetch DM messages for this contact to count in/out traffic
             let messages = try await dataStore.fetchMessages(
                 contactID: contact.id,
                 limit: 10_000,
                 offset: 0
             )
 
-            // Filter by time period
-            let filteredMessages: [MessageDTO]
-            if let since = selectedPeriod.sinceDate {
-                filteredMessages = messages.filter { $0.createdAt >= since }
-            } else {
-                filteredMessages = messages
+            // Count inbound/outbound messages
+            var inCount = 0
+            var outCount = 0
+            for message in messages {
+                if message.isOutgoing {
+                    outCount += 1
+                } else {
+                    inCount += 1
+                }
             }
+            inboundCount = inCount
+            outboundCount = outCount
 
             // Build endpoint hops for user and contact so segments connect to them
             let userHop: RouteAggregator.LocatedHop? = userLocation.map { loc in
-                // Stable synthetic key so the aggregator deduplicates the user node
                 let syntheticKey = Data("__user_endpoint__".utf8)
                 return RouteAggregator.LocatedHop(
                     publicKey: syntheticKey,
@@ -102,13 +112,11 @@ final class ContactRouteMapViewModel {
                 )
             }() : nil
 
-            // Build routes
+            // Build routes from per-message path data (works for channel messages;
+            // DM text messages don't have per-message path data from firmware).
             var routes: [(hops: [RouteAggregator.LocatedHop], snr: Double?, direction: RouteAggregator.RouteDirection)] = []
 
-            var inCount = 0
-            var outCount = 0
-
-            for message in filteredMessages {
+            for message in messages {
                 guard let pathNodes = message.pathNodes, !pathNodes.isEmpty else { continue }
 
                 let intermediateHops = RouteAggregator.resolvePath(
@@ -123,9 +131,6 @@ final class ContactRouteMapViewModel {
 
                 let direction: RouteAggregator.RouteDirection = message.isOutgoing ? .outbound : .inbound
 
-                // Build full path including endpoints:
-                // Outbound (user → contact): user → repeaters → contact
-                // Inbound (contact → user): contact → repeaters → user
                 var fullHops: [RouteAggregator.LocatedHop] = []
                 if message.isOutgoing {
                     if let userHop { fullHops.append(userHop) }
@@ -138,19 +143,10 @@ final class ContactRouteMapViewModel {
                 }
 
                 routes.append((hops: fullHops, snr: message.snr, direction: direction))
-
-                if message.isOutgoing {
-                    outCount += 1
-                } else {
-                    inCount += 1
-                }
             }
 
-            inboundCount = inCount
-            outboundCount = outCount
-
-            // Fallback: if no messages had per-message path data, use the
-            // contact's current outPath (the route shown on the contact detail).
+            // For DMs, per-message path data is not available (firmware limitation).
+            // Use the contact's current outPath from the routing table as the known route.
             if routes.isEmpty, !contact.isFloodRouted, contact.pathHopCount > 0 {
                 let currentPathHops = RouteAggregator.resolvePath(
                     pathNodes: contact.outPath.prefix(contact.pathByteLength),
@@ -160,15 +156,29 @@ final class ContactRouteMapViewModel {
                     userLocation: userLocation
                 )
                 if !currentPathHops.isEmpty {
-                    var fullHops: [RouteAggregator.LocatedHop] = []
-                    if let userHop { fullHops.append(userHop) }
-                    fullHops.append(contentsOf: currentPathHops)
-                    if let contactHop { fullHops.append(contactHop) }
-                    routes.append((hops: fullHops, snr: nil, direction: .unspecified))
+                    // The outPath is the route from us to the contact (outbound).
+                    // Add it once per direction to show bidirectional traffic
+                    // since we know messages flow both ways.
+                    var outHops: [RouteAggregator.LocatedHop] = []
+                    if let userHop { outHops.append(userHop) }
+                    outHops.append(contentsOf: currentPathHops)
+                    if let contactHop { outHops.append(contactHop) }
+
+                    if outCount > 0 {
+                        routes.append((hops: outHops, snr: nil, direction: .outbound))
+                    }
+                    if inCount > 0 {
+                        // Inbound uses same path in reverse
+                        routes.append((hops: outHops.reversed(), snr: nil, direction: .inbound))
+                    }
+                    // If no messages yet but we have a path, show it as unspecified
+                    if routes.isEmpty {
+                        routes.append((hops: outHops, snr: nil, direction: .unspecified))
+                    }
                 }
             }
 
-            hasData = !filteredMessages.isEmpty || !routes.isEmpty
+            hasData = !messages.isEmpty || !routes.isEmpty
 
             // Synthetic keys used for endpoints — exclude from bubble annotations
             let syntheticKeys: Set<Data> = [
@@ -182,7 +192,7 @@ final class ContactRouteMapViewModel {
                 let result = RouteAggregator.aggregate(routes: routes, directional: true)
                 // Filter out endpoint bubbles — they're shown as endpoint pins instead
                 bubbleAnnotations = result.bubbleAnnotations.filter { !syntheticKeys.contains($0.publicKey) }
-                segmentOverlays = result.segmentOverlays
+                segmentData = result.segmentData
                 let repeaterBubbleCount = bubbleAnnotations.count
                 locatedRepeaterCount = repeaterBubbleCount
                 hasLocatedRepeaters = !bubbleAnnotations.isEmpty
@@ -220,14 +230,14 @@ final class ContactRouteMapViewModel {
                 longitude: contact.longitude
             )
             endpointAnnotations.append(
-                RouteEndpointAnnotation(type: .sender, coordinate: coord, name: contact.displayName, routeIndex: 0)
+                RouteEndpointData(id: "contact", endpointType: .sender, coordinate: coord, name: contact.displayName)
             )
         }
 
         // User endpoint
         if let userLocation {
             endpointAnnotations.append(
-                RouteEndpointAnnotation(type: .receiver, coordinate: userLocation.coordinate, name: userName, routeIndex: 1)
+                RouteEndpointData(id: "user", endpointType: .receiver, coordinate: userLocation.coordinate, name: userName)
             )
         }
     }
@@ -262,8 +272,7 @@ final class ContactRouteMapViewModel {
             longitudeDelta: min(360, (maxLon - minLon) * 1.5 + 0.01)
         )
 
-        cameraRegion = MKCoordinateRegion(center: center, span: span)
-        cameraRegionVersion += 1
+        cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
     }
 
     // MARK: - Find Path
@@ -307,7 +316,7 @@ final class ContactRouteMapViewModel {
 
     private func clearDisplayData() {
         bubbleAnnotations = []
-        segmentOverlays = []
+        segmentData = []
         endpointAnnotations = []
         locatedRepeaterCount = 0
         hasLocatedRepeaters = false

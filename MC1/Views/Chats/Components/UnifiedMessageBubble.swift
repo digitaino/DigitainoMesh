@@ -274,7 +274,11 @@ private struct BubbleContent: View {
     }
 
     private var isDirect: Bool {
-        message.pathLength == 0 || message.pathLength == 0xFF
+        // Not direct if we have actual path node data (DMs may have pathLength 0 but valid pathNodes)
+        if let pathNodes = message.pathNodes, !pathNodes.isEmpty, pathNodes != Data([0xFF]) {
+            return false
+        }
+        return message.pathLength == 0 || message.pathLength == 0xFF
     }
 
     var body: some View {

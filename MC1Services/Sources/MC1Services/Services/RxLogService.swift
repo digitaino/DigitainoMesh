@@ -82,7 +82,9 @@ public actor RxLogService {
         }
     }
 
-    /// Load channel secrets from database to enable decryption before sync completes.
+    /// Load channel secrets and contact public keys from database to enable decryption before sync completes.
+    /// Contact keys are loaded here so DM packets arriving before contact sync can still be decrypted
+    /// (as long as the contacts already exist in the database from a previous session).
     private func loadSecretsFromDatabase(deviceID: UUID) async {
         do {
             let channels = try await dataStore.fetchChannels(deviceID: deviceID)
@@ -93,6 +95,16 @@ public actor RxLogService {
             }
         } catch {
             logger.error("Failed to load channel secrets: \(error.localizedDescription)")
+        }
+
+        do {
+            let publicKeys = try await dataStore.fetchContactPublicKeysByPrefix(deviceID: deviceID)
+            if !publicKeys.isEmpty {
+                contactPublicKeysByPrefix = publicKeys
+                logger.info("Pre-loaded \(publicKeys.count) contact public key prefixes from database")
+            }
+        } catch {
+            logger.error("Failed to pre-load contact public keys: \(error.localizedDescription)")
         }
     }
 
@@ -194,20 +206,97 @@ public actor RxLogService {
         }
     }
 
+    /// Re-process recent DM entries that failed timestamp extraction due to missing keys.
+    /// Re-decrypts recent DM RxLogEntries that initially failed decryption (no senderTimestamp).
+    /// This happens when keys weren't available yet when the RxLog event was first processed.
+    /// Successful re-decryption fills in the senderTimestamp, which helps with SNR correlation.
+    /// Note: DM text RxLogEntries never contain hop/path data (firmware limitation), so we
+    /// only update the RxLogEntry timestamps here — no message path patching.
+    private func reprocessDMEntriesWithoutTimestamp() async {
+        guard !isReprocessing else { return }
+        isReprocessing = true
+        defer { isReprocessing = false }
+
+        guard let deviceID, let myPrivateKey else { return }
+
+        let cutoff = Date().addingTimeInterval(-120)
+
+        do {
+            let entries = try await dataStore.fetchRecentDMEntriesWithoutTimestamp(
+                deviceID: deviceID,
+                since: cutoff
+            )
+
+            guard !entries.isEmpty else { return }
+            logger.info("Re-processing \(entries.count) DM entries without senderTimestamp")
+
+            var updates: [(id: UUID, channelIndex: UInt8?, channelName: String?, senderTimestamp: UInt32?)] = []
+
+            for entry in entries {
+                guard !Task.isCancelled else { break }
+
+                // Try to extract senderTimestamp using available keys.
+                // For DM entries, extract the sender pubkey prefix from the packet payload.
+                // Layout: [recipientHash: hs bytes] [senderHash: hs bytes] [ciphertext...]
+                let hs = entry.pathHashSize
+                guard entry.packetPayload.count >= hs * 2 else { continue }
+                let firstByte = entry.packetPayload[hs]  // first byte of sender hash
+                guard let candidateKeys = contactPublicKeysByPrefix[firstByte] else { continue }
+
+                var timestamp: UInt32?
+                for senderPublicKey in candidateKeys {
+                    if let ts = DirectMessageCrypto.extractTimestamp(
+                        payload: entry.packetPayload,
+                        myPrivateKey: myPrivateKey,
+                        senderPublicKey: senderPublicKey
+                    ) {
+                        timestamp = ts
+                        break
+                    }
+                }
+
+                guard let timestamp else { continue }
+
+                updates.append((
+                    id: entry.id,
+                    channelIndex: nil,
+                    channelName: nil,
+                    senderTimestamp: timestamp
+                ))
+            }
+
+            if !updates.isEmpty {
+                try await dataStore.batchUpdateRxLogDecryption(updates)
+                logger.info("Re-processed \(updates.count) DM entries with senderTimestamp")
+            }
+        } catch {
+            logger.error("Failed to re-process DM entries: \(error.localizedDescription)")
+        }
+    }
+
     /// Update contact names cache.
     public func updateContactNames(_ names: [Data: String]) {
         contactNames = names
     }
 
     /// Update device private key for direct message decryption.
-    public func updatePrivateKey(_ key: Data?) {
+    /// Triggers re-decryption of recent DM entries that arrived before the key was available.
+    public func updatePrivateKey(_ key: Data?) async {
         myPrivateKey = key
+
+        if key != nil && !contactPublicKeysByPrefix.isEmpty {
+            await reprocessDMEntriesWithoutTimestamp()
+        }
     }
 
     /// Update contact public keys for direct message decryption.
-    /// Called when contacts sync completes.
-    public func updateContactPublicKeys(_ keys: [UInt8: [Data]]) {
+    /// Called when contacts sync completes. Triggers re-decryption if private key is already available.
+    public func updateContactPublicKeys(_ keys: [UInt8: [Data]]) async {
         contactPublicKeysByPrefix = keys
+
+        if myPrivateKey != nil && !keys.isEmpty {
+            await reprocessDMEntriesWithoutTimestamp()
+        }
     }
 
     /// Process a parsed RX log event.

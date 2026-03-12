@@ -315,6 +315,14 @@ public protocol PersistenceStoreProtocol: Actor {
         contactName: String?
     ) async throws -> RxLogEntryDTO?
 
+    // MARK: - RxLog DM Reprocessing
+
+    /// Fetch recent DM RX log entries that have no senderTimestamp (failed decryption).
+    func fetchRecentDMEntriesWithoutTimestamp(deviceID: UUID, since: Date) async throws -> [RxLogEntryDTO]
+
+    /// Fetch the receivedAt date of the oldest RX log entry for a device.
+    func fetchOldestRxLogDate(deviceID: UUID) async throws -> Date?
+
     // MARK: - Room Session State
 
     /// Mark a session as disconnected without changing permission level.

@@ -1,5 +1,4 @@
 import CoreLocation
-import MapKit
 import MC1Services
 
 /// Shared route aggregation utility used by Traffic Heatmap, Per-Contact Route Map,
@@ -26,7 +25,7 @@ enum RouteAggregator {
     /// Result of aggregating multiple routes.
     struct AggregationResult {
         let bubbleAnnotations: [TrafficBubbleAnnotation]
-        let segmentOverlays: [TrafficSegmentOverlay]
+        let segmentData: [TrafficSegmentData]
         let locatedRepeaterCount: Int
         let segmentCount: Int
     }
@@ -92,7 +91,7 @@ enum RouteAggregator {
 
     // MARK: - Aggregation
 
-    /// Aggregate multiple route paths into bubble annotations and segment overlays.
+    /// Aggregate multiple route paths into bubble annotations and segment data.
     /// - Parameters:
     ///   - routes: Array of (resolved hops, SNR, direction) tuples
     ///   - directional: If true, A→B and B→A are kept as separate segments.
@@ -193,10 +192,11 @@ enum RouteAggregator {
             )
         }
 
-        let segments = segmentTraffic.values.map { segment in
-            TrafficSegmentOverlay.line(
-                from: segment.coordinateA,
-                to: segment.coordinateB,
+        let segments = segmentTraffic.map { (key, segment) in
+            TrafficSegmentData(
+                id: "\(key.keyA.base64EncodedString())-\(key.keyB.base64EncodedString())-\(key.direction)",
+                startCoordinate: segment.coordinateA,
+                endCoordinate: segment.coordinateB,
                 frequency: segment.frequency,
                 normalizedFrequency: Double(segment.frequency) / Double(maxFrequency),
                 averageSNR: segment.averageSNR,
@@ -206,7 +206,7 @@ enum RouteAggregator {
 
         return AggregationResult(
             bubbleAnnotations: bubbles,
-            segmentOverlays: segments,
+            segmentData: segments,
             locatedRepeaterCount: repeaterTraffic.count,
             segmentCount: segmentTraffic.count
         )
@@ -259,7 +259,7 @@ enum RouteAggregator {
 // MARK: - Direction Conversion
 
 private extension RouteAggregator.RouteDirection {
-    var segmentDirection: TrafficSegmentOverlay.SegmentDirection {
+    var segmentDirection: SegmentDirection {
         switch self {
         case .inbound: .inbound
         case .outbound: .outbound

@@ -361,6 +361,11 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
     func fetchDMMessageCandidates(deviceID: UUID, contactID: UUID, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> [MessageDTO] { [] }
     func findDMMessageForReaction(deviceID: UUID, contactID: UUID, messageHash: String, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> MessageDTO? { nil }
 
+    // MARK: - RxLog Diagnostics
+
+    func fetchRecentDMEntriesWithoutTimestamp(deviceID: UUID, since: Date) async throws -> [RxLogEntryDTO] { [] }
+    func fetchOldestRxLogDate(deviceID: UUID) async throws -> Date? { nil }
+
     // MARK: - Notification Level
 
     func setChannelNotificationLevel(_ channelID: UUID, level: NotificationLevel) async throws {}

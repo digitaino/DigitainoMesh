@@ -9,6 +9,7 @@ struct TrafficHeatmapView: View {
     @Environment(\.appState) private var appState
 
     @State private var viewModel = TrafficHeatmapViewModel()
+    @Namespace private var mapScope
 
     var body: some View {
         ZStack {
@@ -33,7 +34,7 @@ struct TrafficHeatmapView: View {
         .task(id: appState.servicesVersion) {
             await loadData()
         }
-        .onChange(of: viewModel.selectedPeriod) {
+        .onChange(of: viewModel.selectedPeriodID) {
             Task { await loadData() }
         }
     }
@@ -54,11 +55,11 @@ struct TrafficHeatmapView: View {
 
     private var timePeriodMenu: some View {
         Menu {
-            ForEach(TrafficHeatmapViewModel.TimePeriod.allCases, id: \.self) { period in
+            ForEach(viewModel.availablePeriods) { period in
                 Button {
-                    viewModel.selectedPeriod = period
+                    viewModel.selectedPeriodID = period.id
                 } label: {
-                    if period == viewModel.selectedPeriod {
+                    if period.id == viewModel.selectedPeriodID {
                         Label(period.displayName, systemImage: "checkmark")
                     } else {
                         Text(period.displayName)
@@ -73,29 +74,66 @@ struct TrafficHeatmapView: View {
     // MARK: - Map Content
 
     private var mapContent: some View {
-        TrafficHeatmapMKMapView(
-            bubbleAnnotations: viewModel.bubbleAnnotations,
-            segmentOverlays: viewModel.segmentOverlays,
-            mapType: viewModel.mapType,
-            cameraRegion: $viewModel.cameraRegion,
-            cameraRegionVersion: viewModel.cameraRegionVersion
-        )
+        Map(position: $viewModel.cameraPosition, scope: mapScope) {
+            // Route segments
+            ForEach(viewModel.segmentData) { segment in
+                MapPolyline(coordinates: segment.coordinates)
+                    .stroke(
+                        segmentColor(for: segment),
+                        lineWidth: segmentWidth(for: segment)
+                    )
+            }
+
+            // Repeater bubbles
+            ForEach(viewModel.bubbleAnnotations) { bubble in
+                Annotation("", coordinate: bubble.coordinate) {
+                    TrafficBubbleView(annotation: bubble)
+                }
+            }
+
+            UserAnnotation()
+        }
+        .mapStyle(viewModel.mapStyleSelection.mapStyle)
+        .mapScope(mapScope)
         .ignoresSafeArea()
+    }
+
+    // MARK: - Segment Styling
+
+    private func segmentColor(for segment: TrafficSegmentData) -> Color {
+        if let snr = segment.averageSNR {
+            SNRQuality(snr: snr).color
+        } else {
+            .secondary
+        }
+    }
+
+    private func segmentWidth(for segment: TrafficSegmentData) -> CGFloat {
+        // Scale from 2pt (lowest traffic) to 8pt (highest traffic)
+        2 + 6 * segment.normalizedFrequency
     }
 
     // MARK: - Summary Banner
 
     private var summaryBanner: some View {
         VStack {
-            Text(L10n.Tools.Tools.TrafficMap.summary(
-                viewModel.locatedRepeaterCount,
-                viewModel.segmentCount,
-                viewModel.totalPacketsAnalyzed
-            ))
-            .font(.subheadline.weight(.medium))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            VStack(spacing: 2) {
+                Text(L10n.Tools.Tools.TrafficMap.summary(
+                    viewModel.locatedRepeaterCount,
+                    viewModel.segmentCount,
+                    viewModel.totalPacketsAnalyzed
+                ))
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+
+                if let age = viewModel.formattedOldestAge {
+                    Text("Oldest: \(age)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .liquidGlass(in: .capsule)
@@ -131,17 +169,7 @@ struct TrafficHeatmapView: View {
             HStack {
                 Spacer()
                 MapControlsToolbar(
-                    onLocationTap: {
-                        if let location = appState.locationService.currentLocation {
-                            viewModel.cameraRegion = MKCoordinateRegion(
-                                center: location.coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-                            )
-                            viewModel.cameraRegionVersion += 1
-                        } else {
-                            appState.locationService.requestLocation()
-                        }
-                    },
+                    mapScope: mapScope,
                     showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
                     // Center on data
@@ -171,5 +199,35 @@ struct TrafficHeatmapView: View {
             }
         }
         .animation(.spring(response: 0.3), value: viewModel.showingLayersMenu)
+    }
+}
+
+// MARK: - Traffic Bubble View
+
+/// Inline SwiftUI view for a repeater traffic bubble annotation.
+/// Sized 24–56pt by normalized traffic, colored by SNR quality.
+private struct TrafficBubbleView: View {
+    let annotation: TrafficBubbleAnnotation
+
+    var body: some View {
+        Circle()
+            .fill(annotation.snrQuality.color.opacity(0.7))
+            .overlay {
+                Circle()
+                    .strokeBorder(annotation.snrQuality.color, lineWidth: 2)
+            }
+            .frame(width: bubbleSize, height: bubbleSize)
+            .overlay {
+                if bubbleSize >= 36 {
+                    Text("\(annotation.packetCount)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+    }
+
+    private var bubbleSize: CGFloat {
+        // Scale from 24pt (lowest traffic) to 56pt (highest traffic)
+        24 + 32 * annotation.normalizedTraffic
     }
 }

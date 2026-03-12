@@ -531,7 +531,7 @@ private struct ActionsIncomingDetailsRows: View {
 
     var body: some View {
         ActionInfoRow(
-            text: L10n.Chats.Chats.Message.Info.hops(hopCountFormatted(message.pathLength))
+            text: L10n.Chats.Chats.Message.Info.hops(MessagePathFormatter.format(message))
                 + (distanceText.map { " · \($0)" } ?? ""),
             icon: "arrowshape.bounce.right"
         )
@@ -566,14 +566,6 @@ private struct ActionsIncomingDetailsRows: View {
         return "\(snr.formatted(.number.precision(.fractionLength(1)))) dB (\(quality))"
     }
 
-    private func hopCountFormatted(_ pathLength: UInt8) -> String {
-        switch pathLength {
-        case 0, 0xFF:
-            return L10n.Chats.Chats.Message.Hops.direct
-        default:
-            return "\(pathLength)"
-        }
-    }
 }
 
 // MARK: - Shared Helper Views

@@ -203,14 +203,17 @@ extension PersistenceStore {
 
     /// Find RxLogEntry matching an incoming message for path correlation.
     ///
-    /// For channel messages: Correlates by channel index and sender timestamp (stored in RxLogEntry).
-    /// For direct messages: Correlates by sender timestamp (now stored via decryption), payload type, and optional contact name.
+    /// For channel messages: Correlates by channel index and sender timestamp to get SNR and path data.
+    /// For direct messages: Correlates by sender timestamp to get SNR data. Note that the firmware
+    /// does not include hop/path data on DM text message RxLogEntries (pathLength is always 0),
+    /// so DM per-message path display is not possible. The contact route map aggregates ACK/multipart
+    /// packets separately to show route information.
     ///
     /// - Parameters:
     ///   - channelIndex: Channel index for channel messages, nil for direct messages
     ///   - senderTimestamp: The sender's timestamp from the message
-    ///   - withinSeconds: Time window for correlation (unused, kept for API compatibility)
-    ///   - contactName: For direct messages, the sender's contact name for additional filtering
+    ///   - withinSeconds: Time window for correlation
+    ///   - contactName: For direct messages, the sender's contact name (unused, kept for API compatibility)
     public func findRxLogEntry(
         channelIndex: UInt8?,
         senderTimestamp: UInt32,
@@ -235,31 +238,42 @@ extension PersistenceStore {
             let results = try modelContext.fetch(descriptor)
             return results.first.map { RxLogEntryDTO(from: $0) }
         } else {
-            // Direct message: match on senderTimestamp (now stored via decryption)
+            // Direct message: match on senderTimestamp + DM route type for SNR data.
             let textMessageType = Int(PayloadType.textMessage.rawValue)
+            let directType = Int(RouteType.direct.rawValue)
+            let tcDirectType = Int(RouteType.tcDirect.rawValue)
 
-            let predicate: Predicate<RxLogEntry>
-            if let contactName {
-                predicate = #Predicate<RxLogEntry> { entry in
-                    entry.senderTimestamp == targetTimestamp &&
-                    entry.channelIndex == nil &&
-                    entry.payloadType == textMessageType &&
-                    entry.fromContactName == contactName
-                }
-            } else {
-                predicate = #Predicate<RxLogEntry> { entry in
-                    entry.senderTimestamp == targetTimestamp &&
-                    entry.channelIndex == nil &&
-                    entry.payloadType == textMessageType
-                }
+            let primaryPredicate = #Predicate<RxLogEntry> { entry in
+                entry.senderTimestamp == targetTimestamp &&
+                entry.channelIndex == nil &&
+                entry.payloadType == textMessageType &&
+                (entry.routeType == directType || entry.routeType == tcDirectType)
+            }
+            var primaryDescriptor = FetchDescriptor<RxLogEntry>(predicate: primaryPredicate)
+            primaryDescriptor.fetchLimit = 1
+            primaryDescriptor.sortBy = [SortDescriptor(\.receivedAt, order: .reverse)]
+
+            if let match = try modelContext.fetch(primaryDescriptor).first {
+                return RxLogEntryDTO(from: match)
             }
 
-            var descriptor = FetchDescriptor<RxLogEntry>(predicate: predicate)
-            descriptor.fetchLimit = 1
-            descriptor.sortBy = [SortDescriptor(\.receivedAt, order: .reverse)]
+            // Fallback: time-window match for entries where senderTimestamp wasn't decrypted
+            let cutoff = Date().addingTimeInterval(-withinSeconds)
+            let fallbackPredicate = #Predicate<RxLogEntry> { entry in
+                entry.receivedAt >= cutoff &&
+                entry.channelIndex == nil &&
+                entry.payloadType == textMessageType &&
+                (entry.routeType == directType || entry.routeType == tcDirectType)
+            }
+            var fallbackDescriptor = FetchDescriptor<RxLogEntry>(predicate: fallbackPredicate)
+            fallbackDescriptor.fetchLimit = 1
+            fallbackDescriptor.sortBy = [SortDescriptor(\.receivedAt, order: .reverse)]
 
-            let results = try modelContext.fetch(descriptor)
-            return results.first.map { RxLogEntryDTO(from: $0) }
+            if let match = try modelContext.fetch(fallbackDescriptor).first {
+                return RxLogEntryDTO(from: match)
+            }
+
+            return nil
         }
     }
 
@@ -298,6 +312,39 @@ extension PersistenceStore {
             entry.senderTimestamp = update.senderTimestamp.map { Int($0) }
         }
         try modelContext.save()
+    }
+
+    /// Fetch recent DM RX log entries that have no senderTimestamp (failed decryption).
+    /// Used by RxLogService to re-decrypt DM entries when the private key or contact keys arrive.
+    public func fetchRecentDMEntriesWithoutTimestamp(deviceID: UUID, since: Date) throws -> [RxLogEntryDTO] {
+        let targetDeviceID = deviceID
+        let cutoff = since
+        let textMessageType = Int(PayloadType.textMessage.rawValue)
+        let responseType = Int(PayloadType.response.rawValue)
+        let descriptor = FetchDescriptor<RxLogEntry>(
+            predicate: #Predicate {
+                $0.deviceID == targetDeviceID &&
+                $0.senderTimestamp == nil &&
+                $0.channelIndex == nil &&
+                ($0.payloadType == textMessageType || $0.payloadType == responseType) &&
+                $0.receivedAt >= cutoff
+            },
+            sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
+        )
+        let entries = try modelContext.fetch(descriptor)
+        return entries.map { RxLogEntryDTO(from: $0) }
+    }
+
+    /// Fetch the receivedAt date of the oldest RX log entry for a device.
+    /// Used to display data age in the traffic heatmap.
+    public func fetchOldestRxLogDate(deviceID: UUID) throws -> Date? {
+        let targetDeviceID = deviceID
+        var descriptor = FetchDescriptor<RxLogEntry>(
+            predicate: #Predicate { $0.deviceID == targetDeviceID },
+            sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first?.receivedAt
     }
 
     // MARK: - Debug Log Entries

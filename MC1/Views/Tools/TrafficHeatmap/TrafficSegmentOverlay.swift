@@ -1,40 +1,34 @@
-import MapKit
+import CoreLocation
 
-/// Map overlay representing a route segment between two repeaters with traffic frequency data.
-final class TrafficSegmentOverlay: MKPolyline {
+/// Traffic direction for a route segment.
+enum SegmentDirection: Hashable {
+    case inbound
+    case outbound
+    case bidirectional
+    case unspecified
+}
 
-    /// Traffic direction for this segment.
-    enum SegmentDirection {
-        case inbound
-        case outbound
-        case bidirectional
-        case unspecified
+/// Plain data model representing a route segment between two repeaters with traffic metrics.
+/// Used by both the traffic heatmap and contact route map SwiftUI Map views.
+struct TrafficSegmentData: Identifiable, Hashable {
+    let id: String  // derived from endpoint keys + direction
+    let startCoordinate: CLLocationCoordinate2D
+    let endCoordinate: CLLocationCoordinate2D
+    let frequency: Int
+    let normalizedFrequency: Double
+    let averageSNR: Double?
+    let direction: SegmentDirection
+
+    var coordinates: [CLLocationCoordinate2D] {
+        [startCoordinate, endCoordinate]
     }
 
-    private(set) var frequency: Int = 0
-    private(set) var normalizedFrequency: Double = 0
-    private(set) var averageSNR: Double?
-    private(set) var startCoordinate: CLLocationCoordinate2D = CLLocationCoordinate2D()
-    private(set) var endCoordinate: CLLocationCoordinate2D = CLLocationCoordinate2D()
-    private(set) var direction: SegmentDirection = .unspecified
+    // Hashable conformance using id
+    static func == (lhs: TrafficSegmentData, rhs: TrafficSegmentData) -> Bool {
+        lhs.id == rhs.id
+    }
 
-    /// Create a segment overlay between two coordinates with traffic metrics.
-    static func line(
-        from start: CLLocationCoordinate2D,
-        to end: CLLocationCoordinate2D,
-        frequency: Int,
-        normalizedFrequency: Double,
-        averageSNR: Double?,
-        direction: SegmentDirection = .unspecified
-    ) -> TrafficSegmentOverlay {
-        var coords = [start, end]
-        let overlay = TrafficSegmentOverlay(coordinates: &coords, count: 2)
-        overlay.frequency = frequency
-        overlay.normalizedFrequency = normalizedFrequency
-        overlay.averageSNR = averageSNR
-        overlay.startCoordinate = start
-        overlay.endCoordinate = end
-        overlay.direction = direction
-        return overlay
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }

@@ -121,6 +121,14 @@ struct MessagePathFormatterTests {
         #expect(result == "A3,7F,42")
     }
 
+    @Test("pathLength 0 with valid pathNodes shows hops (DM with patched path data)")
+    func directPathLengthWithPathNodes() {
+        // DMs may have pathLength 0 from ContactMessage fallback but valid pathNodes from RxLogEntry
+        let message = createMessage(pathLength: 0, pathNodes: Data([0xA3, 0x7F]))
+        let result = MessagePathFormatter.format(message)
+        #expect(result == "A3,7F")
+    }
+
     // MARK: - Helper
 
     private func createMessage(pathLength: UInt8, pathNodes: Data?) -> MessageDTO {

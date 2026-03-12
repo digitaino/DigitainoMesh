@@ -1010,6 +1010,24 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         }
     }
 
+    // MARK: - DM Reprocessing & Path Patching
+
+    public func fetchRecentDMEntriesWithoutTimestamp(deviceID: UUID, since: Date) throws -> [RxLogEntryDTO] {
+        mockRxLogEntries.filter { entry in
+            entry.deviceID == deviceID &&
+            entry.senderTimestamp == nil &&
+            entry.channelIndex == nil &&
+            entry.receivedAt >= since
+        }
+    }
+
+    public func fetchOldestRxLogDate(deviceID: UUID) throws -> Date? {
+        mockRxLogEntries
+            .filter { $0.deviceID == deviceID }
+            .map(\.receivedAt)
+            .min()
+    }
+
     // MARK: - Saved Trace Paths
 
     public var savedTracePaths: [UUID: SavedTracePathDTO] = [:]

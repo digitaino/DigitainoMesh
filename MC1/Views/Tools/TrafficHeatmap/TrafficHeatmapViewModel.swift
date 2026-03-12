@@ -1,5 +1,6 @@
 import CoreLocation
 import MapKit
+import SwiftUI
 import MeshCore
 import os.log
 import MC1Services
@@ -12,45 +13,27 @@ private let logger = Logger(subsystem: "com.pocketmesh", category: "TrafficHeatm
 @MainActor @Observable
 final class TrafficHeatmapViewModel {
 
-    // MARK: - Time Period
+    // MARK: - Dynamic Time Period
 
-    enum TimePeriod: String, CaseIterable {
-        case lastHour
-        case last24Hours
-        case last7Days
-        case allTime
+    /// A time period computed from the actual data span rather than fixed durations.
+    struct TimePeriod: Identifiable, Equatable {
+        let id: String
+        let displayName: String
+        let sinceDate: Date?
 
-        var sinceDate: Date? {
-            switch self {
-            case .lastHour: Calendar.current.date(byAdding: .hour, value: -1, to: .now)
-            case .last24Hours: Calendar.current.date(byAdding: .day, value: -1, to: .now)
-            case .last7Days: Calendar.current.date(byAdding: .day, value: -7, to: .now)
-            case .allTime: nil
-            }
-        }
-
-        var displayName: String {
-            switch self {
-            case .lastHour: L10n.Tools.Tools.TrafficMap.Period.lastHour
-            case .last24Hours: L10n.Tools.Tools.TrafficMap.Period.last24Hours
-            case .last7Days: L10n.Tools.Tools.TrafficMap.Period.last7Days
-            case .allTime: L10n.Tools.Tools.TrafficMap.Period.allTime
-            }
-        }
+        static func == (lhs: TimePeriod, rhs: TimePeriod) -> Bool { lhs.id == rhs.id }
     }
 
     // MARK: - Map State
 
-    var cameraRegion: MKCoordinateRegion?
-    var cameraRegionVersion = 0
+    var cameraPosition: MapCameraPosition = .automatic
     var mapStyleSelection: MapStyleSelection = .standard
     var showingLayersMenu: Bool = false
 
-    var mapType: MKMapType { mapStyleSelection.mkMapType }
-
     // MARK: - Data State
 
-    var selectedPeriod: TimePeriod = .last24Hours
+    var selectedPeriodID: String = "all"
+    private(set) var availablePeriods: [TimePeriod] = []
     private(set) var isLoading = false
     private(set) var hasData = false
     private(set) var hasLocatedRepeaters = false
@@ -58,43 +41,17 @@ final class TrafficHeatmapViewModel {
     // MARK: - Map Display Data
 
     private(set) var bubbleAnnotations: [TrafficBubbleAnnotation] = []
-    private(set) var segmentOverlays: [TrafficSegmentOverlay] = []
+    private(set) var segmentData: [TrafficSegmentData] = []
 
     // MARK: - Stats
 
     private(set) var totalPacketsAnalyzed: Int = 0
     private(set) var locatedRepeaterCount: Int = 0
     private(set) var segmentCount: Int = 0
+    private(set) var oldestPacketAge: TimeInterval?
 
-    // MARK: - Aggregation Internals
-
-    private struct RepeaterTraffic {
-        let node: any RepeaterResolvable
-        var packetCount: Int
-        var totalSNR: Double
-        var snrSampleCount: Int
-        var lastSeen: Date
-
-        var averageSNR: Double? {
-            snrSampleCount > 0 ? totalSNR / Double(snrSampleCount) : nil
-        }
-    }
-
-    private struct SegmentKey: Hashable {
-        let keyA: Data  // smaller key first for canonicalization
-        let keyB: Data
-    }
-
-    private struct SegmentTraffic {
-        let coordinateA: CLLocationCoordinate2D
-        let coordinateB: CLLocationCoordinate2D
-        var frequency: Int
-        var totalSNR: Double
-        var snrSampleCount: Int
-
-        var averageSNR: Double? {
-            snrSampleCount > 0 ? totalSNR / Double(snrSampleCount) : nil
-        }
+    var selectedPeriod: TimePeriod? {
+        availablePeriods.first { $0.id == selectedPeriodID }
     }
 
     // MARK: - Load
@@ -107,12 +64,30 @@ final class TrafficHeatmapViewModel {
         isLoading = true
 
         do {
+            // Fetch oldest packet date for data age display and dynamic window computation
+            let oldestDate = try await dataStore.fetchOldestRxLogDate(deviceID: deviceID)
+            if let oldestDate {
+                oldestPacketAge = Date().timeIntervalSince(oldestDate)
+            } else {
+                oldestPacketAge = nil
+            }
+
+            // Compute dynamic time periods based on actual data span
+            let periods = Self.computeTimePeriods(oldestDate: oldestDate)
+            availablePeriods = periods
+
+            // If selected period is no longer available, default to "all"
+            if !periods.contains(where: { $0.id == selectedPeriodID }) {
+                selectedPeriodID = "all"
+            }
+
             let contacts = try await dataStore.fetchContacts(deviceID: deviceID)
             let discoveredNodes = try await dataStore.fetchDiscoveredNodes(deviceID: deviceID)
 
+            let sinceDate = selectedPeriod?.sinceDate
             let entries: [RxLogEntryDTO]
-            if let since = selectedPeriod.sinceDate {
-                entries = try await dataStore.fetchRxLogEntries(deviceID: deviceID, since: since)
+            if let sinceDate {
+                entries = try await dataStore.fetchRxLogEntries(deviceID: deviceID, since: sinceDate)
             } else {
                 entries = try await dataStore.fetchRxLogEntries(deviceID: deviceID, limit: 10_000)
             }
@@ -129,6 +104,69 @@ final class TrafficHeatmapViewModel {
         }
 
         isLoading = false
+    }
+
+    // MARK: - Dynamic Time Periods
+
+    /// Computes available time periods based on the actual data span.
+    static func computeTimePeriods(oldestDate: Date?) -> [TimePeriod] {
+        guard let oldestDate else {
+            return [TimePeriod(id: "all", displayName: L10n.Tools.Tools.TrafficMap.Period.allTime, sinceDate: nil)]
+        }
+
+        let age = Date().timeIntervalSince(oldestDate)
+        let now = Date()
+
+        var periods: [TimePeriod] = []
+
+        if age < 3600 {
+            // < 1 hour: 15m / 30m / all
+            periods.append(TimePeriod(id: "15m", displayName: "Last 15 min", sinceDate: now.addingTimeInterval(-900)))
+            periods.append(TimePeriod(id: "30m", displayName: "Last 30 min", sinceDate: now.addingTimeInterval(-1800)))
+        } else if age < 21600 {
+            // < 6 hours: 30m / 1h / 3h / all
+            periods.append(TimePeriod(id: "30m", displayName: "Last 30 min", sinceDate: now.addingTimeInterval(-1800)))
+            periods.append(TimePeriod(id: "1h", displayName: L10n.Tools.Tools.TrafficMap.Period.lastHour, sinceDate: now.addingTimeInterval(-3600)))
+            periods.append(TimePeriod(id: "3h", displayName: "Last 3 Hours", sinceDate: now.addingTimeInterval(-10800)))
+        } else if age < 86400 {
+            // < 24 hours: 1h / 6h / 12h / all
+            periods.append(TimePeriod(id: "1h", displayName: L10n.Tools.Tools.TrafficMap.Period.lastHour, sinceDate: now.addingTimeInterval(-3600)))
+            periods.append(TimePeriod(id: "6h", displayName: "Last 6 Hours", sinceDate: now.addingTimeInterval(-21600)))
+            periods.append(TimePeriod(id: "12h", displayName: "Last 12 Hours", sinceDate: now.addingTimeInterval(-43200)))
+        } else if age < 604800 {
+            // < 7 days: 6h / 1d / 3d / all
+            periods.append(TimePeriod(id: "6h", displayName: "Last 6 Hours", sinceDate: now.addingTimeInterval(-21600)))
+            periods.append(TimePeriod(id: "1d", displayName: L10n.Tools.Tools.TrafficMap.Period.last24Hours, sinceDate: now.addingTimeInterval(-86400)))
+            periods.append(TimePeriod(id: "3d", displayName: "Last 3 Days", sinceDate: now.addingTimeInterval(-259200)))
+        } else {
+            // >= 7 days: 1d / 3d / 7d / all
+            periods.append(TimePeriod(id: "1d", displayName: L10n.Tools.Tools.TrafficMap.Period.last24Hours, sinceDate: now.addingTimeInterval(-86400)))
+            periods.append(TimePeriod(id: "3d", displayName: "Last 3 Days", sinceDate: now.addingTimeInterval(-259200)))
+            periods.append(TimePeriod(id: "7d", displayName: L10n.Tools.Tools.TrafficMap.Period.last7Days, sinceDate: now.addingTimeInterval(-604800)))
+        }
+
+        // "All Time" is always the last option
+        periods.append(TimePeriod(id: "all", displayName: L10n.Tools.Tools.TrafficMap.Period.allTime, sinceDate: nil))
+
+        return periods
+    }
+
+    /// Formats the oldest packet age for display. E.g. "12h 34m ago"
+    var formattedOldestAge: String? {
+        guard let age = oldestPacketAge, age > 0 else { return nil }
+
+        let hours = Int(age / 3600)
+        let minutes = Int(age.truncatingRemainder(dividingBy: 3600) / 60)
+
+        if hours >= 24 {
+            let days = hours / 24
+            let remainingHours = hours % 24
+            return "\(days)d \(remainingHours)h ago"
+        } else if hours > 0 {
+            return "\(hours)h \(minutes)m ago"
+        } else {
+            return "\(minutes)m ago"
+        }
     }
 
     // MARK: - Aggregation
@@ -159,7 +197,6 @@ final class TrafficHeatmapViewModel {
             var locatedHops: [(publicKey: Data, coordinate: CLLocationCoordinate2D)] = []
 
             for hash in hopHashes {
-                // Try contacts first, then discovered nodes
                 let match: (any RepeaterResolvable)? =
                     RepeaterResolver.bestMatch(for: hash, in: contacts, userLocation: userLocation)
                     ?? RepeaterResolver.bestMatch(for: hash, in: discoveredNodes, userLocation: userLocation)
@@ -173,7 +210,6 @@ final class TrafficHeatmapViewModel {
 
                 let key = match.publicKey
 
-                // Accumulate repeater traffic
                 if var existing = repeaterTraffic[key] {
                     existing.packetCount += 1
                     if let snr = entry.snr {
@@ -203,10 +239,8 @@ final class TrafficHeatmapViewModel {
                 let a = locatedHops[i]
                 let b = locatedHops[i + 1]
 
-                // Skip self-loops (same repeater appearing consecutively)
                 guard a.publicKey != b.publicKey else { continue }
 
-                // Canonicalize key so A→B == B→A
                 let segKey: SegmentKey
                 if a.publicKey.lexicographicallyPrecedes(b.publicKey) {
                     segKey = SegmentKey(keyA: a.publicKey, keyB: b.publicKey)
@@ -237,14 +271,14 @@ final class TrafficHeatmapViewModel {
         let maxPackets = repeaterTraffic.values.map(\.packetCount).max() ?? 1
         let maxFrequency = segmentTraffic.values.map(\.frequency).max() ?? 1
 
-        bubbleAnnotations = repeaterTraffic.values.map { traffic in
+        bubbleAnnotations = repeaterTraffic.map { (key, traffic) in
             TrafficBubbleAnnotation(
                 coordinate: CLLocationCoordinate2D(
                     latitude: traffic.node.latitude,
                     longitude: traffic.node.longitude
                 ),
                 name: traffic.node.resolvableName,
-                publicKey: traffic.node.publicKey,
+                publicKey: key,
                 packetCount: traffic.packetCount,
                 averageSNR: traffic.averageSNR,
                 snrQuality: SNRQuality(snr: traffic.averageSNR),
@@ -253,13 +287,15 @@ final class TrafficHeatmapViewModel {
             )
         }
 
-        segmentOverlays = segmentTraffic.values.map { segment in
-            TrafficSegmentOverlay.line(
-                from: segment.coordinateA,
-                to: segment.coordinateB,
+        segmentData = segmentTraffic.map { (key, segment) in
+            TrafficSegmentData(
+                id: "\(key.keyA.base64EncodedString())-\(key.keyB.base64EncodedString())",
+                startCoordinate: segment.coordinateA,
+                endCoordinate: segment.coordinateB,
                 frequency: segment.frequency,
                 normalizedFrequency: Double(segment.frequency) / Double(maxFrequency),
-                averageSNR: segment.averageSNR
+                averageSNR: segment.averageSNR,
+                direction: .unspecified
             )
         }
 
@@ -304,19 +340,50 @@ final class TrafficHeatmapViewModel {
             longitudeDelta: min(360, (maxLon - minLon) * 1.5 + 0.01)
         )
 
-        cameraRegion = MKCoordinateRegion(center: center, span: span)
-        cameraRegionVersion += 1
+        cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
+    }
+
+    // MARK: - Private Types
+
+    private struct RepeaterTraffic {
+        let node: any RepeaterResolvable
+        var packetCount: Int
+        var totalSNR: Double
+        var snrSampleCount: Int
+        var lastSeen: Date
+
+        var averageSNR: Double? {
+            snrSampleCount > 0 ? totalSNR / Double(snrSampleCount) : nil
+        }
+    }
+
+    private struct SegmentKey: Hashable {
+        let keyA: Data
+        let keyB: Data
+    }
+
+    private struct SegmentTraffic {
+        let coordinateA: CLLocationCoordinate2D
+        let coordinateB: CLLocationCoordinate2D
+        var frequency: Int
+        var totalSNR: Double
+        var snrSampleCount: Int
+
+        var averageSNR: Double? {
+            snrSampleCount > 0 ? totalSNR / Double(snrSampleCount) : nil
+        }
     }
 
     // MARK: - Private
 
     private func clearState() {
         bubbleAnnotations = []
-        segmentOverlays = []
+        segmentData = []
         totalPacketsAnalyzed = 0
         locatedRepeaterCount = 0
         segmentCount = 0
         hasData = false
         hasLocatedRepeaters = false
+        oldestPacketAge = nil
     }
 }
