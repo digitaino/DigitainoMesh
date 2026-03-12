@@ -147,7 +147,29 @@ public enum MentionUtilities {
 
     /// Builds reply text with a mention and quoted preview of the original message.
     /// Strips any leading mention from the message text before generating the preview.
-    public static func buildReplyText(mentionName: String, messageText: String) -> String {
+    public static func buildReplyText(mentionName: String, messageText: String, routeInfo: String? = nil) -> String {
+        let preview = replyPreview(from: messageText)
+        let mention = createMention(for: mentionName)
+        var result = "\(mention)\n>\(preview)\n"
+        if let routeInfo {
+            result += "\(routeInfo)\n"
+        }
+        return result
+    }
+
+    /// Builds reply text with only a quoted preview (no mention prefix).
+    /// Suitable for direct messages where the recipient is already implied.
+    public static func buildReplyPreview(messageText: String, routeInfo: String? = nil) -> String {
+        let preview = replyPreview(from: messageText)
+        var result = ">\(preview)\n"
+        if let routeInfo {
+            result += "\(routeInfo)\n"
+        }
+        return result
+    }
+
+    /// Extracts a short preview from the message text, stripping any leading mention.
+    private static func replyPreview(from messageText: String) -> String {
         let previewSource: String
         if let regex = leadingMentionRegex,
            let match = regex.firstMatch(in: messageText, range: NSRange(messageText.startIndex..., in: messageText)),
@@ -158,7 +180,6 @@ public enum MentionUtilities {
         }
         let preview = String(previewSource.prefix(10))
         let suffix = previewSource.count > 10 ? ".." : ""
-        let mention = createMention(for: mentionName)
-        return "\(mention)\n>\(preview)\(suffix)\n"
+        return "\(preview)\(suffix)"
     }
 }

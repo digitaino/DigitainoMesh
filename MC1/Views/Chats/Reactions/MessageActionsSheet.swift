@@ -1,3 +1,4 @@
+import CoreLocation
 import MC1Services
 import SwiftUI
 
@@ -5,6 +6,7 @@ import SwiftUI
 enum MessageAction: Equatable {
     case react(String)
     case reply
+    case replyWithRoute(String)
     case copy
     case sendAgain
     case blockSender
@@ -102,7 +104,10 @@ struct MessageActionsSheet: View {
                             repeats: repeats,
                             contacts: contacts,
                             discoveredNodes: discoveredNodes,
-                            pathViewModel: pathViewModel
+                            pathViewModel: pathViewModel,
+                            onReplyWithRoute: { routeInfo in
+                                performAction(.replyWithRoute(routeInfo))
+                            }
                         )
                         ActionsBlockSection(
                             availability: availability,
@@ -337,6 +342,9 @@ private struct ActionsDetailsSection: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
+    var onReplyWithRoute: ((String) -> Void)?
+
+    @Environment(\.appState) private var appState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -348,7 +356,8 @@ private struct ActionsDetailsSection: View {
                     repeats: repeats,
                     contacts: contacts,
                     discoveredNodes: discoveredNodes,
-                    pathViewModel: pathViewModel
+                    pathViewModel: pathViewModel,
+                    onReplyWithRoute: onReplyWithRoute
                 )
             }
 
@@ -362,7 +371,12 @@ private struct ActionsDetailsSection: View {
             if message.isOutgoing {
                 ActionsOutgoingDetailsRows(message: message)
             } else {
-                ActionsIncomingDetailsRows(message: message)
+                ActionsIncomingDetailsRows(
+                    message: message,
+                    contacts: contacts.isEmpty ? pathViewModel.allContacts : contacts,
+                    discoveredNodes: discoveredNodes.isEmpty ? pathViewModel.allDiscoveredNodes : discoveredNodes,
+                    userLocation: appState.locationService.currentLocation
+                )
             }
         }
     }
@@ -378,6 +392,7 @@ private struct ActionsExpandableDetailRow: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
+    var onReplyWithRoute: ((String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -416,7 +431,8 @@ private struct ActionsExpandableDetailRow: View {
                     repeats: repeats,
                     contacts: contacts,
                     discoveredNodes: discoveredNodes,
-                    pathViewModel: pathViewModel
+                    pathViewModel: pathViewModel,
+                    onReplyWithRoute: onReplyWithRoute
                 )
                 .padding(.horizontal)
                 .padding(.bottom)
@@ -435,6 +451,7 @@ private struct ActionsExpandedContent: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
+    var onReplyWithRoute: ((String) -> Void)?
 
     @State private var showingRepeatsMap = false
 
@@ -469,7 +486,8 @@ private struct ActionsExpandedContent: View {
                 message: message,
                 viewModel: pathViewModel,
                 receiverName: appState.connectedDevice?.nodeName ?? L10n.Chats.Chats.Path.Receiver.you,
-                userLocation: appState.locationService.currentLocation
+                userLocation: appState.locationService.currentLocation,
+                onReplyWithRoute: onReplyWithRoute
             )
         }
     }
@@ -497,10 +515,24 @@ private struct ActionsOutgoingDetailsRows: View {
 
 private struct ActionsIncomingDetailsRows: View {
     let message: MessageDTO
+    var contacts: [ContactDTO] = []
+    var discoveredNodes: [DiscoveredNodeDTO] = []
+    var userLocation: CLLocation?
+
+    private var distanceText: String? {
+        guard let result = RouteDistanceCalculator.computeRouteDistance(
+            message: message,
+            contacts: contacts,
+            discoveredNodes: discoveredNodes,
+            userLocation: userLocation
+        ) else { return nil }
+        return RouteDistanceCalculator.formatTotal(result.meters, hasGaps: result.hasGaps)
+    }
 
     var body: some View {
         ActionInfoRow(
-            text: L10n.Chats.Chats.Message.Info.hops(hopCountFormatted(message.pathLength)),
+            text: L10n.Chats.Chats.Message.Info.hops(hopCountFormatted(message.pathLength))
+                + (distanceText.map { " · \($0)" } ?? ""),
             icon: "arrowshape.bounce.right"
         )
 

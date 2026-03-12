@@ -65,6 +65,12 @@ final class HeardRepeatsMapViewModel {
     private(set) var repeatCount: Int = 0
     private(set) var locatedRepeaterCount: Int = 0
 
+    // MARK: - Distance
+
+    /// Formatted total route distance for the current view (single repeat or all).
+    /// Includes "≥" prefix when hops are missing location data.
+    private(set) var distanceText: String?
+
     // MARK: - Repeat Cycling
 
     /// nil = show all repeats aggregated, 0..<N = show single repeat
@@ -78,6 +84,8 @@ final class HeardRepeatsMapViewModel {
     struct ResolvedRepeat {
         let repeatDTO: MessageRepeatDTO
         let hops: [(contact: ContactDTO, coordinate: CLLocationCoordinate2D)]
+        /// Number of hops in the path that had no location data.
+        let unlocatedHopCount: Int
     }
 
     private var resolvedRepeats: [ResolvedRepeat] = []
@@ -114,23 +122,34 @@ final class HeardRepeatsMapViewModel {
             guard !hashes.isEmpty else { continue }
 
             var resolvedHops: [(contact: ContactDTO, coordinate: CLLocationCoordinate2D)] = []
+            var unlocatedCount = 0
 
             for hash in hashes {
                 guard let match = RepeaterResolver.bestMatch(
                     for: hash, in: repeaters, userLocation: userLocation
-                ), match.hasLocation else { continue }
+                ), match.hasLocation else {
+                    unlocatedCount += 1
+                    continue
+                }
 
                 let coord = CLLocationCoordinate2D(
                     latitude: match.latitude,
                     longitude: match.longitude
                 )
-                guard CLLocationCoordinate2DIsValid(coord) else { continue }
+                guard CLLocationCoordinate2DIsValid(coord) else {
+                    unlocatedCount += 1
+                    continue
+                }
 
                 resolvedHops.append((contact: match, coordinate: coord))
             }
 
             guard !resolvedHops.isEmpty else { continue }
-            resolved.append(ResolvedRepeat(repeatDTO: repeatDTO, hops: resolvedHops))
+            resolved.append(ResolvedRepeat(
+                repeatDTO: repeatDTO,
+                hops: resolvedHops,
+                unlocatedHopCount: unlocatedCount
+            ))
         }
 
         resolvedRepeats = resolved
@@ -174,7 +193,7 @@ final class HeardRepeatsMapViewModel {
         centerOnData()
     }
 
-    /// Summary text for the selected single repeat (e.g. "Repeat 2 of 5 · 12.3 dB · 2 hops")
+    /// Summary text for the selected single repeat (e.g. "Repeat 2 of 5 · 12.3 dB · 2 hops · ≥ 4.2 km")
     var selectedRepeatSummary: String {
         guard let index = selectedRepeatIndex,
               index < resolvedRepeats.count else { return "" }
@@ -192,7 +211,13 @@ final class HeardRepeatsMapViewModel {
         }
 
         let hopWord = hopCount == 1 ? "hop" : "hops"
-        return "Repeat \(repeatNum) of \(total) · \(snrText) · \(hopCount) \(hopWord)"
+        var parts = ["Repeat \(repeatNum) of \(total)", snrText, "\(hopCount) \(hopWord)"]
+
+        if let dist = distanceText {
+            parts.append(dist)
+        }
+
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Camera
@@ -303,9 +328,37 @@ final class HeardRepeatsMapViewModel {
             endpointAnnotations = []
         }
 
+        // Compute distance
+        computeDistance(for: repeatsToShow)
+
         if hasLocatedRepeaters, selectedRepeatIndex == nil {
             centerOnData()
         }
+    }
+
+    /// Compute total route distance for a single selected repeat.
+    /// Only meaningful when viewing one repeat at a time — each repeat is an
+    /// independent route, so there's no single distance for the aggregate view.
+    private func computeDistance(for repeatsToShow: [ResolvedRepeat]) {
+        // Only show distance when viewing a single repeat
+        guard repeatsToShow.count == 1, let resolved = repeatsToShow.first else {
+            distanceText = nil
+            return
+        }
+
+        var coordinates = resolved.hops.map(\.coordinate)
+        if let userLocation = storedUserLocation {
+            coordinates.append(userLocation.coordinate)
+        }
+
+        let totalMeters = RouteDistanceCalculator.chainDistance(between: coordinates)
+        guard totalMeters > 0 else {
+            distanceText = nil
+            return
+        }
+
+        let hasGaps = resolved.unlocatedHopCount > 0
+        distanceText = RouteDistanceCalculator.formatTotal(totalMeters, hasGaps: hasGaps)
     }
 
     private func clearDisplayData() {
@@ -317,5 +370,6 @@ final class HeardRepeatsMapViewModel {
         endpointAnnotations = []
         locatedRepeaterCount = 0
         hasLocatedRepeaters = false
+        distanceText = nil
     }
 }

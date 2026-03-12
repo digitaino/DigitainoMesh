@@ -13,7 +13,9 @@ Features and fixes added in this fork on top of upstream:
 - **Traffic Map** — Aggregate received RF packets over selectable time windows (1h, 24h, 7d, all time) and visualize mesh traffic patterns with sized/colored bubble annotations on repeaters and weighted route lines between hops
 - **Historical GPS on Messages** — Messages store the phone's GPS coordinates at send/receive time so route maps show where the user actually was, not the phone's current location
 - **Channel DM & Contact Card** — Long-press a channel message to direct-message the sender or tap their name to view their contact card, without leaving the channel
-- **Swipe to Reply** — Swipe right on an incoming message in channels or DMs to quickly reply, with haptic feedback and a visual reply indicator
+- **Reply with Route** — Reply to a message with its route info (hop count, distance, and repeater hex IDs) from the expanded path details view
+- **Route Distance on Maps** — Message route maps and heard repeats maps display the total chain distance along the path, with a "≥" prefix when intermediate repeaters lack location data
+- **Swipe to Reply** — Swipe right on an incoming message in channels or DMs to quickly reply, with haptic feedback and a visual reply indicator (UIKit-based gesture avoids scroll blocking)
 - **Message Draft Persistence** — Unsent message text is preserved when navigating away from a conversation and restored when returning
 - **Mention Improvements** — Live-updating mention suggestion order based on most recent sender, keyboard auto-reset to letters after selecting a mention
 - **BLE Reconnect Fix** — Fixed a race condition crash during BLE auto-reconnect when services were cleared concurrently

@@ -10,9 +10,20 @@ struct MessagePathContent: View {
     let viewModel: MessagePathViewModel
     let receiverName: String
     let userLocation: CLLocation?
+    var onReplyWithRoute: ((String) -> Void)?
 
     @State private var copyHapticTrigger = 0
     @State private var showingRouteMap = false
+
+    /// Pre-computed route info text for the reply button
+    private var routeInfoText: String? {
+        RouteDistanceCalculator.formatRouteInfo(
+            message: message,
+            contacts: viewModel.allContacts,
+            discoveredNodes: viewModel.allDiscoveredNodes,
+            userLocation: userLocation
+        )
+    }
 
     /// Path hops chunked by hash size, each as (hashData, hexString) pair
     private var pathHops: [(data: Data, hex: String)] {
@@ -100,6 +111,17 @@ struct MessagePathContent: View {
                 .padding(.top, 4)
                 .sheet(isPresented: $showingRouteMap) {
                     MessageRouteMapSheet(message: message)
+                }
+
+                // Reply with Route
+                if let onReplyWithRoute, let routeInfo = routeInfoText {
+                    Button {
+                        onReplyWithRoute(routeInfo)
+                    } label: {
+                        Label("Reply with Route", systemImage: "arrowshape.turn.up.left")
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.top, 4)
                 }
             }
         }

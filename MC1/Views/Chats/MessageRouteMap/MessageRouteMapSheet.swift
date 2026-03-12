@@ -97,6 +97,11 @@ struct MessageRouteMapSheet: View {
                     Text("•")
                     Text("SNR \(snr, format: .number.precision(.fractionLength(1))) dB")
                 }
+
+                if let distanceText = mapViewModel.distanceText {
+                    Text("•")
+                    Text(distanceText)
+                }
             }
             .font(.subheadline.weight(.medium))
             .lineLimit(1)

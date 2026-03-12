@@ -38,6 +38,9 @@ final class MessageRouteMapViewModel {
     /// Total number of intermediate hops in the path (located + unlocated)
     private(set) var totalHopCount: Int = 0
 
+    /// Formatted total route distance. Includes "≥" prefix when hops are missing location data.
+    private(set) var distanceText: String?
+
     struct PathInfo {
         let hopIndex: Int
         /// Position in the overall route sequence for label alternation
@@ -186,11 +189,37 @@ final class MessageRouteMapViewModel {
             lineOverlays.append(overlay)
         }
 
+        // Compute total route distance
+        computeDistance(from: points)
+
         if hasLocatedHops {
             centerOnRoute()
         }
 
         logger.debug("Built route with \(points.count) points, \(self.lineOverlays.count) overlays")
+    }
+
+    // MARK: - Distance Computation
+
+    private func computeDistance(
+        from points: [(coordinate: CLLocationCoordinate2D, name: String, hasGap: Bool)]
+    ) {
+        guard points.count >= 2 else {
+            distanceText = nil
+            return
+        }
+
+        let totalMeters = RouteDistanceCalculator.chainDistance(
+            between: points.map(\.coordinate)
+        )
+
+        guard totalMeters > 0 else {
+            distanceText = nil
+            return
+        }
+
+        let hasGaps = points.contains(where: \.hasGap)
+        distanceText = RouteDistanceCalculator.formatTotal(totalMeters, hasGaps: hasGaps)
     }
 
     // MARK: - Path Parsing

@@ -36,6 +36,12 @@ final class MessagePathViewModel {
         isLoading = false
     }
 
+    /// All contacts (for route distance calculation)
+    var allContacts: [ContactDTO] { contacts }
+
+    /// All discovered nodes (for route distance calculation)
+    var allDiscoveredNodes: [DiscoveredNodeDTO] { discoveredRepeaters }
+
     func senderName(for message: MessageDTO) -> String {
         if message.isChannelMessage, let nodeName = message.senderNodeName {
             return nodeName

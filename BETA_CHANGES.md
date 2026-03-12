@@ -1,32 +1,50 @@
-# Beta Changes — Build 9
+# Beta Changes — Build 11
 
-## Swipe to Reply & Haptic Improvements
+## Reply with Route
+
+- **Reply with route info** — In the message long-press menu, expand the path details and tap the new "Reply with Route" button. This pre-fills the input bar with a quoted reply that includes the route summary — hop count, distance, and repeater hex IDs. Example: `Via 3 hops · 12.4 mi (A1,B2,C3)`.
+
+- **Route distance in message details** — The "Hops" row in the expanded path details now shows the total route distance alongside the hop count (e.g. "Hops: 3 · 12.4 mi"). When intermediate repeaters lack location data, a "≥" prefix indicates the distance is a minimum estimate.
+
+  **How to test:** Long-press an incoming message that was relayed through hops. Expand the path details section — verify the Hops row shows a distance. Tap "Reply with Route" and verify the input bar is pre-filled with a reply containing the route info. Send it and confirm the route info appears in the message. Test with both channel messages (should include @[name] mention) and DMs (no mention).
+
+## Route Distance on Maps
+
+- **Message route map distance** — The message route map now displays the total chain distance along the path at the top of the screen. Uses "≥" prefix only when intermediate repeaters in the route are missing location data.
+
+- **Heard repeats map distance** — The heard repeats map shows the total path distance when viewing a single repeat.
+
+  **How to test:** Open a message route map for a multi-hop message — verify the distance badge appears. If all repeaters have GPS, the distance should be exact (no ≥). If some intermediate repeaters lack location, it should show ≥. Check the heard repeats map similarly.
+
+## Swipe to Reply Fix
+
+- **Fixed scroll blocking** — The swipe-to-reply gesture has been rebuilt using UIKit's `UIPanGestureRecognizer` instead of SwiftUI's `DragGesture`. This fixes the issue where the swipe gesture would block normal vertical scrolling in conversations. Swiping right to reply and scrolling up/down now work independently without interfering with each other.
+
+  **How to test:** Open a channel or DM with many messages. Scroll up and down — scrolling should be smooth with no hesitation or blocking. Then swipe right on an incoming message to trigger a reply — the gesture should still work as before with the arrow icon and haptic feedback. Verify that a diagonal swipe (mostly vertical) scrolls instead of triggering the reply.
+
+---
+
+# Previous Builds
+
+## Build 9
+
+### Swipe to Reply & Haptic Improvements
 
 - **Swipe right to reply** — In both channel and direct message conversations, swipe an incoming message to the right to quickly reply. A reply arrow appears as you swipe; release past the threshold to trigger the reply (pre-fills the input bar with a mention and quoted preview). Works the same as the existing Reply action in the long-press menu, just faster.
 
 - **Improved long-press haptic** — The haptic feedback when you tap and hold a message to open the actions sheet now uses a heavier impact, closer to the old force touch feel.
 
-  **How to test:** Open any channel or DM conversation with incoming messages. Swipe right on an incoming message — you should see a reply arrow icon appear on the left and feel a haptic tick when passing the threshold. Releasing should pre-fill the input bar with a reply. Also tap and hold any message to verify the stronger haptic feedback fires when the actions sheet opens.
-
-## Message Draft Persistence
+### Message Draft Persistence
 
 - **Drafts survive navigation** — If you start typing a message in a channel or DM and press the back button, the text you typed is preserved. When you return to that conversation, the draft is restored in the input bar. Each conversation has its own independent draft. Drafts are kept in memory for the current session (cleared on app restart).
 
-  **How to test:** Open a channel or DM, type some text (don't send), press back. Navigate back to the same conversation — the text should still be in the input bar. Verify that different conversations keep separate drafts. Sending a message should clear the draft.
-
-## Upstream Sync: PocketMesh → MeshCore One (MC1)
+### Upstream Sync: PocketMesh → MeshCore One (MC1)
 
 - **Merged upstream rename** — The upstream project has been renamed from PocketMesh to MeshCore One (MC1). All fork files have been moved and updated to match the new project structure. Import statements updated from `PocketMeshServices` to `MC1Services`.
 
 - **File reorganization** — Views for route maps, traffic heatmap, and contact route maps moved from `PocketMesh/Views/` to `MC1/Views/` to align with the new upstream layout.
 
 - **Build version sync** — Fixed a CFBundleVersion mismatch between the main app and the widget extension that was preventing the app from launching on device.
-
-  **How to test:** Install the app on your device and verify it launches correctly. All existing features (route maps, traffic map, channel DM, mentions) should work as before. Check that the widget still appears in the widget gallery.
-
----
-
-# Previous Builds
 
 ## Build 4
 

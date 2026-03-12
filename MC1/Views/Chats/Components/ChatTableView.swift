@@ -4,7 +4,7 @@ import SwiftUI
 /// UIKit table view controller with flipped orientation for chat-style scrolling
 /// Newest messages appear at visual bottom, keyboard handling via native UIKit
 @MainActor
-final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, CellContent: View>: UITableViewController where Item.ID: Sendable {
+final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, CellContent: View>: UITableViewController, UIGestureRecognizerDelegate where Item.ID: Sendable {
 
     // MARK: - Types
 
@@ -76,6 +76,35 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
     private var isUserInteracting = false
     private var isScrollingToTarget = false
 
+    // MARK: - Swipe to Reply
+
+    /// Closure to check if an item at a given index is eligible for swipe-to-reply
+    var canSwipeToReply: ((Item) -> Bool)?
+
+    /// Callback when user completes a swipe-to-reply on an item
+    var onSwipeToReply: ((Item) -> Void)?
+
+    /// The cell currently being swiped (nil when no swipe active)
+    private weak var swipedCell: UITableViewCell?
+
+    /// The reply indicator view shown during swipe
+    private var replyIndicatorView: UIImageView?
+
+    /// Whether the current drag has been committed as a horizontal swipe
+    private var isSwipeActive = false
+
+    /// Whether the swipe has passed the trigger threshold
+    private var hasPassedSwipeThreshold = false
+
+    /// Minimum horizontal drag distance to trigger reply
+    private let swipeThreshold: CGFloat = 60
+
+    /// Haptic generator for swipe feedback
+    private let swipeHaptic = UIImpactFeedbackGenerator(style: .medium)
+
+    /// Reference to the swipe-to-reply pan gesture recognizer (for delegate identification)
+    private var swipeToReplyGestureRecognizer: UIPanGestureRecognizer?
+
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -115,6 +144,9 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
 
         // Configure data source
         configureDataSource()
+
+        // Swipe-to-reply gesture (UIKit-level to avoid SwiftUI/UIKit gesture conflicts)
+        setupSwipeToReplyGesture()
 
         // Manual keyboard observation (UIKit auto-adjustment doesn't work in SwiftUI embed)
         setupKeyboardObservers()
@@ -605,6 +637,177 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
         pendingScrollTask?.cancel()
         pendingScrollTask = nil
     }
+
+    // MARK: - Swipe to Reply Gesture
+
+    private func setupSwipeToReplyGesture() {
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleSwipeToReply(_:)))
+        pan.delegate = self
+        tableView.addGestureRecognizer(pan)
+        swipeToReplyGestureRecognizer = pan
+    }
+
+    @objc private func handleSwipeToReply(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            beginSwipe(gesture)
+        case .changed:
+            updateSwipe(gesture)
+        case .ended:
+            endSwipe(gesture)
+        case .cancelled, .failed:
+            cancelSwipe()
+        default:
+            break
+        }
+    }
+
+    private func beginSwipe(_ gesture: UIPanGestureRecognizer) {
+        let location = gesture.location(in: tableView)
+        guard let indexPath = tableView.indexPathForRow(at: location),
+              let cell = tableView.cellForRow(at: indexPath) else {
+            gesture.isEnabled = false
+            gesture.isEnabled = true
+            return
+        }
+
+        // Resolve item from the reversed table layout
+        let reversedIndex = items.count - 1 - indexPath.row
+        guard reversedIndex >= 0, reversedIndex < items.count else {
+            gesture.isEnabled = false
+            gesture.isEnabled = true
+            return
+        }
+
+        let item = items[reversedIndex]
+        guard canSwipeToReply?(item) == true else {
+            gesture.isEnabled = false
+            gesture.isEnabled = true
+            return
+        }
+
+        swipedCell = cell
+        isSwipeActive = true
+        hasPassedSwipeThreshold = false
+        swipeHaptic.prepare()
+
+        // Create reply indicator (arrow icon) positioned in the table view
+        // so it stays fixed while the cell slides right
+        let indicator = UIImageView(image: UIImage(systemName: "arrowshape.turn.up.left.fill"))
+        indicator.tintColor = .secondaryLabel
+        indicator.alpha = 0
+        indicator.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+        indicator.frame = CGRect(x: 16, y: cell.center.y - 12, width: 24, height: 24)
+        tableView.addSubview(indicator)
+        replyIndicatorView = indicator
+    }
+
+    private func updateSwipe(_ gesture: UIPanGestureRecognizer) {
+        guard isSwipeActive, let cell = swipedCell else { return }
+
+        let dx = gesture.translation(in: tableView).x
+        let clamped = min(max(dx, 0), 100)
+
+        // Translate the entire cell horizontally (concatenating with existing y-flip)
+        cell.transform = CGAffineTransform(scaleX: 1, y: -1)
+            .translatedBy(x: clamped, y: 0)
+
+        // Update reply indicator
+        if let indicator = replyIndicatorView {
+            let progress = min(clamped / swipeThreshold, 1.0)
+            indicator.alpha = progress
+        }
+
+        // Threshold crossing feedback
+        let pastThreshold = clamped >= swipeThreshold
+        if pastThreshold != hasPassedSwipeThreshold {
+            hasPassedSwipeThreshold = pastThreshold
+            if pastThreshold {
+                swipeHaptic.impactOccurred()
+                UIView.animate(withDuration: 0.15) {
+                    self.replyIndicatorView?.tintColor = .systemBlue
+                    self.replyIndicatorView?.transform = .identity
+                }
+            } else {
+                UIView.animate(withDuration: 0.15) {
+                    self.replyIndicatorView?.tintColor = .secondaryLabel
+                    self.replyIndicatorView?.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+                }
+            }
+        }
+    }
+
+    private func endSwipe(_ gesture: UIPanGestureRecognizer) {
+        guard isSwipeActive else {
+            cancelSwipe()
+            return
+        }
+
+        let didTrigger = hasPassedSwipeThreshold
+
+        // Find the item that was swiped
+        var swipedItem: Item?
+        if didTrigger, let cell = swipedCell,
+           let indexPath = tableView.indexPath(for: cell) {
+            let reversedIndex = items.count - 1 - indexPath.row
+            if reversedIndex >= 0, reversedIndex < items.count {
+                swipedItem = items[reversedIndex]
+            }
+        }
+
+        // Animate cell back to original position
+        animateSwipeReset { [weak self] in
+            if didTrigger, let item = swipedItem {
+                self?.onSwipeToReply?(item)
+            }
+        }
+    }
+
+    private func cancelSwipe() {
+        animateSwipeReset(completion: nil)
+    }
+
+    private func animateSwipeReset(completion: (() -> Void)?) {
+        let cell = swipedCell
+        let indicator = replyIndicatorView
+
+        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.5) {
+            // Reset to base flip-only transform (remove horizontal translation)
+            cell?.transform = CGAffineTransform(scaleX: 1, y: -1)
+            indicator?.alpha = 0
+        } completion: { _ in
+            indicator?.removeFromSuperview()
+            completion?()
+        }
+
+        swipedCell = nil
+        replyIndicatorView = nil
+        isSwipeActive = false
+        hasPassedSwipeThreshold = false
+    }
+    // MARK: - UIGestureRecognizerDelegate
+
+    /// Only recognize rightward horizontal swipes, yield to vertical scrolling
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+              pan === swipeToReplyGestureRecognizer else {
+            return true
+        }
+        let velocity = pan.velocity(in: tableView)
+        // Must be moving rightward and more horizontal than vertical
+        return velocity.x > 0 && abs(velocity.x) > abs(velocity.y) * 1.5
+    }
+
+    /// Don't allow our swipe gesture to recognize simultaneously with table scroll.
+    /// This delegate is only set on the swipe-to-reply gesture recognizer, so it won't
+    /// affect other gesture pairs. gestureRecognizerShouldBegin already filters for
+    /// rightward horizontal swipes.
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        false
+    }
 }
 
 // MARK: - SwiftUI Wrapper
@@ -626,6 +829,8 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
     @Binding var isDividerVisible: Bool
     var onNearTop: (() -> Void)?
     var isLoadingOlderMessages: Bool = false
+    var canSwipeToReply: ((Item) -> Bool)?
+    var onSwipeToReply: ((Item) -> Void)?
 
     func makeUIViewController(context: Context) -> ChatTableViewController<Item, Content> {
         let controller = ChatTableViewController<Item, Content>()
@@ -678,6 +883,10 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
         // Update pagination state
         controller.onNearTop = onNearTop
         controller.isLoadingOlderMessages = isLoadingOlderMessages
+
+        // Update swipe-to-reply closures
+        controller.canSwipeToReply = canSwipeToReply
+        controller.onSwipeToReply = onSwipeToReply
 
         // Check for scroll-to-mention request
         let shouldScrollToMention = scrollToMentionRequest != context.coordinator.lastMentionRequest

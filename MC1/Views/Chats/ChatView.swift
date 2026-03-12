@@ -348,6 +348,9 @@ struct ChatView: View {
         case .reply:
             let replyText = buildReplyText(for: message)
             setReplyText(replyText)
+        case .replyWithRoute(let routeInfo):
+            let replyText = MentionUtilities.buildReplyPreview(messageText: message.text, routeInfo: routeInfo)
+            setReplyText(replyText)
         case .copy:
             UIPasteboard.general.string = message.text
         case .sendAgain:
@@ -360,7 +363,7 @@ struct ChatView: View {
     }
 
     private func buildReplyText(for message: MessageDTO) -> String {
-        MentionUtilities.buildReplyText(mentionName: contact.name, messageText: message.text)
+        MentionUtilities.buildReplyPreview(messageText: message.text)
     }
 
     // MARK: - Input Bar
@@ -496,7 +499,13 @@ private struct ChatMessagesContent: View {
                             await viewModel.loadOlderMessages()
                         }
                     },
-                    isLoadingOlderMessages: viewModel.isLoadingOlder
+                    isLoadingOlderMessages: viewModel.isLoadingOlder,
+                    canSwipeToReply: { item in !item.isOutgoing },
+                    onSwipeToReply: { item in
+                        if let message = viewModel.message(for: item) {
+                            onReply(message)
+                        }
+                    }
                 )
                 .overlay(alignment: .bottomTrailing) {
                     VStack(spacing: 12) {

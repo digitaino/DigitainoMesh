@@ -255,11 +255,6 @@ struct TraceResultsSheet: View {
 
     // MARK: - Total Distance Row
 
-    private func formatDistance(_ meters: Double) -> String {
-        let measurement = Measurement(value: meters, unit: UnitLength.meters)
-        return measurement.formatted(.measurement(width: .abbreviated, usage: .road))
-    }
-
     @ViewBuilder
     private var totalDistanceRow: some View {
         HStack {
@@ -269,7 +264,7 @@ struct TraceResultsSheet: View {
 
             if let distance = viewModel.totalPathDistance {
                 HStack {
-                    Text(formatDistance(distance))
+                    Text(RouteDistanceCalculator.formatDistance(distance))
                         .font(.body.monospacedDigit())
                     if viewModel.isDistanceUsingFallback {
                         Button(L10n.Contacts.Contacts.Results.distanceInfo, systemImage: "info.circle") {
