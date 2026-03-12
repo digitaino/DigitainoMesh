@@ -105,7 +105,7 @@ enum RouteDistanceCalculator {
     }
 
     /// Formats a route info line for use in reply text.
-    /// Example: "Via 3 hops · ≥ 12 mi (80,16,78)"
+    /// Example: "RX via 80,16,78. 3 hops ≥ 12 mi"
     static func formatRouteInfo(
         message: MessageDTO,
         contacts: [ContactDTO] = [],
@@ -118,6 +118,8 @@ enum RouteDistanceCalculator {
         let pathHex = message.pathNodesHex.joined(separator: ",")
         guard !pathHex.isEmpty else { return nil }
 
+        let hopWord = hopCount == 1 ? "hop" : "hops"
+
         // Try to compute distance
         let distancePart: String
         if let result = computeRouteDistance(
@@ -126,12 +128,11 @@ enum RouteDistanceCalculator {
             discoveredNodes: discoveredNodes,
             userLocation: userLocation
         ) {
-            distancePart = " · \(formatTotal(result.meters, hasGaps: result.hasGaps))"
+            distancePart = " \(formatTotal(result.meters, hasGaps: result.hasGaps))"
         } else {
             distancePart = ""
         }
 
-        let hopWord = hopCount == 1 ? "hop" : "hops"
-        return "Via \(hopCount) \(hopWord)\(distancePart) (\(pathHex))"
+        return "RX via \(pathHex). \(hopCount) \(hopWord)\(distancePart)"
     }
 }

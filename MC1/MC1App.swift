@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 import SwiftData
 import TipKit
@@ -80,6 +81,9 @@ struct MC1App: App {
     private func handleScenePhaseChange(from oldPhase: ScenePhase, to newPhase: ScenePhase) {
         switch newPhase {
         case .active:
+            let idleDisabled = UIApplication.shared.isIdleTimerDisabled
+            Logger(subsystem: "com.mc1", category: "IdleTimer")
+                .warning("isIdleTimerDisabled = \(idleDisabled)")
             Task {
                 await appState.handleReturnToForeground()
             }
