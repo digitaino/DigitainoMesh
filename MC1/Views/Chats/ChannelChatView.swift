@@ -33,6 +33,7 @@ struct ChannelChatView: View {
     @State private var isDividerVisible = false
 
     @State private var selectedMessageForActions: MessageDTO?
+    @State private var sharedRouteForMap: SharedRoute?
     @State private var contactDetailContact: ContactDTO?
     @State private var blockSenderContext: BlockSenderContext?
     @State private var recentEmojisStore = RecentEmojisStore()
@@ -127,6 +128,9 @@ struct ChannelChatView: View {
         }
         .fullScreenCover(item: $imageViewerData) { data in
             FullScreenImageViewer(data: data)
+        }
+        .sheet(item: $sharedRouteForMap) { route in
+            SharedRouteMapSheet(sharedRoute: route)
         }
         .onAppear {
             eventCursor = appState.messageEventBroadcaster.currentEventSequence
@@ -381,6 +385,7 @@ struct ChannelChatView: View {
             scrollToDividerRequest: $scrollToDividerRequest,
             isDividerVisible: $isDividerVisible,
             selectedMessageForActions: $selectedMessageForActions,
+            sharedRouteForMap: $sharedRouteForMap,
             recentEmojisStore: recentEmojisStore,
             imageViewerData: $imageViewerData,
             onMentionSeen: { await markMentionSeen(messageID: $0) },
@@ -610,6 +615,7 @@ private struct ChannelMessagesContent: View {
     @Binding var scrollToDividerRequest: Int
     @Binding var isDividerVisible: Bool
     @Binding var selectedMessageForActions: MessageDTO?
+    @Binding var sharedRouteForMap: SharedRoute?
     let recentEmojisStore: RecentEmojisStore
     @Binding var imageViewerData: ImageViewerData?
     let onMentionSeen: (UUID) async -> Void
@@ -740,7 +746,8 @@ private struct ChannelMessagesContent: View {
                         isOutgoing: message.isOutgoing,
                         currentUserName: deviceName,
                         isHighContrast: colorSchemeContrast == .increased
-                    )
+                    ),
+                    detectedSharedRoute: item.detectedSharedRoute
                 ),
                 callbacks: MessageBubbleCallbacks(
                     onRetry: { onRetryMessage(message) },
@@ -772,6 +779,9 @@ private struct ChannelMessagesContent: View {
                         Task {
                             await viewModel.manualFetchPreview(for: message.id)
                         }
+                    },
+                    onShowSharedRoute: item.detectedSharedRoute.map { route in
+                        { [route] in sharedRouteForMap = route }
                     }
                 )
             )

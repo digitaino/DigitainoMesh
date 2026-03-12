@@ -14,6 +14,7 @@ Features and fixes added in this fork on top of upstream:
 - **Historical GPS on Messages** — Messages store the phone's GPS coordinates at send/receive time so route maps show where the user actually was, not the phone's current location
 - **Channel DM & Contact Card** — Long-press a channel message to direct-message the sender or tap their name to view their contact card, without leaving the channel
 - **Reply with Route** — Reply to a message with its route info (hop count, distance, and repeater hex IDs) from the expanded path details view
+- **Shared Route Map** — When a message contains route info (from Reply with Route), an inline card appears below the bubble. Tap it to open an interactive map plotting the shared route through repeaters, reusing the same map renderer as message route maps
 - **Route Distance on Maps** — Message route maps and heard repeats maps display the total chain distance along the path, with a "≥" prefix when intermediate repeaters lack location data
 - **Swipe to Reply** — Swipe right on an incoming message in channels or DMs to quickly reply, with haptic feedback and a visual reply indicator (UIKit-based gesture avoids scroll blocking)
 - **Message Draft Persistence** — Unsent message text is preserved when navigating away from a conversation and restored when returning

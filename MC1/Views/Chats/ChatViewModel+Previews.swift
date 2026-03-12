@@ -148,6 +148,7 @@ extension ChatViewModel {
             retryAttempt: item.retryAttempt,
             maxRetryAttempts: item.maxRetryAttempts,
             reactionSummary: message?.reactionSummary,
+            detectedSharedRoute: item.detectedSharedRoute,
             previewState: previewStates[messageID] ?? .idle,
             loadedPreview: loadedPreviews[messageID]
         )
@@ -168,6 +169,7 @@ extension ChatViewModel {
         decodedPreviewAssets.removeAll()
         legacyPreviewDecodeInFlight.removeAll()
         cachedURLs.removeAll()
+        cachedSharedRoutes.removeAll()
         formattedTexts.removeAll()
         clearImageState()
     }

@@ -405,6 +405,8 @@ extension ChatViewModel {
 
         // Build display item synchronously for immediate consistency
         let flags = Self.computeDisplayFlags(for: message, previous: previous)
+        let sharedRoute: SharedRoute? = message.isOutgoing ? nil : SharedRouteParser.parse(message.text)
+        cachedSharedRoutes[message.id] = sharedRoute
         let newItem = MessageDisplayItem(
             messageID: message.id,
             showTimestamp: flags.showTimestamp,
@@ -421,6 +423,7 @@ extension ChatViewModel {
             retryAttempt: message.retryAttempt,
             maxRetryAttempts: message.maxRetryAttempts,
             reactionSummary: message.reactionSummary,
+            detectedSharedRoute: sharedRoute,
             previewState: .idle,
             loadedPreview: nil
         )
@@ -469,6 +472,7 @@ extension ChatViewModel {
             retryAttempt: item.retryAttempt,
             maxRetryAttempts: item.maxRetryAttempts,
             reactionSummary: item.reactionSummary,
+            detectedSharedRoute: item.detectedSharedRoute,
             previewState: previewStates[messageID] ?? .idle,
             loadedPreview: loadedPreviews[messageID]
         )
@@ -937,6 +941,19 @@ extension ChatViewModel {
                 uncachedMessageIDs.append((message.id, message.text))
             }
 
+            // Shared route detection (synchronous regex, cached per message ID)
+            let sharedRoute: SharedRoute?
+            if let cached = cachedSharedRoutes[message.id] {
+                sharedRoute = cached
+            } else if !message.isOutgoing {
+                let parsed = SharedRouteParser.parse(message.text)
+                cachedSharedRoutes[message.id] = parsed
+                sharedRoute = parsed
+            } else {
+                cachedSharedRoutes[message.id] = nil as SharedRoute?
+                sharedRoute = nil
+            }
+
             return MessageDisplayItem(
                 messageID: message.id,
                 showTimestamp: flags.showTimestamp,
@@ -953,6 +970,7 @@ extension ChatViewModel {
                 retryAttempt: message.retryAttempt,
                 maxRetryAttempts: message.maxRetryAttempts,
                 reactionSummary: message.reactionSummary,
+                detectedSharedRoute: sharedRoute,
                 previewState: previewStates[message.id] ?? .idle,
                 loadedPreview: loadedPreviews[message.id]
             )

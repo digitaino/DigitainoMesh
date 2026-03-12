@@ -73,6 +73,7 @@ struct MessageDisplayState {
     var showIncomingPath: Bool = false
     var showIncomingHopCount: Bool = false
     var formattedText: AttributedString?
+    var detectedSharedRoute: SharedRoute?
 }
 
 /// Callbacks for message bubble interactions
@@ -85,6 +86,7 @@ struct MessageBubbleCallbacks {
     var onRetryImageFetch: (() -> Void)?
     var onRequestPreviewFetch: (() -> Void)?
     var onManualPreviewFetch: (() -> Void)?
+    var onShowSharedRoute: (() -> Void)?
 }
 
 /// Unified message bubble for both direct and channel messages
@@ -177,6 +179,13 @@ struct UnifiedMessageBubble: View {
                     if displayState.previewState == .malwareWarning,
                        let url = displayState.detectedURL {
                         MalwareWarningCard(url: url)
+                    }
+
+                    // Shared route card (for messages containing "RX via ..." route info)
+                    if let sharedRoute = displayState.detectedSharedRoute {
+                        SharedRouteCard(sharedRoute: sharedRoute) {
+                            callbacks.onShowSharedRoute?()
+                        }
                     }
 
                     // Link preview (if applicable, skip for image URLs shown in bubble)

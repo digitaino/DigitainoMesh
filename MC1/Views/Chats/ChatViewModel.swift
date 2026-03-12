@@ -213,6 +213,9 @@ final class ChatViewModel {
     /// Cached URL detection results to avoid re-running NSDataDetector on rebuilds
     var cachedURLs: [UUID: URL?] = [:]
 
+    /// Cached shared route detection results per message ID
+    @ObservationIgnored var cachedSharedRoutes: [UUID: SharedRoute?] = [:]
+
     /// Cached formatted text per message (avoids rebuilding AttributedString on every render)
     @ObservationIgnored var formattedTexts: [UUID: AttributedString] = [:]
 

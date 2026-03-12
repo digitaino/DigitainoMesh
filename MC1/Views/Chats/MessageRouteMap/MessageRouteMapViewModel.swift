@@ -6,6 +6,14 @@ import os.log
 
 private let logger = Logger(subsystem: "com.pocketmesh", category: "MessageRouteMap")
 
+/// Pre-computed path info for a repeater annotation on a route map.
+/// Shared between MessageRouteMapViewModel and SharedRouteMapViewModel.
+struct RouteMapPathInfo {
+    let hopIndex: Int
+    /// Position in the overall route sequence for label alternation
+    let routeIndex: Int
+}
+
 /// View model for the message route map.
 /// Resolves message path hops to geographic coordinates and builds map overlays.
 @MainActor @Observable
@@ -41,11 +49,7 @@ final class MessageRouteMapViewModel {
     /// Formatted total route distance. Includes "≥" prefix when hops are missing location data.
     private(set) var distanceText: String?
 
-    struct PathInfo {
-        let hopIndex: Int
-        /// Position in the overall route sequence for label alternation
-        let routeIndex: Int
-    }
+    typealias PathInfo = RouteMapPathInfo
 
     // MARK: - Private State
 

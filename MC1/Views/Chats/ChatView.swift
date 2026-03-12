@@ -28,6 +28,7 @@ struct ChatView: View {
     @State private var isDividerVisible = false
 
     @State private var selectedMessageForActions: MessageDTO?
+    @State private var sharedRouteForMap: SharedRoute?
     @State private var recentEmojisStore = RecentEmojisStore()
     @State private var imageViewerData: ImageViewerData?
     @State private var eventCursor: Int?
@@ -62,6 +63,7 @@ struct ChatView: View {
             scrollToDividerRequest: $scrollToDividerRequest,
             isDividerVisible: $isDividerVisible,
             selectedMessageForActions: $selectedMessageForActions,
+            sharedRouteForMap: $sharedRouteForMap,
             imageViewerData: $imageViewerData,
             onMentionSeen: { await markMentionSeen(messageID: $0) },
             onScrollToMention: { scrollToNextMention() },
@@ -111,6 +113,9 @@ struct ChatView: View {
         }
         .fullScreenCover(item: $imageViewerData) { data in
             FullScreenImageViewer(data: data)
+        }
+        .sheet(item: $sharedRouteForMap) { route in
+            SharedRouteMapSheet(sharedRoute: route)
         }
         .onAppear {
             eventCursor = appState.messageEventBroadcaster.currentEventSequence
@@ -452,6 +457,7 @@ private struct ChatMessagesContent: View {
     @Binding var scrollToDividerRequest: Int
     @Binding var isDividerVisible: Bool
     @Binding var selectedMessageForActions: MessageDTO?
+    @Binding var sharedRouteForMap: SharedRoute?
     @Binding var imageViewerData: ImageViewerData?
     let onMentionSeen: (UUID) async -> Void
     let onScrollToMention: () -> Void
@@ -576,7 +582,8 @@ private struct ChatMessagesContent: View {
                         isOutgoing: message.isOutgoing,
                         currentUserName: deviceName,
                         isHighContrast: colorSchemeContrast == .increased
-                    )
+                    ),
+                    detectedSharedRoute: item.detectedSharedRoute
                 ),
                 callbacks: MessageBubbleCallbacks(
                     onRetry: {
@@ -607,6 +614,9 @@ private struct ChatMessagesContent: View {
                         Task {
                             await viewModel.manualFetchPreview(for: message.id)
                         }
+                    },
+                    onShowSharedRoute: item.detectedSharedRoute.map { route in
+                        { [route] in sharedRouteForMap = route }
                     }
                 )
             )

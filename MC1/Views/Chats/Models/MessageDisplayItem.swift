@@ -32,6 +32,9 @@ struct MessageDisplayItem: Identifiable, Hashable, Sendable {
     let maxRetryAttempts: Int
     let reactionSummary: String?
 
+    // Shared route detected in message text (e.g., "RX via ...")
+    let detectedSharedRoute: SharedRoute?
+
     // Preview state (owned by ViewModel, not view)
     let previewState: PreviewLoadState
     let loadedPreview: LinkPreviewDataDTO?

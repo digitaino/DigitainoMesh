@@ -1,6 +1,20 @@
-# Beta Changes — Build 11
+# Beta Changes — Build 13
 
-## Reply with Route
+## Shared Route Map
+
+- **Inline route card** — When an incoming message contains route info (from "Reply with Route"), a tappable "Shared Route" card appears below the message bubble. The card shows a summary of the route — hop count, repeater hex IDs, and distance.
+
+- **Shared route map** — Tap the card to open an interactive map plotting the shared route. Repeater hex IDs are resolved against your known contacts and discovered nodes to place pins on the map. Lines connect consecutive hops, with dashed orange lines for hops that couldn't be located. An info banner shows how many of the hops were located and the original distance text.
+
+  **How to test:** Have someone send a message through multiple hops. Long-press the message, expand path details, and tap "Reply with Route". On the receiving end, verify the reply shows an inline "Shared Route" card below the bubble. Tap the card — the map should open showing pins for any repeaters that have GPS locations in your contacts or discovered nodes. If no hops resolve, an empty state message should appear. Verify that normal messages without "RX via" text do not show the card, and that outgoing messages never show it.
+
+---
+
+# Previous Builds
+
+## Build 11
+
+### Reply with Route
 
 - **Reply with route info** — In the message long-press menu, expand the path details and tap the new "Reply with Route" button. This pre-fills the input bar with a quoted reply that includes the route summary — hop count, distance, and repeater hex IDs. Example: `Via 3 hops · 12.4 mi (A1,B2,C3)`.
 
