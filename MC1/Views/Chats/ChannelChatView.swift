@@ -143,6 +143,11 @@ struct ChannelChatView: View {
             await viewModel.loadAllContacts(deviceID: channel.deviceID)
             await viewModel.loadChannelMessages(for: channel)
             await viewModel.loadConversations(deviceID: channel.deviceID)
+            // Restore in-progress draft from navigation
+            if viewModel.composingText.isEmpty,
+               let draft = ChatViewModel.loadDraft(key: "ch-\(channel.id)") {
+                viewModel.composingText = draft
+            }
             await loadUnseenMentions()
 
             // Trigger scroll to target message if pending (notification deeplink)
@@ -154,6 +159,9 @@ struct ChannelChatView: View {
         .onDisappear {
             mentionScrollTask?.cancel()
             mentionScrollTask = nil
+
+            // Save in-progress draft so it survives navigation
+            ChatViewModel.saveDraft(key: "ch-\(channel.id)", text: viewModel.composingText)
 
             // Clear active channel for notification suppression
             appState.services?.notificationService.activeChannelIndex = nil

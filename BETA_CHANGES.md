@@ -8,6 +8,12 @@
 
   **How to test:** Open any channel or DM conversation with incoming messages. Swipe right on an incoming message — you should see a reply arrow icon appear on the left and feel a haptic tick when passing the threshold. Releasing should pre-fill the input bar with a reply. Also tap and hold any message to verify the stronger haptic feedback fires when the actions sheet opens.
 
+## Message Draft Persistence
+
+- **Drafts survive navigation** — If you start typing a message in a channel or DM and press the back button, the text you typed is preserved. When you return to that conversation, the draft is restored in the input bar. Each conversation has its own independent draft. Drafts are kept in memory for the current session (cleared on app restart).
+
+  **How to test:** Open a channel or DM, type some text (don't send), press back. Navigate back to the same conversation — the text should still be in the input bar. Verify that different conversations keep separate drafts. Sending a message should clear the draft.
+
 ## Upstream Sync: PocketMesh → MeshCore One (MC1)
 
 - **Merged upstream rename** — The upstream project has been renamed from PocketMesh to MeshCore One (MC1). All fork files have been moved and updated to match the new project structure. Import statements updated from `PocketMeshServices` to `MC1Services`.

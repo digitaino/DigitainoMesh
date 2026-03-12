@@ -14,6 +14,24 @@ struct DecodedPreviewAssets {
 @MainActor
 final class ChatViewModel {
 
+    // MARK: - Draft Storage
+
+    /// In-memory draft storage that survives view destruction during navigation.
+    /// Keyed by conversation identifier (e.g. "dm-{contactID}" or "ch-{channelID}").
+    private static var drafts: [String: String] = [:]
+
+    static func saveDraft(key: String, text: String) {
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            drafts.removeValue(forKey: key)
+        } else {
+            drafts[key] = text
+        }
+    }
+
+    static func loadDraft(key: String) -> String? {
+        drafts.removeValue(forKey: key)
+    }
+
     // MARK: - Properties
 
     let logger = Logger(subsystem: "com.mc1", category: "ChatViewModel")

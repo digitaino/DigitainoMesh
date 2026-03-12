@@ -127,6 +127,11 @@ struct ChatView: View {
             await viewModel.loadConversations(deviceID: contact.deviceID)
             await viewModel.loadAllContacts(deviceID: contact.deviceID)
             viewModel.loadDraftIfExists()
+            // Restore in-progress draft from navigation (only if no notification draft was loaded)
+            if viewModel.composingText.isEmpty,
+               let draft = ChatViewModel.loadDraft(key: "dm-\(contact.id)") {
+                viewModel.composingText = draft
+            }
             await loadUnseenMentions()
 
             // Trigger scroll to target message if pending (notification deeplink)
@@ -138,6 +143,9 @@ struct ChatView: View {
         .onDisappear {
             mentionScrollTask?.cancel()
             mentionScrollTask = nil
+
+            // Save in-progress draft so it survives navigation
+            ChatViewModel.saveDraft(key: "dm-\(contact.id)", text: viewModel.composingText)
 
             // Clear active conversation for notification suppression
             appState.services?.notificationService.activeContactID = nil
