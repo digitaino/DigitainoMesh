@@ -2,17 +2,17 @@ import SwiftUI
 
 struct ChatsSplitLayout<Sidebar: View, Detail: View>: View {
     let detailID: UUID?
-    @ViewBuilder let sidebar: () -> Sidebar
-    @ViewBuilder let detail: () -> Detail
+    @ViewBuilder let sidebar: Sidebar
+    @ViewBuilder let detail: Detail
 
     var body: some View {
         NavigationSplitView {
             NavigationStack {
-                sidebar()
+                sidebar
             }
         } detail: {
             NavigationStack {
-                detail()
+                detail
             }
             .id(detailID)
         }

@@ -5,6 +5,11 @@ import SwiftData
 /// Max number of channels depends on the device, with slot 0 being the public channel.
 @Model
 public final class Channel {
+    #Index<Channel>(
+        [\.deviceID],
+        [\.deviceID, \.index]
+    )
+
     /// Unique identifier
     @Attribute(.unique)
     public var id: UUID

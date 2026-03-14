@@ -6,6 +6,11 @@ import SwiftData
 /// Contacts are stored per-device and synced from the device's contact table.
 @Model
 public final class Contact {
+    #Index<Contact>(
+        [\.deviceID],
+        [\.deviceID, \.publicKey]
+    )
+
     /// Unique identifier (derived from public key hash)
     @Attribute(.unique)
     public var id: UUID

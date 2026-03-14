@@ -9,36 +9,30 @@ struct ChatsStackLayout<RootContent: View>: View {
     @Binding var activeRoute: ChatRoute?
 
     let onLoadConversations: () async -> Void
-    @ViewBuilder let rootContent: () -> RootContent
+    @ViewBuilder let rootContent: RootContent
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            rootContent()
+            rootContent
                 .navigationDestination(for: ChatRoute.self) { route in
-                    switch route {
-                    case .direct(let contact):
-                        ChatView(contact: contact, parentViewModel: viewModel)
-                            .id(contact.id)
-                            .onAppear {
-                                activeRoute = route
-                                appState.navigation.tabBarVisibility = .hidden
-                            }
+                    Group {
+                        switch route {
+                        case .direct(let contact):
+                            ChatConversationView(conversationType: .dm(contact), parentViewModel: viewModel)
+                                .id(contact.id)
 
-                    case .channel(let channel):
-                        ChannelChatView(channel: channel, parentViewModel: viewModel)
-                            .id(channel.id)
-                            .onAppear {
-                                activeRoute = route
-                                appState.navigation.tabBarVisibility = .hidden
-                            }
+                        case .channel(let channel):
+                            ChatConversationView(conversationType: .channel(channel), parentViewModel: viewModel)
+                                .id(channel.id)
 
-                    case .room(let session):
-                        RoomConversationView(session: session)
-                            .id(session.id)
-                            .onAppear {
-                                activeRoute = route
-                                appState.navigation.tabBarVisibility = .hidden
-                            }
+                        case .room(let session):
+                            RoomConversationView(session: session)
+                                .id(session.id)
+                        }
+                    }
+                    .onAppear {
+                        activeRoute = route
+                        appState.navigation.tabBarVisibility = .hidden
                     }
                 }
                 .onChange(of: navigationPath) { _, newPath in

@@ -98,18 +98,18 @@ struct RxLogViewModelTests {
         #expect(dto.senderPrefix == nil)
     }
 
-    @Test("pathHashSize returns 1 for TRACE regardless of pathLength encoding")
+    @Test("pathHashSize decodes TRACE using standard pathLength encoding")
     func pathHashSize_trace() {
-        // pathLength=0x41 would normally decode as hashSize=2
+        // pathLength=0x41 → mode=1, hashSize=2
         let dto = makeDTO(payloadType: .trace, pathLength: 0x41)
-        #expect(dto.pathHashSize == 1)
+        #expect(dto.pathHashSize == 2)
     }
 
-    @Test("hopCount returns raw pathLength for TRACE")
+    @Test("hopCount decodes TRACE using standard pathLength encoding")
     func hopCount_trace() {
-        // pathLength=5 as raw count, not encoded
-        let dto = makeDTO(payloadType: .trace, pathLength: 5)
-        #expect(dto.hopCount == 5)
+        // pathLength=0x43 → mode=1, hashSize=2, hopCount=3
+        let dto = makeDTO(payloadType: .trace, pathLength: 0x43)
+        #expect(dto.hopCount == 3)
     }
 
     @Test("hopCount uses decodePathLen for non-TRACE")

@@ -347,7 +347,7 @@ struct RxLogRowView: View {
             if !routeParts.isEmpty {
                 return truncatedJoin(routeParts, separator: " → ")
             }
-            let count = entry.pathNodes.count
+            let count = entry.hopCount
             let hopLabel = count == 1 ? L10n.Tools.Tools.RxLog.hopSingular : L10n.Tools.Tools.RxLog.hopPlural
             return "\(count) \(hopLabel)"
         }

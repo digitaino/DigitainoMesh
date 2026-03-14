@@ -13,9 +13,11 @@ public final class LinkPreviewData {
     public var title: String?
 
     /// Preview image data (hero image)
+    @Attribute(.externalStorage)
     public var imageData: Data?
 
     /// Icon/favicon data
+    @Attribute(.externalStorage)
     public var iconData: Data?
 
     /// When this preview was fetched

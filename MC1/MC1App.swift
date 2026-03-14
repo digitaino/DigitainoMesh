@@ -1,8 +1,10 @@
-import OSLog
+import os
 import SwiftUI
 import SwiftData
 import TipKit
 import MC1Services
+
+private let logger = Logger(subsystem: "com.mc1", category: "MC1App")
 
 @main
 struct MC1App: App {
@@ -17,8 +19,18 @@ struct MC1App: App {
     #endif
 
     init() {
-        // swiftlint:disable:next force_try
-        let container = try! PersistenceStore.createContainer()
+        let container: ModelContainer
+        do {
+            container = try PersistenceStore.createContainer()
+        } catch {
+            logger.fault("Container creation failed, retrying: \(error)")
+            do {
+                container = try PersistenceStore.createContainer()
+            } catch {
+                logger.fault("Container creation failed after retry: \(error)")
+                fatalError("Unrecoverable: ModelContainer creation failed after retry")
+            }
+        }
         _appState = State(initialValue: AppState(modelContainer: container))
     }
 

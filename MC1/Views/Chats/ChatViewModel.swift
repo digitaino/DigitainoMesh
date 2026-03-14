@@ -3,12 +3,6 @@ import UIKit
 import MC1Services
 import OSLog
 
-/// Decoded preview hero image and icon, stored together to batch Observable notifications
-struct DecodedPreviewAssets {
-    var image: UIImage?
-    var icon: UIImage?
-}
-
 /// ViewModel for chat operations
 @Observable
 @MainActor
@@ -84,6 +78,9 @@ final class ChatViewModel {
     @ObservationIgnored private var cachedFavoriteConversations: [Conversation] = []
     @ObservationIgnored private var cachedNonFavoriteConversations: [Conversation] = []
     @ObservationIgnored private var conversationCacheValid = false
+    @ObservationIgnored var urlDetectionTask: Task<Void, Never>?
+    // Stored for lifecycle tracking; queue drains independently of conversation
+    @ObservationIgnored var queueProcessorTask: Task<Void, Never>?
 
     /// Fallback date for conversations with no messages, used to sort them to the end.
     private static let noMessageSentinel = Date.distantPast
@@ -158,12 +155,6 @@ final class ChatViewModel {
     /// Message text being composed
     var composingText = ""
 
-    /// A message waiting to be sent, with its target contact captured at enqueue time
-    struct QueuedMessage {
-        let messageID: UUID
-        let contactID: UUID
-    }
-
     /// Queue of message IDs waiting to be sent
     var sendQueue: [QueuedMessage] = []
 
@@ -175,9 +166,6 @@ final class ChatViewModel {
 
     /// Last message previews cache
     var lastMessageCache: [UUID: MessageDTO] = [:]
-
-    /// Store for recently used reaction emojis
-    let recentEmojisStore = RecentEmojisStore()
 
     /// Preview state per message (keyed by message ID)
     var previewStates: [UUID: PreviewLoadState] = [:]
@@ -374,13 +362,6 @@ final class ChatViewModel {
 
 // MARK: - Environment Key
 
-private struct ChatViewModelKey: EnvironmentKey {
-    static let defaultValue: ChatViewModel? = nil
-}
-
 extension EnvironmentValues {
-    var chatViewModel: ChatViewModel? {
-        get { self[ChatViewModelKey.self] }
-        set { self[ChatViewModelKey.self] = newValue }
-    }
+    @Entry var chatViewModel: ChatViewModel? = nil
 }

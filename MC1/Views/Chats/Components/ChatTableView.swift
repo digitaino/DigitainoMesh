@@ -165,12 +165,6 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
             name: UIResponder.keyboardWillShowNotification,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(keyboardWillHide(_:)),
-            name: UIResponder.keyboardWillHideNotification,
-            object: nil
-        )
     }
 
     @objc private func keyboardWillShow(_ notification: Notification) {
@@ -195,9 +189,6 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
                 self?.scrollToBottom(animated: true)
             }
         }
-    }
-
-    @objc private func keyboardWillHide(_ notification: Notification) {
     }
 
     // MARK: - Configuration
@@ -940,6 +931,7 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
         Coordinator()
     }
 
+    @MainActor
     class Coordinator {
         var lastScrollRequest: Int = 0
         var lastMentionRequest: Int = 0

@@ -100,7 +100,6 @@ struct ChatsView: View {
                         showingChannelOptions: $showingChannelOptions,
                         roomToAuthenticate: $roomToAuthenticate,
                         navigationPath: $navigationPath,
-                        onNavigate: { navigate(to: $0) },
                         onDeleteConversation: handleDeleteConversation,
                         onLoadConversations: loadConversations,
                         onHandlePendingNavigation: handlePendingNavigation,
@@ -137,7 +136,7 @@ struct ChatsView: View {
                 navigate(to: .direct(contact))
             }
         }) {
-            NewChatView(viewModel: viewModel) { contact in
+            NewChatView { contact in
                 pendingChatContact = contact
                 showingNewChat = false
             }
@@ -236,21 +235,14 @@ struct ChatsView: View {
             self.selectedRoute = nil
         }
 
-        lastSelectedRoomIsConnected = {
-            guard case .room(let session) = self.selectedRoute else { return nil }
-            return session.isConnected
-        }()
+        lastSelectedRoomIsConnected = selectedRoute?.roomIsConnected
     }
 
     private func announceOfflineStateIfNeeded() {
-        guard UIAccessibility.isVoiceOverRunning,
-              appState.connectionState == .disconnected,
+        guard appState.connectionState == .disconnected,
               appState.currentDeviceID != nil else { return }
 
-        UIAccessibility.post(
-            notification: .announcement,
-            argument: L10n.Chats.Chats.Accessibility.offlineAnnouncement
-        )
+        AccessibilityNotification.Announcement(L10n.Chats.Chats.Accessibility.offlineAnnouncement).post()
     }
 
     private func navigate(to route: ChatRoute) {
@@ -290,7 +282,7 @@ struct ChatsView: View {
         viewModel.removeConversation(.direct(contact))
 
         Task {
-            try? await viewModel.deleteConversation(for: contact)
+            try? await viewModel.deleteDirectConversation(for: contact)
             await loadConversations()
             routeBeingDeleted = nil
         }
@@ -326,10 +318,8 @@ struct ChatsView: View {
 
             await appState.services?.notificationService.updateBadgeCount()
 
-            await MainActor.run {
-                clearNavigationIfActive(.room(session))
-                viewModel.removeConversation(.room(session))
-            }
+            clearNavigationIfActive(.room(session))
+            viewModel.removeConversation(.room(session))
         } catch {
             chatsViewLogger.error("Failed to delete room: \(error)")
         }
@@ -388,9 +378,7 @@ struct ChatsView: View {
             }
 
             guard let deviceID = appState.currentDeviceID else {
-                await MainActor.run {
-                    hashtagToJoin = HashtagJoinRequest(id: fullName)
-                }
+                hashtagToJoin = HashtagJoinRequest(id: fullName)
                 return
             }
 
@@ -402,19 +390,13 @@ struct ChatsView: View {
                         try await appState.offlineDataStore?.fetchChannels(deviceID: deviceID) ?? []
                     }
                 ) {
-                    await MainActor.run {
-                        navigate(to: .channel(channel))
-                    }
+                    navigate(to: .channel(channel))
                 } else {
-                    await MainActor.run {
-                        hashtagToJoin = HashtagJoinRequest(id: fullName)
-                    }
+                    hashtagToJoin = HashtagJoinRequest(id: fullName)
                 }
             } catch {
                 chatsViewLogger.error("Failed to fetch channels for hashtag lookup: \(error)")
-                await MainActor.run {
-                    hashtagToJoin = HashtagJoinRequest(id: fullName)
-                }
+                hashtagToJoin = HashtagJoinRequest(id: fullName)
             }
         }
     }

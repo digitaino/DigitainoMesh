@@ -184,16 +184,12 @@ public struct RxLogEntryDTO: Sendable, Identifiable, Equatable, Hashable {
     // MARK: - Computed Properties
 
     /// Hash size per hop in bytes (1, 2, or 3), derived from pathLength upper 2 bits.
-    /// TRACE path bytes are per-hop SNR values, always 1 byte each.
     public var pathHashSize: Int {
-        if payloadType == .trace { return 1 }
         return decodePathLen(pathLength)?.hashSize ?? 1
     }
 
     /// Hop count decoded from pathLength.
-    /// For TRACE packets, pathLength is a raw byte count, not the encoded format.
     public var hopCount: Int {
-        if payloadType == .trace { return Int(pathLength) }
         return decodePathLen(pathLength)?.hopCount ?? 0
     }
 
