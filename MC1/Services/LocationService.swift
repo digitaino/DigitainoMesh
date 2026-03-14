@@ -57,6 +57,12 @@ public final class LocationService: NSObject, CLLocationManagerDelegate {
     /// Whether a location request is in progress
     public private(set) var isRequestingLocation = false
 
+    /// Whether continuous location updates are active (for signal survey)
+    public private(set) var isContinuouslyUpdating = false
+
+    /// Callback for continuous location updates
+    private var continuousLocationHandler: ((CLLocation) -> Void)?
+
     /// Whether location services are authorized for use
     public var isAuthorized: Bool {
         authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways
@@ -156,6 +162,41 @@ public final class LocationService: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    // MARK: - Continuous Updates (for Signal Survey)
+
+    /// Start continuous location updates for wardriving.
+    /// Uses higher accuracy than one-shot requests.
+    public func startContinuousUpdates(handler: @escaping (CLLocation) -> Void) {
+        guard isAuthorized else {
+            logger.warning("Cannot start continuous updates: not authorized")
+            requestPermissionIfNeeded()
+            return
+        }
+
+        continuousLocationHandler = handler
+        isContinuouslyUpdating = true
+
+        locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        locationManager.distanceFilter = 5  // Update every 5 meters of movement
+        locationManager.startUpdatingLocation()
+
+        logger.info("Started continuous location updates for survey")
+    }
+
+    /// Stop continuous location updates and restore default accuracy settings.
+    public func stopContinuousUpdates() {
+        guard isContinuouslyUpdating else { return }
+
+        locationManager.stopUpdatingLocation()
+        isContinuouslyUpdating = false
+        continuousLocationHandler = nil
+
+        locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        locationManager.distanceFilter = kCLDistanceFilterNone
+
+        logger.info("Stopped continuous location updates")
+    }
+
     // MARK: - Private Methods
 
     private func waitForAuthorizationDecision(timeout: Duration) async throws -> CLAuthorizationStatus {
@@ -223,6 +264,9 @@ public final class LocationService: NSObject, CLLocationManagerDelegate {
                 self.requestContinuation = nil
                 continuation.resume(returning: location)
             }
+
+            // Continuous update callback (for signal survey)
+            self.continuousLocationHandler?(location)
         }
     }
 

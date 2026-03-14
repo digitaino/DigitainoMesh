@@ -83,6 +83,9 @@ public final class ServiceContainer {
     /// Service for tracking heard repeats of sent messages
     public let heardRepeatsService: HeardRepeatsService
 
+    /// Service for signal survey (wardriving) recording
+    public let surveyService: SurveyService
+
     /// Buffer for batching debug log entries to persistence
     public let debugLogBuffer: DebugLogBuffer
 
@@ -157,6 +160,7 @@ public final class ServiceContainer {
         self.binaryProtocolService = BinaryProtocolService(session: session, dataStore: dataStore)
         self.rxLogService = RxLogService(session: session, dataStore: dataStore)
         self.heardRepeatsService = HeardRepeatsService(dataStore: dataStore)
+        self.surveyService = SurveyService(dataStore: dataStore)
         self.debugLogBuffer = DebugLogBuffer(dataStore: dataStore)
         DebugLogBuffer.shared = debugLogBuffer
         self.reactionService = ReactionService()
@@ -248,6 +252,9 @@ public final class ServiceContainer {
         // Wire HeardRepeatsService to RxLogService for repeat detection
         await rxLogService.setHeardRepeatsService(heardRepeatsService)
 
+        // Wire SurveyService to RxLogService for signal survey recording
+        await rxLogService.setSurveyService(surveyService)
+
         isWired = true
     }
 
@@ -284,6 +291,9 @@ public final class ServiceContainer {
         } catch {
             logger.warning("Failed to fetch device for HeardRepeatsService: \(error)")
         }
+
+        // Configure SurveyService with device ID
+        await surveyService.configure(deviceID: deviceID)
 
         // Start event monitoring for services that need it
         if enableAdvertisementMonitoring {

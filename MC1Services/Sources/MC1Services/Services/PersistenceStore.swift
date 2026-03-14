@@ -54,7 +54,9 @@ public actor PersistenceStore: PersistenceStoreProtocol {
         LinkPreviewData.self,
         DiscoveredNode.self,
         NodeStatusSnapshot.self,
-        BlockedChannelSender.self
+        BlockedChannelSender.self,
+        SurveySession.self,
+        SignalSurveyPoint.self
     ])
 
     /// Creates a ModelContainer for the app.

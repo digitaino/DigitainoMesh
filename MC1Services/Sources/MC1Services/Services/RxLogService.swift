@@ -32,6 +32,9 @@ public actor RxLogService {
     // Heard repeats processing
     private var heardRepeatsService: HeardRepeatsService?
 
+    // Signal survey recording
+    private var surveyService: SurveyService?
+
     // Reentrancy guard for reprocessing
     private var isReprocessing = false
 
@@ -43,6 +46,11 @@ public actor RxLogService {
     /// Sets the HeardRepeatsService for processing channel message repeats.
     public func setHeardRepeatsService(_ service: HeardRepeatsService) {
         self.heardRepeatsService = service
+    }
+
+    /// Sets the SurveyService for signal survey recording.
+    public func setSurveyService(_ service: SurveyService) {
+        self.surveyService = service
     }
 
     /// Sets the callback invoked when any RF packet is received.
@@ -404,6 +412,11 @@ public actor RxLogService {
         // preventing unbounded Task accumulation under high RX volume)
         if let heardRepeatsService = self.heardRepeatsService {
             await heardRepeatsService.processForRepeats(dto)
+        }
+
+        // Process for signal survey recording
+        if let surveyService = self.surveyService {
+            await surveyService.processForSurvey(dto)
         }
     }
 

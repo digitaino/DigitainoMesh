@@ -118,6 +118,11 @@ public final class AppState {
     /// Message event broadcaster for UI updates
     let messageEventBroadcaster = MessageEventBroadcaster()
 
+    // MARK: - Signal Survey
+
+    /// Whether a signal survey session is currently recording.
+    var isSurveyActive = false
+
     // MARK: - CLI Tool
 
     /// Persistent CLI tool view model (survives tab switches, reset on device disconnect)
@@ -250,6 +255,22 @@ public final class AppState {
         }
         await services.syncCoordinator.setUserLocationProvider(locationProvider)
         await services.messageService.setUserLocationProvider(locationProvider)
+
+        // Wire survey service location provider
+        let surveyLocationProvider: @Sendable () async -> SurveyLocationFix? = { [weak self] in
+            guard let self else { return nil }
+            let loc: CLLocation? = await MainActor.run { self.locationService.currentLocation }
+            guard let loc else { return nil }
+            return SurveyLocationFix(
+                latitude: loc.coordinate.latitude,
+                longitude: loc.coordinate.longitude,
+                altitude: loc.altitude,
+                horizontalAccuracy: loc.horizontalAccuracy,
+                speed: loc.speed >= 0 ? loc.speed : nil,
+                timestamp: loc.timestamp
+            )
+        }
+        await services.surveyService.setLocationProvider(surveyLocationProvider)
 
         // After a message is saved, request a fresh GPS fix in the background and
         // patch the message's coordinates if the cached location was stale or nil.

@@ -12,6 +12,7 @@ struct ToolsView: View {
         case noiseFloor
         case nodeDiscovery
         case trafficMap
+        case signalSurvey
         case cli
 
         var title: String {
@@ -22,6 +23,7 @@ struct ToolsView: View {
             case .noiseFloor: L10n.Tools.Tools.noiseFloor
             case .nodeDiscovery: L10n.Tools.Tools.nodeDiscovery
             case .trafficMap: L10n.Tools.Tools.trafficMap
+            case .signalSurvey: "Signal Survey"
             case .cli: L10n.Tools.Tools.cli
             }
         }
@@ -34,12 +36,13 @@ struct ToolsView: View {
             case .noiseFloor: "waveform"
             case .nodeDiscovery: "dot.radiowaves.left.and.right"
             case .trafficMap: "map.circle"
+            case .signalSurvey: "antenna.radiowaves.left.and.right"
             case .cli: "terminal"
             }
         }
 
         var requiresRadio: Bool {
-            self != .lineOfSight && self != .trafficMap
+            self != .lineOfSight && self != .trafficMap && self != .signalSurvey
         }
     }
 
@@ -108,7 +111,7 @@ struct ToolsView: View {
                         NavigationLink {
                             toolDestination(for: tool)
                         } label: {
-                            Label(tool.title, systemImage: tool.systemImage)
+                            toolLabel(for: tool)
                         }
                     }
                 }
@@ -129,7 +132,7 @@ struct ToolsView: View {
                     Button {
                         selectTool(tool)
                     } label: {
-                        Label(tool.title, systemImage: tool.systemImage)
+                        toolLabel(for: tool)
                     }
                 }
             }
@@ -164,6 +167,26 @@ struct ToolsView: View {
     }
 
     @ViewBuilder
+    private func toolLabel(for tool: ToolSelection) -> some View {
+        if tool == .signalSurvey && appState.isSurveyActive {
+            HStack {
+                Label(tool.title, systemImage: tool.systemImage)
+                Spacer()
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 8, height: 8)
+                    Text("Recording")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+        } else {
+            Label(tool.title, systemImage: tool.systemImage)
+        }
+    }
+
+    @ViewBuilder
     private func toolDestination(for tool: ToolSelection) -> some View {
         switch tool {
         case .tracePath: TracePathView()
@@ -172,6 +195,7 @@ struct ToolsView: View {
         case .noiseFloor: NoiseFloorView()
         case .nodeDiscovery: NodeDiscoveryView()
         case .trafficMap: TrafficHeatmapView()
+        case .signalSurvey: SignalSurveyView()
         case .cli: CLIToolView()
         }
     }
@@ -185,6 +209,7 @@ struct ToolsView: View {
         case .noiseFloor: NoiseFloorView()
         case .nodeDiscovery: NodeDiscoveryView()
         case .trafficMap: TrafficHeatmapView()
+        case .signalSurvey: SignalSurveyView()
         case .cli: CLIToolView()
         case .none: ContentUnavailableView(L10n.Tools.Tools.selectTool, systemImage: "wrench.and.screwdriver")
         }

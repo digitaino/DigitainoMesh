@@ -19,6 +19,7 @@ Features and fixes added in this fork on top of upstream:
 - **Swipe to Reply** — Swipe right on an incoming message in channels or DMs to quickly reply, with haptic feedback and a visual reply indicator (UIKit-based gesture avoids scroll blocking)
 - **Message Draft Persistence** — Unsent message text is preserved when navigating away from a conversation and restored when returning
 - **Mention Improvements** — Live-updating mention suggestion order based on most recent sender, keyboard auto-reset to letters after selecting a mention
+- **Signal Survey (Wardriving)** — Record mesh signal quality as you move, building a coverage heatmap. Start a GPS-tagged survey session that pairs every received packet with your location. Visualize data as individual points or an aggregated hex-grid heatmap with SNR-based color coding. Tap any hex cell to see signal stats in a native bottom sheet. Includes active trace probing (sends flood traces on a smart schedule triggered by cell-exit or a max timer), session management with rename/delete, JSON export of anonymized grid data, screen-lock prevention during recording, and a "Recording" indicator visible from the Tools list
 - **BLE Reconnect Fix** — Fixed a race condition crash during BLE auto-reconnect when services were cleared concurrently
 
 ## Requirements
