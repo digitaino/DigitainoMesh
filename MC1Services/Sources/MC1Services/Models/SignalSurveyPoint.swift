@@ -32,6 +32,12 @@ public final class SignalSurveyPoint {
     // Deduplication
     public var packetHash: String
 
+    // Sender identification
+    public var fromContactName: String?
+
+    // Relay path — comma-separated hex IDs of repeaters in the path
+    public var pathNodeHexIDs: String?
+
     public init(
         id: UUID = UUID(),
         deviceID: UUID,
@@ -47,7 +53,9 @@ public final class SignalSurveyPoint {
         routeType: Int,
         payloadType: Int,
         pathLength: Int,
-        packetHash: String
+        packetHash: String,
+        fromContactName: String? = nil,
+        pathNodeHexIDs: String? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -64,6 +72,8 @@ public final class SignalSurveyPoint {
         self.payloadType = payloadType
         self.pathLength = pathLength
         self.packetHash = packetHash
+        self.fromContactName = fromContactName
+        self.pathNodeHexIDs = pathNodeHexIDs
     }
 }
 
@@ -86,6 +96,8 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
     public let payloadType: PayloadType
     public let pathLength: UInt8
     public let packetHash: String
+    public let fromContactName: String?
+    public let pathNodeHexIDs: [String]
 
     /// Initialize from SwiftData model.
     public init(from model: SignalSurveyPoint) {
@@ -104,6 +116,10 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         self.payloadType = PayloadType(rawValue: UInt8(model.payloadType)) ?? .unknown
         self.pathLength = UInt8(model.pathLength)
         self.packetHash = model.packetHash
+        self.fromContactName = model.fromContactName
+        self.pathNodeHexIDs = model.pathNodeHexIDs?
+            .split(separator: ",")
+            .map(String.init) ?? []
     }
 
     public init(
@@ -121,7 +137,9 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         routeType: RouteType,
         payloadType: PayloadType,
         pathLength: UInt8,
-        packetHash: String
+        packetHash: String,
+        fromContactName: String? = nil,
+        pathNodeHexIDs: [String] = []
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -138,6 +156,8 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         self.payloadType = payloadType
         self.pathLength = pathLength
         self.packetHash = packetHash
+        self.fromContactName = fromContactName
+        self.pathNodeHexIDs = pathNodeHexIDs
     }
 
     // MARK: - Computed Properties

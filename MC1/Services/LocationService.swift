@@ -177,7 +177,7 @@ public final class LocationService: NSObject, CLLocationManagerDelegate {
         isContinuouslyUpdating = true
 
         locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-        locationManager.distanceFilter = 5  // Update every 5 meters of movement
+        locationManager.distanceFilter = kCLDistanceFilterNone  // Get all updates for freshness
         locationManager.startUpdatingLocation()
 
         logger.info("Started continuous location updates for survey")

@@ -60,7 +60,7 @@ struct SignalSurveyView: View {
         .sheet(isPresented: $showingPacketList) {
             CellPacketListView(
                 points: viewModel.pointsForSelectedCell(relayFilter: viewModel.selectedRelayFilter),
-                cellID: viewModel.selectedCell?.id ?? "",
+                cellID: viewModel.selectedCell?.coordKey ?? "",
                 relayFilter: viewModel.selectedRelayFilter,
                 contactsByName: viewModel.contactsByName,
                 onNavigateToContact: { contact in
@@ -148,16 +148,16 @@ struct SignalSurveyView: View {
                             .stroke(cell.snrQuality.color.opacity(0.6), lineWidth: 0.5)
                     }
 
-                    // Invisible tap target at cell center
+                    // Invisible tap target at cell center — oversized for easier tapping
                     Annotation("", coordinate: CLLocationCoordinate2D(
                         latitude: cell.centerLatitude,
                         longitude: cell.centerLongitude
                     )) {
                         Color.clear
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
+                            .frame(width: 60, height: 60)
+                            .contentShape(.circle)
                             .onTapGesture {
-                                if viewModel.selectedCell?.id == cell.id {
+                                if viewModel.selectedCell?.coordKey == cell.coordKey {
                                     viewModel.selectedCell = nil
                                 } else {
                                     viewModel.selectedCell = cell
@@ -671,7 +671,7 @@ struct SignalSurveyView: View {
             .padding(.leading, 16)
             .padding(.bottom, 8)
         }
-        .animation(.snappy(duration: 0.25), value: viewModel.selectedCell?.id)
+        .animation(.snappy(duration: 0.25), value: viewModel.selectedCell?.coordKey)
     }
 
     private var surveyToggleButton: some View {

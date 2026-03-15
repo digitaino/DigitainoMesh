@@ -188,10 +188,17 @@ public actor SurveyService {
 
         // Extract relay/target hex IDs.
         // For TRACE responses: use traceTargetHashes (the probed nodes from the payload).
+        // For CONTROL packets (discover responses): extract the responder's public key from the payload.
+        //   Discover response packetPayload format: [0x9x:1][snr_in:1][tag:4][pubkey:8-32]
+        //   where x = node type. The pubkey starts at offset 6.
         // For other packets: use pathNodes (the routing hops from the network path).
         let pathHexIDs: [String] = {
             if let traceHashes = entry.traceTargetHashes {
                 return traceHashes.map { $0.hexString() }
+            }
+            if entry.payloadType == .control {
+                return Self.extractDiscoverResponsePubkey(from: entry.packetPayload)
+                    .map { [$0] } ?? []
             }
             let hashSize = entry.pathHashSize
             guard hashSize > 0, !entry.pathNodes.isEmpty else { return [] }
@@ -236,6 +243,29 @@ public actor SurveyService {
         if let handler = onPointRecorded {
             await handler(point)
         }
+    }
+
+    // MARK: - Discover Response Parsing
+
+    /// Extract the responder's public key hex from a control packet's payload.
+    ///
+    /// Discover response payload format (from firmware `onControlDataRecv`):
+    /// `[payloadType:1][snr_in:1][tag:4][pubkey:8-32]`
+    /// where `payloadType` upper nibble `0x90` = DISCOVER_RESP, lower nibble = node type.
+    ///
+    /// - Returns: Uppercase hex string of the first 3 bytes of the public key (e.g. "80 5D 8C"),
+    ///   or nil if not a discover response.
+    private static func extractDiscoverResponsePubkey(from payload: Data) -> String? {
+        // Minimum: 1 (type) + 1 (snr_in) + 4 (tag) + 1 (at least 1 byte pubkey) = 7
+        guard payload.count >= 7 else { return nil }
+        // Check upper nibble for DISCOVER_RESP (0x90)
+        guard payload[payload.startIndex] & 0xF0 == 0x90 else { return nil }
+        // Public key starts at offset 6; take at most 3 bytes
+        let pubkeyStart = payload.startIndex + 6
+        let pubkeyEnd = min(pubkeyStart + 3, payload.endIndex)
+        let pubkeyData = payload[pubkeyStart..<pubkeyEnd]
+        guard !pubkeyData.isEmpty else { return nil }
+        return Data(pubkeyData).hexString(separator: " ")
     }
 }
 

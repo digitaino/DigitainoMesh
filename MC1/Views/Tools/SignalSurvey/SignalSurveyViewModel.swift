@@ -76,7 +76,8 @@ final class SignalSurveyViewModel {
     // MARK: - Grid Cell for Heatmap
 
     struct GridCell: Identifiable {
-        let id: String
+        /// Hex coordinate key (e.g. "0_5") — stable across updates.
+        let coordKey: String
         let centerLatitude: Double
         let centerLongitude: Double
         let averageSNR: Double?
@@ -92,8 +93,11 @@ final class SignalSurveyViewModel {
         let uniqueRelayNodes: [String]
         let isDeadZone: Bool
 
+        /// Composite identity: coordKey + packetCount so ForEach detects content changes.
+        var id: String { "\(coordKey)_\(packetCount)" }
+
         static func == (lhs: GridCell, rhs: GridCell) -> Bool {
-            lhs.id == rhs.id &&
+            lhs.coordKey == rhs.coordKey &&
             lhs.packetCount == rhs.packetCount &&
             lhs.averageSNR == rhs.averageSNR &&
             lhs.snrQuality == rhs.snrQuality &&
@@ -104,7 +108,7 @@ final class SignalSurveyViewModel {
     /// The currently selected hex cell (tapped by user).
     var selectedCell: GridCell? {
         didSet {
-            if selectedCell?.id != oldValue?.id {
+            if selectedCell?.coordKey != oldValue?.coordKey {
                 selectedRelayFilter = nil
             }
         }
@@ -119,7 +123,7 @@ final class SignalSurveyViewModel {
 
     // MARK: - Active Probing
 
-    /// Whether active trace probing is enabled during survey.
+    /// Whether active probing (node discovery) is enabled during survey.
     var probeEnabled: Bool = false {
         didSet {
             guard isActive else { return }
@@ -131,7 +135,7 @@ final class SignalSurveyViewModel {
         }
     }
 
-    /// Number of probe traces sent in the current session.
+    /// Number of probes sent in the current session.
     private(set) var probeCount: Int = 0
 
     /// Distance threshold in meters for distance-based probing (0 = disabled, use time/cell-exit only).
@@ -363,11 +367,14 @@ final class SignalSurveyViewModel {
 
     // MARK: - Filtering
 
+    /// Active probe payload types: trace (legacy) and control (discover node responses).
+    private static let activePayloadTypes: Set<PayloadType> = [.trace, .control]
+
     private func passesFilter(_ point: SignalSurveyPointDTO) -> Bool {
         switch surveyFilter {
         case .all: true
-        case .passiveOnly: point.payloadType != .trace
-        case .traceOnly: point.payloadType == .trace
+        case .passiveOnly: !Self.activePayloadTypes.contains(point.payloadType)
+        case .traceOnly: Self.activePayloadTypes.contains(point.payloadType)
         }
     }
 
@@ -434,13 +441,13 @@ final class SignalSurveyViewModel {
 
         // Add dead zone cells for probed-but-no-response hexes
         let now = Date()
-        let dataCellIDs = Set(cells.map(\.id))
+        let dataCellIDs = Set(cells.map(\.coordKey))
         for probe in probeSendLocations where now.timeIntervalSince(probe.time) >= Self.deadZoneTimeout {
             let key = probe.hexCoord.key
             guard !dataCellIDs.contains(key) else { continue }
             let center = HexGrid.centerLatLon(from: probe.hexCoord, referenceLatitude: gridReferenceLatitude)
             cells.append(GridCell(
-                id: key,
+                coordKey: key,
                 centerLatitude: center.latitude,
                 centerLongitude: center.longitude,
                 averageSNR: nil,
@@ -462,7 +469,7 @@ final class SignalSurveyViewModel {
 
         // Refresh or clear selected cell after rebuild
         if let selected = selectedCell {
-            if let updated = gridCells.first(where: { $0.id == selected.id }) {
+            if let updated = gridCells.first(where: { $0.coordKey == selected.coordKey }) {
                 selectedCell = updated
             } else {
                 selectedCell = nil
@@ -488,14 +495,14 @@ final class SignalSurveyViewModel {
             refLat: gridReferenceLatitude
         )
 
-        if let idx = gridCells.firstIndex(where: { $0.id == hex.key }) {
+        if let idx = gridCells.firstIndex(where: { $0.coordKey == hex.key }) {
             gridCells[idx] = updatedCell
         } else {
             gridCells.append(updatedCell)
         }
 
         // Update selected cell if it's the one that changed
-        if selectedCell?.id == hex.key {
+        if selectedCell?.coordKey == hex.key {
             selectedCell = updatedCell
         }
 
@@ -515,10 +522,11 @@ final class SignalSurveyViewModel {
         let avgRSSI = rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count)
         let timestamps = points.map(\.timestamp).sorted()
         let senders = Array(Set(points.compactMap(\.fromContactName))).sorted()
-        let relayNodes = Array(Set(points.flatMap(\.pathNodeHexIDs))).sorted()
+        // Only show the 0-hop (directly heard) repeater — the last node in each path chain.
+        let relayNodes = Array(Set(points.compactMap(\.pathNodeHexIDs.last))).sorted()
 
         return GridCell(
-            id: coord.key,
+            coordKey: coord.key,
             centerLatitude: center.latitude,
             centerLongitude: center.longitude,
             averageSNR: avgSNR,
@@ -608,7 +616,7 @@ final class SignalSurveyViewModel {
 
     // MARK: - Probe Loop
 
-    /// Starts the periodic probe loop that sends flood traces.
+    /// Starts the periodic probe loop that sends node discovery requests.
     private func startProbeLoop(locationService: LocationService) {
         stopProbeLoop()
 
@@ -696,14 +704,12 @@ final class SignalSurveyViewModel {
         probeErrorMessage = nil
     }
 
-    /// Sends a flood trace probe and updates tracking state.
+    /// Sends a node discovery probe and updates tracking state.
     private func sendProbe(location: CLLocation) async {
         guard let bps = binaryProtocolService else {
             logger.warning("Probe skipped: binaryProtocolService is nil")
             return
         }
-
-        let tag = UInt32.random(in: 0...UInt32.max)
 
         // Always increment count and update tracking before the async call
         probeCount += 1
@@ -722,8 +728,10 @@ final class SignalSurveyViewModel {
         ))
 
         do {
-            _ = try await bps.sendTrace(tag: tag)
-            logger.debug("Probe #\(self.probeCount) sent (tag: \(tag))")
+            // Use discover nodes (repeater filter 0x04) instead of flood trace —
+            // discover is a lighter-weight broadcast that elicits responses from nearby repeaters.
+            let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
+            logger.debug("Probe #\(self.probeCount) sent (discover tag: \(tag))")
         } catch {
             logger.warning("Probe #\(self.probeCount) failed: \(error.localizedDescription)")
         }
@@ -741,10 +749,10 @@ final class SignalSurveyViewModel {
             guard !dataCellIDs.contains(key) else { continue }
 
             // Only add if not already present
-            if !gridCells.contains(where: { $0.id == key }) {
+            if !gridCells.contains(where: { $0.coordKey == key }) {
                 let center = HexGrid.centerLatLon(from: probe.hexCoord, referenceLatitude: gridReferenceLatitude)
                 gridCells.append(GridCell(
-                    id: key,
+                    coordKey: key,
                     centerLatitude: center.latitude,
                     centerLongitude: center.longitude,
                     averageSNR: nil,
@@ -765,8 +773,8 @@ final class SignalSurveyViewModel {
         }
 
         // Remove dead zone cells that now have data
-        if gridCells.contains(where: { $0.isDeadZone && dataCellIDs.contains($0.id) }) {
-            gridCells.removeAll { $0.isDeadZone && dataCellIDs.contains($0.id) }
+        if gridCells.contains(where: { $0.isDeadZone && dataCellIDs.contains($0.coordKey) }) {
+            gridCells.removeAll { $0.isDeadZone && dataCellIDs.contains($0.coordKey) }
             changed = true
         }
 
@@ -778,12 +786,13 @@ final class SignalSurveyViewModel {
     /// Returns the raw survey points for the selected cell, optionally filtered by relay node.
     func pointsForSelectedCell(relayFilter: String? = nil) -> [SignalSurveyPointDTO] {
         guard let cell = selectedCell else { return [] }
-        let parts = cell.id.split(separator: "_").compactMap { Int($0) }
+        let parts = cell.coordKey.split(separator: "_").compactMap { Int($0) }
         guard parts.count == 2 else { return [] }
         let coord = HexGrid.AxialCoord(q: parts[0], r: parts[1])
         let points = gridBuckets[coord] ?? []
         if let relay = relayFilter {
-            return points.filter { $0.pathNodeHexIDs.contains(relay) }
+            // Match on the directly heard repeater (last in path chain)
+            return points.filter { $0.pathNodeHexIDs.last == relay }
         }
         return points
     }

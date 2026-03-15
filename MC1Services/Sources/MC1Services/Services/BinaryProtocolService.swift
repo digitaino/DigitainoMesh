@@ -277,4 +277,25 @@ public actor BinaryProtocolService {
             throw BinaryProtocolError.sessionError(error)
         }
     }
+
+    // MARK: - Node Discovery
+
+    /// Send a node discovery request (broadcast ping to discover nearby nodes).
+    /// - Parameters:
+    ///   - filter: Node type filter (e.g. 0x04 for repeaters)
+    ///   - prefixOnly: Whether to request prefix-only public keys
+    /// - Returns: The tag used for correlating responses
+    public func sendNodeDiscoverRequest(
+        filter: UInt8,
+        prefixOnly: Bool = true
+    ) async throws -> UInt32 {
+        do {
+            return try await session.sendNodeDiscoverRequest(
+                filter: filter,
+                prefixOnly: prefixOnly
+            )
+        } catch let error as MeshCoreError {
+            throw BinaryProtocolError.sessionError(error)
+        }
+    }
 }

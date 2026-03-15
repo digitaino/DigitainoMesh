@@ -106,7 +106,9 @@ extension PersistenceStore {
             routeType: Int(dto.routeType.rawValue),
             payloadType: Int(dto.payloadType.rawValue),
             pathLength: Int(dto.pathLength),
-            packetHash: dto.packetHash
+            packetHash: dto.packetHash,
+            fromContactName: dto.fromContactName,
+            pathNodeHexIDs: dto.pathNodeHexIDs.isEmpty ? nil : dto.pathNodeHexIDs.joined(separator: ",")
         )
         modelContext.insert(point)
         try modelContext.save()
