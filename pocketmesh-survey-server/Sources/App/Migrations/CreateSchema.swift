@@ -23,12 +23,6 @@ struct CreateSchema: AsyncMigration {
             .unique(on: "hex_q", "hex_r", "reference_latitude")
             .create()
 
-        // Spatial index for bounding box queries
-        try await database.schema("cells")
-            .field("latitude", .double)
-            .field("longitude", .double)
-            .update()
-
         // Cell repeaters table
         try await database.schema("cell_repeaters")
             .field("id", .int, .identifier(auto: true))

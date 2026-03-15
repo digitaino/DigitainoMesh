@@ -7,9 +7,8 @@ COPY Sources/ Sources/
 COPY Public/ Public/
 RUN swift build -c release
 
-# Runtime stage
-FROM ubuntu:24.04
-RUN apt-get update && apt-get install -y libsqlite3-0 && rm -rf /var/lib/apt/lists/*
+# Runtime stage - use swift image to avoid apt-get (includes SQLite + Swift runtime)
+FROM swift:6.0-noble-slim
 WORKDIR /app
 COPY --from=build /build/.build/release/App .
 COPY --from=build /build/Public ./Public

@@ -1,6 +1,10 @@
 import Vapor
 
 func routes(_ app: Application) throws {
+    app.get { req -> Response in
+        req.redirect(to: "/index.html")
+    }
+
     let api = app.grouped("api", "v1")
 
     let surveyController = SurveyController()

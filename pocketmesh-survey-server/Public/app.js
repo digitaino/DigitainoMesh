@@ -1,4 +1,4 @@
-// PocketMesh Community Signal Map
+// MeshCore Community Map
 
 const API_BASE = '/api/v1';
 
