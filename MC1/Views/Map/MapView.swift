@@ -366,6 +366,14 @@ private struct ContactDetailSheet: View {
                     }
                 }
 
+                // Public key section
+                Section("Public Key") {
+                    Text(contact.publicKey.hexString(separator: " "))
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
+
                 // Location section
                 Section(L10n.Map.Map.Detail.Section.location) {
                     LabeledContent(L10n.Map.Map.Detail.latitude) {

@@ -253,9 +253,26 @@ final class ContactsViewModel {
         } else {
             // Filter by search text (name or public key hex prefix)
             let query = searchText.trimmingCharacters(in: .whitespaces)
+            let hexQuery = query.uppercased()
+            let looksLikeHex = hexQuery.allSatisfy { $0.isHexDigit }
             result = result.filter { contact in
-                contact.displayName.localizedStandardContains(query)
-                || contact.publicKeyHex.localizedCaseInsensitiveContains(query)
+                if contact.displayName.localizedStandardContains(query) {
+                    return true
+                }
+                // Only match hex if the query looks like a hex string (avoids false positives)
+                if looksLikeHex, !hexQuery.isEmpty {
+                    return contact.publicKeyHex.contains(hexQuery)
+                }
+                return false
+            }
+            // When query looks like hex, sort public key matches first
+            if looksLikeHex, !hexQuery.isEmpty {
+                result.sort { a, b in
+                    let aHex = a.publicKeyHex.hasPrefix(hexQuery)
+                    let bHex = b.publicKeyHex.hasPrefix(hexQuery)
+                    if aHex != bHex { return aHex }
+                    return false
+                }
             }
         }
 
