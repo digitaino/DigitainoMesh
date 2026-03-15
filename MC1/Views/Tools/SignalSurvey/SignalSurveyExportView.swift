@@ -9,6 +9,9 @@ struct SignalSurveyExportView: View {
     @State private var exportURL: URL?
     @State private var isGenerating = false
     @State private var errorMessage: String?
+    @State private var isUploading = false
+    @State private var uploadResult: String?
+    @State private var uploadError: String?
 
     var body: some View {
         NavigationStack {
@@ -35,6 +38,36 @@ struct SignalSurveyExportView: View {
                             Label("Share Survey Data", systemImage: "square.and.arrow.up")
                         }
                         .buttonStyle(.borderedProminent)
+
+                        Divider()
+                            .padding(.vertical, 4)
+
+                        // Community upload
+                        if isUploading {
+                            ProgressView("Uploading to community map...")
+                        } else if let uploadResult {
+                            Label(uploadResult, systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.subheadline)
+                        } else if let uploadError {
+                            VStack(spacing: 6) {
+                                Label(uploadError, systemImage: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.red)
+                                    .font(.caption)
+                                Button("Retry Upload") {
+                                    Task { await uploadToCommunity() }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        } else {
+                            Button {
+                                Task { await uploadToCommunity() }
+                            } label: {
+                                Label("Upload to Community Map", systemImage: "globe")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
                 } else if let errorMessage {
                     Text(errorMessage)
@@ -88,6 +121,26 @@ struct SignalSurveyExportView: View {
             exportURL = url
         } else {
             errorMessage = "No data to export or export failed."
+        }
+    }
+
+    private func uploadToCommunity() async {
+        guard let dataStore else {
+            uploadError = "Data store not available."
+            return
+        }
+
+        isUploading = true
+        uploadError = nil
+        uploadResult = nil
+        defer { isUploading = false }
+
+        do {
+            let service = SurveyUploadService()
+            let response = try await service.upload(sessionID: sessionID, dataStore: dataStore)
+            uploadResult = "\(response.accepted) cells uploaded"
+        } catch {
+            uploadError = error.localizedDescription
         }
     }
 }

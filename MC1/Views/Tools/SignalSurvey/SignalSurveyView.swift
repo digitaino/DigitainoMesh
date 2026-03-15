@@ -11,6 +11,7 @@ struct SignalSurveyView: View {
     @State private var showingExportSheet = false
     @State private var showingPacketList = false
     @State private var showingSurveySetup = false
+    @State private var showingCommunityMap = false
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
     @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
@@ -60,6 +61,9 @@ struct SignalSurveyView: View {
                     dataStore: appState.offlineDataStore
                 )
             }
+        }
+        .sheet(isPresented: $showingCommunityMap) {
+            CommunityMapView()
         }
         .sheet(isPresented: $showingPacketList) {
             CellPacketListView(
@@ -1062,6 +1066,14 @@ struct SignalSurveyView: View {
                     } label: {
                         Label("All Sessions", systemImage: "map.fill")
                     }
+                }
+
+                Divider()
+
+                Button {
+                    showingCommunityMap = true
+                } label: {
+                    Label("Community Map", systemImage: "globe")
                 }
             } label: {
                 Label("More", systemImage: "ellipsis.circle")

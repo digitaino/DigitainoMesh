@@ -49,7 +49,11 @@ enum SurveyExportService {
         let maxSNR: Double?
         let packetCount: Int
         let routeTypeBreakdown: RouteBreakdown
-        let timeRange: TimeRange
+        let timeRange: TimeRange?
+        let repeaterHexIDs: [String]
+        let hexQ: Int
+        let hexR: Int
+        let referenceLatitude: Double
     }
 
     struct RouteBreakdown: Codable {
@@ -62,6 +66,74 @@ enum SurveyExportService {
         let latest: String
     }
 
+    // MARK: - Cell Data Generation (shared by file export and community upload)
+
+    struct CellDataResult {
+        let cells: [CellData]
+        let referenceLatitude: Double
+        let points: [SignalSurveyPointDTO]
+    }
+
+    /// Generate aggregated cell data from a survey session.
+    /// Shared by both file export and community upload.
+    static func generateCellData(
+        sessionID: UUID,
+        dataStore: PersistenceStore,
+        includeTimeRange: Bool = true
+    ) async throws -> CellDataResult? {
+        let points = try await dataStore.fetchSurveyPoints(sessionID: sessionID)
+        guard !points.isEmpty else {
+            logger.warning("No points for session \(sessionID)")
+            return nil
+        }
+
+        let refLat = points.map(\.latitude).reduce(0, +) / Double(points.count)
+        var buckets: [HexGrid.AxialCoord: [SignalSurveyPointDTO]] = [:]
+
+        for point in points {
+            let hex = HexGrid.axialFromLatLon(latitude: point.latitude, longitude: point.longitude, referenceLatitude: refLat)
+            buckets[hex, default: []].append(point)
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+
+        let cells: [CellData] = buckets.map { coord, cellPoints in
+            let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
+            let snrValues = cellPoints.compactMap(\.snr)
+            let rssiValues = cellPoints.compactMap(\.rssi)
+            let floodCount = cellPoints.filter { $0.routeType == .flood || $0.routeType == .tcFlood }.count
+            let directCount = cellPoints.count - floodCount
+            let timestamps = cellPoints.map(\.timestamp).sorted()
+
+            // Extract unique repeater hex IDs from path nodes
+            let repeaters = Array(Set(cellPoints.flatMap(\.pathNodeHexIDs)).sorted())
+
+            let timeRange: TimeRange? = includeTimeRange ? TimeRange(
+                earliest: isoFormatter.string(from: timestamps.first ?? Date()),
+                latest: isoFormatter.string(from: timestamps.last ?? Date())
+            ) : nil
+
+            return CellData(
+                latitude: center.latitude,
+                longitude: center.longitude,
+                averageSNR: snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count),
+                averageRSSI: rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count),
+                minSNR: snrValues.min(),
+                maxSNR: snrValues.max(),
+                packetCount: cellPoints.count,
+                routeTypeBreakdown: RouteBreakdown(flood: floodCount, direct: directCount),
+                timeRange: timeRange,
+                repeaterHexIDs: repeaters,
+                hexQ: coord.q,
+                hexR: coord.r,
+                referenceLatitude: refLat
+            )
+        }
+
+        return CellDataResult(cells: cells, referenceLatitude: refLat, points: points)
+    }
+
     // MARK: - Generate Export
 
     static func generateExport(
@@ -69,54 +141,23 @@ enum SurveyExportService {
         dataStore: PersistenceStore
     ) async -> URL? {
         do {
-            let points = try await dataStore.fetchSurveyPoints(sessionID: sessionID)
-            guard !points.isEmpty else {
-                logger.warning("No points to export for session \(sessionID)")
+            guard let result = try await generateCellData(
+                sessionID: sessionID,
+                dataStore: dataStore,
+                includeTimeRange: true
+            ) else {
                 return nil
             }
 
-            let sessions = try await dataStore.fetchSurveySessions(deviceID: points[0].deviceID)
+            let sessions = try await dataStore.fetchSurveySessions(deviceID: result.points[0].deviceID)
             let session = sessions.first { $0.id == sessionID }
-
-            // Aggregate into hex grid cells
-            let refLat = points.map(\.latitude).reduce(0, +) / Double(points.count)
-            var buckets: [HexGrid.AxialCoord: [SignalSurveyPointDTO]] = [:]
-
-            for point in points {
-                let hex = HexGrid.axialFromLatLon(latitude: point.latitude, longitude: point.longitude, referenceLatitude: refLat)
-                buckets[hex, default: []].append(point)
-            }
 
             let isoFormatter = ISO8601DateFormatter()
             isoFormatter.formatOptions = [.withInternetDateTime]
 
-            let cells: [CellData] = buckets.map { coord, cellPoints in
-                let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
-                let snrValues = cellPoints.compactMap(\.snr)
-                let rssiValues = cellPoints.compactMap(\.rssi)
-                let floodCount = cellPoints.filter { $0.routeType == .flood || $0.routeType == .tcFlood }.count
-                let directCount = cellPoints.count - floodCount
-                let timestamps = cellPoints.map(\.timestamp).sorted()
-
-                return CellData(
-                    latitude: center.latitude,
-                    longitude: center.longitude,
-                    averageSNR: snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count),
-                    averageRSSI: rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count),
-                    minSNR: snrValues.min(),
-                    maxSNR: snrValues.max(),
-                    packetCount: cellPoints.count,
-                    routeTypeBreakdown: RouteBreakdown(flood: floodCount, direct: directCount),
-                    timeRange: TimeRange(
-                        earliest: isoFormatter.string(from: timestamps.first ?? Date()),
-                        latest: isoFormatter.string(from: timestamps.last ?? Date())
-                    )
-                )
-            }
-
             // Build bounding box
-            let lats = points.map(\.latitude)
-            let lons = points.map(\.longitude)
+            let lats = result.points.map(\.latitude)
+            let lons = result.points.map(\.longitude)
 
             let export = SurveyExport(
                 version: formatVersion,
@@ -124,8 +165,8 @@ enum SurveyExportService {
                 session: SessionInfo(
                     startedAt: isoFormatter.string(from: session?.startedAt ?? Date()),
                     endedAt: session?.endedAt.map { isoFormatter.string(from: $0) },
-                    totalPoints: points.count,
-                    cellCount: cells.count
+                    totalPoints: result.points.count,
+                    cellCount: result.cells.count
                 ),
                 grid: GridInfo(
                     gridType: "hex",
@@ -138,7 +179,7 @@ enum SurveyExportService {
                         maxLongitude: lons.max() ?? 0
                     )
                 ),
-                cells: cells
+                cells: result.cells
             )
 
             // Write JSON file
@@ -153,7 +194,7 @@ enum SurveyExportService {
             let tempURL = FileManager.default.temporaryDirectory.appending(path: filename)
             try data.write(to: tempURL)
 
-            logger.info("Exported \(cells.count) cells from \(points.count) points to \(filename)")
+            logger.info("Exported \(result.cells.count) cells from \(result.points.count) points to \(filename)")
             return tempURL
 
         } catch {
