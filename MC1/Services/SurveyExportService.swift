@@ -99,7 +99,9 @@ enum SurveyExportService {
         isoFormatter.formatOptions = [.withInternetDateTime]
 
         let cells: [CellData] = buckets.map { coord, cellPoints in
-            let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
+            // Use average of actual GPS coordinates for the cell center
+            let avgLat = cellPoints.map(\.latitude).reduce(0, +) / Double(cellPoints.count)
+            let avgLon = cellPoints.map(\.longitude).reduce(0, +) / Double(cellPoints.count)
             let snrValues = cellPoints.compactMap(\.snr)
             let rssiValues = cellPoints.compactMap(\.rssi)
             let floodCount = cellPoints.filter { $0.routeType == .flood || $0.routeType == .tcFlood }.count
@@ -115,8 +117,8 @@ enum SurveyExportService {
             ) : nil
 
             return CellData(
-                latitude: center.latitude,
-                longitude: center.longitude,
+                latitude: avgLat,
+                longitude: avgLon,
                 averageSNR: snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count),
                 averageRSSI: rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count),
                 minSNR: snrValues.min(),

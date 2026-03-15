@@ -69,6 +69,20 @@ enum HexGrid {
         }
     }
 
+    /// Generate the 6 vertices of a flat-top hex centered on actual geographic coordinates.
+    /// Use this when you have real lat/lon (e.g., from server data) instead of computing from axial coords.
+    static func vertices(centerLatitude: Double, centerLongitude: Double, referenceLatitude: Double = 30.0) -> [CLLocationCoordinate2D] {
+        let lonScale = cos(referenceLatitude * .pi / 180.0)
+
+        return (0..<6).map { i in
+            let angleDeg = 60.0 * Double(i)
+            let angleRad = angleDeg * .pi / 180.0
+            let vLat = centerLatitude + size * sin(angleRad)
+            let vLon = centerLongitude + (size * cos(angleRad)) / lonScale
+            return CLLocationCoordinate2D(latitude: vLat, longitude: vLon)
+        }
+    }
+
     // MARK: - Cube Rounding
 
     /// Round fractional cube coordinates to the nearest hex center.

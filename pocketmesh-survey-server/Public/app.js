@@ -24,21 +24,18 @@ function snrQuality(snr) {
     return 'veryPoor';
 }
 
-// Hex grid math — matches iOS HexGrid.swift exactly
+// Hex grid math — renders hex polygon centered on actual GPS coordinates
 const HEX_SIZE = 0.0005;
 
-function hexVertices(q, r, refLat) {
+function hexVerticesAtCenter(centerLat, centerLon, refLat) {
     const lonScale = Math.cos(refLat * Math.PI / 180);
-    const scaledLon = HEX_SIZE * 1.5 * q;
-    const lat = HEX_SIZE * Math.sqrt(3) * (r + q / 2);
-    const lon = scaledLon / lonScale;
 
     const vertices = [];
     for (let i = 0; i < 6; i++) {
         const angle = (60 * i) * Math.PI / 180;
         vertices.push([
-            lat + HEX_SIZE * Math.sin(angle),
-            lon + (HEX_SIZE * Math.cos(angle)) / lonScale
+            centerLat + HEX_SIZE * Math.sin(angle),
+            centerLon + (HEX_SIZE * Math.cos(angle)) / lonScale
         ]);
     }
     return vertices;
@@ -89,7 +86,7 @@ function renderCells(cells) {
     cellLayer.clearLayers();
 
     cells.forEach(cell => {
-        const vertices = hexVertices(cell.hexQ, cell.hexR, cell.referenceLatitude);
+        const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
         const quality = cell.snrQuality || snrQuality(cell.averageSNR);
         const color = snrColor(quality);
         const opacity = 0.2 + 0.5 * Math.min(1, cell.contributionCount / 5);

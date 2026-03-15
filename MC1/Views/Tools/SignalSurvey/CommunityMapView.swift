@@ -84,7 +84,8 @@ struct CommunityMapView: View {
             ForEach(cells) { cell in
                 let quality = SNRQuality(snr: cell.averageSNR)
                 let vertices = HexGrid.vertices(
-                    for: HexGrid.AxialCoord(q: cell.hexQ, r: cell.hexR),
+                    centerLatitude: cell.latitude,
+                    centerLongitude: cell.longitude,
                     referenceLatitude: cell.referenceLatitude
                 )
 
@@ -115,7 +116,8 @@ struct CommunityMapView: View {
 
             if let selected = selectedCell {
                 let vertices = HexGrid.vertices(
-                    for: HexGrid.AxialCoord(q: selected.hexQ, r: selected.hexR),
+                    centerLatitude: selected.latitude,
+                    centerLongitude: selected.longitude,
                     referenceLatitude: selected.referenceLatitude
                 )
                 MapPolygon(coordinates: vertices)
