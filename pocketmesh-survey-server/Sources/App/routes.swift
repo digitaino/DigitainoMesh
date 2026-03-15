@@ -12,6 +12,7 @@ func routes(_ app: Application) throws {
     // Public endpoints (no auth)
     api.get("cells", use: surveyController.getCells)
     api.get("stats", use: surveyController.getStats)
+    api.get("mapkit-token", use: surveyController.getMapKitToken)
 
     // Authenticated endpoints
     let protected = api.grouped(APIKeyMiddleware())

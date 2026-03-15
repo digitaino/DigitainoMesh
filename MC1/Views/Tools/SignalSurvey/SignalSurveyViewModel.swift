@@ -205,6 +205,9 @@ final class SignalSurveyViewModel {
 
     /// Persistent grid buckets for incremental updates during live survey.
     private var gridBuckets: [HexGrid.AxialCoord: [SignalSurveyPointDTO]] = [:]
+    /// Reference latitude for hex grid Mercator correction.
+    /// Uses fixed 10° bands (via HexGrid.fixedReferenceLatitude) so all clients
+    /// produce identical cells at the same location.
     private var gridReferenceLatitude: Double = 30.0
 
     // MARK: - Active Probing
@@ -258,6 +261,7 @@ final class SignalSurveyViewModel {
     private var lastProbeHex: HexGrid.AxialCoord?
     private var lastProbeTime: Date = .distantPast
     private var lastProbeLocation: CLLocation?
+    /// Probe loop reference latitude — fixed 10° band, matching gridReferenceLatitude.
     private var probeReferenceLatitude: Double = 30.0
 
     /// Locations where probes were sent, for dead zone detection.
@@ -479,8 +483,9 @@ final class SignalSurveyViewModel {
 
         // Set reference latitude on first point BEFORE any grid operations,
         // so the hex coordinate system is stable from the very first cell.
+        // Uses fixed 10° bands so all clients produce identical grids.
         if livePointCount == 1 {
-            gridReferenceLatitude = point.latitude
+            gridReferenceLatitude = HexGrid.fixedReferenceLatitude(for: point.latitude)
             cameraPosition = .region(MKCoordinateRegion(
                 center: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude),
                 span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
@@ -595,7 +600,7 @@ final class SignalSurveyViewModel {
             do {
                 let pointCount = try await dataStore.countSurveyPoints(sessionID: session.id)
                 let coords = try await dataStore.fetchSurveyPointCoordinates(sessionID: session.id)
-                let refLat = coords.first?.latitude ?? gridReferenceLatitude
+                let refLat = HexGrid.fixedReferenceLatitude(for: coords.first?.latitude ?? gridReferenceLatitude)
                 let uniqueCells = Set(coords.map {
                     HexGrid.axialFromLatLon(latitude: $0.latitude, longitude: $0.longitude, referenceLatitude: refLat).key
                 })
@@ -639,8 +644,9 @@ final class SignalSurveyViewModel {
             return
         }
 
-        // Use average latitude of ALL points (not filtered) for stable Mercator correction across filters
-        gridReferenceLatitude = allPoints.map(\.latitude).reduce(0, +) / Double(allPoints.count)
+        // Use fixed 10° band reference latitude so all clients produce identical grids
+        let avgLat = allPoints.map(\.latitude).reduce(0, +) / Double(allPoints.count)
+        gridReferenceLatitude = HexGrid.fixedReferenceLatitude(for: avgLat)
 
         gridBuckets = [:]
         for point in displayPoints {
@@ -906,9 +912,9 @@ final class SignalSurveyViewModel {
     private func startProbeLoop(locationService: LocationService) {
         stopProbeLoop()
 
-        // Set reference latitude from current location or fallback
+        // Set reference latitude from current location using fixed 10° bands
         if let loc = locationService.currentLocation {
-            probeReferenceLatitude = loc.coordinate.latitude
+            probeReferenceLatitude = HexGrid.fixedReferenceLatitude(for: loc.coordinate.latitude)
         }
 
         probeTask = Task { [weak self] in

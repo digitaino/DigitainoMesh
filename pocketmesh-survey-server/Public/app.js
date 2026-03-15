@@ -1,4 +1,4 @@
-// MeshCore Community Map
+// MeshCore Community Map — Apple MapKit JS
 
 const API_BASE = '/api/v1';
 
@@ -33,41 +33,88 @@ function hexVerticesAtCenter(centerLat, centerLon, refLat) {
     const vertices = [];
     for (let i = 0; i < 6; i++) {
         const angle = (60 * i) * Math.PI / 180;
-        vertices.push([
-            centerLat + HEX_SIZE * Math.sin(angle),
-            centerLon + (HEX_SIZE * Math.cos(angle)) / lonScale
-        ]);
+        vertices.push(
+            new mapkit.Coordinate(
+                centerLat + HEX_SIZE * Math.sin(angle),
+                centerLon + (HEX_SIZE * Math.cos(angle)) / lonScale
+            )
+        );
     }
     return vertices;
 }
 
-// Initialize map
-const map = L.map('map', {
-    center: [30.27, -97.74], // Austin, TX default
-    zoom: 13,
-    zoomControl: true,
-    attributionControl: true
-});
-
-// Dark tile layer
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-    subdomains: 'abcd',
-    maxZoom: 20
-}).addTo(map);
-
-// Layer for hex cells
-let cellLayer = L.layerGroup().addTo(map);
+// State
+let map = null;
+let currentOverlays = [];
 let loadingTimeout = null;
+
+// MapKit JS initialization callback
+function initMapKit() {
+    mapkit.init({
+        authorizationCallback: function(done) {
+            // Fetch the MapKit JS token from the server
+            fetch('/api/v1/mapkit-token')
+                .then(res => res.text())
+                .then(token => done(token))
+                .catch(() => {
+                    console.error('Failed to fetch MapKit JS token');
+                });
+        }
+    });
+
+    map = new mapkit.Map('map', {
+        center: new mapkit.Coordinate(30.27, -97.74),
+        cameraDistance: 15000,
+        colorScheme: mapkit.Map.ColorSchemes.Dark,
+        mapType: mapkit.Map.MapTypes.MutedStandard,
+        showsCompass: mapkit.FeatureVisibility.Adaptive,
+        showsZoomControl: true,
+        showsMapTypeControl: false,
+        isRotationEnabled: true,
+        isZoomEnabled: true,
+        isScrollEnabled: true
+    });
+
+    // Load cells when map region changes
+    map.addEventListener('region-change-end', function() {
+        clearTimeout(loadingTimeout);
+        loadingTimeout = setTimeout(loadCells, 300);
+    });
+
+    // Handle overlay selection for popups
+    map.addEventListener('select', function(event) {
+        if (event.overlay && event.overlay._cellData) {
+            showCellPopup(event.overlay._cellData);
+        }
+    });
+
+    map.addEventListener('deselect', function() {
+        dismissPopup();
+    });
+
+    // Initial load
+    loadCells();
+    loadStats();
+    setInterval(loadStats, 60000);
+}
 
 // Load cells for current viewport
 async function loadCells() {
-    const bounds = map.getBounds();
+    if (!map) return;
+
+    const region = map.region;
+    const center = region.center;
+    const span = region.span;
+    const minLat = center.latitude - span.latitudeDelta / 2;
+    const maxLat = center.latitude + span.latitudeDelta / 2;
+    const minLon = center.longitude - span.longitudeDelta / 2;
+    const maxLon = center.longitude + span.longitudeDelta / 2;
+
     const params = new URLSearchParams({
-        minLat: bounds.getSouth(),
-        maxLat: bounds.getNorth(),
-        minLon: bounds.getWest(),
-        maxLon: bounds.getEast(),
+        minLat: minLat,
+        maxLat: maxLat,
+        minLon: minLon,
+        maxLon: maxLon,
         limit: 5000
     });
 
@@ -83,66 +130,104 @@ async function loadCells() {
 
 // Render hex cells on map
 function renderCells(cells) {
-    cellLayer.clearLayers();
+    // Remove old overlays
+    if (currentOverlays.length > 0) {
+        map.removeOverlays(currentOverlays);
+    }
+    currentOverlays = [];
 
-    cells.forEach(cell => {
+    const overlays = cells.map(cell => {
         const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
         const quality = cell.snrQuality || snrQuality(cell.averageSNR);
         const color = snrColor(quality);
         const opacity = 0.2 + 0.5 * Math.min(1, cell.contributionCount / 5);
 
-        const polygon = L.polygon(vertices, {
-            color: color,
-            weight: 0.5,
-            opacity: 0.6,
+        const style = new mapkit.Style({
             fillColor: color,
-            fillOpacity: opacity
+            fillOpacity: opacity,
+            strokeColor: color,
+            strokeOpacity: 0.6,
+            lineWidth: 0.5
         });
 
-        // Popup on click
-        polygon.on('click', () => {
-            const snrText = cell.averageSNR !== null
-                ? cell.averageSNR.toFixed(1) + ' dB'
-                : 'N/A';
-
-            let repeatersHTML = '';
-            if (cell.repeaterHexIDs && cell.repeaterHexIDs.length > 0) {
-                repeatersHTML = `
-                    <div class="repeaters">
-                        <div class="detail-label">Repeaters:</div>
-                        ${cell.repeaterHexIDs.map(id =>
-                            `<span class="repeater-tag">${id}</span>`
-                        ).join('')}
-                    </div>
-                `;
-            }
-
-            const popup = L.popup()
-                .setLatLng([cell.latitude, cell.longitude])
-                .setContent(`
-                    <div class="cell-popup">
-                        <h3 style="color: ${color}">Signal: ${quality}</h3>
-                        <div class="detail-row">
-                            <span class="detail-label">Avg SNR</span>
-                            <span class="detail-value">${snrText}</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Packets</span>
-                            <span class="detail-value">${cell.packetCount.toLocaleString()}</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Contributions</span>
-                            <span class="detail-value">${cell.contributionCount}</span>
-                        </div>
-                        ${repeatersHTML}
-                    </div>
-                `);
-
-            popup.openOn(map);
+        const polygon = new mapkit.PolygonOverlay(vertices, {
+            style: style,
+            enabled: true,
+            visible: true
         });
 
-        cellLayer.addLayer(polygon);
+        // Attach cell data for popup on select
+        polygon._cellData = cell;
+        polygon._quality = quality;
+        polygon._color = color;
+
+        return polygon;
     });
+
+    if (overlays.length > 0) {
+        map.addOverlays(overlays);
+    }
+    currentOverlays = overlays;
+}
+
+// Popup element
+let popupElement = null;
+
+function showCellPopup(cell) {
+    dismissPopup();
+
+    const quality = cell.snrQuality || snrQuality(cell.averageSNR);
+    const color = snrColor(quality);
+    const snrText = cell.averageSNR !== null && cell.averageSNR !== undefined
+        ? cell.averageSNR.toFixed(1) + ' dB'
+        : 'N/A';
+
+    let repeatersHTML = '';
+    if (cell.repeaterHexIDs && cell.repeaterHexIDs.length > 0) {
+        repeatersHTML = `
+            <div class="repeaters">
+                <div class="detail-label">Repeaters:</div>
+                ${cell.repeaterHexIDs.map(id =>
+                    `<span class="repeater-tag">${id}</span>`
+                ).join('')}
+            </div>
+        `;
+    }
+
+    popupElement = document.createElement('div');
+    popupElement.className = 'cell-popup-overlay';
+    popupElement.innerHTML = `
+        <div class="cell-popup">
+            <h3 style="color: ${color}">Signal: ${quality}</h3>
+            <div class="detail-row">
+                <span class="detail-label">Avg SNR</span>
+                <span class="detail-value">${snrText}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Packets</span>
+                <span class="detail-value">${cell.packetCount.toLocaleString()}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Contributions</span>
+                <span class="detail-value">${cell.contributionCount}</span>
+            </div>
+            ${repeatersHTML}
+        </div>
+    `;
+
+    popupElement.addEventListener('click', function(e) {
+        e.stopPropagation();
+        dismissPopup();
+    });
+
+    document.body.appendChild(popupElement);
+}
+
+function dismissPopup() {
+    if (popupElement) {
+        popupElement.remove();
+        popupElement = null;
+    }
 }
 
 // Load stats
@@ -170,16 +255,3 @@ async function loadStats() {
         console.error('Failed to load stats:', e);
     }
 }
-
-// Debounced cell loading on map move
-map.on('moveend', () => {
-    clearTimeout(loadingTimeout);
-    loadingTimeout = setTimeout(loadCells, 300);
-});
-
-// Initial load
-loadCells();
-loadStats();
-
-// Refresh stats periodically
-setInterval(loadStats, 60000);

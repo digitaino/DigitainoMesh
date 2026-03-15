@@ -25,8 +25,9 @@ struct SurveyController {
         }
 
         let now = ISO8601DateFormatter().string(from: Date())
-        // Normalize reference latitude to 1 decimal place for merging
-        let normalizedRefLat = (payload.referenceLatitude * 10).rounded() / 10
+        // Normalize reference latitude to nearest 10° band for global grid alignment.
+        // All clients use the same rounding so cells from different sessions merge correctly.
+        let normalizedRefLat = (payload.referenceLatitude / 10.0).rounded() * 10.0
 
         var acceptedCount = 0
 
@@ -277,5 +278,17 @@ struct SurveyController {
             cellsRemoved: cellsRemoved,
             cellsUpdated: cellsUpdated
         )
+    }
+
+    // MARK: - GET /api/v1/mapkit-token
+
+    @Sendable
+    func getMapKitToken(req: Request) async throws -> Response {
+        let token = try MapKitTokenGenerator.generateToken()
+        var headers = HTTPHeaders()
+        headers.add(name: .contentType, value: "text/plain")
+        // Cache for 1 hour (tokens are valid 24h, so this is safe)
+        headers.add(name: .cacheControl, value: "max-age=3600, public")
+        return Response(status: .ok, headers: headers, body: .init(string: token))
     }
 }

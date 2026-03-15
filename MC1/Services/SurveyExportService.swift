@@ -87,7 +87,8 @@ enum SurveyExportService {
             return nil
         }
 
-        let refLat = points.map(\.latitude).reduce(0, +) / Double(points.count)
+        let avgLat = points.map(\.latitude).reduce(0, +) / Double(points.count)
+        let refLat = HexGrid.fixedReferenceLatitude(for: avgLat)
         var buckets: [HexGrid.AxialCoord: [SignalSurveyPointDTO]] = [:]
 
         for point in points {

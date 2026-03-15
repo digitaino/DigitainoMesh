@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MeshCore Community Map</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.core.js"
+            crossorigin async
+            data-callback="initMapKit"
+            data-libraries="map,annotations,overlays"></script>
 </head>
 <body>
     <div id="map"></div>
@@ -14,19 +17,19 @@
         <h2>MeshCore Community Map</h2>
         <div class="stats-grid">
             <div class="stat">
-                <span class="stat-value" id="stat-cells">—</span>
+                <span class="stat-value" id="stat-cells">&mdash;</span>
                 <span class="stat-label">Cells Mapped</span>
             </div>
             <div class="stat">
-                <span class="stat-value" id="stat-uploads">—</span>
+                <span class="stat-value" id="stat-uploads">&mdash;</span>
                 <span class="stat-label">Uploads</span>
             </div>
             <div class="stat">
-                <span class="stat-value" id="stat-repeaters">—</span>
+                <span class="stat-value" id="stat-repeaters">&mdash;</span>
                 <span class="stat-label">Repeaters</span>
             </div>
             <div class="stat">
-                <span class="stat-value" id="stat-contributors">—</span>
+                <span class="stat-value" id="stat-contributors">&mdash;</span>
                 <span class="stat-label">Contributors</span>
             </div>
         </div>
@@ -42,7 +45,6 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

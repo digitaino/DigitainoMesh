@@ -83,6 +83,18 @@ enum HexGrid {
         }
     }
 
+    // MARK: - Fixed Reference Latitude
+
+    /// Returns a predetermined reference latitude for the given latitude,
+    /// ensuring all clients produce identical hex grids at the same location.
+    ///
+    /// Rounds to the nearest 10° band (e.g. 32.7° → 30°, -7.3° → -10°).
+    /// This means the grid Mercator correction is slightly imprecise
+    /// (off by up to 5° of latitude), but the cells are globally consistent.
+    static func fixedReferenceLatitude(for latitude: Double) -> Double {
+        (latitude / 10.0).rounded() * 10.0
+    }
+
     // MARK: - Cube Rounding
 
     /// Round fractional cube coordinates to the nearest hex center.
