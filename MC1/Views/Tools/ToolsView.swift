@@ -57,6 +57,7 @@ struct ToolsView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var sidebarPath = NavigationPath()
     @State private var isShowingLineOfSightPoints = false
+    @State private var navigateToSurvey = false
 
     @State private var lineOfSightViewModel = LineOfSightViewModel()
 
@@ -65,6 +66,7 @@ struct ToolsView: View {
     }
 
     var body: some View {
+        Group {
         if shouldUseSplitView {
             NavigationSplitView(columnVisibility: $columnVisibility) {
                 if isShowingLineOfSightPoints {
@@ -121,7 +123,20 @@ struct ToolsView: View {
                         BLEStatusIndicatorView()
                     }
                 }
+                .navigationDestination(isPresented: $navigateToSurvey) {
+                    SignalSurveyView()
+                }
             }
+        }
+        } // Group
+        .onChange(of: appState.navigation.pendingSurveyNavigation) { _, pending in
+            guard pending else { return }
+            if shouldUseSplitView {
+                selectTool(.signalSurvey)
+            } else {
+                navigateToSurvey = true
+            }
+            appState.navigation.clearPendingSurveyNavigation()
         }
     }
 

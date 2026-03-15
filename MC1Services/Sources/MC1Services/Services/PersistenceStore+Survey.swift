@@ -143,6 +143,15 @@ extension PersistenceStore {
         return try modelContext.fetchCount(descriptor)
     }
 
+    /// Fetches just the lat/lon coordinates for all points in a session (lightweight, for cell counting).
+    public func fetchSurveyPointCoordinates(sessionID: UUID) throws -> [(latitude: Double, longitude: Double)] {
+        let targetSessionID = sessionID
+        let descriptor = FetchDescriptor<SignalSurveyPoint>(
+            predicate: #Predicate { $0.surveySessionID == targetSessionID }
+        )
+        return try modelContext.fetch(descriptor).map { (latitude: $0.latitude, longitude: $0.longitude) }
+    }
+
     /// Checks if a packet hash already exists in a session (deduplication).
     public func surveyPointExists(sessionID: UUID, packetHash: String) throws -> Bool {
         let targetSessionID = sessionID

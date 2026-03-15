@@ -11,8 +11,8 @@ import Foundation
 enum HexGrid {
 
     /// Hex size in degrees of latitude (center to vertex).
-    /// Produces ~50m flat-to-flat cells at mid-latitudes.
-    static let size: Double = 0.00025
+    /// Produces ~100m flat-to-flat cells at mid-latitudes.
+    static let size: Double = 0.0005
 
     /// Axial hex coordinate pair.
     struct AxialCoord: Hashable {

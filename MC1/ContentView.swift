@@ -142,6 +142,21 @@ struct MainTabView: View {
             .opacity(appState.statusPillState == .hidden ? 0 : 1)
             .animation(pillAnimation, value: appState.statusPillState)
             .allowsHitTesting(appState.statusPillState != .hidden)
+
+            // Floating survey indicator (visible on all tabs except Tools)
+            if appState.isSurveyActive && navigation.selectedTab != 3 {
+                SurveyIndicatorView(
+                    status: appState.surveyLiveStatus,
+                    onTap: {
+                        appState.navigation.navigateToSurvey()
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, 16)
+                .padding(.bottom, 60)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .animation(.spring(duration: 0.3), value: appState.isSurveyActive)
+            }
         }
         .onChange(of: appState.statusPillState, initial: true) { _, new in
             if new != .hidden {

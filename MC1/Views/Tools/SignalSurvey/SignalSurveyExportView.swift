@@ -26,7 +26,7 @@ struct SignalSurveyExportView: View {
                         Text("Export ready")
                             .font(.headline)
 
-                        Text("Anonymized grid data (~50m cells). No exact GPS, no sender identity, no message content.")
+                        Text("Anonymized grid data (~100m cells). No exact GPS, no sender identity, no message content.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)

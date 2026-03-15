@@ -126,6 +126,9 @@ public final class AppState {
     /// Whether a signal survey session is currently recording.
     var isSurveyActive = false
 
+    /// Live status broadcast by the survey ViewModel for the floating indicator.
+    var surveyLiveStatus = SurveyLiveStatus()
+
     // MARK: - CLI Tool
 
     /// Persistent CLI tool view model (survives tab switches, reset on device disconnect)

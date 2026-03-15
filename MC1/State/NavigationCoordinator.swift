@@ -69,6 +69,18 @@ public final class NavigationCoordinator {
         selectedTab = 1
     }
 
+    /// Whether to navigate into Signal Survey on the Tools tab.
+    var pendingSurveyNavigation = false
+
+    func navigateToSurvey() {
+        pendingSurveyNavigation = true
+        selectedTab = 3  // Tools tab
+    }
+
+    func clearPendingSurveyNavigation() {
+        pendingSurveyNavigation = false
+    }
+
     func navigateToContactDetail(_ contact: ContactDTO) {
         pendingContactDetail = contact
         selectedTab = 1

@@ -10,9 +10,10 @@ struct SignalSurveyView: View {
     @State private var showingSessionList = false
     @State private var showingExportSheet = false
     @State private var showingPacketList = false
+    @State private var showingSurveySetup = false
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
-    @AppStorage("surveyProbeDistance") private var probeDistancePref: Double = 50
+    @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
     @Namespace private var mapScope
 
     var body: some View {
@@ -34,6 +35,7 @@ struct SignalSurveyView: View {
                   let deviceID = appState.currentDeviceID else { return }
             await viewModel.loadSessions(dataStore: dataStore, deviceID: deviceID)
             await viewModel.loadContacts(dataStore: dataStore, deviceID: deviceID)
+            await viewModel.loadProbeChannels(dataStore: dataStore, deviceID: deviceID)
 
             // Resume if the SurveyService still has an active session (e.g. navigated away and back)
             if let surveyService = appState.services?.surveyService {
@@ -41,8 +43,10 @@ struct SignalSurveyView: View {
                     surveyService: surveyService,
                     locationService: appState.locationService,
                     binaryProtocolService: appState.services?.binaryProtocolService,
-                    dataStore: dataStore,
-                    deviceID: deviceID
+                    messageService: appState.services?.messageService,
+                    deviceID: deviceID,
+                    pathHashMode: appState.connectedDevice?.pathHashMode ?? 0,
+                    dataStore: dataStore
                 )
             }
         }
@@ -80,6 +84,9 @@ struct SignalSurveyView: View {
             )
             .presentationDetents([.medium])
         }
+        .sheet(isPresented: $showingSurveySetup) {
+            surveySetupSheet
+        }
         .alert("Survey Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { if !$0 { viewModel.errorMessage = nil } }
@@ -92,13 +99,17 @@ struct SignalSurveyView: View {
         }
         .onAppear {
             viewModel.probeEnabled = probeEnabledPref
-            viewModel.probeDistanceMeters = probeDistancePref
+            if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref) {
+                viewModel.probeFrequency = freq
+            }
         }
         .onChange(of: probeEnabledPref) { _, newValue in
             viewModel.probeEnabled = newValue
         }
-        .onChange(of: probeDistancePref) { _, newValue in
-            viewModel.probeDistanceMeters = newValue
+        .onChange(of: probeFrequencyPref) { _, newValue in
+            if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: newValue) {
+                viewModel.probeFrequency = freq
+            }
         }
         .onChange(of: viewModel.isActive) { _, isActive in
             UIApplication.shared.isIdleTimerDisabled = isActive
@@ -107,6 +118,9 @@ struct SignalSurveyView: View {
         .onDisappear {
             // Sync state when navigating away (survey may still be running)
             appState.isSurveyActive = viewModel.isActive
+        }
+        .onChange(of: viewModel.liveStatus) { _, newStatus in
+            appState.surveyLiveStatus = newStatus
         }
     }
 
@@ -157,6 +171,7 @@ struct SignalSurveyView: View {
                             .frame(width: 60, height: 60)
                             .contentShape(.circle)
                             .onTapGesture {
+                                viewModel.trackingUserLocation = false
                                 if viewModel.selectedCell?.coordKey == cell.coordKey {
                                     viewModel.selectedCell = nil
                                 } else {
@@ -328,9 +343,12 @@ struct SignalSurveyView: View {
                                 cellStatColumn(label: "SNR Range", value: String(format: "%.0f – %.0f", minSNR, maxSNR), unit: "dB")
                             }
                             if let latest = filtered.latestTimestamp {
-                                cellStatColumn(label: "Last Heard", value: relativeTimeString(from: latest), unit: "ago")
+                                lastHeardColumn(label: "Last Heard", date: latest, unit: "ago")
                             }
                         } else {
+                            if let bestGW = cell.bestGatewaySNR {
+                                cellStatColumn(label: "Best GW", value: String(format: "%.1f", bestGW), unit: "dB")
+                            }
                             if let snr = cell.averageSNR {
                                 cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
                             }
@@ -341,7 +359,10 @@ struct SignalSurveyView: View {
                                 cellStatColumn(label: "SNR Range", value: String(format: "%.0f – %.0f", minSNR, maxSNR), unit: "dB")
                             }
                             if let latest = cell.latestTimestamp {
-                                cellStatColumn(label: "Last Heard", value: relativeTimeString(from: latest), unit: "ago")
+                                lastHeardColumn(label: "Last Heard", date: latest, unit: "ago")
+                            }
+                            if cell.traceResponseCount > 0 {
+                                cellStatColumn(label: "Traces", value: "\(cell.traceResponseCount)", unit: "")
                             }
                         }
                     }
@@ -482,8 +503,15 @@ struct SignalSurveyView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func relativeTimeString(from date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
+    /// "Last Heard" column that auto-refreshes every second via TimelineView.
+    private func lastHeardColumn(label: String, date: Date, unit: String) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            cellStatColumn(label: label, value: relativeTimeString(from: date, now: context.date), unit: unit)
+        }
+    }
+
+    private func relativeTimeString(from date: Date, now: Date = Date()) -> String {
+        let seconds = Int(now.timeIntervalSince(date))
         if seconds < 60 { return "\(seconds)s" }
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }
@@ -517,6 +545,20 @@ struct SignalSurveyView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Toggle visualization mode")
+
+                    // Track user location
+                    Button {
+                        viewModel.trackingUserLocation.toggle()
+                    } label: {
+                        Image(systemName: viewModel.trackingUserLocation
+                              ? "location.fill" : "location")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(viewModel.trackingUserLocation ? .blue : .primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Track current location")
 
                     // Center on data
                     Button {
@@ -594,44 +636,15 @@ struct SignalSurveyView: View {
                         }
                         .buttonStyle(.plain)
 
-                        Button {
-                            Task { await viewModel.sendManualProbe() }
-                        } label: {
-                            Image(systemName: "wave.3.right")
-                                .font(.caption)
-                                .foregroundStyle(viewModel.canSendManualProbe ? .orange : .secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .liquidGlass(in: .capsule)
-                                .overlay {
-                                    Circle()
-                                        .stroke(Color.orange, lineWidth: 2)
-                                        .scaleEffect(probePulseScale)
-                                        .opacity(probePulseScale > 1 ? 0 : 1)
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!viewModel.canSendManualProbe)
-                        .onChange(of: viewModel.probeVisualPulse) { _, _ in
-                            probePulseScale = 1.0
-                            withAnimation(.easeOut(duration: 0.6)) {
-                                probePulseScale = 2.5
-                            }
-                            Task {
-                                try? await Task.sleep(for: .seconds(0.65))
-                                probePulseScale = 1.0
-                            }
-                        }
-
                         if viewModel.probeEnabled {
                             Menu {
-                                ForEach([25.0, 50.0, 100.0, 200.0], id: \.self) { distance in
+                                ForEach(SignalSurveyViewModel.ProbeFrequency.allCases) { freq in
                                     Button {
-                                        probeDistancePref = distance
+                                        probeFrequencyPref = freq.rawValue
                                     } label: {
                                         HStack {
-                                            Text("\(Int(distance))m")
-                                            if probeDistancePref == distance {
+                                            Text(freq.rawValue)
+                                            if viewModel.probeFrequency == freq {
                                                 Image(systemName: "checkmark")
                                             }
                                         }
@@ -639,9 +652,9 @@ struct SignalSurveyView: View {
                                 }
                             } label: {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "ruler")
+                                    Image(systemName: "gauge.with.dots.needle.33percent")
                                         .font(.caption)
-                                    Text("\(Int(probeDistancePref))m")
+                                    Text(viewModel.probeFrequency.rawValue)
                                         .font(.caption)
                                 }
                                 .foregroundStyle(.secondary)
@@ -649,6 +662,8 @@ struct SignalSurveyView: View {
                                 .padding(.vertical, 5)
                                 .liquidGlass(in: .capsule)
                             }
+
+                            probeChannelMenu
                         }
                     }
                 }
@@ -664,7 +679,45 @@ struct SignalSurveyView: View {
                         }
                 }
 
-                surveyToggleButton
+                // Start/Stop + Manual Probe buttons
+                HStack(spacing: 10) {
+                    surveyToggleButton
+
+                    if viewModel.isActive {
+                        Button {
+                            Task { await viewModel.sendManualProbe() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "wave.3.right")
+                                Text("Probe")
+                                    .fontWeight(.semibold)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(.white)
+                            .background(viewModel.canSendManualProbe ? Color.orange : Color.secondary)
+                            .clipShape(Capsule())
+                            .opacity(viewModel.canSendManualProbe ? 1.0 : 0.6)
+                            .overlay {
+                                Capsule()
+                                    .stroke(Color.orange, lineWidth: 2)
+                                    .scaleEffect(probePulseScale)
+                                    .opacity(probePulseScale > 1 ? 0 : 1)
+                            }
+                        }
+                        .disabled(!viewModel.canSendManualProbe)
+                        .onChange(of: viewModel.probeVisualPulse) { _, _ in
+                            probePulseScale = 1.0
+                            withAnimation(.easeOut(duration: 0.6)) {
+                                probePulseScale = 2.5
+                            }
+                            Task {
+                                try? await Task.sleep(for: .seconds(0.65))
+                                probePulseScale = 1.0
+                            }
+                        }
+                    }
+                }
             }
             .sensoryFeedback(.impact(weight: .heavy, intensity: 1.0), trigger: viewModel.probeSuccessHaptic)
             .sensoryFeedback(.error, trigger: viewModel.probeErrorHaptic)
@@ -674,12 +727,273 @@ struct SignalSurveyView: View {
         .animation(.snappy(duration: 0.25), value: viewModel.selectedCell?.coordKey)
     }
 
+    // MARK: - Survey Setup Sheet
+
+    private var surveySetupSheet: some View {
+        NavigationStack {
+            List {
+                // MARK: Passive Mode
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label {
+                            Text("Passive")
+                                .font(.subheadline.weight(.semibold))
+                        } icon: {
+                            Image(systemName: "ear")
+                                .foregroundStyle(.blue)
+                        }
+                        Text("Always on. Listens for any mesh traffic and records each received packet with your GPS location. The map builds a coverage heatmap from real-world traffic — no transmissions required.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                } header: {
+                    Text("Survey Modes")
+                } footer: {
+                    Text("Signal quality is shown as hexagonal grid cells (~100m). Each cell is colored by the best repeater SNR when discover data is available, otherwise the average SNR of all packets. Tap any cell for detailed stats.")
+                }
+
+                // MARK: Active Mode
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label {
+                            Text("Active")
+                                .font(.subheadline.weight(.semibold))
+                        } icon: {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .foregroundStyle(.orange)
+                        }
+                        Text("Sends probe packets as you move to actively test the mesh. Each probe cycle sends a discover request (identifies nearby repeaters) and a flood trace (measures how far the mesh reaches). Cells where probes get no response are marked as dead zones.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+
+                    Toggle("Enable Active Probing", isOn: $probeEnabledPref)
+
+                    if probeEnabledPref {
+                        HStack {
+                            Text("Probe Frequency")
+                            Spacer()
+                            Menu {
+                                ForEach(SignalSurveyViewModel.ProbeFrequency.allCases) { freq in
+                                    Button {
+                                        probeFrequencyPref = freq.rawValue
+                                    } label: {
+                                        HStack {
+                                            VStack(alignment: .leading) {
+                                                Text(freq.rawValue)
+                                                Text(freq.subtitle)
+                                            }
+                                            if probeFrequencyPref == freq.rawValue {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Text(SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref)?.rawValue ?? "Normal")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } footer: {
+                    if probeEnabledPref {
+                        let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref) ?? .normal
+                        Text("Probes every ~\(Int(freq.distanceMeters))m of movement (min \(Int(freq.minInterval))s cooldown). Also probes on hex cell boundary crossings and when stationary for \(Int(freq.maxInterval))s. Tap the Probe button on the map at any time to send one manually.")
+                    } else {
+                        Text("When disabled, the survey only records passively overheard traffic. Enable probing to actively test coverage and detect dead zones.")
+                    }
+                }
+
+                // MARK: Channel Probe
+                if probeEnabledPref {
+                    Section {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label {
+                                Text("Channel Probe")
+                                    .font(.subheadline.weight(.medium))
+                            } icon: {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .foregroundStyle(.cyan)
+                            }
+                            Text("Sends a message on a private channel during each probe cycle. Other nodes that hear the message record a heard-repeat, letting you measure real message delivery across the mesh.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+
+                        if viewModel.availableProbeChannels.isEmpty {
+                            HStack {
+                                Text("No private channels")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Create") {
+                                    guard let channelService = appState.services?.channelService,
+                                          let dataStore = appState.offlineDataStore,
+                                          let deviceID = appState.currentDeviceID else { return }
+                                    Task {
+                                        await viewModel.createSurveyChannel(
+                                            channelService: channelService,
+                                            dataStore: dataStore,
+                                            deviceID: deviceID,
+                                            maxChannels: appState.connectedDevice?.maxChannels ?? 8
+                                        )
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        } else {
+                            Picker("Channel", selection: $viewModel.selectedProbeChannel) {
+                                Text("None").tag(ChannelDTO?.none)
+                                ForEach(viewModel.availableProbeChannels) { channel in
+                                    Text(channel.displayName).tag(ChannelDTO?.some(channel))
+                                }
+                            }
+
+                            Button {
+                                guard let channelService = appState.services?.channelService,
+                                      let dataStore = appState.offlineDataStore,
+                                      let deviceID = appState.currentDeviceID else { return }
+                                Task {
+                                    await viewModel.createSurveyChannel(
+                                        channelService: channelService,
+                                        dataStore: dataStore,
+                                        deviceID: deviceID,
+                                        maxChannels: appState.connectedDevice?.maxChannels ?? 8
+                                    )
+                                }
+                            } label: {
+                                Label("Create Survey Channel", systemImage: "plus.circle")
+                            }
+                        }
+                    } footer: {
+                        Text("Use a dedicated private channel to avoid cluttering conversations. Optional — probing works without this.")
+                    }
+                }
+            }
+            .navigationTitle("Survey Setup")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingSurveySetup = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Start") {
+                        showingSurveySetup = false
+                        Task {
+                            guard let service = appState.services?.surveyService else { return }
+                            await viewModel.startSurvey(
+                                surveyService: service,
+                                locationService: appState.locationService,
+                                binaryProtocolService: appState.services?.binaryProtocolService,
+                                messageService: appState.services?.messageService,
+                                deviceID: appState.currentDeviceID,
+                                pathHashMode: appState.connectedDevice?.pathHashMode ?? 0
+                            )
+                        }
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    // MARK: - Probe Channel Menu
+
+    private var probeChannelMenu: some View {
+        Menu {
+            if viewModel.availableProbeChannels.isEmpty {
+                Button {
+                    guard let channelService = appState.services?.channelService,
+                          let dataStore = appState.offlineDataStore,
+                          let deviceID = appState.currentDeviceID else { return }
+                    Task {
+                        await viewModel.createSurveyChannel(
+                            channelService: channelService,
+                            dataStore: dataStore,
+                            deviceID: deviceID,
+                            maxChannels: appState.connectedDevice?.maxChannels ?? 8
+                        )
+                    }
+                } label: {
+                    Label("Create Survey Channel", systemImage: "plus.circle")
+                }
+            } else {
+                ForEach(viewModel.availableProbeChannels, id: \.id) { channel in
+                    Button {
+                        viewModel.selectedProbeChannel = channel
+                    } label: {
+                        HStack {
+                            Text(channel.displayName)
+                            if viewModel.selectedProbeChannel?.id == channel.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+
+                Divider()
+
+                Button {
+                    viewModel.selectedProbeChannel = nil
+                } label: {
+                    HStack {
+                        Text("None")
+                        if viewModel.selectedProbeChannel == nil {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+
+                Divider()
+
+                Button {
+                    guard let channelService = appState.services?.channelService,
+                          let dataStore = appState.offlineDataStore,
+                          let deviceID = appState.currentDeviceID else { return }
+                    Task {
+                        await viewModel.createSurveyChannel(
+                            channelService: channelService,
+                            dataStore: dataStore,
+                            deviceID: deviceID,
+                            maxChannels: appState.connectedDevice?.maxChannels ?? 8
+                        )
+                    }
+                } label: {
+                    Label("Create Survey Channel", systemImage: "plus.circle")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: viewModel.hasProbeChannel
+                      ? "bubble.left.and.bubble.right.fill"
+                      : "bubble.left.and.bubble.right")
+                    .font(.caption)
+                if let channel = viewModel.selectedProbeChannel {
+                    Text(channel.displayName)
+                        .font(.caption)
+                        .lineLimit(1)
+                } else {
+                    Text("Ch")
+                        .font(.caption)
+                }
+            }
+            .foregroundStyle(viewModel.hasProbeChannel ? .cyan : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .liquidGlass(in: .capsule)
+        }
+    }
+
     private var surveyToggleButton: some View {
         let isDisabled = appState.services?.surveyService == nil
 
         return Button {
-            Task {
-                if viewModel.isActive {
+            if viewModel.isActive {
+                Task {
                     guard let service = appState.services?.surveyService else { return }
                     await viewModel.stopSurvey(
                         surveyService: service,
@@ -687,14 +1001,9 @@ struct SignalSurveyView: View {
                         dataStore: appState.offlineDataStore,
                         deviceID: appState.currentDeviceID
                     )
-                } else {
-                    guard let service = appState.services?.surveyService else { return }
-                    await viewModel.startSurvey(
-                        surveyService: service,
-                        locationService: appState.locationService,
-                        binaryProtocolService: appState.services?.binaryProtocolService
-                    )
                 }
+            } else {
+                showingSurveySetup = true
             }
         } label: {
             HStack(spacing: 6) {
@@ -770,14 +1079,7 @@ struct SignalSurveyView: View {
         } actions: {
             if appState.services?.surveyService != nil {
                 Button("Start Survey") {
-                    Task {
-                        guard let service = appState.services?.surveyService else { return }
-                        await viewModel.startSurvey(
-                            surveyService: service,
-                            locationService: appState.locationService,
-                            binaryProtocolService: appState.services?.binaryProtocolService
-                        )
-                    }
+                    showingSurveySetup = true
                 }
                 .buttonStyle(.borderedProminent)
             } else {
@@ -870,6 +1172,16 @@ struct SignalSurveyView: View {
                     Text("Active")
                         .font(.caption2)
                         .foregroundStyle(.green)
+                }
+
+                if let stats = viewModel.sessionStats[session.id] {
+                    Label("\(stats.pointCount)", systemImage: "wave.3.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    Label("\(stats.cellCount)", systemImage: "hexagon")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 if session.id == viewModel.selectedSessionID {
