@@ -46,6 +46,7 @@ function hexVerticesAtCenter(centerLat, centerLon, refLat) {
 // State
 let map = null;
 let currentOverlays = [];
+let currentRepeaterAnnotations = [];
 let loadingTimeout = null;
 
 // MapKit JS initialization callback
@@ -75,10 +76,13 @@ function initMapKit() {
         isScrollEnabled: true
     });
 
-    // Load cells when map region changes
+    // Load cells and repeaters when map region changes
     map.addEventListener('region-change-end', function() {
         clearTimeout(loadingTimeout);
-        loadingTimeout = setTimeout(loadCells, 300);
+        loadingTimeout = setTimeout(() => {
+            loadCells();
+            loadRepeaters();
+        }, 300);
     });
 
     // Handle overlay selection for popups
@@ -94,6 +98,7 @@ function initMapKit() {
 
     // Initial load
     loadCells();
+    loadRepeaters();
     loadStats();
     setInterval(loadStats, 60000);
 }
@@ -168,6 +173,60 @@ function renderCells(cells) {
         map.addOverlays(overlays);
     }
     currentOverlays = overlays;
+}
+
+// Load repeaters for current viewport
+async function loadRepeaters() {
+    if (!map) return;
+
+    const region = map.region;
+    const center = region.center;
+    const span = region.span;
+    const minLat = center.latitude - span.latitudeDelta / 2;
+    const maxLat = center.latitude + span.latitudeDelta / 2;
+    const minLon = center.longitude - span.longitudeDelta / 2;
+    const maxLon = center.longitude + span.longitudeDelta / 2;
+
+    const params = new URLSearchParams({
+        minLat: minLat,
+        maxLat: maxLat,
+        minLon: minLon,
+        maxLon: maxLon
+    });
+
+    try {
+        const response = await fetch(`${API_BASE}/repeaters?${params}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        renderRepeaters(data.repeaters);
+    } catch (e) {
+        console.error('Failed to load repeaters:', e);
+    }
+}
+
+// Render repeater annotations on map
+function renderRepeaters(repeaters) {
+    // Remove old annotations
+    if (currentRepeaterAnnotations.length > 0) {
+        map.removeAnnotations(currentRepeaterAnnotations);
+    }
+    currentRepeaterAnnotations = [];
+
+    const annotations = repeaters.map(repeater => {
+        const coord = new mapkit.Coordinate(repeater.latitude, repeater.longitude);
+        const annotation = new mapkit.MarkerAnnotation(coord, {
+            title: repeater.name,
+            subtitle: repeater.hexID,
+            color: '#22d3ee',
+            glyphText: '📡'
+        });
+        return annotation;
+    });
+
+    if (annotations.length > 0) {
+        map.addAnnotations(annotations);
+    }
+    currentRepeaterAnnotations = annotations;
 }
 
 // Popup element

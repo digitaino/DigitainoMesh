@@ -60,6 +60,7 @@ actor SurveyUploadService {
         let cellSizeDegrees: Double
         let referenceLatitude: Double
         let cells: [SurveyExportService.CellData]
+        let repeaters: [SurveyExportService.RepeaterInfo]
     }
 
     struct UploadResponse: Codable {
@@ -105,11 +106,20 @@ actor SurveyUploadService {
     // MARK: - Upload
 
     /// Upload survey data to the community map server.
-    func upload(sessionID: UUID, dataStore: PersistenceStore) async throws -> UploadResponse {
+    /// - Parameters:
+    ///   - sessionID: The survey session to upload.
+    ///   - dataStore: Persistence store for reading survey points.
+    ///   - repeaterContacts: Known contacts for resolving repeater hex IDs to names/locations.
+    func upload(
+        sessionID: UUID,
+        dataStore: PersistenceStore,
+        repeaterContacts: [ContactDTO] = []
+    ) async throws -> UploadResponse {
         guard let result = try await SurveyExportService.generateCellData(
             sessionID: sessionID,
             dataStore: dataStore,
-            includeTimeRange: false
+            includeTimeRange: false,
+            repeaterContacts: repeaterContacts
         ) else {
             throw SurveyUploadError.noData
         }
@@ -122,7 +132,8 @@ actor SurveyUploadService {
             gridType: "hex",
             cellSizeDegrees: HexGrid.size,
             referenceLatitude: result.referenceLatitude,
-            cells: result.cells
+            cells: result.cells,
+            repeaters: result.repeaters
         )
 
         let encoder = JSONEncoder()

@@ -56,6 +56,14 @@ enum SurveyExportService {
         let referenceLatitude: Double
     }
 
+    /// Resolved repeater information for community map display.
+    struct RepeaterInfo: Codable {
+        let hexID: String
+        let name: String
+        let latitude: Double
+        let longitude: Double
+    }
+
     struct RouteBreakdown: Codable {
         let flood: Int
         let direct: Int
@@ -72,14 +80,17 @@ enum SurveyExportService {
         let cells: [CellData]
         let referenceLatitude: Double
         let points: [SignalSurveyPointDTO]
+        let repeaters: [RepeaterInfo]
     }
 
     /// Generate aggregated cell data from a survey session.
     /// Shared by both file export and community upload.
+    /// When `repeaterContacts` is provided, resolves hex IDs to names/locations for community map.
     static func generateCellData(
         sessionID: UUID,
         dataStore: PersistenceStore,
-        includeTimeRange: Bool = true
+        includeTimeRange: Bool = true,
+        repeaterContacts: [ContactDTO] = []
     ) async throws -> CellDataResult? {
         let points = try await dataStore.fetchSurveyPoints(sessionID: sessionID)
         guard !points.isEmpty else {
@@ -134,7 +145,23 @@ enum SurveyExportService {
             )
         }
 
-        return CellDataResult(cells: cells, referenceLatitude: refLat, points: points)
+        // Resolve unique repeater hex IDs to contact names and locations
+        let allHexIDs = Set(cells.flatMap(\.repeaterHexIDs))
+        let resolvedRepeaters: [RepeaterInfo] = allHexIDs.compactMap { hexID in
+            guard let hashBytes = Data(hexString: hexID) else { return nil }
+            guard let contact = RepeaterResolver.bestMatch(
+                for: hashBytes, in: repeaterContacts, userLocation: nil
+            ) else { return nil }
+            guard contact.hasLocation else { return nil }
+            return RepeaterInfo(
+                hexID: hexID,
+                name: contact.displayName,
+                latitude: contact.latitude,
+                longitude: contact.longitude
+            )
+        }
+
+        return CellDataResult(cells: cells, referenceLatitude: refLat, points: points, repeaters: resolvedRepeaters)
     }
 
     // MARK: - Generate Export

@@ -4,6 +4,7 @@ import SwiftUI
 struct SignalSurveyExportView: View {
     let sessionID: UUID
     let dataStore: PersistenceStore?
+    var deviceID: UUID?
 
     @Environment(\.dismiss) private var dismiss
     @State private var exportURL: URL?
@@ -136,8 +137,19 @@ struct SignalSurveyExportView: View {
         defer { isUploading = false }
 
         do {
+            // Fetch repeater contacts for resolution (best-effort)
+            var repeaterContacts: [ContactDTO] = []
+            if let deviceID {
+                let allContacts = (try? await dataStore.fetchContacts(deviceID: deviceID)) ?? []
+                repeaterContacts = allContacts.filter { $0.type == .repeater }
+            }
+
             let service = SurveyUploadService()
-            let response = try await service.upload(sessionID: sessionID, dataStore: dataStore)
+            let response = try await service.upload(
+                sessionID: sessionID,
+                dataStore: dataStore,
+                repeaterContacts: repeaterContacts
+            )
             uploadResult = "\(response.accepted) cells uploaded"
         } catch {
             uploadError = error.localizedDescription

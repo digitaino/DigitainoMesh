@@ -137,6 +137,35 @@ struct SurveyController {
             acceptedCount += 1
         }
 
+        // Upsert repeater locations from resolved info
+        if let repeaterInfos = payload.repeaters {
+            for info in repeaterInfos {
+                guard (-90...90).contains(info.latitude),
+                      (-180...180).contains(info.longitude) else { continue }
+
+                let existing = try await RepeaterLocation.query(on: req.db)
+                    .filter(\.$hexID == info.hexID)
+                    .first()
+
+                if let existing {
+                    existing.name = info.name
+                    existing.latitude = info.latitude
+                    existing.longitude = info.longitude
+                    existing.lastUpdated = now
+                    try await existing.save(on: req.db)
+                } else {
+                    let repeater = RepeaterLocation(
+                        hexID: info.hexID,
+                        name: info.name,
+                        latitude: info.latitude,
+                        longitude: info.longitude,
+                        lastUpdated: now
+                    )
+                    try await repeater.save(on: req.db)
+                }
+            }
+        }
+
         // Log upload
         let log = UploadLog(
             contributorID: payload.contributorID,
@@ -278,6 +307,40 @@ struct SurveyController {
             cellsRemoved: cellsRemoved,
             cellsUpdated: cellsUpdated
         )
+    }
+
+    // MARK: - GET /api/v1/repeaters
+
+    @Sendable
+    func getRepeaters(req: Request) async throws -> RepeatersResponse {
+        let minLat = req.query[Double.self, at: "minLat"]
+        let maxLat = req.query[Double.self, at: "maxLat"]
+        let minLon = req.query[Double.self, at: "minLon"]
+        let maxLon = req.query[Double.self, at: "maxLon"]
+
+        var query = RepeaterLocation.query(on: req.db)
+
+        // Apply bounding box filter if all params provided
+        if let minLat, let maxLat, let minLon, let maxLon {
+            query = query
+                .filter(\.$latitude >= minLat)
+                .filter(\.$latitude <= maxLat)
+                .filter(\.$longitude >= minLon)
+                .filter(\.$longitude <= maxLon)
+        }
+
+        let locations = try await query.all()
+
+        let response = locations.map {
+            RepeaterLocationResponse(
+                hexID: $0.hexID,
+                name: $0.name,
+                latitude: $0.latitude,
+                longitude: $0.longitude
+            )
+        }
+
+        return RepeatersResponse(repeaters: response)
     }
 
     // MARK: - GET /api/v1/mapkit-token

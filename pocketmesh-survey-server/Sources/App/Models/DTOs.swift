@@ -9,6 +9,14 @@ struct UploadPayload: Content {
     let cellSizeDegrees: Double
     let referenceLatitude: Double
     let cells: [UploadCellData]
+    let repeaters: [UploadRepeaterInfo]?
+}
+
+struct UploadRepeaterInfo: Content {
+    let hexID: String
+    let name: String
+    let latitude: Double
+    let longitude: Double
 }
 
 struct UploadCellData: Content {
@@ -66,6 +74,19 @@ struct StatsResponse: Content {
     let uniqueRepeaters: Int
     let uniqueContributors: Int
     let lastUpload: String?
+}
+
+// MARK: - Repeaters Response
+
+struct RepeaterLocationResponse: Content {
+    let hexID: String
+    let name: String
+    let latitude: Double
+    let longitude: Double
+}
+
+struct RepeatersResponse: Content {
+    let repeaters: [RepeaterLocationResponse]
 }
 
 // MARK: - Delete Response

@@ -58,7 +58,8 @@ struct SignalSurveyView: View {
             if let sessionID = viewModel.selectedSessionID {
                 SignalSurveyExportView(
                     sessionID: sessionID,
-                    dataStore: appState.offlineDataStore
+                    dataStore: appState.offlineDataStore,
+                    deviceID: appState.currentDeviceID
                 )
             }
         }
