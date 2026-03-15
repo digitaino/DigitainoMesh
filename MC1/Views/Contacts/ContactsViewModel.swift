@@ -251,9 +251,11 @@ final class ContactsViewModel {
                 result = result.filter { $0.type == .repeater || $0.type == .room }
             }
         } else {
-            // Filter by search text only
+            // Filter by search text (name or public key hex prefix)
+            let query = searchText.trimmingCharacters(in: .whitespaces)
             result = result.filter { contact in
-                contact.displayName.localizedStandardContains(searchText)
+                contact.displayName.localizedStandardContains(query)
+                || contact.publicKeyHex.localizedCaseInsensitiveContains(query)
             }
         }
 

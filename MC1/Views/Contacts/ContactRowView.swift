@@ -86,6 +86,11 @@ struct ContactRowView: View {
                         }
                     }
                 }
+
+                // Public key prefix (first 3 bytes)
+                Text(contact.publicKey.prefix(3).hexString(separator: " "))
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.tertiary)
             }
             .alignmentGuide(.listRowSeparatorLeading) { dimensions in
                 dimensions[.leading]
