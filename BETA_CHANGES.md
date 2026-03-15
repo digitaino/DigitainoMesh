@@ -1,6 +1,62 @@
-# Beta Changes — Build 13
+# Beta Changes — v0.10.1 (Build 2)
 
-## Shared Route Map
+## Signal Survey (Wardriving)
+
+- **Coverage heatmap tool** — New tool under Tools > Signal Survey. Start a GPS-tagged survey session that pairs every received RF packet with your phone's location. As you move around, the app builds a live coverage map of your mesh network's signal quality.
+
+- **Hex grid heatmap** — Received packets are aggregated into a hex grid overlay on the map. Each cell is color-coded by average SNR (green = excellent, red = poor). Tap any hex cell to see a detail card with signal quality, packet count, and which repeaters were heard in that cell. The heatmap is the default visualization; you can switch to a raw point cloud view if preferred.
+
+- **Active trace probing** — Toggle active probing to automatically send flood traces on a smart schedule (triggered by cell-exit or a max timer). Probed repeaters appear in the cell detail card alongside passively heard packets. Filter the heatmap by All / Passive / Active to see probe-only vs. passive-only coverage. A manual probe button with heavy haptic feedback and a visual pulse animation lets you trigger a trace on demand.
+
+- **Repeater annotations** — Resolved repeater contacts with GPS locations appear as cyan antenna pins on the survey map. Tap a repeater pin to see a detail sheet with name, public key, coordinates, and a "View Contact Card" button. When you select a repeater filter chip in the cell detail card, a dashed line is drawn from the cell center to the repeater's location on the map.
+
+- **Session management** — Create, rename, and delete survey sessions. Switch between sessions to review past data. The active session resumes automatically when navigating back to the survey. A "Recording" indicator is visible from the Tools list. Screen lock is prevented during recording.
+
+- **JSON export** — Export anonymized grid data as JSON for external analysis.
+
+  **How to test:** Go to Tools > Signal Survey. Tap "Start Survey" and walk/drive around with your MeshCore device connected. Verify hex cells appear and update as packets arrive. Tap a cell to see the detail card — check signal bars, quality label, packet count, and repeater chips. Switch between All/Passive/Active filters and verify the cell colors and card stats update. Toggle active probing and verify traces are sent (the manual probe button should show an expanding orange ring). Tap a cyan repeater pin and verify the detail sheet shows correct info. Navigate away from the survey and come back — it should resume recording. Try renaming and deleting a session.
+
+---
+
+## Nodes List Improvements
+
+- **Search by public key** — The search bar in the Nodes list now matches against public key hex prefixes. Type a hex string like "0C" or "D1A9" and nodes whose public key starts with that prefix appear at the top of results, followed by substring matches, then name-only matches.
+
+- **Public key prefix display** — Each node row now shows the first 3 bytes of the node's public key in monospaced text below the name and distance (e.g. "0C 13 77"). This makes it easy to identify nodes by their key prefix at a glance.
+
+- **Public key in map contact detail** — Tapping a node pin on the map and opening its detail card now shows the full public key in a selectable monospaced field.
+
+  **How to test:** Open the Nodes tab and verify each row shows a 3-byte hex prefix below the name. Use the search bar — type a 2-character hex prefix and verify the matching node appears at the top. Open the map, tap a node pin, and verify the detail card shows the public key.
+
+---
+
+## Maps Modernization
+
+- **SwiftUI Map migration** — All route maps have been modernized from UIKit MapKit wrappers to native SwiftUI Map views. This improves rendering consistency and simplifies the codebase.
+
+- **DM path display fix** — Direct message route maps now correctly show the message path.
+
+- **Contact route map fix** — The contact route map now correctly renders the aggregated route history.
+
+---
+
+## Upstream Merge & Unified Chat
+
+- **Unified chat view** — DM and channel chat views have been merged into a single `ChatConversationView`, reducing code duplication and ensuring feature parity between DM and channel conversations.
+
+- **Performance improvements** — SwiftData indexes added to Contact, Channel, and RemoteNodeSession models. Conversation reload tasks are debounced. Existence checks use `fetchCount` instead of full fetches.
+
+- **Persistent message deduplication** — Replaced the in-memory dedup cache with persistent packet hash deduplication, preventing duplicate messages across app restarts.
+
+- **Crash fix** — Handle transient ModelContainer creation failure during app launch with automatic retry.
+
+---
+
+# Previous Builds
+
+## Build 13
+
+### Shared Route Map
 
 - **Inline route card** — When an incoming message contains route info (from "Reply with Route"), a tappable "Shared Route" card appears below the message bubble. The card shows a summary of the route — hop count, repeater hex IDs, and distance.
 
@@ -9,8 +65,6 @@
   **How to test:** Have someone send a message through multiple hops. Long-press the message, expand path details, and tap "Reply with Route". On the receiving end, verify the reply shows an inline "Shared Route" card below the bubble. Tap the card — the map should open showing pins for any repeaters that have GPS locations in your contacts or discovered nodes. If no hops resolve, an empty state message should appear. Verify that normal messages without "RX via" text do not show the card, and that outgoing messages never show it.
 
 ---
-
-# Previous Builds
 
 ## Build 11
 
@@ -37,8 +91,6 @@
   **How to test:** Open a channel or DM with many messages. Scroll up and down — scrolling should be smooth with no hesitation or blocking. Then swipe right on an incoming message to trigger a reply — the gesture should still work as before with the arrow icon and haptic feedback. Verify that a diagonal swipe (mostly vertical) scrolls instead of triggering the reply.
 
 ---
-
-# Previous Builds
 
 ## Build 9
 
