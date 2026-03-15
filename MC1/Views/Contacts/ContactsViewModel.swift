@@ -254,32 +254,45 @@ final class ContactsViewModel {
             // Filter by search text (name or public key hex prefix)
             let query = searchText.trimmingCharacters(in: .whitespaces)
             let hexQuery = query.uppercased()
-            let looksLikeHex = hexQuery.allSatisfy { $0.isHexDigit }
+            let looksLikeHex = hexQuery.allSatisfy { $0.isHexDigit } && !hexQuery.isEmpty
             result = result.filter { contact in
                 if contact.displayName.localizedStandardContains(query) {
                     return true
                 }
                 // Only match hex if the query looks like a hex string (avoids false positives)
-                if looksLikeHex, !hexQuery.isEmpty {
+                if looksLikeHex {
                     return contact.publicKeyHex.contains(hexQuery)
                 }
                 return false
-            }
-            // When query looks like hex, sort public key matches first
-            if looksLikeHex, !hexQuery.isEmpty {
-                result.sort { a, b in
-                    let aHex = a.publicKeyHex.hasPrefix(hexQuery)
-                    let bHex = b.publicKeyHex.hasPrefix(hexQuery)
-                    if aHex != bHex { return aHex }
-                    return false
-                }
             }
         }
 
         // Sort
         result = sorted(result, by: sortOrder, userLocation: userLocation)
 
+        // When query looks like hex, re-sort to put public key matches on top
+        // Tier 1: key starts with query, Tier 2: key contains query, Tier 3: name-only match
+        if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+            let hexQuery = searchText.trimmingCharacters(in: .whitespaces).uppercased()
+            let looksLikeHex = hexQuery.allSatisfy { $0.isHexDigit } && !hexQuery.isEmpty
+            if looksLikeHex {
+                result.sort { a, b in
+                    let aTier = hexMatchTier(for: a, hexQuery: hexQuery)
+                    let bTier = hexMatchTier(for: b, hexQuery: hexQuery)
+                    if aTier != bTier { return aTier < bTier }
+                    return false // preserve existing sort within same tier
+                }
+            }
+        }
+
         return result
+    }
+
+    /// Returns 0 if key starts with hex query, 1 if key contains it, 2 if name-only match
+    private func hexMatchTier(for contact: ContactDTO, hexQuery: String) -> Int {
+        if contact.publicKeyHex.hasPrefix(hexQuery) { return 0 }
+        if contact.publicKeyHex.contains(hexQuery) { return 1 }
+        return 2
     }
 
     /// Sort contacts by the given order
