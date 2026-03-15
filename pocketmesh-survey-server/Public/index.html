@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MeshCore Community Map</title>
     <link rel="stylesheet" href="style.css" />
+    <!-- Load app.js first so initMapKit is defined before MapKit fires its callback -->
+    <script src="app.js"></script>
     <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.core.js"
             crossorigin async
             data-callback="initMapKit"
@@ -44,7 +46,5 @@
             <div class="legend-item"><span class="legend-color" style="background: #991b1b;"></span> Very Poor (&le;-10 dB)</div>
         </div>
     </div>
-
-    <script src="app.js"></script>
 </body>
 </html>

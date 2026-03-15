@@ -96,3 +96,10 @@ struct DeleteContributorResponse: Content {
     let cellsRemoved: Int
     let cellsUpdated: Int
 }
+
+// MARK: - Admin Response
+
+struct FixCoordinatesResponse: Content {
+    let totalCells: Int
+    let fixedCells: Int
+}

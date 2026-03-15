@@ -1,5 +1,21 @@
 import Fluent
 import Vapor
+import Foundation
+
+/// Hex grid math matching the iOS client's HexGrid.swift
+private enum HexGridServer {
+    static let size: Double = 0.0005
+
+    /// Compute the exact center lat/lon for a hex cell from its axial coordinates.
+    /// Must match HexGrid.centerLatLon in the iOS client.
+    static func centerLatLon(hexQ: Int, hexR: Int, referenceLatitude: Double) -> (latitude: Double, longitude: Double) {
+        let lonScale = cos(referenceLatitude * .pi / 180.0)
+        let scaledLon = size * 3.0 / 2.0 * Double(hexQ)
+        let latitude = size * sqrt(3.0) * (Double(hexR) + Double(hexQ) / 2.0)
+        let longitude = scaledLon / lonScale
+        return (latitude: latitude, longitude: longitude)
+    }
+}
 
 struct SurveyController {
 
@@ -96,11 +112,15 @@ struct SurveyController {
                     try await contribution.save(on: req.db)
                 }
             } else {
-                // Create new cell
+                // Create new cell — compute exact hex center from axial coordinates
+                let hexCenter = HexGridServer.centerLatLon(
+                    hexQ: cellData.hexQ, hexR: cellData.hexR,
+                    referenceLatitude: normalizedRefLat
+                )
                 let cell = CellModel(
                     hexQ: cellData.hexQ, hexR: cellData.hexR,
                     referenceLatitude: normalizedRefLat,
-                    latitude: cellData.latitude, longitude: cellData.longitude,
+                    latitude: hexCenter.latitude, longitude: hexCenter.longitude,
                     totalSNRWeighted: snrWeighted,
                     totalRSSIWeighted: rssiWeighted ?? 0,
                     totalPacketCount: cellData.packetCount,
@@ -353,5 +373,32 @@ struct SurveyController {
         // Cache for 1 hour (tokens are valid 24h, so this is safe)
         headers.add(name: .cacheControl, value: "max-age=3600, public")
         return Response(status: .ok, headers: headers, body: .init(string: token))
+    }
+
+    // MARK: - POST /api/v1/admin/fix-coordinates
+
+    @Sendable
+    func fixCellCoordinates(req: Request) async throws -> FixCoordinatesResponse {
+        let allCells = try await CellModel.query(on: req.db).all()
+        var fixedCount = 0
+
+        for cell in allCells {
+            let center = HexGridServer.centerLatLon(
+                hexQ: cell.hexQ, hexR: cell.hexR,
+                referenceLatitude: cell.referenceLatitude
+            )
+            if abs(cell.latitude - center.latitude) > 1e-10 ||
+               abs(cell.longitude - center.longitude) > 1e-10 {
+                cell.latitude = center.latitude
+                cell.longitude = center.longitude
+                try await cell.save(on: req.db)
+                fixedCount += 1
+            }
+        }
+
+        return FixCoordinatesResponse(
+            totalCells: allCells.count,
+            fixedCells: fixedCount
+        )
     }
 }

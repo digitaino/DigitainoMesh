@@ -19,4 +19,5 @@ func routes(_ app: Application) throws {
     let protected = api.grouped(APIKeyMiddleware())
     protected.post("survey", use: surveyController.uploadSurvey)
     protected.delete("contributor", ":contributorID", use: surveyController.deleteContributor)
+    protected.post("admin", "fix-coordinates", use: surveyController.fixCellCoordinates)
 }

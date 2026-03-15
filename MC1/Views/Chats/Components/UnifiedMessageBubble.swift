@@ -93,6 +93,14 @@ struct UnifiedMessageBubble: View {
                         MalwareWarningCard(url: url)
                     }
 
+                    // Shared route card (for incoming messages with "RX via ..." route info)
+                    if let sharedRoute = displayState.detectedSharedRoute {
+                        SharedRouteCard(
+                            sharedRoute: sharedRoute,
+                            onTap: { callbacks.onShowSharedRoute?() }
+                        )
+                    }
+
                     // Link preview (if applicable, skip for image URLs shown in bubble)
                     if previewsEnabled && !(displayState.isImageURL && displayState.showInlineImages) {
                         BubbleLinkPreviewContent(

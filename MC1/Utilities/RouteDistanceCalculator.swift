@@ -1,6 +1,9 @@
 import CoreLocation
 import Foundation
 import MC1Services
+import os.log
+
+private let routeLogger = Logger(subsystem: "com.pocketmesh", category: "RouteDistanceCalculator")
 
 /// Calculates and formats distances along a message route through mesh repeaters.
 ///
@@ -113,10 +116,20 @@ enum RouteDistanceCalculator {
         userLocation: CLLocation? = nil
     ) -> String? {
         let hopCount = Int(message.pathLength & 0x3F) // lower 6 bits
-        guard hopCount > 0 else { return nil }
+        routeLogger.debug("formatRouteInfo: pathLength=\(message.pathLength) (0x\(String(format: "%02X", message.pathLength))), hopCount=\(hopCount), pathNodes=\(message.pathNodes?.count ?? 0) bytes, pathHashSize=\(message.pathHashSize)")
+
+        guard hopCount > 0 else {
+            routeLogger.debug("formatRouteInfo: hopCount is 0, returning nil")
+            return nil
+        }
 
         let pathHex = message.pathNodesHex.joined(separator: ",")
-        guard !pathHex.isEmpty else { return nil }
+        routeLogger.debug("formatRouteInfo: pathNodesHex=[\(message.pathNodesHex.joined(separator: ", "), privacy: .public)], joined=\"\(pathHex, privacy: .public)\"")
+
+        guard !pathHex.isEmpty else {
+            routeLogger.warning("formatRouteInfo: pathHex is empty despite hopCount=\(hopCount)")
+            return nil
+        }
 
         let hopWord = hopCount == 1 ? "hop" : "hops"
 
@@ -133,6 +146,8 @@ enum RouteDistanceCalculator {
             distancePart = ""
         }
 
-        return "RX via \(pathHex). \(hopCount) \(hopWord)\(distancePart)"
+        let result = "RX via \(pathHex). \(hopCount) \(hopWord)\(distancePart)"
+        routeLogger.info("formatRouteInfo: generated \"\(result, privacy: .public)\"")
+        return result
     }
 }
