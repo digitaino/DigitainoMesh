@@ -108,6 +108,8 @@ struct MapView: View {
                     mapType: viewModel.mapStyleSelection.mkMapType,
                     showLabels: viewModel.showLabels,
                     showsUserLocation: true,
+                    communityCells: viewModel.communityCells,
+                    showCommunityOverlay: viewModel.showCommunityOverlay,
                     selectedContact: $viewModel.selectedContact,
                     cameraRegion: $viewModel.cameraRegion,
                     onDetailTap: { contact in
@@ -115,6 +117,9 @@ struct MapView: View {
                     },
                     onMessageTap: { contact in
                         navigateToChat(with: contact)
+                    },
+                    onRegionChanged: { region in
+                        viewModel.loadCommunityCells(for: region)
                     },
                     onSnapshotParamsGetter: { getter in
                         Task { @MainActor in
@@ -184,9 +189,27 @@ struct MapView: View {
             onLocationTap: { centerOnUserLocation() },
             showingLayersMenu: $viewModel.showingLayersMenu
         ) {
+            communityOverlayButton
             labelsToggleButton
             centerAllButton
         }
+    }
+
+    private var communityOverlayButton: some View {
+        Button {
+            viewModel.showCommunityOverlay.toggle()
+            if viewModel.showCommunityOverlay, let region = viewModel.cameraRegion {
+                viewModel.loadCommunityCells(for: region)
+            }
+        } label: {
+            Image(systemName: "hexagon.fill")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(viewModel.showCommunityOverlay ? .blue : .primary)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(viewModel.showCommunityOverlay ? "Hide signal overlay" : "Show signal overlay")
     }
 
     private var labelsToggleButton: some View {

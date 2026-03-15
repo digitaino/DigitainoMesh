@@ -11,6 +11,8 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     let mapType: MKMapType
     let showLabels: Bool
     let showsUserLocation: Bool
+    let communityCells: [SurveyUploadService.CommunityCell]
+    let showCommunityOverlay: Bool
 
     @Binding var selectedContact: ContactDTO?
     @Binding var cameraRegion: MKCoordinateRegion?
@@ -18,6 +20,8 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     // Callbacks for callout actions
     let onDetailTap: (ContactDTO) -> Void
     let onMessageTap: (ContactDTO) -> Void
+    /// Called when the map region changes and community overlay is active
+    var onRegionChanged: ((MKCoordinateRegion) -> Void)?
     /// Called once with a closure that returns snapshot parameters from the actual MKMapView (bypasses async binding)
     var onSnapshotParamsGetter: ((@escaping () -> (camera: MKMapCamera, size: CGSize)?) -> Void)?
 
@@ -55,7 +59,9 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         coordinator.setCameraRegion = { cameraRegion = $0 }
         coordinator.onDetailTap = onDetailTap
         coordinator.onMessageTap = onMessageTap
+        coordinator.onRegionChanged = onRegionChanged
         coordinator.showLabels = showLabels
+        coordinator.showCommunityOverlay = showCommunityOverlay
 
         // Mark as programmatic update to prevent feedback loops
         coordinator.isUpdatingFromSwiftUI = true
@@ -99,10 +105,43 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                 coordinator.lastAppliedRegion = region
             }
         }
+
+        // Update community hex overlays
+        updateCommunityOverlays(in: mapView, coordinator: coordinator)
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
+    }
+
+    // MARK: - Community Overlay Management
+
+    private func updateCommunityOverlays(in mapView: MKMapView, coordinator: Coordinator) {
+        let existingOverlays = mapView.overlays.compactMap { $0 as? CommunityHexOverlay }
+
+        if !showCommunityOverlay {
+            // Remove all community overlays when disabled
+            if !existingOverlays.isEmpty {
+                mapView.removeOverlays(existingOverlays)
+                coordinator.lastOverlayCellIDs = []
+            }
+            return
+        }
+
+        // Check if cells actually changed
+        let newIDs = Set(communityCells.map(\.id))
+        guard newIDs != coordinator.lastOverlayCellIDs else { return }
+
+        // Remove old overlays and add new ones
+        if !existingOverlays.isEmpty {
+            mapView.removeOverlays(existingOverlays)
+        }
+
+        let overlays = communityCells.map { CommunityHexOverlay.make(from: $0) }
+        if !overlays.isEmpty {
+            mapView.addOverlays(overlays, level: .aboveRoads)
+        }
+        coordinator.lastOverlayCellIDs = newIDs
     }
 
     // MARK: - Annotation Management
@@ -171,9 +210,11 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         // Callbacks
         var onDetailTap: ((ContactDTO) -> Void)?
         var onMessageTap: ((ContactDTO) -> Void)?
+        var onRegionChanged: ((MKCoordinateRegion) -> Void)?
 
         // Configuration
         var showLabels: Bool = true
+        var showCommunityOverlay: Bool = false
 
         // State management
         var isUpdatingFromSwiftUI = false
@@ -196,6 +237,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         // Previous state for change detection (avoid unnecessary view updates that interfere with clustering)
         var lastShowLabels: Bool = true
         var lastSelectedContactID: UUID?
+        var lastOverlayCellIDs: Set<String> = []
 
         // Lazily created map view owned by coordinator
         lazy var mapView: MKMapView = {
@@ -279,6 +321,17 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             }
 
             return view
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: any MKOverlay) -> MKOverlayRenderer {
+            if let hexOverlay = overlay as? CommunityHexOverlay {
+                let renderer = MKPolygonRenderer(polygon: hexOverlay)
+                renderer.fillColor = hexOverlay.fillUIColor.withAlphaComponent(hexOverlay.fillOpacity)
+                renderer.strokeColor = hexOverlay.fillUIColor.withAlphaComponent(0.6)
+                renderer.lineWidth = 0.5
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
         }
 
         func mapView(_ mapView: MKMapView, didSelect annotation: any MKAnnotation) {
@@ -382,6 +435,11 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             Task { @MainActor in
                 logger.debug("Region: updating cameraRegion binding")
                 self.setCameraRegion?(mapView.region)
+            }
+
+            // Notify for community overlay refresh
+            if showCommunityOverlay {
+                onRegionChanged?(mapView.region)
             }
         }
     }

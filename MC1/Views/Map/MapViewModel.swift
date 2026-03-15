@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import MC1Services
+import os
 
 /// ViewModel for map contact locations
 @Observable
@@ -33,10 +34,30 @@ final class MapViewModel {
     /// Whether the layers menu is showing
     var showingLayersMenu = false
 
+    /// Whether the community signal overlay is active
+    var showCommunityOverlay = false {
+        didSet {
+            if !showCommunityOverlay {
+                communityLoadTask?.cancel()
+                communityLoadTask = nil
+                communityCells = []
+            }
+        }
+    }
+
+    /// Community signal cells currently loaded for the viewport
+    var communityCells: [SurveyUploadService.CommunityCell] = []
+
+    /// Whether community data is loading
+    var isLoadingCommunity = false
+
     // MARK: - Dependencies
 
     private var dataStore: PersistenceStore?
     private var deviceID: UUID?
+    private let uploadService = SurveyUploadService()
+    private var communityLoadTask: Task<Void, Never>?
+    private static let logger = Logger(subsystem: "com.mc1", category: "MapViewModel")
 
     // MARK: - Initialization
 
@@ -127,6 +148,42 @@ final class MapViewModel {
     /// Clear selection
     func clearSelection() {
         selectedContact = nil
+    }
+
+    // MARK: - Community Overlay
+
+    /// Load community signal cells for the given map region, debounced.
+    func loadCommunityCells(for region: MKCoordinateRegion) {
+        guard showCommunityOverlay else { return }
+
+        communityLoadTask?.cancel()
+        communityLoadTask = Task {
+            // Debounce
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+
+            isLoadingCommunity = true
+            defer { isLoadingCommunity = false }
+
+            let span = region.span
+            let center = region.center
+            let minLat = center.latitude - span.latitudeDelta / 2
+            let maxLat = center.latitude + span.latitudeDelta / 2
+            let minLon = center.longitude - span.longitudeDelta / 2
+            let maxLon = center.longitude + span.longitudeDelta / 2
+
+            do {
+                let response = try await uploadService.fetchCommunityData(
+                    minLat: minLat, maxLat: maxLat,
+                    minLon: minLon, maxLon: maxLon
+                )
+                guard !Task.isCancelled else { return }
+                communityCells = response.cells
+            } catch {
+                guard !Task.isCancelled else { return }
+                Self.logger.warning("Failed to load community cells: \(error.localizedDescription)")
+            }
+        }
     }
 }
 
