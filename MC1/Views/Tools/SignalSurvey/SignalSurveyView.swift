@@ -9,16 +9,20 @@ struct SignalSurveyView: View {
     @State private var viewModel = SignalSurveyViewModel()
     @State private var showingSessionList = false
     @State private var showingExportSheet = false
+    @State private var showingPacketList = false
+    @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
+    @AppStorage("surveyProbeDistance") private var probeDistancePref: Double = 50
     @Namespace private var mapScope
 
     var body: some View {
         ZStack {
-            if viewModel.displayPoints.isEmpty && !viewModel.isActive {
+            if viewModel.allPoints.isEmpty && !viewModel.isActive {
                 emptyState
             } else {
                 mapContent
                 statsOverlay
+                mapControlsOverlay
                 bottomOverlay
             }
         }
@@ -29,6 +33,7 @@ struct SignalSurveyView: View {
             guard let dataStore = appState.offlineDataStore,
                   let deviceID = appState.currentDeviceID else { return }
             await viewModel.loadSessions(dataStore: dataStore, deviceID: deviceID)
+            await viewModel.loadContacts(dataStore: dataStore, deviceID: deviceID)
         }
         .sheet(isPresented: $showingSessionList) {
             sessionListSheet
@@ -41,11 +46,28 @@ struct SignalSurveyView: View {
                 )
             }
         }
-        .sheet(isPresented: Binding(
-            get: { viewModel.selectedCell != nil },
-            set: { if !$0 { viewModel.selectedCell = nil } }
-        )) {
-            cellDetailSheet
+        .sheet(isPresented: $showingPacketList) {
+            CellPacketListView(
+                points: viewModel.pointsForSelectedCell(relayFilter: viewModel.selectedRelayFilter),
+                cellID: viewModel.selectedCell?.id ?? "",
+                relayFilter: viewModel.selectedRelayFilter,
+                contactsByName: viewModel.contactsByName,
+                onNavigateToContact: { contact in
+                    showingPacketList = false
+                    appState.navigation.navigateToContactDetail(contact)
+                }
+            )
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $viewModel.selectedMapRepeater) { contact in
+            RepeaterDetailSheet(
+                contact: contact,
+                onNavigateToContact: { contact in
+                    viewModel.selectedMapRepeater = nil
+                    appState.navigation.navigateToContactDetail(contact)
+                }
+            )
+            .presentationDetents([.medium])
         }
         .alert("Survey Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -57,9 +79,15 @@ struct SignalSurveyView: View {
                 Text(error)
             }
         }
-        .onAppear { viewModel.probeEnabled = probeEnabledPref }
+        .onAppear {
+            viewModel.probeEnabled = probeEnabledPref
+            viewModel.probeDistanceMeters = probeDistancePref
+        }
         .onChange(of: probeEnabledPref) { _, newValue in
             viewModel.probeEnabled = newValue
+        }
+        .onChange(of: probeDistancePref) { _, newValue in
+            viewModel.probeDistanceMeters = newValue
         }
         .onChange(of: viewModel.isActive) { _, isActive in
             UIApplication.shared.isIdleTimerDisabled = isActive
@@ -93,18 +121,21 @@ struct SignalSurveyView: View {
                 }
 
             case .gridHeatmap:
+                // All cells rendered unconditionally
                 ForEach(viewModel.gridCells) { cell in
-                    let isSelected = viewModel.selectedCell?.id == cell.id
-                    MapPolygon(coordinates: cell.vertices)
-                        .foregroundStyle(
-                            cell.snrQuality.color.opacity(
-                                0.2 + 0.5 * min(1, Double(cell.packetCount) / 10.0)
+                    if cell.isDeadZone {
+                        MapPolygon(coordinates: cell.vertices)
+                            .foregroundStyle(Color.gray.opacity(0.15))
+                            .stroke(Color.gray.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    } else {
+                        MapPolygon(coordinates: cell.vertices)
+                            .foregroundStyle(
+                                cell.snrQuality.color.opacity(
+                                    0.2 + 0.5 * min(1, Double(cell.packetCount) / 10.0)
+                                )
                             )
-                        )
-                        .stroke(
-                            isSelected ? Color.white : cell.snrQuality.color.opacity(0.6),
-                            lineWidth: isSelected ? 2 : 0.5
-                        )
+                            .stroke(cell.snrQuality.color.opacity(0.6), lineWidth: 0.5)
+                    }
 
                     // Invisible tap target at cell center
                     Annotation("", coordinate: CLLocationCoordinate2D(
@@ -123,6 +154,51 @@ struct SignalSurveyView: View {
                             }
                     }
                 }
+
+                // Selected cell highlight rendered on top
+                if let selected = viewModel.selectedCell {
+                    MapPolygon(coordinates: selected.vertices)
+                        .foregroundStyle(
+                            selected.isDeadZone
+                                ? Color.gray.opacity(0.3)
+                                : selected.snrQuality.color.opacity(0.5)
+                        )
+                        .stroke(Color.white, lineWidth: 3)
+                }
+            }
+
+            // Repeater annotations
+            ForEach(viewModel.mapRepeaterAnnotations, id: \.hexID) { item in
+                Annotation(item.contact.displayName, coordinate: CLLocationCoordinate2D(
+                    latitude: item.contact.latitude,
+                    longitude: item.contact.longitude
+                )) {
+                    Button {
+                        viewModel.selectedMapRepeater = item.contact
+                    } label: {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(6)
+                            .background(Color.cyan)
+                            .clipShape(Circle())
+                            .overlay {
+                                Circle()
+                                    .strokeBorder(Color.white, lineWidth: 1.5)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Line from selected cell to selected repeater
+            if let cell = viewModel.selectedCell,
+               let repeater = viewModel.selectedRepeaterContact {
+                MapPolyline(coordinates: [
+                    CLLocationCoordinate2D(latitude: cell.centerLatitude, longitude: cell.centerLongitude),
+                    CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
+                ])
+                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
             }
 
             UserAnnotation()
@@ -148,16 +224,6 @@ struct SignalSurveyView: View {
                             .font(.caption.weight(.medium))
                     }
 
-                    if viewModel.isActive && viewModel.probeEnabled {
-                        Text("·")
-                            .foregroundStyle(.secondary)
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.caption2)
-                            .foregroundStyle(.green)
-                        Text("\(viewModel.probeCount)")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.green)
-                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -171,55 +237,222 @@ struct SignalSurveyView: View {
         .padding(.leading, 16)
     }
 
-    // MARK: - Cell Detail Sheet
+    // MARK: - Cell Detail Card (inline)
 
-    private var cellDetailSheet: some View {
-        VStack(spacing: 0) {
-            if let cell = viewModel.selectedCell {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "cellularbars", variableValue: cell.snrQuality.barLevel)
-                            .foregroundStyle(cell.snrQuality.color)
-                            .font(.title2)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(cell.snrQuality.qualityLabel)
-                                .font(.headline)
-                            Text("\(cell.packetCount) packet\(cell.packetCount == 1 ? "" : "s") received")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
+    @ViewBuilder
+    private var cellDetailCard: some View {
+        if let cell = viewModel.selectedCell {
+            let displayQuality = viewModel.filteredCellStats?.quality ?? cell.snrQuality
+            let displayPacketCount = viewModel.filteredCellStats?.packetCount ?? cell.packetCount
+            VStack(alignment: .leading, spacing: 8) {
+                // Header row with dismiss button
+                HStack(spacing: 10) {
+                    if cell.isDeadZone {
+                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                            .foregroundStyle(.secondary)
+                            .font(.title3)
+                    } else {
+                        Image(systemName: "cellularbars", variableValue: displayQuality.barLevel)
+                            .foregroundStyle(displayQuality.color)
+                            .font(.title3)
                     }
 
-                    Divider()
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(cell.isDeadZone ? "No Response" : displayQuality.qualityLabel)
+                            .font(.subheadline.weight(.semibold))
+                        if cell.isDeadZone {
+                            Text("Probe sent, no response")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("\(displayPacketCount) packet\(displayPacketCount == 1 ? "" : "s") received")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
+                    Spacer()
+
+                    Button {
+                        viewModel.selectedCell = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if !cell.isDeadZone {
+                    // Relay filter indicator
+                    if let relay = viewModel.selectedRelayFilter {
+                        HStack(spacing: 4) {
+                            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                                .font(.caption2)
+                            Text("via \(relay)")
+                                .font(.system(.caption, design: .monospaced))
+                            Spacer()
+                            Button {
+                                viewModel.selectedRelayFilter = nil
+                            } label: {
+                                Text("Clear")
+                                    .font(.caption2)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .foregroundStyle(Color.accentColor)
+                    }
+
+                    // Signal stats row (use filtered stats when relay filter is active)
                     HStack(spacing: 0) {
-                        if let snr = cell.averageSNR {
-                            cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
+                        if let filtered = viewModel.filteredCellStats {
+                            if let snr = filtered.avgSNR {
+                                cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
+                            }
+                            if let rssi = filtered.avgRSSI {
+                                cellStatColumn(label: "Avg RSSI", value: String(format: "%.0f", rssi), unit: "dBm")
+                            }
+                            if let minSNR = filtered.minSNR, let maxSNR = filtered.maxSNR {
+                                cellStatColumn(label: "SNR Range", value: String(format: "%.0f – %.0f", minSNR, maxSNR), unit: "dB")
+                            }
+                            if let latest = filtered.latestTimestamp {
+                                cellStatColumn(label: "Last Heard", value: relativeTimeString(from: latest), unit: "ago")
+                            }
+                        } else {
+                            if let snr = cell.averageSNR {
+                                cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
+                            }
+                            if let rssi = cell.averageRSSI {
+                                cellStatColumn(label: "Avg RSSI", value: String(format: "%.0f", rssi), unit: "dBm")
+                            }
+                            if let minSNR = cell.minSNR, let maxSNR = cell.maxSNR {
+                                cellStatColumn(label: "SNR Range", value: String(format: "%.0f – %.0f", minSNR, maxSNR), unit: "dB")
+                            }
+                            if let latest = cell.latestTimestamp {
+                                cellStatColumn(label: "Last Heard", value: relativeTimeString(from: latest), unit: "ago")
+                            }
                         }
-                        if let rssi = cell.averageRSSI {
-                            cellStatColumn(label: "Avg RSSI", value: String(format: "%.0f", rssi), unit: "dBm")
+                    }
+
+                    // View Packets button
+                    if cell.packetCount > 0 {
+                        Button {
+                            showingPacketList = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "list.bullet")
+                                    .font(.caption2)
+                                let count = viewModel.filteredCellStats?.packetCount ?? cell.packetCount
+                                Text("View \(count) Packet\(count == 1 ? "" : "s")")
+                                    .font(.caption)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(Color.accentColor)
                         }
-                        if let minSNR = cell.minSNR, let maxSNR = cell.maxSNR {
-                            cellStatColumn(label: "SNR Range", value: String(format: "%.0f – %.0f", minSNR, maxSNR), unit: "dB")
-                        }
-                        if let earliest = cell.earliestTimestamp, let latest = cell.latestTimestamp, earliest != latest {
-                            let minutes = Int(latest.timeIntervalSince(earliest) / 60)
-                            cellStatColumn(label: "Time Span", value: "\(minutes)", unit: "min")
+                        .buttonStyle(.plain)
+                    }
+
+                    // Relay nodes and senders
+                    if !cell.uniqueRelayNodes.isEmpty || !cell.uniqueSenders.isEmpty {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 6) {
+                            if !cell.uniqueRelayNodes.isEmpty {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Label {
+                                        Text("Repeater(s) heard")
+                                            .font(.caption2)
+                                    } icon: {
+                                        Image(systemName: "arrow.triangle.swap")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .foregroundStyle(.secondary)
+
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 4) {
+                                            ForEach(cell.uniqueRelayNodes, id: \.self) { hexID in
+                                                Button {
+                                                    if viewModel.selectedRelayFilter == hexID {
+                                                        viewModel.selectedRelayFilter = nil
+                                                    } else {
+                                                        viewModel.selectedRelayFilter = hexID
+                                                    }
+                                                } label: {
+                                                    Text(hexID)
+                                                        .font(.system(.caption, design: .monospaced))
+                                                        .padding(.horizontal, 8)
+                                                        .padding(.vertical, 3)
+                                                        .background(
+                                                            viewModel.selectedRelayFilter == hexID
+                                                                ? Color.accentColor.opacity(0.2)
+                                                                : Color.secondary.opacity(0.12)
+                                                        )
+                                                        .clipShape(Capsule())
+                                                        .overlay(
+                                                            Capsule().strokeBorder(
+                                                                viewModel.selectedRelayFilter == hexID
+                                                                    ? Color.accentColor : Color.clear,
+                                                                lineWidth: 1
+                                                            )
+                                                        )
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if !cell.uniqueSenders.isEmpty {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Label {
+                                        Text("Heard from")
+                                            .font(.caption2)
+                                    } icon: {
+                                        Image(systemName: "person.wave.2")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .foregroundStyle(.secondary)
+
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 6) {
+                                            ForEach(cell.uniqueSenders, id: \.self) { name in
+                                                if let contact = viewModel.contactsByName[name] {
+                                                    Button {
+                                                        appState.navigation.navigateToContactDetail(contact)
+                                                    } label: {
+                                                        HStack(spacing: 2) {
+                                                            Text(name)
+                                                                .font(.caption)
+                                                            Image(systemName: "chevron.right")
+                                                                .font(.system(size: 8))
+                                                        }
+                                                        .foregroundStyle(Color.accentColor)
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                } else {
+                                                    Text(name)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .liquidGlass(in: .rect(cornerRadius: 16))
+            .padding(.horizontal, 16)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-        .presentationDetents([.height(160)])
-        .presentationDragIndicator(.visible)
-        .presentationBackgroundInteraction(.enabled)
-        .presentationCornerRadius(16)
     }
 
     private func cellStatColumn(label: String, value: String, unit: String) -> some View {
@@ -229,106 +462,205 @@ struct SignalSurveyView: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(.title3, design: .rounded, weight: .semibold))
-            Text(unit)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Bottom Overlay
+    private func relativeTimeString(from date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        if remainingMinutes == 0 { return "\(hours)h" }
+        return "\(hours)h \(remainingMinutes)m"
+    }
 
-    private var bottomOverlay: some View {
-        VStack(spacing: 0) {
-            Spacer()
+    // MARK: - Map Controls Overlay (Top-Right)
 
-            // Probe toggle row (above toolbar)
-            if viewModel.isActive {
-                HStack {
+    private var mapControlsOverlay: some View {
+        VStack {
+            HStack {
+                Spacer()
+                MapControlsToolbar(
+                    mapScope: mapScope,
+                    showingLayersMenu: $viewModel.showingLayersMenu
+                ) {
+                    // Visualization toggle
                     Button {
-                        probeEnabledPref.toggle()
+                        viewModel.visualizationMode = viewModel.visualizationMode == .pointCloud
+                            ? .gridHeatmap : .pointCloud
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: viewModel.probeEnabled
-                                  ? "antenna.radiowaves.left.and.right"
-                                  : "antenna.radiowaves.left.and.right.slash")
-                                .font(.caption)
-                                .foregroundStyle(viewModel.probeEnabled ? .green : .secondary)
-                            Text(viewModel.probeEnabled
-                                 ? "Probing (\(viewModel.probeCount))"
-                                 : "Probe Off")
-                                .font(.caption)
-                                .foregroundStyle(viewModel.probeEnabled ? .green : .secondary)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .liquidGlass(in: .capsule)
+                        Image(systemName: viewModel.visualizationMode == .pointCloud
+                              ? "square.grid.3x3.fill" : "circle.fill")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Toggle visualization mode")
 
-                    Spacer()
+                    // Center on data
+                    Button {
+                        viewModel.centerOnData()
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Center on survey data")
                 }
-                .padding(.leading, 16)
-                .padding(.bottom, 4)
             }
-
-            mapToolbar
+            .padding(.top, 8)
+            Spacer()
         }
-        .overlay(alignment: .bottomTrailing) {
+        .overlay(alignment: .topTrailing) {
             if viewModel.showingLayersMenu {
                 LayersMenu(
                     selection: $viewModel.mapStyleSelection,
                     isPresented: $viewModel.showingLayersMenu
                 )
                 .padding(.trailing, 16)
-                .padding(.bottom, 160)
+                .padding(.top, 240)
                 .transition(.scale.combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.3), value: viewModel.showingLayersMenu)
     }
 
-    // MARK: - Map Toolbar
+    // MARK: - Bottom Overlay
 
-    private var mapToolbar: some View {
-        HStack {
-            surveyToggleButton
-
+    private var bottomOverlay: some View {
+        VStack(spacing: 8) {
             Spacer()
 
-            MapControlsToolbar(
-                mapScope: mapScope,
-                showingLayersMenu: $viewModel.showingLayersMenu
-            ) {
-                // Visualization toggle
-                Button {
-                    viewModel.visualizationMode = viewModel.visualizationMode == .pointCloud
-                        ? .gridHeatmap : .pointCloud
-                } label: {
-                    Image(systemName: viewModel.visualizationMode == .pointCloud
-                          ? "square.grid.3x3.fill" : "circle.fill")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Toggle visualization mode")
+            cellDetailCard
 
-                // Center on data
-                Button {
-                    viewModel.centerOnData()
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
+            // Survey controls (left-aligned)
+            VStack(alignment: .leading, spacing: 6) {
+                // Filter picker
+                if viewModel.livePointCount > 0 || viewModel.isActive {
+                    Picker("Filter", selection: $viewModel.surveyFilter) {
+                        ForEach(SignalSurveyViewModel.SurveyFilter.allCases, id: \.self) { filter in
+                            Text(filter.rawValue).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 220)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Center on survey data")
+
+                // Probe controls
+                if viewModel.isActive {
+                    HStack(spacing: 6) {
+                        Button {
+                            probeEnabledPref.toggle()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: viewModel.probeEnabled
+                                      ? "antenna.radiowaves.left.and.right"
+                                      : "antenna.radiowaves.left.and.right.slash")
+                                    .font(.caption)
+                                    .foregroundStyle(viewModel.probeEnabled ? .green : .secondary)
+                                Text(viewModel.probeEnabled
+                                     ? "Probing (\(viewModel.probeCount))"
+                                     : "Probe Off")
+                                    .font(.caption)
+                                    .foregroundStyle(viewModel.probeEnabled ? .green : .secondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .liquidGlass(in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            Task { await viewModel.sendManualProbe() }
+                        } label: {
+                            Image(systemName: "wave.3.right")
+                                .font(.caption)
+                                .foregroundStyle(viewModel.canSendManualProbe ? .orange : .secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .liquidGlass(in: .capsule)
+                                .overlay {
+                                    Circle()
+                                        .stroke(Color.orange, lineWidth: 2)
+                                        .scaleEffect(probePulseScale)
+                                        .opacity(probePulseScale > 1 ? 0 : 1)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!viewModel.canSendManualProbe)
+                        .onChange(of: viewModel.probeVisualPulse) { _, _ in
+                            probePulseScale = 1.0
+                            withAnimation(.easeOut(duration: 0.6)) {
+                                probePulseScale = 2.5
+                            }
+                            Task {
+                                try? await Task.sleep(for: .seconds(0.65))
+                                probePulseScale = 1.0
+                            }
+                        }
+
+                        if viewModel.probeEnabled {
+                            Menu {
+                                ForEach([25.0, 50.0, 100.0, 200.0], id: \.self) { distance in
+                                    Button {
+                                        probeDistancePref = distance
+                                    } label: {
+                                        HStack {
+                                            Text("\(Int(distance))m")
+                                            if probeDistancePref == distance {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "ruler")
+                                        .font(.caption)
+                                    Text("\(Int(probeDistancePref))m")
+                                        .font(.caption)
+                                }
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .liquidGlass(in: .capsule)
+                            }
+                        }
+                    }
+                }
+
+                if let errorMsg = viewModel.probeErrorMessage {
+                    Text(errorMsg)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .transition(.opacity)
+                        .task(id: viewModel.probeErrorHaptic) {
+                            try? await Task.sleep(for: .seconds(2))
+                            viewModel.probeErrorMessage = nil
+                        }
+                }
+
+                surveyToggleButton
             }
+            .sensoryFeedback(.impact(weight: .heavy, intensity: 1.0), trigger: viewModel.probeSuccessHaptic)
+            .sensoryFeedback(.error, trigger: viewModel.probeErrorHaptic)
+            .padding(.leading, 16)
+            .padding(.bottom, 8)
         }
+        .animation(.snappy(duration: 0.25), value: viewModel.selectedCell?.id)
     }
 
     private var surveyToggleButton: some View {
@@ -363,8 +695,8 @@ struct SignalSurveyView: View {
                      : isDisabled ? "Connect to Start" : "Start Survey")
                     .fontWeight(.semibold)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
             .foregroundStyle(.white)
             .background(
                 viewModel.isActive
@@ -375,8 +707,6 @@ struct SignalSurveyView: View {
             .opacity(isDisabled ? 0.6 : 1.0)
         }
         .disabled(isDisabled)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
     }
 
     // MARK: - Toolbar
