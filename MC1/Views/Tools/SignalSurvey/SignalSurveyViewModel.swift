@@ -41,7 +41,7 @@ final class SignalSurveyViewModel {
         case gridHeatmap = "Heatmap"
     }
 
-    var visualizationMode: VisualizationMode = .pointCloud {
+    var visualizationMode: VisualizationMode = .gridHeatmap {
         didSet {
             if visualizationMode == .gridHeatmap {
                 rebuildGrid()
@@ -291,6 +291,48 @@ final class SignalSurveyViewModel {
             errorMessage = error.localizedDescription
             logger.error("Failed to stop survey: \(error.localizedDescription)")
         }
+    }
+
+    /// Resume the view model state if the SurveyService still has an active session
+    /// (e.g. user navigated away and came back while survey was running).
+    func resumeIfActive(
+        surveyService: SurveyService,
+        locationService: LocationService,
+        binaryProtocolService: BinaryProtocolService? = nil,
+        dataStore: PersistenceStore,
+        deviceID: UUID
+    ) async {
+        // Already active in this view model — nothing to do
+        guard !isActive else { return }
+
+        guard let sessionID = await surveyService.currentSessionID else { return }
+
+        // The service has an active session — restore view model state
+        let session = sessions.first(where: { $0.id == sessionID })
+        activeSession = session
+        state = .active(sessionID: sessionID)
+        selectedSessionID = sessionID
+
+        // Load existing points for this session
+        await loadPoints(dataStore: dataStore, sessionID: sessionID)
+
+        // Store references for probing
+        self.binaryProtocolService = binaryProtocolService
+        self.locationServiceRef = locationService
+
+        // Re-wire live point handler
+        await surveyService.setPointRecordedHandler { [weak self] point in
+            await MainActor.run {
+                self?.handleNewPoint(point)
+            }
+        }
+
+        // Resume probe loop if enabled
+        if probeEnabled, binaryProtocolService != nil {
+            startProbeLoop(locationService: locationService)
+        }
+
+        logger.info("Resumed active survey session: \(sessionID), \(self.livePointCount) existing points")
     }
 
     // MARK: - Live Updates

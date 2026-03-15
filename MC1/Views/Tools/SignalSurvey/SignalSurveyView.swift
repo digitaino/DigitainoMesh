@@ -34,6 +34,17 @@ struct SignalSurveyView: View {
                   let deviceID = appState.currentDeviceID else { return }
             await viewModel.loadSessions(dataStore: dataStore, deviceID: deviceID)
             await viewModel.loadContacts(dataStore: dataStore, deviceID: deviceID)
+
+            // Resume if the SurveyService still has an active session (e.g. navigated away and back)
+            if let surveyService = appState.services?.surveyService {
+                await viewModel.resumeIfActive(
+                    surveyService: surveyService,
+                    locationService: appState.locationService,
+                    binaryProtocolService: appState.services?.binaryProtocolService,
+                    dataStore: dataStore,
+                    deviceID: deviceID
+                )
+            }
         }
         .sheet(isPresented: $showingSessionList) {
             sessionListSheet

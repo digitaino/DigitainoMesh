@@ -56,7 +56,10 @@ public actor SurveyService {
     private let maxAccuracyMeters: Double = 100
 
     /// Maximum GPS age to accept (seconds). Stale fixes are discarded.
-    private let maxLocationAgeSeconds: TimeInterval = 10
+    /// CoreLocation's distanceFilter means updates only arrive on movement,
+    /// so a stationary user's fix goes stale quickly. 30s is generous enough
+    /// for wardriving while still rejecting truly outdated fixes.
+    private let maxLocationAgeSeconds: TimeInterval = 30
 
     public init(dataStore: PersistenceStore) {
         self.dataStore = dataStore
@@ -141,22 +144,31 @@ public actor SurveyService {
     /// Process an incoming RX log entry for signal survey recording.
     /// Called from RxLogService for each received packet.
     public func processForSurvey(_ entry: RxLogEntryDTO) async {
-        guard let sessionID = activeSessionID else { return }
-        guard let deviceID = self.deviceID else { return }
+        guard let sessionID = activeSessionID else {
+            // No active session — this is normal when survey is not running
+            return
+        }
+        guard let deviceID = self.deviceID else {
+            logger.warning("Survey: no deviceID configured")
+            return
+        }
 
         // Get current GPS location
         guard let fix = await locationProvider?() else {
+            logger.debug("Survey: no GPS fix available, skipping packet")
             return
         }
 
         // Validate GPS quality
         guard fix.horizontalAccuracy <= maxAccuracyMeters else {
+            logger.debug("Survey: GPS accuracy \(fix.horizontalAccuracy)m exceeds \(self.maxAccuracyMeters)m limit")
             return
         }
 
         // Validate GPS freshness
         let age = abs(fix.timestamp.timeIntervalSinceNow)
         guard age <= maxLocationAgeSeconds else {
+            logger.debug("Survey: GPS fix age \(age)s exceeds \(self.maxLocationAgeSeconds)s limit")
             return
         }
 
@@ -166,10 +178,29 @@ public actor SurveyService {
                 sessionID: sessionID,
                 packetHash: entry.packetHash
             )
-            if exists { return }
+            if exists {
+                logger.debug("Survey: duplicate packet hash, skipping")
+                return
+            }
         } catch {
             logger.error("Dedup check failed: \(error.localizedDescription)")
         }
+
+        // Extract relay/target hex IDs.
+        // For TRACE responses: use traceTargetHashes (the probed nodes from the payload).
+        // For other packets: use pathNodes (the routing hops from the network path).
+        let pathHexIDs: [String] = {
+            if let traceHashes = entry.traceTargetHashes {
+                return traceHashes.map { $0.hexString() }
+            }
+            let hashSize = entry.pathHashSize
+            guard hashSize > 0, !entry.pathNodes.isEmpty else { return [] }
+            let bytes = Array(entry.pathNodes)
+            return stride(from: 0, to: bytes.count, by: hashSize).map { start in
+                let end = min(start + hashSize, bytes.count)
+                return Data(bytes[start..<end]).hexString()
+            }
+        }()
 
         // Create survey point
         let point = SignalSurveyPointDTO(
@@ -186,16 +217,20 @@ public actor SurveyService {
             routeType: entry.routeType,
             payloadType: entry.payloadType,
             pathLength: entry.pathLength,
-            packetHash: entry.packetHash
+            packetHash: entry.packetHash,
+            fromContactName: entry.fromContactName,
+            pathNodeHexIDs: pathHexIDs
         )
 
         // Persist
         do {
             try await dataStore.saveSurveyPoint(point)
         } catch {
-            logger.error("Failed to save survey point: \(error.localizedDescription)")
+            logger.error("Failed to save survey point: \(error)")
             return
         }
+
+        logger.debug("Survey: saved point (SNR: \(point.snr?.description ?? "nil"), relays: \(pathHexIDs.count))")
 
         // Notify handler (for live map update)
         if let handler = onPointRecorded {
