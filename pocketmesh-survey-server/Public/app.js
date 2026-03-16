@@ -24,6 +24,18 @@ function snrQuality(snr) {
     return 'veryPoor';
 }
 
+// Quality level index (1-5) for signal bars
+function qualityLevel(quality) {
+    switch (quality) {
+        case 'excellent': return 5;
+        case 'good': return 4;
+        case 'fair': return 3;
+        case 'poor': return 2;
+        case 'veryPoor': return 1;
+        default: return 0;
+    }
+}
+
 // Hex grid math — renders hex polygon centered on actual GPS coordinates
 const HEX_SIZE = 0.0005;
 
@@ -46,12 +58,18 @@ function hexVerticesAtCenter(centerLat, centerLon, refLat) {
 // Coverage filter: 'all', 'active', 'passive'
 let coverageFilter = 'all';
 
+// Repeater filter: null means all repeaters, otherwise a hex ID string
+let repeaterFilter = null;
+
 // State
 let map = null;
 let currentOverlays = [];
+let selectedHighlightOverlay = null;
+let selectedCellData = null;
 let currentRepeaterAnnotations = [];
 let loadingTimeout = null;
 let lastCellData = [];
+let repeaterNames = {}; // hexID -> name mapping from repeater annotations
 
 // MapKit JS initialization callback
 function initMapKit() {
@@ -92,12 +110,12 @@ function initMapKit() {
     // Handle overlay selection for popups
     map.addEventListener('select', function(event) {
         if (event.overlay && event.overlay._cellData) {
-            showCellPopup(event.overlay._cellData);
+            selectCell(event.overlay, event.overlay._cellData);
         }
     });
 
     map.addEventListener('deselect', function() {
-        dismissPopup();
+        deselectCell();
     });
 
     // Initial load
@@ -108,6 +126,40 @@ function initMapKit() {
     // Auto-refresh: cells and repeaters every 15s, stats every 60s
     setInterval(() => { loadCells(); loadRepeaters(); }, 15000);
     setInterval(loadStats, 60000);
+}
+
+// Select a cell — highlight on map + show popup
+function selectCell(overlay, cellData) {
+    deselectCell();
+    selectedCellData = cellData;
+
+    // Add highlight overlay with white stroke
+    const vertices = hexVerticesAtCenter(cellData.latitude, cellData.longitude, cellData.referenceLatitude);
+    const highlightStyle = new mapkit.Style({
+        fillColor: snrColor(cellData.snrQuality || snrQuality(cellData.averageSNR)),
+        fillOpacity: 0.5,
+        strokeColor: '#ffffff',
+        strokeOpacity: 1.0,
+        lineWidth: 3
+    });
+    selectedHighlightOverlay = new mapkit.PolygonOverlay(vertices, {
+        style: highlightStyle,
+        enabled: false,
+        visible: true
+    });
+    map.addOverlay(selectedHighlightOverlay);
+
+    showCellPopup(cellData);
+}
+
+// Deselect current cell
+function deselectCell() {
+    if (selectedHighlightOverlay) {
+        map.removeOverlay(selectedHighlightOverlay);
+        selectedHighlightOverlay = null;
+    }
+    selectedCellData = null;
+    dismissPopup();
 }
 
 // Load cells for current viewport
@@ -136,6 +188,7 @@ async function loadCells() {
         const data = await response.json();
         lastCellData = data.cells;
         renderCells(data.cells);
+        updateRepeaterDropdown(data.cells);
     } catch (e) {
         console.error('Failed to load cells:', e);
     }
@@ -151,6 +204,48 @@ function applyCoverageFilter(filter) {
     renderCells(lastCellData);
 }
 
+// Apply repeater filter and re-render
+function applyRepeaterFilter(hexID) {
+    repeaterFilter = hexID || null;
+    renderCells(lastCellData);
+}
+
+// Update the repeater dropdown with available repeaters from cell data
+function updateRepeaterDropdown(cells) {
+    const select = document.getElementById('repeater-select');
+    if (!select) return;
+
+    // Collect all unique repeater hex IDs
+    const repeaterSet = new Set();
+    cells.forEach(c => {
+        if (c.repeaterHexIDs) {
+            c.repeaterHexIDs.forEach(id => repeaterSet.add(id));
+        }
+    });
+
+    const repeaters = Array.from(repeaterSet).sort();
+
+    // Preserve current selection
+    const current = select.value;
+
+    // Rebuild options
+    select.innerHTML = '<option value="">All Repeaters</option>';
+    repeaters.forEach(hexID => {
+        const option = document.createElement('option');
+        option.value = hexID;
+        const name = repeaterNames[hexID];
+        option.textContent = name ? `${name} (${hexID})` : hexID;
+        if (hexID === current) option.selected = true;
+        select.appendChild(option);
+    });
+
+    // Update count label
+    const countLabel = document.getElementById('repeater-count');
+    if (countLabel) {
+        countLabel.textContent = `${repeaters.length} found`;
+    }
+}
+
 // Render hex cells on map
 function renderCells(cells) {
     // Remove old overlays
@@ -159,12 +254,23 @@ function renderCells(cells) {
     }
     currentOverlays = [];
 
+    // Also clear selection highlight if cells are reloaded
+    if (selectedHighlightOverlay) {
+        map.removeOverlay(selectedHighlightOverlay);
+        selectedHighlightOverlay = null;
+    }
+
     // Apply coverage filter
     let filtered = cells;
     if (coverageFilter === 'active') {
         filtered = cells.filter(c => c.activePacketCount && c.activePacketCount > 0);
     } else if (coverageFilter === 'passive') {
         filtered = cells.filter(c => c.passivePacketCount && c.passivePacketCount > 0);
+    }
+
+    // Apply repeater filter
+    if (repeaterFilter) {
+        filtered = filtered.filter(c => c.repeaterHexIDs && c.repeaterHexIDs.includes(repeaterFilter));
     }
 
     const overlays = filtered.map(cell => {
@@ -199,6 +305,18 @@ function renderCells(cells) {
         map.addOverlays(overlays);
     }
     currentOverlays = overlays;
+
+    // Re-select the previously selected cell if it's still in the filtered set
+    if (selectedCellData) {
+        const key = `${selectedCellData.hexQ}_${selectedCellData.hexR}`;
+        const match = filtered.find(c => `${c.hexQ}_${c.hexR}` === key);
+        if (match) {
+            selectCell(null, match);
+        } else {
+            selectedCellData = null;
+            dismissPopup();
+        }
+    }
 }
 
 // Load repeaters for current viewport
@@ -225,6 +343,14 @@ async function loadRepeaters() {
         if (!response.ok) return;
         const data = await response.json();
         renderRepeaters(data.repeaters);
+
+        // Build name lookup for repeater dropdown
+        data.repeaters.forEach(r => {
+            repeaterNames[r.hexID] = r.name;
+        });
+
+        // Refresh dropdown labels with names
+        updateRepeaterDropdown(lastCellData);
     } catch (e) {
         console.error('Failed to load repeaters:', e);
     }
@@ -263,18 +389,30 @@ function showCellPopup(cell) {
 
     const quality = cell.snrQuality || snrQuality(cell.averageSNR);
     const color = snrColor(quality);
+    const level = qualityLevel(quality);
     const snrText = cell.averageSNR !== null && cell.averageSNR !== undefined
         ? cell.averageSNR.toFixed(1) + ' dB'
         : 'N/A';
+
+    // Signal quality bars HTML
+    let barsHTML = '<div class="signal-bar">';
+    for (let i = 1; i <= 5; i++) {
+        const filled = i <= level;
+        const barColor = filled ? color : 'rgba(255,255,255,0.1)';
+        barsHTML += `<div class="signal-segment" style="background:${barColor};height:${8 + i * 4}px;"></div>`;
+    }
+    barsHTML += '</div>';
 
     let repeatersHTML = '';
     if (cell.repeaterHexIDs && cell.repeaterHexIDs.length > 0) {
         repeatersHTML = `
             <div class="repeaters">
                 <div class="detail-label">Repeaters:</div>
-                ${cell.repeaterHexIDs.map(id =>
-                    `<span class="repeater-tag">${id}</span>`
-                ).join('')}
+                ${cell.repeaterHexIDs.map(id => {
+                    const name = repeaterNames[id];
+                    const label = name ? `${name}` : id;
+                    return `<span class="repeater-tag" onclick="event.stopPropagation(); applyRepeaterFilter('${id}'); document.getElementById('repeater-select').value='${id}';" title="Click to filter by this repeater">${label}</span>`;
+                }).join('')}
             </div>
         `;
     }
@@ -298,7 +436,11 @@ function showCellPopup(cell) {
     popupElement.className = 'cell-popup-overlay';
     popupElement.innerHTML = `
         <div class="cell-popup">
-            <h3 style="color: ${color}">Signal: ${quality}</h3>
+            <div class="popup-header">
+                <h3 style="color: ${color}">Signal: ${quality}</h3>
+                <button class="popup-close" onclick="event.stopPropagation(); deselectCell();">&times;</button>
+            </div>
+            ${barsHTML}
             <div class="detail-row">
                 <span class="detail-label">Avg SNR</span>
                 <span class="detail-value">${snrText}</span>
@@ -318,7 +460,7 @@ function showCellPopup(cell) {
 
     popupElement.addEventListener('click', function(e) {
         e.stopPropagation();
-        dismissPopup();
+        deselectCell();
     });
 
     document.body.appendChild(popupElement);

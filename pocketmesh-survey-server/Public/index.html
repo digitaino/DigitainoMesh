@@ -46,6 +46,16 @@
             </div>
         </div>
 
+        <div class="filter-bar">
+            <div class="filter-header">
+                <h3>Repeater</h3>
+                <span class="filter-count" id="repeater-count"></span>
+            </div>
+            <select id="repeater-select" class="repeater-select" onchange="applyRepeaterFilter(this.value)">
+                <option value="">All Repeaters</option>
+            </select>
+        </div>
+
         <div class="legend">
             <h3>Signal Quality (SNR)</h3>
             <div class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> Excellent (&gt;10 dB)</div>

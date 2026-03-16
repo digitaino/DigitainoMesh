@@ -236,6 +236,108 @@ final class SignalSurveyViewModel {
     /// Count of points successfully uploaded live in this session.
     private(set) var liveUploadCount: Int = 0
 
+    // MARK: - Community Overlay
+
+    /// Whether the community data overlay is shown on the survey map.
+    var showCommunityOverlay: Bool = false {
+        didSet {
+            if showCommunityOverlay {
+                if let region = lastCommunityRegion {
+                    Task { await loadCommunityCells(for: region) }
+                }
+                startCommunityRefresh()
+            } else {
+                communityCells = []
+                selectedCommunityCell = nil
+                communityCoverageFilter = .all
+                communityRepeaterFilter = nil
+                stopCommunityRefresh()
+            }
+        }
+    }
+
+    /// Community cells loaded from the server for the current viewport.
+    private(set) var communityCells: [SurveyUploadService.CommunityCell] = []
+
+    /// Coverage filter for the community overlay (All/Active/Passive).
+    var communityCoverageFilter: CommunityMapView.CoverageFilter = .all
+
+    /// Optional repeater filter for the community overlay layer.
+    var communityRepeaterFilter: String?
+
+    /// All unique repeater hex IDs from current community cell data.
+    var communityAvailableRepeaters: [String] {
+        let ids = Set(communityCells.flatMap(\.repeaterHexIDs))
+        return ids.sorted()
+    }
+
+    /// Community cells after applying coverage and repeater filters.
+    var filteredCommunityCells: [SurveyUploadService.CommunityCell] {
+        var result: [SurveyUploadService.CommunityCell]
+        switch communityCoverageFilter {
+        case .all: result = communityCells
+        case .active: result = communityCells.filter { ($0.activePacketCount ?? 0) > 0 }
+        case .passive: result = communityCells.filter { ($0.passivePacketCount ?? 0) > 0 }
+        }
+        if let repeater = communityRepeaterFilter {
+            result = result.filter { $0.repeaterHexIDs.contains(repeater) }
+        }
+        return result
+    }
+
+    /// Upload service for fetching community data.
+    private var communityUploadService: SurveyUploadService?
+    private var communityRefreshTask: Task<Void, Never>?
+    private var lastCommunityRegion: MKCoordinateRegion?
+
+    /// Load community cells for a given map region.
+    func loadCommunityCells(for region: MKCoordinateRegion) async {
+        lastCommunityRegion = region
+        guard showCommunityOverlay else { return }
+
+        if communityUploadService == nil {
+            communityUploadService = SurveyUploadService()
+        }
+
+        let center = region.center
+        let span = region.span
+        let minLat = center.latitude - span.latitudeDelta / 2
+        let maxLat = center.latitude + span.latitudeDelta / 2
+        let minLon = center.longitude - span.longitudeDelta / 2
+        let maxLon = center.longitude + span.longitudeDelta / 2
+
+        do {
+            let response = try await communityUploadService!.fetchCommunityData(
+                minLat: minLat, maxLat: maxLat,
+                minLon: minLon, maxLon: maxLon
+            )
+            communityCells = response.cells
+        } catch {
+            // Silently fail — community overlay is best-effort
+            logger.warning("Community overlay fetch failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func startCommunityRefresh() {
+        stopCommunityRefresh()
+        communityRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled else { break }
+                guard let self, let region = self.lastCommunityRegion else { continue }
+                await self.loadCommunityCells(for: region)
+            }
+        }
+    }
+
+    private func stopCommunityRefresh() {
+        communityRefreshTask?.cancel()
+        communityRefreshTask = nil
+    }
+
+    /// The community cell tapped by the user (for showing detail overlay).
+    var selectedCommunityCell: SurveyUploadService.CommunityCell?
+
     // MARK: - Active Probing
 
     /// Whether active probing (node discovery) is enabled during survey.

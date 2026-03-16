@@ -160,7 +160,52 @@ struct SignalSurveyView: View {
                 }
 
             case .gridHeatmap:
-                // All cells rendered unconditionally
+                // Community overlay cells (faded backdrop, rendered behind user data)
+                if viewModel.showCommunityOverlay {
+                    ForEach(viewModel.filteredCommunityCells) { cell in
+                        let quality = SNRQuality(snr: cell.averageSNR)
+                        let vertices = HexGrid.vertices(
+                            centerLatitude: cell.latitude,
+                            centerLongitude: cell.longitude,
+                            referenceLatitude: cell.referenceLatitude
+                        )
+
+                        MapPolygon(coordinates: vertices)
+                            .foregroundStyle(quality.color.opacity(0.12))
+                            .stroke(quality.color.opacity(0.25), style: StrokeStyle(lineWidth: 0.5, dash: [3, 2]))
+
+                        Annotation("", coordinate: CLLocationCoordinate2D(
+                            latitude: cell.latitude,
+                            longitude: cell.longitude
+                        )) {
+                            Color.clear
+                                .frame(width: 60, height: 60)
+                                .contentShape(.circle)
+                                .onTapGesture {
+                                    if viewModel.selectedCommunityCell?.id == cell.id {
+                                        viewModel.selectedCommunityCell = nil
+                                    } else {
+                                        viewModel.selectedCommunityCell = cell
+                                        viewModel.selectedCell = nil
+                                    }
+                                }
+                        }
+                    }
+
+                    // Community cell selection highlight
+                    if let selected = viewModel.selectedCommunityCell {
+                        let vertices = HexGrid.vertices(
+                            centerLatitude: selected.latitude,
+                            centerLongitude: selected.longitude,
+                            referenceLatitude: selected.referenceLatitude
+                        )
+                        MapPolygon(coordinates: vertices)
+                            .foregroundStyle(SNRQuality(snr: selected.averageSNR).color.opacity(0.35))
+                            .stroke(Color.cyan, lineWidth: 2)
+                    }
+                }
+
+                // User's own survey cells rendered on top
                 ForEach(viewModel.gridCells) { cell in
                     if cell.isDeadZone {
                         MapPolygon(coordinates: cell.vertices)
@@ -186,6 +231,7 @@ struct SignalSurveyView: View {
                             .contentShape(.circle)
                             .onTapGesture {
                                 viewModel.trackingUserLocation = false
+                                viewModel.selectedCommunityCell = nil
                                 if viewModel.selectedCell?.coordKey == cell.coordKey {
                                     viewModel.selectedCell = nil
                                 } else {
@@ -244,6 +290,11 @@ struct SignalSurveyView: View {
             UserAnnotation()
         }
         .mapStyle(viewModel.mapStyleSelection.mapStyle)
+        .onMapCameraChange(frequency: .onEnd) { context in
+            if viewModel.showCommunityOverlay {
+                Task { await viewModel.loadCommunityCells(for: context.region) }
+            }
+        }
         .ignoresSafeArea()
     }
 
@@ -657,6 +708,19 @@ struct SignalSurveyView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Center on survey data")
+
+                    // Community overlay toggle
+                    Button {
+                        viewModel.showCommunityOverlay.toggle()
+                    } label: {
+                        Image(systemName: viewModel.showCommunityOverlay ? "globe.americas.fill" : "globe.americas")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(viewModel.showCommunityOverlay ? .cyan : .primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Toggle community overlay")
                 }
             }
             .padding(.top, 8)
@@ -683,6 +747,10 @@ struct SignalSurveyView: View {
             Spacer()
 
             cellDetailCard
+
+            communityCellDetailCard
+
+            communityFilterBar
 
             // Survey controls (left-aligned)
             VStack(alignment: .leading, spacing: 6) {
@@ -810,6 +878,198 @@ struct SignalSurveyView: View {
             .padding(.bottom, 8)
         }
         .animation(.snappy(duration: 0.25), value: viewModel.selectedCell?.coordKey)
+        .animation(.snappy(duration: 0.25), value: viewModel.selectedCommunityCell?.id)
+        .animation(.snappy(duration: 0.25), value: viewModel.showCommunityOverlay)
+    }
+
+    // MARK: - Community Filter Bar
+
+    @ViewBuilder
+    private var communityFilterBar: some View {
+        if viewModel.showCommunityOverlay {
+            HStack(spacing: 8) {
+                Picker("Coverage", selection: $viewModel.communityCoverageFilter) {
+                    ForEach(CommunityMapView.CoverageFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 180)
+
+                Menu {
+                    Button {
+                        viewModel.communityRepeaterFilter = nil
+                    } label: {
+                        HStack {
+                            Text("All Repeaters")
+                            if viewModel.communityRepeaterFilter == nil {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    ForEach(viewModel.communityAvailableRepeaters, id: \.self) { hexID in
+                        Button {
+                            viewModel.communityRepeaterFilter = hexID
+                        } label: {
+                            HStack {
+                                Text(hexID)
+                                if viewModel.communityRepeaterFilter == hexID {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.caption2)
+                        Text(viewModel.communityRepeaterFilter ?? "All")
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(viewModel.communityRepeaterFilter != nil ? .cyan : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(viewModel.communityRepeaterFilter != nil ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
+                    )
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 16)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    // MARK: - Community Cell Detail Card
+
+    @ViewBuilder
+    private var communityCellDetailCard: some View {
+        if let cell = viewModel.selectedCommunityCell {
+            let quality = SNRQuality(snr: cell.averageSNR)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "globe.americas.fill")
+                        .foregroundStyle(.cyan)
+                        .font(.title3)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(quality.qualityLabel)
+                            .font(.subheadline.weight(.semibold))
+                        Text("Community data")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    communityCellSignalBar(quality: quality)
+
+                    Button {
+                        viewModel.selectedCommunityCell = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.title3)
+                    }
+                }
+
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let snr = cell.averageSNR {
+                            Label(String(format: "%.1f dB SNR", snr), systemImage: "antenna.radiowaves.left.and.right")
+                                .font(.caption)
+                        }
+                        Label("\(cell.packetCount) packets", systemImage: "number")
+                            .font(.caption)
+                        if let active = cell.activePacketCount, let passive = cell.passivePacketCount,
+                           active > 0 || passive > 0 {
+                            HStack(spacing: 6) {
+                                if active > 0 {
+                                    Text("\(active) active")
+                                        .font(.caption2)
+                                        .foregroundStyle(.green)
+                                }
+                                if passive > 0 {
+                                    Text("\(passive) passive")
+                                        .font(.caption2)
+                                        .foregroundStyle(.yellow)
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("\(cell.contributionCount) contributions", systemImage: "person.2")
+                            .font(.caption)
+                        if !cell.repeaterHexIDs.isEmpty {
+                            Label("\(cell.repeaterHexIDs.count) repeater(s)", systemImage: "point.3.filled.connected.trianglepath.dotted")
+                                .font(.caption)
+                        }
+                    }
+                }
+
+                if !cell.repeaterHexIDs.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            ForEach(cell.repeaterHexIDs, id: \.self) { hexID in
+                                Button {
+                                    if viewModel.communityRepeaterFilter == hexID {
+                                        viewModel.communityRepeaterFilter = nil
+                                    } else {
+                                        viewModel.communityRepeaterFilter = hexID
+                                    }
+                                } label: {
+                                    Text(hexID)
+                                        .font(.caption2.monospaced())
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            viewModel.communityRepeaterFilter == hexID
+                                                ? Color.cyan.opacity(0.35)
+                                                : Color.cyan.opacity(0.15),
+                                            in: Capsule()
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 16)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func communityCellSignalBar(quality: SNRQuality) -> some View {
+        let level: Int = {
+            switch quality {
+            case .excellent: return 5
+            case .good: return 4
+            case .fair: return 3
+            case .poor: return 2
+            case .veryPoor: return 1
+            case .unknown: return 0
+            }
+        }()
+
+        return HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(i <= level ? quality.color : Color.secondary.opacity(0.2))
+                    .frame(width: 6, height: CGFloat(4 + i * 3))
+            }
+        }
     }
 
     // MARK: - Survey Setup Sheet

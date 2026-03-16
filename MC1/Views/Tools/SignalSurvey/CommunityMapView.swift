@@ -23,16 +23,28 @@ struct CommunityMapView: View {
     @State private var lastRegion: MKCoordinateRegion?
     @State private var refreshTask: Task<Void, Never>?
     @State private var coverageFilter: CoverageFilter = .all
+    @State private var selectedRepeater: String?
 
     private let uploadService = SurveyUploadService()
 
-    /// Cells filtered by the active/passive coverage filter.
+    /// All unique repeater hex IDs from current cell data.
+    private var availableRepeaters: [String] {
+        let ids = Set(cells.flatMap(\.repeaterHexIDs))
+        return ids.sorted()
+    }
+
+    /// Cells filtered by the active/passive coverage filter and repeater filter.
     private var filteredCells: [SurveyUploadService.CommunityCell] {
+        var result: [SurveyUploadService.CommunityCell]
         switch coverageFilter {
-        case .all: cells
-        case .active: cells.filter { ($0.activePacketCount ?? 0) > 0 }
-        case .passive: cells.filter { ($0.passivePacketCount ?? 0) > 0 }
+        case .all: result = cells
+        case .active: result = cells.filter { ($0.activePacketCount ?? 0) > 0 }
+        case .passive: result = cells.filter { ($0.passivePacketCount ?? 0) > 0 }
         }
+        if let repeater = selectedRepeater {
+            result = result.filter { $0.repeaterHexIDs.contains(repeater) }
+        }
+        return result
     }
 
     var body: some View {
@@ -87,12 +99,17 @@ struct CommunityMapView: View {
                     }
                 }
                 ToolbarItem(placement: .bottomBar) {
-                    Picker("Coverage", selection: $coverageFilter) {
-                        ForEach(CoverageFilter.allCases, id: \.self) { filter in
-                            Text(filter.rawValue).tag(filter)
+                    HStack(spacing: 8) {
+                        Picker("Coverage", selection: $coverageFilter) {
+                            ForEach(CoverageFilter.allCases, id: \.self) { filter in
+                                Text(filter.rawValue).tag(filter)
+                            }
                         }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 200)
+
+                        repeaterMenu
                     }
-                    .pickerStyle(.segmented)
                 }
             }
             .task {
@@ -116,6 +133,53 @@ struct CommunityMapView: View {
                 refreshTask?.cancel()
                 refreshTask = nil
             }
+        }
+    }
+
+    // MARK: - Repeater Filter Menu
+
+    private var repeaterMenu: some View {
+        Menu {
+            Button {
+                selectedRepeater = nil
+            } label: {
+                HStack {
+                    Text("All Repeaters")
+                    if selectedRepeater == nil {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+
+            Divider()
+
+            ForEach(availableRepeaters, id: \.self) { hexID in
+                Button {
+                    selectedRepeater = hexID
+                } label: {
+                    HStack {
+                        Text(hexID)
+                        if selectedRepeater == hexID {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.caption)
+                Text(selectedRepeater ?? "All")
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(selectedRepeater != nil ? .cyan : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(selectedRepeater != nil ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
+            )
         }
     }
 
@@ -196,18 +260,47 @@ struct CommunityMapView: View {
         }
     }
 
+    // MARK: - Signal Quality Bar
+
+    private func signalQualityBar(quality: SNRQuality) -> some View {
+        let level: Int = {
+            switch quality {
+            case .excellent: return 5
+            case .good: return 4
+            case .fair: return 3
+            case .poor: return 2
+            case .veryPoor: return 1
+            case .unknown: return 0
+            }
+        }()
+
+        return HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(i <= level ? quality.color : Color.secondary.opacity(0.2))
+                    .frame(width: 8, height: CGFloat(4 + i * 3))
+            }
+        }
+    }
+
     // MARK: - Cell Detail
 
     private func cellDetail(_ cell: SurveyUploadService.CommunityCell) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let quality = SNRQuality(snr: cell.averageSNR)
+
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label {
                     Text("Cell Detail")
                         .font(.subheadline.weight(.semibold))
                 } icon: {
                     Image(systemName: "hexagon.fill")
-                        .foregroundStyle(SNRQuality(snr: cell.averageSNR).color)
+                        .foregroundStyle(quality.color)
                 }
+
+                Spacer()
+
+                signalQualityBar(quality: quality)
 
                 Spacer()
 
@@ -258,11 +351,25 @@ struct CommunityMapView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 4) {
                         ForEach(cell.repeaterHexIDs, id: \.self) { hexID in
-                            Text(hexID)
-                                .font(.caption2.monospaced())
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.cyan.opacity(0.15), in: Capsule())
+                            Button {
+                                if selectedRepeater == hexID {
+                                    selectedRepeater = nil
+                                } else {
+                                    selectedRepeater = hexID
+                                }
+                            } label: {
+                                Text(hexID)
+                                    .font(.caption2.monospaced())
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        selectedRepeater == hexID
+                                            ? Color.cyan.opacity(0.35)
+                                            : Color.cyan.opacity(0.15),
+                                        in: Capsule()
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
