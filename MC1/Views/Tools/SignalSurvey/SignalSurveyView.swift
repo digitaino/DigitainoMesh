@@ -15,6 +15,7 @@ struct SignalSurveyView: View {
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
     @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
+    @AppStorage("surveyLiveUpload") private var liveUploadPref = false
     @Namespace private var mapScope
 
     var body: some View {
@@ -104,12 +105,16 @@ struct SignalSurveyView: View {
         }
         .onAppear {
             viewModel.probeEnabled = probeEnabledPref
+            viewModel.liveUploadEnabled = liveUploadPref
             if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref) {
                 viewModel.probeFrequency = freq
             }
         }
         .onChange(of: probeEnabledPref) { _, newValue in
             viewModel.probeEnabled = newValue
+        }
+        .onChange(of: liveUploadPref) { _, newValue in
+            viewModel.liveUploadEnabled = newValue
         }
         .onChange(of: probeFrequencyPref) { _, newValue in
             if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: newValue) {
@@ -875,6 +880,32 @@ struct SignalSurveyView: View {
                         }
                     } footer: {
                         Text("Use a dedicated private channel to avoid cluttering conversations. Optional — probing works without this.")
+                    }
+                }
+
+                // MARK: Community Data
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label {
+                            Text("Community Map")
+                                .font(.subheadline.weight(.semibold))
+                        } icon: {
+                            Image(systemName: "globe")
+                                .foregroundStyle(.green)
+                        }
+                        Text("Share your survey data with the DigitainoMesh community to build a crowd-sourced coverage map at mesh.digitaino.com. Data is anonymized — only hex grid cells (~100m), signal stats, and repeater IDs are sent. No exact GPS, device identity, or message content is included.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+
+                    Toggle("Live Upload", isOn: $liveUploadPref)
+
+                } footer: {
+                    if liveUploadPref {
+                        Text("Each received packet will be uploaded to the community map in real time. You can also export and upload a full session later from the toolbar menu.")
+                    } else {
+                        Text("Data stays on your device. You can export and upload to the community map after the session from the toolbar menu.")
                     }
                 }
             }

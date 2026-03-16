@@ -59,6 +59,8 @@ struct MapView: View {
 
             // Floating controls
             VStack {
+                timeFilterBar
+                    .padding(.top, 8)
                 Spacer()
                 mapControls
             }
@@ -95,7 +97,7 @@ struct MapView: View {
 
     @ViewBuilder
     private var mapContent: some View {
-        if viewModel.contactsWithLocation.isEmpty && !viewModel.isLoading {
+        if viewModel.filteredContacts.isEmpty && !viewModel.isLoading {
             emptyState
         } else {
             // Keep MKMapView always in tree to prevent Metal deallocation crashes
@@ -104,7 +106,7 @@ struct MapView: View {
 
             ZStack {
                 MKMapViewRepresentable(
-                    contacts: viewModel.contactsWithLocation,
+                    contacts: viewModel.filteredContacts,
                     mapType: viewModel.mapStyleSelection.mkMapType,
                     showLabels: viewModel.showLabels,
                     showsUserLocation: true,
@@ -235,13 +237,44 @@ struct MapView: View {
         } label: {
             Image(systemName: "arrow.up.left.and.arrow.down.right")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(viewModel.contactsWithLocation.isEmpty ? .secondary : .primary)
+                .foregroundStyle(viewModel.filteredContacts.isEmpty ? .secondary : .primary)
                 .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.contactsWithLocation.isEmpty)
+        .disabled(viewModel.filteredContacts.isEmpty)
         .accessibilityLabel(L10n.Map.Map.Controls.centerAll)
+    }
+
+    // MARK: - Time Filter Bar
+
+    private var timeFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(MapTimeFilter.allCases) { filter in
+                    Button {
+                        withAnimation {
+                            viewModel.selectedTimeFilter = filter
+                        }
+                    } label: {
+                        Text(filter.displayName)
+                            .font(.caption)
+                            .fontWeight(viewModel.selectedTimeFilter == filter ? .semibold : .regular)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                viewModel.selectedTimeFilter == filter
+                                    ? AnyShapeStyle(.tint)
+                                    : AnyShapeStyle(.ultraThinMaterial)
+                            )
+                            .foregroundStyle(viewModel.selectedTimeFilter == filter ? .white : .primary)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+        }
     }
 
     // MARK: - Refresh Button

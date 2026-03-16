@@ -219,7 +219,7 @@ enum SurveyExportService {
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd-HHmmss"
             let timestamp = formatter.string(from: Date())
-            let filename = "PocketMesh-Survey-\(timestamp).json"
+            let filename = "DigitainoMesh-Survey-\(timestamp).json"
             let tempURL = FileManager.default.temporaryDirectory.appending(path: filename)
             try data.write(to: tempURL)
 

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Uploads shared route and repeater map data to the PocketMesh server
+/// Uploads shared route and repeater map data to the DigitainoMesh server
 /// and returns short URLs for sharing.
 actor RouteShareService {
     private static let logger = Logger(subsystem: "com.mc1", category: "RouteShare")

@@ -34,12 +34,30 @@ final class MapViewModel {
     /// Whether the layers menu is showing
     var showingLayersMenu = false
 
+    /// Time filter for "last heard" filtering
+    var selectedTimeFilter: MapTimeFilter = .allTime
+
+    /// Contacts filtered by the selected time filter
+    var filteredContacts: [ContactDTO] {
+        guard let maxAge = selectedTimeFilter.maxAge else {
+            return contactsWithLocation
+        }
+        let cutoff = Date().timeIntervalSince1970 - maxAge
+        return contactsWithLocation.filter { contact in
+            TimeInterval(contact.lastAdvertTimestamp) >= cutoff
+        }
+    }
+
     /// Whether the community signal overlay is active
     var showCommunityOverlay = false {
         didSet {
-            if !showCommunityOverlay {
+            if showCommunityOverlay {
+                startCommunityRefresh()
+            } else {
                 communityLoadTask?.cancel()
                 communityLoadTask = nil
+                communityRefreshTask?.cancel()
+                communityRefreshTask = nil
                 communityCells = []
             }
         }
@@ -57,6 +75,8 @@ final class MapViewModel {
     private var deviceID: UUID?
     private let uploadService = SurveyUploadService()
     private var communityLoadTask: Task<Void, Never>?
+    private var communityRefreshTask: Task<Void, Never>?
+    private var lastCommunityRegion: MKCoordinateRegion?
     private static let logger = Logger(subsystem: "com.mc1", category: "MapViewModel")
 
     // MARK: - Initialization
@@ -111,9 +131,10 @@ final class MapViewModel {
         selectedContact = contact
     }
 
-    /// Center map to show all contacts
+    /// Center map to show all filtered contacts
     func centerOnAllContacts() {
-        guard !contactsWithLocation.isEmpty else {
+        let contacts = filteredContacts
+        guard !contacts.isEmpty else {
             cameraRegion = nil
             return
         }
@@ -124,7 +145,7 @@ final class MapViewModel {
         var minLon = Double.greatestFiniteMagnitude
         var maxLon = -Double.greatestFiniteMagnitude
 
-        for contact in contactsWithLocation {
+        for contact in contacts {
             let lat = contact.latitude
             let lon = contact.longitude
             minLat = min(minLat, lat)
@@ -155,6 +176,7 @@ final class MapViewModel {
     /// Load community signal cells for the given map region, debounced.
     func loadCommunityCells(for region: MKCoordinateRegion) {
         guard showCommunityOverlay else { return }
+        lastCommunityRegion = region
 
         communityLoadTask?.cancel()
         communityLoadTask = Task {
@@ -162,26 +184,44 @@ final class MapViewModel {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
 
-            isLoadingCommunity = true
-            defer { isLoadingCommunity = false }
+            await fetchCommunityCells(for: region)
+        }
+    }
 
-            let span = region.span
-            let center = region.center
-            let minLat = center.latitude - span.latitudeDelta / 2
-            let maxLat = center.latitude + span.latitudeDelta / 2
-            let minLon = center.longitude - span.longitudeDelta / 2
-            let maxLon = center.longitude + span.longitudeDelta / 2
+    /// Fetch community cells for a region (shared by on-demand and periodic refresh).
+    private func fetchCommunityCells(for region: MKCoordinateRegion) async {
+        isLoadingCommunity = true
+        defer { isLoadingCommunity = false }
 
-            do {
-                let response = try await uploadService.fetchCommunityData(
-                    minLat: minLat, maxLat: maxLat,
-                    minLon: minLon, maxLon: maxLon
-                )
-                guard !Task.isCancelled else { return }
-                communityCells = response.cells
-            } catch {
-                guard !Task.isCancelled else { return }
-                Self.logger.warning("Failed to load community cells: \(error.localizedDescription)")
+        let span = region.span
+        let center = region.center
+        let minLat = center.latitude - span.latitudeDelta / 2
+        let maxLat = center.latitude + span.latitudeDelta / 2
+        let minLon = center.longitude - span.longitudeDelta / 2
+        let maxLon = center.longitude + span.longitudeDelta / 2
+
+        do {
+            let response = try await uploadService.fetchCommunityData(
+                minLat: minLat, maxLat: maxLat,
+                minLon: minLon, maxLon: maxLon
+            )
+            guard !Task.isCancelled else { return }
+            communityCells = response.cells
+        } catch {
+            guard !Task.isCancelled else { return }
+            Self.logger.warning("Failed to load community cells: \(error.localizedDescription)")
+        }
+    }
+
+    /// Periodically refresh community cells every 15s while the overlay is visible.
+    private func startCommunityRefresh() {
+        communityRefreshTask?.cancel()
+        communityRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled else { break }
+                guard let self, let region = self.lastCommunityRegion else { continue }
+                await self.fetchCommunityCells(for: region)
             }
         }
     }

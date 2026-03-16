@@ -33,7 +33,7 @@ enum SurveyUploadError: LocalizedError {
 
 // MARK: - Service
 
-/// Uploads anonymized signal survey data to the PocketMesh community map server
+/// Uploads anonymized signal survey data to the DigitainoMesh community map server
 /// and fetches aggregated community data for display.
 actor SurveyUploadService {
     private static let logger = Logger(subsystem: "com.mc1", category: "SurveyUpload")
@@ -152,6 +152,89 @@ actor SurveyUploadService {
 
         Self.logger.info("Uploaded \(response.accepted) cells to community map")
         return response
+    }
+
+    // MARK: - Live Upload (per-point)
+
+    /// Upload a single survey point to the community map server in real time.
+    /// Converts the point to a 1-cell hex payload and POSTs it immediately.
+    /// Errors are logged but not thrown — live upload is best-effort.
+    func uploadLivePoint(
+        _ point: SignalSurveyPointDTO,
+        referenceLatitude: Double,
+        repeaterContacts: [ContactDTO] = []
+    ) async {
+        let hex = HexGrid.axialFromLatLon(
+            latitude: point.latitude,
+            longitude: point.longitude,
+            referenceLatitude: referenceLatitude
+        )
+        let center = HexGrid.centerLatLon(from: hex, referenceLatitude: referenceLatitude)
+        let isFlood = point.routeType == .flood || point.routeType == .tcFlood
+
+        let cellData = SurveyExportService.CellData(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            averageSNR: point.snr,
+            averageRSSI: point.rssi.map { Double($0) },
+            minSNR: point.snr,
+            maxSNR: point.snr,
+            packetCount: 1,
+            routeTypeBreakdown: SurveyExportService.RouteBreakdown(
+                flood: isFlood ? 1 : 0,
+                direct: isFlood ? 0 : 1
+            ),
+            timeRange: nil,
+            repeaterHexIDs: point.pathNodeHexIDs,
+            hexQ: hex.q,
+            hexR: hex.r,
+            referenceLatitude: referenceLatitude
+        )
+
+        // Resolve repeater info for any path nodes
+        let resolvedRepeaters: [SurveyExportService.RepeaterInfo] = point.pathNodeHexIDs.compactMap { hexID in
+            guard let hashBytes = Data(hexString: hexID) else { return nil }
+            guard let contact = RepeaterResolver.bestMatch(
+                for: hashBytes, in: repeaterContacts, userLocation: nil
+            ) else { return nil }
+            guard contact.hasLocation else { return nil }
+            return SurveyExportService.RepeaterInfo(
+                hexID: hexID,
+                name: contact.displayName,
+                latitude: contact.latitude,
+                longitude: contact.longitude
+            )
+        }
+
+        do {
+            let contributorID = try await getOrCreateContributorID()
+
+            let payload = UploadPayload(
+                version: SurveyExportService.formatVersion,
+                contributorID: contributorID,
+                gridType: "hex",
+                cellSizeDegrees: HexGrid.size,
+                referenceLatitude: referenceLatitude,
+                cells: [cellData],
+                repeaters: resolvedRepeaters
+            )
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let body = try encoder.encode(payload)
+
+            let url = Self.serverBaseURL.appending(path: "survey")
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(Self.apiKey, forHTTPHeaderField: "X-API-Key")
+            request.httpBody = body
+
+            _ = try await performRequest(request)
+            Self.logger.debug("Live uploaded point to hex (\(hex.q), \(hex.r))")
+        } catch {
+            Self.logger.warning("Live upload failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Fetch Community Data

@@ -2,7 +2,7 @@ import MapKit
 import MC1Services
 import SwiftUI
 
-/// Displays aggregated community signal survey data from the PocketMesh server.
+/// Displays aggregated community signal survey data from the DigitainoMesh server.
 struct CommunityMapView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -13,6 +13,8 @@ struct CommunityMapView: View {
     @State private var selectedCell: SurveyUploadService.CommunityCell?
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var showStats = true
+    @State private var lastRegion: MKCoordinateRegion?
+    @State private var refreshTask: Task<Void, Never>?
 
     private let uploadService = SurveyUploadService()
 
@@ -72,7 +74,22 @@ struct CommunityMapView: View {
                 await loadData()
             }
             .onMapCameraChange(frequency: .onEnd) { context in
+                lastRegion = context.region
                 Task { await loadCellsForRegion(context.region) }
+            }
+            .onAppear {
+                // Auto-refresh every 15s so live uploads appear quickly
+                refreshTask = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(15))
+                        guard !Task.isCancelled, let region = lastRegion else { continue }
+                        await loadCellsForRegion(region)
+                    }
+                }
+            }
+            .onDisappear {
+                refreshTask?.cancel()
+                refreshTask = nil
             }
         }
     }

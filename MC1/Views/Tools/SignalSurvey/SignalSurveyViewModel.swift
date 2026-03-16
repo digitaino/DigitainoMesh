@@ -210,6 +210,17 @@ final class SignalSurveyViewModel {
     /// produce identical cells at the same location.
     private var gridReferenceLatitude: Double = 30.0
 
+    // MARK: - Live Community Upload
+
+    /// Whether each survey point is uploaded to the community map in real time.
+    var liveUploadEnabled: Bool = false
+
+    /// Upload service instance for live point uploads. Created on demand.
+    private var liveUploadService: SurveyUploadService?
+
+    /// Count of points successfully uploaded live in this session.
+    private(set) var liveUploadCount: Int = 0
+
     // MARK: - Active Probing
 
     /// Whether active probing (node discovery) is enabled during survey.
@@ -349,6 +360,7 @@ final class SignalSurveyViewModel {
             activeSession = session
             state = .active(sessionID: session.id)
             livePointCount = 0
+            liveUploadCount = 0
             probeCount = 0
             probeSendLocations = []
             gridBuckets = [:]
@@ -507,6 +519,24 @@ final class SignalSurveyViewModel {
                 pointCount: livePointCount,
                 cellCount: gridCells.count
             )
+        }
+
+        // Live upload to community map if enabled
+        if liveUploadEnabled {
+            let refLat = gridReferenceLatitude
+            let contacts = repeaterContacts
+            let service = liveUploadService ?? SurveyUploadService()
+            if liveUploadService == nil { liveUploadService = service }
+            Task.detached {
+                await service.uploadLivePoint(
+                    point,
+                    referenceLatitude: refLat,
+                    repeaterContacts: contacts
+                )
+                await MainActor.run { [weak self] in
+                    self?.liveUploadCount += 1
+                }
+            }
         }
 
         refreshLiveStatus()

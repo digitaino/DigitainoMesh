@@ -26,7 +26,7 @@ final class TrafficHeatmapViewModel {
 
     // MARK: - Map State
 
-    var cameraPosition: MapCameraPosition = .automatic
+    var cameraRegion: MKCoordinateRegion?
     var mapStyleSelection: MapStyleSelection = .standard
     var showingLayersMenu: Bool = false
 
@@ -196,7 +196,7 @@ final class TrafficHeatmapViewModel {
             // Resolve each hop to a located node
             var locatedHops: [(publicKey: Data, coordinate: CLLocationCoordinate2D)] = []
 
-            for hash in hopHashes {
+            for (hopIndex, hash) in hopHashes.enumerated() {
                 let match: (any RepeaterResolvable)? =
                     RepeaterResolver.bestMatch(for: hash, in: contacts, userLocation: userLocation)
                     ?? RepeaterResolver.bestMatch(for: hash, in: discoveredNodes, userLocation: userLocation)
@@ -210,9 +210,14 @@ final class TrafficHeatmapViewModel {
 
                 let key = match.publicKey
 
+                // SNR/RSSI from the RxLog entry only applies to the last hop in the
+                // path — that's the repeater our radio actually heard directly.
+                // Earlier hops in the chain have unknown link quality.
+                let isLastHop = (hopIndex == hopHashes.count - 1)
+
                 if var existing = repeaterTraffic[key] {
                     existing.packetCount += 1
-                    if let snr = entry.snr {
+                    if isLastHop, let snr = entry.snr {
                         existing.totalSNR += snr
                         existing.snrSampleCount += 1
                     }
@@ -224,8 +229,8 @@ final class TrafficHeatmapViewModel {
                     repeaterTraffic[key] = RepeaterTraffic(
                         node: match,
                         packetCount: 1,
-                        totalSNR: entry.snr ?? 0,
-                        snrSampleCount: entry.snr != nil ? 1 : 0,
+                        totalSNR: isLastHop ? (entry.snr ?? 0) : 0,
+                        snrSampleCount: (isLastHop && entry.snr != nil) ? 1 : 0,
                         lastSeen: entry.receivedAt
                     )
                 }
@@ -233,7 +238,9 @@ final class TrafficHeatmapViewModel {
                 locatedHops.append((key, coord))
             }
 
-            // Build segment traffic from consecutive located hops
+            // Build segment traffic from consecutive located hops.
+            // We don't attribute SNR to segments because we only know the
+            // signal quality of the final hop to our radio, not intermediate links.
             guard locatedHops.count >= 2 else { continue }
             for i in 0..<(locatedHops.count - 1) {
                 let a = locatedHops[i]
@@ -250,18 +257,12 @@ final class TrafficHeatmapViewModel {
 
                 if var existing = segmentTraffic[segKey] {
                     existing.frequency += 1
-                    if let snr = entry.snr {
-                        existing.totalSNR += snr
-                        existing.snrSampleCount += 1
-                    }
                     segmentTraffic[segKey] = existing
                 } else {
                     segmentTraffic[segKey] = SegmentTraffic(
                         coordinateA: a.coordinate,
                         coordinateB: b.coordinate,
-                        frequency: 1,
-                        totalSNR: entry.snr ?? 0,
-                        snrSampleCount: entry.snr != nil ? 1 : 0
+                        frequency: 1
                     )
                 }
             }
@@ -294,7 +295,7 @@ final class TrafficHeatmapViewModel {
                 endCoordinate: segment.coordinateB,
                 frequency: segment.frequency,
                 normalizedFrequency: Double(segment.frequency) / Double(maxFrequency),
-                averageSNR: segment.averageSNR,
+                averageSNR: nil,
                 direction: .unspecified
             )
         }
@@ -340,7 +341,7 @@ final class TrafficHeatmapViewModel {
             longitudeDelta: min(360, (maxLon - minLon) * 1.5 + 0.01)
         )
 
-        cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
+        cameraRegion = MKCoordinateRegion(center: center, span: span)
     }
 
     // MARK: - Private Types
@@ -366,12 +367,6 @@ final class TrafficHeatmapViewModel {
         let coordinateA: CLLocationCoordinate2D
         let coordinateB: CLLocationCoordinate2D
         var frequency: Int
-        var totalSNR: Double
-        var snrSampleCount: Int
-
-        var averageSNR: Double? {
-            snrSampleCount > 0 ? totalSNR / Double(snrSampleCount) : nil
-        }
     }
 
     // MARK: - Private

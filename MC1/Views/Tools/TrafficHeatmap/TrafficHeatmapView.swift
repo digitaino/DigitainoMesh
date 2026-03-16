@@ -3,13 +3,15 @@ import SwiftUI
 import MC1Services
 
 /// Tool view that displays aggregated mesh traffic patterns on a map.
-/// Shows bubble annotations on repeaters (sized by traffic volume, colored by signal quality)
-/// and weighted route lines between hops.
+/// Uses MKMapView via UIViewRepresentable for proper annotation clustering,
+/// tappable pins with callouts, and polyline segment overlays.
 struct TrafficHeatmapView: View {
     @Environment(\.appState) private var appState
 
     @State private var viewModel = TrafficHeatmapViewModel()
-    @Namespace private var mapScope
+    @State private var selectedBubble: TrafficBubbleAnnotation?
+    @State private var detailBubble: TrafficBubbleAnnotation?
+    @State private var showingInfo = false
 
     var body: some View {
         ZStack {
@@ -28,8 +30,19 @@ struct TrafficHeatmapView: View {
         .navigationTitle(L10n.Tools.Tools.trafficMap)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 timePeriodMenu
             }
+        }
+        .sheet(isPresented: $showingInfo) {
+            TrafficMapInfoSheet()
+                .presentationDetents([.medium, .large])
         }
         .task(id: appState.servicesVersion) {
             await loadData()
@@ -74,43 +87,22 @@ struct TrafficHeatmapView: View {
     // MARK: - Map Content
 
     private var mapContent: some View {
-        Map(position: $viewModel.cameraPosition, scope: mapScope) {
-            // Route segments
-            ForEach(viewModel.segmentData) { segment in
-                MapPolyline(coordinates: segment.coordinates)
-                    .stroke(
-                        segmentColor(for: segment),
-                        lineWidth: segmentWidth(for: segment)
-                    )
+        TrafficMapRepresentable(
+            annotations: viewModel.bubbleAnnotations,
+            segments: viewModel.segmentData,
+            mapType: viewModel.mapStyleSelection.mkMapType,
+            showsUserLocation: true,
+            selectedAnnotation: $selectedBubble,
+            cameraRegion: $viewModel.cameraRegion,
+            onDetailTap: { bubble in
+                detailBubble = bubble
             }
-
-            // Repeater bubbles
-            ForEach(viewModel.bubbleAnnotations) { bubble in
-                Annotation("", coordinate: bubble.coordinate) {
-                    TrafficBubbleView(annotation: bubble)
-                }
-            }
-
-            UserAnnotation()
-        }
-        .mapStyle(viewModel.mapStyleSelection.mapStyle)
-        .mapScope(mapScope)
+        )
         .ignoresSafeArea()
-    }
-
-    // MARK: - Segment Styling
-
-    private func segmentColor(for segment: TrafficSegmentData) -> Color {
-        if let snr = segment.averageSNR {
-            SNRQuality(snr: snr).color
-        } else {
-            .secondary
+        .sheet(item: $detailBubble) { bubble in
+            RepeaterTrafficDetailSheet(bubble: bubble)
+                .presentationDetents([.medium])
         }
-    }
-
-    private func segmentWidth(for segment: TrafficSegmentData) -> CGFloat {
-        // Scale from 2pt (lowest traffic) to 8pt (highest traffic)
-        2 + 6 * segment.normalizedFrequency
     }
 
     // MARK: - Summary Banner
@@ -169,7 +161,7 @@ struct TrafficHeatmapView: View {
             HStack {
                 Spacer()
                 MapControlsToolbar(
-                    mapScope: mapScope,
+                    onLocationTap: { centerOnUserLocation() },
                     showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
                     // Center on data
@@ -200,34 +192,192 @@ struct TrafficHeatmapView: View {
         }
         .animation(.spring(response: 0.3), value: viewModel.showingLayersMenu)
     }
+
+    // MARK: - Actions
+
+    private func centerOnUserLocation() {
+        guard let location = appState.locationService.currentLocation else { return }
+        viewModel.cameraRegion = MKCoordinateRegion(
+            center: location.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        )
+    }
 }
 
-// MARK: - Traffic Bubble View
+// MARK: - Repeater Traffic Detail Sheet
 
-/// Inline SwiftUI view for a repeater traffic bubble annotation.
-/// Sized 24–56pt by normalized traffic, colored by SNR quality.
-private struct TrafficBubbleView: View {
-    let annotation: TrafficBubbleAnnotation
+private struct RepeaterTrafficDetailSheet: View {
+    let bubble: TrafficBubbleAnnotation
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Circle()
-            .fill(annotation.snrQuality.color.opacity(0.7))
-            .overlay {
-                Circle()
-                    .strokeBorder(annotation.snrQuality.color, lineWidth: 2)
-            }
-            .frame(width: bubbleSize, height: bubbleSize)
-            .overlay {
-                if bubbleSize >= 36 {
-                    Text("\(annotation.packetCount)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
+        NavigationStack {
+            List {
+                Section("Traffic") {
+                    LabeledContent("Packets", value: "\(bubble.packetCount)")
+
+                    if let snr = bubble.averageSNR {
+                        LabeledContent("Avg SNR") {
+                            Text(String(format: "%.1f dB", snr))
+                                .foregroundStyle(bubble.snrQuality.color)
+                        }
+                    }
+
+                    LabeledContent("Last Seen") {
+                        Text(bubble.lastSeen, style: .relative)
+                    }
+                }
+
+                Section("Identity") {
+                    LabeledContent("Public Key") {
+                        Text(bubble.publicKey.map { $0.hexString }.joined(separator: " "))
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+
+                Section("Location") {
+                    LabeledContent("Latitude") {
+                        Text(bubble.coordinate.latitude, format: .number.precision(.fractionLength(6)))
+                    }
+                    LabeledContent("Longitude") {
+                        Text(bubble.coordinate.longitude, format: .number.precision(.fractionLength(6)))
+                    }
                 }
             }
+            .navigationTitle(bubble.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Traffic Map Info Sheet
+
+private struct TrafficMapInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("The traffic map visualizes mesh network activity by showing repeaters and the routes packets travel between them.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Pins") {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Repeater Pins")
+                                .font(.subheadline.weight(.medium))
+                            Text("Each pin represents a repeater that forwarded packets. The two-character label is the first byte of its public key in hex.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "mappin.circle.fill")
+                            .foregroundStyle(.cyan)
+                    }
+
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Clusters")
+                                .font(.subheadline.weight(.medium))
+                            Text("When repeaters are close together, they group into a numbered cluster. Tap to zoom in and reveal individual pins.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "circle.grid.2x2.fill")
+                            .foregroundStyle(.cyan)
+                    }
+                }
+
+                Section("Pin Colors — Signal Quality (SNR)") {
+                    Text("Pin color reflects the average SNR of packets where this repeater was the **last hop** — the one your radio heard directly. Repeaters only seen as intermediate hops show as gray (unknown).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    snrRow(quality: .excellent, label: "Excellent", range: "> 10 dB")
+                    snrRow(quality: .good, label: "Good", range: "5 – 10 dB")
+                    snrRow(quality: .fair, label: "Fair", range: "0 – 5 dB")
+                    snrRow(quality: .poor, label: "Weak", range: "-10 – 0 dB")
+                    snrRow(quality: .veryPoor, label: "Marginal", range: "< -10 dB")
+                    snrRow(quality: .unknown, label: "Unknown", range: "No direct reception")
+                }
+
+                Section("Route Lines") {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Packet Routes")
+                                .font(.subheadline.weight(.medium))
+                            Text("Lines between pins show the paths packets traveled through the mesh. Thicker, brighter lines indicate more traffic on that link. Line color does not indicate signal quality — we only know the signal of the final hop to your radio.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                            .foregroundStyle(.cyan)
+                    }
+                }
+
+                Section("Callouts & Details") {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Tap a Pin")
+                                .font(.subheadline.weight(.medium))
+                            Text("Shows a callout with packet count, SNR, last seen time, and a public key prefix. Tap \"Details\" for the full detail view including coordinates and full public key.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "hand.tap")
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+                Section("Time Period") {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Filter by Time")
+                                .font(.subheadline.weight(.medium))
+                            Text("Use the clock menu in the toolbar to filter traffic data to a specific time window. Available periods adjust based on how much data you have.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "clock")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+            .navigationTitle("Traffic Map Guide")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 
-    private var bubbleSize: CGFloat {
-        // Scale from 24pt (lowest traffic) to 56pt (highest traffic)
-        24 + 32 * annotation.normalizedTraffic
+    private func snrRow(quality: SNRQuality, label: String, range: String) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(quality.color)
+                .frame(width: 14, height: 14)
+            Text(label)
+                .font(.subheadline)
+            Spacer()
+            Text(range)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+        }
     }
 }

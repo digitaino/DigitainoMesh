@@ -100,6 +100,9 @@ function initMapKit() {
     loadCells();
     loadRepeaters();
     loadStats();
+
+    // Auto-refresh: cells and repeaters every 15s, stats every 60s
+    setInterval(() => { loadCells(); loadRepeaters(); }, 15000);
     setInterval(loadStats, 60000);
 }
 
