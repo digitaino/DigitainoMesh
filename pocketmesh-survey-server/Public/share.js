@@ -21,6 +21,10 @@ function snrQualityColor(snr) {
 
 let map = null;
 
+function togglePanel() {
+    document.getElementById('share-panel').classList.toggle('expanded');
+}
+
 function initShareMap() {
     mapkit.init({
         authorizationCallback: function(done) {
@@ -135,7 +139,7 @@ function renderRoute(data) {
     }
 
     // Fit map to show all points
-    const padding = new mapkit.Padding(60, 40, 280, 40);
+    const padding = new mapkit.Padding(60, 40, 100, 40);
     map.showItems(annotations, { padding: padding, animate: true });
 }
 
@@ -224,7 +228,7 @@ function renderRepeaterMap(data) {
     map.addAnnotations(annotations);
 
     // Fit to show all repeaters
-    const padding = new mapkit.Padding(60, 40, 280, 40);
+    const padding = new mapkit.Padding(60, 40, 100, 40);
     map.showItems(annotations, { padding: padding, animate: true });
 }
 

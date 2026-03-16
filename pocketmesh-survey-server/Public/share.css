@@ -15,20 +15,52 @@
     padding: 20px;
     z-index: 1000;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    max-height: 45vh;
-    overflow-y: auto;
+    overflow: hidden;
+}
+
+#panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
 }
 
 #share-panel h2 {
     font-size: 16px;
     font-weight: 600;
-    margin-bottom: 12px;
+    margin: 0;
     color: #fff;
+}
+
+#panel-toggle {
+    font-size: 12px;
+    color: #666;
+    transition: transform 0.25s ease;
+}
+
+#share-panel.expanded #panel-toggle {
+    transform: rotate(180deg);
+}
+
+#panel-body {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.25s ease;
+    max-height: 0;
+    opacity: 0;
+}
+
+#share-panel.expanded #panel-body {
+    max-height: 60vh;
+    opacity: 1;
+    overflow-y: auto;
 }
 
 #route-summary {
     display: flex;
     gap: 16px;
+    margin-top: 12px;
     margin-bottom: 12px;
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);

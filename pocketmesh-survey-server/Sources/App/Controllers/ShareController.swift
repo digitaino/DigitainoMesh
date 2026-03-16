@@ -270,11 +270,16 @@ struct ShareController {
         <body>
             <div id="map"></div>
             <div id="share-panel">
-                <h2>Shared Route</h2>
-                <div id="route-summary"></div>
-                <div id="hop-list"></div>
-                <div class="share-footer">
-                    Shared via <a href="https://apps.apple.com/app/pocketmesh/id6743539498">PocketMesh</a>
+                <div id="panel-header" onclick="togglePanel()">
+                    <h2>Shared Route</h2>
+                    <span id="panel-toggle">▲</span>
+                </div>
+                <div id="panel-body">
+                    <div id="route-summary"></div>
+                    <div id="hop-list"></div>
+                    <div class="share-footer">
+                        Shared via <a href="https://apps.apple.com/app/pocketmesh/id6743539498">PocketMesh</a>
+                    </div>
                 </div>
             </div>
         </body>
@@ -302,11 +307,16 @@ struct ShareController {
         <body>
             <div id="map"></div>
             <div id="share-panel">
-                <h2>Heard Repeaters</h2>
-                <div id="route-summary"></div>
-                <div id="hop-list"></div>
-                <div class="share-footer">
-                    Shared via <a href="https://apps.apple.com/app/pocketmesh/id6743539498">PocketMesh</a>
+                <div id="panel-header" onclick="togglePanel()">
+                    <h2>Heard Repeaters</h2>
+                    <span id="panel-toggle">▲</span>
+                </div>
+                <div id="panel-body">
+                    <div id="route-summary"></div>
+                    <div id="hop-list"></div>
+                    <div class="share-footer">
+                        Shared via <a href="https://apps.apple.com/app/pocketmesh/id6743539498">PocketMesh</a>
+                    </div>
                 </div>
             </div>
         </body>
