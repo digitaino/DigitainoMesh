@@ -1,6 +1,60 @@
-# Beta Changes — v0.10.1 (Build 2)
+# Beta Changes — v0.10.1 (Build 4)
 
-## Signal Survey (Wardriving)
+## Community Signal Map
+
+- **Live upload to community map** — New "Live Upload" toggle in the survey setup sheet. When enabled, each received packet's hex cell is immediately uploaded to mesh.digitaino.com as you survey, so the community coverage map updates in real time. Data is anonymized — only hex grid cells (~100m), signal stats, and repeater IDs are sent. No exact GPS, device identity, or message content is included. When disabled, you can still export and upload a full session manually from the toolbar menu after the survey.
+
+- **Community map auto-refresh** — The community signal map overlay (both the dedicated Community Map view and the main map's hex overlay) now auto-refreshes every 15 seconds, so cells uploaded by you or other users appear live without needing to pan or zoom. The web frontend at mesh.digitaino.com also auto-refreshes.
+
+- **Community overlay on main map** — Toggle the hex overlay from the main map to see crowd-sourced signal quality from all contributors, not just your own surveys. Cells are color-coded by SNR quality and scale opacity by contribution count.
+
+- **Repeater names and locations in uploads** — Community uploads now include resolved repeater names and GPS locations (from your known contacts), so the community map can show named repeater pins, not just hex IDs.
+
+  **How to test:** Go to Tools > Signal Survey. In the setup sheet, enable "Live Upload" under the Community Data section. Start a survey and walk around — open mesh.digitaino.com in a browser and you should see hex cells appearing within ~15 seconds. On the main map, toggle the community signal overlay (hexagon button) and verify it refreshes periodically without manual interaction. Try with Live Upload disabled and verify data stays local until you manually export.
+
+---
+
+## Shareable Route & Repeater Maps
+
+- **Shareable route links** — When you "Reply with Route", the route data is uploaded to the server and a short URL is generated (e.g. `mesh.digitaino.com/r/abc123`). The link opens a web page with an interactive Apple MapKit JS map showing the route plotted through repeaters with hop-by-hop annotations, a polyline connecting located hops, and a collapsible details panel with hop count, distance, and a list of each hop.
+
+- **Shareable repeater map links** — Similarly, repeater maps can be shared as web links showing all your known repeaters with signal quality color coding, heard counts, SNR, and RSSI stats.
+
+- **Collapsible share panels** — The web pages for shared routes and repeater maps have a collapsible bottom panel that you can tap to expand/collapse, keeping the map unobstructed.
+
+  **How to test:** Long-press a message relayed through hops, expand path details, tap "Reply with Route". The reply should include a link. Open the link in a browser — verify the map shows correctly with repeater pins and a dashed line connecting them. Check the panel at the bottom shows hop details. Tap the panel header to collapse/expand.
+
+---
+
+## Traffic Map Overhaul
+
+- **MKMapView with clustering** — The traffic map has been rebuilt from SwiftUI Map with Annotation views to a native MKMapView (UIViewRepresentable) with proper annotation clustering, native callouts, and correct hit testing. Overlapping repeater bubbles are now tappable even when dense.
+
+- **Public key hex on pins** — Repeater pins now show the first byte of the node's public key as a hex label (e.g. "A3") instead of a generic antenna icon. This makes it easy to identify individual repeaters at a glance. The full public key is shown in the detail sheet.
+
+- **Tappable callouts** — Tapping a repeater pin shows a native MKAnnotation callout with packet count, SNR, last-seen time, and a 3-byte key prefix. A "Details" button opens the full detail sheet with signal stats and the complete public key.
+
+- **Info guide button** — New info button (ℹ) in the traffic map toolbar opens a guide sheet explaining pin colors, SNR thresholds, route lines, callouts, and time period filtering.
+
+- **SNR last-hop-only fix** — Signal quality (SNR) is now correctly attributed only to the last hop in the packet path. Previously, the same SNR was misleadingly applied to all hops and route segments. Route lines now use uniform cyan with opacity scaling by traffic volume instead of SNR-based coloring.
+
+- **Location button fix** — The location button in the traffic map toolbar now correctly centers the map on the user's location, even after manually panning.
+
+  **How to test:** Go to Tools > Traffic Map. Verify repeater pins show hex labels instead of antenna icons. Tap a pin — the callout should show stats and a "Details" button. Tap Details and verify the full public key is displayed. Tap the ℹ button and read the info guide. Tap the location button after panning — it should snap back to your location. Check that route lines are uniformly cyan (not colored by signal quality).
+
+---
+
+## Branding
+
+- **PocketMesh → DigitainoMesh** — Updated user-facing references from "PocketMesh" to "DigitainoMesh" in the survey export filename, setup sheet text, and code documentation. Internal identifiers and upstream attribution remain unchanged.
+
+---
+
+# Previous Builds
+
+## Build 3 (v0.10.1)
+
+### Signal Survey (Wardriving)
 
 - **Coverage heatmap tool** — New tool under Tools > Signal Survey. Start a GPS-tagged survey session that pairs every received RF packet with your phone's location. As you move around, the app builds a live coverage map of your mesh network's signal quality.
 
@@ -18,7 +72,7 @@
 
 ---
 
-## Nodes List Improvements
+### Nodes List Improvements
 
 - **Search by public key** — The search bar in the Nodes list now matches against public key hex prefixes. Type a hex string like "0C" or "D1A9" and nodes whose public key starts with that prefix appear at the top of results, followed by substring matches, then name-only matches.
 
@@ -30,7 +84,7 @@
 
 ---
 
-## Maps Modernization
+### Maps Modernization
 
 - **SwiftUI Map migration** — All route maps have been modernized from UIKit MapKit wrappers to native SwiftUI Map views. This improves rendering consistency and simplifies the codebase.
 
@@ -40,7 +94,7 @@
 
 ---
 
-## Upstream Merge & Unified Chat
+### Upstream Merge & Unified Chat
 
 - **Unified chat view** — DM and channel chat views have been merged into a single `ChatConversationView`, reducing code duplication and ensuring feature parity between DM and channel conversations.
 
@@ -51,8 +105,6 @@
 - **Crash fix** — Handle transient ModelContainer creation failure during app launch with automatic retry.
 
 ---
-
-# Previous Builds
 
 ## Build 13
 
@@ -76,7 +128,7 @@
 
   **How to test:** Long-press an incoming message that was relayed through hops. Expand the path details section — verify the Hops row shows a distance. Tap "Reply with Route" and verify the input bar is pre-filled with a reply containing the route info. Send it and confirm the route info appears in the message. Test with both channel messages (should include @[name] mention) and DMs (no mention).
 
-## Route Distance on Maps
+### Route Distance on Maps
 
 - **Message route map distance** — The message route map now displays the total chain distance along the path at the top of the screen. Uses "≥" prefix only when intermediate repeaters in the route are missing location data.
 
@@ -84,7 +136,7 @@
 
   **How to test:** Open a message route map for a multi-hop message — verify the distance badge appears. If all repeaters have GPS, the distance should be exact (no ≥). If some intermediate repeaters lack location, it should show ≥. Check the heard repeats map similarly.
 
-## Swipe to Reply Fix
+### Swipe to Reply Fix
 
 - **Fixed scroll blocking** — The swipe-to-reply gesture has been rebuilt using UIKit's `UIPanGestureRecognizer` instead of SwiftUI's `DragGesture`. This fixes the issue where the swipe gesture would block normal vertical scrolling in conversations. Swiping right to reply and scrolling up/down now work independently without interfering with each other.
 
