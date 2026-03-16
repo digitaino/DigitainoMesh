@@ -12,6 +12,8 @@ struct SharedRoute: Sendable, Hashable, Identifiable {
     let hopCount: Int
     /// Optional distance string (e.g., "2.3 mi", "≥ 12 km")
     let distanceText: String?
+    /// Optional server-hosted share URL (e.g., "https://mesh.digitaino.com/r/a3Kx9m")
+    let shareURL: URL?
 
     var id: String { hexIDs.joined(separator: ",") }
 
@@ -43,6 +45,36 @@ enum SharedRouteParser {
         let pattern = #"RX via ([0-9A-Fa-f]{2,6}(?:,[0-9A-Fa-f]{2,6})*)\.\s+(\d+)\s+hops?(.*)"#
         return try? NSRegularExpression(pattern: pattern, options: [])
     }()
+
+    /// Pattern to detect a shared route URL: https://mesh.digitaino.com/r/{shortID}
+    private static let routeURLRegex: NSRegularExpression? = {
+        let pattern = #"https?://mesh\.digitaino\.com/r/([A-Za-z0-9]{5,10})"#
+        return try? NSRegularExpression(pattern: pattern, options: [])
+    }()
+
+    /// Pattern to detect a shared repeater map URL: https://mesh.digitaino.com/m/{shortID}
+    private static let mapURLRegex: NSRegularExpression? = {
+        let pattern = #"https?://mesh\.digitaino\.com/m/([A-Za-z0-9]{5,10})"#
+        return try? NSRegularExpression(pattern: pattern, options: [])
+    }()
+
+    /// Extract a shared route URL from message text, if present.
+    static func parseRouteURL(_ text: String) -> URL? {
+        guard let regex = routeURLRegex else { return nil }
+        let nsRange = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: nsRange),
+              let urlRange = Range(match.range, in: text) else { return nil }
+        return URL(string: String(text[urlRange]))
+    }
+
+    /// Extract a shared repeater map URL from message text, if present.
+    static func parseMapURL(_ text: String) -> URL? {
+        guard let regex = mapURLRegex else { return nil }
+        let nsRange = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: nsRange),
+              let urlRange = Range(match.range, in: text) else { return nil }
+        return URL(string: String(text[urlRange]))
+    }
 
     /// Parse "RX via ..." pattern from message text. Returns nil if not found.
     static func parse(_ text: String) -> SharedRoute? {
@@ -106,7 +138,13 @@ enum SharedRouteParser {
             distanceText = nil
         }
 
+        // Check for an accompanying share URL
+        let shareURL = parseRouteURL(text)
+        if let shareURL {
+            logger.info("SharedRouteParser: found share URL: \(shareURL.absoluteString, privacy: .public)")
+        }
+
         logger.info("SharedRouteParser: ✓ parsed route — hexIDs=\(hexIDs, privacy: .public), hops=\(hopCount), distance=\(distanceText ?? "none", privacy: .public)")
-        return SharedRoute(hexIDs: hexIDs, hopCount: hopCount, distanceText: distanceText)
+        return SharedRoute(hexIDs: hexIDs, hopCount: hopCount, distanceText: distanceText, shareURL: shareURL)
     }
 }

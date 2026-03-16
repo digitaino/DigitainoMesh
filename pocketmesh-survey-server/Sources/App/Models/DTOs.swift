@@ -103,3 +103,59 @@ struct FixCoordinatesResponse: Content {
     let totalCells: Int
     let fixedCells: Int
 }
+
+// MARK: - Shared Route
+
+struct SharedRouteHop: Content {
+    let hexID: String
+    let name: String?
+    let latitude: Double?
+    let longitude: Double?
+}
+
+struct CreateSharedRouteRequest: Content {
+    let hopCount: Int
+    let distanceText: String?
+    let hops: [SharedRouteHop]
+}
+
+struct CreateSharedRouteResponse: Content {
+    let id: String
+    let url: String
+}
+
+struct SharedRouteResponse: Content {
+    let id: String
+    let hopCount: Int
+    let distanceText: String?
+    let hops: [SharedRouteHop]
+    let createdAt: String
+}
+
+// MARK: - Shared Repeater Map
+
+struct SharedRepeaterInfo: Content {
+    let hexID: String
+    let name: String?
+    let latitude: Double?
+    let longitude: Double?
+    let heardCount: Int
+    let avgSNR: Double?
+    let avgRSSI: Double?
+}
+
+struct CreateSharedRepeaterMapRequest: Content {
+    let repeaters: [SharedRepeaterInfo]
+}
+
+struct CreateSharedRepeaterMapResponse: Content {
+    let id: String
+    let url: String
+}
+
+struct SharedRepeaterMapResponse: Content {
+    let id: String
+    let repeaterCount: Int
+    let repeaters: [SharedRepeaterInfo]
+    let createdAt: String
+}
