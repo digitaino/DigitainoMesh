@@ -38,9 +38,19 @@
 
 - **SNR last-hop-only fix** — Signal quality (SNR) is now correctly attributed only to the last hop in the packet path. Previously, the same SNR was misleadingly applied to all hops and route segments. Route lines now use uniform cyan with opacity scaling by traffic volume instead of SNR-based coloring.
 
+- **Time period filtering** — The traffic map's time period menu dynamically adapts its options based on how old the data is (e.g. Last 15m/30m/All for recent data; Last 1d/3d/7d/All for older data). The selected period filters which packets are shown on the map.
+
 - **Location button fix** — The location button in the traffic map toolbar now correctly centers the map on the user's location, even after manually panning.
 
-  **How to test:** Go to Tools > Traffic Map. Verify repeater pins show hex labels instead of antenna icons. Tap a pin — the callout should show stats and a "Details" button. Tap Details and verify the full public key is displayed. Tap the ℹ button and read the info guide. Tap the location button after panning — it should snap back to your location. Check that route lines are uniformly cyan (not colored by signal quality).
+  **How to test:** Go to Tools > Traffic Map. Verify repeater pins show hex labels instead of antenna icons. Tap a pin — the callout should show stats, last-seen time, and a "Details" button. Tap Details and verify the full public key is displayed. Tap the ℹ button and read the info guide. Use the time period picker in the toolbar to filter by different time windows — verify the pins update. Tap the location button after panning — it should snap back to your location. Check that route lines are uniformly cyan (not colored by signal quality).
+
+---
+
+## Map — Last Heard Filter
+
+- **Time filter bar on main map** — A scrollable filter bar at the top of the main map lets you filter displayed nodes by when they were last heard: 1 Hour, 12 Hours, 1 Day, 3 Days, 5 Days, or All Time. This makes it easy to see which repeaters and nodes are currently active versus stale.
+
+  **How to test:** Open the main map. The filter bar should appear at the top. Tap different time filters — nodes that haven't been heard within the selected window should disappear. "All Time" shows everything.
 
 ---
 
