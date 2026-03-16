@@ -635,6 +635,17 @@ struct ChatConversationView: View {
             }
             chatViewModel.composingText = replyText
             isInputFocused = true
+
+            // Upload route to server in background; append share URL if successful
+            Task {
+                guard let url = await uploadRouteToServer(message: message, routeInfo: routeInfo) else { return }
+                await MainActor.run {
+                    // Only append if the user hasn't changed the composing text
+                    if chatViewModel.composingText.contains(routeInfo) {
+                        chatViewModel.composingText += "\(url.absoluteString)\n"
+                    }
+                }
+            }
         case .delete:
             Task { await chatViewModel.deleteMessage(message) }
         }
@@ -649,6 +660,59 @@ struct ChatConversationView: View {
             mentionName = message.senderNodeName ?? L10n.Chats.Chats.Message.Sender.unknown
         }
         return MentionUtilities.buildReplyText(mentionName: mentionName, messageText: message.text)
+    }
+
+    /// Resolve hop data from a message and upload to the server.
+    /// Returns the share URL on success, nil on failure or no internet.
+    private func uploadRouteToServer(message: MessageDTO, routeInfo: String) async -> URL? {
+        guard let pathNodes = message.pathNodes, !pathNodes.isEmpty else { return nil }
+
+        let hashSize = message.pathHashSize
+        let hopHashes = stride(from: 0, to: pathNodes.count, by: hashSize).map { start in
+            Data(pathNodes[start..<min(start + hashSize, pathNodes.count)])
+        }
+
+        let contacts = chatViewModel.allContacts
+        let userLocation = appState.locationService.currentLocation
+
+        // Fetch discovered nodes for resolution
+        var discoveredNodes: [DiscoveredNodeDTO] = []
+        if let deviceID = appState.connectedDevice?.id {
+            discoveredNodes = (try? await appState.services?.dataStore.fetchDiscoveredNodes(deviceID: deviceID)) ?? []
+        }
+
+        // Build RouteHop array by resolving each hop
+        let hops: [RouteShareService.RouteHop] = hopHashes.map { hashBytes in
+            let hexID = hashBytes.map { String(format: "%02X", $0) }.joined()
+
+            // Try to resolve name and location
+            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: contacts, userLocation: userLocation) {
+                return RouteShareService.RouteHop(
+                    hexID: hexID,
+                    name: match.resolvableName,
+                    latitude: match.hasLocation ? match.latitude : nil,
+                    longitude: match.hasLocation ? match.longitude : nil
+                )
+            }
+            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: discoveredNodes, userLocation: userLocation) {
+                return RouteShareService.RouteHop(
+                    hexID: hexID,
+                    name: match.resolvableName,
+                    latitude: match.hasLocation ? match.latitude : nil,
+                    longitude: match.hasLocation ? match.longitude : nil
+                )
+            }
+
+            return RouteShareService.RouteHop(hexID: hexID, name: nil, latitude: nil, longitude: nil)
+        }
+
+        let hopCount = Int(message.pathLength & 0x3F)
+
+        // Extract distance text from the route info string
+        let distanceText = SharedRouteParser.parse(routeInfo)?.distanceText
+
+        let service = RouteShareService()
+        return await service.shareRoute(hopCount: hopCount, distanceText: distanceText, hops: hops)
     }
 
     private func retryMessage(_ message: MessageDTO) {
