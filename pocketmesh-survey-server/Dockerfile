@@ -2,10 +2,10 @@
 FROM swift:6.0-noble AS build
 WORKDIR /build
 COPY Package.swift Package.resolved ./
-RUN --mount=type=cache,target=/build/.build swift package resolve
+RUN swift package resolve
 COPY Sources/ Sources/
 COPY Public/ Public/
-RUN --mount=type=cache,target=/build/.build swift build -c release && cp -a .build/release/App /tmp/App
+RUN swift build -c release && cp -a .build/release/App /tmp/App
 
 # Runtime stage - use swift image to avoid apt-get (includes SQLite + Swift runtime)
 FROM swift:6.0-noble-slim
