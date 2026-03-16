@@ -110,6 +110,12 @@ final class SignalSurveyViewModel {
     /// Selected session for historical browsing (nil = show all)
     var selectedSessionID: UUID?
 
+    /// The currently selected session DTO, if any.
+    var selectedSession: SurveySessionDTO? {
+        guard let id = selectedSessionID else { return nil }
+        return sessions.first { $0.id == id }
+    }
+
     /// Per-session stats for the session list.
     struct SessionStats {
         let pointCount: Int

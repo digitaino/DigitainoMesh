@@ -102,6 +102,12 @@ enum SurveyExportService {
             return nil
         }
 
+        // DEBUG: Log payloadType distribution and active probe stats
+        let payloadTypeCounts = Dictionary(grouping: points, by: { $0.payloadType }).mapValues(\.count)
+        logger.info("DEBUG generateCellData: \(points.count) points, payloadTypes: \(payloadTypeCounts.sorted(by: { $0.key.rawValue < $1.key.rawValue }).map { "\($0.key.displayName)=\($0.value)" }.joined(separator: ", "))")
+        let activeProbeCount = points.filter(\.isActiveProbe).count
+        logger.info("DEBUG generateCellData: isActiveProbe=true: \(activeProbeCount), isActiveProbe=false: \(points.count - activeProbeCount)")
+
         let avgLat = points.map(\.latitude).reduce(0, +) / Double(points.count)
         let refLat = HexGrid.fixedReferenceLatitude(for: avgLat)
         var buckets: [HexGrid.AxialCoord: [SignalSurveyPointDTO]] = [:]
@@ -153,6 +159,13 @@ enum SurveyExportService {
                 passivePacketCount: passiveCount > 0 ? passiveCount : nil
             )
         }
+
+        // DEBUG: Log per-cell active/passive breakdown
+        let cellsWithActive = cells.filter { $0.activePacketCount != nil }.count
+        let cellsWithPassive = cells.filter { $0.passivePacketCount != nil }.count
+        let totalActive = cells.compactMap(\.activePacketCount).reduce(0, +)
+        let totalPassive = cells.compactMap(\.passivePacketCount).reduce(0, +)
+        logger.info("DEBUG generateCellData: \(cells.count) cells — \(cellsWithActive) with active (\(totalActive) pkts), \(cellsWithPassive) with passive (\(totalPassive) pkts)")
 
         // Resolve unique repeater hex IDs to contact names and locations
         let allHexIDs = Set(cells.flatMap(\.repeaterHexIDs))

@@ -117,6 +117,12 @@ actor SurveyUploadService {
         dataStore: PersistenceStore,
         repeaterContacts: [ContactDTO] = []
     ) async throws -> UploadResponse {
+        // Ensure active/passive classification is backfilled before generating cell data.
+        // The backfill is idempotent (only touches points with isActiveProbe==false that have
+        // control/trace payloadType), so it's safe to always run before upload.
+        let backfilled = try await dataStore.backfillActiveProbeFlag()
+        Self.logger.info("DEBUG upload: backfill result = \(backfilled) points updated")
+
         guard let result = try await SurveyExportService.generateCellData(
             sessionID: sessionID,
             dataStore: dataStore,
@@ -138,9 +144,23 @@ actor SurveyUploadService {
             repeaters: result.repeaters
         )
 
+        // DEBUG: Log what's actually in the payload
+        let activeCells = result.cells.filter { $0.activePacketCount != nil }
+        let passiveCells = result.cells.filter { $0.passivePacketCount != nil }
+        Self.logger.info("DEBUG upload: \(result.cells.count) cells — \(activeCells.count) with activePacketCount, \(passiveCells.count) with passivePacketCount")
+        if let first = activeCells.first {
+            Self.logger.info("DEBUG upload: sample active cell — activePacketCount=\(first.activePacketCount ?? -1), passivePacketCount=\(first.passivePacketCount ?? -1), packetCount=\(first.packetCount)")
+        }
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let body = try encoder.encode(payload)
+
+        // DEBUG: Log a snippet of the JSON to verify keys are present
+        if let jsonStr = String(data: body, encoding: .utf8) {
+            let snippet = String(jsonStr.prefix(500))
+            Self.logger.info("DEBUG upload: JSON snippet: \(snippet)")
+        }
 
         let url = Self.serverBaseURL.appending(path: "survey")
         var request = URLRequest(url: url)

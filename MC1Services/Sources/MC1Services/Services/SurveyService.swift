@@ -86,6 +86,20 @@ public actor SurveyService {
             logger.error("Failed to close orphaned sessions: \(error.localizedDescription)")
         }
 
+        // One-time backfill: retroactively classify existing survey points as active/passive
+        // based on payloadType (.control and .trace are inherently active probe responses)
+        if !UserDefaults.standard.bool(forKey: "surveyActiveProbeBackfillDone") {
+            do {
+                let updated = try await dataStore.backfillActiveProbeFlag()
+                if updated > 0 {
+                    logger.info("Backfilled isActiveProbe on \(updated) existing survey point(s)")
+                }
+                UserDefaults.standard.set(true, forKey: "surveyActiveProbeBackfillDone")
+            } catch {
+                logger.error("Failed to backfill active probe flag: \(error.localizedDescription)")
+            }
+        }
+
         logger.info("Configured with deviceID: \(deviceID)")
     }
 

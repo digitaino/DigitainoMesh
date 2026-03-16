@@ -251,19 +251,60 @@ struct SignalSurveyView: View {
 
     private var statsOverlay: some View {
         VStack {
-            if viewModel.livePointCount > 0 || viewModel.isActive {
+            if viewModel.isActive {
+                // Active session indicator
                 HStack(spacing: 6) {
-                    if viewModel.isActive {
-                        Circle()
-                            .fill(.red)
-                            .frame(width: 8, height: 8)
-                    }
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 8, height: 8)
 
                     if viewModel.livePointCount > 0 {
                         Text("\(viewModel.livePointCount) pts")
                             .font(.caption.weight(.medium))
                     }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .liquidGlass(in: .capsule)
+            } else if let session = viewModel.selectedSession {
+                // Historical session header with close button
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(session.name ?? session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                        if let stats = viewModel.sessionStats[session.id] {
+                            Text("\(stats.pointCount) pts · \(stats.cellCount) cells")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
+                    Button {
+                        guard let dataStore = appState.offlineDataStore,
+                              let deviceID = appState.currentDeviceID else { return }
+                        viewModel.selectedSessionID = nil
+                        Task {
+                            await viewModel.loadAllPoints(dataStore: dataStore, deviceID: deviceID)
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .liquidGlass(in: .capsule)
+            } else if viewModel.livePointCount > 0 {
+                // All sessions view with point count
+                HStack(spacing: 6) {
+                    Text("\(viewModel.livePointCount) pts")
+                        .font(.caption.weight(.medium))
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
