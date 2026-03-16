@@ -43,11 +43,15 @@ function hexVerticesAtCenter(centerLat, centerLon, refLat) {
     return vertices;
 }
 
+// Coverage filter: 'all', 'active', 'passive'
+let coverageFilter = 'all';
+
 // State
 let map = null;
 let currentOverlays = [];
 let currentRepeaterAnnotations = [];
 let loadingTimeout = null;
+let lastCellData = [];
 
 // MapKit JS initialization callback
 function initMapKit() {
@@ -130,10 +134,21 @@ async function loadCells() {
         const response = await fetch(`${API_BASE}/cells?${params}`);
         if (!response.ok) return;
         const data = await response.json();
+        lastCellData = data.cells;
         renderCells(data.cells);
     } catch (e) {
         console.error('Failed to load cells:', e);
     }
+}
+
+// Apply coverage filter and re-render
+function applyCoverageFilter(filter) {
+    coverageFilter = filter;
+    // Update button states
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    renderCells(lastCellData);
 }
 
 // Render hex cells on map
@@ -144,7 +159,15 @@ function renderCells(cells) {
     }
     currentOverlays = [];
 
-    const overlays = cells.map(cell => {
+    // Apply coverage filter
+    let filtered = cells;
+    if (coverageFilter === 'active') {
+        filtered = cells.filter(c => c.activePacketCount && c.activePacketCount > 0);
+    } else if (coverageFilter === 'passive') {
+        filtered = cells.filter(c => c.passivePacketCount && c.passivePacketCount > 0);
+    }
+
+    const overlays = filtered.map(cell => {
         const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
         const quality = cell.snrQuality || snrQuality(cell.averageSNR);
         const color = snrColor(quality);
@@ -256,6 +279,21 @@ function showCellPopup(cell) {
         `;
     }
 
+    // Active/passive breakdown
+    let modeHTML = '';
+    const hasActive = cell.activePacketCount && cell.activePacketCount > 0;
+    const hasPassive = cell.passivePacketCount && cell.passivePacketCount > 0;
+    if (hasActive || hasPassive) {
+        modeHTML = '<div class="detail-row">';
+        if (hasActive) {
+            modeHTML += `<span class="mode-tag mode-active">Active: ${cell.activePacketCount}</span>`;
+        }
+        if (hasPassive) {
+            modeHTML += `<span class="mode-tag mode-passive">Passive: ${cell.passivePacketCount}</span>`;
+        }
+        modeHTML += '</div>';
+    }
+
     popupElement = document.createElement('div');
     popupElement.className = 'cell-popup-overlay';
     popupElement.innerHTML = `
@@ -269,6 +307,7 @@ function showCellPopup(cell) {
                 <span class="detail-label">Packets</span>
                 <span class="detail-value">${cell.packetCount.toLocaleString()}</span>
             </div>
+            ${modeHTML}
             <div class="detail-row">
                 <span class="detail-label">Contributions</span>
                 <span class="detail-value">${cell.contributionCount}</span>

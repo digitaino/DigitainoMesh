@@ -20,6 +20,7 @@ final class SignalSurveyViewModel {
 
     /// Bundled probe frequency presets that pair a distance trigger with a minimum cooldown.
     enum ProbeFrequency: String, CaseIterable, Identifiable {
+        case driving = "Driving"
         case dense = "Dense"
         case normal = "Normal"
         case sparse = "Sparse"
@@ -29,6 +30,7 @@ final class SignalSurveyViewModel {
         /// Distance threshold in meters before triggering a probe.
         var distanceMeters: Double {
             switch self {
+            case .driving: 15
             case .dense: 25
             case .normal: 50
             case .sparse: 100
@@ -38,6 +40,7 @@ final class SignalSurveyViewModel {
         /// Minimum seconds between consecutive probes (hard cooldown).
         var minInterval: TimeInterval {
             switch self {
+            case .driving: 1
             case .dense: 2
             case .normal: 4
             case .sparse: 8
@@ -47,6 +50,7 @@ final class SignalSurveyViewModel {
         /// Maximum seconds before a probe fires regardless of movement.
         var maxInterval: TimeInterval {
             switch self {
+            case .driving: 3
             case .dense: 6
             case .normal: 10
             case .sparse: 20
@@ -56,6 +60,7 @@ final class SignalSurveyViewModel {
         /// Human-readable subtitle for the setup sheet.
         var subtitle: String {
             switch self {
+            case .driving: "Every ~15m — driving, fast travel"
             case .dense: "Every ~25m — walking, slow cycling"
             case .normal: "Every ~50m — e-bike, jogging"
             case .sparse: "Every ~100m — driving, fast cycling"
@@ -144,6 +149,10 @@ final class SignalSurveyViewModel {
         let latestTimestamp: Date?
         let uniqueSenders: [String]
         let uniqueRelayNodes: [String]
+        /// Repeaters confirmed bidirectional via discover response (active probing).
+        let connectedRelayNodes: [String]
+        /// Repeaters only heard passively (one-way RX only).
+        let heardOnlyRelayNodes: [String]
         let isDeadZone: Bool
         /// Best-gateway SNR from discover responses.
         /// Nil when no discover data is available (passive-only cells use averageSNR).
@@ -227,6 +236,10 @@ final class SignalSurveyViewModel {
     var probeEnabled: Bool = false {
         didSet {
             guard isActive else { return }
+            // Notify SurveyService so it classifies incoming packets as active/passive
+            if let surveyService = surveyServiceRef {
+                Task { await surveyService.setProbingActive(probeEnabled) }
+            }
             if probeEnabled, let bps = binaryProtocolService, let ls = locationServiceRef {
                 startProbeLoop(locationService: ls)
             } else {
@@ -245,6 +258,7 @@ final class SignalSurveyViewModel {
     private var messageServiceRef: MessageService?
     private var channelServiceRef: ChannelService?
     private var locationServiceRef: LocationService?
+    private var surveyServiceRef: SurveyService?
     private var deviceID: UUID?
     /// Path hash mode from device config, used for flood trace flags.
     private var pathHashMode: UInt8 = 0
@@ -372,6 +386,7 @@ final class SignalSurveyViewModel {
             self.messageServiceRef = messageService
             self.deviceID = deviceID
             self.locationServiceRef = locationService
+            self.surveyServiceRef = surveyService
             self.pathHashMode = pathHashMode
 
             // Start continuous GPS
@@ -387,9 +402,12 @@ final class SignalSurveyViewModel {
                 }
             }
 
-            // Start probe loop if enabled
-            if probeEnabled, binaryProtocolService != nil {
-                startProbeLoop(locationService: locationService)
+            // Start probe loop if enabled and sync active state
+            if probeEnabled {
+                await surveyService.setProbingActive(true)
+                if binaryProtocolService != nil {
+                    startProbeLoop(locationService: locationService)
+                }
             }
 
             logger.info("Survey started: \(session.id)")
@@ -423,6 +441,7 @@ final class SignalSurveyViewModel {
             messageServiceRef = nil
             channelServiceRef = nil
             locationServiceRef = nil
+            surveyServiceRef = nil
             self.deviceID = nil
             lastProbeHex = nil
             lastProbeLocation = nil
@@ -469,6 +488,7 @@ final class SignalSurveyViewModel {
         self.messageServiceRef = messageService
         self.deviceID = deviceID
         self.locationServiceRef = locationService
+        self.surveyServiceRef = surveyService
         self.pathHashMode = pathHashMode
 
         // Re-wire live point handler
@@ -478,9 +498,12 @@ final class SignalSurveyViewModel {
             }
         }
 
-        // Resume probe loop if enabled
-        if probeEnabled, binaryProtocolService != nil {
-            startProbeLoop(locationService: locationService)
+        // Resume probe loop if enabled and sync active state
+        if probeEnabled {
+            await surveyService.setProbingActive(true)
+            if binaryProtocolService != nil {
+                startProbeLoop(locationService: locationService)
+            }
         }
 
         logger.info("Resumed active survey session: \(sessionID), \(self.livePointCount) existing points")
@@ -711,6 +734,8 @@ final class SignalSurveyViewModel {
                 latestTimestamp: nil,
                 uniqueSenders: [],
                 uniqueRelayNodes: [],
+                connectedRelayNodes: [],
+                heardOnlyRelayNodes: [],
                 isDeadZone: true,
                 bestGatewaySNR: nil,
                 traceResponseCount: 0
@@ -808,6 +833,14 @@ final class SignalSurveyViewModel {
         }
         let relayNodes = latestByRelay.sorted { $0.value > $1.value }.map(\.key)
 
+        // Split relay nodes into connected (bidirectional via discover) vs heard-only (passive).
+        // A repeater is "connected" if we have a discover response (control packet) with that node in its path.
+        let connectedIDs = Set(points
+            .filter { $0.payloadType == .control }
+            .flatMap(\.pathNodeHexIDs))
+        let connected = relayNodes.filter { connectedIDs.contains($0) }
+        let heardOnly = relayNodes.filter { !connectedIDs.contains($0) }
+
         // Best-gateway quality: cell color reflects strongest discovered repeater
         let (bestGatewaySNR, traceResponseCount) = computeCellQuality(points: points)
         let displaySNR = bestGatewaySNR ?? avgSNR
@@ -827,6 +860,8 @@ final class SignalSurveyViewModel {
             latestTimestamp: timestamps.last,
             uniqueSenders: senders,
             uniqueRelayNodes: relayNodes,
+            connectedRelayNodes: connected,
+            heardOnlyRelayNodes: heardOnly,
             isDeadZone: false,
             bestGatewaySNR: bestGatewaySNR,
             traceResponseCount: traceResponseCount
@@ -958,7 +993,12 @@ final class SignalSurveyViewModel {
                 guard let location = locationService.currentLocation else { continue }
 
                 if self.shouldProbe(location: location) {
-                    await self.sendProbe(location: location)
+                    // Fire-and-forget: decouple probe check cadence from probe execution time.
+                    // State updates (lastProbeTime, lastProbeHex, etc.) happen synchronously
+                    // at the top of sendProbe before any async radio calls, so this is safe.
+                    Task { [weak self] in
+                        await self?.sendProbe(location: location)
+                    }
                 }
             }
         }
@@ -1085,7 +1125,7 @@ final class SignalSurveyViewModel {
         }
 
         // 3. Brief delay to separate transmissions
-        try? await Task.sleep(for: .seconds(2))
+        try? await Task.sleep(for: .seconds(0.3))
         guard !Task.isCancelled else { return }
 
         // 4. Flood trace: measure mesh reach from this location
@@ -1126,6 +1166,8 @@ final class SignalSurveyViewModel {
                     latestTimestamp: nil,
                     uniqueSenders: [],
                     uniqueRelayNodes: [],
+                    connectedRelayNodes: [],
+                    heardOnlyRelayNodes: [],
                     isDeadZone: true,
                     bestGatewaySNR: nil,
                     traceResponseCount: 0

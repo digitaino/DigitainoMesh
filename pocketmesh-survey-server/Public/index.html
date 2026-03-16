@@ -37,6 +37,15 @@
         </div>
         <div class="stat-footer" id="stat-last-upload"></div>
 
+        <div class="filter-bar">
+            <h3>Coverage</h3>
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all" onclick="applyCoverageFilter('all')">All</button>
+                <button class="filter-btn" data-filter="active" onclick="applyCoverageFilter('active')">Active</button>
+                <button class="filter-btn" data-filter="passive" onclick="applyCoverageFilter('passive')">Passive</button>
+            </div>
+        </div>
+
         <div class="legend">
             <h3>Signal Quality (SNR)</h3>
             <div class="legend-item"><span class="legend-color" style="background: #22c55e;"></span> Excellent (&gt;10 dB)</div>

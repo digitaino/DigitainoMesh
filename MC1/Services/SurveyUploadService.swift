@@ -80,6 +80,8 @@ actor SurveyUploadService {
         let contributionCount: Int
         let repeaterHexIDs: [String]
         let snrQuality: String
+        let activePacketCount: Int?
+        let passivePacketCount: Int?
     }
 
     struct CommunityCellsResponse: Codable {
@@ -188,7 +190,9 @@ actor SurveyUploadService {
             repeaterHexIDs: point.pathNodeHexIDs,
             hexQ: hex.q,
             hexR: hex.r,
-            referenceLatitude: referenceLatitude
+            referenceLatitude: referenceLatitude,
+            activePacketCount: point.isActiveProbe ? 1 : nil,
+            passivePacketCount: point.isActiveProbe ? nil : 1
         )
 
         // Resolve repeater info for any path nodes

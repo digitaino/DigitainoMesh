@@ -58,6 +58,9 @@ struct SurveyController {
             let snrWeighted = (cellData.averageSNR ?? 0) * Double(cellData.packetCount)
             let rssiWeighted = cellData.averageRSSI.map { $0 * Double(cellData.packetCount) }
 
+            let activePkts = cellData.activePacketCount ?? 0
+            let passivePkts = cellData.passivePacketCount ?? 0
+
             if let existing {
                 // Merge into existing cell
                 existing.totalSNRWeighted += snrWeighted
@@ -65,6 +68,8 @@ struct SurveyController {
                 existing.totalPacketCount += cellData.packetCount
                 existing.floodCount += cellData.routeTypeBreakdown.flood
                 existing.directCount += cellData.routeTypeBreakdown.direct
+                existing.activePacketCount += activePkts
+                existing.passivePacketCount += passivePkts
                 existing.contributionCount += 1
                 existing.lastUpdated = now
 
@@ -107,6 +112,8 @@ struct SurveyController {
                         rssiWeighted: rssiWeighted,
                         floodCount: cellData.routeTypeBreakdown.flood,
                         directCount: cellData.routeTypeBreakdown.direct,
+                        activePacketCount: activePkts,
+                        passivePacketCount: passivePkts,
                         contributedAt: now
                     )
                     try await contribution.save(on: req.db)
@@ -127,6 +134,8 @@ struct SurveyController {
                     minSNR: cellData.minSNR, maxSNR: cellData.maxSNR,
                     floodCount: cellData.routeTypeBreakdown.flood,
                     directCount: cellData.routeTypeBreakdown.direct,
+                    activePacketCount: activePkts,
+                    passivePacketCount: passivePkts,
                     contributionCount: 1,
                     firstSeen: now, lastUpdated: now
                 )
@@ -148,6 +157,8 @@ struct SurveyController {
                         rssiWeighted: rssiWeighted,
                         floodCount: cellData.routeTypeBreakdown.flood,
                         directCount: cellData.routeTypeBreakdown.direct,
+                        activePacketCount: activePkts,
+                        passivePacketCount: passivePkts,
                         contributedAt: now
                     )
                     try await contribution.save(on: req.db)
@@ -239,7 +250,9 @@ struct SurveyController {
                 packetCount: cell.totalPacketCount,
                 contributionCount: cell.contributionCount,
                 repeaterHexIDs: cell.repeaters.map(\.repeaterHexID),
-                snrQuality: cell.snrQuality
+                snrQuality: cell.snrQuality,
+                activePacketCount: cell.activePacketCount > 0 ? cell.activePacketCount : nil,
+                passivePacketCount: cell.passivePacketCount > 0 ? cell.passivePacketCount : nil
             )
         }
 
@@ -302,6 +315,8 @@ struct SurveyController {
             cell.totalPacketCount -= contribution.packetCount
             cell.floodCount -= contribution.floodCount
             cell.directCount -= contribution.directCount
+            cell.activePacketCount -= contribution.activePacketCount
+            cell.passivePacketCount -= contribution.passivePacketCount
             cell.contributionCount -= 1
 
             if cell.totalPacketCount <= 0 {

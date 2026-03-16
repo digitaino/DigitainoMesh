@@ -38,6 +38,9 @@ public final class SignalSurveyPoint {
     // Relay path — comma-separated hex IDs of repeaters in the path
     public var pathNodeHexIDs: String?
 
+    // Active/passive classification — true when this point was collected during active probing
+    public var isActiveProbe: Bool = false
+
     public init(
         id: UUID = UUID(),
         deviceID: UUID,
@@ -55,7 +58,8 @@ public final class SignalSurveyPoint {
         pathLength: Int,
         packetHash: String,
         fromContactName: String? = nil,
-        pathNodeHexIDs: String? = nil
+        pathNodeHexIDs: String? = nil,
+        isActiveProbe: Bool = false
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -74,6 +78,7 @@ public final class SignalSurveyPoint {
         self.packetHash = packetHash
         self.fromContactName = fromContactName
         self.pathNodeHexIDs = pathNodeHexIDs
+        self.isActiveProbe = isActiveProbe
     }
 }
 
@@ -98,6 +103,7 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
     public let packetHash: String
     public let fromContactName: String?
     public let pathNodeHexIDs: [String]
+    public let isActiveProbe: Bool
 
     /// Initialize from SwiftData model.
     public init(from model: SignalSurveyPoint) {
@@ -120,6 +126,7 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         self.pathNodeHexIDs = model.pathNodeHexIDs?
             .split(separator: ",")
             .map(String.init) ?? []
+        self.isActiveProbe = model.isActiveProbe
     }
 
     public init(
@@ -139,7 +146,8 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         pathLength: UInt8,
         packetHash: String,
         fromContactName: String? = nil,
-        pathNodeHexIDs: [String] = []
+        pathNodeHexIDs: [String] = [],
+        isActiveProbe: Bool = false
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -158,6 +166,7 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         self.packetHash = packetHash
         self.fromContactName = fromContactName
         self.pathNodeHexIDs = pathNodeHexIDs
+        self.isActiveProbe = isActiveProbe
     }
 
     // MARK: - Computed Properties

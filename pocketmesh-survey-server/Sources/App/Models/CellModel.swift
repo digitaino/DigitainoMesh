@@ -48,6 +48,13 @@ final class CellModel: Model, Content, @unchecked Sendable {
     @Field(key: "direct_count")
     var directCount: Int
 
+    // Active/passive packet breakdown
+    @Field(key: "active_packet_count")
+    var activePacketCount: Int
+
+    @Field(key: "passive_packet_count")
+    var passivePacketCount: Int
+
     // Metadata
     @Field(key: "contribution_count")
     var contributionCount: Int
@@ -73,6 +80,7 @@ final class CellModel: Model, Content, @unchecked Sendable {
         totalSNRWeighted: Double, totalRSSIWeighted: Double,
         totalPacketCount: Int, minSNR: Double?, maxSNR: Double?,
         floodCount: Int, directCount: Int,
+        activePacketCount: Int = 0, passivePacketCount: Int = 0,
         contributionCount: Int, firstSeen: String, lastUpdated: String
     ) {
         self.hexQ = hexQ
@@ -87,6 +95,8 @@ final class CellModel: Model, Content, @unchecked Sendable {
         self.maxSNR = maxSNR
         self.floodCount = floodCount
         self.directCount = directCount
+        self.activePacketCount = activePacketCount
+        self.passivePacketCount = passivePacketCount
         self.contributionCount = contributionCount
         self.firstSeen = firstSeen
         self.lastUpdated = lastUpdated

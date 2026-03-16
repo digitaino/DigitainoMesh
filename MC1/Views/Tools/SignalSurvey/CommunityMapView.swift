@@ -6,6 +6,13 @@ import SwiftUI
 struct CommunityMapView: View {
     @Environment(\.dismiss) private var dismiss
 
+    /// Coverage filter for active/passive survey data.
+    enum CoverageFilter: String, CaseIterable {
+        case all = "All"
+        case active = "Active"
+        case passive = "Passive"
+    }
+
     @State private var cells: [SurveyUploadService.CommunityCell] = []
     @State private var stats: SurveyUploadService.CommunityStats?
     @State private var isLoading = false
@@ -15,8 +22,18 @@ struct CommunityMapView: View {
     @State private var showStats = true
     @State private var lastRegion: MKCoordinateRegion?
     @State private var refreshTask: Task<Void, Never>?
+    @State private var coverageFilter: CoverageFilter = .all
 
     private let uploadService = SurveyUploadService()
+
+    /// Cells filtered by the active/passive coverage filter.
+    private var filteredCells: [SurveyUploadService.CommunityCell] {
+        switch coverageFilter {
+        case .all: cells
+        case .active: cells.filter { ($0.activePacketCount ?? 0) > 0 }
+        case .passive: cells.filter { ($0.passivePacketCount ?? 0) > 0 }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -69,6 +86,14 @@ struct CommunityMapView: View {
                         Image(systemName: showStats ? "chart.bar.fill" : "chart.bar")
                     }
                 }
+                ToolbarItem(placement: .bottomBar) {
+                    Picker("Coverage", selection: $coverageFilter) {
+                        ForEach(CoverageFilter.allCases, id: \.self) { filter in
+                            Text(filter.rawValue).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
             }
             .task {
                 await loadData()
@@ -98,7 +123,7 @@ struct CommunityMapView: View {
 
     private var mapContent: some View {
         Map(position: $cameraPosition) {
-            ForEach(cells) { cell in
+            ForEach(filteredCells) { cell in
                 let quality = SNRQuality(snr: cell.averageSNR)
                 let vertices = HexGrid.vertices(
                     centerLatitude: cell.latitude,
@@ -202,6 +227,21 @@ struct CommunityMapView: View {
                     }
                     Label("\(cell.packetCount) packets", systemImage: "number")
                         .font(.caption)
+                    if let active = cell.activePacketCount, let passive = cell.passivePacketCount,
+                       active > 0 || passive > 0 {
+                        HStack(spacing: 6) {
+                            if active > 0 {
+                                Text("\(active) active")
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                            }
+                            if passive > 0 {
+                                Text("\(passive) passive")
+                                    .font(.caption2)
+                                    .foregroundStyle(.yellow)
+                            }
+                        }
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {

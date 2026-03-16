@@ -52,6 +52,10 @@ public actor SurveyService {
     /// Provider that returns the current GPS fix.
     private var locationProvider: SurveyLocationProvider?
 
+    /// Whether active probing is currently enabled. When true, incoming control (discover)
+    /// and trace response packets are classified as active probe results.
+    private var isProbingActive: Bool = false
+
     /// Maximum GPS accuracy to accept (meters). Points with worse accuracy are discarded.
     private let maxAccuracyMeters: Double = 100
 
@@ -93,6 +97,12 @@ public actor SurveyService {
     /// Sets the location provider callback.
     public func setLocationProvider(_ provider: @escaping SurveyLocationProvider) {
         self.locationProvider = provider
+    }
+
+    /// Sets whether active probing is enabled. When true, control (discover response)
+    /// and trace response packets are classified as active probe results.
+    public func setProbingActive(_ active: Bool) {
+        self.isProbingActive = active
     }
 
     // MARK: - Session Management
@@ -195,10 +205,9 @@ public actor SurveyService {
         //   where x = node type. The pubkey starts at offset 6.
         // For other packets: use pathNodes (the routing hops from the network path).
         let pathHexIDs: [String] = {
-            if entry.traceTargetHashes != nil {
-                // Trace targets are mesh reachability data, not heard repeaters — exclude.
-                return []
-            }
+            // Note: traceTargetHashes (mesh reachability data) is tracked separately via
+            // traceResponseCount. Here we extract the *forwarding repeater* from pathNodes,
+            // which is present on trace responses just like any other packet.
             if entry.payloadType == .control {
                 let pubkey = Self.extractDiscoverResponsePubkey(from: entry.packetPayload)
                 return pubkey.map { [$0] } ?? []
@@ -214,6 +223,10 @@ public actor SurveyService {
             }
             return ids
         }()
+
+        // Classify as active probe result when probing is enabled and this is a
+        // probe response packet (discover response or trace response).
+        let isActive = isProbingActive && (entry.payloadType == .control || entry.payloadType == .trace)
 
         // Create survey point
         let point = SignalSurveyPointDTO(
@@ -232,7 +245,8 @@ public actor SurveyService {
             pathLength: entry.pathLength,
             packetHash: entry.packetHash,
             fromContactName: entry.fromContactName,
-            pathNodeHexIDs: pathHexIDs
+            pathNodeHexIDs: pathHexIDs,
+            isActiveProbe: isActive
         )
 
         // Persist
@@ -260,19 +274,20 @@ public actor SurveyService {
     /// where `payloadType` upper nibble `0x90` = DISCOVER_RESP, lower nibble = node type
     /// (ADV_TYPE_REPEATER = 2).
     ///
-    /// - Returns: Uppercase hex string of the first byte of the public key (e.g. "80"),
+    /// - Returns: Uppercase hex string of the first 2 bytes of the public key (e.g. "80A3"),
     ///   or nil if not a discover response from a repeater.
     private static func extractDiscoverResponsePubkey(from payload: Data) -> String? {
-        // Minimum: 1 (type) + 1 (snr_in) + 4 (tag) + 1 (at least 1 byte pubkey) = 7
-        guard payload.count >= 7 else { return nil }
+        // Minimum: 1 (type) + 1 (snr_in) + 4 (tag) + 2 (at least 2 bytes pubkey) = 8
+        guard payload.count >= 8 else { return nil }
         let typeByte = payload[payload.startIndex]
         // Check upper nibble for DISCOVER_RESP (0x90)
         guard typeByte & 0xF0 == 0x90 else { return nil }
         // Check lower nibble for ADV_TYPE_REPEATER (2) — ignore sensors, rooms, etc.
         guard typeByte & 0x0F == 2 else { return nil }
-        // Public key starts at offset 6; take first byte only
-        let pubkeyByte = payload[payload.startIndex + 6]
-        return String(format: "%02X", pubkeyByte)
+        // Public key starts at offset 6; take first 2 bytes for better disambiguation
+        let start = payload.startIndex + 6
+        let pubkeyBytes = payload[start..<start+2]
+        return pubkeyBytes.map { String(format: "%02X", $0) }.joined()
     }
 }
 

@@ -32,6 +32,10 @@ struct UploadCellData: Content {
     let hexQ: Int
     let hexR: Int
     let referenceLatitude: Double
+    /// Packets collected during active probing (bidirectional confirmation). Optional for backward compat.
+    let activePacketCount: Int?
+    /// Packets collected passively (RX only). Optional for backward compat.
+    let passivePacketCount: Int?
 }
 
 struct RouteBreakdown: Content {
@@ -59,6 +63,8 @@ struct CommunityCellResponse: Content {
     let contributionCount: Int
     let repeaterHexIDs: [String]
     let snrQuality: String
+    let activePacketCount: Int?
+    let passivePacketCount: Int?
 }
 
 struct CommunityCellsResponse: Content {

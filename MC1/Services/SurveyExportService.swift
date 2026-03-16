@@ -54,6 +54,10 @@ enum SurveyExportService {
         let hexQ: Int
         let hexR: Int
         let referenceLatitude: Double
+        /// Number of packets collected during active probing (bidirectional confirmation).
+        let activePacketCount: Int?
+        /// Number of packets collected passively (RX only, one-way).
+        let passivePacketCount: Int?
     }
 
     /// Resolved repeater information for community map display.
@@ -127,6 +131,10 @@ enum SurveyExportService {
                 latest: isoFormatter.string(from: timestamps.last ?? Date())
             ) : nil
 
+            // Active/passive breakdown
+            let activeCount = cellPoints.count(where: \.isActiveProbe)
+            let passiveCount = cellPoints.count - activeCount
+
             return CellData(
                 latitude: center.latitude,
                 longitude: center.longitude,
@@ -140,7 +148,9 @@ enum SurveyExportService {
                 repeaterHexIDs: repeaters,
                 hexQ: coord.q,
                 hexR: coord.r,
-                referenceLatitude: refLat
+                referenceLatitude: refLat,
+                activePacketCount: activeCount > 0 ? activeCount : nil,
+                passivePacketCount: passiveCount > 0 ? passiveCount : nil
             )
         }
 

@@ -12,6 +12,7 @@ struct SignalSurveyView: View {
     @State private var showingPacketList = false
     @State private var showingSurveySetup = false
     @State private var showingCommunityMap = false
+    @State private var showingInfoSheet = false
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
     @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
@@ -66,6 +67,9 @@ struct SignalSurveyView: View {
         }
         .sheet(isPresented: $showingCommunityMap) {
             CommunityMapView()
+        }
+        .sheet(isPresented: $showingInfoSheet) {
+            SurveyInfoSheet()
         }
         .sheet(isPresented: $showingPacketList) {
             CellPacketListView(
@@ -357,7 +361,7 @@ struct SignalSurveyView: View {
                             }
                         } else {
                             if let bestGW = cell.bestGatewaySNR {
-                                cellStatColumn(label: "Best GW", value: String(format: "%.1f", bestGW), unit: "dB")
+                                cellStatColumn(label: "Best Repeater", value: String(format: "%.1f", bestGW), unit: "dB")
                             }
                             if let snr = cell.averageSNR {
                                 cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
@@ -372,7 +376,7 @@ struct SignalSurveyView: View {
                                 lastHeardColumn(label: "Last Heard", date: latest, unit: "ago")
                             }
                             if cell.traceResponseCount > 0 {
-                                cellStatColumn(label: "Traces", value: "\(cell.traceResponseCount)", unit: "")
+                                cellStatColumn(label: "Mesh Reach", value: "\(cell.traceResponseCount)", unit: "")
                             }
                         }
                     }
@@ -401,51 +405,32 @@ struct SignalSurveyView: View {
                     if !cell.uniqueRelayNodes.isEmpty || !cell.uniqueSenders.isEmpty {
                         Divider()
                         VStack(alignment: .leading, spacing: 6) {
-                            if !cell.uniqueRelayNodes.isEmpty {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Label {
-                                        Text("Repeater(s) heard")
-                                            .font(.caption2)
-                                    } icon: {
-                                        Image(systemName: "arrow.triangle.swap")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .foregroundStyle(.secondary)
-
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 4) {
-                                            ForEach(cell.uniqueRelayNodes, id: \.self) { hexID in
-                                                Button {
-                                                    if viewModel.selectedRelayFilter == hexID {
-                                                        viewModel.selectedRelayFilter = nil
-                                                    } else {
-                                                        viewModel.selectedRelayFilter = hexID
-                                                    }
-                                                } label: {
-                                                    Text(hexID)
-                                                        .font(.system(.caption, design: .monospaced))
-                                                        .padding(.horizontal, 8)
-                                                        .padding(.vertical, 3)
-                                                        .background(
-                                                            viewModel.selectedRelayFilter == hexID
-                                                                ? Color.accentColor.opacity(0.2)
-                                                                : Color.secondary.opacity(0.12)
-                                                        )
-                                                        .clipShape(Capsule())
-                                                        .overlay(
-                                                            Capsule().strokeBorder(
-                                                                viewModel.selectedRelayFilter == hexID
-                                                                    ? Color.accentColor : Color.clear,
-                                                                lineWidth: 1
-                                                            )
-                                                        )
-                                                }
-                                                .buttonStyle(.plain)
-                                            }
-                                        }
-                                    }
-                                }
+                            // Connected repeaters (bidirectional, confirmed via discover response)
+                            if !cell.connectedRelayNodes.isEmpty {
+                                relayNodeSection(
+                                    label: "Connected (2-way)",
+                                    icon: "arrow.left.arrow.right",
+                                    iconColor: .green,
+                                    hexIDs: cell.connectedRelayNodes
+                                )
+                            }
+                            // Heard-only repeaters (passive RX, one-way)
+                            if !cell.heardOnlyRelayNodes.isEmpty {
+                                relayNodeSection(
+                                    label: "Heard (1-way)",
+                                    icon: "ear",
+                                    iconColor: .secondary,
+                                    hexIDs: cell.heardOnlyRelayNodes
+                                )
+                            }
+                            // Legacy fallback: show all relay nodes if no connected/heard split
+                            if cell.connectedRelayNodes.isEmpty && cell.heardOnlyRelayNodes.isEmpty && !cell.uniqueRelayNodes.isEmpty {
+                                relayNodeSection(
+                                    label: "Repeater(s)",
+                                    icon: "antenna.radiowaves.left.and.right",
+                                    iconColor: .secondary,
+                                    hexIDs: cell.uniqueRelayNodes
+                                )
                             }
                             if !cell.uniqueSenders.isEmpty {
                                 VStack(alignment: .leading, spacing: 3) {
@@ -529,6 +514,55 @@ struct SignalSurveyView: View {
         let remainingMinutes = minutes % 60
         if remainingMinutes == 0 { return "\(hours)h" }
         return "\(hours)h \(remainingMinutes)m"
+    }
+
+    /// Reusable relay node section with icon, label, and tappable hex ID chips.
+    @ViewBuilder
+    private func relayNodeSection(label: String, icon: String, iconColor: Color, hexIDs: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label {
+                Text(label)
+                    .font(.caption2)
+            } icon: {
+                Image(systemName: icon)
+                    .font(.caption2)
+                    .foregroundStyle(iconColor)
+            }
+            .foregroundStyle(.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(hexIDs, id: \.self) { hexID in
+                        Button {
+                            if viewModel.selectedRelayFilter == hexID {
+                                viewModel.selectedRelayFilter = nil
+                            } else {
+                                viewModel.selectedRelayFilter = hexID
+                            }
+                        } label: {
+                            Text(hexID)
+                                .font(.system(.caption, design: .monospaced))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(
+                                    viewModel.selectedRelayFilter == hexID
+                                        ? Color.accentColor.opacity(0.2)
+                                        : Color.secondary.opacity(0.12)
+                                )
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule().strokeBorder(
+                                        viewModel.selectedRelayFilter == hexID
+                                            ? Color.accentColor : Color.clear,
+                                        lineWidth: 1
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Map Controls Overlay (Top-Right)
@@ -752,7 +786,7 @@ struct SignalSurveyView: View {
                             Image(systemName: "ear")
                                 .foregroundStyle(.blue)
                         }
-                        Text("Always on. Listens for any mesh traffic and records each received packet with your GPS location. The map builds a coverage heatmap from real-world traffic — no transmissions required.")
+                        Text("Listens for mesh traffic. Shows where you can receive — but hearing a repeater doesn't mean it can hear you back. One-way coverage only.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -773,7 +807,7 @@ struct SignalSurveyView: View {
                             Image(systemName: "dot.radiowaves.left.and.right")
                                 .foregroundStyle(.orange)
                         }
-                        Text("Sends probe packets as you move to actively test the mesh. Each probe cycle sends a discover request (identifies nearby repeaters) and a flood trace (measures how far the mesh reaches). Cells where probes get no response are marked as dead zones.")
+                        Text("Sends probes to test bidirectional connectivity. A response means the repeater heard you AND you heard it — this is the real test of whether you're connected to the mesh. Locations with no response are dead zones.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -914,6 +948,13 @@ struct SignalSurveyView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { showingSurveySetup = false }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingInfoSheet = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") {
@@ -1106,6 +1147,14 @@ struct SignalSurveyView: View {
                     showingCommunityMap = true
                 } label: {
                     Label("Community Map", systemImage: "globe")
+                }
+
+                Divider()
+
+                Button {
+                    showingInfoSheet = true
+                } label: {
+                    Label("How It Works", systemImage: "info.circle")
                 }
             } label: {
                 Label("More", systemImage: "ellipsis.circle")

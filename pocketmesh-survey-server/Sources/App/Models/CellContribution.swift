@@ -30,6 +30,12 @@ final class CellContribution: Model, Content, @unchecked Sendable {
     @Field(key: "direct_count")
     var directCount: Int
 
+    @Field(key: "active_packet_count")
+    var activePacketCount: Int
+
+    @Field(key: "passive_packet_count")
+    var passivePacketCount: Int
+
     @Field(key: "contributed_at")
     var contributedAt: String
 
@@ -38,7 +44,9 @@ final class CellContribution: Model, Content, @unchecked Sendable {
     init(
         cellID: Int, contributorID: String,
         packetCount: Int, snrWeighted: Double, rssiWeighted: Double?,
-        floodCount: Int, directCount: Int, contributedAt: String
+        floodCount: Int, directCount: Int,
+        activePacketCount: Int = 0, passivePacketCount: Int = 0,
+        contributedAt: String
     ) {
         self.$cell.id = cellID
         self.contributorID = contributorID
@@ -47,6 +55,8 @@ final class CellContribution: Model, Content, @unchecked Sendable {
         self.rssiWeighted = rssiWeighted
         self.floodCount = floodCount
         self.directCount = directCount
+        self.activePacketCount = activePacketCount
+        self.passivePacketCount = passivePacketCount
         self.contributedAt = contributedAt
     }
 }
