@@ -954,17 +954,19 @@ final class SignalSurveyViewModel {
 
         // Consolidate hex IDs: different hash sizes produce different lengths for the
         // same repeater (e.g. "88" from 1-byte pathNodes vs "8850" from discover response).
-        // For display consistency, keep the **shortest** form (matching the mesh hash size)
-        // while merging timestamps from all variants.
+        // Keep the **longest** form for better specificity — multi-byte firmware is being
+        // rolled out and longer IDs reduce collision risk between repeaters.
         let allIDs = Array(latestByRelay.keys).map { $0.uppercased() }
         var displayIDs: [String] = []
         for id in allIDs {
             let dominated = displayIDs.contains(where: { $0.hasPrefix(id) || id.hasPrefix($0) })
             if dominated {
-                // Keep the shorter of the two
+                // Keep the longer of the two (more specific)
                 displayIDs = displayIDs.map { existing in
-                    if existing.hasPrefix(id) && id.count < existing.count { return id }
-                    if id.hasPrefix(existing) && existing.count < id.count { return existing }
+                    // existing starts with id → existing is longer or equal, keep existing
+                    if existing.hasPrefix(id) { return existing }
+                    // id starts with existing → id is longer, replace with id
+                    if id.hasPrefix(existing) { return id }
                     return existing
                 }
             } else {
