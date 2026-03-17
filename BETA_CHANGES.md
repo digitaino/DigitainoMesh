@@ -1,4 +1,14 @@
-# Beta Changes — v0.10.1 (Build 5)
+# Beta Changes — v0.10.1 (Build 7)
+
+## Share Heard Repeaters
+
+- **Share repeater map from messages** — On sent channel messages with heard repeats, a new "Share" button uploads the aggregated repeater data to the server and generates a shareable web link (e.g. `mesh.digitaino.com/m/abc123`). The web page shows all heard repeaters on an interactive map with signal quality color coding, heard counts, SNR/RSSI stats, and a collapsible detail panel.
+
+## Route Distance Fix
+
+- **Correct route distance calculation** — Fixed a bug where shared route distances were significantly underestimated (e.g. 1.4 mi instead of ~4 mi). The issue was caused by 1-byte hop hashes falsely matching non-repeater contacts whose public key prefix collided, producing wrong or missing locations. Hop resolution now prioritizes repeater-typed contacts before falling back to discovered nodes and then all contacts.
+
+- **Direct distance computation for shared routes** — Route sharing now computes distance directly from resolved hop coordinates instead of parsing it from the route info string, ensuring the web link always shows the correct distance.
 
 ## Active vs Passive Survey Probing
 
