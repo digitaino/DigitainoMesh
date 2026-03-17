@@ -1,6 +1,50 @@
-# Beta Changes — v0.10.1 (Build 4)
+# Beta Changes — v0.10.1 (Build 5)
 
-## Community Signal Map
+## Active vs Passive Survey Probing
+
+- **Active/passive packet distinction** — Survey data now tracks whether each packet was collected during active probing (bidirectional confirmation via trace/control packets) or passively (RX only). The cell detail card shows separate active and passive packet counts.
+
+- **Active/Passive filter on community map** — Both the iOS Community Map and the web frontend at mesh.digitaino.com have Active/Passive/All filter buttons. Filter the coverage map to see only actively probed cells, passively heard cells, or both.
+
+- **Faster active probing** — The probe scheduler now triggers more frequently on cell-exit events, improving coverage density during wardriving.
+
+- **Session close button** — Active survey sessions now have a close button in the toolbar for quick access.
+
+---
+
+## Signal Quality Bars & Repeater Filtering
+
+- **Signal quality bars in cell detail** — Both the iOS community map and the web frontend cell popups now show a 5-segment visual signal quality bar (like cellular bars) color-coded by SNR quality level. Makes it easy to gauge signal strength at a glance.
+
+- **Repeater filter** — Filter the community map by specific repeater. A dropdown menu lets you select a repeater (shown by name when known, hex ID otherwise) and see only cells where that repeater was heard. Available on both the iOS community map and the web frontend.
+
+- **Selected cell highlight** — On the web frontend, clicking a cell now highlights it with a white border on the map so you can see which cell's popup you're viewing.
+
+---
+
+## Batch Upload & Session Deduplication
+
+- **Upload Sessions picker** — The "Upload All Sessions" button has been renamed to "Upload Sessions..." and opens a multi-select picker where you can choose which sessions to upload, not just all of them.
+
+- **Idempotent uploads** — Each upload now includes session UUIDs. The server tracks which sessions have been uploaded and automatically replaces previous data for those sessions instead of accumulating duplicates. Re-uploading the same session is safe and produces the same result.
+
+- **Live upload dedup** — Live per-packet uploads are tagged with the active session ID. When you later do a batch upload of the same session, the server removes the live-uploaded data and replaces it with the consolidated batch, preventing double-counting.
+
+- **Delete My Server Data** — New option in the Upload Sessions toolbar menu lets you delete all your contributed data from the community map server. Useful for starting fresh.
+
+---
+
+## Hex ID Normalization
+
+- **Consistent repeater hex IDs** — Repeater hex IDs are now normalized across sessions and upload paths. Different-length hashes for the same repeater (e.g. "0C" vs "0C13") are consolidated to the shortest unique prefix, ensuring consistent cell-to-repeater associations in the community map.
+
+---
+
+# Previous Builds
+
+## Build 4 (v0.10.1)
+
+### Community Signal Map
 
 - **Live upload to community map** — New "Live Upload" toggle in the survey setup sheet. When enabled, each received packet's hex cell is immediately uploaded to mesh.digitaino.com as you survey, so the community coverage map updates in real time. Data is anonymized — only hex grid cells (~100m), signal stats, and repeater IDs are sent. No exact GPS, device identity, or message content is included. When disabled, you can still export and upload a full session manually from the toolbar menu after the survey.
 
@@ -10,11 +54,7 @@
 
 - **Repeater names and locations in uploads** — Community uploads now include resolved repeater names and GPS locations (from your known contacts), so the community map can show named repeater pins, not just hex IDs.
 
-  **How to test:** Go to Tools > Signal Survey. In the setup sheet, enable "Live Upload" under the Community Data section. Start a survey and walk around — open mesh.digitaino.com in a browser and you should see hex cells appearing within ~15 seconds. On the main map, toggle the community signal overlay (hexagon button) and verify it refreshes periodically without manual interaction. Try with Live Upload disabled and verify data stays local until you manually export.
-
----
-
-## Shareable Route & Repeater Maps
+### Shareable Route & Repeater Maps
 
 - **Shareable route links** — When you "Reply with Route", the route data is uploaded to the server and a short URL is generated (e.g. `mesh.digitaino.com/r/abc123`). The link opens a web page with an interactive Apple MapKit JS map showing the route plotted through repeaters with hop-by-hop annotations, a polyline connecting located hops, and a collapsible details panel with hop count, distance, and a list of each hop.
 
@@ -22,11 +62,7 @@
 
 - **Collapsible share panels** — The web pages for shared routes and repeater maps have a collapsible bottom panel that you can tap to expand/collapse, keeping the map unobstructed.
 
-  **How to test:** Long-press a message relayed through hops, expand path details, tap "Reply with Route". The reply should include a link. Open the link in a browser — verify the map shows correctly with repeater pins and a dashed line connecting them. Check the panel at the bottom shows hop details. Tap the panel header to collapse/expand.
-
----
-
-## Traffic Map Overhaul
+### Traffic Map Overhaul
 
 - **MKMapView with clustering** — The traffic map has been rebuilt from SwiftUI Map with Annotation views to a native MKMapView (UIViewRepresentable) with proper annotation clustering, native callouts, and correct hit testing. Overlapping repeater bubbles are now tappable even when dense.
 
@@ -34,7 +70,7 @@
 
 - **Tappable callouts** — Tapping a repeater pin shows a native MKAnnotation callout with packet count, SNR, last-seen time, and a 3-byte key prefix. A "Details" button opens the full detail sheet with signal stats and the complete public key.
 
-- **Info guide button** — New info button (ℹ) in the traffic map toolbar opens a guide sheet explaining pin colors, SNR thresholds, route lines, callouts, and time period filtering.
+- **Info guide button** — New info button in the traffic map toolbar opens a guide sheet explaining pin colors, SNR thresholds, route lines, callouts, and time period filtering.
 
 - **SNR last-hop-only fix** — Signal quality (SNR) is now correctly attributed only to the last hop in the packet path. Previously, the same SNR was misleadingly applied to all hops and route segments. Route lines now use uniform cyan with opacity scaling by traffic volume instead of SNR-based coloring.
 
@@ -42,25 +78,13 @@
 
 - **Location button fix** — The location button in the traffic map toolbar now correctly centers the map on the user's location, even after manually panning.
 
-  **How to test:** Go to Tools > Traffic Map. Verify repeater pins show hex labels instead of antenna icons. Tap a pin — the callout should show stats, last-seen time, and a "Details" button. Tap Details and verify the full public key is displayed. Tap the ℹ button and read the info guide. Use the time period picker in the toolbar to filter by different time windows — verify the pins update. Tap the location button after panning — it should snap back to your location. Check that route lines are uniformly cyan (not colored by signal quality).
-
----
-
-## Map — Last Heard Filter
+### Map — Last Heard Filter
 
 - **Time filter bar on main map** — A scrollable filter bar at the top of the main map lets you filter displayed nodes by when they were last heard: 1 Hour, 12 Hours, 1 Day, 3 Days, 5 Days, or All Time. This makes it easy to see which repeaters and nodes are currently active versus stale.
 
-  **How to test:** Open the main map. The filter bar should appear at the top. Tap different time filters — nodes that haven't been heard within the selected window should disappear. "All Time" shows everything.
-
----
-
-## Branding
+### Branding
 
 - **PocketMesh → DigitainoMesh** — Updated user-facing references from "PocketMesh" to "DigitainoMesh" in the survey export filename, setup sheet text, and code documentation. Internal identifiers and upstream attribution remain unchanged.
-
----
-
-# Previous Builds
 
 ## Build 3 (v0.10.1)
 
