@@ -951,21 +951,31 @@ final class SignalSurveyViewModel {
         }
 
         // Consolidate hex IDs: different hash sizes produce different lengths for the
-        // same repeater (e.g. "07" from 1-byte pathNodes vs "07D3" from discover response).
-        // Keep the longest (most specific) version and merge timestamps.
-        let consolidated = SurveyExportService.consolidateHexIDs(Array(latestByRelay.keys))
+        // same repeater (e.g. "88" from 1-byte pathNodes vs "8850" from discover response).
+        // For display consistency, keep the **shortest** form (matching the mesh hash size)
+        // while merging timestamps from all variants.
+        let allIDs = Array(latestByRelay.keys).map { $0.uppercased() }
+        var displayIDs: [String] = []
+        for id in allIDs {
+            let dominated = displayIDs.contains(where: { $0.hasPrefix(id) || id.hasPrefix($0) })
+            if dominated {
+                // Keep the shorter of the two
+                displayIDs = displayIDs.map { existing in
+                    if existing.hasPrefix(id) && id.count < existing.count { return id }
+                    if id.hasPrefix(existing) && existing.count < id.count { return existing }
+                    return existing
+                }
+            } else {
+                displayIDs.append(id)
+            }
+        }
+        displayIDs = Array(Set(displayIDs)) // deduplicate
         var consolidatedLatest: [String: Date] = [:]
-        for cID in consolidated {
-            // Merge timestamps from all raw IDs that are prefixes of (or equal to) this consolidated ID
+        for dID in displayIDs {
             for (rawID, ts) in latestByRelay {
                 let rawUp = rawID.uppercased()
-                let cUp = cID.uppercased()
-                if rawUp == cUp || cUp.hasPrefix(rawUp) || rawUp.hasPrefix(cUp) {
-                    if let existing = consolidatedLatest[cID] {
-                        consolidatedLatest[cID] = max(existing, ts)
-                    } else {
-                        consolidatedLatest[cID] = ts
-                    }
+                if rawUp == dID || dID.hasPrefix(rawUp) || rawUp.hasPrefix(dID) {
+                    consolidatedLatest[dID] = max(consolidatedLatest[dID] ?? .distantPast, ts)
                 }
             }
         }

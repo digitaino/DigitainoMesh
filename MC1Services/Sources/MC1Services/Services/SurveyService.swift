@@ -222,20 +222,26 @@ public actor SurveyService {
             // Note: traceTargetHashes (mesh reachability data) is tracked separately via
             // traceResponseCount. Here we extract the *forwarding repeater* from pathNodes,
             // which is present on trace responses just like any other packet.
+            //
+            // For control packets (discover responses) we use pathNodes just like any other
+            // packet type. This ensures relay hex IDs use the same hash size (e.g. 1-byte)
+            // as heard packets, keeping the display consistent. If pathNodes are empty,
+            // fall back to extracting the responder's 2-byte public key prefix from the
+            // payload so we still have an identifier for the connected repeater.
+            let hashSize = entry.pathHashSize
+            if hashSize > 0, !entry.pathNodes.isEmpty {
+                let bytes = Array(entry.pathNodes)
+                return stride(from: 0, to: bytes.count, by: hashSize).map { start in
+                    let end = min(start + hashSize, bytes.count)
+                    return Data(bytes[start..<end]).hexString()
+                }
+            }
+            // Fallback for control packets with no pathNodes
             if entry.payloadType == .control {
                 let pubkey = Self.extractDiscoverResponsePubkey(from: entry.packetPayload)
                 return pubkey.map { [$0] } ?? []
             }
-            let hashSize = entry.pathHashSize
-            guard hashSize > 0, !entry.pathNodes.isEmpty else {
-                return []
-            }
-            let bytes = Array(entry.pathNodes)
-            let ids = stride(from: 0, to: bytes.count, by: hashSize).map { start in
-                let end = min(start + hashSize, bytes.count)
-                return Data(bytes[start..<end]).hexString()
-            }
-            return ids
+            return []
         }()
 
         // Classify as active probe result when probing is enabled and this is a
