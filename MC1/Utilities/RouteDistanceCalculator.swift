@@ -48,6 +48,9 @@ enum RouteDistanceCalculator {
 
     /// Computes distance along a message's path using known contacts/discovered nodes.
     /// Returns (totalMeters, hasGaps) or nil if distance can't be computed.
+    ///
+    /// Hop resolution prioritizes repeater-typed contacts to avoid false matches
+    /// with non-repeater contacts that share a 1-byte public key prefix.
     static func computeRouteDistance(
         message: MessageDTO,
         contacts: [ContactDTO],
@@ -63,6 +66,13 @@ enum RouteDistanceCalculator {
 
         guard !hops.isEmpty else { return nil }
 
+        // Filter to repeater-typed contacts first to avoid false matches.
+        // With 1-byte hashes (e.g. 0x80), non-repeater contacts whose key
+        // starts with the same byte can steal the match and produce wrong
+        // locations or no location, causing incorrect distance calculations.
+        let repeaterContacts = contacts.filter { $0.type == .repeater }
+        let repeaterDiscovered = discoveredNodes.filter { $0.nodeType == .repeater }
+
         // Build coordinate chain: sender → hops → receiver (user)
         var locatedCoordinates: [CLLocationCoordinate2D] = []
         // Only intermediate repeaters with unknown location count as gaps,
@@ -70,22 +80,32 @@ enum RouteDistanceCalculator {
         // Missing sender/receiver locations just shorten the measured chain.
         var hasGaps = false
 
-        // Helper to resolve a hash against contacts then discovered nodes
+        // Helper to resolve a hop hash — repeater contacts first, then discovered
+        // repeaters, then all contacts as fallback for non-repeater relay nodes.
         func resolveLocation(for hashBytes: Data) -> CLLocationCoordinate2D? {
-            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: contacts, userLocation: userLocation),
+            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: repeaterContacts, userLocation: userLocation),
                match.hasLocation {
                 return CLLocationCoordinate2D(latitude: match.latitude, longitude: match.longitude)
             }
-            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: discoveredNodes, userLocation: userLocation),
+            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: repeaterDiscovered, userLocation: userLocation),
+               match.hasLocation {
+                return CLLocationCoordinate2D(latitude: match.latitude, longitude: match.longitude)
+            }
+            // Fallback to all contacts for non-repeater relay nodes
+            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: contacts, userLocation: userLocation),
                match.hasLocation {
                 return CLLocationCoordinate2D(latitude: match.latitude, longitude: match.longitude)
             }
             return nil
         }
 
-        // Try to locate sender from senderKeyPrefix
-        if let senderKey = message.senderKeyPrefix, let coord = resolveLocation(for: senderKey) {
-            locatedCoordinates.append(coord)
+        // Try to locate sender from senderKeyPrefix (uses all contacts since
+        // the sender is typically a chat contact, not a repeater)
+        if let senderKey = message.senderKeyPrefix {
+            if let match = RepeaterResolver.bestMatch(for: senderKey, in: contacts, userLocation: userLocation),
+               match.hasLocation {
+                locatedCoordinates.append(CLLocationCoordinate2D(latitude: match.latitude, longitude: match.longitude))
+            }
         }
 
         // Resolve each intermediate hop (repeater)

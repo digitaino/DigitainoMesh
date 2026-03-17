@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 import UIKit  // UIPasteboard for .copy action
 import MC1Services
@@ -723,8 +724,22 @@ struct ChatConversationView: View {
 
         let hopCount = Int(message.pathLength & 0x3F)
 
-        // Extract distance text from the route info string
-        let distanceText = SharedRouteParser.parse(routeInfo)?.distanceText
+        // Compute distance directly from the resolved hop coordinates.
+        // This is more accurate than parsing the route info string because
+        // the hops here were resolved with repeater-priority matching.
+        let locatedCoords: [CLLocationCoordinate2D] = hops.compactMap { hop in
+            guard let lat = hop.latitude, let lon = hop.longitude else { return nil }
+            return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        }
+        var distanceCoords = locatedCoords
+        if let userLocation {
+            distanceCoords.append(userLocation.coordinate)
+        }
+        let totalMeters = RouteDistanceCalculator.chainDistance(between: distanceCoords)
+        let hasGaps = locatedCoords.count < hops.count
+        let distanceText: String? = totalMeters > 0
+            ? RouteDistanceCalculator.formatTotal(totalMeters, hasGaps: hasGaps)
+            : nil
 
         let service = RouteShareService()
         return await service.shareRoute(hopCount: hopCount, distanceText: distanceText, hops: hops)
