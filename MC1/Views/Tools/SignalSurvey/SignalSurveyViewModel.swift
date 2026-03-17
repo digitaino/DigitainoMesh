@@ -725,11 +725,14 @@ final class SignalSurveyViewModel {
             selectedCell = cell
         }
 
-        // Follow user location
-        cameraPosition = .region(MKCoordinateRegion(
-            center: location.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-        ))
+        // Follow user location, offset center northward so the current cell
+        // sits above the detail card (which covers ~35% of the bottom).
+        let span = MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+        let offsetCenter = CLLocationCoordinate2D(
+            latitude: location.coordinate.latitude - span.latitudeDelta * 0.2,
+            longitude: location.coordinate.longitude
+        )
+        cameraPosition = .region(MKCoordinateRegion(center: offsetCenter, span: span))
     }
 
     // MARK: - Filtering
@@ -946,15 +949,48 @@ final class SignalSurveyViewModel {
                 latestByRelay[hexID] = p.timestamp
             }
         }
-        let relayNodes = latestByRelay.sorted { $0.value > $1.value }.map(\.key)
+
+        // Consolidate hex IDs: different hash sizes produce different lengths for the
+        // same repeater (e.g. "07" from 1-byte pathNodes vs "07D3" from discover response).
+        // Keep the longest (most specific) version and merge timestamps.
+        let consolidated = SurveyExportService.consolidateHexIDs(Array(latestByRelay.keys))
+        var consolidatedLatest: [String: Date] = [:]
+        for cID in consolidated {
+            // Merge timestamps from all raw IDs that are prefixes of (or equal to) this consolidated ID
+            for (rawID, ts) in latestByRelay {
+                let rawUp = rawID.uppercased()
+                let cUp = cID.uppercased()
+                if rawUp == cUp || cUp.hasPrefix(rawUp) || rawUp.hasPrefix(cUp) {
+                    if let existing = consolidatedLatest[cID] {
+                        consolidatedLatest[cID] = max(existing, ts)
+                    } else {
+                        consolidatedLatest[cID] = ts
+                    }
+                }
+            }
+        }
+        let relayNodes = consolidatedLatest.sorted { $0.value > $1.value }.map(\.key)
 
         // Split relay nodes into connected (bidirectional via discover) vs heard-only (passive).
         // A repeater is "connected" if we have a discover response (control packet) with that node in its path.
+        // Use prefix matching because control packets produce 2-byte IDs while regular packets use 1-byte hashes.
         let connectedIDs = Set(points
             .filter { $0.payloadType == .control }
             .flatMap(\.pathNodeHexIDs))
-        let connected = relayNodes.filter { connectedIDs.contains($0) }
-        let heardOnly = relayNodes.filter { !connectedIDs.contains($0) }
+        let connected = relayNodes.filter { relay in
+            let r = relay.uppercased()
+            return connectedIDs.contains(where: { id in
+                let u = id.uppercased()
+                return u == r || u.hasPrefix(r) || r.hasPrefix(u)
+            })
+        }
+        let heardOnly = relayNodes.filter { relay in
+            let r = relay.uppercased()
+            return !connectedIDs.contains(where: { id in
+                let u = id.uppercased()
+                return u == r || u.hasPrefix(r) || r.hasPrefix(u)
+            })
+        }
 
         // Best-gateway quality: cell color reflects strongest discovered repeater
         let (bestGatewaySNR, traceResponseCount) = computeCellQuality(points: points)
@@ -1314,8 +1350,15 @@ final class SignalSurveyViewModel {
         let coord = HexGrid.AxialCoord(q: parts[0], r: parts[1])
         let points = gridBuckets[coord] ?? []
         if let relay = relayFilter {
-            // Match on the directly heard repeater (last in path chain)
-            return points.filter { $0.pathNodeHexIDs.last == relay }
+            // Match on the directly heard repeater (last in path chain).
+            // Use prefix matching because consolidated hex IDs may be longer
+            // than the 1-byte hash in pathNodeHexIDs (e.g. filter "07D3" should match point with "07").
+            let r = relay.uppercased()
+            return points.filter { point in
+                guard let last = point.pathNodeHexIDs.last else { return false }
+                let u = last.uppercased()
+                return u == r || u.hasPrefix(r) || r.hasPrefix(u)
+            }
         }
         return points
     }
