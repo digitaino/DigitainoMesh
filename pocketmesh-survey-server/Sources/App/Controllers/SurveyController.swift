@@ -56,6 +56,51 @@ struct SurveyController {
         return result
     }
 
+    // MARK: - Session Deduplication
+
+    /// Remove existing contributions for the given session IDs from this contributor,
+    /// subtracting their data from cell aggregates. Returns the number of contributions removed.
+    private func removeSessionContributions(
+        contributorID: String,
+        sessionIDs: [String],
+        on db: Database
+    ) async throws -> Int {
+        var removedCount = 0
+
+        for sessionID in sessionIDs {
+            let existing = try await CellContribution.query(on: db)
+                .filter(\.$contributorID == contributorID)
+                .filter(\.$sessionID == sessionID)
+                .with(\.$cell)
+                .all()
+
+            for contribution in existing {
+                let cell = contribution.cell
+
+                // Subtract this contribution's data from cell aggregates
+                cell.totalSNRWeighted -= contribution.snrWeighted
+                cell.totalRSSIWeighted -= contribution.rssiWeighted ?? 0
+                cell.totalPacketCount -= contribution.packetCount
+                cell.floodCount -= contribution.floodCount
+                cell.directCount -= contribution.directCount
+                cell.activePacketCount -= contribution.activePacketCount
+                cell.passivePacketCount -= contribution.passivePacketCount
+                cell.contributionCount -= 1
+
+                if cell.totalPacketCount <= 0 {
+                    try await cell.delete(on: db)
+                } else {
+                    try await cell.save(on: db)
+                }
+
+                try await contribution.delete(on: db)
+                removedCount += 1
+            }
+        }
+
+        return removedCount
+    }
+
     // MARK: - POST /api/v1/survey
 
     @Sendable
@@ -81,6 +126,26 @@ struct SurveyController {
         // Normalize reference latitude to nearest 10° band for global grid alignment.
         // All clients use the same rounding so cells from different sessions merge correctly.
         let normalizedRefLat = (payload.referenceLatitude / 10.0).rounded() * 10.0
+
+        // Session-based deduplication: if sessionIDs are provided, remove any existing
+        // contributions for those sessions from this contributor before adding new data.
+        // This makes re-uploading the same session idempotent.
+        let sessionIDs = payload.sessionIDs ?? []
+        if !sessionIDs.isEmpty {
+            let removed = try await removeSessionContributions(
+                contributorID: payload.contributorID,
+                sessionIDs: sessionIDs,
+                on: req.db
+            )
+            if removed > 0 {
+                req.logger.info("Removed \(removed) existing contributions for \(sessionIDs.count) session(s) from contributor \(payload.contributorID.prefix(8))...")
+            }
+        }
+
+        // Build a session tag for contribution records.
+        // For single-session uploads: the session UUID directly.
+        // For multi-session batch: sorted+joined so dedup works on the same combination.
+        let sessionTag: String? = sessionIDs.isEmpty ? nil : sessionIDs.sorted().joined(separator: "+")
 
         var acceptedCount = 0
 
@@ -166,7 +231,8 @@ struct SurveyController {
                         directCount: cellData.routeTypeBreakdown.direct,
                         activePacketCount: activePkts,
                         passivePacketCount: passivePkts,
-                        contributedAt: now
+                        contributedAt: now,
+                        sessionID: sessionTag
                     )
                     try await contribution.save(on: req.db)
                 }
@@ -212,7 +278,8 @@ struct SurveyController {
                         directCount: cellData.routeTypeBreakdown.direct,
                         activePacketCount: activePkts,
                         passivePacketCount: passivePkts,
-                        contributedAt: now
+                        contributedAt: now,
+                        sessionID: sessionTag
                     )
                     try await contribution.save(on: req.db)
                 }

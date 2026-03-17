@@ -10,6 +10,10 @@ struct UploadPayload: Content {
     let referenceLatitude: Double
     let cells: [UploadCellData]
     let repeaters: [UploadRepeaterInfo]?
+    /// Client session UUIDs included in this upload.
+    /// When provided, the server replaces any existing contributions for these sessions
+    /// from this contributor, making uploads idempotent per session.
+    let sessionIDs: [String]?
 }
 
 struct UploadRepeaterInfo: Content {

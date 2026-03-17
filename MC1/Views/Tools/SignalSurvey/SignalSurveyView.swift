@@ -1443,7 +1443,7 @@ struct SignalSurveyView: View {
                         batchSelectedSessions = Set(viewModel.sessions.map(\.id))
                         showingBatchUpload = true
                     } label: {
-                        Label("Upload All Sessions", systemImage: "icloud.and.arrow.up")
+                        Label("Upload Sessions…", systemImage: "icloud.and.arrow.up")
                     }
                 }
 
@@ -1621,6 +1621,9 @@ struct BatchUploadView: View {
     @State private var isUploading = false
     @State private var uploadResult: String?
     @State private var uploadError: String?
+    @State private var showingDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var deleteResult: String?
 
     private var totalPoints: Int {
         selectedSessions.compactMap { sessionStats[$0]?.pointCount }.reduce(0, +)
@@ -1714,11 +1717,15 @@ struct BatchUploadView: View {
 
                 // Upload status / button
                 VStack(spacing: 12) {
-                    if isUploading {
-                        ProgressView("Uploading \(selectedSessions.count) session(s)...")
+                    if isUploading || isDeleting {
+                        ProgressView(isDeleting ? "Deleting server data..." : "Uploading \(selectedSessions.count) session(s)...")
                     } else if let uploadResult {
                         Label(uploadResult, systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
+                            .font(.subheadline)
+                    } else if let deleteResult {
+                        Label(deleteResult, systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.orange)
                             .font(.subheadline)
                     } else if let uploadError {
                         VStack(spacing: 6) {
@@ -1732,7 +1739,7 @@ struct BatchUploadView: View {
                             .controlSize(.small)
                         }
                     } else {
-                        Text("Uploads anonymized grid data. No exact GPS, no sender identity, no message content.")
+                        Text("Re-uploading the same sessions replaces previous data (safe to repeat).")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -1749,12 +1756,31 @@ struct BatchUploadView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Batch Upload")
+            .navigationTitle("Upload Sessions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button(role: .destructive) {
+                            showingDeleteConfirm = true
+                        } label: {
+                            Label("Delete My Server Data", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .alert("Delete Server Data?", isPresented: $showingDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    Task { await performDelete() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes all your uploaded survey data from the community map server. Your local sessions are not affected. You can re-upload afterward.")
             }
         }
     }
@@ -1768,6 +1794,7 @@ struct BatchUploadView: View {
         isUploading = true
         uploadError = nil
         uploadResult = nil
+        deleteResult = nil
         defer { isUploading = false }
 
         do {
@@ -1786,6 +1813,22 @@ struct BatchUploadView: View {
             uploadResult = "\(response.accepted) cells uploaded from \(selectedSessions.count) session(s)"
         } catch {
             uploadError = error.localizedDescription
+        }
+    }
+
+    private func performDelete() async {
+        isDeleting = true
+        uploadError = nil
+        uploadResult = nil
+        deleteResult = nil
+        defer { isDeleting = false }
+
+        do {
+            let service = SurveyUploadService()
+            let response = try await service.deleteContributorData()
+            deleteResult = "Deleted \(response.deletedContributions) contributions, \(response.cellsRemoved) cells removed"
+        } catch {
+            uploadError = "Delete failed: \(error.localizedDescription)"
         }
     }
 }

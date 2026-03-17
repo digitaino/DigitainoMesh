@@ -661,12 +661,14 @@ final class SignalSurveyViewModel {
         if liveUploadEnabled {
             let refLat = gridReferenceLatitude
             let contacts = repeaterContacts
+            let activeSessionID = activeSession?.id
             let service = liveUploadService ?? SurveyUploadService()
             if liveUploadService == nil { liveUploadService = service }
             Task.detached {
                 await service.uploadLivePoint(
                     point,
                     referenceLatitude: refLat,
+                    sessionID: activeSessionID,
                     repeaterContacts: contacts
                 )
                 await MainActor.run { [weak self] in

@@ -39,6 +39,9 @@ final class CellContribution: Model, Content, @unchecked Sendable {
     @Field(key: "contributed_at")
     var contributedAt: String
 
+    @OptionalField(key: "session_id")
+    var sessionID: String?
+
     init() {}
 
     init(
@@ -46,7 +49,8 @@ final class CellContribution: Model, Content, @unchecked Sendable {
         packetCount: Int, snrWeighted: Double, rssiWeighted: Double?,
         floodCount: Int, directCount: Int,
         activePacketCount: Int = 0, passivePacketCount: Int = 0,
-        contributedAt: String
+        contributedAt: String,
+        sessionID: String? = nil
     ) {
         self.$cell.id = cellID
         self.contributorID = contributorID
@@ -58,5 +62,6 @@ final class CellContribution: Model, Content, @unchecked Sendable {
         self.activePacketCount = activePacketCount
         self.passivePacketCount = passivePacketCount
         self.contributedAt = contributedAt
+        self.sessionID = sessionID
     }
 }

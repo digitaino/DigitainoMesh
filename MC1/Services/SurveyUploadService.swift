@@ -61,11 +61,20 @@ actor SurveyUploadService {
         let referenceLatitude: Double
         let cells: [SurveyExportService.CellData]
         let repeaters: [SurveyExportService.RepeaterInfo]
+        /// Session UUIDs included in this upload for server-side deduplication.
+        /// Re-uploading the same session replaces previous data instead of accumulating.
+        let sessionIDs: [String]?
     }
 
     struct UploadResponse: Codable {
         let accepted: Int
         let message: String?
+    }
+
+    struct DeleteContributorResponse: Codable {
+        let deletedContributions: Int
+        let cellsRemoved: Int
+        let cellsUpdated: Int
     }
 
     struct CommunityCell: Codable, Identifiable {
@@ -141,26 +150,15 @@ actor SurveyUploadService {
             cellSizeDegrees: HexGrid.size,
             referenceLatitude: result.referenceLatitude,
             cells: result.cells,
-            repeaters: result.repeaters
+            repeaters: result.repeaters,
+            sessionIDs: [sessionID.uuidString]
         )
 
-        // DEBUG: Log what's actually in the payload
-        let activeCells = result.cells.filter { $0.activePacketCount != nil }
-        let passiveCells = result.cells.filter { $0.passivePacketCount != nil }
-        Self.logger.info("DEBUG upload: \(result.cells.count) cells — \(activeCells.count) with activePacketCount, \(passiveCells.count) with passivePacketCount")
-        if let first = activeCells.first {
-            Self.logger.info("DEBUG upload: sample active cell — activePacketCount=\(first.activePacketCount ?? -1), passivePacketCount=\(first.passivePacketCount ?? -1), packetCount=\(first.packetCount)")
-        }
+        Self.logger.info("Upload: \(result.cells.count) cells for session \(sessionID.uuidString.prefix(8))")
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let body = try encoder.encode(payload)
-
-        // DEBUG: Log a snippet of the JSON to verify keys are present
-        if let jsonStr = String(data: body, encoding: .utf8) {
-            let snippet = String(jsonStr.prefix(500))
-            Self.logger.info("DEBUG upload: JSON snippet: \(snippet)")
-        }
 
         let url = Self.serverBaseURL.appending(path: "survey")
         var request = URLRequest(url: url)
@@ -178,13 +176,14 @@ actor SurveyUploadService {
 
     /// Upload multiple survey sessions at once, merging their data into a single payload.
     /// This consolidates overlapping hex cells and normalizes repeater hex IDs across sessions.
+    /// Session IDs are sent to the server for deduplication — re-uploading replaces previous data.
     func uploadMultipleSessions(
         sessionIDs: [UUID],
         dataStore: PersistenceStore,
         repeaterContacts: [ContactDTO] = []
     ) async throws -> UploadResponse {
         let backfilled = try await dataStore.backfillActiveProbeFlag()
-        Self.logger.info("DEBUG uploadMultiple: backfill result = \(backfilled) points updated")
+        Self.logger.info("Batch upload: backfill updated \(backfilled) points")
 
         guard let result = try await SurveyExportService.generateCellDataForSessions(
             sessionIDs: sessionIDs,
@@ -203,10 +202,11 @@ actor SurveyUploadService {
             cellSizeDegrees: HexGrid.size,
             referenceLatitude: result.referenceLatitude,
             cells: result.cells,
-            repeaters: result.repeaters
+            repeaters: result.repeaters,
+            sessionIDs: sessionIDs.map(\.uuidString)
         )
 
-        Self.logger.info("DEBUG uploadMultiple: \(result.cells.count) merged cells from \(sessionIDs.count) sessions")
+        Self.logger.info("Batch upload: \(result.cells.count) merged cells from \(sessionIDs.count) sessions")
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -230,10 +230,12 @@ actor SurveyUploadService {
 
     /// Upload a single survey point to the community map server in real time.
     /// Converts the point to a 1-cell hex payload and POSTs it immediately.
+    /// The sessionID is included so the batch upload can replace live-uploaded data.
     /// Errors are logged but not thrown — live upload is best-effort.
     func uploadLivePoint(
         _ point: SignalSurveyPointDTO,
         referenceLatitude: Double,
+        sessionID: UUID? = nil,
         repeaterContacts: [ContactDTO] = []
     ) async {
         let hex = HexGrid.axialFromLatLon(
@@ -294,7 +296,8 @@ actor SurveyUploadService {
                 cellSizeDegrees: HexGrid.size,
                 referenceLatitude: referenceLatitude,
                 cells: [cellData],
-                repeaters: resolvedRepeaters
+                repeaters: resolvedRepeaters,
+                sessionIDs: sessionID.map { [$0.uuidString] }
             )
 
             let encoder = JSONEncoder()
@@ -386,6 +389,25 @@ actor SurveyUploadService {
 
         Self.logger.error("Rate limited after \(Self.maxRetries) retries")
         throw SurveyUploadError.rateLimited
+    }
+
+    // MARK: - Delete Contributor Data
+
+    /// Delete all data for this contributor from the community map server.
+    /// Returns the server response with counts of removed contributions and cells.
+    func deleteContributorData() async throws -> DeleteContributorResponse {
+        let contributorID = try await getOrCreateContributorID()
+
+        let url = Self.serverBaseURL.appending(path: "contributor/\(contributorID)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue(Self.apiKey, forHTTPHeaderField: "X-API-Key")
+
+        let data = try await performRequest(request)
+        let response = try JSONDecoder().decode(DeleteContributorResponse.self, from: data)
+
+        Self.logger.info("Deleted contributor data: \(response.deletedContributions) contributions, \(response.cellsRemoved) cells removed")
+        return response
     }
 
     // MARK: - Contributor ID (Keychain)
