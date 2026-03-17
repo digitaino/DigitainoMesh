@@ -27,10 +27,15 @@ struct CommunityMapView: View {
 
     private let uploadService = SurveyUploadService()
 
-    /// All unique repeater hex IDs from current cell data.
+    /// All unique repeater hex IDs from current cell data, consolidated by prefix.
     private var availableRepeaters: [String] {
-        let ids = Set(cells.flatMap(\.repeaterHexIDs))
-        return ids.sorted()
+        Self.consolidateHexIDs(cells.flatMap(\.repeaterHexIDs)).sorted()
+    }
+
+    /// Consolidates hex IDs that are prefixes of each other, keeping the longest version.
+    /// Delegates to the canonical implementation in SurveyExportService.
+    static func consolidateHexIDs(_ hexIDs: [String]) -> [String] {
+        SurveyExportService.consolidateHexIDs(hexIDs)
     }
 
     /// Cells filtered by the active/passive coverage filter and repeater filter.
@@ -42,7 +47,13 @@ struct CommunityMapView: View {
         case .passive: result = cells.filter { ($0.passivePacketCount ?? 0) > 0 }
         }
         if let repeater = selectedRepeater {
-            result = result.filter { $0.repeaterHexIDs.contains(repeater) }
+            let rf = repeater.uppercased()
+            result = result.filter { cell in
+                cell.repeaterHexIDs.contains { id in
+                    let uid = id.uppercased()
+                    return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
+                }
+            }
         }
         return result
     }

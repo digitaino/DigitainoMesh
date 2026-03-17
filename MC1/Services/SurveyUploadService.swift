@@ -176,6 +176,56 @@ actor SurveyUploadService {
         return response
     }
 
+    /// Upload multiple survey sessions at once, merging their data into a single payload.
+    /// This consolidates overlapping hex cells and normalizes repeater hex IDs across sessions.
+    func uploadMultipleSessions(
+        sessionIDs: [UUID],
+        dataStore: PersistenceStore,
+        repeaterContacts: [ContactDTO] = []
+    ) async throws -> UploadResponse {
+        let backfilled = try await dataStore.backfillActiveProbeFlag()
+        Self.logger.info("DEBUG uploadMultiple: backfill result = \(backfilled) points updated")
+
+        guard let result = try await SurveyExportService.generateCellDataForSessions(
+            sessionIDs: sessionIDs,
+            dataStore: dataStore,
+            repeaterContacts: repeaterContacts
+        ) else {
+            throw SurveyUploadError.noData
+        }
+
+        let contributorID = try await getOrCreateContributorID()
+
+        let payload = UploadPayload(
+            version: SurveyExportService.formatVersion,
+            contributorID: contributorID,
+            gridType: "hex",
+            cellSizeDegrees: HexGrid.size,
+            referenceLatitude: result.referenceLatitude,
+            cells: result.cells,
+            repeaters: result.repeaters
+        )
+
+        Self.logger.info("DEBUG uploadMultiple: \(result.cells.count) merged cells from \(sessionIDs.count) sessions")
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let body = try encoder.encode(payload)
+
+        let url = Self.serverBaseURL.appending(path: "survey")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.apiKey, forHTTPHeaderField: "X-API-Key")
+        request.httpBody = body
+
+        let data = try await performRequest(request)
+        let response = try JSONDecoder().decode(UploadResponse.self, from: data)
+
+        Self.logger.info("Uploaded \(response.accepted) merged cells from \(sessionIDs.count) sessions")
+        return response
+    }
+
     // MARK: - Live Upload (per-point)
 
     /// Upload a single survey point to the community map server in real time.
@@ -194,6 +244,10 @@ actor SurveyUploadService {
         let center = HexGrid.centerLatLon(from: hex, referenceLatitude: referenceLatitude)
         let isFlood = point.routeType == .flood || point.routeType == .tcFlood
 
+        // Consolidate hex IDs at the source — different pathHashMode sessions may produce
+        // different-length hashes for the same repeater (e.g. "0C" vs "0C13")
+        let consolidatedHexIDs = SurveyExportService.consolidateHexIDs(point.pathNodeHexIDs)
+
         let cellData = SurveyExportService.CellData(
             latitude: center.latitude,
             longitude: center.longitude,
@@ -207,7 +261,7 @@ actor SurveyUploadService {
                 direct: isFlood ? 0 : 1
             ),
             timeRange: nil,
-            repeaterHexIDs: point.pathNodeHexIDs,
+            repeaterHexIDs: consolidatedHexIDs,
             hexQ: hex.q,
             hexR: hex.r,
             referenceLatitude: referenceLatitude,
@@ -215,8 +269,8 @@ actor SurveyUploadService {
             passivePacketCount: point.isActiveProbe ? nil : 1
         )
 
-        // Resolve repeater info for any path nodes
-        let resolvedRepeaters: [SurveyExportService.RepeaterInfo] = point.pathNodeHexIDs.compactMap { hexID in
+        // Resolve repeater info for any path nodes (using consolidated IDs)
+        let resolvedRepeaters: [SurveyExportService.RepeaterInfo] = consolidatedHexIDs.compactMap { hexID in
             guard let hashBytes = Data(hexString: hexID) else { return nil }
             guard let contact = RepeaterResolver.bestMatch(
                 for: hashBytes, in: repeaterContacts, userLocation: nil

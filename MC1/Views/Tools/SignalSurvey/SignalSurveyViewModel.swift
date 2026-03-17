@@ -265,10 +265,9 @@ final class SignalSurveyViewModel {
     /// Optional repeater filter for the community overlay layer.
     var communityRepeaterFilter: String?
 
-    /// All unique repeater hex IDs from current community cell data.
+    /// All unique repeater hex IDs from current community cell data, consolidated by prefix.
     var communityAvailableRepeaters: [String] {
-        let ids = Set(communityCells.flatMap(\.repeaterHexIDs))
-        return ids.sorted()
+        CommunityMapView.consolidateHexIDs(communityCells.flatMap(\.repeaterHexIDs)).sorted()
     }
 
     /// Community cells after applying coverage and repeater filters.
@@ -280,7 +279,13 @@ final class SignalSurveyViewModel {
         case .passive: result = communityCells.filter { ($0.passivePacketCount ?? 0) > 0 }
         }
         if let repeater = communityRepeaterFilter {
-            result = result.filter { $0.repeaterHexIDs.contains(repeater) }
+            let rf = repeater.uppercased()
+            result = result.filter { cell in
+                cell.repeaterHexIDs.contains { id in
+                    let uid = id.uppercased()
+                    return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
+                }
+            }
         }
         return result
     }
@@ -1108,6 +1113,10 @@ final class SignalSurveyViewModel {
                         await self?.sendProbe(location: location)
                     }
                 }
+
+                // Check for dead zones on every tick — probes that timed out
+                // (no response within deadZoneTimeout) should appear as gray cells.
+                self.refreshDeadZones()
             }
         }
 

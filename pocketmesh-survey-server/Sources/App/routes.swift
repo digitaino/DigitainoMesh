@@ -29,6 +29,7 @@ func routes(_ app: Application) throws {
     protected.post("survey", use: surveyController.uploadSurvey)
     protected.delete("contributor", ":contributorID", use: surveyController.deleteContributor)
     protected.post("admin", "fix-coordinates", use: surveyController.fixCellCoordinates)
+    protected.post("admin", "normalize-repeaters", use: surveyController.normalizeRepeaters)
 
     // Authenticated shared link creation
     protected.post("routes", use: shareController.createRoute)

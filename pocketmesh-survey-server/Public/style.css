@@ -189,6 +189,7 @@ body {
     display: flex;
     align-items: flex-end;
     gap: 3px;
+    max-width: 100px;
     margin: 6px 0 10px 0;
     height: 28px;
 }

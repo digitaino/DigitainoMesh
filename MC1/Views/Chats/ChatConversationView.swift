@@ -672,21 +672,26 @@ struct ChatConversationView: View {
             Data(pathNodes[start..<min(start + hashSize, pathNodes.count)])
         }
 
-        let contacts = chatViewModel.allContacts
         let userLocation = appState.locationService.currentLocation
 
-        // Fetch discovered nodes for resolution
+        // Use the same resolution lists as the message path view:
+        // repeater-typed contacts first, then discovered repeater nodes.
+        // Using all contacts (unfiltered) can pick the wrong match when
+        // 1-byte hex IDs collide between a repeater and a non-repeater contact.
+        let repeaterContacts = chatViewModel.allContacts.filter { $0.type == .repeater }
+
         var discoveredNodes: [DiscoveredNodeDTO] = []
         if let deviceID = appState.connectedDevice?.id {
-            discoveredNodes = (try? await appState.services?.dataStore.fetchDiscoveredNodes(deviceID: deviceID)) ?? []
+            let allDiscovered = (try? await appState.services?.dataStore.fetchDiscoveredNodes(deviceID: deviceID)) ?? []
+            discoveredNodes = allDiscovered.filter { $0.nodeType == .repeater }
         }
 
         // Build RouteHop array by resolving each hop
         let hops: [RouteShareService.RouteHop] = hopHashes.map { hashBytes in
             let hexID = hashBytes.map { String(format: "%02X", $0) }.joined()
 
-            // Try to resolve name and location
-            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: contacts, userLocation: userLocation) {
+            // Try to resolve name and location — matching the message path view
+            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: repeaterContacts, userLocation: userLocation) {
                 return RouteShareService.RouteHop(
                     hexID: hexID,
                     name: match.resolvableName,
@@ -695,6 +700,16 @@ struct ChatConversationView: View {
                 )
             }
             if let match = RepeaterResolver.bestMatch(for: hashBytes, in: discoveredNodes, userLocation: userLocation) {
+                return RouteShareService.RouteHop(
+                    hexID: hexID,
+                    name: match.resolvableName,
+                    latitude: match.hasLocation ? match.latitude : nil,
+                    longitude: match.hasLocation ? match.longitude : nil
+                )
+            }
+
+            // Fall back to all contacts in case the hop is a non-repeater node
+            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: chatViewModel.allContacts, userLocation: userLocation) {
                 return RouteShareService.RouteHop(
                     hexID: hexID,
                     name: match.resolvableName,

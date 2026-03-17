@@ -110,6 +110,14 @@ struct FixCoordinatesResponse: Content {
     let fixedCells: Int
 }
 
+struct NormalizeRepeatersResponse: Content {
+    let cellsFixed: Int
+    let repeatersRemoved: Int
+    let repeatersUpgraded: Int
+    let locationsRemoved: Int
+    let locationsUpgraded: Int
+}
+
 // MARK: - Shared Route
 
 struct SharedRouteHop: Content {

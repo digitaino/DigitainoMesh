@@ -13,6 +13,8 @@ struct SignalSurveyView: View {
     @State private var showingSurveySetup = false
     @State private var showingCommunityMap = false
     @State private var showingInfoSheet = false
+    @State private var showingBatchUpload = false
+    @State private var batchSelectedSessions: Set<UUID> = []
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
     @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
@@ -64,6 +66,15 @@ struct SignalSurveyView: View {
                     deviceID: appState.currentDeviceID
                 )
             }
+        }
+        .sheet(isPresented: $showingBatchUpload) {
+            BatchUploadView(
+                sessions: viewModel.sessions,
+                selectedSessions: $batchSelectedSessions,
+                sessionStats: viewModel.sessionStats,
+                dataStore: appState.offlineDataStore,
+                deviceID: appState.currentDeviceID
+            )
         }
         .sheet(isPresented: $showingCommunityMap) {
             CommunityMapView()
@@ -1423,7 +1434,16 @@ struct SignalSurveyView: View {
                     Button {
                         showingExportSheet = true
                     } label: {
-                        Label("Export", systemImage: "square.and.arrow.up")
+                        Label("Export Session", systemImage: "square.and.arrow.up")
+                    }
+                }
+
+                if !viewModel.sessions.isEmpty && !viewModel.isActive {
+                    Button {
+                        batchSelectedSessions = Set(viewModel.sessions.map(\.id))
+                        showingBatchUpload = true
+                    } label: {
+                        Label("Upload All Sessions", systemImage: "icloud.and.arrow.up")
                     }
                 }
 
@@ -1587,3 +1607,186 @@ struct SignalSurveyView: View {
         }
     }
 }
+// MARK: - Batch Upload View
+
+/// Allows selecting multiple survey sessions for batch upload to the community map.
+struct BatchUploadView: View {
+    let sessions: [SurveySessionDTO]
+    @Binding var selectedSessions: Set<UUID>
+    let sessionStats: [UUID: SignalSurveyViewModel.SessionStats]
+    let dataStore: PersistenceStore?
+    var deviceID: UUID?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var isUploading = false
+    @State private var uploadResult: String?
+    @State private var uploadError: String?
+
+    private var totalPoints: Int {
+        selectedSessions.compactMap { sessionStats[$0]?.pointCount }.reduce(0, +)
+    }
+
+    private var totalCells: Int {
+        selectedSessions.compactMap { sessionStats[$0]?.cellCount }.reduce(0, +)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Selection summary
+                HStack(spacing: 16) {
+                    VStack(spacing: 2) {
+                        Text("\(selectedSessions.count)")
+                            .font(.title2.bold().monospacedDigit())
+                        Text("Sessions")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    VStack(spacing: 2) {
+                        Text("\(totalPoints)")
+                            .font(.title2.bold().monospacedDigit())
+                        Text("Points")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    VStack(spacing: 2) {
+                        Text("\(totalCells)")
+                            .font(.title2.bold().monospacedDigit())
+                        Text("Cells")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 12)
+
+                Divider()
+
+                // Session selection list
+                List {
+                    Section {
+                        ForEach(sessions) { session in
+                            Button {
+                                if selectedSessions.contains(session.id) {
+                                    selectedSessions.remove(session.id)
+                                } else {
+                                    selectedSessions.insert(session.id)
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: selectedSessions.contains(session.id) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selectedSessions.contains(session.id) ? .blue : .secondary)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(session.name ?? "Session")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.primary)
+                                        Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    if let stats = sessionStats[session.id] {
+                                        Text("\(stats.pointCount) pts")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    } header: {
+                        HStack {
+                            Text("Select sessions to upload")
+                            Spacer()
+                            Button(selectedSessions.count == sessions.count ? "Deselect All" : "Select All") {
+                                if selectedSessions.count == sessions.count {
+                                    selectedSessions.removeAll()
+                                } else {
+                                    selectedSessions = Set(sessions.map(\.id))
+                                }
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+
+                // Upload status / button
+                VStack(spacing: 12) {
+                    if isUploading {
+                        ProgressView("Uploading \(selectedSessions.count) session(s)...")
+                    } else if let uploadResult {
+                        Label(uploadResult, systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.subheadline)
+                    } else if let uploadError {
+                        VStack(spacing: 6) {
+                            Label(uploadError, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                                .font(.caption)
+                            Button("Retry") {
+                                Task { await performUpload() }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    } else {
+                        Text("Uploads anonymized grid data. No exact GPS, no sender identity, no message content.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        Button {
+                            Task { await performUpload() }
+                        } label: {
+                            Label("Upload to Community Map", systemImage: "icloud.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(selectedSessions.isEmpty)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Batch Upload")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func performUpload() async {
+        guard let dataStore, !selectedSessions.isEmpty else {
+            uploadError = "No sessions selected or data store unavailable."
+            return
+        }
+
+        isUploading = true
+        uploadError = nil
+        uploadResult = nil
+        defer { isUploading = false }
+
+        do {
+            var repeaterContacts: [ContactDTO] = []
+            if let deviceID {
+                let allContacts = (try? await dataStore.fetchContacts(deviceID: deviceID)) ?? []
+                repeaterContacts = allContacts.filter { $0.type == .repeater }
+            }
+
+            let service = SurveyUploadService()
+            let response = try await service.uploadMultipleSessions(
+                sessionIDs: Array(selectedSessions),
+                dataStore: dataStore,
+                repeaterContacts: repeaterContacts
+            )
+            uploadResult = "\(response.accepted) cells uploaded from \(selectedSessions.count) session(s)"
+        } catch {
+            uploadError = error.localizedDescription
+        }
+    }
+}
+

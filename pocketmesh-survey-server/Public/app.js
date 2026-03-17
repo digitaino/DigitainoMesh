@@ -55,6 +55,24 @@ function hexVerticesAtCenter(centerLat, centerLon, refLat) {
     return vertices;
 }
 
+// Consolidate hex IDs — group IDs that are prefixes of each other, keep longest
+function consolidateHexIDs(hexIDs) {
+    const upper = hexIDs.map(id => id.toUpperCase());
+    const result = [];
+    for (const id of upper) {
+        // Skip if a longer version already in result
+        if (result.some(r => r.startsWith(id) && r.length > id.length)) continue;
+        // Remove shorter prefixes from result
+        for (let i = result.length - 1; i >= 0; i--) {
+            if (id.startsWith(result[i]) && id.length > result[i].length) {
+                result.splice(i, 1);
+            }
+        }
+        if (!result.includes(id)) result.push(id);
+    }
+    return result;
+}
+
 // Coverage filter: 'all', 'active', 'passive'
 let coverageFilter = 'all';
 
@@ -215,15 +233,15 @@ function updateRepeaterDropdown(cells) {
     const select = document.getElementById('repeater-select');
     if (!select) return;
 
-    // Collect all unique repeater hex IDs
-    const repeaterSet = new Set();
+    // Collect all unique repeater hex IDs and consolidate prefixes
+    const allIDs = [];
     cells.forEach(c => {
         if (c.repeaterHexIDs) {
-            c.repeaterHexIDs.forEach(id => repeaterSet.add(id));
+            c.repeaterHexIDs.forEach(id => allIDs.push(id));
         }
     });
 
-    const repeaters = Array.from(repeaterSet).sort();
+    const repeaters = consolidateHexIDs(allIDs).sort();
 
     // Preserve current selection
     const current = select.value;
@@ -233,9 +251,15 @@ function updateRepeaterDropdown(cells) {
     repeaters.forEach(hexID => {
         const option = document.createElement('option');
         option.value = hexID;
-        const name = repeaterNames[hexID];
+        // Prefix-aware name lookup: check exact, then prefix matches
+        const name = repeaterNames[hexID] || Object.entries(repeaterNames).find(([k, _]) => {
+            const uk = k.toUpperCase(), uh = hexID.toUpperCase();
+            return uk.startsWith(uh) || uh.startsWith(uk);
+        })?.[1];
         option.textContent = name ? `${name} (${hexID})` : hexID;
-        if (hexID === current) option.selected = true;
+        if (hexID === current || (current && hexID.toUpperCase().startsWith(current.toUpperCase()))) {
+            option.selected = true;
+        }
         select.appendChild(option);
     });
 
@@ -268,9 +292,13 @@ function renderCells(cells) {
         filtered = cells.filter(c => c.passivePacketCount && c.passivePacketCount > 0);
     }
 
-    // Apply repeater filter
+    // Apply repeater filter (prefix-aware: "0C" matches "0C13" and vice versa)
     if (repeaterFilter) {
-        filtered = filtered.filter(c => c.repeaterHexIDs && c.repeaterHexIDs.includes(repeaterFilter));
+        const rf = repeaterFilter.toUpperCase();
+        filtered = filtered.filter(c => c.repeaterHexIDs && c.repeaterHexIDs.some(id => {
+            const uid = id.toUpperCase();
+            return uid === rf || uid.startsWith(rf) || rf.startsWith(uid);
+        }));
     }
 
     const overlays = filtered.map(cell => {

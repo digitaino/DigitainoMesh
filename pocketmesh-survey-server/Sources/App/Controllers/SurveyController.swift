@@ -19,6 +19,43 @@ private enum HexGridServer {
 
 struct SurveyController {
 
+    // MARK: - Hex ID Normalization
+
+    /// Normalizes a hex ID against a set of existing hex IDs.
+    /// If the incoming ID is a prefix of an existing one, returns the longer existing ID.
+    /// If an existing ID is a prefix of the incoming one, returns the incoming (longer) ID.
+    /// Otherwise returns the original ID unchanged.
+    private static func normalizeHexID(_ hexID: String, existing: [String]) -> String {
+        let upper = hexID.uppercased()
+        // Check if any existing ID is a longer version of this one
+        for existingID in existing {
+            let existingUpper = existingID.uppercased()
+            if existingUpper.hasPrefix(upper) && existingUpper.count > upper.count {
+                return existingUpper
+            }
+        }
+        return upper
+    }
+
+    /// Given a set of hex IDs, consolidates those that are prefixes of each other,
+    /// keeping only the longest version of each.
+    private static func consolidateHexIDs(_ hexIDs: [String]) -> [String] {
+        let upper = hexIDs.map { $0.uppercased() }
+        var result: [String] = []
+        for id in upper {
+            // Check if this ID is already a prefix of something in result
+            if result.contains(where: { $0.hasPrefix(id) && $0.count > id.count }) {
+                continue // skip — a longer version already present
+            }
+            // Remove any existing entries that are prefixes of this ID
+            result.removeAll { id.hasPrefix($0) && id.count > $0.count }
+            if !result.contains(id) {
+                result.append(id)
+            }
+        }
+        return result
+    }
+
     // MARK: - POST /api/v1/survey
 
     @Sendable
@@ -90,15 +127,30 @@ struct SurveyController {
 
                 try await existing.save(on: req.db)
 
-                // Add new repeaters
+                // Add new repeaters (with hex ID normalization)
                 if let cellID = existing.id {
+                    let existingRepeaters = try await CellRepeater.query(on: req.db)
+                        .filter(\.$cell.$id == cellID)
+                        .all()
+                    let existingIDs = existingRepeaters.map(\.repeaterHexID)
+
                     for hexID in cellData.repeaterHexIDs {
-                        let existingRepeater = try await CellRepeater.query(on: req.db)
-                            .filter(\.$cell.$id == cellID)
-                            .filter(\.$repeaterHexID == hexID)
-                            .first()
-                        if existingRepeater == nil {
-                            let repeater = CellRepeater(cellID: cellID, repeaterHexID: hexID)
+                        let normalized = hexID.uppercased()
+                        // Check if a shorter prefix already exists — upgrade it
+                        if let match = existingRepeaters.first(where: {
+                            let eid = $0.repeaterHexID.uppercased()
+                            return normalized.hasPrefix(eid) && normalized.count > eid.count
+                        }) {
+                            match.repeaterHexID = normalized
+                            try await match.save(on: req.db)
+                        } else if existingIDs.contains(where: {
+                            let eid = $0.uppercased()
+                            // Already have this exact ID or a longer version
+                            return eid == normalized || eid.hasPrefix(normalized)
+                        }) {
+                            // Already have this ID or a longer version — skip
+                        } else {
+                            let repeater = CellRepeater(cellID: cellID, repeaterHexID: normalized)
                             try await repeater.save(on: req.db)
                         }
                     }
@@ -142,8 +194,9 @@ struct SurveyController {
                 try await cell.save(on: req.db)
 
                 if let cellID = cell.id {
-                    // Add repeaters
-                    for hexID in cellData.repeaterHexIDs {
+                    // Add repeaters (consolidated + uppercased)
+                    let consolidatedIDs = Self.consolidateHexIDs(cellData.repeaterHexIDs)
+                    for hexID in consolidatedIDs {
                         let repeater = CellRepeater(cellID: cellID, repeaterHexID: hexID)
                         try await repeater.save(on: req.db)
                     }
@@ -168,32 +221,59 @@ struct SurveyController {
             acceptedCount += 1
         }
 
-        // Upsert repeater locations from resolved info
+        // Upsert repeater locations from resolved info (with prefix normalization)
         if let repeaterInfos = payload.repeaters {
             for info in repeaterInfos {
                 guard (-90...90).contains(info.latitude),
                       (-180...180).contains(info.longitude) else { continue }
 
-                let existing = try await RepeaterLocation.query(on: req.db)
-                    .filter(\.$hexID == info.hexID)
+                let normalized = info.hexID.uppercased()
+
+                // Look for exact match first
+                let exact = try await RepeaterLocation.query(on: req.db)
+                    .filter(\.$hexID == normalized)
                     .first()
 
-                if let existing {
-                    existing.name = info.name
-                    existing.latitude = info.latitude
-                    existing.longitude = info.longitude
-                    existing.lastUpdated = now
-                    try await existing.save(on: req.db)
-                } else {
-                    let repeater = RepeaterLocation(
-                        hexID: info.hexID,
-                        name: info.name,
-                        latitude: info.latitude,
-                        longitude: info.longitude,
-                        lastUpdated: now
-                    )
-                    try await repeater.save(on: req.db)
+                if let exact {
+                    exact.name = info.name
+                    exact.latitude = info.latitude
+                    exact.longitude = info.longitude
+                    exact.lastUpdated = now
+                    try await exact.save(on: req.db)
+                    continue
                 }
+
+                // Check if a shorter prefix exists — upgrade it
+                let allRepeaters = try await RepeaterLocation.query(on: req.db).all()
+                if let shorter = allRepeaters.first(where: {
+                    let eid = $0.hexID.uppercased()
+                    return normalized.hasPrefix(eid) && normalized.count > eid.count
+                }) {
+                    shorter.hexID = normalized
+                    shorter.name = info.name
+                    shorter.latitude = info.latitude
+                    shorter.longitude = info.longitude
+                    shorter.lastUpdated = now
+                    try await shorter.save(on: req.db)
+                    continue
+                }
+
+                // Check if a longer version already exists — skip
+                if allRepeaters.contains(where: {
+                    let eid = $0.hexID.uppercased()
+                    return eid.hasPrefix(normalized) && eid.count > normalized.count
+                }) {
+                    continue
+                }
+
+                let repeater = RepeaterLocation(
+                    hexID: normalized,
+                    name: info.name,
+                    latitude: info.latitude,
+                    longitude: info.longitude,
+                    lastUpdated: now
+                )
+                try await repeater.save(on: req.db)
             }
         }
 
@@ -249,7 +329,7 @@ struct SurveyController {
                 averageSNR: cell.averageSNR,
                 packetCount: cell.totalPacketCount,
                 contributionCount: cell.contributionCount,
-                repeaterHexIDs: cell.repeaters.map(\.repeaterHexID),
+                repeaterHexIDs: Self.consolidateHexIDs(cell.repeaters.map(\.repeaterHexID)),
                 snrQuality: cell.snrQuality,
                 activePacketCount: cell.activePacketCount > 0 ? cell.activePacketCount : nil,
                 passivePacketCount: cell.passivePacketCount > 0 ? cell.passivePacketCount : nil
@@ -388,6 +468,98 @@ struct SurveyController {
         // Cache for 1 hour (tokens are valid 24h, so this is safe)
         headers.add(name: .cacheControl, value: "max-age=3600, public")
         return Response(status: .ok, headers: headers, body: .init(string: token))
+    }
+
+    // MARK: - POST /api/v1/admin/normalize-repeaters
+
+    @Sendable
+    func normalizeRepeaters(req: Request) async throws -> NormalizeRepeatersResponse {
+        // 1. Consolidate CellRepeater entries per cell
+        let allCells = try await CellModel.query(on: req.db)
+            .with(\.$repeaters)
+            .all()
+
+        var cellsFixed = 0
+        var repeatersRemoved = 0
+        var repeatersUpgraded = 0
+
+        for cell in allCells {
+            let repeaters = cell.repeaters
+            guard !repeaters.isEmpty else { continue }
+
+            let originalIDs = repeaters.map(\.repeaterHexID)
+            let consolidated = Self.consolidateHexIDs(originalIDs)
+
+            // If no change needed, skip
+            if Set(originalIDs.map { $0.uppercased() }) == Set(consolidated) { continue }
+
+            cellsFixed += 1
+
+            // Delete all existing repeater records for this cell
+            for r in repeaters {
+                repeatersRemoved += 1
+                try await r.delete(on: req.db)
+            }
+
+            // Re-create with consolidated IDs
+            if let cellID = cell.id {
+                for hexID in consolidated {
+                    let r = CellRepeater(cellID: cellID, repeaterHexID: hexID)
+                    try await r.save(on: req.db)
+                }
+            }
+        }
+
+        // 2. Consolidate RepeaterLocation entries
+        let allLocations = try await RepeaterLocation.query(on: req.db).all()
+        var locationsRemoved = 0
+        var locationsUpgraded = 0
+
+        // Group by prefix — find entries that are prefixes of each other
+        var toDelete: Set<Int> = []
+        for i in 0..<allLocations.count {
+            guard let id = allLocations[i].id, !toDelete.contains(id) else { continue }
+            let eid = allLocations[i].hexID.uppercased()
+
+            for j in (i+1)..<allLocations.count {
+                guard let jid = allLocations[j].id, !toDelete.contains(jid) else { continue }
+                let ejd = allLocations[j].hexID.uppercased()
+
+                if eid.hasPrefix(ejd) && eid.count > ejd.count {
+                    // i is longer — delete j (shorter)
+                    toDelete.insert(jid)
+                    locationsRemoved += 1
+                } else if ejd.hasPrefix(eid) && ejd.count > eid.count {
+                    // j is longer — delete i (shorter)
+                    toDelete.insert(id)
+                    locationsRemoved += 1
+                    break
+                }
+            }
+        }
+
+        for loc in allLocations {
+            guard let id = loc.id else { continue }
+            if toDelete.contains(id) {
+                try await loc.delete(on: req.db)
+            } else {
+                // Uppercase existing IDs
+                let upper = loc.hexID.uppercased()
+                if loc.hexID != upper {
+                    loc.hexID = upper
+                    try await loc.save(on: req.db)
+                    locationsUpgraded += 1
+                }
+            }
+        }
+
+        return NormalizeRepeatersResponse(
+            cellsFixed: cellsFixed,
+            repeatersRemoved: repeatersRemoved,
+            repeatersUpgraded: repeatersUpgraded,
+            locationsRemoved: locationsRemoved,
+            locationsUpgraded: locationsUpgraded
+        )
     }
 
     // MARK: - POST /api/v1/admin/fix-coordinates

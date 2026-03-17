@@ -78,6 +78,25 @@ enum SurveyExportService {
         let latest: String
     }
 
+    // MARK: - Hex ID Consolidation
+
+    /// Consolidates hex IDs that are prefixes of each other, keeping the longest (most specific) version.
+    /// For example, if a repeater appears as "0C" (1-byte hash) and "0C13" (2-byte hash) across
+    /// different sessions or packets, only "0C13" is kept since it's a more specific identifier
+    /// for the same repeater.
+    static func consolidateHexIDs(_ hexIDs: [String]) -> [String] {
+        let upper = hexIDs.map { $0.uppercased() }
+        var result: [String] = []
+        for id in upper {
+            // Skip if we already have a longer version that starts with this id
+            if result.contains(where: { $0.hasPrefix(id) && $0.count > id.count }) { continue }
+            // Remove any shorter versions that this id extends
+            result.removeAll { id.hasPrefix($0) && id.count > $0.count }
+            if !result.contains(id) { result.append(id) }
+        }
+        return result
+    }
+
     // MARK: - Cell Data Generation (shared by file export and community upload)
 
     struct CellDataResult {
@@ -129,8 +148,9 @@ enum SurveyExportService {
             let directCount = cellPoints.count - floodCount
             let timestamps = cellPoints.map(\.timestamp).sorted()
 
-            // Extract unique repeater hex IDs from path nodes
-            let repeaters = Array(Set(cellPoints.flatMap(\.pathNodeHexIDs)).sorted())
+            // Extract unique repeater hex IDs from path nodes, consolidating prefix variants
+            // (e.g. "0C" and "0C13" become just "0C13" — the longer, more specific hash)
+            let repeaters = consolidateHexIDs(Array(Set(cellPoints.flatMap(\.pathNodeHexIDs)))).sorted()
 
             let timeRange: TimeRange? = includeTimeRange ? TimeRange(
                 earliest: isoFormatter.string(from: timestamps.first ?? Date()),
@@ -168,7 +188,8 @@ enum SurveyExportService {
         logger.info("DEBUG generateCellData: \(cells.count) cells — \(cellsWithActive) with active (\(totalActive) pkts), \(cellsWithPassive) with passive (\(totalPassive) pkts)")
 
         // Resolve unique repeater hex IDs to contact names and locations
-        let allHexIDs = Set(cells.flatMap(\.repeaterHexIDs))
+        // (already consolidated per-cell, but consolidate across all cells too)
+        let allHexIDs = Set(consolidateHexIDs(cells.flatMap(\.repeaterHexIDs)))
         let resolvedRepeaters: [RepeaterInfo] = allHexIDs.compactMap { hexID in
             guard let hashBytes = Data(hexString: hexID) else { return nil }
             guard let contact = RepeaterResolver.bestMatch(
@@ -184,6 +205,82 @@ enum SurveyExportService {
         }
 
         return CellDataResult(cells: cells, referenceLatitude: refLat, points: points, repeaters: resolvedRepeaters)
+    }
+
+    /// Generate aggregated cell data from multiple survey sessions, merging overlapping cells.
+    /// Used for batch community upload of multiple sessions at once.
+    static func generateCellDataForSessions(
+        sessionIDs: [UUID],
+        dataStore: PersistenceStore,
+        repeaterContacts: [ContactDTO] = []
+    ) async throws -> CellDataResult? {
+        var allPoints: [SignalSurveyPointDTO] = []
+        for sessionID in sessionIDs {
+            let sessionPoints = try await dataStore.fetchSurveyPoints(sessionID: sessionID)
+            allPoints.append(contentsOf: sessionPoints)
+        }
+        guard !allPoints.isEmpty else {
+            logger.warning("No points across \(sessionIDs.count) sessions")
+            return nil
+        }
+
+        logger.info("generateCellDataForSessions: \(allPoints.count) points from \(sessionIDs.count) sessions")
+
+        let avgLat = allPoints.map(\.latitude).reduce(0, +) / Double(allPoints.count)
+        let refLat = HexGrid.fixedReferenceLatitude(for: avgLat)
+        var buckets: [HexGrid.AxialCoord: [SignalSurveyPointDTO]] = [:]
+
+        for point in allPoints {
+            let hex = HexGrid.axialFromLatLon(latitude: point.latitude, longitude: point.longitude, referenceLatitude: refLat)
+            buckets[hex, default: []].append(point)
+        }
+
+        let cells: [CellData] = buckets.map { coord, cellPoints in
+            let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
+            let snrValues = cellPoints.compactMap(\.snr)
+            let rssiValues = cellPoints.compactMap(\.rssi)
+            let floodCount = cellPoints.filter { $0.routeType == .flood || $0.routeType == .tcFlood }.count
+            let directCount = cellPoints.count - floodCount
+            let repeaters = consolidateHexIDs(Array(Set(cellPoints.flatMap(\.pathNodeHexIDs)))).sorted()
+            let activeCount = cellPoints.count(where: \.isActiveProbe)
+            let passiveCount = cellPoints.count - activeCount
+
+            return CellData(
+                latitude: center.latitude,
+                longitude: center.longitude,
+                averageSNR: snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count),
+                averageRSSI: rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count),
+                minSNR: snrValues.min(),
+                maxSNR: snrValues.max(),
+                packetCount: cellPoints.count,
+                routeTypeBreakdown: RouteBreakdown(flood: floodCount, direct: directCount),
+                timeRange: nil,
+                repeaterHexIDs: repeaters,
+                hexQ: coord.q,
+                hexR: coord.r,
+                referenceLatitude: refLat,
+                activePacketCount: activeCount > 0 ? activeCount : nil,
+                passivePacketCount: passiveCount > 0 ? passiveCount : nil
+            )
+        }
+
+        let allHexIDs = Set(consolidateHexIDs(cells.flatMap(\.repeaterHexIDs)))
+        let resolvedRepeaters: [RepeaterInfo] = allHexIDs.compactMap { hexID in
+            guard let hashBytes = Data(hexString: hexID) else { return nil }
+            guard let contact = RepeaterResolver.bestMatch(
+                for: hashBytes, in: repeaterContacts, userLocation: nil
+            ) else { return nil }
+            guard contact.hasLocation else { return nil }
+            return RepeaterInfo(
+                hexID: hexID,
+                name: contact.displayName,
+                latitude: contact.latitude,
+                longitude: contact.longitude
+            )
+        }
+
+        logger.info("generateCellDataForSessions: \(cells.count) merged cells, \(resolvedRepeaters.count) repeaters")
+        return CellDataResult(cells: cells, referenceLatitude: refLat, points: allPoints, repeaters: resolvedRepeaters)
     }
 
     // MARK: - Generate Export
