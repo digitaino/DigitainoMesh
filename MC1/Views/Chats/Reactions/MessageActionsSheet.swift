@@ -7,6 +7,7 @@ enum MessageAction: Equatable {
     case react(String)
     case reply
     case replyWithRoute(String)
+    case replyWithRepeaterMap(URL)
     case copy
     case sendAgain
     case blockSender
@@ -107,6 +108,9 @@ struct MessageActionsSheet: View {
                             pathViewModel: pathViewModel,
                             onReplyWithRoute: { routeInfo in
                                 performAction(.replyWithRoute(routeInfo))
+                            },
+                            onReplyWithRepeaterMap: { url in
+                                performAction(.replyWithRepeaterMap(url))
                             }
                         )
                         ActionsBlockSection(
@@ -343,6 +347,7 @@ private struct ActionsDetailsSection: View {
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
     var onReplyWithRoute: ((String) -> Void)?
+    var onReplyWithRepeaterMap: ((URL) -> Void)?
 
     @Environment(\.appState) private var appState
 
@@ -357,7 +362,8 @@ private struct ActionsDetailsSection: View {
                     contacts: contacts,
                     discoveredNodes: discoveredNodes,
                     pathViewModel: pathViewModel,
-                    onReplyWithRoute: onReplyWithRoute
+                    onReplyWithRoute: onReplyWithRoute,
+                    onReplyWithRepeaterMap: onReplyWithRepeaterMap
                 )
             }
 
@@ -393,6 +399,7 @@ private struct ActionsExpandableDetailRow: View {
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
     var onReplyWithRoute: ((String) -> Void)?
+    var onReplyWithRepeaterMap: ((URL) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -432,7 +439,8 @@ private struct ActionsExpandableDetailRow: View {
                     contacts: contacts,
                     discoveredNodes: discoveredNodes,
                     pathViewModel: pathViewModel,
-                    onReplyWithRoute: onReplyWithRoute
+                    onReplyWithRoute: onReplyWithRoute,
+                    onReplyWithRepeaterMap: onReplyWithRepeaterMap
                 )
                 .padding(.horizontal)
                 .padding(.bottom)
@@ -452,11 +460,10 @@ private struct ActionsExpandedContent: View {
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
     var onReplyWithRoute: ((String) -> Void)?
+    var onReplyWithRepeaterMap: ((URL) -> Void)?
 
     @State private var showingRepeatsMap = false
     @State private var isSharing = false
-    @State private var shareURL: URL?
-    @State private var showingShareSheet = false
 
     var body: some View {
         if availability.canShowRepeatDetails {
@@ -498,11 +505,6 @@ private struct ActionsExpandedContent: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(isSharing)
-                    .sheet(isPresented: $showingShareSheet) {
-                        if let shareURL {
-                            ShareSheet(items: [shareURL])
-                        }
-                    }
                 }
                 .padding(.top, 8)
             }
@@ -529,6 +531,9 @@ private struct ActionsExpandedContent: View {
         // Aggregate unique repeaters across all repeats
         var repeaterMap: [String: (contact: ContactDTO?, heardCount: Int, snrSum: Double, snrCount: Int, rssiSum: Double, rssiCount: Int)] = [:]
 
+        // Build per-repeat path data for map line rendering
+        var repeatPaths: [RouteShareService.RepeatPath] = []
+
         for repeatDTO in repeats {
             guard !repeatDTO.pathNodes.isEmpty else { continue }
 
@@ -536,6 +541,16 @@ private struct ActionsExpandedContent: View {
                 pathNodes: repeatDTO.pathNodes,
                 hashSize: repeatDTO.hashSize
             )
+            guard !hashes.isEmpty else { continue }
+
+            // Build path hop hex IDs for this repeat
+            let hopHexIDs = hashes.map { hash in
+                hash.map { String(format: "%02X", $0) }.joined()
+            }
+            repeatPaths.append(RouteShareService.RepeatPath(
+                hops: hopHexIDs,
+                snr: repeatDTO.snr
+            ))
 
             for hash in hashes {
                 let hexID = hash.map { String(format: "%02X", $0) }.joined()
@@ -574,9 +589,13 @@ private struct ActionsExpandedContent: View {
         guard !repeaterInfos.isEmpty else { return }
 
         let service = RouteShareService()
-        if let url = await service.shareRepeaterMap(repeaters: repeaterInfos) {
-            shareURL = url
-            showingShareSheet = true
+        if let url = await service.shareRepeaterMap(
+            repeaters: repeaterInfos,
+            paths: repeatPaths.isEmpty ? nil : repeatPaths,
+            userLatitude: userLocation?.coordinate.latitude,
+            userLongitude: userLocation?.coordinate.longitude
+        ) {
+            onReplyWithRepeaterMap?(url)
         }
     }
 }

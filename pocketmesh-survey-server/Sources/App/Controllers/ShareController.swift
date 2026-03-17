@@ -130,10 +130,19 @@ struct ShareController {
         let repeatersData = try encoder.encode(payload.repeaters)
         let repeatersJSON = String(data: repeatersData, encoding: .utf8) ?? "[]"
 
+        var pathsJSON: String? = nil
+        if let paths = payload.paths, !paths.isEmpty {
+            let pathsData = try encoder.encode(paths)
+            pathsJSON = String(data: pathsData, encoding: .utf8)
+        }
+
         let map = SharedRepeaterMap(
             id: shortID,
             repeaterCount: payload.repeaters.count,
             repeatersJSON: repeatersJSON,
+            pathsJSON: pathsJSON,
+            userLatitude: payload.userLatitude,
+            userLongitude: payload.userLongitude,
             createdAt: now
         )
         try await map.save(on: req.db)
@@ -164,10 +173,20 @@ struct ShareController {
             repeaters = []
         }
 
+        let paths: [SharedRepeatPath]?
+        if let pathsStr = map.pathsJSON, let data = pathsStr.data(using: .utf8) {
+            paths = try? JSONDecoder().decode([SharedRepeatPath].self, from: data)
+        } else {
+            paths = nil
+        }
+
         return SharedRepeaterMapResponse(
             id: map.id ?? id,
             repeaterCount: map.repeaterCount,
             repeaters: repeaters,
+            paths: paths,
+            userLatitude: map.userLatitude,
+            userLongitude: map.userLongitude,
             createdAt: map.createdAt
         )
     }
@@ -231,12 +250,22 @@ struct ShareController {
             repeaters = []
         }
 
+        let paths: [SharedRepeatPath]?
+        if let pathsStr = map.pathsJSON, let data = pathsStr.data(using: .utf8) {
+            paths = try? JSONDecoder().decode([SharedRepeatPath].self, from: data)
+        } else {
+            paths = nil
+        }
+
         let title = "\(map.repeaterCount) repeater\(map.repeaterCount == 1 ? "" : "s") heard"
 
         let mapData = SharedRepeaterMapResponse(
             id: map.id ?? id,
             repeaterCount: map.repeaterCount,
             repeaters: repeaters,
+            paths: paths,
+            userLatitude: map.userLatitude,
+            userLongitude: map.userLongitude,
             createdAt: map.createdAt
         )
         let encoder = JSONEncoder()

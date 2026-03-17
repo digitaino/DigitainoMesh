@@ -20,16 +20,32 @@ final class SharedRepeaterMap: Model, Content, @unchecked Sendable {
     @Field(key: "repeaters_json")
     var repeatersJSON: String
 
+    /// JSON-encoded array of repeat paths for line drawing (optional).
+    /// [{"hops": ["80", "A3"], "snr": 8.5}]
+    @OptionalField(key: "paths_json")
+    var pathsJSON: String?
+
+    /// User latitude at time of share (for last-hop line endpoint)
+    @OptionalField(key: "user_latitude")
+    var userLatitude: Double?
+
+    /// User longitude at time of share
+    @OptionalField(key: "user_longitude")
+    var userLongitude: Double?
+
     /// ISO 8601 timestamp of creation
     @Field(key: "created_at")
     var createdAt: String
 
     init() {}
 
-    init(id: String, repeaterCount: Int, repeatersJSON: String, createdAt: String) {
+    init(id: String, repeaterCount: Int, repeatersJSON: String, pathsJSON: String? = nil, userLatitude: Double? = nil, userLongitude: Double? = nil, createdAt: String) {
         self.id = id
         self.repeaterCount = repeaterCount
         self.repeatersJSON = repeatersJSON
+        self.pathsJSON = pathsJSON
+        self.userLatitude = userLatitude
+        self.userLongitude = userLongitude
         self.createdAt = createdAt
     }
 }

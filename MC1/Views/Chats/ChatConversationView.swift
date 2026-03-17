@@ -647,6 +647,17 @@ struct ChatConversationView: View {
                     }
                 }
             }
+        case .replyWithRepeaterMap(let url):
+            let replyText: String
+            switch conversationType {
+            case .dm:
+                replyText = MentionUtilities.buildReplyPreview(messageText: message.text, routeInfo: url.absoluteString)
+            case .channel:
+                let mentionName = message.senderNodeName ?? L10n.Chats.Chats.Message.Sender.unknown
+                replyText = MentionUtilities.buildReplyText(mentionName: mentionName, messageText: message.text, routeInfo: url.absoluteString)
+            }
+            chatViewModel.composingText = replyText
+            isInputFocused = true
         case .delete:
             Task { await chatViewModel.deleteMessage(message) }
         }

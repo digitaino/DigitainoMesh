@@ -737,14 +737,16 @@ final class SignalSurveyViewModel {
 
     // MARK: - Filtering
 
-    /// Active probe payload types: trace (legacy) and control (discover node responses).
+    /// Active probe payload types used for probing classification.
+    /// `.control` = discover node response (proves bidirectional 2-way link).
+    /// `.trace` = outbound flood probe (one-way, no proof of return path).
     private static let activePayloadTypes: Set<PayloadType> = [.trace, .control]
 
     private func passesFilter(_ point: SignalSurveyPointDTO) -> Bool {
         switch surveyFilter {
         case .all: true
         case .passiveOnly: !Self.activePayloadTypes.contains(point.payloadType)
-        case .traceOnly: Self.activePayloadTypes.contains(point.payloadType)
+        case .traceOnly: point.payloadType == .control
         }
     }
 

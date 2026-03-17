@@ -46,8 +46,16 @@ actor RouteShareService {
         let avgRSSI: Double?
     }
 
+    struct RepeatPath: Codable {
+        let hops: [String]
+        let snr: Double?
+    }
+
     private struct CreateMapRequest: Codable {
         let repeaters: [RepeaterInfo]
+        let paths: [RepeatPath]?
+        let userLatitude: Double?
+        let userLongitude: Double?
     }
 
     private struct CreateMapResponse: Codable {
@@ -85,8 +93,8 @@ actor RouteShareService {
 
     /// Upload heard repeaters data and return the share URL.
     /// Returns nil if the upload fails.
-    func shareRepeaterMap(repeaters: [RepeaterInfo]) async -> URL? {
-        let payload = CreateMapRequest(repeaters: repeaters)
+    func shareRepeaterMap(repeaters: [RepeaterInfo], paths: [RepeatPath]? = nil, userLatitude: Double? = nil, userLongitude: Double? = nil) async -> URL? {
+        let payload = CreateMapRequest(repeaters: repeaters, paths: paths, userLatitude: userLatitude, userLongitude: userLongitude)
 
         do {
             let data = try await post(path: "maps", body: payload)

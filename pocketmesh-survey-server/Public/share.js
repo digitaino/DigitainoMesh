@@ -227,6 +227,12 @@ function renderRepeaterMap(data) {
         return;
     }
 
+    // Build a lookup of hexID → coordinate for located repeaters
+    const coordByHex = {};
+    located.forEach(r => {
+        coordByHex[r.hexID.toUpperCase()] = new mapkit.Coordinate(r.latitude, r.longitude);
+    });
+
     const annotations = located.map(repeater => {
         const coord = new mapkit.Coordinate(repeater.latitude, repeater.longitude);
         const color = snrQualityColor(repeater.avgSNR);
@@ -239,7 +245,66 @@ function renderRepeaterMap(data) {
     });
     map.addAnnotations(annotations);
 
-    // Fit to show all repeaters
+    // Draw path lines if available
+    if (data.paths && data.paths.length > 0) {
+        const userCoord = (data.userLatitude != null && data.userLongitude != null)
+            ? new mapkit.Coordinate(data.userLatitude, data.userLongitude)
+            : null;
+
+        // Add user endpoint annotation
+        if (userCoord) {
+            const userAnnotation = new mapkit.MarkerAnnotation(userCoord, {
+                title: 'You',
+                color: '#3b82f6',
+                glyphText: '📱'
+            });
+            map.addAnnotation(userAnnotation);
+            annotations.push(userAnnotation);
+        }
+
+        data.paths.forEach(path => {
+            if (!path.hops || path.hops.length === 0) return;
+
+            // Resolve hop coordinates
+            const hopCoords = path.hops
+                .map(h => coordByHex[h.toUpperCase()])
+                .filter(c => c != null);
+
+            if (hopCoords.length === 0) return;
+
+            // Draw dashed outbound chain (blue) between consecutive hops
+            if (hopCoords.length >= 2) {
+                const outboundLine = new mapkit.PolylineOverlay(hopCoords, {
+                    style: new mapkit.Style({
+                        strokeColor: '#3b82f6',
+                        strokeOpacity: 0.6,
+                        lineWidth: 3,
+                        lineDash: [8, 4]
+                    })
+                });
+                map.addOverlay(outboundLine);
+            }
+
+            // Draw solid SNR-colored last-hop line (last repeater → user)
+            if (userCoord) {
+                const lastHopCoord = hopCoords[hopCoords.length - 1];
+                const lastHopColor = snrQualityColor(path.snr);
+                const lastHopLine = new mapkit.PolylineOverlay(
+                    [lastHopCoord, userCoord],
+                    {
+                        style: new mapkit.Style({
+                            strokeColor: lastHopColor,
+                            strokeOpacity: 0.9,
+                            lineWidth: 4
+                        })
+                    }
+                );
+                map.addOverlay(lastHopLine);
+            }
+        });
+    }
+
+    // Fit to show all points
     const padding = new mapkit.Padding(60, 40, 100, 40);
     map.showItems(annotations, { padding: padding, animate: true });
 }

@@ -162,8 +162,22 @@ struct SharedRepeaterInfo: Content {
     let avgRSSI: Double?
 }
 
+/// A single heard-repeat path: the ordered hop chain plus last-hop signal data.
+struct SharedRepeatPath: Content {
+    /// Ordered repeater hex IDs from first hop to last hop
+    let hops: [String]
+    /// SNR of the last hop (repeater → user)
+    let snr: Double?
+}
+
 struct CreateSharedRepeaterMapRequest: Content {
     let repeaters: [SharedRepeaterInfo]
+    /// Per-repeat paths for drawing lines on the map (optional for backwards compat)
+    let paths: [SharedRepeatPath]?
+    /// User latitude at time of share (for drawing last-hop lines)
+    let userLatitude: Double?
+    /// User longitude at time of share
+    let userLongitude: Double?
 }
 
 struct CreateSharedRepeaterMapResponse: Content {
@@ -175,5 +189,8 @@ struct SharedRepeaterMapResponse: Content {
     let id: String
     let repeaterCount: Int
     let repeaters: [SharedRepeaterInfo]
+    let paths: [SharedRepeatPath]?
+    let userLatitude: Double?
+    let userLongitude: Double?
     let createdAt: String
 }
