@@ -40,7 +40,22 @@ enum RepeaterResolver {
 
         guard !candidates.isEmpty else { return nil }
 
+        // With short prefixes (1 byte = 256 values) collisions are common.
+        // Prioritise recency first so that a repeater heard hours ago beats
+        // one last seen months ago, then use distance as a tiebreaker among
+        // similarly-recent candidates.
         let sorted = candidates.sorted { lhs, rhs in
+            // 1. Most recently advertised wins
+            if lhs.0.lastAdvertTimestamp != rhs.0.lastAdvertTimestamp {
+                return lhs.0.lastAdvertTimestamp > rhs.0.lastAdvertTimestamp
+            }
+
+            // 2. Secondary recency (lastModified / lastHeard)
+            if lhs.0.recencyDate != rhs.0.recencyDate {
+                return lhs.0.recencyDate > rhs.0.recencyDate
+            }
+
+            // 3. Among equally-recent candidates, prefer located over unlocated
             switch (lhs.1, rhs.1) {
             case let (left?, right?):
                 if left != right { return left < right }
@@ -52,14 +67,7 @@ enum RepeaterResolver {
                 break
             }
 
-            if lhs.0.lastAdvertTimestamp != rhs.0.lastAdvertTimestamp {
-                return lhs.0.lastAdvertTimestamp > rhs.0.lastAdvertTimestamp
-            }
-
-            if lhs.0.recencyDate != rhs.0.recencyDate {
-                return lhs.0.recencyDate > rhs.0.recencyDate
-            }
-
+            // 4. Alphabetical fallback
             return lhs.0.resolvableName.localizedStandardCompare(rhs.0.resolvableName) == .orderedAscending
         }
 
