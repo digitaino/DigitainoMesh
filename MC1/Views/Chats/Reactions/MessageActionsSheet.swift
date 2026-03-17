@@ -454,6 +454,9 @@ private struct ActionsExpandedContent: View {
     var onReplyWithRoute: ((String) -> Void)?
 
     @State private var showingRepeatsMap = false
+    @State private var isSharing = false
+    @State private var shareURL: URL?
+    @State private var showingShareSheet = false
 
     var body: some View {
         if availability.canShowRepeatDetails {
@@ -465,21 +468,43 @@ private struct ActionsExpandedContent: View {
             )
 
             if let repeats, !repeats.isEmpty {
-                Button {
-                    showingRepeatsMap = true
-                } label: {
-                    Label(L10n.Chats.Chats.HeardRepeats.Map.viewOnMap, systemImage: "map")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 8) {
+                    Button {
+                        showingRepeatsMap = true
+                    } label: {
+                        Label(L10n.Chats.Chats.HeardRepeats.Map.viewOnMap, systemImage: "map")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .sheet(isPresented: $showingRepeatsMap) {
+                        HeardRepeatsMapSheet(
+                            repeats: repeats,
+                            contacts: contacts,
+                            discoveredNodes: discoveredNodes
+                        )
+                    }
+
+                    Button {
+                        Task { await shareHeardRepeaters(repeats: repeats) }
+                    } label: {
+                        if isSharing {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isSharing)
+                    .sheet(isPresented: $showingShareSheet) {
+                        if let shareURL {
+                            ShareSheet(items: [shareURL])
+                        }
+                    }
                 }
-                .buttonStyle(.bordered)
                 .padding(.top, 8)
-                .sheet(isPresented: $showingRepeatsMap) {
-                    HeardRepeatsMapSheet(
-                        repeats: repeats,
-                        contacts: contacts,
-                        discoveredNodes: discoveredNodes
-                    )
-                }
             }
         } else if availability.canViewPath {
             MessagePathContent(
@@ -489,6 +514,69 @@ private struct ActionsExpandedContent: View {
                 userLocation: appState.locationService.currentLocation,
                 onReplyWithRoute: onReplyWithRoute
             )
+        }
+    }
+
+    // MARK: - Share Heard Repeaters
+
+    private func shareHeardRepeaters(repeats: [MessageRepeatDTO]) async {
+        isSharing = true
+        defer { isSharing = false }
+
+        let repeaterContacts = contacts.filter { $0.type == .repeater }
+        let userLocation = appState.locationService.currentLocation
+
+        // Aggregate unique repeaters across all repeats
+        var repeaterMap: [String: (contact: ContactDTO?, heardCount: Int, snrSum: Double, snrCount: Int, rssiSum: Double, rssiCount: Int)] = [:]
+
+        for repeatDTO in repeats {
+            guard !repeatDTO.pathNodes.isEmpty else { continue }
+
+            let hashes = RouteAggregator.parseHopHashes(
+                pathNodes: repeatDTO.pathNodes,
+                hashSize: repeatDTO.hashSize
+            )
+
+            for hash in hashes {
+                let hexID = hash.map { String(format: "%02X", $0) }.joined()
+                var entry = repeaterMap[hexID] ?? (contact: nil, heardCount: 0, snrSum: 0, snrCount: 0, rssiSum: 0, rssiCount: 0)
+
+                if entry.contact == nil {
+                    entry.contact = RepeaterResolver.bestMatch(for: hash, in: repeaterContacts, userLocation: userLocation)
+                }
+
+                entry.heardCount += 1
+                if let snr = repeatDTO.snr {
+                    entry.snrSum += snr
+                    entry.snrCount += 1
+                }
+                if let rssi = repeatDTO.rssi {
+                    entry.rssiSum += Double(rssi)
+                    entry.rssiCount += 1
+                }
+
+                repeaterMap[hexID] = entry
+            }
+        }
+
+        let repeaterInfos: [RouteShareService.RepeaterInfo] = repeaterMap.map { hexID, entry in
+            RouteShareService.RepeaterInfo(
+                hexID: hexID,
+                name: entry.contact?.displayName,
+                latitude: entry.contact?.hasLocation == true ? entry.contact?.latitude : nil,
+                longitude: entry.contact?.hasLocation == true ? entry.contact?.longitude : nil,
+                heardCount: entry.heardCount,
+                avgSNR: entry.snrCount > 0 ? entry.snrSum / Double(entry.snrCount) : nil,
+                avgRSSI: entry.rssiCount > 0 ? entry.rssiSum / Double(entry.rssiCount) : nil
+            )
+        }
+
+        guard !repeaterInfos.isEmpty else { return }
+
+        let service = RouteShareService()
+        if let url = await service.shareRepeaterMap(repeaters: repeaterInfos) {
+            shareURL = url
+            showingShareSheet = true
         }
     }
 }

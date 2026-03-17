@@ -1,4 +1,4 @@
-// PocketMesh Shared Route & Repeater Map Viewer
+// DigitainoMesh Shared Route & Repeater Map Viewer
 
 // SNR quality helpers — matches iOS app thresholds
 function snrQualityClass(snr) {
@@ -24,6 +24,18 @@ let map = null;
 function togglePanel() {
     document.getElementById('share-panel').classList.toggle('expanded');
 }
+
+// Prevent touch events on the panel body from reaching the map underneath.
+// MapKit JS intercepts touch events for panning, which blocks scrolling
+// inside the panel on mobile Safari.
+document.addEventListener('DOMContentLoaded', function() {
+    const panelBody = document.getElementById('panel-body');
+    if (panelBody) {
+        panelBody.addEventListener('touchmove', function(e) {
+            e.stopPropagation();
+        }, { passive: true });
+    }
+});
 
 function initShareMap() {
     mapkit.init({

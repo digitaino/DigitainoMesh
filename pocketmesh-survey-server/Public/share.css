@@ -16,6 +16,7 @@
     z-index: 1000;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     overflow: hidden;
+    touch-action: auto;
 }
 
 #panel-header {
@@ -55,6 +56,9 @@
     max-height: 60vh;
     opacity: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
 }
 
 #route-summary {

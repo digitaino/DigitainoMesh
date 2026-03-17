@@ -257,7 +257,7 @@ struct ShareController {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>\(title) — PocketMesh</title>
+            <title>\(title) — DigitainoMesh</title>
             <link rel="stylesheet" href="/style.css" />
             <link rel="stylesheet" href="/share.css" />
             <script>const SHARE_DATA = \(routeJSON); const SHARE_TYPE = 'route';</script>
@@ -278,7 +278,7 @@ struct ShareController {
                     <div id="route-summary"></div>
                     <div id="hop-list"></div>
                     <div class="share-footer">
-                        Shared via <a href="https://apps.apple.com/app/pocketmesh/id6743539498">PocketMesh</a>
+                        Shared via <a href="https://mesh.digitaino.com">DigitainoMesh</a>
                     </div>
                 </div>
             </div>
@@ -294,7 +294,7 @@ struct ShareController {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>\(title) — PocketMesh</title>
+            <title>\(title) — DigitainoMesh</title>
             <link rel="stylesheet" href="/style.css" />
             <link rel="stylesheet" href="/share.css" />
             <script>const SHARE_DATA = \(mapJSON); const SHARE_TYPE = 'repeaterMap';</script>
@@ -315,7 +315,7 @@ struct ShareController {
                     <div id="route-summary"></div>
                     <div id="hop-list"></div>
                     <div class="share-footer">
-                        Shared via <a href="https://apps.apple.com/app/pocketmesh/id6743539498">PocketMesh</a>
+                        Shared via <a href="https://mesh.digitaino.com">DigitainoMesh</a>
                     </div>
                 </div>
             </div>
