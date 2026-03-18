@@ -82,12 +82,15 @@ let repeaterFilter = null;
 // State
 let map = null;
 let currentOverlays = [];
+let currentOverlaysByKey = {}; // hexQ_hexR -> overlay, for diff-based updates
 let selectedHighlightOverlay = null;
 let selectedCellData = null;
 let currentRepeaterAnnotations = [];
+let currentRepeatersByHex = {}; // hexID -> annotation, for diff-based updates
 let loadingTimeout = null;
 let lastCellData = [];
 let repeaterNames = {}; // hexID -> name mapping from repeater annotations
+let eventSource = null; // SSE connection
 
 // MapKit JS initialization callback
 function initMapKit() {
@@ -116,12 +119,12 @@ function initMapKit() {
         isScrollEnabled: true
     });
 
-    // Load cells and repeaters when map region changes
+    // Load cells and repeaters when map region changes (full refresh for new viewport)
     map.addEventListener('region-change-end', function() {
         clearTimeout(loadingTimeout);
         loadingTimeout = setTimeout(() => {
-            loadCells();
-            loadRepeaters();
+            loadCells(true); // force full redraw on pan/zoom
+            loadRepeaters(true);
         }, 300);
     });
 
@@ -141,9 +144,46 @@ function initMapKit() {
     loadRepeaters();
     loadStats();
 
-    // Auto-refresh: cells and repeaters every 15s, stats every 60s
-    setInterval(() => { loadCells(); loadRepeaters(); }, 15000);
+    // Connect to server-sent events for real-time push updates.
+    // Falls back to 30s polling if SSE is unavailable.
+    connectSSE();
     setInterval(loadStats, 60000);
+}
+
+// Server-Sent Events: receive push notifications when new data is uploaded
+function connectSSE() {
+    if (eventSource) {
+        eventSource.close();
+    }
+
+    eventSource = new EventSource(`${API_BASE}/events`);
+
+    eventSource.addEventListener('upload', function() {
+        // New survey data was uploaded — refresh cells, repeaters, and stats
+        loadCells();
+        loadRepeaters();
+        loadStats();
+    });
+
+    eventSource.addEventListener('connected', function() {
+        console.log('SSE connected');
+    });
+
+    eventSource.onerror = function() {
+        // SSE disconnected — fall back to polling until reconnect
+        // EventSource auto-reconnects, but poll in the meantime
+        if (!eventSource._fallbackInterval) {
+            eventSource._fallbackInterval = setInterval(() => {
+                if (eventSource.readyState === EventSource.OPEN) {
+                    clearInterval(eventSource._fallbackInterval);
+                    eventSource._fallbackInterval = null;
+                } else {
+                    loadCells();
+                    loadRepeaters();
+                }
+            }, 30000);
+        }
+    };
 }
 
 // Select a cell — highlight on map + show popup
@@ -180,9 +220,19 @@ function deselectCell() {
     dismissPopup();
 }
 
-// Load cells for current viewport
-async function loadCells() {
+// Load cells for current viewport.
+// forceFullRedraw: when true (e.g. on pan/zoom), clears overlay cache first.
+async function loadCells(forceFullRedraw) {
     if (!map) return;
+
+    if (forceFullRedraw) {
+        // Clear overlay cache so diff logic treats everything as new
+        if (currentOverlays.length > 0) {
+            map.removeOverlays(currentOverlays);
+        }
+        currentOverlays = [];
+        currentOverlaysByKey = {};
+    }
 
     const region = map.region;
     const center = region.center;
@@ -212,19 +262,30 @@ async function loadCells() {
     }
 }
 
-// Apply coverage filter and re-render
+// Apply coverage filter and re-render (full redraw since filter set changes)
 function applyCoverageFilter(filter) {
     coverageFilter = filter;
     // Update button states
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filter);
     });
+    // Clear cache for full redraw — filter change means different cell set
+    if (currentOverlays.length > 0) {
+        map.removeOverlays(currentOverlays);
+    }
+    currentOverlays = [];
+    currentOverlaysByKey = {};
     renderCells(lastCellData);
 }
 
-// Apply repeater filter and re-render
+// Apply repeater filter and re-render (full redraw since filter set changes)
 function applyRepeaterFilter(hexID) {
     repeaterFilter = hexID || null;
+    if (currentOverlays.length > 0) {
+        map.removeOverlays(currentOverlays);
+    }
+    currentOverlays = [];
+    currentOverlaysByKey = {};
     renderCells(lastCellData);
 }
 
@@ -270,20 +331,15 @@ function updateRepeaterDropdown(cells) {
     }
 }
 
-// Render hex cells on map
+// Build a fingerprint for a cell to detect changes
+function cellFingerprint(cell) {
+    const quality = cell.snrQuality || snrQuality(cell.averageSNR);
+    return `${quality}_${cell.packetCount}_${cell.contributionCount}_${cell.activePacketCount || 0}_${cell.passivePacketCount || 0}`;
+}
+
+// Render hex cells on map — diff-based: only add/remove/update what changed.
+// Preserves selected cell highlight and popup across refreshes.
 function renderCells(cells) {
-    // Remove old overlays
-    if (currentOverlays.length > 0) {
-        map.removeOverlays(currentOverlays);
-    }
-    currentOverlays = [];
-
-    // Also clear selection highlight if cells are reloaded
-    if (selectedHighlightOverlay) {
-        map.removeOverlay(selectedHighlightOverlay);
-        selectedHighlightOverlay = null;
-    }
-
     // Apply coverage filter
     let filtered = cells;
     if (coverageFilter === 'active') {
@@ -301,55 +357,125 @@ function renderCells(cells) {
         }));
     }
 
-    const overlays = filtered.map(cell => {
-        const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
-        const quality = cell.snrQuality || snrQuality(cell.averageSNR);
-        const color = snrColor(quality);
-        const opacity = 0.2 + 0.5 * Math.min(1, cell.contributionCount / 5);
-
-        const style = new mapkit.Style({
-            fillColor: color,
-            fillOpacity: opacity,
-            strokeColor: color,
-            strokeOpacity: 0.6,
-            lineWidth: 0.5
-        });
-
-        const polygon = new mapkit.PolygonOverlay(vertices, {
-            style: style,
-            enabled: true,
-            visible: true
-        });
-
-        // Attach cell data for popup on select
-        polygon._cellData = cell;
-        polygon._quality = quality;
-        polygon._color = color;
-
-        return polygon;
+    // Build new cell set keyed by hex coordinates
+    const newCellsByKey = {};
+    filtered.forEach(cell => {
+        const key = `${cell.hexQ}_${cell.hexR}`;
+        newCellsByKey[key] = cell;
     });
 
-    if (overlays.length > 0) {
-        map.addOverlays(overlays);
-    }
-    currentOverlays = overlays;
+    // Diff: find cells to remove, add, or update
+    const toRemove = [];
+    const toAdd = [];
+    let selectedCellUpdated = false;
+    const selectedKey = selectedCellData ? `${selectedCellData.hexQ}_${selectedCellData.hexR}` : null;
 
-    // Re-select the previously selected cell if it's still in the filtered set
-    if (selectedCellData) {
-        const key = `${selectedCellData.hexQ}_${selectedCellData.hexR}`;
-        const match = filtered.find(c => `${c.hexQ}_${c.hexR}` === key);
-        if (match) {
-            selectCell(null, match);
-        } else {
-            selectedCellData = null;
-            dismissPopup();
+    // Remove overlays for cells no longer in the filtered set
+    for (const key in currentOverlaysByKey) {
+        if (!newCellsByKey[key]) {
+            toRemove.push(currentOverlaysByKey[key]);
+            delete currentOverlaysByKey[key];
         }
+    }
+
+    // Add or update cells
+    for (const key in newCellsByKey) {
+        const cell = newCellsByKey[key];
+        const existing = currentOverlaysByKey[key];
+
+        if (existing) {
+            // Cell exists — check if its data changed
+            const oldFP = existing._fingerprint;
+            const newFP = cellFingerprint(cell);
+            if (oldFP !== newFP) {
+                // Data changed — remove old, add new
+                toRemove.push(existing);
+                const overlay = createCellOverlay(cell);
+                toAdd.push(overlay);
+                currentOverlaysByKey[key] = overlay;
+
+                // Update selected cell data if this is the selected cell
+                if (key === selectedKey) {
+                    selectedCellData = cell;
+                    selectedCellUpdated = true;
+                }
+            } else {
+                // No change — keep existing overlay, just update cell data reference
+                existing._cellData = cell;
+            }
+        } else {
+            // New cell — create and add
+            const overlay = createCellOverlay(cell);
+            toAdd.push(overlay);
+            currentOverlaysByKey[key] = overlay;
+        }
+    }
+
+    // Batch map operations
+    if (toRemove.length > 0) {
+        map.removeOverlays(toRemove);
+    }
+    if (toAdd.length > 0) {
+        map.addOverlays(toAdd);
+    }
+
+    // Rebuild flat array for compatibility
+    currentOverlays = Object.values(currentOverlaysByKey);
+
+    // Handle selected cell
+    if (selectedCellData) {
+        if (!newCellsByKey[selectedKey]) {
+            // Selected cell was filtered out
+            deselectCell();
+        } else if (selectedCellUpdated) {
+            // Selected cell data changed — update popup content in place
+            showCellPopup(selectedCellData);
+        }
+        // Otherwise: selected cell is unchanged, leave popup and highlight alone
     }
 }
 
-// Load repeaters for current viewport
-async function loadRepeaters() {
+// Create a single cell overlay polygon
+function createCellOverlay(cell) {
+    const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
+    const quality = cell.snrQuality || snrQuality(cell.averageSNR);
+    const color = snrColor(quality);
+    const opacity = 0.2 + 0.5 * Math.min(1, cell.contributionCount / 5);
+
+    const style = new mapkit.Style({
+        fillColor: color,
+        fillOpacity: opacity,
+        strokeColor: color,
+        strokeOpacity: 0.6,
+        lineWidth: 0.5
+    });
+
+    const polygon = new mapkit.PolygonOverlay(vertices, {
+        style: style,
+        enabled: true,
+        visible: true
+    });
+
+    polygon._cellData = cell;
+    polygon._quality = quality;
+    polygon._color = color;
+    polygon._fingerprint = cellFingerprint(cell);
+
+    return polygon;
+}
+
+// Load repeaters for current viewport.
+// forceFullRedraw: when true (e.g. on pan/zoom), clears annotation cache first.
+async function loadRepeaters(forceFullRedraw) {
     if (!map) return;
+
+    if (forceFullRedraw) {
+        if (currentRepeaterAnnotations.length > 0) {
+            map.removeAnnotations(currentRepeaterAnnotations);
+        }
+        currentRepeaterAnnotations = [];
+        currentRepeatersByHex = {};
+    }
 
     const region = map.region;
     const center = region.center;
@@ -384,29 +510,45 @@ async function loadRepeaters() {
     }
 }
 
-// Render repeater annotations on map
+// Render repeater annotations — diff-based to avoid flicker
 function renderRepeaters(repeaters) {
-    // Remove old annotations
-    if (currentRepeaterAnnotations.length > 0) {
-        map.removeAnnotations(currentRepeaterAnnotations);
-    }
-    currentRepeaterAnnotations = [];
+    const newByHex = {};
+    repeaters.forEach(r => { newByHex[r.hexID] = r; });
 
-    const annotations = repeaters.map(repeater => {
-        const coord = new mapkit.Coordinate(repeater.latitude, repeater.longitude);
-        const annotation = new mapkit.MarkerAnnotation(coord, {
-            title: repeater.name,
-            subtitle: repeater.hexID,
-            color: '#22d3ee',
-            glyphText: '📡'
-        });
-        return annotation;
-    });
-
-    if (annotations.length > 0) {
-        map.addAnnotations(annotations);
+    // Remove annotations for repeaters no longer in the set
+    const toRemove = [];
+    for (const hexID in currentRepeatersByHex) {
+        if (!newByHex[hexID]) {
+            toRemove.push(currentRepeatersByHex[hexID]);
+            delete currentRepeatersByHex[hexID];
+        }
     }
-    currentRepeaterAnnotations = annotations;
+
+    // Add annotations for new repeaters
+    const toAdd = [];
+    for (const hexID in newByHex) {
+        if (!currentRepeatersByHex[hexID]) {
+            const repeater = newByHex[hexID];
+            const coord = new mapkit.Coordinate(repeater.latitude, repeater.longitude);
+            const annotation = new mapkit.MarkerAnnotation(coord, {
+                title: repeater.name,
+                subtitle: repeater.hexID,
+                color: '#22d3ee',
+                glyphText: '📡'
+            });
+            toAdd.push(annotation);
+            currentRepeatersByHex[hexID] = annotation;
+        }
+    }
+
+    if (toRemove.length > 0) {
+        map.removeAnnotations(toRemove);
+    }
+    if (toAdd.length > 0) {
+        map.addAnnotations(toAdd);
+    }
+
+    currentRepeaterAnnotations = Object.values(currentRepeatersByHex);
 }
 
 // Popup element

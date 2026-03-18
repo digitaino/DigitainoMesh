@@ -15,6 +15,7 @@ func routes(_ app: Application) throws {
     api.get("repeaters", use: surveyController.getRepeaters)
     api.get("stats", use: surveyController.getStats)
     api.get("mapkit-token", use: surveyController.getMapKitToken)
+    api.get("events", use: surveyController.sseEvents)
 
     // Public shared link data endpoints
     api.get("routes", ":id", use: shareController.getRoute)

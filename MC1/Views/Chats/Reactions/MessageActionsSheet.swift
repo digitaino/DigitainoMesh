@@ -551,10 +551,10 @@ private struct ActionsExpandedContent: View {
     /// Returns the user's location obfuscated according to the chosen privacy mode.
     private func obfuscatedUserLocation(
         mode: LocationShareMode,
+        userLocation: CLLocation?,
         repeaterInfos: [RouteShareService.RepeaterInfo]
     ) -> (latitude: Double, longitude: Double)? {
-        guard mode != .none,
-              let userLocation = appState.locationService.currentLocation else {
+        guard mode != .none, let userLocation else {
             return nil
         }
 
@@ -618,7 +618,13 @@ private struct ActionsExpandedContent: View {
         defer { isSharing = false }
 
         let repeaterContacts = contacts.filter { $0.type == .repeater }
-        let userLocation = appState.locationService.currentLocation
+
+        // Use the location recorded on the message at receive time, NOT the device's
+        // current GPS — the user may be somewhere else when they share.
+        let userLocation: CLLocation? = {
+            guard let lat = message.userLatitude, let lon = message.userLongitude else { return nil }
+            return CLLocation(latitude: lat, longitude: lon)
+        }()
 
         // Aggregate unique repeaters across all repeats
         var repeaterMap: [String: (contact: ContactDTO?, heardCount: Int, snrSum: Double, snrCount: Int, rssiSum: Double, rssiCount: Int)] = [:]
@@ -680,7 +686,7 @@ private struct ActionsExpandedContent: View {
 
         guard !repeaterInfos.isEmpty else { return }
 
-        let obfuscated = obfuscatedUserLocation(mode: locationMode, repeaterInfos: repeaterInfos)
+        let obfuscated = obfuscatedUserLocation(mode: locationMode, userLocation: userLocation, repeaterInfos: repeaterInfos)
 
         let service = RouteShareService()
         if let url = await service.shareRepeaterMap(

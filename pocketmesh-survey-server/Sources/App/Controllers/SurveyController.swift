@@ -354,6 +354,12 @@ struct SurveyController {
         )
         try await log.save(on: req.db)
 
+        // Notify connected web map clients about the new data
+        await SSEBroadcaster.shared.broadcast(
+            event: "upload",
+            data: "{\"cells\":\(acceptedCount)}"
+        )
+
         return UploadResponse(accepted: acceptedCount, message: "ok")
     }
 
@@ -654,5 +660,44 @@ struct SurveyController {
             totalCells: allCells.count,
             fixedCells: fixedCount
         )
+    }
+
+    // MARK: - GET /api/v1/events (Server-Sent Events)
+
+    @Sendable
+    func sseEvents(req: Request) async throws -> Response {
+        let (clientID, stream) = await SSEBroadcaster.shared.addClient()
+        req.logger.info("SSE client connected: \(clientID)")
+
+        let headers = HTTPHeaders([
+            ("Content-Type", "text/event-stream"),
+            ("Cache-Control", "no-cache"),
+            ("Connection", "keep-alive"),
+            ("X-Accel-Buffering", "no")
+        ])
+
+        let body = Response.Body(asyncStream: { writer in
+            // Send initial connection event
+            try await writer.write(.buffer(.init(string: "event: connected\ndata: {}\n\n")))
+
+            // Send heartbeat every 30s to keep connection alive
+            let heartbeatTask = Task {
+                while !Task.isCancelled {
+                    try await Task.sleep(for: .seconds(30))
+                    try await writer.write(.buffer(.init(string: ": heartbeat\n\n")))
+                }
+            }
+
+            // Forward broadcast events to this client
+            for await message in stream {
+                try await writer.write(.buffer(.init(string: message)))
+            }
+
+            heartbeatTask.cancel()
+            try await writer.write(.end)
+            req.logger.info("SSE client disconnected: \(clientID)")
+        })
+
+        return Response(status: .ok, headers: headers, body: body)
     }
 }
