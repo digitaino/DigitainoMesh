@@ -341,6 +341,11 @@ struct ShareController {
                     <span id="panel-toggle">▲</span>
                 </div>
                 <div id="panel-body">
+                    <div id="repeat-nav" style="display:none">
+                        <button class="nav-btn" onclick="prevRepeat()">‹</button>
+                        <span id="repeat-nav-label"></span>
+                        <button class="nav-btn" onclick="nextRepeat()">›</button>
+                    </div>
                     <div id="route-summary"></div>
                     <div id="hop-list"></div>
                     <div class="share-footer">

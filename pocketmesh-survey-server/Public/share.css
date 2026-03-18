@@ -61,6 +61,61 @@
     touch-action: pan-y;
 }
 
+/* Repeat navigation bar (< 4 repeats · 4 repeaters >) */
+#repeat-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+    padding: 6px 0;
+}
+
+#repeat-nav-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #ccc;
+    text-align: center;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#repeat-nav-label .nav-count {
+    color: #fff;
+    font-weight: 600;
+}
+
+.nav-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 300;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.nav-btn:active {
+    background: rgba(255, 255, 255, 0.22);
+}
+
 #route-summary {
     display: flex;
     gap: 16px;
