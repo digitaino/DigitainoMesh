@@ -7,7 +7,7 @@ enum MessageAction: Equatable {
     case react(String)
     case reply
     case replyWithRoute(String)
-    case replyWithRepeaterMap(URL)
+    case replyWithRepeaterMap(url: URL, description: String)
     case copy
     case sendAgain
     case blockSender
@@ -109,8 +109,8 @@ struct MessageActionsSheet: View {
                             onReplyWithRoute: { routeInfo in
                                 performAction(.replyWithRoute(routeInfo))
                             },
-                            onReplyWithRepeaterMap: { url in
-                                performAction(.replyWithRepeaterMap(url))
+                            onReplyWithRepeaterMap: { url, description in
+                                performAction(.replyWithRepeaterMap(url: url, description: description))
                             }
                         )
                         ActionsBlockSection(
@@ -347,7 +347,7 @@ private struct ActionsDetailsSection: View {
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
     var onReplyWithRoute: ((String) -> Void)?
-    var onReplyWithRepeaterMap: ((URL) -> Void)?
+    var onReplyWithRepeaterMap: ((URL, String) -> Void)?
 
     @Environment(\.appState) private var appState
 
@@ -399,7 +399,7 @@ private struct ActionsExpandableDetailRow: View {
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
     var onReplyWithRoute: ((String) -> Void)?
-    var onReplyWithRepeaterMap: ((URL) -> Void)?
+    var onReplyWithRepeaterMap: ((URL, String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -460,7 +460,7 @@ private struct ActionsExpandedContent: View {
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
     var onReplyWithRoute: ((String) -> Void)?
-    var onReplyWithRepeaterMap: ((URL) -> Void)?
+    var onReplyWithRepeaterMap: ((URL, String) -> Void)?
 
     @State private var showingRepeatsMap = false
     @State private var isSharing = false
@@ -695,7 +695,12 @@ private struct ActionsExpandedContent: View {
             userLatitude: obfuscated?.latitude,
             userLongitude: obfuscated?.longitude
         ) {
-            onReplyWithRepeaterMap?(url)
+            // Build a descriptive message instead of a reply-quote.
+            // e.g. "📡 4 repeats via 0C, C0, 80, 78"
+            let hexList = repeaterInfos.map(\.hexID).joined(separator: ", ")
+            let repeatWord = repeats.count == 1 ? "repeat" : "repeats"
+            let description = "📡 \(repeats.count) \(repeatWord) via \(hexList)"
+            onReplyWithRepeaterMap?(url, description)
         }
     }
 }
