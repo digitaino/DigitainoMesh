@@ -161,6 +161,21 @@ function renderRepeaterMap(data) {
     const summaryEl = document.getElementById('route-summary');
     const hopListEl = document.getElementById('hop-list');
 
+    // Build hop number lookup from paths (1-indexed, first appearance order, matching iOS)
+    const hopNumberByHex = {};
+    let nextHopNumber = 1;
+    if (data.paths && data.paths.length > 0) {
+        data.paths.forEach(path => {
+            if (!path.hops) return;
+            path.hops.forEach(hexID => {
+                const key = hexID.toUpperCase();
+                if (hopNumberByHex[key] === undefined) {
+                    hopNumberByHex[key] = nextHopNumber++;
+                }
+            });
+        });
+    }
+
     // Summary
     const locatedCount = data.repeaters.filter(r => r.latitude != null && r.longitude != null).length;
     const totalHeard = data.repeaters.reduce((sum, r) => sum + (r.heardCount || 0), 0);
@@ -181,14 +196,30 @@ function renderRepeaterMap(data) {
     `;
     summaryEl.innerHTML = summaryHTML;
 
-    // Repeater list sorted by heard count (descending)
-    const sorted = [...data.repeaters].sort((a, b) => (b.heardCount || 0) - (a.heardCount || 0));
+    // Repeater list: show hop-numbered repeaters first (in path order), then others by heard count
+    const hasPaths = Object.keys(hopNumberByHex).length > 0;
+    const sorted = [...data.repeaters].sort((a, b) => {
+        const hopA = hopNumberByHex[a.hexID.toUpperCase()];
+        const hopB = hopNumberByHex[b.hexID.toUpperCase()];
+        if (hopA != null && hopB != null) return hopA - hopB;
+        if (hopA != null) return -1;
+        if (hopB != null) return 1;
+        return (b.heardCount || 0) - (a.heardCount || 0);
+    });
 
     let listHTML = '';
+    let prevHadHop = false;
     sorted.forEach(repeater => {
         const name = repeater.name || repeater.hexID;
         const located = repeater.latitude != null && repeater.longitude != null;
         const snrClass = snrQualityClass(repeater.avgSNR);
+        const hopNum = hopNumberByHex[repeater.hexID.toUpperCase()];
+
+        // Show connector between consecutive hop-numbered repeaters
+        if (hopNum != null && prevHadHop) {
+            listHTML += '<div class="hop-connector"><div class="line"></div></div>';
+        }
+        prevHadHop = hopNum != null;
 
         let signalHTML = '';
         if (repeater.heardCount) {
@@ -203,8 +234,8 @@ function renderRepeaterMap(data) {
 
         listHTML += `
             <div class="hop-item">
-                <div class="hop-index" style="background: ${repeater.avgSNR != null ? snrQualityColor(repeater.avgSNR) + '33' : 'rgba(34,211,238,0.2)'}; color: ${repeater.avgSNR != null ? snrQualityColor(repeater.avgSNR) : '#22d3ee'}">
-                    📡
+                <div class="hop-index" style="background: ${hopNum != null ? 'rgba(59,130,246,0.2)' : (repeater.avgSNR != null ? snrQualityColor(repeater.avgSNR) + '33' : 'rgba(34,211,238,0.2)')}; color: ${hopNum != null ? '#3b82f6' : (repeater.avgSNR != null ? snrQualityColor(repeater.avgSNR) : '#22d3ee')}">
+                    ${hopNum != null ? hopNum : '📡'}
                 </div>
                 <div class="hop-details">
                     <div class="hop-name">${escapeHTML(name)}</div>
@@ -236,11 +267,12 @@ function renderRepeaterMap(data) {
     const annotations = located.map(repeater => {
         const coord = new mapkit.Coordinate(repeater.latitude, repeater.longitude);
         const color = snrQualityColor(repeater.avgSNR);
+        const hopNum = hopNumberByHex[repeater.hexID.toUpperCase()];
         return new mapkit.MarkerAnnotation(coord, {
             title: repeater.name || repeater.hexID,
-            subtitle: repeater.heardCount ? `${repeater.heardCount}× heard` : repeater.hexID,
-            color: color,
-            glyphText: '📡'
+            subtitle: hopNum != null ? `Hop ${hopNum}` : (repeater.heardCount ? `${repeater.heardCount}× heard` : repeater.hexID),
+            color: hopNum != null ? '#3b82f6' : color,
+            glyphText: hopNum != null ? `${hopNum}` : '📡'
         });
     });
     map.addAnnotations(annotations);

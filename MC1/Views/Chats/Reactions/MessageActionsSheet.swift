@@ -464,6 +464,7 @@ private struct ActionsExpandedContent: View {
 
     @State private var showingRepeatsMap = false
     @State private var isSharing = false
+    @State private var showingShareLocationOptions = false
 
     var body: some View {
         if availability.canShowRepeatDetails {
@@ -492,7 +493,7 @@ private struct ActionsExpandedContent: View {
                     }
 
                     Button {
-                        Task { await shareHeardRepeaters(repeats: repeats) }
+                        showingShareLocationOptions = true
                     } label: {
                         if isSharing {
                             ProgressView()
@@ -505,6 +506,25 @@ private struct ActionsExpandedContent: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(isSharing)
+                    .confirmationDialog(
+                        "Your location is used to draw the last-hop line on the shared map.",
+                        isPresented: $showingShareLocationOptions,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Exact Location") {
+                            Task { await shareHeardRepeaters(repeats: repeats, locationMode: .exact) }
+                        }
+                        Button("Snap to Grid (~500m)") {
+                            Task { await shareHeardRepeaters(repeats: repeats, locationMode: .hexSnap) }
+                        }
+                        Button("Direction Only (ray)") {
+                            Task { await shareHeardRepeaters(repeats: repeats, locationMode: .ray) }
+                        }
+                        Button("Don't Include Location") {
+                            Task { await shareHeardRepeaters(repeats: repeats, locationMode: .none) }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    }
                 }
                 .padding(.top, 8)
             }
@@ -519,9 +539,81 @@ private struct ActionsExpandedContent: View {
         }
     }
 
+    // MARK: - Location Privacy
+
+    private enum LocationShareMode {
+        case exact
+        case hexSnap
+        case ray
+        case none
+    }
+
+    /// Returns the user's location obfuscated according to the chosen privacy mode.
+    private func obfuscatedUserLocation(
+        mode: LocationShareMode,
+        repeaterInfos: [RouteShareService.RepeaterInfo]
+    ) -> (latitude: Double, longitude: Double)? {
+        guard mode != .none,
+              let userLocation = appState.locationService.currentLocation else {
+            return nil
+        }
+
+        let lat = userLocation.coordinate.latitude
+        let lon = userLocation.coordinate.longitude
+
+        switch mode {
+        case .exact:
+            return (lat, lon)
+
+        case .hexSnap:
+            // Snap to the center of the containing hex cell (~100m grid)
+            let refLat = HexGrid.fixedReferenceLatitude(for: lat)
+            let axial = HexGrid.axialFromLatLon(latitude: lat, longitude: lon, referenceLatitude: refLat)
+            let center = HexGrid.centerLatLon(from: axial, referenceLatitude: refLat)
+            return (center.latitude, center.longitude)
+
+        case .ray:
+            // Place the point 40% of the way from the nearest located repeater toward the user.
+            // This preserves direction information without revealing exact position.
+            guard let nearest = nearestLocatedRepeater(from: userLocation, repeaters: repeaterInfos) else {
+                // No located repeaters — fall back to hex snap
+                let refLat = HexGrid.fixedReferenceLatitude(for: lat)
+                let axial = HexGrid.axialFromLatLon(latitude: lat, longitude: lon, referenceLatitude: refLat)
+                let center = HexGrid.centerLatLon(from: axial, referenceLatitude: refLat)
+                return (center.latitude, center.longitude)
+            }
+            let fraction = 0.4
+            let rayLat = nearest.latitude + (lat - nearest.latitude) * fraction
+            let rayLon = nearest.longitude + (lon - nearest.longitude) * fraction
+            return (rayLat, rayLon)
+
+        case .none:
+            return nil
+        }
+    }
+
+    /// Find the nearest located repeater to the user.
+    private func nearestLocatedRepeater(
+        from userLocation: CLLocation,
+        repeaters: [RouteShareService.RepeaterInfo]
+    ) -> (latitude: Double, longitude: Double)? {
+        var bestDistance = Double.greatestFiniteMagnitude
+        var bestCoord: (latitude: Double, longitude: Double)?
+
+        for repeater in repeaters {
+            guard let rLat = repeater.latitude, let rLon = repeater.longitude else { continue }
+            let distance = userLocation.distance(from: CLLocation(latitude: rLat, longitude: rLon))
+            if distance < bestDistance {
+                bestDistance = distance
+                bestCoord = (rLat, rLon)
+            }
+        }
+        return bestCoord
+    }
+
     // MARK: - Share Heard Repeaters
 
-    private func shareHeardRepeaters(repeats: [MessageRepeatDTO]) async {
+    private func shareHeardRepeaters(repeats: [MessageRepeatDTO], locationMode: LocationShareMode) async {
         isSharing = true
         defer { isSharing = false }
 
@@ -588,12 +680,14 @@ private struct ActionsExpandedContent: View {
 
         guard !repeaterInfos.isEmpty else { return }
 
+        let obfuscated = obfuscatedUserLocation(mode: locationMode, repeaterInfos: repeaterInfos)
+
         let service = RouteShareService()
         if let url = await service.shareRepeaterMap(
             repeaters: repeaterInfos,
             paths: repeatPaths.isEmpty ? nil : repeatPaths,
-            userLatitude: userLocation?.coordinate.latitude,
-            userLongitude: userLocation?.coordinate.longitude
+            userLatitude: obfuscated?.latitude,
+            userLongitude: obfuscated?.longitude
         ) {
             onReplyWithRepeaterMap?(url)
         }
