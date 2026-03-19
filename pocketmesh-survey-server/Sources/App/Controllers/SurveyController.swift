@@ -56,6 +56,36 @@ struct SurveyController {
         return result
     }
 
+    // MARK: - Per-Repeater Metric Merging
+
+    /// Merge uploaded per-repeater metrics into an existing CellRepeater record using weighted averages.
+    private static func mergeRepeaterMetrics(existing: CellRepeater, upload: RepeaterMetricData) {
+        let oldCount = existing.packetCount ?? 0
+        let newCount = upload.packetCount
+
+        if oldCount == 0 {
+            // No existing metrics — just set from upload
+            existing.averageSNR = upload.averageSNR
+            existing.averageRSSI = upload.averageRSSI
+            existing.packetCount = newCount
+        } else {
+            let totalCount = oldCount + newCount
+            // Weighted average for SNR
+            if let oldSNR = existing.averageSNR, let newSNR = upload.averageSNR {
+                existing.averageSNR = (oldSNR * Double(oldCount) + newSNR * Double(newCount)) / Double(totalCount)
+            } else if let newSNR = upload.averageSNR {
+                existing.averageSNR = newSNR
+            }
+            // Weighted average for RSSI
+            if let oldRSSI = existing.averageRSSI, let newRSSI = upload.averageRSSI {
+                existing.averageRSSI = (oldRSSI * Double(oldCount) + newRSSI * Double(newCount)) / Double(totalCount)
+            } else if let newRSSI = upload.averageRSSI {
+                existing.averageRSSI = newRSSI
+            }
+            existing.packetCount = totalCount
+        }
+    }
+
     // MARK: - Session Deduplication
 
     /// Remove existing contributions for the given session IDs from this contributor,
@@ -192,30 +222,55 @@ struct SurveyController {
 
                 try await existing.save(on: req.db)
 
-                // Add new repeaters (with hex ID normalization)
+                // Add new repeaters (with hex ID normalization and per-repeater metrics)
                 if let cellID = existing.id {
                     let existingRepeaters = try await CellRepeater.query(on: req.db)
                         .filter(\.$cell.$id == cellID)
                         .all()
-                    let existingIDs = existingRepeaters.map(\.repeaterHexID)
+                    // Build lookup for per-repeater metrics from this upload
+                    let metricsByHex: [String: RepeaterMetricData] = {
+                        var dict: [String: RepeaterMetricData] = [:]
+                        for m in cellData.repeaterMetrics ?? [] {
+                            dict[m.hexID.uppercased()] = m
+                        }
+                        return dict
+                    }()
 
                     for hexID in cellData.repeaterHexIDs {
                         let normalized = hexID.uppercased()
+                        // Find metric for this repeater (prefix-aware)
+                        let metric = metricsByHex[normalized] ?? metricsByHex.first(where: { key, _ in
+                            key.hasPrefix(normalized) || normalized.hasPrefix(key)
+                        })?.value
+
                         // Check if a shorter prefix already exists — upgrade it
                         if let match = existingRepeaters.first(where: {
                             let eid = $0.repeaterHexID.uppercased()
                             return normalized.hasPrefix(eid) && normalized.count > eid.count
                         }) {
                             match.repeaterHexID = normalized
+                            // Merge per-repeater metrics using weighted average
+                            if let metric {
+                                Self.mergeRepeaterMetrics(existing: match, upload: metric)
+                            }
                             try await match.save(on: req.db)
-                        } else if existingIDs.contains(where: {
-                            let eid = $0.uppercased()
-                            // Already have this exact ID or a longer version
+                        } else if let match = existingRepeaters.first(where: {
+                            let eid = $0.repeaterHexID.uppercased()
                             return eid == normalized || eid.hasPrefix(normalized)
                         }) {
-                            // Already have this ID or a longer version — skip
+                            // Already have this exact ID or a longer version — merge metrics only
+                            if let metric {
+                                Self.mergeRepeaterMetrics(existing: match, upload: metric)
+                                try await match.save(on: req.db)
+                            }
                         } else {
-                            let repeater = CellRepeater(cellID: cellID, repeaterHexID: normalized)
+                            let repeater = CellRepeater(
+                                cellID: cellID,
+                                repeaterHexID: normalized,
+                                averageSNR: metric?.averageSNR,
+                                averageRSSI: metric?.averageRSSI,
+                                packetCount: metric?.packetCount
+                            )
                             try await repeater.save(on: req.db)
                         }
                     }
@@ -260,10 +315,26 @@ struct SurveyController {
                 try await cell.save(on: req.db)
 
                 if let cellID = cell.id {
-                    // Add repeaters (consolidated + uppercased)
+                    // Add repeaters (consolidated + uppercased) with per-repeater metrics
                     let consolidatedIDs = Self.consolidateHexIDs(cellData.repeaterHexIDs)
+                    let metricsByHex: [String: RepeaterMetricData] = {
+                        var dict: [String: RepeaterMetricData] = [:]
+                        for m in cellData.repeaterMetrics ?? [] {
+                            dict[m.hexID.uppercased()] = m
+                        }
+                        return dict
+                    }()
                     for hexID in consolidatedIDs {
-                        let repeater = CellRepeater(cellID: cellID, repeaterHexID: hexID)
+                        let metric = metricsByHex[hexID] ?? metricsByHex.first(where: { key, _ in
+                            key.hasPrefix(hexID) || hexID.hasPrefix(key)
+                        })?.value
+                        let repeater = CellRepeater(
+                            cellID: cellID,
+                            repeaterHexID: hexID,
+                            averageSNR: metric?.averageSNR,
+                            averageRSSI: metric?.averageRSSI,
+                            packetCount: metric?.packetCount
+                        )
                         try await repeater.save(on: req.db)
                     }
 
@@ -393,7 +464,21 @@ struct SurveyController {
             .count()
 
         let responseCells = cells.map { cell in
-            CommunityCellResponse(
+            // Build per-repeater metrics from CellRepeater records that have signal data
+            let metrics: [RepeaterMetricData]? = {
+                let withData = cell.repeaters.filter { $0.packetCount != nil }
+                guard !withData.isEmpty else { return nil }
+                return withData.map { r in
+                    RepeaterMetricData(
+                        hexID: r.repeaterHexID,
+                        averageSNR: r.averageSNR,
+                        averageRSSI: r.averageRSSI,
+                        packetCount: r.packetCount ?? 0
+                    )
+                }
+            }()
+
+            return CommunityCellResponse(
                 latitude: cell.latitude,
                 longitude: cell.longitude,
                 hexQ: cell.hexQ,
@@ -405,7 +490,8 @@ struct SurveyController {
                 repeaterHexIDs: Self.consolidateHexIDs(cell.repeaters.map(\.repeaterHexID)),
                 snrQuality: cell.snrQuality,
                 activePacketCount: cell.activePacketCount > 0 ? cell.activePacketCount : nil,
-                passivePacketCount: cell.passivePacketCount > 0 ? cell.passivePacketCount : nil
+                passivePacketCount: cell.passivePacketCount > 0 ? cell.passivePacketCount : nil,
+                repeaterMetrics: metrics
             )
         }
 

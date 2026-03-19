@@ -14,6 +14,8 @@ private let logger = Logger(subsystem: "com.pocketmesh", category: "HeardRepeats
 ///
 /// The map draws:
 /// - Repeater pins with hex hash labels for all intermediate hops (no signal data)
+/// - A neutral-colored `PathLineOverlay` from the user to the first repeater
+///   in the outbound chain (the initial hop)
 /// - Neutral-colored `PathLineOverlay` lines with arrowheads between consecutive
 ///   hops in the outbound chain
 /// - An SNR-colored `PathLineOverlay` from each "last repeater" to the user's
@@ -279,6 +281,18 @@ final class HeardRepeatsMapViewModel {
                     allPathState[hop.contact.id] = PathInfo(hopIndex: hopIdx + 1, routeIndex: routeIndex)
                     routeIndex += 1
                 }
+            }
+
+            // Draw user → first hop (outbound first leg, neutral-colored)
+            if let userLocation = storedUserLocation {
+                let firstHop = resolved.hops[0]
+                let overlay = PathLineOverlay.line(
+                    from: userLocation.coordinate,
+                    to: firstHop.coordinate,
+                    segmentIndex: segmentIndex
+                )
+                allLineOverlays.append(overlay)
+                segmentIndex += 1
             }
 
             // Draw outbound chain: consecutive hops

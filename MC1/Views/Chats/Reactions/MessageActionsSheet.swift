@@ -470,7 +470,7 @@ private struct ActionsExpandedContent: View {
 
     @State private var showingRepeatsMap = false
     @State private var isSharing = false
-    @State private var showingShareLocationOptions = false
+    @State private var showingLocationPicker = false
 
     /// Location recorded on the message at receive time — preferred over current GPS.
     private var messageLocation: CLLocation? {
@@ -506,7 +506,7 @@ private struct ActionsExpandedContent: View {
                     }
 
                     Button {
-                        showingShareLocationOptions = true
+                        showingLocationPicker = true
                     } label: {
                         if isSharing {
                             ProgressView()
@@ -518,22 +518,18 @@ private struct ActionsExpandedContent: View {
                         }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(isSharing)
-                    .confirmationDialog(
-                        "Your location is used to draw the last-hop line on the shared map.",
-                        isPresented: $showingShareLocationOptions,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Exact Location") {
-                            Task { await shareHeardRepeaters(repeats: repeats, locationMode: .exact) }
+                    .disabled(isSharing || trueLocationCoordinate == nil)
+                    .sheet(isPresented: $showingLocationPicker) {
+                        if let coord = trueLocationCoordinate {
+                            ShareLocationPickerSheet(trueLocation: coord) { chosenCoordinate in
+                                Task {
+                                    await shareHeardRepeaters(
+                                        repeats: repeats,
+                                        chosenCoordinate: chosenCoordinate
+                                    )
+                                }
+                            }
                         }
-                        Button("Approximate Area (~300m)") {
-                            Task { await shareHeardRepeaters(repeats: repeats, locationMode: .hexSnap) }
-                        }
-                        Button("Don't Include Location") {
-                            Task { await shareHeardRepeaters(repeats: repeats, locationMode: .none) }
-                        }
-                        Button("Cancel", role: .cancel) {}
                     }
                 }
                 .padding(.top, 8)
@@ -549,54 +545,30 @@ private struct ActionsExpandedContent: View {
         }
     }
 
-    // MARK: - Location Privacy
+    // MARK: - Location
 
-    private enum LocationShareMode {
-        case exact
-        case hexSnap
-        case none
-    }
-
-    /// Returns the user's location obfuscated according to the chosen privacy mode.
-    private func obfuscatedUserLocation(
-        mode: LocationShareMode,
-        userLocation: CLLocation?
-    ) -> (latitude: Double, longitude: Double)? {
-        guard mode != .none, let userLocation else {
-            return nil
+    /// The user's true location coordinate for the location picker.
+    /// Prefers the location recorded on the message; falls back to current GPS.
+    private var trueLocationCoordinate: CLLocationCoordinate2D? {
+        if let lat = message.userLatitude, let lon = message.userLongitude {
+            return CLLocationCoordinate2D(latitude: lat, longitude: lon)
         }
-
-        let lat = userLocation.coordinate.latitude
-        let lon = userLocation.coordinate.longitude
-
-        switch mode {
-        case .exact:
-            return (lat, lon)
-
-        case .hexSnap:
-            // Snap to the center of the containing hex cell (~100m grid).
-            // The web frontend renders a 7-cell cluster offset from this center,
-            // so the actual user position is hidden within a ~300m area.
-            let refLat = HexGrid.fixedReferenceLatitude(for: lat)
-            let axial = HexGrid.axialFromLatLon(latitude: lat, longitude: lon, referenceLatitude: refLat)
-            let center = HexGrid.centerLatLon(from: axial, referenceLatitude: refLat)
-            return (center.latitude, center.longitude)
-
-        case .none:
-            return nil
-        }
+        return appState.locationService.currentLocation?.coordinate
     }
 
     // MARK: - Share Heard Repeaters
 
-    private func shareHeardRepeaters(repeats: [MessageRepeatDTO], locationMode: LocationShareMode) async {
+    private func shareHeardRepeaters(
+        repeats: [MessageRepeatDTO],
+        chosenCoordinate: CLLocationCoordinate2D?
+    ) async {
         isSharing = true
         defer { isSharing = false }
 
         let repeaterContacts = contacts.filter { $0.type == .repeater }
 
-        // Use the location recorded on the message at receive time, NOT the device's
-        // current GPS — the user may be somewhere else when they share.
+        // Use the location recorded on the message at receive time for repeater
+        // matching — the user may be somewhere else when they share.
         let userLocation: CLLocation? = {
             guard let lat = message.userLatitude, let lon = message.userLongitude else { return nil }
             return CLLocation(latitude: lat, longitude: lon)
@@ -662,17 +634,13 @@ private struct ActionsExpandedContent: View {
 
         guard !repeaterInfos.isEmpty else { return }
 
-        let obfuscated = obfuscatedUserLocation(mode: locationMode, userLocation: userLocation)
-
         let service = RouteShareService()
         if let url = await service.shareRepeaterMap(
             repeaters: repeaterInfos,
             paths: repeatPaths.isEmpty ? nil : repeatPaths,
-            userLatitude: obfuscated?.latitude,
-            userLongitude: obfuscated?.longitude
+            userLatitude: chosenCoordinate?.latitude,
+            userLongitude: chosenCoordinate?.longitude
         ) {
-            // Build a descriptive message instead of a reply-quote.
-            // e.g. "📡 4 repeats via 0C, C0, 80, 78"
             let hexList = repeaterInfos.map(\.hexID).joined(separator: ", ")
             let repeatWord = repeats.count == 1 ? "repeat" : "repeats"
             let description = "📡 \(repeats.count) \(repeatWord) via \(hexList)"

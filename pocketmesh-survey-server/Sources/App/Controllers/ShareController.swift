@@ -301,7 +301,10 @@ struct ShareController {
             <div id="share-panel">
                 <div id="panel-header" onclick="togglePanel()">
                     <h2>Shared Route</h2>
-                    <span id="panel-toggle">▲</span>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <button id="cell-toggle" class="cell-toggle-btn active" onclick="event.stopPropagation();toggleCellOverlay()" title="Toggle community signal overlay">📶</button>
+                        <span id="panel-toggle">▲</span>
+                    </div>
                 </div>
                 <div id="panel-body">
                     <div id="route-summary"></div>
@@ -338,7 +341,10 @@ struct ShareController {
             <div id="share-panel">
                 <div id="panel-header" onclick="togglePanel()">
                     <h2>Heard Repeaters</h2>
-                    <span id="panel-toggle">▲</span>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <button id="cell-toggle" class="cell-toggle-btn active" onclick="event.stopPropagation();toggleCellOverlay()" title="Toggle community signal overlay">📶</button>
+                        <span id="panel-toggle">▲</span>
+                    </div>
                 </div>
                 <div id="panel-body">
                     <div id="repeat-nav" style="display:none">

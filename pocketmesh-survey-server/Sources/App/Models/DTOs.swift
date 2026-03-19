@@ -40,6 +40,16 @@ struct UploadCellData: Content {
     let activePacketCount: Int?
     /// Packets collected passively (RX only). Optional for backward compat.
     let passivePacketCount: Int?
+    /// Per-repeater signal metrics. Optional for backward compat with older clients.
+    let repeaterMetrics: [RepeaterMetricData]?
+}
+
+/// Per-repeater signal metrics within a cell.
+struct RepeaterMetricData: Content {
+    let hexID: String
+    let averageSNR: Double?
+    let averageRSSI: Double?
+    let packetCount: Int
 }
 
 struct RouteBreakdown: Content {
@@ -69,6 +79,8 @@ struct CommunityCellResponse: Content {
     let snrQuality: String
     let activePacketCount: Int?
     let passivePacketCount: Int?
+    /// Per-repeater signal metrics. Nil for legacy cells without this data.
+    let repeaterMetrics: [RepeaterMetricData]?
 }
 
 struct CommunityCellsResponse: Content {

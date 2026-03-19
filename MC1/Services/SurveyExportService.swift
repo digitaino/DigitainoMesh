@@ -7,7 +7,7 @@ enum SurveyExportService {
     private static let logger = Logger(subsystem: "com.mc1", category: "SurveyExport")
 
     /// Export format version
-    static let formatVersion = "1.1"
+    static let formatVersion = "1.2"
 
     // MARK: - Export Format
 
@@ -58,6 +58,8 @@ enum SurveyExportService {
         let activePacketCount: Int?
         /// Number of packets collected passively (RX only, one-way).
         let passivePacketCount: Int?
+        /// Per-repeater signal metrics (SNR, RSSI, packet count per repeater in this cell).
+        let repeaterMetrics: [RepeaterMetric]?
     }
 
     /// Resolved repeater information for community map display.
@@ -68,6 +70,14 @@ enum SurveyExportService {
         let longitude: Double
     }
 
+    /// Per-repeater signal metrics within a cell.
+    struct RepeaterMetric: Codable {
+        let hexID: String
+        let averageSNR: Double?
+        let averageRSSI: Double?
+        let packetCount: Int
+    }
+
     struct RouteBreakdown: Codable {
         let flood: Int
         let direct: Int
@@ -76,6 +86,40 @@ enum SurveyExportService {
     struct TimeRange: Codable {
         let earliest: String
         let latest: String
+    }
+
+    // MARK: - Per-Repeater Metrics
+
+    /// Compute per-repeater signal metrics from survey points within a cell.
+    /// Groups points by their associated repeater hex IDs (prefix-aware), then
+    /// computes average SNR/RSSI and packet count for each consolidated repeater.
+    private static func computeRepeaterMetrics(
+        cellPoints: [SignalSurveyPointDTO],
+        consolidatedRepeaters: [String]
+    ) -> [RepeaterMetric] {
+        // Build a lookup of all points associated with each raw hex ID
+        var pointsByRawHex: [String: [SignalSurveyPointDTO]] = [:]
+        for point in cellPoints {
+            for hexID in point.pathNodeHexIDs {
+                pointsByRawHex[hexID.uppercased(), default: []].append(point)
+            }
+        }
+
+        // For each consolidated repeater, collect points from all matching raw hex IDs
+        return consolidatedRepeaters.map { repeaterHex in
+            let matchingPoints = pointsByRawHex.filter { rawHex, _ in
+                rawHex.hasPrefix(repeaterHex) || repeaterHex.hasPrefix(rawHex)
+            }.values.flatMap { $0 }
+
+            let snrs = matchingPoints.compactMap(\.snr)
+            let rssis = matchingPoints.compactMap(\.rssi)
+            return RepeaterMetric(
+                hexID: repeaterHex,
+                averageSNR: snrs.isEmpty ? nil : snrs.reduce(0, +) / Double(snrs.count),
+                averageRSSI: rssis.isEmpty ? nil : Double(rssis.reduce(0, +)) / Double(rssis.count),
+                packetCount: matchingPoints.count
+            )
+        }
     }
 
     // MARK: - Hex ID Consolidation
@@ -161,6 +205,9 @@ enum SurveyExportService {
             let activeCount = cellPoints.count(where: \.isActiveProbe)
             let passiveCount = cellPoints.count - activeCount
 
+            // Per-repeater signal metrics
+            let metrics = computeRepeaterMetrics(cellPoints: cellPoints, consolidatedRepeaters: repeaters)
+
             return CellData(
                 latitude: center.latitude,
                 longitude: center.longitude,
@@ -176,7 +223,8 @@ enum SurveyExportService {
                 hexR: coord.r,
                 referenceLatitude: refLat,
                 activePacketCount: activeCount > 0 ? activeCount : nil,
-                passivePacketCount: passiveCount > 0 ? passiveCount : nil
+                passivePacketCount: passiveCount > 0 ? passiveCount : nil,
+                repeaterMetrics: metrics.isEmpty ? nil : metrics
             )
         }
 
@@ -244,6 +292,7 @@ enum SurveyExportService {
             let repeaters = consolidateHexIDs(Array(Set(cellPoints.flatMap(\.pathNodeHexIDs)))).sorted()
             let activeCount = cellPoints.count(where: \.isActiveProbe)
             let passiveCount = cellPoints.count - activeCount
+            let metrics = computeRepeaterMetrics(cellPoints: cellPoints, consolidatedRepeaters: repeaters)
 
             return CellData(
                 latitude: center.latitude,
@@ -260,7 +309,8 @@ enum SurveyExportService {
                 hexR: coord.r,
                 referenceLatitude: refLat,
                 activePacketCount: activeCount > 0 ? activeCount : nil,
-                passivePacketCount: passiveCount > 0 ? passiveCount : nil
+                passivePacketCount: passiveCount > 0 ? passiveCount : nil,
+                repeaterMetrics: metrics.isEmpty ? nil : metrics
             )
         }
 

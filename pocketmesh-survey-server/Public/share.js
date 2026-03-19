@@ -19,118 +19,57 @@ function snrQualityColor(snr) {
     return '#991b1b';
 }
 
-// Hex grid math — must match iOS HexGrid.swift exactly
-const HEX_SIZE = 0.0005;
-
-function fixedReferenceLatitude(lat) {
-    return Math.round(lat / 10) * 10;
-}
-
-function cubeRound(q, r, s) {
-    let rq = Math.round(q);
-    let rr = Math.round(r);
-    const rs = Math.round(s);
-
-    const dq = Math.abs(rq - q);
-    const dr = Math.abs(rr - r);
-    const ds = Math.abs(rs - s);
-
-    if (dq > dr && dq > ds) {
-        rq = -rr - rs;
-    } else if (dr > ds) {
-        rr = -rq - rs;
-    }
-    return { q: rq, r: rr };
-}
-
-function axialFromLatLon(lat, lon, refLat) {
-    const lonScale = Math.cos(refLat * Math.PI / 180);
-    const scaledLon = lon * lonScale;
-    const q = (2 / 3 * scaledLon) / HEX_SIZE;
-    const r = (-1 / 3 * scaledLon + Math.sqrt(3) / 3 * lat) / HEX_SIZE;
-    const s = -q - r;
-    return cubeRound(q, r, s);
-}
-
-function hexCenterLatLon(axial, refLat) {
-    const lonScale = Math.cos(refLat * Math.PI / 180);
-    const scaledLon = HEX_SIZE * 3 / 2 * axial.q;
-    const latitude = HEX_SIZE * Math.sqrt(3) * (axial.r + axial.q / 2);
-    const longitude = scaledLon / lonScale;
-    return { latitude, longitude };
-}
-
-function hexVerticesFromCenter(centerLat, centerLon, refLat) {
-    const lonScale = Math.cos(refLat * Math.PI / 180);
-    const vertices = [];
-    for (let i = 0; i < 6; i++) {
-        const angle = (60 * i) * Math.PI / 180;
-        vertices.push(new mapkit.Coordinate(
-            centerLat + HEX_SIZE * Math.sin(angle),
-            centerLon + (HEX_SIZE * Math.cos(angle)) / lonScale
-        ));
-    }
-    return vertices;
-}
-
-// The 6 axial neighbor offsets for a hex grid
-const HEX_NEIGHBORS = [
-    { q: 1, r: 0 }, { q: -1, r: 0 },
-    { q: 0, r: 1 }, { q: 0, r: -1 },
-    { q: 1, r: -1 }, { q: -1, r: 1 }
-];
-
-// Render a 7-hex cluster (center + 6 neighbors) as the user's approximate area.
-// The cluster is deliberately offset to a random neighbor so the user's real
-// position is NOT at the center — they could be anywhere in the 7 cells.
-function addUserHexCluster(lat, lon, color) {
-    const refLat = fixedReferenceLatitude(lat);
-    const userAxial = axialFromLatLon(lat, lon, refLat);
-
-    // Offset: pick a deterministic but non-obvious neighbor based on coordinates.
-    // Use a simple hash of q+r to pick one of the 6 neighbors as the new center.
-    const offsetIdx = Math.abs((userAxial.q * 7 + userAxial.r * 13) % 6);
-    const offset = HEX_NEIGHBORS[offsetIdx];
-    const clusterCenter = { q: userAxial.q + offset.q, r: userAxial.r + offset.r };
-
-    // 7 cells: the offset center + its 6 neighbors
-    const cells = [clusterCenter];
-    for (const n of HEX_NEIGHBORS) {
-        cells.push({ q: clusterCenter.q + n.q, r: clusterCenter.r + n.r });
-    }
-
-    const overlays = [];
-    for (const cell of cells) {
-        const center = hexCenterLatLon(cell, refLat);
-        const vertices = hexVerticesFromCenter(center.latitude, center.longitude, refLat);
-        const polygon = new mapkit.PolygonOverlay(vertices, {
-            style: new mapkit.Style({
-                fillColor: color,
-                fillOpacity: 0.25,
-                strokeColor: color,
-                strokeOpacity: 0.6,
-                lineWidth: 1.5
-            })
-        });
-        overlays.push(polygon);
-    }
-    map.addOverlays(overlays);
-    currentMapOverlays.push(...overlays);
-
-    // Return the center coordinate of the cluster for line-drawing purposes
-    const cc = hexCenterLatLon(clusterCenter, refLat);
-    const clusterCoord = new mapkit.Coordinate(cc.latitude, cc.longitude);
-
-    // Add a visible "You" label at the cluster center so it's identifiable at any zoom
-    const youAnnotation = new mapkit.MarkerAnnotation(clusterCoord, {
-        title: 'You (approx.)',
+// Add a simple "You" marker at the user's shared location.
+// Returns the coordinate for line-drawing purposes.
+function addUserMarker(lat, lon, color) {
+    const coord = new mapkit.Coordinate(lat, lon);
+    const youAnnotation = new mapkit.MarkerAnnotation(coord, {
+        title: 'You',
         color: color,
         glyphText: '📱'
     });
     map.addAnnotation(youAnnotation);
     currentMapAnnotations.push(youAnnotation);
+    return coord;
+}
 
-    return clusterCoord;
+// Hex grid math — matches app.js and iOS client
+const HEX_SIZE = 0.0005;
+
+function hexVerticesAtCenter(centerLat, centerLon, refLat) {
+    const lonScale = Math.cos(refLat * Math.PI / 180);
+    const vertices = [];
+    for (let i = 0; i < 6; i++) {
+        const angle = (60 * i) * Math.PI / 180;
+        vertices.push(
+            new mapkit.Coordinate(
+                centerLat + HEX_SIZE * Math.sin(angle),
+                centerLon + (HEX_SIZE * Math.cos(angle)) / lonScale
+            )
+        );
+    }
+    return vertices;
+}
+
+// SNR quality from value — matches app.js
+function snrQuality(snr) {
+    if (snr === null || snr === undefined) return 'unknown';
+    if (snr > 10) return 'excellent';
+    if (snr > 5) return 'good';
+    if (snr > 0) return 'fair';
+    if (snr > -10) return 'poor';
+    return 'veryPoor';
+}
+
+function snrColor(quality) {
+    switch (quality) {
+        case 'excellent': return '#22c55e';
+        case 'good': return '#eab308';
+        case 'fair': return '#f97316';
+        case 'poor': return '#ef4444';
+        case 'veryPoor': return '#991b1b';
+        default: return '#666666';
+    }
 }
 
 let map = null;
@@ -140,6 +79,12 @@ let repeatMapData = null;     // SHARE_DATA reference
 let selectedRepeat = null;    // null = "All", 0..N-1 = specific repeat index
 let currentMapOverlays = [];  // polylines on the map
 let currentMapAnnotations = []; // annotations on the map
+
+// Cell overlay state
+let cellOverlayEnabled = true;
+let cellOverlays = [];
+let cellOverlaysByKey = {};
+let cellLoadingTimeout = null;
 
 function togglePanel() {
     document.getElementById('share-panel').classList.toggle('expanded');
@@ -184,6 +129,13 @@ function initShareMap() {
         repeatMapData = SHARE_DATA;
         renderRepeaterMap(SHARE_DATA);
     }
+
+    // Load community signal cell overlay and refresh on pan/zoom
+    map.addEventListener('region-change-end', function() {
+        clearTimeout(cellLoadingTimeout);
+        cellLoadingTimeout = setTimeout(() => { loadCellOverlay(); }, 300);
+    });
+    loadCellOverlay();
 }
 
 // MARK: - Route Rendering
@@ -568,10 +520,10 @@ function renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex) {
             ? new mapkit.Coordinate(data.userLatitude, data.userLongitude)
             : null;
 
-        // User location: render as a 7-hex cluster with "You" marker
-        let userClusterCoord = null;
+        // User location marker
+        let userMapCoord = null;
         if (userCoord) {
-            userClusterCoord = addUserHexCluster(
+            userMapCoord = addUserMarker(
                 data.userLatitude, data.userLongitude, '#3b82f6'
             );
         }
@@ -585,7 +537,24 @@ function renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex) {
 
             if (hopCoords.length === 0) return;
 
-            // Dashed outbound chain (blue)
+            // Dashed user → first hop line (outbound first leg)
+            if (userMapCoord) {
+                const firstHopLine = new mapkit.PolylineOverlay(
+                    [userMapCoord, hopCoords[0]],
+                    {
+                        style: new mapkit.Style({
+                            strokeColor: '#3b82f6',
+                            strokeOpacity: 0.6,
+                            lineWidth: 3,
+                            lineDash: [8, 4]
+                        })
+                    }
+                );
+                map.addOverlay(firstHopLine);
+                currentMapOverlays.push(firstHopLine);
+            }
+
+            // Dashed outbound chain between consecutive hops
             if (hopCoords.length >= 2) {
                 const outboundLine = new mapkit.PolylineOverlay(hopCoords, {
                     style: new mapkit.Style({
@@ -599,12 +568,12 @@ function renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex) {
                 currentMapOverlays.push(outboundLine);
             }
 
-            // Solid SNR-colored last-hop line (last repeater → cluster center)
-            if (userClusterCoord) {
+            // Solid SNR-colored last-hop line (last repeater → user)
+            if (userMapCoord) {
                 const lastHopCoord = hopCoords[hopCoords.length - 1];
                 const lastHopColor = snrQualityColor(path.snr);
                 const lastHopLine = new mapkit.PolylineOverlay(
-                    [lastHopCoord, userClusterCoord],
+                    [lastHopCoord, userMapCoord],
                     {
                         style: new mapkit.Style({
                             strokeColor: lastHopColor,
@@ -677,40 +646,60 @@ function renderMapForSingleRepeat(data, path, repeaterByHex) {
         .map(h => coordByHex[h.toUpperCase()])
         .filter(c => c != null);
 
-    // Dashed outbound chain between consecutive hops
-    if (hopCoords.length >= 2) {
-        const outboundLine = new mapkit.PolylineOverlay(hopCoords, {
-            style: new mapkit.Style({
-                strokeColor: '#3b82f6',
-                strokeOpacity: 0.8,
-                lineWidth: 3,
-                lineDash: [8, 4]
-            })
-        });
-        map.addOverlay(outboundLine);
-        currentMapOverlays.push(outboundLine);
-    }
-
     // User location
     const userCoord = (data.userLatitude != null && data.userLongitude != null)
         ? new mapkit.Coordinate(data.userLatitude, data.userLongitude)
         : null;
 
+    let userMapCoord = null;
     if (userCoord) {
-        // User location: render as a 7-hex cluster with "You" marker
-        const userClusterCoord = addUserHexCluster(
+        // User location marker
+        userMapCoord = addUserMarker(
             data.userLatitude, data.userLongitude, '#3b82f6'
         );
-        // The "You" marker annotation was already added to currentMapAnnotations
-        // by addUserHexCluster — add the last one to pathAnnotations for showItems
+        // The "You" marker was added to currentMapAnnotations by addUserMarker
+        // — include it in pathAnnotations for showItems fitting
         pathAnnotations.push(currentMapAnnotations[currentMapAnnotations.length - 1]);
+    }
 
-        // Solid SNR-colored last-hop line (to cluster center)
-        if (hopCoords.length > 0) {
+    if (hopCoords.length > 0) {
+        // Dashed user → first hop line (outbound first leg)
+        if (userMapCoord) {
+            const firstHopLine = new mapkit.PolylineOverlay(
+                [userMapCoord, hopCoords[0]],
+                {
+                    style: new mapkit.Style({
+                        strokeColor: '#3b82f6',
+                        strokeOpacity: 0.8,
+                        lineWidth: 3,
+                        lineDash: [8, 4]
+                    })
+                }
+            );
+            map.addOverlay(firstHopLine);
+            currentMapOverlays.push(firstHopLine);
+        }
+
+        // Dashed outbound chain between consecutive hops
+        if (hopCoords.length >= 2) {
+            const outboundLine = new mapkit.PolylineOverlay(hopCoords, {
+                style: new mapkit.Style({
+                    strokeColor: '#3b82f6',
+                    strokeOpacity: 0.8,
+                    lineWidth: 3,
+                    lineDash: [8, 4]
+                })
+            });
+            map.addOverlay(outboundLine);
+            currentMapOverlays.push(outboundLine);
+        }
+
+        // Solid SNR-colored last-hop line (last repeater → user)
+        if (userMapCoord) {
             const lastHopCoord = hopCoords[hopCoords.length - 1];
             const lastHopColor = snrQualityColor(path.snr);
             const lastHopLine = new mapkit.PolylineOverlay(
-                [lastHopCoord, userClusterCoord],
+                [lastHopCoord, userMapCoord],
                 {
                     style: new mapkit.Style({
                         strokeColor: lastHopColor,
@@ -729,6 +718,109 @@ function renderMapForSingleRepeat(data, path, repeaterByHex) {
     if (itemsToShow.length > 0) {
         const padding = new mapkit.Padding(60, 40, 160, 40);
         map.showItems(itemsToShow, { padding: padding, animate: true });
+    }
+}
+
+// MARK: - Cell Overlay
+
+// Load community signal cells for current viewport
+async function loadCellOverlay() {
+    if (!cellOverlayEnabled || !map) return;
+
+    const region = map.region;
+    const center = region.center;
+    const span = region.span;
+    const minLat = center.latitude - span.latitudeDelta / 2;
+    const maxLat = center.latitude + span.latitudeDelta / 2;
+    const minLon = center.longitude - span.longitudeDelta / 2;
+    const maxLon = center.longitude + span.longitudeDelta / 2;
+
+    const params = new URLSearchParams({
+        minLat: minLat,
+        maxLat: maxLat,
+        minLon: minLon,
+        maxLon: maxLon,
+        limit: 5000
+    });
+
+    try {
+        const response = await fetch(`/api/v1/cells?${params}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        renderCellOverlay(data.cells);
+    } catch (e) {
+        console.error('Failed to load cells:', e);
+    }
+}
+
+// Render cell overlay using diff-based approach (add/remove only what changed)
+function renderCellOverlay(cells) {
+    const newCellsByKey = {};
+    cells.forEach(cell => {
+        const key = `${cell.hexQ}_${cell.hexR}`;
+        newCellsByKey[key] = cell;
+    });
+
+    // Remove overlays no longer in viewport
+    const toRemove = [];
+    for (const key in cellOverlaysByKey) {
+        if (!newCellsByKey[key]) {
+            toRemove.push(cellOverlaysByKey[key]);
+            delete cellOverlaysByKey[key];
+        }
+    }
+
+    // Add new cells
+    const toAdd = [];
+    for (const key in newCellsByKey) {
+        if (!cellOverlaysByKey[key]) {
+            const cell = newCellsByKey[key];
+            const overlay = createCellOverlay(cell);
+            toAdd.push(overlay);
+            cellOverlaysByKey[key] = overlay;
+        }
+    }
+
+    if (toRemove.length > 0) map.removeOverlays(toRemove);
+    if (toAdd.length > 0) map.addOverlays(toAdd);
+
+    cellOverlays = Object.values(cellOverlaysByKey);
+}
+
+// Create a single hex polygon overlay for a cell
+function createCellOverlay(cell) {
+    const quality = cell.snrQuality || snrQuality(cell.averageSNR);
+    const color = snrColor(quality);
+    const opacity = 0.15 + 0.4 * Math.min(1, cell.contributionCount / 5);
+
+    const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
+    const style = new mapkit.Style({
+        fillColor: color,
+        fillOpacity: opacity,
+        strokeColor: color,
+        strokeOpacity: 0.4,
+        lineWidth: 0.5
+    });
+
+    return new mapkit.PolygonOverlay(vertices, {
+        style: style,
+        enabled: false,
+        visible: true
+    });
+}
+
+// Toggle cell overlay visibility
+function toggleCellOverlay() {
+    cellOverlayEnabled = !cellOverlayEnabled;
+    const btn = document.getElementById('cell-toggle');
+    if (btn) btn.classList.toggle('active', cellOverlayEnabled);
+
+    if (cellOverlayEnabled) {
+        loadCellOverlay();
+    } else {
+        if (cellOverlays.length > 0) map.removeOverlays(cellOverlays);
+        cellOverlays = [];
+        cellOverlaysByKey = {};
     }
 }
 

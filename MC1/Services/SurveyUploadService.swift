@@ -268,7 +268,8 @@ actor SurveyUploadService {
             hexR: hex.r,
             referenceLatitude: referenceLatitude,
             activePacketCount: point.isActiveProbe ? 1 : nil,
-            passivePacketCount: point.isActiveProbe ? nil : 1
+            passivePacketCount: point.isActiveProbe ? nil : 1,
+            repeaterMetrics: nil
         )
 
         // Resolve repeater info for any path nodes (using consolidated IDs)

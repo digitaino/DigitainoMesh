@@ -19,6 +19,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddActivePassiveCounts())
     app.migrations.add(AddSessionTracking())
     app.migrations.add(AddRepeaterMapPaths())
+    app.migrations.add(AddRepeaterMetrics())
     try app.autoMigrate().wait()
 
     // Register routes

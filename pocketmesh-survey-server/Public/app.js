@@ -119,12 +119,15 @@ function initMapKit() {
         isScrollEnabled: true
     });
 
-    // Load cells and repeaters when map region changes (full refresh for new viewport)
+    // Load cells and repeaters when map region changes.
+    // Uses diff-based rendering — existing overlays/annotations that are still
+    // in the new viewport are kept; only new ones are added and out-of-viewport
+    // ones removed. No full redraw needed on pan/zoom.
     map.addEventListener('region-change-end', function() {
         clearTimeout(loadingTimeout);
         loadingTimeout = setTimeout(() => {
-            loadCells(true); // force full redraw on pan/zoom
-            loadRepeaters(true);
+            loadCells();
+            loadRepeaters();
         }, 300);
     });
 
@@ -221,18 +224,10 @@ function deselectCell() {
 }
 
 // Load cells for current viewport.
-// forceFullRedraw: when true (e.g. on pan/zoom), clears overlay cache first.
-async function loadCells(forceFullRedraw) {
+// Uses diff-based rendering: fetches cells in the viewport and diffs against
+// the existing overlay cache to add/remove/update only what changed.
+async function loadCells() {
     if (!map) return;
-
-    if (forceFullRedraw) {
-        // Clear overlay cache so diff logic treats everything as new
-        if (currentOverlays.length > 0) {
-            map.removeOverlays(currentOverlays);
-        }
-        currentOverlays = [];
-        currentOverlaysByKey = {};
-    }
 
     const region = map.region;
     const center = region.center;
@@ -465,17 +460,9 @@ function createCellOverlay(cell) {
 }
 
 // Load repeaters for current viewport.
-// forceFullRedraw: when true (e.g. on pan/zoom), clears annotation cache first.
-async function loadRepeaters(forceFullRedraw) {
+// Uses diff-based rendering: only adds/removes annotations that changed.
+async function loadRepeaters() {
     if (!map) return;
-
-    if (forceFullRedraw) {
-        if (currentRepeaterAnnotations.length > 0) {
-            map.removeAnnotations(currentRepeaterAnnotations);
-        }
-        currentRepeaterAnnotations = [];
-        currentRepeatersByHex = {};
-    }
 
     const region = map.region;
     const center = region.center;
@@ -557,17 +544,51 @@ let popupElement = null;
 function showCellPopup(cell) {
     dismissPopup();
 
-    const quality = cell.snrQuality || snrQuality(cell.averageSNR);
+    // When a repeater filter is active, try to show per-repeater metrics
+    let displaySNR = cell.averageSNR;
+    let displayPackets = cell.packetCount;
+    let headerSuffix = '';
+    let repeaterMetricFound = false;
+    let noRepeaterData = false;
+
+    if (repeaterFilter) {
+        const rf = repeaterFilter.toUpperCase();
+        const filterName = repeaterNames[repeaterFilter] || Object.entries(repeaterNames).find(([k, _]) => {
+            const uk = k.toUpperCase();
+            return uk.startsWith(rf) || rf.startsWith(uk);
+        })?.[1] || repeaterFilter;
+
+        if (cell.repeaterMetrics && cell.repeaterMetrics.length > 0) {
+            const match = cell.repeaterMetrics.find(m => {
+                const mh = m.hexID.toUpperCase();
+                return mh === rf || mh.startsWith(rf) || rf.startsWith(mh);
+            });
+            if (match) {
+                displaySNR = match.averageSNR;
+                displayPackets = match.packetCount;
+                headerSuffix = ` · via ${filterName}`;
+                repeaterMetricFound = true;
+            } else {
+                noRepeaterData = true;
+                headerSuffix = ` · via ${filterName}`;
+            }
+        } else {
+            noRepeaterData = true;
+            headerSuffix = ` · via ${filterName}`;
+        }
+    }
+
+    const quality = noRepeaterData ? 'unknown' : snrQuality(displaySNR);
     const color = snrColor(quality);
     const level = qualityLevel(quality);
-    const snrText = cell.averageSNR !== null && cell.averageSNR !== undefined
-        ? cell.averageSNR.toFixed(1) + ' dB'
-        : 'N/A';
+    const snrText = noRepeaterData
+        ? 'No data'
+        : (displaySNR !== null && displaySNR !== undefined ? displaySNR.toFixed(1) + ' dB' : 'N/A');
 
     // Signal quality bars HTML
     let barsHTML = '<div class="signal-bar">';
     for (let i = 1; i <= 5; i++) {
-        const filled = i <= level;
+        const filled = !noRepeaterData && i <= level;
         const barColor = filled ? color : 'rgba(255,255,255,0.1)';
         barsHTML += `<div class="signal-segment" style="background:${barColor};height:${8 + i * 4}px;"></div>`;
     }
@@ -587,19 +608,29 @@ function showCellPopup(cell) {
         `;
     }
 
-    // Active/passive breakdown
+    // Active/passive breakdown (only shown when not in per-repeater view)
     let modeHTML = '';
-    const hasActive = cell.activePacketCount && cell.activePacketCount > 0;
-    const hasPassive = cell.passivePacketCount && cell.passivePacketCount > 0;
-    if (hasActive || hasPassive) {
-        modeHTML = '<div class="detail-row">';
-        if (hasActive) {
-            modeHTML += `<span class="mode-tag mode-active">Active: ${cell.activePacketCount}</span>`;
+    if (!repeaterFilter) {
+        const hasActive = cell.activePacketCount && cell.activePacketCount > 0;
+        const hasPassive = cell.passivePacketCount && cell.passivePacketCount > 0;
+        if (hasActive || hasPassive) {
+            modeHTML = '<div class="detail-row">';
+            if (hasActive) {
+                modeHTML += `<span class="mode-tag mode-active">Active: ${cell.activePacketCount}</span>`;
+            }
+            if (hasPassive) {
+                modeHTML += `<span class="mode-tag mode-passive">Passive: ${cell.passivePacketCount}</span>`;
+            }
+            modeHTML += '</div>';
         }
-        if (hasPassive) {
-            modeHTML += `<span class="mode-tag mode-passive">Passive: ${cell.passivePacketCount}</span>`;
-        }
-        modeHTML += '</div>';
+    }
+
+    // Packets display: per-repeater count when available, cell total as fallback
+    let packetsHTML;
+    if (noRepeaterData) {
+        packetsHTML = `<span class="detail-value">${cell.packetCount.toLocaleString()} <span style="color:#666;font-size:10px">(cell total)</span></span>`;
+    } else {
+        packetsHTML = `<span class="detail-value">${displayPackets.toLocaleString()}</span>`;
     }
 
     popupElement = document.createElement('div');
@@ -607,7 +638,7 @@ function showCellPopup(cell) {
     popupElement.innerHTML = `
         <div class="cell-popup">
             <div class="popup-header">
-                <h3 style="color: ${color}">Signal: ${quality}</h3>
+                <h3 style="color: ${color}">Signal: ${quality}${headerSuffix}</h3>
                 <button class="popup-close" onclick="event.stopPropagation(); deselectCell();">&times;</button>
             </div>
             ${barsHTML}
@@ -617,7 +648,7 @@ function showCellPopup(cell) {
             </div>
             <div class="detail-row">
                 <span class="detail-label">Packets</span>
-                <span class="detail-value">${cell.packetCount.toLocaleString()}</span>
+                ${packetsHTML}
             </div>
             ${modeHTML}
             <div class="detail-row">
