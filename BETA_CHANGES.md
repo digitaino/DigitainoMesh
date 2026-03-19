@@ -1,4 +1,68 @@
-# Beta Changes — v0.10.1 (Build 7)
+# Beta Changes — v0.10.1 (Build 8)
+
+## Shared Repeater Maps — Full Web Experience
+
+- **Repeat-by-repeat navigation on web** — Shared repeater map pages (`mesh.digitaino.com/m/...`) now have left/right navigation arrows matching the iOS "Repeat Coverage" screen. Cycle through individual repeats to see each path's hop chain, SNR, and route lines on the map. The "All" view shows aggregated repeaters with overall hop numbers.
+
+- **Path lines on web maps** — Shared repeater maps now draw dashed outbound lines between hops and solid SNR-colored last-hop lines matching the iOS map rendering. Hop numbers are shown on pins and in the panel list.
+
+- **"You" marker on web maps** — Both shared route and repeater map pages show your approximate location as a "You (approx.)" marker when location was included in the share, with connecting lines to the first/last hops.
+
+- **Community signal overlay on web shares** — Both shared route and repeater map pages now have a toggleable community signal cell overlay (📶 button), showing crowd-sourced coverage data alongside your shared data.
+
+- **Standalone share messages** — Shared repeater maps now compose a standalone message like "📡 4 repeats via 0C, C0, 80, 78" with the URL, instead of replying to yourself.
+
+## Location Privacy for Sharing
+
+- **Location picker for route sharing** — Route sharing now prompts you with an interactive location picker (same as repeater map sharing) where you can adjust your shared position within a 500m circle of your true location, or toggle location off entirely.
+
+- **Simplified location options** — The location picker now offers two clear choices: include an approximate location (snapped to ~500m) or omit location entirely.
+
+## Per-Repeater Signal Metrics
+
+- **Per-repeater SNR/RSSI in cell detail** — When filtering the community map by a specific repeater, the cell detail popup now shows that repeater's individual signal metrics (SNR, RSSI, packet count) instead of the cell's aggregate. This lets you compare signal quality between repeaters in the same cell.
+
+- **Per-repeater data in uploads** — Survey uploads now include per-repeater weighted-average SNR/RSSI/packet counts (format v1.2), enabling finer-grained analysis on the server.
+
+## Repeater Resolver Improvements
+
+- **Recency-first resolver** — With 1-byte path hashes (256 values), collisions are common. The resolver now prioritizes recently-heard repeaters over geographically closer ones, fixing cases where a months-old stale contact would incorrectly match a hash.
+
+- **Multi-byte hash support** — Hex ID consolidation now keeps the longest form (e.g. "8850" instead of "88") for better repeater specificity as multi-byte path hashes roll out.
+
+## Community Web Map
+
+- **Viewport-scoped repeater filter** — The repeater filter dropdown on the web community map now only lists repeaters whose physical locations are within the current map viewport. Zooming in narrows the list; zooming out expands it.
+
+- **SSE real-time updates** — The web community map now receives push updates via server-sent events when new survey data is uploaded, instead of polling every 15 seconds. Cell updates are diff-based, preserving your selected cell popup across refreshes.
+
+## Server Security & Operations
+
+- **API key rotation** — Server now reads the API key from environment variables instead of hardcode. Supports dual-key acceptance (`SURVEY_API_KEY` + `SURVEY_API_KEY_OLD`) for zero-downtime key rotation.
+
+- **Rate limiting** — Per-IP rate limiting added: 60 requests/minute for public endpoints, 10/minute for write endpoints (uploads, share creation).
+
+- **Access logging** — Apache Combined Log Format access and error logging for all requests.
+
+- **XSS protection** — HTML escaping and script-tag sanitization on shared route/map pages.
+
+- **Database backups** — New deploy script automatically backs up the SQLite database before every rebuild, keeping the 10 most recent backups.
+
+- **iOS API key in xcconfig** — API key moved from hardcoded Swift string to a gitignored `Secrets.xcconfig` file, read at runtime via Info.plist.
+
+## Bug Fixes
+
+- **Mesh Reach redesign** — Now shows max hop depth (1=direct, 2=one relay, etc.) instead of raw trace packet count.
+
+- **Active filter fix** — Active probing filter now only counts `.control` packets (bidirectional discover responses) instead of including one-way `.trace` floods.
+
+- **Follow-cell camera offset** — When tracking your location during a survey, the map center shifts slightly north so the current cell appears above the detail card instead of being hidden behind it.
+
+---
+
+# Previous Builds
+
+## Build 7 (v0.10.1)
 
 ## Share Heard Repeaters
 
