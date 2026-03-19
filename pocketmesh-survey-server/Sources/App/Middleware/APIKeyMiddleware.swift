@@ -16,7 +16,6 @@ struct APIKeyMiddleware: AsyncMiddleware {
         // Accept current key or legacy key (for zero-downtime rotation)
         let legacyKey = Environment.get("SURVEY_API_KEY_OLD")
         guard providedKey == expectedKey || (legacyKey != nil && providedKey == legacyKey) else {
-            request.logger.warning("API key mismatch — expected[\(expectedKey.prefix(8))...] len=\(expectedKey.count), got[\(providedKey.prefix(8))...] len=\(providedKey.count)")
             throw Abort(.unauthorized, reason: "Invalid or missing API key")
         }
 

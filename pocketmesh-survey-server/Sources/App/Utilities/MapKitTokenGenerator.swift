@@ -60,8 +60,10 @@ enum MapKitTokenGenerator {
 
     /// Parse the PEM-encoded P-256 private key.
     private static func parsePrivateKey(pem: String) throws -> P256.Signing.PrivateKey {
-        // Strip PEM headers and whitespace to get raw base64
+        // Strip PEM headers and whitespace to get raw base64.
+        // env_file passes literal "\n" (two chars), so replace those too.
         let stripped = pem
+            .replacingOccurrences(of: "\\n", with: "\n")
             .replacingOccurrences(of: "-----BEGIN PRIVATE KEY-----", with: "")
             .replacingOccurrences(of: "-----END PRIVATE KEY-----", with: "")
             .replacingOccurrences(of: "\n", with: "")
