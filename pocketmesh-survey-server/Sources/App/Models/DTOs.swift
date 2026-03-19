@@ -50,6 +50,8 @@ struct RepeaterMetricData: Content {
     let averageSNR: Double?
     let averageRSSI: Double?
     let packetCount: Int
+    /// ISO 8601 timestamp of the most recent packet from this repeater in this cell.
+    let lastHeard: String?
 }
 
 struct RouteBreakdown: Content {
@@ -147,6 +149,10 @@ struct CreateSharedRouteRequest: Content {
     let hopCount: Int
     let distanceText: String?
     let hops: [SharedRouteHop]
+    /// User latitude at time of share (for drawing user→first-hop lines)
+    let userLatitude: Double?
+    /// User longitude at time of share
+    let userLongitude: Double?
 }
 
 struct CreateSharedRouteResponse: Content {
@@ -159,6 +165,8 @@ struct SharedRouteResponse: Content {
     let hopCount: Int
     let distanceText: String?
     let hops: [SharedRouteHop]
+    let userLatitude: Double?
+    let userLongitude: Double?
     let createdAt: String
 }
 

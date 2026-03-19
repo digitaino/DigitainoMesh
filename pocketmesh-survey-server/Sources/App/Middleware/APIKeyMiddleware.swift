@@ -1,6 +1,7 @@
 import Vapor
 
 /// Validates the X-API-Key header against the SURVEY_API_KEY environment variable.
+/// Also accepts SURVEY_API_KEY_OLD for zero-downtime key rotation.
 struct APIKeyMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard let expectedKey = Environment.get("SURVEY_API_KEY") else {
@@ -8,8 +9,13 @@ struct APIKeyMiddleware: AsyncMiddleware {
             throw Abort(.internalServerError, reason: "Server misconfigured")
         }
 
-        guard let providedKey = request.headers.first(name: "X-API-Key"),
-              providedKey == expectedKey else {
+        guard let providedKey = request.headers.first(name: "X-API-Key") else {
+            throw Abort(.unauthorized, reason: "Invalid or missing API key")
+        }
+
+        // Accept current key or legacy key (for zero-downtime rotation)
+        let legacyKey = Environment.get("SURVEY_API_KEY_OLD")
+        guard providedKey == expectedKey || (legacyKey != nil && providedKey == legacyKey) else {
             throw Abort(.unauthorized, reason: "Invalid or missing API key")
         }
 

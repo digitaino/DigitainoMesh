@@ -76,6 +76,8 @@ enum SurveyExportService {
         let averageSNR: Double?
         let averageRSSI: Double?
         let packetCount: Int
+        /// ISO 8601 timestamp of the most recent packet from this repeater in this cell.
+        let lastHeard: String?
     }
 
     struct RouteBreakdown: Codable {
@@ -97,6 +99,8 @@ enum SurveyExportService {
         cellPoints: [SignalSurveyPointDTO],
         consolidatedRepeaters: [String]
     ) -> [RepeaterMetric] {
+        let isoFormatter = ISO8601DateFormatter()
+
         // Build a lookup of all points associated with each raw hex ID
         var pointsByRawHex: [String: [SignalSurveyPointDTO]] = [:]
         for point in cellPoints {
@@ -113,11 +117,13 @@ enum SurveyExportService {
 
             let snrs = matchingPoints.compactMap(\.snr)
             let rssis = matchingPoints.compactMap(\.rssi)
+            let latestTimestamp = matchingPoints.map(\.timestamp).max()
             return RepeaterMetric(
                 hexID: repeaterHex,
                 averageSNR: snrs.isEmpty ? nil : snrs.reduce(0, +) / Double(snrs.count),
                 averageRSSI: rssis.isEmpty ? nil : Double(rssis.reduce(0, +)) / Double(rssis.count),
-                packetCount: matchingPoints.count
+                packetCount: matchingPoints.count,
+                lastHeard: latestTimestamp.map { isoFormatter.string(from: $0) }
             )
         }
     }

@@ -94,3 +94,6 @@ __pycache__
 
 # idea
 .idea/
+
+# Secrets (API keys, credentials)
+Secrets.xcconfig

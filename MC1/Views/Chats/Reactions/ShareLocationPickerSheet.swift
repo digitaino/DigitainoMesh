@@ -5,14 +5,17 @@ import CoreLocation
 /// Map-based location picker for choosing an obfuscated share location.
 ///
 /// Presents a map centered on the user's true position with a 500m radius circle.
-/// The user taps anywhere within the circle to place a pin — taps outside are
-/// clamped to the circle boundary. The chosen coordinate (not the true one)
+/// A pin is fixed at the screen center — the user pans the map underneath it to
+/// choose their shared position. The chosen coordinate (clamped to the 500m circle)
 /// is sent to the server when sharing.
 struct ShareLocationPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     /// The true location — center of the 500m circle. Never sent to the server.
     let trueLocation: CLLocationCoordinate2D
+
+    /// Label for the share button (e.g., "Share Repeater Map" or "Share Route").
+    let shareLabel: String
 
     /// Called when the user taps Share. Receives the chosen coordinate,
     /// or nil if they toggled "Include Location" off.
@@ -22,15 +25,16 @@ struct ShareLocationPickerSheet: View {
     @State private var position: MapCameraPosition
     @State private var selectedCoordinate: CLLocationCoordinate2D
     @State private var includeLocation = true
-    @State private var pinMoveTrigger = false
 
     private static let maxRadiusMeters: CLLocationDistance = 500
 
     init(
         trueLocation: CLLocationCoordinate2D,
+        shareLabel: String = "Share Repeater Map",
         onConfirm: @escaping (CLLocationCoordinate2D?) -> Void
     ) {
         self.trueLocation = trueLocation
+        self.shareLabel = shareLabel
         self.onConfirm = onConfirm
         _selectedCoordinate = State(initialValue: trueLocation)
         // Show enough area to see the full circle with padding
@@ -44,29 +48,22 @@ struct ShareLocationPickerSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                MapReader { proxy in
-                    Map(position: $position, interactionModes: [.pan, .zoom]) {
-                        // 500m boundary circle
-                        MapCircle(center: trueLocation, radius: Self.maxRadiusMeters)
-                            .foregroundStyle(.blue.opacity(0.08))
-                            .stroke(.blue.opacity(0.4), lineWidth: 2)
+                Map(position: $position, interactionModes: [.pan, .zoom]) {
+                    // 500m boundary circle
+                    MapCircle(center: trueLocation, radius: Self.maxRadiusMeters)
+                        .foregroundStyle(.blue.opacity(0.08))
+                        .stroke(.blue.opacity(0.4), lineWidth: 2)
+                }
+                .onMapCameraChange(frequency: .continuous) { context in
+                    selectedCoordinate = clampToRadius(context.camera.centerCoordinate)
+                }
+                .mapControls {
+                    MapCompass()
+                }
 
-                        // Selected pin
-                        if includeLocation {
-                            Annotation("", coordinate: selectedCoordinate) {
-                                pinView
-                            }
-                        }
-                    }
-                    .onTapGesture { screenPoint in
-                        guard includeLocation,
-                              let tapped = proxy.convert(screenPoint, from: .local) else { return }
-                        selectedCoordinate = clampToRadius(tapped)
-                        pinMoveTrigger.toggle()
-                    }
-                    .mapControls {
-                        MapCompass()
-                    }
+                // Fixed center pin overlay (doesn't move with the map)
+                if includeLocation {
+                    pinView
                 }
 
                 // Bottom controls
@@ -82,7 +79,6 @@ struct ShareLocationPickerSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .sensoryFeedback(.impact(flexibility: .soft), trigger: pinMoveTrigger)
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -117,7 +113,7 @@ struct ShareLocationPickerSheet: View {
             VStack(spacing: 16) {
                 Toggle("Include Location", isOn: $includeLocation)
 
-                Text("Tap the map to move your shared position within the blue circle. Your actual location is never shared.")
+                Text("Pan the map to adjust your shared position within the blue circle. Your actual location is never shared.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -145,7 +141,7 @@ struct ShareLocationPickerSheet: View {
             Button {
                 confirmAndDismiss()
             } label: {
-                Label("Share Repeater Map", systemImage: "square.and.arrow.up")
+                Label(shareLabel, systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
@@ -153,7 +149,7 @@ struct ShareLocationPickerSheet: View {
             Button {
                 confirmAndDismiss()
             } label: {
-                Label("Share Repeater Map", systemImage: "square.and.arrow.up")
+                Label(shareLabel, systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)

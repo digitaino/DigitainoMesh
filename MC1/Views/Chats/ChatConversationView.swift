@@ -38,6 +38,11 @@ struct ChatConversationView: View {
     @State private var imageViewerData: ImageViewerData?
     @State private var contactDetailContact: ContactDTO?
 
+    // Route location picker state
+    @State private var showingRouteLocationPicker = false
+    @State private var pendingRouteMessage: MessageDTO?
+    @State private var pendingRouteInfo: String?
+
     // MARK: - Other State
 
     @State private var recentEmojisStore = RecentEmojisStore()
@@ -170,6 +175,23 @@ struct ChatConversationView: View {
         .sheet(item: $contactDetailContact) { contact in
             NavigationStack {
                 ContactDetailView(contact: contact)
+            }
+        }
+        .sheet(isPresented: $showingRouteLocationPicker) {
+            if let trueCoord = routePickerTrueLocation {
+                ShareLocationPickerSheet(trueLocation: trueCoord, shareLabel: "Share Route") { chosenCoordinate in
+                    guard let message = pendingRouteMessage, let routeInfo = pendingRouteInfo else { return }
+                    Task {
+                        guard let url = await uploadRouteToServer(message: message, routeInfo: routeInfo, chosenCoordinate: chosenCoordinate) else { return }
+                        await MainActor.run {
+                            if chatViewModel.composingText.contains(routeInfo) {
+                                chatViewModel.composingText += "\(url.absoluteString)\n"
+                            }
+                        }
+                    }
+                    pendingRouteMessage = nil
+                    pendingRouteInfo = nil
+                }
             }
         }
         .onAppear {
@@ -637,13 +659,21 @@ struct ChatConversationView: View {
             chatViewModel.composingText = replyText
             isInputFocused = true
 
-            // Upload route to server in background; append share URL if successful
-            Task {
-                guard let url = await uploadRouteToServer(message: message, routeInfo: routeInfo) else { return }
-                await MainActor.run {
-                    // Only append if the user hasn't changed the composing text
-                    if chatViewModel.composingText.contains(routeInfo) {
-                        chatViewModel.composingText += "\(url.absoluteString)\n"
+            // Show location picker before uploading (same privacy system as repeater maps)
+            let hasLocation = (message.userLatitude != nil && message.userLongitude != nil)
+                || appState.locationService.currentLocation != nil
+            if hasLocation {
+                pendingRouteMessage = message
+                pendingRouteInfo = routeInfo
+                showingRouteLocationPicker = true
+            } else {
+                // No location available — upload without user location
+                Task {
+                    guard let url = await uploadRouteToServer(message: message, routeInfo: routeInfo, chosenCoordinate: nil) else { return }
+                    await MainActor.run {
+                        if chatViewModel.composingText.contains(routeInfo) {
+                            chatViewModel.composingText += "\(url.absoluteString)\n"
+                        }
                     }
                 }
             }
@@ -667,9 +697,19 @@ struct ChatConversationView: View {
         return MentionUtilities.buildReplyText(mentionName: mentionName, messageText: message.text)
     }
 
+    /// The true location for the route share location picker.
+    /// Prefers the location recorded on the pending message; falls back to current GPS.
+    private var routePickerTrueLocation: CLLocationCoordinate2D? {
+        if let msg = pendingRouteMessage,
+           let lat = msg.userLatitude, let lon = msg.userLongitude {
+            return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        }
+        return appState.locationService.currentLocation?.coordinate
+    }
+
     /// Resolve hop data from a message and upload to the server.
     /// Returns the share URL on success, nil on failure or no internet.
-    private func uploadRouteToServer(message: MessageDTO, routeInfo: String) async -> URL? {
+    private func uploadRouteToServer(message: MessageDTO, routeInfo: String, chosenCoordinate: CLLocationCoordinate2D?) async -> URL? {
         guard let pathNodes = message.pathNodes, !pathNodes.isEmpty else { return nil }
 
         let hashSize = message.pathHashSize
@@ -746,7 +786,13 @@ struct ChatConversationView: View {
             : nil
 
         let service = RouteShareService()
-        return await service.shareRoute(hopCount: hopCount, distanceText: distanceText, hops: hops)
+        return await service.shareRoute(
+            hopCount: hopCount,
+            distanceText: distanceText,
+            hops: hops,
+            userLatitude: chosenCoordinate?.latitude,
+            userLongitude: chosenCoordinate?.longitude
+        )
     }
 
     private func retryMessage(_ message: MessageDTO) {

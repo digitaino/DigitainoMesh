@@ -23,17 +23,27 @@ final class SharedRoute: Model, Content, @unchecked Sendable {
     @Field(key: "hops_json")
     var hopsJSON: String
 
+    /// User latitude at time of share (for drawing user→first-hop lines)
+    @OptionalField(key: "user_latitude")
+    var userLatitude: Double?
+
+    /// User longitude at time of share
+    @OptionalField(key: "user_longitude")
+    var userLongitude: Double?
+
     /// ISO 8601 timestamp of creation
     @Field(key: "created_at")
     var createdAt: String
 
     init() {}
 
-    init(id: String, hopCount: Int, distanceText: String?, hopsJSON: String, createdAt: String) {
+    init(id: String, hopCount: Int, distanceText: String?, hopsJSON: String, userLatitude: Double? = nil, userLongitude: Double? = nil, createdAt: String) {
         self.id = id
         self.hopCount = hopCount
         self.distanceText = distanceText
         self.hopsJSON = hopsJSON
+        self.userLatitude = userLatitude
+        self.userLongitude = userLongitude
         self.createdAt = createdAt
     }
 }

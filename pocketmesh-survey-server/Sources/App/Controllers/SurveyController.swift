@@ -84,6 +84,17 @@ struct SurveyController {
             }
             existing.packetCount = totalCount
         }
+
+        // Keep the most recent lastHeard timestamp
+        if let newLastHeard = upload.lastHeard {
+            if let existingLastHeard = existing.lastHeard {
+                if newLastHeard > existingLastHeard {
+                    existing.lastHeard = newLastHeard
+                }
+            } else {
+                existing.lastHeard = newLastHeard
+            }
+        }
     }
 
     // MARK: - Session Deduplication
@@ -269,7 +280,8 @@ struct SurveyController {
                                 repeaterHexID: normalized,
                                 averageSNR: metric?.averageSNR,
                                 averageRSSI: metric?.averageRSSI,
-                                packetCount: metric?.packetCount
+                                packetCount: metric?.packetCount,
+                                lastHeard: metric?.lastHeard
                             )
                             try await repeater.save(on: req.db)
                         }
@@ -333,7 +345,8 @@ struct SurveyController {
                             repeaterHexID: hexID,
                             averageSNR: metric?.averageSNR,
                             averageRSSI: metric?.averageRSSI,
-                            packetCount: metric?.packetCount
+                            packetCount: metric?.packetCount,
+                            lastHeard: metric?.lastHeard
                         )
                         try await repeater.save(on: req.db)
                     }
@@ -473,7 +486,8 @@ struct SurveyController {
                         hexID: r.repeaterHexID,
                         averageSNR: r.averageSNR,
                         averageRSSI: r.averageRSSI,
-                        packetCount: r.packetCount ?? 0
+                        packetCount: r.packetCount ?? 0,
+                        lastHeard: r.lastHeard
                     )
                 }
             }()

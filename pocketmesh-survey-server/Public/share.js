@@ -185,6 +185,20 @@ function renderRoute(data) {
             </div>
         `;
     });
+
+    // Add "You" at the end if user location is available
+    if (data.userLatitude != null && data.userLongitude != null) {
+        hopHTML += '<div class="hop-connector"><div class="line"></div></div>';
+        hopHTML += `
+            <div class="hop-item">
+                <div class="hop-index" style="background: rgba(59,130,246,0.2); color: #3b82f6">📱</div>
+                <div class="hop-details">
+                    <div class="hop-name">You</div>
+                    <div class="hop-hex">receiver</div>
+                </div>
+            </div>
+        `;
+    }
     hopListEl.innerHTML = hopHTML;
 
     // Map: add annotations and polyline for located hops
@@ -207,6 +221,42 @@ function renderRoute(data) {
         });
     });
     map.addAnnotations(annotations);
+    const allAnnotations = [...annotations];
+
+    // User location marker and lines
+    const hasUserLoc = data.userLatitude != null && data.userLongitude != null;
+    if (hasUserLoc) {
+        const userCoord = addUserMarker(data.userLatitude, data.userLongitude, '#3b82f6');
+        allAnnotations.push(currentMapAnnotations[currentMapAnnotations.length - 1]);
+
+        // Dashed line: user → first located hop
+        const firstHopLine = new mapkit.PolylineOverlay(
+            [userCoord, new mapkit.Coordinate(locatedHops[0].latitude, locatedHops[0].longitude)],
+            {
+                style: new mapkit.Style({
+                    strokeColor: '#3b82f6',
+                    strokeOpacity: 0.6,
+                    lineWidth: 3,
+                    lineDash: [8, 4]
+                })
+            }
+        );
+        map.addOverlay(firstHopLine);
+
+        // Solid line: last located hop → user
+        const lastHop = locatedHops[locatedHops.length - 1];
+        const lastHopLine = new mapkit.PolylineOverlay(
+            [new mapkit.Coordinate(lastHop.latitude, lastHop.longitude), userCoord],
+            {
+                style: new mapkit.Style({
+                    strokeColor: '#22d3ee',
+                    strokeOpacity: 0.9,
+                    lineWidth: 4
+                })
+            }
+        );
+        map.addOverlay(lastHopLine);
+    }
 
     // Polyline between located hops (in order of appearance in the route)
     if (locatedHops.length >= 2) {
@@ -222,9 +272,9 @@ function renderRoute(data) {
         map.addOverlay(polyline);
     }
 
-    // Fit map to show all points
+    // Fit map to show all points (including user marker if present)
     const padding = new mapkit.Padding(60, 40, 100, 40);
-    map.showItems(annotations, { padding: padding, animate: true });
+    map.showItems(allAnnotations, { padding: padding, animate: true });
 }
 
 // MARK: - Repeater Map Rendering

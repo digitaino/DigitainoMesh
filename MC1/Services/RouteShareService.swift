@@ -29,6 +29,8 @@ actor RouteShareService {
         let hopCount: Int
         let distanceText: String?
         let hops: [RouteHop]
+        let userLatitude: Double?
+        let userLongitude: Double?
     }
 
     private struct CreateRouteResponse: Codable {
@@ -70,12 +72,16 @@ actor RouteShareService {
     func shareRoute(
         hopCount: Int,
         distanceText: String?,
-        hops: [RouteHop]
+        hops: [RouteHop],
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil
     ) async -> URL? {
         let payload = CreateRouteRequest(
             hopCount: hopCount,
             distanceText: distanceText,
-            hops: hops
+            hops: hops,
+            userLatitude: userLatitude,
+            userLongitude: userLongitude
         )
 
         do {

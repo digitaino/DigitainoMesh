@@ -36,6 +36,23 @@ function qualityLevel(quality) {
     }
 }
 
+// Format a Date as relative time ago (e.g. "3h ago", "2d ago")
+function formatTimeAgo(date) {
+    const now = Date.now();
+    const diff = now - date.getTime();
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo ago`;
+    return `${Math.floor(months / 12)}y ago`;
+}
+
 // Hex grid math — renders hex polygon centered on actual GPS coordinates
 const HEX_SIZE = 0.0005;
 
@@ -90,6 +107,7 @@ let currentRepeatersByHex = {}; // hexID -> annotation, for diff-based updates
 let loadingTimeout = null;
 let lastCellData = [];
 let repeaterNames = {}; // hexID -> name mapping from repeater annotations
+let viewportRepeaterHexIDs = new Set(); // hex IDs of repeaters with locations in the current viewport
 let eventSource = null; // SSE connection
 
 // MapKit JS initialization callback
@@ -284,12 +302,14 @@ function applyRepeaterFilter(hexID) {
     renderCells(lastCellData);
 }
 
-// Update the repeater dropdown with available repeaters from cell data
+// Update the repeater dropdown with repeaters that are both referenced in
+// viewport cells AND have their physical location within the current viewport.
+// This ensures zooming in narrows the list to only locally relevant repeaters.
 function updateRepeaterDropdown(cells) {
     const select = document.getElementById('repeater-select');
     if (!select) return;
 
-    // Collect all unique repeater hex IDs and consolidate prefixes
+    // Collect all unique repeater hex IDs from cells and consolidate prefixes
     const allIDs = [];
     cells.forEach(c => {
         if (c.repeaterHexIDs) {
@@ -297,7 +317,19 @@ function updateRepeaterDropdown(cells) {
         }
     });
 
-    const repeaters = consolidateHexIDs(allIDs).sort();
+    let repeaters = consolidateHexIDs(allIDs).sort();
+
+    // Filter to only repeaters whose physical location is in the current viewport
+    // (prefix-aware: cell hex "0C13" matches viewport repeater "0C" and vice versa)
+    if (viewportRepeaterHexIDs.size > 0) {
+        repeaters = repeaters.filter(hexID => {
+            const uh = hexID.toUpperCase();
+            for (const vh of viewportRepeaterHexIDs) {
+                if (uh === vh || uh.startsWith(vh) || vh.startsWith(uh)) return true;
+            }
+            return false;
+        });
+    }
 
     // Preserve current selection
     const current = select.value;
@@ -318,6 +350,16 @@ function updateRepeaterDropdown(cells) {
         }
         select.appendChild(option);
     });
+
+    // If the active filter is no longer in the dropdown, clear it
+    if (current && select.value !== current) {
+        const stillPresent = repeaters.some(id => {
+            return id === current || (id.toUpperCase().startsWith(current.toUpperCase()));
+        });
+        if (!stillPresent && repeaterFilter) {
+            applyRepeaterFilter(null);
+        }
+    }
 
     // Update count label
     const countLabel = document.getElementById('repeater-count');
@@ -485,12 +527,15 @@ async function loadRepeaters() {
         const data = await response.json();
         renderRepeaters(data.repeaters);
 
-        // Build name lookup for repeater dropdown
+        // Rebuild name lookup and viewport set from current viewport repeaters
+        repeaterNames = {};
+        viewportRepeaterHexIDs = new Set();
         data.repeaters.forEach(r => {
             repeaterNames[r.hexID] = r.name;
+            viewportRepeaterHexIDs.add(r.hexID.toUpperCase());
         });
 
-        // Refresh dropdown labels with names
+        // Refresh dropdown with viewport-scoped repeaters
         updateRepeaterDropdown(lastCellData);
     } catch (e) {
         console.error('Failed to load repeaters:', e);
@@ -547,6 +592,7 @@ function showCellPopup(cell) {
     // When a repeater filter is active, try to show per-repeater metrics
     let displaySNR = cell.averageSNR;
     let displayPackets = cell.packetCount;
+    let displayLastHeard = null;
     let headerSuffix = '';
     let repeaterMetricFound = false;
     let noRepeaterData = false;
@@ -566,6 +612,7 @@ function showCellPopup(cell) {
             if (match) {
                 displaySNR = match.averageSNR;
                 displayPackets = match.packetCount;
+                displayLastHeard = match.lastHeard;
                 headerSuffix = ` · via ${filterName}`;
                 repeaterMetricFound = true;
             } else {
@@ -633,6 +680,26 @@ function showCellPopup(cell) {
         packetsHTML = `<span class="detail-value">${displayPackets.toLocaleString()}</span>`;
     }
 
+    // Surveyed timestamp row (only when repeater filter is active)
+    let surveyedHTML = '';
+    if (repeaterMetricFound && displayLastHeard) {
+        const date = new Date(displayLastHeard);
+        const timeAgo = formatTimeAgo(date);
+        surveyedHTML = `
+            <div class="detail-row">
+                <span class="detail-label">Surveyed</span>
+                <span class="detail-value">${timeAgo}</span>
+            </div>
+        `;
+    } else if (noRepeaterData) {
+        surveyedHTML = `
+            <div class="detail-row">
+                <span class="detail-label">Surveyed</span>
+                <span class="detail-value" style="color:#666">No data</span>
+            </div>
+        `;
+    }
+
     popupElement = document.createElement('div');
     popupElement.className = 'cell-popup-overlay';
     popupElement.innerHTML = `
@@ -650,6 +717,7 @@ function showCellPopup(cell) {
                 <span class="detail-label">Packets</span>
                 ${packetsHTML}
             </div>
+            ${surveyedHTML}
             ${modeHTML}
             <div class="detail-row">
                 <span class="detail-label">Contributions</span>

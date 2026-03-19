@@ -3,9 +3,9 @@ services:
   survey-server:
     build: .
     ports:
-      - "8420:8080"
-    environment:
-      - SURVEY_API_KEY=c94393f688d61a3c1193153f5bbe860ee57ca066a256bb812529ee199448ba83
+      - "127.0.0.1:8420:8080"
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
     restart: unless-stopped

@@ -41,7 +41,12 @@ actor SurveyUploadService {
     // MARK: - Configuration
 
     static let serverBaseURL = URL(string: "https://mesh.digitaino.com/api/v1")!
-    static let apiKey = "c94393f688d61a3c1193153f5bbe860ee57ca066a256bb812529ee199448ba83"
+    static let apiKey: String = {
+        guard let key = Bundle.main.infoDictionary?["SurveyAPIKey"] as? String, !key.isEmpty else {
+            fatalError("SurveyAPIKey not found in Info.plist — check Secrets.xcconfig")
+        }
+        return key
+    }()
 
     private static let maxRetries = 3
     private static let baseRetryDelay: Duration = .milliseconds(500)

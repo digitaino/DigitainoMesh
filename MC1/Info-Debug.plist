@@ -31,6 +31,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>SurveyAPIKey</key>
+	<string>$(SURVEY_API_KEY)</string>
 	<key>NSAccessorySetupBluetoothNames</key>
 	<array>
 		<string>MeshCore-</string>

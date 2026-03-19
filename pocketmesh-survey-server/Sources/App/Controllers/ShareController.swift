@@ -6,6 +6,26 @@ struct ShareController {
 
     // MARK: - Base62 Short ID Generation
 
+    // MARK: - HTML Escaping
+
+    /// Escape a string for safe inclusion in HTML content and attributes.
+    private static func htmlEscape(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
+    }
+
+    /// Escape a JSON string for safe embedding inside an HTML <script> tag.
+    /// Prevents "</script>" injection and HTML entity edge cases.
+    private static func jsonForScript(_ json: String) -> String {
+        json
+            .replacingOccurrences(of: "</", with: "<\\/")
+            .replacingOccurrences(of: "<!--", with: "<\\!--")
+    }
+
     private static let base62Chars = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     private static let shortIDLength = 7
 
@@ -62,6 +82,8 @@ struct ShareController {
             hopCount: payload.hopCount,
             distanceText: payload.distanceText,
             hopsJSON: hopsJSON,
+            userLatitude: payload.userLatitude,
+            userLongitude: payload.userLongitude,
             createdAt: now
         )
         try await route.save(on: req.db)
@@ -97,6 +119,8 @@ struct ShareController {
             hopCount: route.hopCount,
             distanceText: route.distanceText,
             hops: hops,
+            userLatitude: route.userLatitude,
+            userLongitude: route.userLongitude,
             createdAt: route.createdAt
         )
     }
@@ -212,7 +236,8 @@ struct ShareController {
 
         let hopsList = hops.map { $0.hexID }.joined(separator: ", ")
         let distanceHTML = route.distanceText.map { " · \($0)" } ?? ""
-        let title = "\(route.hopCount) hop\(route.hopCount == 1 ? "" : "s") via \(hopsList)\(distanceHTML)"
+        let rawTitle = "\(route.hopCount) hop\(route.hopCount == 1 ? "" : "s") via \(hopsList)\(distanceHTML)"
+        let title = Self.htmlEscape(rawTitle)
 
         // Encode route data as JSON for the page script
         let routeData = SharedRouteResponse(
@@ -220,6 +245,8 @@ struct ShareController {
             hopCount: route.hopCount,
             distanceText: route.distanceText,
             hops: hops,
+            userLatitude: route.userLatitude,
+            userLongitude: route.userLongitude,
             createdAt: route.createdAt
         )
         let encoder = JSONEncoder()
@@ -257,7 +284,7 @@ struct ShareController {
             paths = nil
         }
 
-        let title = "\(map.repeaterCount) repeater\(map.repeaterCount == 1 ? "" : "s") heard"
+        let title = Self.htmlEscape("\(map.repeaterCount) repeater\(map.repeaterCount == 1 ? "" : "s") heard")
 
         let mapData = SharedRepeaterMapResponse(
             id: map.id ?? id,
@@ -289,7 +316,7 @@ struct ShareController {
             <title>\(title) — DigitainoMesh</title>
             <link rel="stylesheet" href="/style.css" />
             <link rel="stylesheet" href="/share.css" />
-            <script>const SHARE_DATA = \(routeJSON); const SHARE_TYPE = 'route';</script>
+            <script>const SHARE_DATA = \(Self.jsonForScript(routeJSON)); const SHARE_TYPE = 'route';</script>
             <script src="/share.js"></script>
             <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.core.js"
                     crossorigin async
@@ -329,7 +356,7 @@ struct ShareController {
             <title>\(title) — DigitainoMesh</title>
             <link rel="stylesheet" href="/style.css" />
             <link rel="stylesheet" href="/share.css" />
-            <script>const SHARE_DATA = \(mapJSON); const SHARE_TYPE = 'repeaterMap';</script>
+            <script>const SHARE_DATA = \(Self.jsonForScript(mapJSON)); const SHARE_TYPE = 'repeaterMap';</script>
             <script src="/share.js"></script>
             <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.core.js"
                     crossorigin async

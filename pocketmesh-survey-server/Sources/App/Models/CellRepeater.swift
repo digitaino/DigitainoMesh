@@ -24,13 +24,18 @@ final class CellRepeater: Model, Content, @unchecked Sendable {
     @OptionalField(key: "packet_count")
     var packetCount: Int?
 
+    /// ISO 8601 timestamp of the most recent packet from this repeater in this cell.
+    @OptionalField(key: "last_heard")
+    var lastHeard: String?
+
     init() {}
 
-    init(cellID: Int, repeaterHexID: String, averageSNR: Double? = nil, averageRSSI: Double? = nil, packetCount: Int? = nil) {
+    init(cellID: Int, repeaterHexID: String, averageSNR: Double? = nil, averageRSSI: Double? = nil, packetCount: Int? = nil, lastHeard: String? = nil) {
         self.$cell.id = cellID
         self.repeaterHexID = repeaterHexID
         self.averageSNR = averageSNR
         self.averageRSSI = averageRSSI
         self.packetCount = packetCount
+        self.lastHeard = lastHeard
     }
 }
