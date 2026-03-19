@@ -123,9 +123,14 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         self.pathLength = UInt8(model.pathLength)
         self.packetHash = model.packetHash
         self.fromContactName = model.fromContactName
-        self.pathNodeHexIDs = model.pathNodeHexIDs?
+        // Max valid hex ID is 6 chars (3-byte hash, the firmware maximum).
+        // Drop anything longer — it's corrupt data or a stale entry from an earlier
+        // version. Truncating would produce a wrong prefix that can't merge with the
+        // correct shorter ID, so discarding is safer.
+        self.pathNodeHexIDs = (model.pathNodeHexIDs?
             .split(separator: ",")
-            .map(String.init) ?? []
+            .map(String.init) ?? [])
+            .filter { $0.count <= 6 }
         self.isActiveProbe = model.isActiveProbe
     }
 
@@ -173,4 +178,10 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
 
     /// Classified signal quality based on SNR thresholds.
     public var snrQuality: SNRQuality { SNRQuality(snr: snr) }
+
+    /// Number of relay hops this packet traversed (decoded from pathLength byte).
+    /// 0 means the packet was received directly from the sender with no intermediate relays.
+    public var hopCount: Int {
+        decodePathLen(pathLength)?.hopCount ?? 0
+    }
 }

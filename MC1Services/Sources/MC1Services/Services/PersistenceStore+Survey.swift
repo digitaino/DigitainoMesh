@@ -159,12 +159,6 @@ extension PersistenceStore {
     /// Returns the number of points updated.
     @discardableResult
     public func backfillActiveProbeFlag() throws -> Int {
-        // DEBUG: Log all payloadType values and isActiveProbe distribution
-        let allPoints = try modelContext.fetch(FetchDescriptor<SignalSurveyPoint>())
-        let ptCounts = Dictionary(grouping: allPoints, by: { $0.payloadType }).mapValues(\.count)
-        let alreadyActive = allPoints.filter(\.isActiveProbe).count
-        print("DEBUG backfill: \(allPoints.count) total points, payloadTypes: \(ptCounts.sorted(by: { $0.key < $1.key }).map { "type\($0.key)=\($0.value)" }.joined(separator: ", ")), isActiveProbe=true: \(alreadyActive)")
-
         let controlType = 11  // PayloadType.control.rawValue
         let traceType = 9     // PayloadType.trace.rawValue
         let descriptor = FetchDescriptor<SignalSurveyPoint>(
@@ -174,7 +168,6 @@ extension PersistenceStore {
             }
         )
         let points = try modelContext.fetch(descriptor)
-        print("DEBUG backfill: found \(points.count) points needing backfill (payloadType 9 or 11 with isActiveProbe=false)")
         guard !points.isEmpty else { return 0 }
 
         for point in points {

@@ -19,6 +19,120 @@ function snrQualityColor(snr) {
     return '#991b1b';
 }
 
+// Hex grid math — must match iOS HexGrid.swift exactly
+const HEX_SIZE = 0.0005;
+
+function fixedReferenceLatitude(lat) {
+    return Math.round(lat / 10) * 10;
+}
+
+function cubeRound(q, r, s) {
+    let rq = Math.round(q);
+    let rr = Math.round(r);
+    const rs = Math.round(s);
+
+    const dq = Math.abs(rq - q);
+    const dr = Math.abs(rr - r);
+    const ds = Math.abs(rs - s);
+
+    if (dq > dr && dq > ds) {
+        rq = -rr - rs;
+    } else if (dr > ds) {
+        rr = -rq - rs;
+    }
+    return { q: rq, r: rr };
+}
+
+function axialFromLatLon(lat, lon, refLat) {
+    const lonScale = Math.cos(refLat * Math.PI / 180);
+    const scaledLon = lon * lonScale;
+    const q = (2 / 3 * scaledLon) / HEX_SIZE;
+    const r = (-1 / 3 * scaledLon + Math.sqrt(3) / 3 * lat) / HEX_SIZE;
+    const s = -q - r;
+    return cubeRound(q, r, s);
+}
+
+function hexCenterLatLon(axial, refLat) {
+    const lonScale = Math.cos(refLat * Math.PI / 180);
+    const scaledLon = HEX_SIZE * 3 / 2 * axial.q;
+    const latitude = HEX_SIZE * Math.sqrt(3) * (axial.r + axial.q / 2);
+    const longitude = scaledLon / lonScale;
+    return { latitude, longitude };
+}
+
+function hexVerticesFromCenter(centerLat, centerLon, refLat) {
+    const lonScale = Math.cos(refLat * Math.PI / 180);
+    const vertices = [];
+    for (let i = 0; i < 6; i++) {
+        const angle = (60 * i) * Math.PI / 180;
+        vertices.push(new mapkit.Coordinate(
+            centerLat + HEX_SIZE * Math.sin(angle),
+            centerLon + (HEX_SIZE * Math.cos(angle)) / lonScale
+        ));
+    }
+    return vertices;
+}
+
+// The 6 axial neighbor offsets for a hex grid
+const HEX_NEIGHBORS = [
+    { q: 1, r: 0 }, { q: -1, r: 0 },
+    { q: 0, r: 1 }, { q: 0, r: -1 },
+    { q: 1, r: -1 }, { q: -1, r: 1 }
+];
+
+// Render a 7-hex cluster (center + 6 neighbors) as the user's approximate area.
+// The cluster is deliberately offset to a random neighbor so the user's real
+// position is NOT at the center — they could be anywhere in the 7 cells.
+function addUserHexCluster(lat, lon, color) {
+    const refLat = fixedReferenceLatitude(lat);
+    const userAxial = axialFromLatLon(lat, lon, refLat);
+
+    // Offset: pick a deterministic but non-obvious neighbor based on coordinates.
+    // Use a simple hash of q+r to pick one of the 6 neighbors as the new center.
+    const offsetIdx = Math.abs((userAxial.q * 7 + userAxial.r * 13) % 6);
+    const offset = HEX_NEIGHBORS[offsetIdx];
+    const clusterCenter = { q: userAxial.q + offset.q, r: userAxial.r + offset.r };
+
+    // 7 cells: the offset center + its 6 neighbors
+    const cells = [clusterCenter];
+    for (const n of HEX_NEIGHBORS) {
+        cells.push({ q: clusterCenter.q + n.q, r: clusterCenter.r + n.r });
+    }
+
+    const overlays = [];
+    for (const cell of cells) {
+        const center = hexCenterLatLon(cell, refLat);
+        const vertices = hexVerticesFromCenter(center.latitude, center.longitude, refLat);
+        const polygon = new mapkit.PolygonOverlay(vertices, {
+            style: new mapkit.Style({
+                fillColor: color,
+                fillOpacity: 0.25,
+                strokeColor: color,
+                strokeOpacity: 0.6,
+                lineWidth: 1.5
+            })
+        });
+        overlays.push(polygon);
+    }
+    map.addOverlays(overlays);
+    currentMapOverlays.push(...overlays);
+
+    // Return the center coordinate of the cluster for line-drawing purposes
+    const cc = hexCenterLatLon(clusterCenter, refLat);
+    const clusterCoord = new mapkit.Coordinate(cc.latitude, cc.longitude);
+
+    // Add a visible "You" label at the cluster center so it's identifiable at any zoom
+    const youAnnotation = new mapkit.MarkerAnnotation(clusterCoord, {
+        title: 'You (approx.)',
+        color: color,
+        glyphText: '📱'
+    });
+    map.addAnnotation(youAnnotation);
+    currentMapAnnotations.push(youAnnotation);
+
+    return clusterCoord;
+}
+
 let map = null;
 
 // Repeater map state for repeat navigation
@@ -454,14 +568,12 @@ function renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex) {
             ? new mapkit.Coordinate(data.userLatitude, data.userLongitude)
             : null;
 
+        // User location: render as a 7-hex cluster with "You" marker
+        let userClusterCoord = null;
         if (userCoord) {
-            const userAnnotation = new mapkit.MarkerAnnotation(userCoord, {
-                title: 'You',
-                color: '#3b82f6',
-                glyphText: '📱'
-            });
-            map.addAnnotation(userAnnotation);
-            currentMapAnnotations.push(userAnnotation);
+            userClusterCoord = addUserHexCluster(
+                data.userLatitude, data.userLongitude, '#3b82f6'
+            );
         }
 
         data.paths.forEach(path => {
@@ -487,12 +599,12 @@ function renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex) {
                 currentMapOverlays.push(outboundLine);
             }
 
-            // Solid SNR-colored last-hop line (last repeater → user)
-            if (userCoord) {
+            // Solid SNR-colored last-hop line (last repeater → cluster center)
+            if (userClusterCoord) {
                 const lastHopCoord = hopCoords[hopCoords.length - 1];
                 const lastHopColor = snrQualityColor(path.snr);
                 const lastHopLine = new mapkit.PolylineOverlay(
-                    [lastHopCoord, userCoord],
+                    [lastHopCoord, userClusterCoord],
                     {
                         style: new mapkit.Style({
                             strokeColor: lastHopColor,
@@ -585,21 +697,20 @@ function renderMapForSingleRepeat(data, path, repeaterByHex) {
         : null;
 
     if (userCoord) {
-        const userAnnotation = new mapkit.MarkerAnnotation(userCoord, {
-            title: 'You',
-            color: '#3b82f6',
-            glyphText: '📱'
-        });
-        map.addAnnotation(userAnnotation);
-        currentMapAnnotations.push(userAnnotation);
-        pathAnnotations.push(userAnnotation);
+        // User location: render as a 7-hex cluster with "You" marker
+        const userClusterCoord = addUserHexCluster(
+            data.userLatitude, data.userLongitude, '#3b82f6'
+        );
+        // The "You" marker annotation was already added to currentMapAnnotations
+        // by addUserHexCluster — add the last one to pathAnnotations for showItems
+        pathAnnotations.push(currentMapAnnotations[currentMapAnnotations.length - 1]);
 
-        // Solid SNR-colored last-hop line
+        // Solid SNR-colored last-hop line (to cluster center)
         if (hopCoords.length > 0) {
             const lastHopCoord = hopCoords[hopCoords.length - 1];
             const lastHopColor = snrQualityColor(path.snr);
             const lastHopLine = new mapkit.PolylineOverlay(
-                [lastHopCoord, userCoord],
+                [lastHopCoord, userClusterCoord],
                 {
                     style: new mapkit.Style({
                         strokeColor: lastHopColor,

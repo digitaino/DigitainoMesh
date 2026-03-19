@@ -478,8 +478,8 @@ struct SignalSurveyView: View {
                             if let latest = cell.latestTimestamp {
                                 lastHeardColumn(label: "Last Heard", date: latest, unit: "ago")
                             }
-                            if cell.traceResponseCount > 0 {
-                                cellStatColumn(label: "Mesh Reach", value: "\(cell.traceResponseCount)", unit: "")
+                            if cell.maxMeshDepth > 0 {
+                                cellStatColumn(label: "Mesh Reach", value: "\(cell.maxMeshDepth)", unit: cell.maxMeshDepth == 1 ? "hop" : "hops")
                             }
                         }
                     }

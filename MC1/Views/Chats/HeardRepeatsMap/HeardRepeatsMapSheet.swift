@@ -12,6 +12,9 @@ struct HeardRepeatsMapSheet: View {
     let repeats: [MessageRepeatDTO]
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
+    /// Location recorded on the message at receive time. Preferred over current GPS
+    /// so the "You" pin reflects where the user was when the message arrived.
+    var messageLocation: CLLocation?
 
     @State private var viewModel = HeardRepeatsMapViewModel()
 
@@ -38,16 +41,22 @@ struct HeardRepeatsMapSheet: View {
             }
         }
         .task {
-            // Ensure we have a location before loading so lines can connect to the user
-            if appState.locationService.currentLocation == nil,
-               appState.locationService.isAuthorized {
-                try? await appState.locationService.requestCurrentLocation(timeout: .seconds(5))
+            // Prefer the location recorded on the message at receive time so the "You"
+            // pin reflects where the user was when the packet arrived, not where the
+            // device is now.  Fall back to current GPS only if no message location.
+            var location = messageLocation
+            if location == nil {
+                if appState.locationService.currentLocation == nil,
+                   appState.locationService.isAuthorized {
+                    try? await appState.locationService.requestCurrentLocation(timeout: .seconds(5))
+                }
+                location = appState.locationService.currentLocation
             }
             viewModel.load(
                 repeats: repeats,
                 contacts: contacts,
                 discoveredNodes: discoveredNodes,
-                userLocation: appState.locationService.currentLocation,
+                userLocation: location,
                 userName: appState.connectedDevice?.nodeName
                     ?? L10n.Chats.Chats.Path.Receiver.you
             )

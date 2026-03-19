@@ -163,8 +163,10 @@ final class SignalSurveyViewModel {
         /// Best-gateway SNR from discover responses.
         /// Nil when no discover data is available (passive-only cells use averageSNR).
         let bestGatewaySNR: Double?
-        /// Number of trace responses received in this cell (mesh reachability indicator).
-        let traceResponseCount: Int
+        /// Maximum mesh depth reached by active probes in this cell.
+        /// Value is (hopCount + 1): 1 = direct reach, 2 = one relay hop, etc.
+        /// 0 means no trace responses were received.
+        let maxMeshDepth: Int
 
         /// Composite identity: coordKey + packetCount so ForEach detects content changes.
         var id: String { "\(coordKey)_\(packetCount)" }
@@ -858,7 +860,7 @@ final class SignalSurveyViewModel {
                 heardOnlyRelayNodes: [],
                 isDeadZone: true,
                 bestGatewaySNR: nil,
-                traceResponseCount: 0
+                maxMeshDepth: 0
             ))
         }
 
@@ -906,25 +908,32 @@ final class SignalSurveyViewModel {
         refreshRepeaterAnnotations()
     }
 
-    /// Compute best-gateway SNR from discover responses in a cell's points.
+    /// Compute best-gateway SNR from active probe responses in a cell's points.
     ///
-    /// When discover probes identify repeaters, the cell color should reflect the
+    /// When active probes identify repeaters, the cell color should reflect the
     /// **best** gateway's link quality — having one strong repeater nearby is what
-    /// matters, not the average of strong + weak. Trace response count is returned
-    /// separately as a mesh reachability indicator.
+    /// matters, not the average of strong + weak. Both discover responses (control)
+    /// and trace responses prove bidirectional communication and contribute SNR.
+    /// Max mesh depth is returned separately as a mesh reachability indicator.
     ///
-    /// Returns `(bestGatewaySNR, traceResponseCount)`.
-    /// `bestGatewaySNR` is nil when no discover data is available (passive-only cells use averageSNR).
+    /// Returns `(bestGatewaySNR, maxMeshDepth)`.
+    /// `bestGatewaySNR` is nil when no active probe data is available (passive-only cells use averageSNR).
     private static func computeCellQuality(
         points: [SignalSurveyPointDTO]
-    ) -> (bestGatewaySNR: Double?, traceResponseCount: Int) {
-        let discoverPoints = points.filter { $0.payloadType == .control }
-        let traceCount = points.count(where: { $0.payloadType == .trace })
+    ) -> (bestGatewaySNR: Double?, maxMeshDepth: Int) {
+        let activeProbePoints = points.filter { $0.payloadType == .control || $0.payloadType == .trace }
 
-        // Best SNR from discover responses (strongest gateway wins)
-        let bestSNR = discoverPoints.compactMap(\.snr).max()
+        // Best SNR from active probe responses (strongest gateway wins)
+        let bestSNR = activeProbePoints.compactMap(\.snr).max()
 
-        return (bestSNR, traceCount)
+        // Maximum mesh depth from trace responses.
+        // hopCount is the number of relay hops in the return path:
+        //   0 = direct response (1 hop away), 1 = one relay (2 hops away), etc.
+        // We report depth as hopCount + 1 so the user sees "1" for direct reach.
+        let tracePoints = points.filter { $0.payloadType == .trace }
+        let maxDepth = tracePoints.isEmpty ? 0 : (tracePoints.map(\.hopCount).max() ?? 0) + 1
+
+        return (bestSNR, maxDepth)
     }
 
     /// Creates a GridCell from a bucket of points at a hex coordinate.
@@ -942,9 +951,12 @@ final class SignalSurveyViewModel {
         let senders = Array(Set(points.compactMap(\.fromContactName))).sorted()
         // Only show the 0-hop (directly heard) repeater — the last node in each path chain.
         // Sort by most recently heard first (newest on the left in the UI).
+        // Max valid hex ID is 6 chars (3-byte hash). Anything longer is corrupt data —
+        // drop it rather than truncating (a truncated prefix won't merge correctly with
+        // the real shorter ID via the consolidation logic below).
         var latestByRelay: [String: Date] = [:]
         for p in points {
-            guard let hexID = p.pathNodeHexIDs.last else { continue }
+            guard let hexID = p.pathNodeHexIDs.last, hexID.count <= 6 else { continue }
             if let existing = latestByRelay[hexID] {
                 if p.timestamp > existing { latestByRelay[hexID] = p.timestamp }
             } else {
@@ -985,11 +997,12 @@ final class SignalSurveyViewModel {
         }
         let relayNodes = consolidatedLatest.sorted { $0.value > $1.value }.map(\.key)
 
-        // Split relay nodes into connected (bidirectional via discover) vs heard-only (passive).
-        // A repeater is "connected" if we have a discover response (control packet) with that node in its path.
-        // Use prefix matching because control packets produce 2-byte IDs while regular packets use 1-byte hashes.
+        // Split relay nodes into connected (bidirectional via discover/trace) vs heard-only (passive).
+        // A repeater is "connected" if we have a discover response (control packet) or trace response
+        // with that node in its path. Both prove bidirectional communication with the repeater.
+        // Use prefix matching because control/trace packets produce 2-byte IDs while regular packets use 1-byte hashes.
         let connectedIDs = Set(points
-            .filter { $0.payloadType == .control }
+            .filter { $0.payloadType == .control || $0.payloadType == .trace }
             .flatMap(\.pathNodeHexIDs))
         let connected = relayNodes.filter { relay in
             let r = relay.uppercased()
@@ -1007,7 +1020,7 @@ final class SignalSurveyViewModel {
         }
 
         // Best-gateway quality: cell color reflects strongest discovered repeater
-        let (bestGatewaySNR, traceResponseCount) = computeCellQuality(points: points)
+        let (bestGatewaySNR, maxMeshDepth) = computeCellQuality(points: points)
         let displaySNR = bestGatewaySNR ?? avgSNR
 
         return GridCell(
@@ -1029,7 +1042,7 @@ final class SignalSurveyViewModel {
             heardOnlyRelayNodes: heardOnly,
             isDeadZone: false,
             bestGatewaySNR: bestGatewaySNR,
-            traceResponseCount: traceResponseCount
+            maxMeshDepth: maxMeshDepth
         )
     }
 
@@ -1339,7 +1352,7 @@ final class SignalSurveyViewModel {
                     heardOnlyRelayNodes: [],
                     isDeadZone: true,
                     bestGatewaySNR: nil,
-                    traceResponseCount: 0
+                    maxMeshDepth: 0
                 ))
                 changed = true
             }

@@ -211,30 +211,42 @@ public actor SurveyService {
         }
 
         // Extract relay/target hex IDs.
-        // For TRACE responses: trace target hashes represent ALL nodes the flood trace
-        // reached (repeaters, chat nodes, sensors, etc.) — NOT heard repeaters.
-        // traceResponseCount already tracks trace reach separately, so skip them here.
-        // For CONTROL packets (discover responses): extract the responder's public key from the payload.
+        //
+        // TRACE packets are special: the routing header's path[] array contains SNR
+        // values (not hashes) — each repeater appends its SNR as it forwards.
+        // The actual node hashes are in the packetPayload after offset 9.
+        // So we MUST skip pathNodes for trace packets and use the payload hashes.
+        //
+        // CONTROL packets (discover responses): use pathNodes when available.
+        //   If pathNodes are empty, fall back to extracting the responder's 2-byte
+        //   public key prefix from the payload.
         //   Discover response packetPayload format: [0x9x:1][snr_in:1][tag:4][pubkey:8-32]
-        //   where x = node type. The pubkey starts at offset 6.
-        // For other packets: use pathNodes (the routing hops from the network path).
+        //
+        // Other packets: use pathNodes (the routing hops from the network path).
+
         let pathHexIDs: [String] = {
-            // Note: traceTargetHashes (mesh reachability data) is tracked separately via
-            // traceResponseCount. Here we extract the *forwarding repeater* from pathNodes,
-            // which is present on trace responses just like any other packet.
-            //
-            // For control packets (discover responses) we use pathNodes just like any other
-            // packet type. This ensures relay hex IDs use the same hash size (e.g. 1-byte)
-            // as heard packets, keeping the display consistent. If pathNodes are empty,
-            // fall back to extracting the responder's 2-byte public key prefix from the
-            // payload so we still have an identifier for the connected repeater.
+            // Trace packets: always extract from payload (pathNodes are SNR values, not hashes).
+            // IMPORTANT: RxLogParser uses the routing header's pathLength to extract pathNodes,
+            // but for trace packets the path[] array stores SNR values (1 byte each), not hashes
+            // (hashSize bytes each). When hashSize > 1, the parser over-reads into the trace
+            // payload by (hashSize - 1) * hopCount bytes. We must reconstruct the full trace
+            // payload by prepending those stolen bytes.
+            if entry.payloadType == .trace {
+                return Self.extractTraceTargetHexIDs(from: entry)
+            }
+
+            // Non-trace packets: extract hex IDs from routing header pathNodes
             let hashSize = entry.pathHashSize
             if hashSize > 0, !entry.pathNodes.isEmpty {
                 let bytes = Array(entry.pathNodes)
-                return stride(from: 0, to: bytes.count, by: hashSize).map { start in
-                    let end = min(start + hashSize, bytes.count)
+                // Validate: pathNodes byte count should equal hashSize * hopCount.
+                // If mismatched (corrupt packet), only process the valid portion.
+                let safeLen = min(bytes.count, hashSize * max(entry.hopCount, 1))
+                let ids = stride(from: 0, to: safeLen, by: hashSize).map { start in
+                    let end = min(start + hashSize, safeLen)
                     return Data(bytes[start..<end]).hexString()
                 }
+                return ids
             }
             // Fallback for control packets with no pathNodes
             if entry.payloadType == .control {
@@ -308,6 +320,48 @@ public actor SurveyService {
         let start = payload.startIndex + 6
         let pubkeyBytes = payload[start..<start+2]
         return pubkeyBytes.map { String(format: "%02X", $0) }.joined()
+    }
+
+    /// Extract repeater hex ID from a trace packet's RxLogEntry.
+    ///
+    /// Trace on-air payload format: `[tag:4][auth:4][flags:1][pubkey...]`
+    /// The bytes after offset 9 are the responding node's **public key** (up to 32 bytes),
+    /// NOT a list of separate node hashes. We extract the first 2 bytes as a hex prefix
+    /// to match the discover response format (which also uses a 2-byte pubkey prefix).
+    ///
+    /// **Complication**: `RxLogParser` uses the routing header's `pathLength` byte to
+    /// determine how many bytes to extract as `pathNodes`. But for trace packets, the
+    /// path[] array stores SNR values (1 byte per hop), not hashes (hashSize bytes per hop).
+    /// When hashSize > 1, the parser over-reads by `(hashSize - 1) * hopCount` bytes,
+    /// consuming the start of the trace payload. We reconstruct the full trace payload
+    /// by prepending those stolen bytes from `pathNodes`.
+    ///
+    /// - Returns: Array with a single uppercase hex string (2-byte pubkey prefix, e.g. "805D"),
+    ///   or empty if the trace payload is too short.
+    static func extractTraceTargetHexIDs(from entry: RxLogEntryDTO) -> [String] {
+        let hashSize = entry.pathHashSize  // from routing header
+        let hopCount = entry.hopCount
+        let overConsumed = (hashSize > 1 && hopCount > 0) ? (hashSize - 1) * hopCount : 0
+
+        // Reconstruct the full trace payload by prepending bytes stolen from pathNodes
+        var tracePayload: Data
+        if overConsumed > 0, entry.pathNodes.count >= hopCount + overConsumed {
+            let stolenBytes = entry.pathNodes.suffix(overConsumed)
+            tracePayload = Data(stolenBytes) + entry.packetPayload
+        } else {
+            tracePayload = entry.packetPayload
+        }
+
+        // Minimum: tag(4) + auth(4) + flags(1) + pubkey(2) = 11 bytes
+        guard tracePayload.count >= 11 else { return [] }
+
+        // Extract first 2 bytes of the public key as the repeater hex ID.
+        // This matches the discover response format which also uses a 2-byte pubkey prefix.
+        let pubkeyStart = tracePayload.startIndex + 9
+        let pubkeyPrefix = tracePayload[pubkeyStart..<pubkeyStart + 2]
+        let hexID = pubkeyPrefix.map { String(format: "%02X", $0) }.joined()
+
+        return [hexID]
     }
 }
 
