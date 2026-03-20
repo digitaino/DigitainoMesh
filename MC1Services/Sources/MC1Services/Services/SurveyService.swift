@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import MeshCore
 import OSLog
@@ -40,11 +41,15 @@ public struct SurveyLocationFix: Sendable {
 /// each incoming packet. When a survey is active, pairs the packet with the
 /// user's current GPS location and persists a SignalSurveyPoint.
 public actor SurveyService {
+    private let session: MeshCoreSession
     private let dataStore: PersistenceStore
     private let logger = PersistentLogger(subsystem: "MC1", category: "SurveyService")
 
     private var deviceID: UUID?
     private var activeSessionID: UUID?
+
+    /// Task monitoring MeshCore events for discover/trace responses.
+    private var eventMonitorTask: Task<Void, Never>?
 
     /// Called when a new survey point is recorded (for live map updates).
     private var onPointRecorded: SurveyPointHandler?
@@ -65,7 +70,14 @@ public actor SurveyService {
     /// for wardriving while still rejecting truly outdated fixes.
     private let maxLocationAgeSeconds: TimeInterval = 30
 
-    public init(dataStore: PersistenceStore) {
+    /// Relaxed GPS accuracy limit for active probe responses (meters).
+    private let relaxedAccuracyMeters: Double = 200
+
+    /// Relaxed GPS age limit for active probe responses (seconds).
+    private let relaxedLocationAgeSeconds: TimeInterval = 60
+
+    public init(session: MeshCoreSession, dataStore: PersistenceStore) {
+        self.session = session
         self.dataStore = dataStore
     }
 
@@ -117,6 +129,78 @@ public actor SurveyService {
     /// and trace response packets are classified as active probe results.
     public func setProbingActive(_ active: Bool) {
         self.isProbingActive = active
+    }
+
+    // MARK: - Event Monitoring
+
+    /// Start monitoring MeshCore events for discover and trace responses.
+    ///
+    /// These events arrive on separate BLE response codes (0x8E controlData and
+    /// 0x89 traceData) that RxLogService does not process. Without this, the survey
+    /// never captures the bidirectional proof from active probes.
+    public func startEventMonitoring() {
+        eventMonitorTask?.cancel()
+
+        eventMonitorTask = Task { [weak self] in
+            guard let self else { return }
+            let events = await session.events()
+
+            for await event in events {
+                guard !Task.isCancelled else { break }
+                switch event {
+                case .discoverResponse(let response):
+                    await self.processDiscoverResponse(response)
+                case .traceData(let traceInfo):
+                    await self.processTraceResponse(traceInfo)
+                default:
+                    break
+                }
+            }
+        }
+
+        logger.info("Survey event monitoring started")
+    }
+
+    /// Stop monitoring MeshCore events.
+    public func stopEventMonitoring() {
+        eventMonitorTask?.cancel()
+        eventMonitorTask = nil
+    }
+
+    // MARK: - GPS Helpers
+
+    /// Get a validated GPS fix for survey recording.
+    ///
+    /// - Parameter relaxed: When true, uses wider accuracy (200m) and age (60s) limits.
+    ///   Active probe responses use relaxed thresholds because they are high-value
+    ///   bidirectional proof and the user is actively wardriving.
+    private func getLocationForSurvey(relaxed: Bool = false) async -> SurveyLocationFix? {
+        guard let fix = await locationProvider?() else {
+            logger.debug("Survey: no GPS fix available")
+            return nil
+        }
+
+        let accuracyLimit = relaxed ? relaxedAccuracyMeters : maxAccuracyMeters
+        let ageLimit = relaxed ? relaxedLocationAgeSeconds : maxLocationAgeSeconds
+
+        guard fix.horizontalAccuracy <= accuracyLimit else {
+            logger.debug("Survey: GPS accuracy \(fix.horizontalAccuracy)m exceeds \(accuracyLimit)m limit")
+            return nil
+        }
+
+        let age = abs(fix.timestamp.timeIntervalSinceNow)
+        guard age <= ageLimit else {
+            logger.debug("Survey: GPS fix age \(age)s exceeds \(ageLimit)s limit")
+            return nil
+        }
+
+        return fix
+    }
+
+    /// Compute a SHA256-based packet hash for deduplication.
+    private static func computeHash(from data: Data) -> String {
+        let hash = SHA256.hash(data: data)
+        return hash.prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: - Session Management
@@ -177,22 +261,8 @@ public actor SurveyService {
             return
         }
 
-        // Get current GPS location
-        guard let fix = await locationProvider?() else {
-            logger.debug("Survey: no GPS fix available, skipping packet")
-            return
-        }
-
-        // Validate GPS quality
-        guard fix.horizontalAccuracy <= maxAccuracyMeters else {
-            logger.debug("Survey: GPS accuracy \(fix.horizontalAccuracy)m exceeds \(self.maxAccuracyMeters)m limit")
-            return
-        }
-
-        // Validate GPS freshness
-        let age = abs(fix.timestamp.timeIntervalSinceNow)
-        guard age <= maxLocationAgeSeconds else {
-            logger.debug("Survey: GPS fix age \(age)s exceeds \(self.maxLocationAgeSeconds)s limit")
+        // Get current GPS location with standard quality gates
+        guard let fix = await getLocationForSurvey(relaxed: false) else {
             return
         }
 
@@ -297,7 +367,134 @@ public actor SurveyService {
         }
     }
 
-    // MARK: - Discover Response Parsing
+    // MARK: - Direct Event Handlers (0x8E discover, 0x89 trace)
+
+    /// Process a discover response event directly from MeshCore's event stream.
+    ///
+    /// These arrive on BLE response code 0x8E (controlData) which RxLogService
+    /// does not process. This is the primary path for capturing bidirectional
+    /// proof from active discovery probes.
+    private func processDiscoverResponse(_ response: DiscoverResponse) async {
+        guard let sessionID = activeSessionID else { return }
+        guard let deviceID = self.deviceID else { return }
+
+        // Use relaxed GPS thresholds — active probe responses are high-value data
+        guard let fix = await getLocationForSurvey(relaxed: true) else { return }
+
+        // Compute dedup hash from tag + pubkey prefix
+        let hashInput = response.tag + response.publicKey.prefix(4)
+        let packetHash = Self.computeHash(from: hashInput)
+
+        do {
+            if try await dataStore.surveyPointExists(sessionID: sessionID, packetHash: packetHash) {
+                return
+            }
+        } catch {
+            logger.error("Dedup check failed: \(error.localizedDescription)")
+        }
+
+        // Extract 2-byte pubkey hex ID (matches existing discover response parsing)
+        let pubkeyHexID = response.publicKey.prefix(2)
+            .map { String(format: "%02X", $0) }.joined()
+
+        let point = SignalSurveyPointDTO(
+            deviceID: deviceID,
+            surveySessionID: sessionID,
+            latitude: fix.latitude,
+            longitude: fix.longitude,
+            altitude: fix.altitude,
+            horizontalAccuracy: fix.horizontalAccuracy,
+            speed: fix.speed,
+            snr: response.snr,
+            rssi: response.rssi,
+            routeType: .flood,
+            payloadType: .control,
+            pathLength: response.pathLength,
+            packetHash: packetHash,
+            pathNodeHexIDs: [pubkeyHexID],
+            isActiveProbe: isProbingActive
+        )
+
+        do {
+            try await dataStore.saveSurveyPoint(point)
+        } catch {
+            logger.error("Failed to save discover survey point: \(error)")
+            return
+        }
+
+        logger.debug("Survey: saved discover response (SNR: \(response.snr), node: \(pubkeyHexID))")
+
+        if let handler = onPointRecorded {
+            await handler(point)
+        }
+    }
+
+    /// Process a trace response event directly from MeshCore's event stream.
+    ///
+    /// These arrive on BLE response code 0x89 (traceData) which RxLogService
+    /// does not process. Trace responses carry hop-by-hop path information
+    /// proving mesh reach from the user's location.
+    private func processTraceResponse(_ traceInfo: TraceInfo) async {
+        guard let sessionID = activeSessionID else { return }
+        guard let deviceID = self.deviceID else { return }
+
+        guard let fix = await getLocationForSurvey(relaxed: true) else { return }
+
+        // Compute dedup hash from tag + authCode
+        var hashInput = Data()
+        withUnsafeBytes(of: traceInfo.tag.littleEndian) { hashInput.append(contentsOf: $0) }
+        withUnsafeBytes(of: traceInfo.authCode.littleEndian) { hashInput.append(contentsOf: $0) }
+        let packetHash = Self.computeHash(from: hashInput)
+
+        do {
+            if try await dataStore.surveyPointExists(sessionID: sessionID, packetHash: packetHash) {
+                return
+            }
+        } catch {
+            logger.error("Dedup check failed: \(error.localizedDescription)")
+        }
+
+        // Extract hex IDs from trace path nodes (2-byte prefix each)
+        let pathHexIDs: [String] = traceInfo.path.compactMap { node in
+            guard let hashBytes = node.hashBytes, hashBytes.count >= 2 else { return nil }
+            return hashBytes.prefix(2).map { String(format: "%02X", $0) }.joined()
+        }
+
+        // Use the last node's SNR (destination node, farthest reach)
+        let destinationSNR = traceInfo.path.last?.snr
+
+        let point = SignalSurveyPointDTO(
+            deviceID: deviceID,
+            surveySessionID: sessionID,
+            latitude: fix.latitude,
+            longitude: fix.longitude,
+            altitude: fix.altitude,
+            horizontalAccuracy: fix.horizontalAccuracy,
+            speed: fix.speed,
+            snr: destinationSNR,
+            routeType: .flood,
+            payloadType: .trace,
+            pathLength: traceInfo.pathLength,
+            packetHash: packetHash,
+            pathNodeHexIDs: pathHexIDs,
+            isActiveProbe: isProbingActive
+        )
+
+        do {
+            try await dataStore.saveSurveyPoint(point)
+        } catch {
+            logger.error("Failed to save trace survey point: \(error)")
+            return
+        }
+
+        logger.debug("Survey: saved trace response (hops: \(traceInfo.path.count), nodes: \(pathHexIDs))")
+
+        if let handler = onPointRecorded {
+            await handler(point)
+        }
+    }
+
+    // MARK: - Discover Response Parsing (legacy RxLogData path)
 
     /// Extract the responder's public key hex from a control packet's payload.
     ///

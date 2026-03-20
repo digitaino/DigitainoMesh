@@ -160,7 +160,7 @@ public final class ServiceContainer {
         self.binaryProtocolService = BinaryProtocolService(session: session, dataStore: dataStore)
         self.rxLogService = RxLogService(session: session, dataStore: dataStore)
         self.heardRepeatsService = HeardRepeatsService(dataStore: dataStore)
-        self.surveyService = SurveyService(dataStore: dataStore)
+        self.surveyService = SurveyService(session: session, dataStore: dataStore)
         self.debugLogBuffer = DebugLogBuffer(dataStore: dataStore)
         DebugLogBuffer.shared = debugLogBuffer
         self.reactionService = ReactionService()
@@ -292,8 +292,9 @@ public final class ServiceContainer {
             logger.warning("Failed to fetch device for HeardRepeatsService: \(error)")
         }
 
-        // Configure SurveyService with device ID
+        // Configure SurveyService with device ID and start its event monitoring
         await surveyService.configure(deviceID: deviceID)
+        await surveyService.startEventMonitoring()
 
         // Start event monitoring for services that need it
         if enableAdvertisementMonitoring {
@@ -333,6 +334,7 @@ public final class ServiceContainer {
         await rxLogService.stopEventMonitoring()
         await messageService.stopEventMonitoring()
         await messagePollingService.stopMessageEventMonitoring()
+        await surveyService.stopEventMonitoring()
         // RemoteNodeService event monitoring is per-session, handled internally
 
         // Flush debug log buffer

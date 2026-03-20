@@ -409,7 +409,9 @@ final class SignalSurveyViewModel {
 
     private static let probeCheckInterval: TimeInterval = 2
     /// How long to wait after a probe before marking its cell as a dead zone.
-    private static let deadZoneTimeout: TimeInterval = 15
+    /// Multi-hop mesh responses can take 10-15s through 3+ relays, so 25s
+    /// prevents false dead zones. Late arrivals still clear the dead zone.
+    private static let deadZoneTimeout: TimeInterval = 25
 
     // MARK: - Probe Feedback
 
