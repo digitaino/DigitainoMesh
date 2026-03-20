@@ -136,6 +136,38 @@ struct NormalizeRepeatersResponse: Content {
     let locationsUpgraded: Int
 }
 
+// MARK: - Admin Contributors Response
+
+struct AdminContributorInfo: Content {
+    let contributorID: String
+    let cellCount: Int
+    let totalPacketCount: Int
+    let uploadCount: Int
+    let firstSeen: String?
+    let lastSeen: String?
+    let clientIPs: [String]
+    let sessionCount: Int
+}
+
+struct AdminContributorsResponse: Content {
+    let contributors: [AdminContributorInfo]
+}
+
+// MARK: - Admin Uploads Response
+
+struct AdminUploadInfo: Content {
+    let id: Int
+    let contributorID: String
+    let uploadedAt: String
+    let cellCount: Int
+    let clientIP: String?
+}
+
+struct AdminUploadsResponse: Content {
+    let uploads: [AdminUploadInfo]
+    let total: Int
+}
+
 // MARK: - Shared Route
 
 struct SharedRouteHop: Content {

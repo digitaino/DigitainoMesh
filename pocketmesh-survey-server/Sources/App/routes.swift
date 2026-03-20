@@ -1,9 +1,11 @@
 import Vapor
 
 func routes(_ app: Application) throws {
-    // Homepage — no redirect to index.html; FileMiddleware will serve it
-    // only if someone requests /index.html directly. The root path returns
-    // a simple landing page or 404 to avoid exposing the map by default.
+    // Serve index.html for the root path (FileMiddleware only handles /index.html)
+    app.get { req -> Response in
+        let indexPath = app.directory.publicDirectory + "index.html"
+        return try await req.fileio.asyncStreamFile(at: indexPath)
+    }
 
     let api = app.grouped("api", "v1")
 
@@ -38,4 +40,15 @@ func routes(_ app: Application) throws {
     // Authenticated shared link creation
     protected.post("routes", use: shareController.createRoute)
     protected.post("maps", use: shareController.createRepeaterMap)
+
+    // Admin dashboard (protected by Cloudflare Access at the network level)
+    app.get("admin") { req -> Response in
+        let adminPath = app.directory.publicDirectory + "admin.html"
+        return try await req.fileio.asyncStreamFile(at: adminPath)
+    }
+
+    // Admin API endpoints (no API key — protected by Cloudflare Access)
+    let admin = api.grouped("admin")
+    admin.get("contributors", use: surveyController.getContributors)
+    admin.get("uploads", use: surveyController.getUploads)
 }

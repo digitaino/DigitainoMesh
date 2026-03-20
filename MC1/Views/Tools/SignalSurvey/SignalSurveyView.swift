@@ -19,6 +19,7 @@ struct SignalSurveyView: View {
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
     @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
     @AppStorage("surveyLiveUpload") private var liveUploadPref = false
+    @AppStorage("surveyDebugMode") private var debugModeEnabled = false
     @Namespace private var mapScope
 
     var body: some View {
@@ -28,6 +29,7 @@ struct SignalSurveyView: View {
             } else {
                 mapContent
                 statsOverlay
+                debugOverlay
                 mapControlsOverlay
                 bottomOverlay
             }
@@ -378,6 +380,22 @@ struct SignalSurveyView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)
         .padding(.leading, 16)
+    }
+
+    // MARK: - Debug Overlay
+
+    @ViewBuilder
+    private var debugOverlay: some View {
+        if debugModeEnabled && viewModel.isActive {
+            VStack {
+                SurveyDebugOverlay(viewModel: viewModel)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 46)
+            .padding(.leading, 16)
+            .allowsHitTesting(false)
+        }
     }
 
     // MARK: - Cell Detail Card (inline)
@@ -1253,6 +1271,15 @@ struct SignalSurveyView: View {
                     } else {
                         Text("Data stays on your device. You can export and upload to the community map after the session from the toolbar menu.")
                     }
+                }
+
+                // MARK: Debug
+                Section {
+                    Toggle("Debug Overlay", isOn: $debugModeEnabled)
+                } header: {
+                    Text("Developer")
+                } footer: {
+                    Text("Shows real-time GPS, probe, and session diagnostics on the survey map.")
                 }
             }
             .navigationTitle("Survey Setup")

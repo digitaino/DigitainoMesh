@@ -762,6 +762,83 @@ struct SurveyController {
         )
     }
 
+    // MARK: - GET /api/v1/admin/contributors
+
+    @Sendable
+    func getContributors(req: Request) async throws -> AdminContributorsResponse {
+        // Get all distinct contributor IDs from contributions
+        let contributorIDs = try await CellContribution.query(on: req.db)
+            .unique()
+            .all(\.$contributorID)
+
+        var contributors: [AdminContributorInfo] = []
+
+        for contributorID in contributorIDs {
+            let contributions = try await CellContribution.query(on: req.db)
+                .filter(\.$contributorID == contributorID)
+                .all()
+
+            let cellCount = contributions.count
+            let totalPacketCount = contributions.reduce(0) { $0 + $1.packetCount }
+
+            let uploads = try await UploadLog.query(on: req.db)
+                .filter(\.$contributorID == contributorID)
+                .sort(\.$uploadedAt, .ascending)
+                .all()
+
+            let uploadCount = uploads.count
+            let firstSeen = uploads.first?.uploadedAt
+            let lastSeen = uploads.last?.uploadedAt
+            let clientIPs = Array(Set(uploads.compactMap(\.clientIP))).sorted()
+
+            let sessionIDs = Set(contributions.compactMap(\.sessionID))
+            let sessionCount = sessionIDs.count
+
+            contributors.append(AdminContributorInfo(
+                contributorID: contributorID,
+                cellCount: cellCount,
+                totalPacketCount: totalPacketCount,
+                uploadCount: uploadCount,
+                firstSeen: firstSeen,
+                lastSeen: lastSeen,
+                clientIPs: clientIPs,
+                sessionCount: sessionCount
+            ))
+        }
+
+        // Sort by last seen (most recent first)
+        contributors.sort { ($0.lastSeen ?? "") > ($1.lastSeen ?? "") }
+
+        return AdminContributorsResponse(contributors: contributors)
+    }
+
+    // MARK: - GET /api/v1/admin/uploads
+
+    @Sendable
+    func getUploads(req: Request) async throws -> AdminUploadsResponse {
+        let limit = req.query[Int.self, at: "limit"] ?? 100
+        let offset = req.query[Int.self, at: "offset"] ?? 0
+
+        let total = try await UploadLog.query(on: req.db).count()
+        let uploads = try await UploadLog.query(on: req.db)
+            .sort(\.$uploadedAt, .descending)
+            .range(offset..<(offset + limit))
+            .all()
+
+        let items = uploads.compactMap { log -> AdminUploadInfo? in
+            guard let id = log.id else { return nil }
+            return AdminUploadInfo(
+                id: id,
+                contributorID: log.contributorID,
+                uploadedAt: log.uploadedAt,
+                cellCount: log.cellCount,
+                clientIP: log.clientIP
+            )
+        }
+
+        return AdminUploadsResponse(uploads: items, total: total)
+    }
+
     // MARK: - GET /api/v1/events (Server-Sent Events)
 
     @Sendable

@@ -137,6 +137,33 @@ final class SignalSurveyViewModel {
         }
     }
 
+    // MARK: - Debug Info
+
+    /// Aggregated debug data for the survey debug overlay.
+    struct DebugInfo {
+        let gpsAccuracy: Double?
+        let gpsFixAge: TimeInterval?
+        let gpsSpeed: Double?
+
+        let probeCount: Int
+        let timeSinceLastProbe: TimeInterval?
+        let probeFrequency: ProbeFrequency
+        let probeEnabled: Bool
+        let nextProbeMaxIn: TimeInterval?
+
+        let totalPoints: Int
+        let passivePoints: Int
+        let controlPoints: Int
+        let tracePoints: Int
+
+        let isActive: Bool
+        let gridCellCount: Int
+        let deadZoneCount: Int
+        let liveUploadCount: Int
+        let liveUploadEnabled: Bool
+        let eventMonitoringActive: Bool
+    }
+
     // MARK: - Grid Cell for Heatmap
 
     struct GridCell: Identifiable {
@@ -399,7 +426,7 @@ final class SignalSurveyViewModel {
     var hasProbeChannel: Bool { selectedProbeChannel != nil }
     private var probeTask: Task<Void, Never>?
     private var lastProbeHex: HexGrid.AxialCoord?
-    private var lastProbeTime: Date = .distantPast
+    private(set) var lastProbeTime: Date = .distantPast
     private var lastProbeLocation: CLLocation?
     /// Probe loop reference latitude — fixed 10° band, matching gridReferenceLatitude.
     private var probeReferenceLatitude: Double = 30.0
@@ -433,6 +460,53 @@ final class SignalSurveyViewModel {
     /// Whether a manual probe can be sent right now.
     var canSendManualProbe: Bool {
         isActive && !isManualProbing && binaryProtocolService != nil && locationServiceRef?.currentLocation != nil
+    }
+
+    // MARK: - Debug Info Computation
+
+    /// Aggregated debug data for the debug overlay. Only computed when debug mode is active.
+    var debugInfo: DebugInfo {
+        let location = locationServiceRef?.currentLocation
+
+        let gpsAccuracy = location?.horizontalAccuracy
+        let gpsFixAge: TimeInterval? = location.map { abs($0.timestamp.timeIntervalSinceNow) }
+        let gpsSpeed: Double? = location.flatMap { $0.speed >= 0 ? $0.speed : nil }
+
+        let timeSinceProbe: TimeInterval? = lastProbeTime == .distantPast
+            ? nil
+            : Date().timeIntervalSince(lastProbeTime)
+        let nextProbeMax: TimeInterval? = {
+            guard probeEnabled, lastProbeTime != .distantPast else { return nil }
+            let elapsed = Date().timeIntervalSince(lastProbeTime)
+            return max(0, probeFrequency.maxInterval - elapsed)
+        }()
+
+        let controlPts = allPoints.filter { $0.payloadType == .control }.count
+        let tracePts = allPoints.filter { $0.payloadType == .trace }.count
+        let passivePts = allPoints.filter { !Self.activePayloadTypes.contains($0.payloadType) }.count
+
+        let deadZones = gridCells.filter(\.isDeadZone).count
+
+        return DebugInfo(
+            gpsAccuracy: gpsAccuracy,
+            gpsFixAge: gpsFixAge,
+            gpsSpeed: gpsSpeed,
+            probeCount: probeCount,
+            timeSinceLastProbe: timeSinceProbe,
+            probeFrequency: probeFrequency,
+            probeEnabled: probeEnabled,
+            nextProbeMaxIn: nextProbeMax,
+            totalPoints: livePointCount,
+            passivePoints: passivePts,
+            controlPoints: controlPts,
+            tracePoints: tracePts,
+            isActive: isActive,
+            gridCellCount: gridCells.count,
+            deadZoneCount: deadZones,
+            liveUploadCount: liveUploadCount,
+            liveUploadEnabled: liveUploadEnabled,
+            eventMonitoringActive: surveyServiceRef != nil
+        )
     }
 
     // MARK: - Contact & Repeater Resolution

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PocketMesh Admin</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #e5e5e5;
+            padding: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { font-size: 20px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+        .subtitle { font-size: 12px; color: #666; margin-bottom: 24px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+        .tab {
+            padding: 8px 16px;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: #999;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab:hover { background: rgba(255,255,255,0.1); color: #ccc; }
+        .tab.active {
+            background: rgba(34,211,238,0.15);
+            border-color: rgba(34,211,238,0.4);
+            color: #22d3ee;
+        }
+
+        .card {
+            background: rgba(15,15,15,0.92);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .stats-row { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+        .stat-card {
+            background: rgba(15,15,15,0.92);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 16px 20px;
+            flex: 1;
+            min-width: 120px;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-card .label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 8px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        td {
+            font-size: 13px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-variant-numeric: tabular-nums;
+        }
+        tr:hover td { background: rgba(255,255,255,0.03); }
+
+        .mono { font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 12px; }
+        .dim { color: #666; }
+        .ip-tag {
+            display: inline-block;
+            font-family: monospace;
+            font-size: 10px;
+            background: rgba(139,92,246,0.15);
+            color: #a78bfa;
+            padding: 2px 6px;
+            border-radius: 6px;
+            margin: 1px 2px;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.05);
+            color: #ccc;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: rgba(255,255,255,0.1); }
+        .btn-danger {
+            border-color: rgba(239,68,68,0.4);
+            color: #ef4444;
+        }
+        .btn-danger:hover { background: rgba(239,68,68,0.15); }
+
+        .hidden { display: none; }
+        .loading { text-align: center; padding: 40px; color: #666; }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            z-index: 9999;
+            transition: opacity 0.3s;
+        }
+        .toast-success { background: rgba(34,197,94,0.9); color: #fff; }
+        .toast-error { background: rgba(239,68,68,0.9); color: #fff; }
+
+        .contributor-id-cell { max-width: 200px; }
+        .contributor-id {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .contributor-id:hover {
+            overflow: visible;
+            white-space: normal;
+            word-break: break-all;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .stats-row { gap: 8px; }
+            .stat-card { min-width: 80px; padding: 12px; }
+            .stat-card .value { font-size: 20px; }
+            .card { padding: 12px; overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+    <h1>PocketMesh Admin</h1>
+    <p class="subtitle">Survey data management dashboard</p>
+
+    <div class="stats-row" id="stats-row">
+        <div class="stat-card"><span class="value" id="s-contributors">&mdash;</span><span class="label">Contributors</span></div>
+        <div class="stat-card"><span class="value" id="s-cells">&mdash;</span><span class="label">Cells</span></div>
+        <div class="stat-card"><span class="value" id="s-uploads">&mdash;</span><span class="label">Uploads</span></div>
+        <div class="stat-card"><span class="value" id="s-repeaters">&mdash;</span><span class="label">Repeaters</span></div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('contributors')">Contributors</div>
+        <div class="tab" onclick="switchTab('uploads')">Upload Log</div>
+    </div>
+
+    <div id="tab-contributors">
+        <div class="card">
+            <div class="loading" id="contributors-loading">Loading contributors...</div>
+            <table id="contributors-table" class="hidden">
+                <thead>
+                    <tr>
+                        <th>Contributor ID</th>
+                        <th>Cells</th>
+                        <th>Packets</th>
+                        <th>Uploads</th>
+                        <th>Sessions</th>
+                        <th>IPs</th>
+                        <th>First Seen</th>
+                        <th>Last Seen</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="contributors-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab-uploads" class="hidden">
+        <div class="card">
+            <div class="loading" id="uploads-loading">Loading uploads...</div>
+            <table id="uploads-table" class="hidden">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Contributor</th>
+                        <th>Cells</th>
+                        <th>IP</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="uploads-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1';
+        let contributorsData = [];
+        let uploadsLoaded = false;
+
+        // Fetch stats
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API_BASE}/stats`);
+                const data = await res.json();
+                document.getElementById('s-contributors').textContent = data.uniqueContributors;
+                document.getElementById('s-cells').textContent = data.totalCells;
+                document.getElementById('s-uploads').textContent = data.totalContributions;
+                document.getElementById('s-repeaters').textContent = data.uniqueRepeaters;
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+
+        // Format ISO date to readable string
+        function formatDate(iso) {
+            if (!iso) return '<span class="dim">—</span>';
+            try {
+                const d = new Date(iso);
+                if (isNaN(d)) return iso;
+                const now = new Date();
+                const diffMs = now - d;
+                const diffDays = Math.floor(diffMs / 86400000);
+                if (diffDays === 0) return 'Today ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                if (diffDays === 1) return 'Yesterday';
+                if (diffDays < 7) return diffDays + 'd ago';
+                return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            } catch {
+                return iso;
+            }
+        }
+
+        // Load contributors
+        async function loadContributors() {
+            try {
+                const res = await fetch(`${API_BASE}/admin/contributors`);
+                const data = await res.json();
+                contributorsData = data.contributors;
+                renderContributors();
+            } catch (e) {
+                document.getElementById('contributors-loading').textContent = 'Failed to load: ' + e.message;
+            }
+        }
+
+        function renderContributors() {
+            const tbody = document.getElementById('contributors-body');
+            tbody.innerHTML = '';
+
+            for (const c of contributorsData) {
+                const tr = document.createElement('tr');
+                const ips = c.clientIPs.map(ip => `<span class="ip-tag">${escapeHtml(ip)}</span>`).join('');
+                tr.innerHTML = `
+                    <td class="contributor-id-cell"><span class="mono contributor-id" title="${escapeHtml(c.contributorID)}">${escapeHtml(c.contributorID)}</span></td>
+                    <td>${c.cellCount}</td>
+                    <td>${c.totalPacketCount.toLocaleString()}</td>
+                    <td>${c.uploadCount}</td>
+                    <td>${c.sessionCount}</td>
+                    <td>${ips || '<span class="dim">—</span>'}</td>
+                    <td>${formatDate(c.firstSeen)}</td>
+                    <td>${formatDate(c.lastSeen)}</td>
+                    <td><button class="btn btn-danger" onclick="deleteContributor('${escapeHtml(c.contributorID)}')">Delete</button></td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            document.getElementById('contributors-loading').classList.add('hidden');
+            document.getElementById('contributors-table').classList.remove('hidden');
+        }
+
+        // Load uploads
+        async function loadUploads() {
+            if (uploadsLoaded) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/uploads?limit=200`);
+                const data = await res.json();
+                renderUploads(data.uploads);
+                uploadsLoaded = true;
+            } catch (e) {
+                document.getElementById('uploads-loading').textContent = 'Failed to load: ' + e.message;
+            }
+        }
+
+        function renderUploads(uploads) {
+            const tbody = document.getElementById('uploads-body');
+            tbody.innerHTML = '';
+
+            for (const u of uploads) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="dim">${u.id}</td>
+                    <td><span class="mono contributor-id" title="${escapeHtml(u.contributorID)}">${escapeHtml(u.contributorID.substring(0, 8))}...</span></td>
+                    <td>${u.cellCount}</td>
+                    <td>${u.clientIP ? `<span class="ip-tag">${escapeHtml(u.clientIP)}</span>` : '<span class="dim">—</span>'}</td>
+                    <td>${formatDate(u.uploadedAt)}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            document.getElementById('uploads-loading').classList.add('hidden');
+            document.getElementById('uploads-table').classList.remove('hidden');
+        }
+
+        // Delete contributor
+        async function deleteContributor(id) {
+            if (!confirm(`Delete all data from contributor ${id.substring(0, 8)}...?\n\nThis will remove all their cell contributions and upload logs. This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/contributor/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-API-Key': prompt('Enter API key:') }
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+
+                const data = await res.json();
+                showToast(`Deleted: ${data.deletedContributions} contributions, ${data.cellsRemoved} cells removed`, 'success');
+                // Reload data
+                loadStats();
+                loadContributors();
+                uploadsLoaded = false;
+            } catch (e) {
+                showToast('Delete failed: ' + e.message, 'error');
+            }
+        }
+
+        // Tab switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[onclick="switchTab('${tab}')"]`).classList.add('active');
+
+            document.getElementById('tab-contributors').classList.toggle('hidden', tab !== 'contributors');
+            document.getElementById('tab-uploads').classList.toggle('hidden', tab !== 'uploads');
+
+            if (tab === 'uploads') loadUploads();
+        }
+
+        // Toast notification
+        function showToast(msg, type) {
+            const el = document.createElement('div');
+            el.className = `toast toast-${type}`;
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Init
+        loadStats();
+        loadContributors();
+    </script>
+</body>
+</html>
