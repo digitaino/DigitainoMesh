@@ -50,6 +50,7 @@ func routes(_ app: Application) throws {
     // Admin API endpoints (no API key — protected by Cloudflare Access)
     let admin = api.grouped("admin")
     admin.get("contributors", use: surveyController.getContributors)
+    admin.get("contributor", ":id", "sessions", use: surveyController.getContributorSessions)
     admin.get("uploads", use: surveyController.getUploads)
     admin.post("purge-bogus", use: surveyController.purgeBogusContributors)
 }

@@ -839,6 +839,74 @@ struct SurveyController {
         return AdminUploadsResponse(uploads: items, total: total)
     }
 
+    // MARK: - GET /api/v1/admin/contributor/:id/sessions
+
+    @Sendable
+    func getContributorSessions(req: Request) async throws -> AdminContributorSessionsResponse {
+        guard let contributorID = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing contributor ID")
+        }
+
+        let contributions = try await CellContribution.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .with(\.$cell)
+            .all()
+
+        // Group contributions by sessionID
+        var sessionMap: [String: [CellContribution]] = [:]
+        for contribution in contributions {
+            let key = contribution.sessionID ?? "unknown"
+            sessionMap[key, default: []].append(contribution)
+        }
+
+        var sessions: [AdminSessionInfo] = []
+
+        for (sessionID, contribs) in sessionMap {
+            let cells = contribs.map { c -> AdminSessionCell in
+                let cell = c.cell
+                let avgSNR = c.packetCount > 0 ? c.snrWeighted / Double(c.packetCount) : nil
+                let quality: String = {
+                    guard let snr = avgSNR else { return "unknown" }
+                    if snr > 10 { return "excellent" }
+                    if snr > 5 { return "good" }
+                    if snr > 0 { return "fair" }
+                    if snr > -10 { return "poor" }
+                    return "veryPoor"
+                }()
+                return AdminSessionCell(
+                    latitude: cell.latitude,
+                    longitude: cell.longitude,
+                    hexQ: cell.hexQ,
+                    hexR: cell.hexR,
+                    packetCount: c.packetCount,
+                    averageSNR: avgSNR,
+                    snrQuality: quality,
+                    activePacketCount: c.activePacketCount,
+                    passivePacketCount: c.passivePacketCount
+                )
+            }
+
+            let totalPackets = contribs.reduce(0) { $0 + $1.packetCount }
+            let earliestDate = contribs.map(\.contributedAt).sorted().first
+
+            sessions.append(AdminSessionInfo(
+                sessionID: sessionID,
+                cellCount: cells.count,
+                totalPacketCount: totalPackets,
+                contributedAt: earliestDate,
+                cells: cells
+            ))
+        }
+
+        // Sort by date (most recent first)
+        sessions.sort { ($0.contributedAt ?? "") > ($1.contributedAt ?? "") }
+
+        return AdminContributorSessionsResponse(
+            contributorID: contributorID,
+            sessions: sessions
+        )
+    }
+
     // MARK: - POST /api/v1/admin/purge-bogus
 
     /// Delete all contributors whose total packet count is at or below a threshold.

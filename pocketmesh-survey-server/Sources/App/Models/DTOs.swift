@@ -168,6 +168,33 @@ struct AdminUploadsResponse: Content {
     let total: Int
 }
 
+// MARK: - Admin Contributor Sessions Response
+
+struct AdminSessionCell: Content {
+    let latitude: Double
+    let longitude: Double
+    let hexQ: Int
+    let hexR: Int
+    let packetCount: Int
+    let averageSNR: Double?
+    let snrQuality: String
+    let activePacketCount: Int
+    let passivePacketCount: Int
+}
+
+struct AdminSessionInfo: Content {
+    let sessionID: String
+    let cellCount: Int
+    let totalPacketCount: Int
+    let contributedAt: String?
+    let cells: [AdminSessionCell]
+}
+
+struct AdminContributorSessionsResponse: Content {
+    let contributorID: String
+    let sessions: [AdminSessionInfo]
+}
+
 // MARK: - Admin Purge Response
 
 struct AdminPurgeResponse: Content {

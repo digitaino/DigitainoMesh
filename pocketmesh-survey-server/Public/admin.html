@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PocketMesh Admin</title>
+    <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.core.js"
+            crossorigin async
+            data-callback="initMapKit"
+            data-libraries="map,annotations,overlays"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -16,7 +20,7 @@
         }
         h1 { font-size: 20px; font-weight: 600; color: #fff; margin-bottom: 4px; }
         .subtitle { font-size: 12px; color: #666; margin-bottom: 24px; }
-        .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; align-items: center; }
         .tab {
             padding: 8px 16px;
             border: 1px solid rgba(255,255,255,0.15);
@@ -83,6 +87,8 @@
             font-variant-numeric: tabular-nums;
         }
         tr:hover td { background: rgba(255,255,255,0.03); }
+        tr.clickable { cursor: pointer; }
+        tr.selected td { background: rgba(34,211,238,0.08); }
 
         .mono { font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 12px; }
         .dim { color: #666; }
@@ -113,6 +119,11 @@
             color: #ef4444;
         }
         .btn-danger:hover { background: rgba(239,68,68,0.15); }
+        .btn-primary {
+            border-color: rgba(34,211,238,0.4);
+            color: #22d3ee;
+        }
+        .btn-primary:hover { background: rgba(34,211,238,0.15); }
 
         .hidden { display: none; }
         .loading { text-align: center; padding: 40px; color: #666; }
@@ -141,6 +152,102 @@
             overflow: visible;
             white-space: normal;
             word-break: break-all;
+        }
+
+        /* Sessions panel */
+        .sessions-panel {
+            margin-top: 16px;
+        }
+        .sessions-panel h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+        .session-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            margin-bottom: 6px;
+            transition: background 0.2s;
+        }
+        .session-row:hover { background: rgba(255,255,255,0.04); }
+        .session-id {
+            font-family: 'SF Mono', Monaco, Consolas, monospace;
+            font-size: 11px;
+            color: #999;
+            min-width: 80px;
+        }
+        .session-stat {
+            font-size: 12px;
+            color: #888;
+        }
+        .session-stat strong { color: #e5e5e5; }
+
+        /* Map modal */
+        .map-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 10000;
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+        }
+        .map-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: rgba(15,15,15,0.95);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .map-modal-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+        }
+        .map-modal-header .meta {
+            font-size: 12px;
+            color: #888;
+        }
+        .map-modal-close {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #ccc;
+            font-size: 13px;
+            padding: 6px 14px;
+            cursor: pointer;
+        }
+        .map-modal-close:hover { background: rgba(255,255,255,0.1); }
+        #session-map {
+            flex: 1;
+        }
+
+        .map-legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15,15,15,0.9);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 11px;
+            z-index: 10001;
+        }
+        .map-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 3px;
+        }
+        .map-legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
         }
 
         @media (max-width: 768px) {
@@ -190,6 +297,7 @@
                 <tbody id="contributors-body"></tbody>
             </table>
         </div>
+        <div id="sessions-container"></div>
     </div>
 
     <div id="tab-uploads" class="hidden">
@@ -210,10 +318,54 @@
         </div>
     </div>
 
+    <div id="map-modal" class="map-modal hidden">
+        <div class="map-modal-header">
+            <div>
+                <h3 id="map-modal-title">Session Map</h3>
+                <span class="meta" id="map-modal-meta"></span>
+            </div>
+            <button class="map-modal-close" onclick="closeMapModal()">Close</button>
+        </div>
+        <div id="session-map"></div>
+        <div class="map-legend">
+            <div class="map-legend-item"><span class="map-legend-dot" style="background:#22c55e"></span> Excellent (&gt;10 dB)</div>
+            <div class="map-legend-item"><span class="map-legend-dot" style="background:#eab308"></span> Good (&gt;5 dB)</div>
+            <div class="map-legend-item"><span class="map-legend-dot" style="background:#f97316"></span> Fair (&gt;0 dB)</div>
+            <div class="map-legend-item"><span class="map-legend-dot" style="background:#ef4444"></span> Poor (&gt;-10 dB)</div>
+            <div class="map-legend-item"><span class="map-legend-dot" style="background:#991b1b"></span> Very Poor (&le;-10 dB)</div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '/api/v1';
         let contributorsData = [];
         let uploadsLoaded = false;
+        let selectedContributorID = null;
+        let mapkitReady = false;
+        let sessionMap = null;
+
+        // MapKit initialization
+        window.initMapKit = async function() {
+            try {
+                const res = await fetch(`${API_BASE}/mapkit-token`);
+                const token = await res.text();
+                mapkit.init({ authorizationCallback: done => done(token) });
+                mapkitReady = true;
+            } catch (e) {
+                console.error('MapKit init failed:', e);
+            }
+        };
+
+        function snrColor(quality) {
+            switch (quality) {
+                case 'excellent': return '#22c55e';
+                case 'good': return '#eab308';
+                case 'fair': return '#f97316';
+                case 'poor': return '#ef4444';
+                case 'veryPoor': return '#991b1b';
+                default: return '#666666';
+            }
+        }
 
         // Fetch stats
         async function loadStats() {
@@ -231,7 +383,7 @@
 
         // Format ISO date to readable string
         function formatDate(iso) {
-            if (!iso) return '<span class="dim">—</span>';
+            if (!iso) return '<span class="dim">\u2014</span>';
             try {
                 const d = new Date(iso);
                 if (isNaN(d)) return iso;
@@ -265,6 +417,7 @@
 
             for (const c of contributorsData) {
                 const tr = document.createElement('tr');
+                tr.className = 'clickable' + (c.contributorID === selectedContributorID ? ' selected' : '');
                 const ips = c.clientIPs.map(ip => `<span class="ip-tag">${escapeHtml(ip)}</span>`).join('');
                 tr.innerHTML = `
                     <td class="contributor-id-cell"><span class="mono contributor-id" title="${escapeHtml(c.contributorID)}">${escapeHtml(c.contributorID)}</span></td>
@@ -272,16 +425,175 @@
                     <td>${c.totalPacketCount.toLocaleString()}</td>
                     <td>${c.uploadCount}</td>
                     <td>${c.sessionCount}</td>
-                    <td>${ips || '<span class="dim">—</span>'}</td>
+                    <td>${ips || '<span class="dim">\u2014</span>'}</td>
                     <td>${formatDate(c.firstSeen)}</td>
                     <td>${formatDate(c.lastSeen)}</td>
-                    <td><button class="btn btn-danger" onclick="deleteContributor('${escapeHtml(c.contributorID)}')">Delete</button></td>
+                    <td><button class="btn btn-danger" onclick="event.stopPropagation(); deleteContributor('${escapeHtml(c.contributorID)}')">Delete</button></td>
                 `;
+                tr.addEventListener('click', () => selectContributor(c.contributorID));
                 tbody.appendChild(tr);
             }
 
             document.getElementById('contributors-loading').classList.add('hidden');
             document.getElementById('contributors-table').classList.remove('hidden');
+        }
+
+        // Select contributor and load sessions
+        async function selectContributor(id) {
+            if (selectedContributorID === id) {
+                selectedContributorID = null;
+                document.getElementById('sessions-container').innerHTML = '';
+                renderContributors();
+                return;
+            }
+
+            selectedContributorID = id;
+            renderContributors();
+
+            const container = document.getElementById('sessions-container');
+            container.innerHTML = '<div class="card"><div class="loading">Loading sessions...</div></div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/contributor/${encodeURIComponent(id)}/sessions`);
+                const data = await res.json();
+                renderSessions(data);
+            } catch (e) {
+                container.innerHTML = `<div class="card"><div class="loading">Failed to load sessions: ${escapeHtml(e.message)}</div></div>`;
+            }
+        }
+
+        function renderSessions(data) {
+            const container = document.getElementById('sessions-container');
+
+            if (!data.sessions || data.sessions.length === 0) {
+                container.innerHTML = '<div class="card"><div class="loading">No sessions found</div></div>';
+                return;
+            }
+
+            let html = `<div class="card sessions-panel">
+                <h3>Sessions for ${escapeHtml(data.contributorID.substring(0, 8))}... (${data.sessions.length} session${data.sessions.length !== 1 ? 's' : ''})</h3>`;
+
+            for (const s of data.sessions) {
+                const sessionLabel = s.sessionID === 'unknown' ? 'No session ID' :
+                    s.sessionID.length > 40 ? s.sessionID.substring(0, 8) + '...' : s.sessionID.substring(0, 8) + '...';
+                html += `
+                    <div class="session-row">
+                        <span class="session-id" title="${escapeHtml(s.sessionID)}">${escapeHtml(sessionLabel)}</span>
+                        <span class="session-stat"><strong>${s.cellCount}</strong> cells</span>
+                        <span class="session-stat"><strong>${s.totalPacketCount.toLocaleString()}</strong> pkts</span>
+                        <span class="session-stat">${formatDate(s.contributedAt)}</span>
+                        <div style="flex:1"></div>
+                        <button class="btn btn-primary" onclick="openSessionMap('${escapeHtml(data.contributorID)}', '${escapeHtml(s.sessionID)}')">View Map</button>
+                    </div>`;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // Map modal
+        let currentOverlays = [];
+
+        function openSessionMap(contributorID, sessionID) {
+            if (!mapkitReady) {
+                showToast('MapKit not loaded yet, try again', 'error');
+                return;
+            }
+
+            // Find session data from the already-loaded sessions
+            // Re-fetch to be sure we have cells
+            fetch(`${API_BASE}/admin/contributor/${encodeURIComponent(contributorID)}/sessions`)
+                .then(r => r.json())
+                .then(data => {
+                    const session = data.sessions.find(s => s.sessionID === sessionID);
+                    if (!session || !session.cells.length) {
+                        showToast('No cell data for this session', 'error');
+                        return;
+                    }
+                    showMapModal(session, contributorID);
+                })
+                .catch(e => showToast('Failed to load session: ' + e.message, 'error'));
+        }
+
+        function showMapModal(session, contributorID) {
+            document.getElementById('map-modal').classList.remove('hidden');
+            document.getElementById('map-modal-title').textContent =
+                `Session ${session.sessionID === 'unknown' ? '(no ID)' : session.sessionID.substring(0, 8) + '...'}`;
+            document.getElementById('map-modal-meta').textContent =
+                `${session.cellCount} cells \u00b7 ${session.totalPacketCount.toLocaleString()} packets \u00b7 Contributor ${contributorID.substring(0, 8)}...`;
+
+            // Clean up old map
+            if (sessionMap) {
+                sessionMap.destroy();
+                sessionMap = null;
+            }
+
+            sessionMap = new mapkit.Map('session-map', {
+                colorScheme: mapkit.Map.ColorSchemes.Dark,
+                mapType: mapkit.Map.MapTypes.MutedStandard,
+                showsCompass: mapkit.FeatureVisibility.Hidden,
+                showsMapTypeControl: false,
+            });
+
+            // Add cell overlays
+            const cells = session.cells;
+            const overlays = [];
+
+            for (const cell of cells) {
+                const color = snrColor(cell.snrQuality);
+                const coord = new mapkit.Coordinate(cell.latitude, cell.longitude);
+
+                const circle = new mapkit.CircleOverlay(coord, 25);
+                circle.style = new mapkit.Style({
+                    fillColor: color,
+                    fillOpacity: 0.7,
+                    strokeColor: color,
+                    strokeOpacity: 0.9,
+                    lineWidth: 1,
+                });
+                circle._cellData = cell;
+                overlays.push(circle);
+            }
+
+            sessionMap.addOverlays(overlays);
+            currentOverlays = overlays;
+
+            // Fit map to show all cells with padding
+            if (cells.length > 0) {
+                let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+                for (const c of cells) {
+                    if (c.latitude < minLat) minLat = c.latitude;
+                    if (c.latitude > maxLat) maxLat = c.latitude;
+                    if (c.longitude < minLon) minLon = c.longitude;
+                    if (c.longitude > maxLon) maxLon = c.longitude;
+                }
+                const latSpan = Math.max(maxLat - minLat, 0.005) * 1.3;
+                const lonSpan = Math.max(maxLon - minLon, 0.005) * 1.3;
+                const centerLat = (minLat + maxLat) / 2;
+                const centerLon = (minLon + maxLon) / 2;
+
+                sessionMap.region = new mapkit.CoordinateRegion(
+                    new mapkit.Coordinate(centerLat, centerLon),
+                    new mapkit.CoordinateSpan(latSpan, lonSpan)
+                );
+            }
+
+            // Handle escape key
+            document.addEventListener('keydown', handleMapEscape);
+        }
+
+        function handleMapEscape(e) {
+            if (e.key === 'Escape') closeMapModal();
+        }
+
+        function closeMapModal() {
+            document.getElementById('map-modal').classList.add('hidden');
+            document.removeEventListener('keydown', handleMapEscape);
+            if (sessionMap) {
+                sessionMap.destroy();
+                sessionMap = null;
+            }
+            currentOverlays = [];
         }
 
         // Load uploads
@@ -307,7 +619,7 @@
                     <td class="dim">${u.id}</td>
                     <td><span class="mono contributor-id" title="${escapeHtml(u.contributorID)}">${escapeHtml(u.contributorID.substring(0, 8))}...</span></td>
                     <td>${u.cellCount}</td>
-                    <td>${u.clientIP ? `<span class="ip-tag">${escapeHtml(u.clientIP)}</span>` : '<span class="dim">—</span>'}</td>
+                    <td>${u.clientIP ? `<span class="ip-tag">${escapeHtml(u.clientIP)}</span>` : '<span class="dim">\u2014</span>'}</td>
                     <td>${formatDate(u.uploadedAt)}</td>
                 `;
                 tbody.appendChild(tr);
@@ -336,7 +648,8 @@
 
                 const data = await res.json();
                 showToast(`Deleted: ${data.deletedContributions} contributions, ${data.cellsRemoved} cells removed`, 'success');
-                // Reload data
+                selectedContributorID = null;
+                document.getElementById('sessions-container').innerHTML = '';
                 loadStats();
                 loadContributors();
                 uploadsLoaded = false;
@@ -371,7 +684,7 @@
             return div.innerHTML;
         }
 
-        // Purge bogus contributors (single-packet entries from the contributor ID bug)
+        // Purge bogus contributors
         async function purgeBogus() {
             const bogusCount = contributorsData.filter(c => c.totalPacketCount <= 1).length;
             if (!confirm(`Purge ${bogusCount} contributors with 1 or fewer packets?\n\nThis removes all their contributions and upload logs. Cannot be undone.`)) {
@@ -385,6 +698,8 @@
                 }
                 const data = await res.json();
                 showToast(`Purged ${data.contributorsRemoved} contributors, ${data.cellsRemoved} cells removed`, 'success');
+                selectedContributorID = null;
+                document.getElementById('sessions-container').innerHTML = '';
                 loadStats();
                 loadContributors();
                 uploadsLoaded = false;
