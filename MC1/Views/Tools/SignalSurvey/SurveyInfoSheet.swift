@@ -14,6 +14,7 @@ struct SurveyInfoSheet: View {
                     activeSurveySection
                     hopCountSection
                     readingTheMapSection
+                    communitySection
                     tipsSection
                 }
                 .padding()
@@ -78,12 +79,11 @@ struct SurveyInfoSheet: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 8) {
-                probeStep(number: 1, text: "Discover request — asks nearby repeaters to identify themselves")
-                probeStep(number: 2, text: "Channel message — tests data delivery through the mesh")
-                probeStep(number: 3, text: "Flood trace — maps how deep into the mesh your signal reaches")
+                probeStep(number: 1, text: "Channel message — sends a message on your selected channel. A heard-repeat response proves direct 2-way connectivity.")
+                probeStep(number: 2, text: "Deep Scan (optional) — also sends discover and flood trace requests to map gateway SNR and mesh depth beyond direct reach.")
             }
 
-            Text("Each probe cycle sends these three packets and records any responses received.")
+            Text("Probe frequency controls how often probes are sent based on distance traveled. Choose Driving, Dense, Normal, or Sparse to match your speed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -109,18 +109,35 @@ struct SurveyInfoSheet: View {
         ) {
             VStack(alignment: .leading, spacing: 6) {
                 mapLegendRow(label: "Connected (2-way)", color: .green, icon: "arrow.left.arrow.right",
-                             description: "Repeaters confirmed via 0-hop direct response")
+                             description: "Repeaters confirmed via direct probe response — strongest proof of connectivity")
                 mapLegendRow(label: "Mesh Reach", color: .cyan, icon: "point.3.connected.trianglepath.dotted",
                              description: "Repeaters reached via multi-hop relay — not direct 2-way")
                 mapLegendRow(label: "Heard (1-way)", color: .secondary, icon: "ear",
-                             description: "Repeaters detected passively — reception only")
-                mapLegendRow(label: "Dead zone", color: .red, icon: "xmark.circle",
-                             description: "Active probes sent but no response received")
+                             description: "Repeaters detected passively — reception only, no TX confirmation")
+                mapLegendRow(label: "Dead Zone", color: .gray, icon: "hexagon",
+                             description: "Active probes were sent but no response was received within the timeout window")
             }
 
-            Text("Cell colors indicate signal quality (SNR): green = excellent, yellow = good, orange = fair, red = poor.")
+            Text("Cell colors reflect signal quality (SNR): green = excellent, yellow = good, orange = fair, red = poor. Tap any cell for detailed stats including packet counts and repeater info.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var communitySection: some View {
+        infoSection(
+            icon: "globe.americas.fill",
+            iconColor: .cyan,
+            title: "Community Map"
+        ) {
+            Text("Aggregated survey data from all contributors, shown as a faded overlay behind your own data.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            bulletPoint("Toggle the globe icon on the map to show/hide community data")
+            bulletPoint("Filter community data by coverage type, repeater, and time range")
+            bulletPoint("Enable live upload to share data to the community map in real time")
+            bulletPoint("Upload completed sessions via the menu to contribute")
         }
     }
 
@@ -130,9 +147,11 @@ struct SurveyInfoSheet: View {
             iconColor: .yellow,
             title: "Tips"
         ) {
-            bulletPoint("Enable active probing to confirm bidirectional connectivity")
+            bulletPoint("Enable active probing with a channel to confirm bidirectional connectivity")
+            bulletPoint("Use Deep Scan mode at slower speeds for detailed mesh depth data")
             bulletPoint("Use Driving mode when traveling at speed for denser coverage")
-            bulletPoint("Upload your survey to the community map to help others")
+            bulletPoint("Enable live upload to share survey data to the community map in real time")
+            bulletPoint("Dead zones appear as gray dashed cells where probes got no response")
             bulletPoint("Passive data is still valuable — it maps where repeater signals reach")
             bulletPoint("Survey the same area multiple times for more reliable data")
         }

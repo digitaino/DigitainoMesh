@@ -11,7 +11,6 @@ struct SignalSurveyView: View {
     @State private var showingExportSheet = false
     @State private var showingPacketList = false
     @State private var showingSurveySetup = false
-    @State private var showingCommunityMap = false
     @State private var showingInfoSheet = false
     @State private var showingBatchUpload = false
     @State private var showingUploadPrompt = false
@@ -85,9 +84,6 @@ struct SignalSurveyView: View {
                     return (q: q, r: r)
                 }
             )
-        }
-        .sheet(isPresented: $showingCommunityMap) {
-            CommunityMapView()
         }
         .sheet(isPresented: $showingInfoSheet) {
             SurveyInfoSheet()
@@ -175,6 +171,7 @@ struct SignalSurveyView: View {
         .onDisappear {
             // Sync state when navigating away (survey may still be running)
             appState.isSurveyActive = viewModel.isActive
+            viewModel.stopCommunityRefresh()
         }
         .onChange(of: viewModel.liveStatus) { _, newStatus in
             appState.surveyLiveStatus = newStatus
@@ -375,12 +372,7 @@ struct SignalSurveyView: View {
                     }
 
                     Button {
-                        guard let dataStore = appState.offlineDataStore,
-                              let deviceID = appState.currentDeviceID else { return }
-                        viewModel.selectedSessionID = nil
-                        Task {
-                            await viewModel.loadAllPoints(dataStore: dataStore, deviceID: deviceID)
-                        }
+                        viewModel.clearSessionData()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.caption2.weight(.semibold))
@@ -399,6 +391,18 @@ struct SignalSurveyView: View {
                 HStack(spacing: 6) {
                     Text("\(viewModel.livePointCount) pts")
                         .font(.caption.weight(.medium))
+
+                    Button {
+                        viewModel.clearSessionData()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -1025,6 +1029,36 @@ struct SignalSurveyView: View {
                             .fill(viewModel.communityRepeaterFilter != nil ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
                     )
                 }
+
+                Menu {
+                    ForEach(MapTimeFilter.allCases) { filter in
+                        Button {
+                            viewModel.communityTimeFilter = filter
+                        } label: {
+                            HStack {
+                                Text(filter.displayName)
+                                if viewModel.communityTimeFilter == filter {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.caption2)
+                        Text(viewModel.communityTimeFilter.displayName)
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(viewModel.communityTimeFilter != .allTime ? .cyan : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(viewModel.communityTimeFilter != .allTime ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
+                    )
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
@@ -1562,14 +1596,23 @@ struct SignalSurveyView: View {
                     } label: {
                         Label("All Sessions", systemImage: "map.fill")
                     }
+
+                    Button {
+                        viewModel.clearSessionData()
+                    } label: {
+                        Label("Clear Map", systemImage: "eye.slash")
+                    }
                 }
 
                 Divider()
 
                 Button {
-                    showingCommunityMap = true
+                    viewModel.showCommunityOverlay.toggle()
                 } label: {
-                    Label("Community Map", systemImage: "globe")
+                    Label(
+                        viewModel.showCommunityOverlay ? "Hide Community Data" : "Show Community Data",
+                        systemImage: viewModel.showCommunityOverlay ? "globe.americas.fill" : "globe.americas"
+                    )
                 }
 
                 Divider()

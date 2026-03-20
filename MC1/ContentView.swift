@@ -151,10 +151,10 @@ struct MainTabView: View {
                         appState.navigation.navigateToSurvey()
                     }
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(.trailing, 16)
-                .padding(.bottom, 60)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .padding(.top, 60)
+                .transition(.move(edge: .top).combined(with: .opacity))
                 .animation(.spring(duration: 0.3), value: appState.isSurveyActive)
             }
         }

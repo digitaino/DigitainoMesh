@@ -10,6 +10,8 @@ private let logger = Logger(subsystem: "com.mc1", category: "SignalSurvey")
 @MainActor @Observable
 final class SignalSurveyViewModel {
 
+    private static let isoFormatter = ISO8601DateFormatter()
+
     // MARK: - Survey State
 
     enum SurveyState: Equatable {
@@ -295,6 +297,7 @@ final class SignalSurveyViewModel {
                 selectedCommunityCell = nil
                 communityCoverageFilter = .all
                 communityRepeaterFilter = nil
+                communityTimeFilter = .allTime
                 stopCommunityRefresh()
             }
         }
@@ -308,6 +311,9 @@ final class SignalSurveyViewModel {
 
     /// Optional repeater filter for the community overlay layer.
     var communityRepeaterFilter: String?
+
+    /// Time filter for the community overlay (how recent the data must be).
+    var communityTimeFilter: MapTimeFilter = .allTime
 
     /// All unique repeater hex IDs from current community cell data, consolidated by prefix.
     var communityAvailableRepeaters: [String] {
@@ -329,6 +335,16 @@ final class SignalSurveyViewModel {
                     let uid = id.uppercased()
                     return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
                 }
+            }
+        }
+        if let maxAge = communityTimeFilter.maxAge {
+            let cutoff = Date().addingTimeInterval(-maxAge)
+            result = result.filter { cell in
+                guard let dateStr = cell.lastUpdated,
+                      let date = Self.isoFormatter.date(from: dateStr) else {
+                    return false
+                }
+                return date >= cutoff
             }
         }
         return result
@@ -356,7 +372,8 @@ final class SignalSurveyViewModel {
         let maxLon = center.longitude + span.longitudeDelta / 2
 
         do {
-            let response = try await communityUploadService!.fetchCommunityData(
+            guard let service = communityUploadService else { return }
+            let response = try await service.fetchCommunityData(
                 minLat: minLat, maxLat: maxLat,
                 minLon: minLon, maxLon: maxLon
             )
@@ -379,7 +396,7 @@ final class SignalSurveyViewModel {
         }
     }
 
-    private func stopCommunityRefresh() {
+    func stopCommunityRefresh() {
         communityRefreshTask?.cancel()
         communityRefreshTask = nil
     }
@@ -717,8 +734,13 @@ final class SignalSurveyViewModel {
         state = .active(sessionID: sessionID)
         selectedSessionID = sessionID
 
-        // Load existing points for this session
-        await loadPoints(dataStore: dataStore, sessionID: sessionID)
+        // Load existing points for this session (pass session to restore probesSentPerCell)
+        await loadPoints(dataStore: dataStore, sessionID: sessionID, session: session)
+
+        // Restore probe count from persisted probe-sent-per-cell data
+        if !probesSentPerCell.isEmpty {
+            probeCount = probesSentPerCell.values.reduce(0, +)
+        }
 
         // Store references for probing
         self.binaryProtocolService = binaryProtocolService
@@ -955,6 +977,20 @@ final class SignalSurveyViewModel {
         }
     }
 
+    /// Clears all displayed data without loading anything.
+    /// Used when dismissing a session selection without wanting to show all sessions.
+    func clearSessionData() {
+        selectedSessionID = nil
+        allPoints = []
+        displayPoints = []
+        gridCells = []
+        gridBuckets = [:]
+        livePointCount = 0
+        probesSentPerCell = [:]
+        selectedCell = nil
+        selectedCommunityCell = nil
+    }
+
     // MARK: - Grid Heatmap Computation
 
     /// Full rebuild — used for batch loads, filter changes, and viz mode switches.
@@ -1078,7 +1114,7 @@ final class SignalSurveyViewModel {
 
         let updatedCell = Self.makeGridCell(
             coord: hex,
-            points: gridBuckets[hex]!,
+            points: gridBuckets[hex] ?? [point],
             refLat: gridReferenceLatitude,
             probesSent: probesSentPerCell[hex.key]
         )

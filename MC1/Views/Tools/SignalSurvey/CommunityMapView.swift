@@ -24,7 +24,9 @@ struct CommunityMapView: View {
     @State private var refreshTask: Task<Void, Never>?
     @State private var coverageFilter: CoverageFilter = .all
     @State private var selectedRepeater: String?
+    @State private var timeFilter: MapTimeFilter = .allTime
 
+    private static let isoFormatter = ISO8601DateFormatter()
     private let uploadService = SurveyUploadService()
 
     /// All unique repeater hex IDs from current cell data, consolidated by prefix.
@@ -53,6 +55,16 @@ struct CommunityMapView: View {
                     let uid = id.uppercased()
                     return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
                 }
+            }
+        }
+        if let maxAge = timeFilter.maxAge {
+            let cutoff = Date().addingTimeInterval(-maxAge)
+            result = result.filter { cell in
+                guard let dateStr = cell.lastUpdated,
+                      let date = Self.isoFormatter.date(from: dateStr) else {
+                    return false
+                }
+                return date >= cutoff
             }
         }
         return result
@@ -120,6 +132,7 @@ struct CommunityMapView: View {
                         .frame(maxWidth: 200)
 
                         repeaterMenu
+                        timeFilterMenu
                     }
                 }
             }
@@ -190,6 +203,40 @@ struct CommunityMapView: View {
             .background(
                 Capsule()
                     .fill(selectedRepeater != nil ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
+            )
+        }
+    }
+
+    // MARK: - Time Filter Menu
+
+    private var timeFilterMenu: some View {
+        Menu {
+            ForEach(MapTimeFilter.allCases) { filter in
+                Button {
+                    timeFilter = filter
+                } label: {
+                    HStack {
+                        Text(filter.displayName)
+                        if timeFilter == filter {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.caption)
+                Text(timeFilter.displayName)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(timeFilter != .allTime ? .cyan : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(timeFilter != .allTime ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
             )
         }
     }
