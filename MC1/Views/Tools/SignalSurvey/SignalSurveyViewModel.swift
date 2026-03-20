@@ -666,6 +666,16 @@ final class SignalSurveyViewModel {
         }
     }
 
+    /// Persists in-memory probe data to the database without stopping the session.
+    /// Called when the view disappears so that `resumeIfActive()` can restore probe count.
+    func persistProbeData(dataStore: PersistenceStore) async {
+        guard case .active(let sessionID) = state, !probesSentPerCell.isEmpty else { return }
+        try? await dataStore.saveProbesSentPerCell(
+            sessionID: sessionID,
+            probesSentPerCell: probesSentPerCell
+        )
+    }
+
     func stopSurvey(
         surveyService: SurveyService,
         locationService: LocationService,
@@ -732,7 +742,10 @@ final class SignalSurveyViewModel {
 
         guard let sessionID = await surveyService.currentSessionID else { return }
 
-        // The service has an active session — restore view model state
+        // Yield to allow the previous view's .onDisappear persist task to schedule,
+        // then re-fetch sessions from DB to get the latest probesSentPerCell.
+        await Task.yield()
+        await loadSessions(dataStore: dataStore, deviceID: deviceID)
         let session = sessions.first(where: { $0.id == sessionID })
         activeSession = session
         state = .active(sessionID: sessionID)
@@ -769,7 +782,10 @@ final class SignalSurveyViewModel {
             }
         }
 
-        logger.info("Resumed active survey session: \(sessionID), \(self.livePointCount) existing points")
+        // Update the live status immediately so the floating indicator shows correct data
+        refreshLiveStatus()
+
+        logger.info("Resumed active survey session: \(sessionID), \(self.livePointCount) existing points, \(self.probeCount) probes")
     }
 
     // MARK: - Live Updates

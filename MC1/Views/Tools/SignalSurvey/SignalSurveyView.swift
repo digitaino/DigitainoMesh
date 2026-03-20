@@ -179,6 +179,12 @@ struct SignalSurveyView: View {
             // Sync state when navigating away (survey may still be running)
             appState.isSurveyActive = viewModel.isActive
             viewModel.stopCommunityRefresh()
+
+            // Persist probe data so resumeIfActive() can restore probe count
+            // when the view is recreated after back-button navigation.
+            if viewModel.isActive, let dataStore = appState.offlineDataStore {
+                Task { await viewModel.persistProbeData(dataStore: dataStore) }
+            }
         }
         .onChange(of: viewModel.liveStatus) { _, newStatus in
             appState.surveyLiveStatus = newStatus
