@@ -171,11 +171,12 @@ struct SurveyController {
         // All clients use the same rounding so cells from different sessions merge correctly.
         let normalizedRefLat = (payload.referenceLatitude / 10.0).rounded() * 10.0
 
-        // Session-based deduplication: if sessionIDs are provided, remove any existing
-        // contributions for those sessions from this contributor before adding new data.
-        // This makes re-uploading the same session idempotent.
+        // Session-based deduplication: if sessionIDs are provided AND this is a batch upload
+        // (more than 1 cell), remove any existing contributions for those sessions before
+        // adding new data. This makes re-uploading the same session idempotent.
+        // Single-cell uploads (live) skip dedup so they accumulate incrementally.
         let sessionIDs = payload.sessionIDs ?? []
-        if !sessionIDs.isEmpty {
+        if !sessionIDs.isEmpty && payload.cells.count > 1 {
             let removed = try await removeSessionContributions(
                 contributorID: payload.contributorID,
                 sessionIDs: sessionIDs,
@@ -921,6 +922,67 @@ struct SurveyController {
         return AdminContributorSessionsResponse(
             contributorID: contributorID,
             sessions: sessions
+        )
+    }
+
+    // MARK: - DELETE /api/v1/admin/contributor/:id/session/:sessionID
+
+    /// Delete a specific session's contributions from a contributor.
+    /// Subtracts the session's data from cell aggregates and removes the contribution records.
+    @Sendable
+    func deleteContributorSession(req: Request) async throws -> AdminDeleteSessionResponse {
+        guard let contributorID = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing contributor ID")
+        }
+        guard let sessionID = req.parameters.get("sessionID") else {
+            throw Abort(.badRequest, reason: "Missing session ID")
+        }
+
+        let contributions = try await CellContribution.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .filter(\.$sessionID == sessionID)
+            .with(\.$cell)
+            .all()
+
+        guard !contributions.isEmpty else {
+            throw Abort(.notFound, reason: "No contributions found for session \(sessionID)")
+        }
+
+        var cellsRemoved = 0
+        var cellsUpdated = 0
+
+        for contribution in contributions {
+            let cell = contribution.cell
+
+            cell.totalSNRWeighted -= contribution.snrWeighted
+            cell.totalRSSIWeighted -= contribution.rssiWeighted ?? 0
+            cell.totalPacketCount -= contribution.packetCount
+            cell.floodCount -= contribution.floodCount
+            cell.directCount -= contribution.directCount
+            cell.activePacketCount -= contribution.activePacketCount
+            cell.passivePacketCount -= contribution.passivePacketCount
+            if let contribProbes = contribution.probesSent, contribProbes > 0 {
+                cell.probesSent = max(0, (cell.probesSent ?? 0) - contribProbes)
+            }
+            cell.contributionCount -= 1
+
+            if cell.totalPacketCount <= 0 && cell.contributionCount <= 0 {
+                try await cell.delete(on: req.db)
+                cellsRemoved += 1
+            } else {
+                try await cell.save(on: req.db)
+                cellsUpdated += 1
+            }
+
+            try await contribution.delete(on: req.db)
+        }
+
+        req.logger.info("Deleted session \(sessionID) from contributor \(contributorID.prefix(8)): \(contributions.count) contributions, \(cellsRemoved) cells removed, \(cellsUpdated) cells updated")
+
+        return AdminDeleteSessionResponse(
+            contributionsRemoved: contributions.count,
+            cellsRemoved: cellsRemoved,
+            cellsUpdated: cellsUpdated
         )
     }
 

@@ -1617,7 +1617,8 @@ struct SignalSurveyView: View {
                                     Task {
                                         await viewModel.loadPoints(
                                             dataStore: dataStore,
-                                            sessionID: session.id
+                                            sessionID: session.id,
+                                            session: session
                                         )
                                     }
                                 }

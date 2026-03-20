@@ -651,12 +651,21 @@ final class SignalSurveyViewModel {
         dataStore: PersistenceStore?,
         deviceID: UUID?
     ) async {
-        guard case .active = state else { return }
+        guard case .active(let sessionID) = state else { return }
 
         // Stop probing first
         stopProbeLoop()
 
         do {
+            // Persist probe-sent-per-cell data before clearing it,
+            // so dead zones can be reconstructed when loading this session later
+            if let dataStore, !probesSentPerCell.isEmpty {
+                try? await dataStore.saveProbesSentPerCell(
+                    sessionID: sessionID,
+                    probesSentPerCell: probesSentPerCell
+                )
+            }
+
             try await surveyService.stopSession()
             locationService.stopContinuousUpdates()
             await surveyService.setPointRecordedHandler(nil)
@@ -916,10 +925,16 @@ final class SignalSurveyViewModel {
         sessionStats = stats
     }
 
-    func loadPoints(dataStore: PersistenceStore, sessionID: UUID) async {
+    func loadPoints(dataStore: PersistenceStore, sessionID: UUID, session: SurveySessionDTO? = nil) async {
         do {
             allPoints = try await dataStore.fetchSurveyPoints(sessionID: sessionID)
             livePointCount = allPoints.count
+
+            // Restore probe-sent-per-cell data if available (for dead zone reconstruction)
+            if let stored = session?.probesSentPerCell, !stored.isEmpty {
+                probesSentPerCell = stored
+            }
+
             applyFilter()
             centerOnData()
         } catch {
@@ -931,6 +946,8 @@ final class SignalSurveyViewModel {
         do {
             allPoints = try await dataStore.fetchSurveyPoints(deviceID: deviceID)
             livePointCount = allPoints.count
+            // Clear single-session probe data so dead zones don't bleed into combined view
+            probesSentPerCell = [:]
             applyFilter()
             centerOnData()
         } catch {
@@ -964,36 +981,75 @@ final class SignalSurveyViewModel {
         }
 
         // Add dead zone cells for probed-but-no-response hexes
-        let now = Date()
         let dataCellIDs = Set(cells.map(\.coordKey))
-        for probe in probeSendLocations where now.timeIntervalSince(probe.time) >= Self.deadZoneTimeout {
-            let key = probe.hexCoord.key
-            guard !dataCellIDs.contains(key) else { continue }
-            let center = HexGrid.centerLatLon(from: probe.hexCoord, referenceLatitude: gridReferenceLatitude)
-            cells.append(GridCell(
-                coordKey: key,
-                centerLatitude: center.latitude,
-                centerLongitude: center.longitude,
-                averageSNR: nil,
-                averageRSSI: nil,
-                minSNR: nil,
-                maxSNR: nil,
-                packetCount: 0,
-                snrQuality: .unknown,
-                vertices: HexGrid.vertices(for: probe.hexCoord, referenceLatitude: gridReferenceLatitude),
-                earliestTimestamp: nil,
-                latestTimestamp: nil,
-                uniqueSenders: [],
-                uniqueRelayNodes: [],
-                connectedRelayNodes: [],
-                meshReachRelayNodes: [],
-                heardOnlyRelayNodes: [],
-                isDeadZone: true,
-                bestGatewaySNR: nil,
-                maxMeshDepth: 0,
-                activePacketCount: 0,
-                probesSent: probesSentPerCell[key]
-            ))
+        var addedDeadZones = Set<String>()
+
+        // Live session: use probeSendLocations with timeout check
+        if !probeSendLocations.isEmpty {
+            let now = Date()
+            for probe in probeSendLocations where now.timeIntervalSince(probe.time) >= Self.deadZoneTimeout {
+                let key = probe.hexCoord.key
+                guard !dataCellIDs.contains(key), !addedDeadZones.contains(key) else { continue }
+                addedDeadZones.insert(key)
+                let center = HexGrid.centerLatLon(from: probe.hexCoord, referenceLatitude: gridReferenceLatitude)
+                cells.append(GridCell(
+                    coordKey: key,
+                    centerLatitude: center.latitude,
+                    centerLongitude: center.longitude,
+                    averageSNR: nil,
+                    averageRSSI: nil,
+                    minSNR: nil,
+                    maxSNR: nil,
+                    packetCount: 0,
+                    snrQuality: .unknown,
+                    vertices: HexGrid.vertices(for: probe.hexCoord, referenceLatitude: gridReferenceLatitude),
+                    earliestTimestamp: nil,
+                    latestTimestamp: nil,
+                    uniqueSenders: [],
+                    uniqueRelayNodes: [],
+                    connectedRelayNodes: [],
+                    meshReachRelayNodes: [],
+                    heardOnlyRelayNodes: [],
+                    isDeadZone: true,
+                    bestGatewaySNR: nil,
+                    maxMeshDepth: 0,
+                    activePacketCount: 0,
+                    probesSent: probesSentPerCell[key]
+                ))
+            }
+        } else if !probesSentPerCell.isEmpty {
+            // Restored session: reconstruct dead zones from stored probesSentPerCell
+            for (key, probes) in probesSentPerCell where probes > 0 {
+                guard !dataCellIDs.contains(key) else { continue }
+                let parts = key.split(separator: "_")
+                guard parts.count == 2, let q = Int(parts[0]), let r = Int(parts[1]) else { continue }
+                let coord = HexGrid.AxialCoord(q: q, r: r)
+                let center = HexGrid.centerLatLon(from: coord, referenceLatitude: gridReferenceLatitude)
+                cells.append(GridCell(
+                    coordKey: key,
+                    centerLatitude: center.latitude,
+                    centerLongitude: center.longitude,
+                    averageSNR: nil,
+                    averageRSSI: nil,
+                    minSNR: nil,
+                    maxSNR: nil,
+                    packetCount: 0,
+                    snrQuality: .unknown,
+                    vertices: HexGrid.vertices(for: coord, referenceLatitude: gridReferenceLatitude),
+                    earliestTimestamp: nil,
+                    latestTimestamp: nil,
+                    uniqueSenders: [],
+                    uniqueRelayNodes: [],
+                    connectedRelayNodes: [],
+                    meshReachRelayNodes: [],
+                    heardOnlyRelayNodes: [],
+                    isDeadZone: true,
+                    bestGatewaySNR: nil,
+                    maxMeshDepth: 0,
+                    activePacketCount: 0,
+                    probesSent: probes
+                ))
+            }
         }
 
         gridCells = cells

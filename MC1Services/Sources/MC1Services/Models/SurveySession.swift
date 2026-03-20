@@ -13,18 +13,24 @@ public final class SurveySession {
     public var endedAt: Date?
     public var name: String?
 
+    /// JSON-encoded `[String: Int]` mapping hex cell keys to probe counts sent.
+    /// Used to reconstruct dead zone cells when loading old sessions.
+    public var probesSentData: Data?
+
     public init(
         id: UUID = UUID(),
         deviceID: UUID,
         startedAt: Date = Date(),
         endedAt: Date? = nil,
-        name: String? = nil
+        name: String? = nil,
+        probesSentData: Data? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.name = name
+        self.probesSentData = probesSentData
     }
 }
 
@@ -37,6 +43,8 @@ public struct SurveySessionDTO: Sendable, Identifiable, Equatable, Hashable {
     public let startedAt: Date
     public var endedAt: Date?
     public var name: String?
+    /// Probe counts per hex cell key. Used to reconstruct dead zone cells.
+    public var probesSentPerCell: [String: Int]?
 
     /// Initialize from SwiftData model.
     public init(from model: SurveySession) {
@@ -45,6 +53,9 @@ public struct SurveySessionDTO: Sendable, Identifiable, Equatable, Hashable {
         self.startedAt = model.startedAt
         self.endedAt = model.endedAt
         self.name = model.name
+        if let data = model.probesSentData {
+            self.probesSentPerCell = try? JSONDecoder().decode([String: Int].self, from: data)
+        }
     }
 
     public init(
@@ -52,13 +63,15 @@ public struct SurveySessionDTO: Sendable, Identifiable, Equatable, Hashable {
         deviceID: UUID,
         startedAt: Date = Date(),
         endedAt: Date? = nil,
-        name: String? = nil
+        name: String? = nil,
+        probesSentPerCell: [String: Int]? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.name = name
+        self.probesSentPerCell = probesSentPerCell
     }
 
     // MARK: - Computed Properties

@@ -51,6 +51,7 @@ func routes(_ app: Application) throws {
     let admin = api.grouped("admin")
     admin.get("contributors", use: surveyController.getContributors)
     admin.get("contributor", ":id", "sessions", use: surveyController.getContributorSessions)
+    admin.delete("contributor", ":id", "session", ":sessionID", use: surveyController.deleteContributorSession)
     admin.get("uploads", use: surveyController.getUploads)
     admin.post("purge-bogus", use: surveyController.purgeBogusContributors)
 }

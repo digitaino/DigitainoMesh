@@ -203,6 +203,14 @@ struct AdminContributorSessionsResponse: Content {
     let sessions: [AdminSessionInfo]
 }
 
+// MARK: - Admin Delete Session Response
+
+struct AdminDeleteSessionResponse: Content {
+    let contributionsRemoved: Int
+    let cellsRemoved: Int
+    let cellsUpdated: Int
+}
+
 // MARK: - Admin Purge Response
 
 struct AdminPurgeResponse: Content {

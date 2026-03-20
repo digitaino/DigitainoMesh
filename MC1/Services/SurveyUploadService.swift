@@ -249,7 +249,8 @@ actor SurveyUploadService {
 
     /// Upload a single survey point to the community map server in real time.
     /// Converts the point to a 1-cell hex payload and POSTs it immediately.
-    /// The sessionID is included so the batch upload can replace live-uploaded data.
+    /// SessionIDs are included so the server can group contributions by session.
+    /// The server skips session dedup for single-cell (live) uploads, allowing accumulation.
     /// Errors are logged but not thrown — live upload is best-effort.
     func uploadLivePoint(
         _ point: SignalSurveyPointDTO,

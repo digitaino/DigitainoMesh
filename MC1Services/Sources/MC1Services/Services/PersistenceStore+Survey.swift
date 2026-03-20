@@ -25,6 +25,20 @@ extension PersistenceStore {
         try modelContext.save()
     }
 
+    /// Saves probe-sent-per-cell data for a session (JSON-encoded `[String: Int]`).
+    /// This enables reconstructing dead zone cells when loading old sessions.
+    public func saveProbesSentPerCell(sessionID: UUID, probesSentPerCell: [String: Int]) throws {
+        guard !probesSentPerCell.isEmpty else { return }
+        let targetID = sessionID
+        var descriptor = FetchDescriptor<SurveySession>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        descriptor.fetchLimit = 1
+        guard let session = try modelContext.fetch(descriptor).first else { return }
+        session.probesSentData = try JSONEncoder().encode(probesSentPerCell)
+        try modelContext.save()
+    }
+
     /// Updates the name of a survey session.
     public func updateSurveySessionName(id: UUID, name: String) throws {
         let targetID = id

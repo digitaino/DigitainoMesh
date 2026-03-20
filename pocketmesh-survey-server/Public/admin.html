@@ -526,6 +526,7 @@
                         <span class="session-stat">${formatDate(s.contributedAt)}</span>
                         <div style="flex:1"></div>
                         <button class="btn btn-primary" onclick="openSessionMap('${escapeHtml(data.contributorID)}', '${escapeHtml(s.sessionID)}')">View Map</button>
+                        <button class="btn btn-danger" onclick="deleteSession('${escapeHtml(data.contributorID)}', '${escapeHtml(s.sessionID)}')">Delete</button>
                     </div>`;
             }
 
@@ -806,6 +807,33 @@
                 loadStats();
                 loadContributors();
                 uploadsLoaded = false;
+            } catch (e) {
+                showToast('Delete failed: ' + e.message, 'error');
+            }
+        }
+
+        // Delete specific session
+        async function deleteSession(contributorID, sessionID) {
+            const label = sessionID === 'unknown' ? '(no ID)' : sessionID.substring(0, 8) + '...';
+            if (!confirm(`Delete session ${label} from contributor ${contributorID.substring(0, 8)}...?\n\nThis will remove all cell contributions from this session. This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/contributor/${encodeURIComponent(contributorID)}/session/${encodeURIComponent(sessionID)}`, {
+                    method: 'DELETE'
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+
+                const data = await res.json();
+                showToast(`Deleted session: ${data.contributionsRemoved} contributions, ${data.cellsRemoved} cells removed, ${data.cellsUpdated} updated`, 'success');
+                // Reload sessions for this contributor
+                selectContributor(contributorID);
+                loadStats();
             } catch (e) {
                 showToast('Delete failed: ' + e.message, 'error');
             }
