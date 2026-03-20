@@ -144,11 +144,41 @@ struct SignalSurveyExportView: View {
                 repeaterContacts = allContacts.filter { $0.type == .repeater }
             }
 
+            // Load stored probe data for dead zone reconstruction
+            var probesSentPerCell: [String: Int] = [:]
+            var deadZoneHexCoords: [(q: Int, r: Int)] = []
+            if let deviceID {
+                let sessions = try await dataStore.fetchSurveySessions(deviceID: deviceID)
+                if let session = sessions.first(where: { $0.id == sessionID }),
+                   let stored = session.probesSentPerCell, !stored.isEmpty {
+                    probesSentPerCell = stored
+
+                    // Derive dead zone coords: cells with probes sent but no survey point data
+                    let pointCoords = try await dataStore.fetchSurveyPointCoordinates(sessionID: sessionID)
+                    let dataCellKeys = Set(pointCoords.map { coord in
+                        let hex = HexGrid.axialFromLatLon(
+                            latitude: coord.latitude,
+                            longitude: coord.longitude,
+                            referenceLatitude: HexGrid.fixedReferenceLatitude(for: coord.latitude)
+                        )
+                        return hex.key
+                    })
+                    for (key, probes) in stored where probes > 0 && !dataCellKeys.contains(key) {
+                        let parts = key.split(separator: "_")
+                        if parts.count == 2, let q = Int(parts[0]), let r = Int(parts[1]) {
+                            deadZoneHexCoords.append((q: q, r: r))
+                        }
+                    }
+                }
+            }
+
             let service = SurveyUploadService()
             let response = try await service.upload(
                 sessionID: sessionID,
                 dataStore: dataStore,
-                repeaterContacts: repeaterContacts
+                repeaterContacts: repeaterContacts,
+                probesSentPerCell: probesSentPerCell,
+                deadZoneHexCoords: deadZoneHexCoords
             )
             uploadResult = "\(response.accepted) cells uploaded"
         } catch {
