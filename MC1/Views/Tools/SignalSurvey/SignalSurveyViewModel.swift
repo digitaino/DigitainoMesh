@@ -76,6 +76,10 @@ final class SignalSurveyViewModel {
     private(set) var livePointCount: Int = 0
     var errorMessage: String?
 
+    /// True while the view is loading sessions and checking for an active survey to resume.
+    /// Prevents the empty state from flashing when the view is recreated after back-button navigation.
+    var isCheckingForActiveSession = false
+
     var isActive: Bool {
         if case .active = state { return true }
         return false

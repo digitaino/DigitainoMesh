@@ -25,7 +25,9 @@ struct SignalSurveyView: View {
 
     var body: some View {
         ZStack {
-            if viewModel.allPoints.isEmpty && !viewModel.isActive {
+            if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
+                ProgressView("Resuming survey…")
+            } else if viewModel.allPoints.isEmpty && !viewModel.isActive {
                 emptyState
             } else {
                 mapContent
@@ -41,6 +43,11 @@ struct SignalSurveyView: View {
         .task(id: appState.servicesVersion) {
             guard let dataStore = appState.offlineDataStore,
                   let deviceID = appState.currentDeviceID else { return }
+
+            // Prevent the empty state from showing while we check for an active session
+            viewModel.isCheckingForActiveSession = true
+            defer { viewModel.isCheckingForActiveSession = false }
+
             await viewModel.loadSessions(dataStore: dataStore, deviceID: deviceID)
             await viewModel.loadContacts(dataStore: dataStore, deviceID: deviceID)
             await viewModel.loadProbeChannels(dataStore: dataStore, deviceID: deviceID)
