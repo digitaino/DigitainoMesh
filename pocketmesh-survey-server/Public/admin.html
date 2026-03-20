@@ -125,7 +125,7 @@
         }
         .btn-primary:hover { background: rgba(34,211,238,0.15); }
 
-        .hidden { display: none; }
+        .hidden { display: none !important; }
         .loading { text-align: center; padding: 40px; color: #666; }
 
         .toast {
@@ -195,6 +195,9 @@
             background: #0a0a0a;
             display: flex;
             flex-direction: column;
+        }
+        .map-modal.hidden {
+            display: none;
         }
         .map-modal-header {
             display: flex;
