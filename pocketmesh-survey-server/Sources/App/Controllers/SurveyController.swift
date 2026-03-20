@@ -893,11 +893,13 @@ struct SurveyController {
                     longitude: cell.longitude,
                     hexQ: cell.hexQ,
                     hexR: cell.hexR,
+                    referenceLatitude: cell.referenceLatitude,
                     packetCount: c.packetCount,
                     averageSNR: avgSNR,
                     snrQuality: quality,
                     activePacketCount: c.activePacketCount,
-                    passivePacketCount: c.passivePacketCount
+                    passivePacketCount: c.passivePacketCount,
+                    probesSent: c.probesSent
                 )
             }
 

@@ -253,6 +253,43 @@
             border-radius: 50%;
         }
 
+        /* Cell detail popup */
+        .cell-popup {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(15,15,15,0.95);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            padding: 14px 18px;
+            font-size: 12px;
+            z-index: 10001;
+            min-width: 220px;
+            max-width: 300px;
+        }
+        .cell-popup.hidden { display: none; }
+        .cell-popup-header {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .cell-popup-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .cell-popup-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            color: #aaa;
+        }
+        .cell-popup-row .val { color: #e5e5e5; font-variant-numeric: tabular-nums; }
+
         @media (max-width: 768px) {
             body { padding: 12px; }
             .stats-row { gap: 8px; }
@@ -336,7 +373,9 @@
             <div class="map-legend-item"><span class="map-legend-dot" style="background:#f97316"></span> Fair (&gt;0 dB)</div>
             <div class="map-legend-item"><span class="map-legend-dot" style="background:#ef4444"></span> Poor (&gt;-10 dB)</div>
             <div class="map-legend-item"><span class="map-legend-dot" style="background:#991b1b"></span> Very Poor (&le;-10 dB)</div>
+            <div class="map-legend-item"><span class="map-legend-dot" style="background:#888"></span> No Response</div>
         </div>
+        <div id="cell-popup" class="cell-popup hidden"></div>
     </div>
 
     <script>
@@ -518,6 +557,26 @@
                 .catch(e => showToast('Failed to load session: ' + e.message, 'error'));
         }
 
+        // Hex grid math — matches community map (app.js)
+        const HEX_SIZE = 0.0005;
+
+        function hexVerticesAtCenter(centerLat, centerLon, refLat) {
+            const lonScale = Math.cos(refLat * Math.PI / 180);
+            const vertices = [];
+            for (let i = 0; i < 6; i++) {
+                const angle = (60 * i) * Math.PI / 180;
+                vertices.push(
+                    new mapkit.Coordinate(
+                        centerLat + HEX_SIZE * Math.sin(angle),
+                        centerLon + (HEX_SIZE * Math.cos(angle)) / lonScale
+                    )
+                );
+            }
+            return vertices;
+        }
+
+        let selectedOverlay = null;
+
         function showMapModal(session, contributorID) {
             document.getElementById('map-modal').classList.remove('hidden');
             document.getElementById('map-modal-title').textContent =
@@ -530,6 +589,8 @@
                 sessionMap.destroy();
                 sessionMap = null;
             }
+            selectedOverlay = null;
+            document.getElementById('cell-popup').classList.add('hidden');
 
             sessionMap = new mapkit.Map('session-map', {
                 colorScheme: mapkit.Map.ColorSchemes.Dark,
@@ -538,28 +599,77 @@
                 showsMapTypeControl: false,
             });
 
-            // Add cell overlays
+            // Add hex cell overlays
             const cells = session.cells;
             const overlays = [];
 
             for (const cell of cells) {
-                const color = snrColor(cell.snrQuality);
-                const coord = new mapkit.Coordinate(cell.latitude, cell.longitude);
+                const isDeadZone = cell.packetCount === 0 && cell.probesSent && cell.probesSent > 0;
+                const color = isDeadZone ? '#888' : snrColor(cell.snrQuality);
+                const opacity = isDeadZone ? 0.45 : 0.6;
+                const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
 
-                const circle = new mapkit.CircleOverlay(coord, 25);
-                circle.style = new mapkit.Style({
-                    fillColor: color,
-                    fillOpacity: 0.7,
-                    strokeColor: color,
-                    strokeOpacity: 0.9,
-                    lineWidth: 1,
+                const polygon = new mapkit.PolygonOverlay(vertices, {
+                    style: new mapkit.Style({
+                        fillColor: color,
+                        fillOpacity: opacity,
+                        strokeColor: color,
+                        strokeOpacity: 0.8,
+                        lineWidth: isDeadZone ? 1 : 0.5,
+                        lineDash: isDeadZone ? [4, 3] : []
+                    }),
+                    enabled: true,
+                    visible: true
                 });
-                circle._cellData = cell;
-                overlays.push(circle);
+                polygon._cellData = cell;
+                polygon._color = color;
+                overlays.push(polygon);
             }
 
             sessionMap.addOverlays(overlays);
             currentOverlays = overlays;
+
+            // Click handler for cell selection
+            sessionMap.addEventListener('select', function(event) {
+                const overlay = event.overlay;
+                if (!overlay || !overlay._cellData) return;
+
+                // Reset previous selection
+                if (selectedOverlay && selectedOverlay !== overlay) {
+                    const prev = selectedOverlay;
+                    const prevDead = prev._cellData.packetCount === 0 && prev._cellData.probesSent > 0;
+                    prev.style = new mapkit.Style({
+                        fillColor: prev._color,
+                        fillOpacity: prevDead ? 0.45 : 0.6,
+                        strokeColor: prev._color,
+                        strokeOpacity: 0.8,
+                        lineWidth: prevDead ? 1 : 0.5,
+                        lineDash: prevDead ? [4, 3] : []
+                    });
+                }
+
+                // Highlight selected
+                overlay.style = new mapkit.Style({
+                    fillColor: overlay._color,
+                    fillOpacity: 0.9,
+                    strokeColor: '#fff',
+                    strokeOpacity: 1,
+                    lineWidth: 2
+                });
+                selectedOverlay = overlay;
+
+                showCellPopup(overlay._cellData);
+            });
+
+            // Click on map background to deselect
+            sessionMap.element.addEventListener('click', function(e) {
+                // Small delay to let the select event fire first
+                setTimeout(() => {
+                    if (!selectedOverlay) {
+                        document.getElementById('cell-popup').classList.add('hidden');
+                    }
+                }, 50);
+            });
 
             // Fit map to show all cells with padding
             if (cells.length > 0) {
@@ -585,18 +695,58 @@
             document.addEventListener('keydown', handleMapEscape);
         }
 
+        function showCellPopup(cell) {
+            const popup = document.getElementById('cell-popup');
+            const isDeadZone = cell.packetCount === 0 && cell.probesSent && cell.probesSent > 0;
+            const color = isDeadZone ? '#888' : snrColor(cell.snrQuality);
+            const label = isDeadZone ? 'No Response' : (cell.snrQuality || 'unknown');
+
+            let html = `
+                <div class="cell-popup-header">
+                    <span class="cell-popup-dot" style="background:${color}"></span>
+                    <span style="color:${color}">${label}</span>
+                </div>
+                <div class="cell-popup-row"><span>Hex</span><span class="val">(${cell.hexQ}, ${cell.hexR})</span></div>
+                <div class="cell-popup-row"><span>Packets</span><span class="val">${cell.packetCount}</span></div>`;
+
+            if (cell.averageSNR !== null && cell.averageSNR !== undefined) {
+                html += `<div class="cell-popup-row"><span>Avg SNR</span><span class="val">${cell.averageSNR.toFixed(1)} dB</span></div>`;
+            }
+
+            html += `<div class="cell-popup-row"><span>Active</span><span class="val">${cell.activePacketCount}</span></div>`;
+            html += `<div class="cell-popup-row"><span>Passive</span><span class="val">${cell.passivePacketCount}</span></div>`;
+
+            if (cell.probesSent && cell.probesSent > 0) {
+                if (cell.packetCount === 0) {
+                    html += `<div class="cell-popup-row"><span>Probes</span><span class="val" style="color:#888">${cell.probesSent} sent, 0 responses</span></div>`;
+                } else {
+                    const rate = Math.min(1.0, cell.activePacketCount / cell.probesSent);
+                    const pct = Math.round(rate * 100);
+                    const rateColor = pct >= 75 ? '#22c55e' : pct >= 40 ? '#eab308' : '#ef4444';
+                    html += `<div class="cell-popup-row"><span>Success</span><span class="val" style="color:${rateColor}">${pct}% (${cell.activePacketCount}/${cell.probesSent})</span></div>`;
+                }
+            }
+
+            html += `<div class="cell-popup-row"><span>Location</span><span class="val" style="font-size:10px">${cell.latitude.toFixed(5)}, ${cell.longitude.toFixed(5)}</span></div>`;
+
+            popup.innerHTML = html;
+            popup.classList.remove('hidden');
+        }
+
         function handleMapEscape(e) {
             if (e.key === 'Escape') closeMapModal();
         }
 
         function closeMapModal() {
             document.getElementById('map-modal').classList.add('hidden');
+            document.getElementById('cell-popup').classList.add('hidden');
             document.removeEventListener('keydown', handleMapEscape);
             if (sessionMap) {
                 sessionMap.destroy();
                 sessionMap = null;
             }
             currentOverlays = [];
+            selectedOverlay = null;
         }
 
         // Load uploads

@@ -181,11 +181,13 @@ struct AdminSessionCell: Content {
     let longitude: Double
     let hexQ: Int
     let hexR: Int
+    let referenceLatitude: Double
     let packetCount: Int
     let averageSNR: Double?
     let snrQuality: String
     let activePacketCount: Int
     let passivePacketCount: Int
+    let probesSent: Int?
 }
 
 struct AdminSessionInfo: Content {
