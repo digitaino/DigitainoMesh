@@ -135,7 +135,9 @@ actor SurveyUploadService {
     func upload(
         sessionID: UUID,
         dataStore: PersistenceStore,
-        repeaterContacts: [ContactDTO] = []
+        repeaterContacts: [ContactDTO] = [],
+        probesSentPerCell: [String: Int] = [:],
+        deadZoneHexCoords: [(q: Int, r: Int)] = []
     ) async throws -> UploadResponse {
         // Ensure active/passive classification is backfilled before generating cell data.
         // The backfill is idempotent (only touches points with isActiveProbe==false that have
@@ -147,7 +149,9 @@ actor SurveyUploadService {
             sessionID: sessionID,
             dataStore: dataStore,
             includeTimeRange: false,
-            repeaterContacts: repeaterContacts
+            repeaterContacts: repeaterContacts,
+            probesSentPerCell: probesSentPerCell,
+            deadZoneHexCoords: deadZoneHexCoords
         ) else {
             throw SurveyUploadError.noData
         }
@@ -191,7 +195,9 @@ actor SurveyUploadService {
     func uploadMultipleSessions(
         sessionIDs: [UUID],
         dataStore: PersistenceStore,
-        repeaterContacts: [ContactDTO] = []
+        repeaterContacts: [ContactDTO] = [],
+        probesSentPerCell: [String: Int] = [:],
+        deadZoneHexCoords: [(q: Int, r: Int)] = []
     ) async throws -> UploadResponse {
         let backfilled = try await dataStore.backfillActiveProbeFlag()
         Self.logger.info("Batch upload: backfill updated \(backfilled) points")
@@ -199,7 +205,9 @@ actor SurveyUploadService {
         guard let result = try await SurveyExportService.generateCellDataForSessions(
             sessionIDs: sessionIDs,
             dataStore: dataStore,
-            repeaterContacts: repeaterContacts
+            repeaterContacts: repeaterContacts,
+            probesSentPerCell: probesSentPerCell,
+            deadZoneHexCoords: deadZoneHexCoords
         ) else {
             throw SurveyUploadError.noData
         }

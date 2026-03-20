@@ -76,7 +76,13 @@ struct SignalSurveyView: View {
                 selectedSessions: $batchSelectedSessions,
                 sessionStats: viewModel.sessionStats,
                 dataStore: appState.offlineDataStore,
-                deviceID: appState.currentDeviceID
+                deviceID: appState.currentDeviceID,
+                probesSentPerCell: viewModel.probesSentPerCell,
+                deadZoneHexCoords: viewModel.gridCells.filter(\.isDeadZone).compactMap { cell in
+                    let parts = cell.coordKey.split(separator: "_")
+                    guard parts.count == 2, let q = Int(parts[0]), let r = Int(parts[1]) else { return nil }
+                    return (q: q, r: r)
+                }
             )
         }
         .sheet(isPresented: $showingCommunityMap) {
@@ -1697,6 +1703,8 @@ struct BatchUploadView: View {
     let sessionStats: [UUID: SignalSurveyViewModel.SessionStats]
     let dataStore: PersistenceStore?
     var deviceID: UUID?
+    var probesSentPerCell: [String: Int] = [:]
+    var deadZoneHexCoords: [(q: Int, r: Int)] = []
 
     @Environment(\.dismiss) private var dismiss
     @State private var isUploading = false
@@ -1889,7 +1897,9 @@ struct BatchUploadView: View {
             let response = try await service.uploadMultipleSessions(
                 sessionIDs: Array(selectedSessions),
                 dataStore: dataStore,
-                repeaterContacts: repeaterContacts
+                repeaterContacts: repeaterContacts,
+                probesSentPerCell: probesSentPerCell,
+                deadZoneHexCoords: deadZoneHexCoords
             )
             uploadResult = "\(response.accepted) cells uploaded from \(selectedSessions.count) session(s)"
         } catch {
