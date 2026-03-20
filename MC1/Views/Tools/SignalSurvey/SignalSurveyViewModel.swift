@@ -205,6 +205,8 @@ final class SignalSurveyViewModel {
         /// Value is (hopCount + 1): 1 = direct reach, 2 = one relay hop, etc.
         /// 0 means no trace responses were received.
         let maxMeshDepth: Int
+        /// Number of packets from active probes (bidirectional confirmation) in this cell.
+        let activePacketCount: Int
         /// Number of active probe messages sent from this cell. Nil if probing was not active.
         let probesSent: Int?
 
@@ -989,6 +991,7 @@ final class SignalSurveyViewModel {
                 isDeadZone: true,
                 bestGatewaySNR: nil,
                 maxMeshDepth: 0,
+                activePacketCount: 0,
                 probesSent: probesSentPerCell[key]
             ))
         }
@@ -1162,6 +1165,7 @@ final class SignalSurveyViewModel {
         // Best-gateway quality: cell color reflects strongest discovered repeater
         let (bestGatewaySNR, maxMeshDepth) = computeCellQuality(points: points)
         let displaySNR = bestGatewaySNR ?? avgSNR
+        let activeCount = points.count(where: \.isActiveProbe)
 
         return GridCell(
             coordKey: coord.key,
@@ -1184,6 +1188,7 @@ final class SignalSurveyViewModel {
             isDeadZone: false,
             bestGatewaySNR: bestGatewaySNR,
             maxMeshDepth: maxMeshDepth,
+            activePacketCount: activeCount,
             probesSent: probesSent
         )
     }
@@ -1509,6 +1514,7 @@ final class SignalSurveyViewModel {
                     isDeadZone: true,
                     bestGatewaySNR: nil,
                     maxMeshDepth: 0,
+                    activePacketCount: 0,
                     probesSent: probes
                 ))
                 changed = true

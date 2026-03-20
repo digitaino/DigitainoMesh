@@ -515,10 +515,10 @@ struct SignalSurveyView: View {
                         }
                     }
 
-                    // Probe success rate
-                    if let probes = cell.probesSent, probes > 0, cell.packetCount > 0 {
-                        let responses = cell.packetCount
-                        let rate = min(1.0, Double(responses) / Double(probes))
+                    // Probe success rate (active responses vs probes sent)
+                    if let probes = cell.probesSent, probes > 0, cell.activePacketCount > 0 {
+                        let active = cell.activePacketCount
+                        let rate = min(1.0, Double(active) / Double(probes))
                         let pct = Int(round(rate * 100))
                         let rateColor: Color = pct >= 75 ? .green : pct >= 40 ? .yellow : .red
                         HStack(spacing: 4) {
@@ -528,7 +528,7 @@ struct SignalSurveyView: View {
                             Text("Probe Success: \(pct)%")
                                 .font(.caption)
                                 .foregroundStyle(rateColor)
-                            Text("(\(responses)/\(probes))")
+                            Text("(\(active)/\(probes))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
