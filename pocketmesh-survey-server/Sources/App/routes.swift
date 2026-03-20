@@ -51,4 +51,5 @@ func routes(_ app: Application) throws {
     let admin = api.grouped("admin")
     admin.get("contributors", use: surveyController.getContributors)
     admin.get("uploads", use: surveyController.getUploads)
+    admin.post("purge-bogus", use: surveyController.purgeBogusContributors)
 }

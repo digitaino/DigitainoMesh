@@ -168,6 +168,16 @@ struct AdminUploadsResponse: Content {
     let total: Int
 }
 
+// MARK: - Admin Purge Response
+
+struct AdminPurgeResponse: Content {
+    let contributorsRemoved: Int
+    let contributionsRemoved: Int
+    let cellsRemoved: Int
+    let cellsUpdated: Int
+    let uploadsRemoved: Int
+}
+
 // MARK: - Shared Route
 
 struct SharedRouteHop: Content {

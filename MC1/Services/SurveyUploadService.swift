@@ -115,6 +115,10 @@ actor SurveyUploadService {
 
     private let session: URLSession
 
+    /// In-memory cache of contributor ID, shared across all instances.
+    /// Prevents generating a new UUID on every call if keychain is failing.
+    private static let cachedContributorID = ContributorIDCache()
+
     init(session: URLSession = .shared) {
         self.session = session
     }
@@ -416,23 +420,33 @@ actor SurveyUploadService {
         return response
     }
 
-    // MARK: - Contributor ID (Keychain)
+    // MARK: - Contributor ID (Keychain + Memory Cache)
 
-    /// Get or create a persistent contributor UUID stored in the Keychain.
+    /// Get or create a persistent contributor UUID.
+    /// Uses a process-wide in-memory cache so that even if keychain reads fail
+    /// (e.g. entitlement issues in debug builds), we return the same ID for the
+    /// lifetime of the app process instead of generating a new UUID per call.
     private func getOrCreateContributorID() async throws -> String {
-        // Try to retrieve existing
-        if let existing = try retrieveFromKeychain() {
+        // Fast path: return cached value
+        if let cached = Self.cachedContributorID.value {
+            return cached
+        }
+
+        // Try to retrieve from keychain
+        if let existing = retrieveFromKeychain() {
+            Self.cachedContributorID.value = existing
             return existing
         }
 
-        // Generate new UUID
+        // Generate new UUID, cache it, and attempt to persist to keychain
         let newID = UUID().uuidString
-        try storeInKeychain(newID)
+        Self.cachedContributorID.value = newID
+        storeInKeychain(newID)
         Self.logger.info("Generated new contributor ID")
         return newID
     }
 
-    private func retrieveFromKeychain() throws -> String? {
+    private func retrieveFromKeychain() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.keychainService,
@@ -448,8 +462,12 @@ actor SurveyUploadService {
             return nil
         }
 
-        guard status == errSecSuccess,
-              let data = result as? Data,
+        if status != errSecSuccess {
+            Self.logger.warning("Keychain read failed with status \(status)")
+            return nil
+        }
+
+        guard let data = result as? Data,
               let value = String(data: data, encoding: .utf8) else {
             return nil
         }
@@ -457,7 +475,7 @@ actor SurveyUploadService {
         return value
     }
 
-    private func storeInKeychain(_ value: String) throws {
+    private func storeInKeychain(_ value: String) {
         guard let data = value.data(using: .utf8) else { return }
 
         // Delete any existing entry
@@ -480,6 +498,29 @@ actor SurveyUploadService {
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status != errSecSuccess {
             Self.logger.error("Failed to store contributor ID in keychain: \(status)")
+        }
+    }
+}
+
+// MARK: - Thread-safe in-memory cache for contributor ID
+
+/// A simple thread-safe cache for the contributor ID, shared across all
+/// SurveyUploadService instances within the same process. This ensures that
+/// even if keychain operations fail, we generate at most one UUID per app launch.
+final class ContributorIDCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: String?
+
+    var value: String? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _value
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            _value = newValue
         }
     }
 }

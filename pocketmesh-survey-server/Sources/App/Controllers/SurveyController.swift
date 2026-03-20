@@ -839,6 +839,86 @@ struct SurveyController {
         return AdminUploadsResponse(uploads: items, total: total)
     }
 
+    // MARK: - POST /api/v1/admin/purge-bogus
+
+    /// Delete all contributors whose total packet count is at or below a threshold.
+    /// These are typically bogus entries from the contributor ID bug where each live upload
+    /// generated a new UUID. Default threshold is 1 packet.
+    @Sendable
+    func purgeBogusContributors(req: Request) async throws -> AdminPurgeResponse {
+        let maxPackets = req.query[Int.self, at: "maxPackets"] ?? 1
+
+        let contributorIDs = try await CellContribution.query(on: req.db)
+            .unique()
+            .all(\.$contributorID)
+
+        var totalContributorsRemoved = 0
+        var totalContributionsRemoved = 0
+        var totalCellsRemoved = 0
+        var totalCellsUpdated = 0
+        var totalUploadsRemoved = 0
+
+        for contributorID in contributorIDs {
+            let contributions = try await CellContribution.query(on: req.db)
+                .filter(\.$contributorID == contributorID)
+                .with(\.$cell)
+                .all()
+
+            let totalPackets = contributions.reduce(0) { $0 + $1.packetCount }
+            guard totalPackets <= maxPackets else { continue }
+
+            // Remove contributions and update cell aggregates
+            var cellsRemoved = 0
+            var cellsUpdated = 0
+
+            for contribution in contributions {
+                let cell = contribution.cell
+                cell.totalSNRWeighted -= contribution.snrWeighted
+                cell.totalRSSIWeighted -= contribution.rssiWeighted ?? 0
+                cell.totalPacketCount -= contribution.packetCount
+                cell.floodCount -= contribution.floodCount
+                cell.directCount -= contribution.directCount
+                cell.activePacketCount -= contribution.activePacketCount
+                cell.passivePacketCount -= contribution.passivePacketCount
+                cell.contributionCount -= 1
+
+                if cell.totalPacketCount <= 0 {
+                    try await cell.delete(on: req.db)
+                    cellsRemoved += 1
+                } else {
+                    try await cell.save(on: req.db)
+                    cellsUpdated += 1
+                }
+
+                try await contribution.delete(on: req.db)
+            }
+
+            // Delete upload logs
+            let uploadsDeleted = try await UploadLog.query(on: req.db)
+                .filter(\.$contributorID == contributorID)
+                .count()
+            try await UploadLog.query(on: req.db)
+                .filter(\.$contributorID == contributorID)
+                .delete()
+
+            totalContributorsRemoved += 1
+            totalContributionsRemoved += contributions.count
+            totalCellsRemoved += cellsRemoved
+            totalCellsUpdated += cellsUpdated
+            totalUploadsRemoved += uploadsDeleted
+        }
+
+        req.logger.info("Purged \(totalContributorsRemoved) bogus contributors (maxPackets=\(maxPackets))")
+
+        return AdminPurgeResponse(
+            contributorsRemoved: totalContributorsRemoved,
+            contributionsRemoved: totalContributionsRemoved,
+            cellsRemoved: totalCellsRemoved,
+            cellsUpdated: totalCellsUpdated,
+            uploadsRemoved: totalUploadsRemoved
+        )
+    }
+
     // MARK: - GET /api/v1/events (Server-Sent Events)
 
     @Sendable
