@@ -475,16 +475,18 @@ function renderCells(cells) {
 // Create a single cell overlay polygon
 function createCellOverlay(cell) {
     const vertices = hexVerticesAtCenter(cell.latitude, cell.longitude, cell.referenceLatitude);
+    const isDeadZone = cell.packetCount === 0 && cell.probesSent && cell.probesSent > 0;
     const quality = cell.snrQuality || snrQuality(cell.averageSNR);
-    const color = snrColor(quality);
-    const opacity = 0.2 + 0.5 * Math.min(1, cell.contributionCount / 5);
+    const color = isDeadZone ? '#888' : snrColor(quality);
+    const opacity = isDeadZone ? 0.45 : 0.2 + 0.5 * Math.min(1, cell.contributionCount / 5);
 
     const style = new mapkit.Style({
         fillColor: color,
         fillOpacity: opacity,
         strokeColor: color,
-        strokeOpacity: 0.6,
-        lineWidth: 0.5
+        strokeOpacity: isDeadZone ? 0.8 : 0.6,
+        lineWidth: isDeadZone ? 1 : 0.5,
+        lineDash: isDeadZone ? [4, 3] : []
     });
 
     const polygon = new mapkit.PolygonOverlay(vertices, {
