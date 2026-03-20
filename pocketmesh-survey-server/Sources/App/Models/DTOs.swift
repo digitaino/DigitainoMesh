@@ -44,6 +44,14 @@ struct UploadCellData: Content {
     let repeaterMetrics: [RepeaterMetricData]?
     /// Number of active probe messages sent from this cell. Optional for backward compat.
     let probesSent: Int?
+    /// Time range of actual survey data collection for this cell. Optional for backward compat.
+    let timeRange: UploadTimeRange?
+}
+
+/// Time range of survey data collection (ISO 8601 timestamps from the client).
+struct UploadTimeRange: Content {
+    let earliest: String
+    let latest: String
 }
 
 /// Per-repeater signal metrics within a cell.

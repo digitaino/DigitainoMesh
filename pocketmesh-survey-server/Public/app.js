@@ -93,6 +93,9 @@ function consolidateHexIDs(hexIDs) {
 // Coverage filter: 'all', 'active', 'passive'
 let coverageFilter = 'all';
 
+// Time filter: 'all', '1h', '1d', '1w', '1m'
+let timeFilter = 'all';
+
 // Repeater filter: null means all repeaters, otherwise a hex ID string
 let repeaterFilter = null;
 
@@ -302,6 +305,33 @@ function applyRepeaterFilter(hexID) {
     renderCells(lastCellData);
 }
 
+// Apply time filter and re-render
+function applyTimeFilter(filter) {
+    timeFilter = filter;
+    document.querySelectorAll('[data-time]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.time === filter);
+    });
+    if (currentOverlays.length > 0) {
+        map.removeOverlays(currentOverlays);
+    }
+    currentOverlays = [];
+    currentOverlaysByKey = {};
+    renderCells(lastCellData);
+}
+
+// Get the cutoff date for the current time filter
+function getTimeCutoff() {
+    if (timeFilter === 'all') return null;
+    const now = Date.now();
+    switch (timeFilter) {
+        case '1h': return new Date(now - 60 * 60 * 1000);
+        case '1d': return new Date(now - 24 * 60 * 60 * 1000);
+        case '1w': return new Date(now - 7 * 24 * 60 * 60 * 1000);
+        case '1m': return new Date(now - 30 * 24 * 60 * 60 * 1000);
+        default: return null;
+    }
+}
+
 // Update the repeater dropdown with repeaters that are both referenced in
 // viewport cells AND have their physical location within the current viewport.
 // This ensures zooming in narrows the list to only locally relevant repeaters.
@@ -392,6 +422,15 @@ function renderCells(cells) {
             const uid = id.toUpperCase();
             return uid === rf || uid.startsWith(rf) || rf.startsWith(uid);
         }));
+    }
+
+    // Apply time filter — keep cells surveyed after the cutoff
+    const timeCutoff = getTimeCutoff();
+    if (timeCutoff) {
+        filtered = filtered.filter(c => {
+            if (!c.lastUpdated) return false;
+            return new Date(c.lastUpdated) >= timeCutoff;
+        });
     }
 
     // Build new cell set keyed by hex coordinates

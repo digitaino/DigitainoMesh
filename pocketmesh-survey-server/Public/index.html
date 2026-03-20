@@ -47,6 +47,17 @@
         </div>
 
         <div class="filter-bar">
+            <h3>Time</h3>
+            <div class="filter-buttons">
+                <button class="filter-btn" data-time="1h" onclick="applyTimeFilter('1h')">1h</button>
+                <button class="filter-btn" data-time="1d" onclick="applyTimeFilter('1d')">1d</button>
+                <button class="filter-btn" data-time="1w" onclick="applyTimeFilter('1w')">1w</button>
+                <button class="filter-btn" data-time="1m" onclick="applyTimeFilter('1m')">1m</button>
+                <button class="filter-btn active" data-time="all" onclick="applyTimeFilter('all')">All</button>
+            </div>
+        </div>
+
+        <div class="filter-bar">
             <div class="filter-header">
                 <h3>Repeater</h3>
                 <span class="filter-count" id="repeater-count"></span>

@@ -209,6 +209,10 @@ struct SurveyController {
             let passivePkts = cellData.passivePacketCount ?? 0
             let probesSent = cellData.probesSent ?? 0
 
+            // Use client-provided survey timestamps when available, fall back to server time
+            let cellLastUpdated = cellData.timeRange?.latest ?? now
+            let cellFirstSeen = cellData.timeRange?.earliest ?? now
+
             if let existing {
                 // Merge into existing cell
                 existing.totalSNRWeighted += snrWeighted
@@ -222,7 +226,10 @@ struct SurveyController {
                     existing.probesSent = (existing.probesSent ?? 0) + probesSent
                 }
                 existing.contributionCount += 1
-                existing.lastUpdated = now
+                // Keep the most recent survey timestamp
+                if cellLastUpdated > existing.lastUpdated {
+                    existing.lastUpdated = cellLastUpdated
+                }
 
                 if let newMin = cellData.minSNR {
                     if let existingMin = existing.minSNR {
@@ -332,7 +339,7 @@ struct SurveyController {
                     passivePacketCount: passivePkts,
                     probesSent: probesSent > 0 ? probesSent : nil,
                     contributionCount: 1,
-                    firstSeen: now, lastUpdated: now
+                    firstSeen: cellFirstSeen, lastUpdated: cellLastUpdated
                 )
                 try await cell.save(on: req.db)
 

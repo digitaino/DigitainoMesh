@@ -14,6 +14,7 @@ struct SignalSurveyView: View {
     @State private var showingCommunityMap = false
     @State private var showingInfoSheet = false
     @State private var showingBatchUpload = false
+    @State private var showingUploadPrompt = false
     @State private var batchSelectedSessions: Set<UUID> = []
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
@@ -126,6 +127,16 @@ struct SignalSurveyView: View {
             if let error = viewModel.errorMessage {
                 Text(error)
             }
+        }
+        .alert("Upload Survey Data?", isPresented: $showingUploadPrompt) {
+            Button("Upload Now") {
+                if viewModel.selectedSessionID != nil {
+                    showingExportSheet = true
+                }
+            }
+            Button("Later", role: .cancel) { }
+        } message: {
+            Text("Your survey data hasn't been uploaded to the community map yet. Would you like to upload it now?")
         }
         .onAppear {
             // Only set values that actually changed to avoid triggering didSet side effects
@@ -1471,12 +1482,16 @@ struct SignalSurveyView: View {
             if viewModel.isActive {
                 Task {
                     guard let service = appState.services?.surveyService else { return }
+                    let wasLiveUpload = viewModel.liveUploadEnabled
                     await viewModel.stopSurvey(
                         surveyService: service,
                         locationService: appState.locationService,
                         dataStore: appState.offlineDataStore,
                         deviceID: appState.currentDeviceID
                     )
+                    if !wasLiveUpload {
+                        showingUploadPrompt = true
+                    }
                 }
             } else {
                 showingSurveySetup = true
