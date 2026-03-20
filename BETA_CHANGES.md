@@ -1,4 +1,30 @@
-# Beta Changes — v0.10.1 (Build 8)
+# Beta Changes — v0.10.1 (Build 9)
+
+## Signal Survey Enhancements
+
+- **Time filters on community map** — Both the iOS community map overlay and the standalone Community Map view now have time filters (1 Hour, 12 Hours, 1 Day, 3 Days, 5 Days, All Time) to show only recent survey data. Matches the time filter already available on the web frontend.
+
+- **Community map is now an overlay** — The "Community Map" menu item has been replaced with a toggle that shows/hides community survey data directly on the main survey map, instead of opening a separate full-screen view. Filters for coverage type, repeater, and time are shown in a filter bar when the overlay is active.
+
+- **Survey indicator moved to top-right** — The floating survey status indicator (visible when navigating away from the survey) now appears at the top-right of the screen instead of the bottom-right, avoiding overlap with the tab bar and chat input.
+
+- **Session deselect clears map** — Tapping the X button on a selected session now clears the map entirely instead of loading all sessions. Use the "All Sessions" menu item to explicitly load all session data.
+
+- **Clear Map option** — New "Clear Map" button in the toolbar menu and an X button on the "all sessions" view to quickly clear all survey data from the map without selecting a specific session.
+
+- **Probe count persists on navigate away** — Probe data (`probesSentPerCell`) is now saved to the database when you navigate away from the survey, so returning via the floating indicator correctly restores the probe count instead of resetting to zero.
+
+- **Resume flow no longer flashes empty state** — When tapping the floating indicator to return to an active survey, a "Resuming survey…" spinner is shown instead of briefly flashing the empty "Start Survey" screen.
+
+- **Crash fix for force unwrap** — Fixed two force-unwrap crashes: one when navigating away while community data was loading (`communityUploadService!`), and one in grid bucket lookup (`gridBuckets[hex]!`). Community refresh is now cancelled on disappear.
+
+- **Updated How It Works guide** — The "How It Works" info sheet has been rewritten with sections on radio asymmetry, passive vs. active surveys, hop count interpretation, map legend (including dead zones as gray dashed cells), community map overlay usage, and updated tips for Deep Scan mode, driving mode, and live upload.
+
+---
+
+# Previous Builds
+
+## Build 8 (v0.10.1)
 
 ## Shared Repeater Maps — Full Web Experience
 
@@ -60,8 +86,6 @@
 
 ---
 
-# Previous Builds
-
 ## Build 7 (v0.10.1)
 
 ## Share Heard Repeaters
@@ -113,8 +137,6 @@
 - **Consistent repeater hex IDs** — Repeater hex IDs are now normalized across sessions and upload paths. Different-length hashes for the same repeater (e.g. "0C" vs "0C13") are consolidated to the shortest unique prefix, ensuring consistent cell-to-repeater associations in the community map.
 
 ---
-
-# Previous Builds
 
 ## Build 4 (v0.10.1)
 
