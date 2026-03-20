@@ -109,7 +109,9 @@ struct SurveyInfoSheet: View {
         ) {
             VStack(alignment: .leading, spacing: 6) {
                 mapLegendRow(label: "Connected (2-way)", color: .green, icon: "arrow.left.arrow.right",
-                             description: "Repeaters confirmed via active probe response")
+                             description: "Repeaters confirmed via 0-hop direct response")
+                mapLegendRow(label: "Mesh Reach", color: .cyan, icon: "point.3.connected.trianglepath.dotted",
+                             description: "Repeaters reached via multi-hop relay — not direct 2-way")
                 mapLegendRow(label: "Heard (1-way)", color: .secondary, icon: "ear",
                              description: "Repeaters detected passively — reception only")
                 mapLegendRow(label: "Dead zone", color: .red, icon: "xmark.circle",

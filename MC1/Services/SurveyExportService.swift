@@ -60,6 +60,8 @@ enum SurveyExportService {
         let passivePacketCount: Int?
         /// Per-repeater signal metrics (SNR, RSSI, packet count per repeater in this cell).
         let repeaterMetrics: [RepeaterMetric]?
+        /// Number of active probe messages sent from this cell. Nil if probing was not active.
+        let probesSent: Int?
     }
 
     /// Resolved repeater information for community map display.
@@ -163,7 +165,9 @@ enum SurveyExportService {
         sessionID: UUID,
         dataStore: PersistenceStore,
         includeTimeRange: Bool = true,
-        repeaterContacts: [ContactDTO] = []
+        repeaterContacts: [ContactDTO] = [],
+        probesSentPerCell: [String: Int] = [:],
+        deadZoneHexCoords: [(q: Int, r: Int)] = []
     ) async throws -> CellDataResult? {
         let points = try await dataStore.fetchSurveyPoints(sessionID: sessionID)
         guard !points.isEmpty else {
@@ -230,7 +234,8 @@ enum SurveyExportService {
                 referenceLatitude: refLat,
                 activePacketCount: activeCount > 0 ? activeCount : nil,
                 passivePacketCount: passiveCount > 0 ? passiveCount : nil,
-                repeaterMetrics: metrics.isEmpty ? nil : metrics
+                repeaterMetrics: metrics.isEmpty ? nil : metrics,
+                probesSent: probesSentPerCell["\(coord.q)_\(coord.r)"]
             )
         }
 
@@ -240,6 +245,44 @@ enum SurveyExportService {
         let totalActive = cells.compactMap(\.activePacketCount).reduce(0, +)
         let totalPassive = cells.compactMap(\.passivePacketCount).reduce(0, +)
         logger.info("DEBUG generateCellData: \(cells.count) cells — \(cellsWithActive) with active (\(totalActive) pkts), \(cellsWithPassive) with passive (\(totalPassive) pkts)")
+
+        // Append dead zone cells (probed but no response) that don't overlap with data cells
+        var allCells = cells
+        if !deadZoneHexCoords.isEmpty {
+            let existingKeys = Set(cells.map { "\($0.hexQ)_\($0.hexR)" })
+            for dz in deadZoneHexCoords {
+                let key = "\(dz.q)_\(dz.r)"
+                guard !existingKeys.contains(key) else { continue }
+                let probes = probesSentPerCell[key]
+                guard probes != nil && probes! > 0 else { continue }
+                let center = HexGrid.centerLatLon(
+                    from: HexGrid.AxialCoord(q: dz.q, r: dz.r),
+                    referenceLatitude: refLat
+                )
+                allCells.append(CellData(
+                    latitude: center.latitude,
+                    longitude: center.longitude,
+                    averageSNR: nil,
+                    averageRSSI: nil,
+                    minSNR: nil,
+                    maxSNR: nil,
+                    packetCount: 0,
+                    routeTypeBreakdown: RouteBreakdown(flood: 0, direct: 0),
+                    timeRange: nil,
+                    repeaterHexIDs: [],
+                    hexQ: dz.q,
+                    hexR: dz.r,
+                    referenceLatitude: refLat,
+                    activePacketCount: nil,
+                    passivePacketCount: nil,
+                    repeaterMetrics: nil,
+                    probesSent: probes
+                ))
+            }
+            if allCells.count > cells.count {
+                logger.info("generateCellData: appended \(allCells.count - cells.count) dead zone cells")
+            }
+        }
 
         // Resolve unique repeater hex IDs to contact names and locations
         // (already consolidated per-cell, but consolidate across all cells too)
@@ -258,7 +301,7 @@ enum SurveyExportService {
             )
         }
 
-        return CellDataResult(cells: cells, referenceLatitude: refLat, points: points, repeaters: resolvedRepeaters)
+        return CellDataResult(cells: allCells, referenceLatitude: refLat, points: points, repeaters: resolvedRepeaters)
     }
 
     /// Generate aggregated cell data from multiple survey sessions, merging overlapping cells.
@@ -266,7 +309,9 @@ enum SurveyExportService {
     static func generateCellDataForSessions(
         sessionIDs: [UUID],
         dataStore: PersistenceStore,
-        repeaterContacts: [ContactDTO] = []
+        repeaterContacts: [ContactDTO] = [],
+        probesSentPerCell: [String: Int] = [:],
+        deadZoneHexCoords: [(q: Int, r: Int)] = []
     ) async throws -> CellDataResult? {
         var allPoints: [SignalSurveyPointDTO] = []
         for sessionID in sessionIDs {
@@ -316,11 +361,47 @@ enum SurveyExportService {
                 referenceLatitude: refLat,
                 activePacketCount: activeCount > 0 ? activeCount : nil,
                 passivePacketCount: passiveCount > 0 ? passiveCount : nil,
-                repeaterMetrics: metrics.isEmpty ? nil : metrics
+                repeaterMetrics: metrics.isEmpty ? nil : metrics,
+                probesSent: probesSentPerCell["\(coord.q)_\(coord.r)"]
             )
         }
 
-        let allHexIDs = Set(consolidateHexIDs(cells.flatMap(\.repeaterHexIDs)))
+        // Append dead zone cells (probed but no response) that don't overlap with data cells
+        var allCells = cells
+        if !deadZoneHexCoords.isEmpty {
+            let existingKeys = Set(cells.map { "\($0.hexQ)_\($0.hexR)" })
+            for dz in deadZoneHexCoords {
+                let key = "\(dz.q)_\(dz.r)"
+                guard !existingKeys.contains(key) else { continue }
+                let probes = probesSentPerCell[key]
+                guard probes != nil && probes! > 0 else { continue }
+                let center = HexGrid.centerLatLon(
+                    from: HexGrid.AxialCoord(q: dz.q, r: dz.r),
+                    referenceLatitude: refLat
+                )
+                allCells.append(CellData(
+                    latitude: center.latitude,
+                    longitude: center.longitude,
+                    averageSNR: nil,
+                    averageRSSI: nil,
+                    minSNR: nil,
+                    maxSNR: nil,
+                    packetCount: 0,
+                    routeTypeBreakdown: RouteBreakdown(flood: 0, direct: 0),
+                    timeRange: nil,
+                    repeaterHexIDs: [],
+                    hexQ: dz.q,
+                    hexR: dz.r,
+                    referenceLatitude: refLat,
+                    activePacketCount: nil,
+                    passivePacketCount: nil,
+                    repeaterMetrics: nil,
+                    probesSent: probes
+                ))
+            }
+        }
+
+        let allHexIDs = Set(consolidateHexIDs(allCells.flatMap(\.repeaterHexIDs)))
         let resolvedRepeaters: [RepeaterInfo] = allHexIDs.compactMap { hexID in
             guard let hashBytes = Data(hexString: hexID) else { return nil }
             guard let contact = RepeaterResolver.bestMatch(
@@ -335,8 +416,8 @@ enum SurveyExportService {
             )
         }
 
-        logger.info("generateCellDataForSessions: \(cells.count) merged cells, \(resolvedRepeaters.count) repeaters")
-        return CellDataResult(cells: cells, referenceLatitude: refLat, points: allPoints, repeaters: resolvedRepeaters)
+        logger.info("generateCellDataForSessions: \(allCells.count) merged cells (\(allCells.count - cells.count) dead zones), \(resolvedRepeaters.count) repeaters")
+        return CellDataResult(cells: allCells, referenceLatitude: refLat, points: allPoints, repeaters: resolvedRepeaters)
     }
 
     // MARK: - Generate Export

@@ -625,10 +625,12 @@ function showCellPopup(cell) {
         }
     }
 
-    const quality = noRepeaterData ? 'unknown' : snrQuality(displaySNR);
-    const color = snrColor(quality);
+    const isDeadZone = cell.packetCount === 0 && cell.probesSent && cell.probesSent > 0;
+    const quality = noRepeaterData || isDeadZone ? 'unknown' : snrQuality(displaySNR);
+    const color = isDeadZone ? '#888' : snrColor(quality);
     const level = qualityLevel(quality);
-    const snrText = noRepeaterData
+    const headerLabel = isDeadZone ? 'No Response' : `Signal: ${quality}`;
+    const snrText = noRepeaterData || isDeadZone
         ? 'No data'
         : (displaySNR !== null && displaySNR !== undefined ? displaySNR.toFixed(1) + ' dB' : 'N/A');
 
@@ -643,13 +645,26 @@ function showCellPopup(cell) {
 
     let repeatersHTML = '';
     if (cell.repeaterHexIDs && cell.repeaterHexIDs.length > 0) {
+        // Build lookup for per-repeater last heard
+        const metricsByID = {};
+        if (cell.repeaterMetrics) {
+            for (const m of cell.repeaterMetrics) {
+                metricsByID[m.hexID.toUpperCase()] = m;
+            }
+        }
         repeatersHTML = `
             <div class="repeaters">
                 <div class="detail-label">Repeaters:</div>
                 ${cell.repeaterHexIDs.map(id => {
                     const name = repeaterNames[id];
                     const label = name ? `${name}` : id;
-                    return `<span class="repeater-tag" onclick="event.stopPropagation(); applyRepeaterFilter('${id}'); document.getElementById('repeater-select').value='${id}';" title="Click to filter by this repeater">${label}</span>`;
+                    const metric = metricsByID[id.toUpperCase()];
+                    let tooltip = 'Click to filter by this repeater';
+                    if (metric && metric.lastHeard) {
+                        const ago = formatTimeAgo(new Date(metric.lastHeard));
+                        tooltip = `Last heard: ${ago} · Click to filter`;
+                    }
+                    return `<span class="repeater-tag" onclick="event.stopPropagation(); applyRepeaterFilter('${id}'); document.getElementById('repeater-select').value='${id}';" title="${tooltip}">${label}</span>`;
                 }).join('')}
             </div>
         `;
@@ -672,6 +687,31 @@ function showCellPopup(cell) {
         }
     }
 
+    // Probe success rate (when probes were sent for this cell)
+    let successRateHTML = '';
+    if (cell.probesSent && cell.probesSent > 0) {
+        if (cell.packetCount === 0) {
+            // Dead zone: probes sent but no responses
+            successRateHTML = `
+                <div class="detail-row">
+                    <span class="detail-label">Probe Result</span>
+                    <span class="detail-value" style="color:#888">${cell.probesSent} sent, 0 responses</span>
+                </div>
+            `;
+        } else {
+            const active = cell.activePacketCount || 0;
+            const rate = Math.min(1.0, active / cell.probesSent);
+            const pct = Math.round(rate * 100);
+            const rateColor = pct >= 75 ? '#4ade80' : pct >= 40 ? '#facc15' : '#f87171';
+            successRateHTML = `
+                <div class="detail-row">
+                    <span class="detail-label">Probe Success</span>
+                    <span class="detail-value" style="color:${rateColor}">${pct}% <span style="color:#666;font-size:10px">(${active}/${cell.probesSent})</span></span>
+                </div>
+            `;
+        }
+    }
+
     // Packets display: per-repeater count when available, cell total as fallback
     let packetsHTML;
     if (noRepeaterData) {
@@ -680,9 +720,10 @@ function showCellPopup(cell) {
         packetsHTML = `<span class="detail-value">${displayPackets.toLocaleString()}</span>`;
     }
 
-    // Surveyed timestamp row (only when repeater filter is active)
+    // Surveyed timestamp row
     let surveyedHTML = '';
     if (repeaterMetricFound && displayLastHeard) {
+        // Per-repeater last heard when filter is active
         const date = new Date(displayLastHeard);
         const timeAgo = formatTimeAgo(date);
         surveyedHTML = `
@@ -698,6 +739,23 @@ function showCellPopup(cell) {
                 <span class="detail-value" style="color:#666">No data</span>
             </div>
         `;
+    } else if (cell.lastUpdated) {
+        // Cell-level last updated when no repeater filter
+        const date = new Date(cell.lastUpdated);
+        const timeAgo = formatTimeAgo(date);
+        surveyedHTML = `
+            <div class="detail-row">
+                <span class="detail-label">Surveyed</span>
+                <span class="detail-value">${timeAgo}</span>
+            </div>
+        `;
+    } else {
+        surveyedHTML = `
+            <div class="detail-row">
+                <span class="detail-label">Surveyed</span>
+                <span class="detail-value" style="color:#666">Not available</span>
+            </div>
+        `;
     }
 
     popupElement = document.createElement('div');
@@ -705,7 +763,7 @@ function showCellPopup(cell) {
     popupElement.innerHTML = `
         <div class="cell-popup">
             <div class="popup-header">
-                <h3 style="color: ${color}">Signal: ${quality}${headerSuffix}</h3>
+                <h3 style="color: ${color}">${headerLabel}${headerSuffix}</h3>
                 <button class="popup-close" onclick="event.stopPropagation(); deselectCell();">&times;</button>
             </div>
             ${barsHTML}
@@ -719,6 +777,7 @@ function showCellPopup(cell) {
             </div>
             ${surveyedHTML}
             ${modeHTML}
+            ${successRateHTML}
             <div class="detail-row">
                 <span class="detail-label">Contributions</span>
                 <span class="detail-value">${cell.contributionCount}</span>

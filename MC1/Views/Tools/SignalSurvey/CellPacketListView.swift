@@ -109,9 +109,9 @@ private struct PacketRow: View {
                     }
                 }
 
-                if point.pathLength > 0 {
+                if point.hopCount > 0 {
                     Label {
-                        Text("\(point.pathLength) hop\(point.pathLength == 1 ? "" : "s")")
+                        Text("\(point.hopCount) hop\(point.hopCount == 1 ? "" : "s")")
                             .font(.caption)
                     } icon: {
                         Image(systemName: "arrow.triangle.swap")

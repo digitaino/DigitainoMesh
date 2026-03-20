@@ -55,6 +55,10 @@ final class CellModel: Model, Content, @unchecked Sendable {
     @Field(key: "passive_packet_count")
     var passivePacketCount: Int
 
+    // Probe tracking
+    @OptionalField(key: "probes_sent")
+    var probesSent: Int?
+
     // Metadata
     @Field(key: "contribution_count")
     var contributionCount: Int
@@ -81,6 +85,7 @@ final class CellModel: Model, Content, @unchecked Sendable {
         totalPacketCount: Int, minSNR: Double?, maxSNR: Double?,
         floodCount: Int, directCount: Int,
         activePacketCount: Int = 0, passivePacketCount: Int = 0,
+        probesSent: Int? = nil,
         contributionCount: Int, firstSeen: String, lastUpdated: String
     ) {
         self.hexQ = hexQ
@@ -97,6 +102,7 @@ final class CellModel: Model, Content, @unchecked Sendable {
         self.directCount = directCount
         self.activePacketCount = activePacketCount
         self.passivePacketCount = passivePacketCount
+        self.probesSent = probesSent
         self.contributionCount = contributionCount
         self.firstSeen = firstSeen
         self.lastUpdated = lastUpdated

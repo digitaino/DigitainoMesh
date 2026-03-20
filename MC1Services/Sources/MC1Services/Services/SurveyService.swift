@@ -61,6 +61,11 @@ public actor SurveyService {
     /// and trace response packets are classified as active probe results.
     private var isProbingActive: Bool = false
 
+    /// Local node name used to identify heard repeats of our own channel messages.
+    /// A `.groupText` packet is only classified as an active probe result if the
+    /// sender name (parsed from the decrypted text) matches this value.
+    private var localNodeName: String?
+
     /// Maximum GPS accuracy to accept (meters). Points with worse accuracy are discarded.
     private let maxAccuracyMeters: Double = 100
 
@@ -85,8 +90,9 @@ public actor SurveyService {
 
     /// Configure the service with device context.
     /// Also closes any orphaned sessions from previous app runs.
-    public func configure(deviceID: UUID) async {
+    public func configure(deviceID: UUID, localNodeName: String? = nil) async {
         self.deviceID = deviceID
+        self.localNodeName = localNodeName
 
         // Close any sessions left open from a previous app run (crash, disconnect, etc.)
         do {
@@ -326,9 +332,22 @@ public actor SurveyService {
             return []
         }()
 
-        // Classify as active probe result when probing is enabled and this is a
-        // probe response packet (discover response or trace response).
-        let isActive = isProbingActive && (entry.payloadType == .control || entry.payloadType == .trace)
+        // Classify as active probe result when probing is enabled.
+        // - .control (discover response) and .trace: always active during probing (deep scan).
+        // - .groupText: only active when it's a heard repeat of OUR OWN channel message
+        //   (sender name matches localNodeName). Other people's messages are passive.
+        let isActive: Bool = {
+            guard isProbingActive else { return false }
+            if entry.payloadType == .control || entry.payloadType == .trace {
+                return true
+            }
+            if entry.payloadType == .groupText, let nodeName = localNodeName, let text = entry.decodedText {
+                if let (senderName, _) = ChannelMessageFormat.parse(text), senderName == nodeName {
+                    return true
+                }
+            }
+            return false
+        }()
 
         // Create survey point
         let point = SignalSurveyPointDTO(

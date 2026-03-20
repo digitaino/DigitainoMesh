@@ -126,6 +126,9 @@ struct SurveyController {
                 cell.directCount -= contribution.directCount
                 cell.activePacketCount -= contribution.activePacketCount
                 cell.passivePacketCount -= contribution.passivePacketCount
+                if let contribProbes = contribution.probesSent, contribProbes > 0 {
+                    cell.probesSent = max(0, (cell.probesSent ?? 0) - contribProbes)
+                }
                 cell.contributionCount -= 1
 
                 if cell.totalPacketCount <= 0 {
@@ -203,6 +206,7 @@ struct SurveyController {
 
             let activePkts = cellData.activePacketCount ?? 0
             let passivePkts = cellData.passivePacketCount ?? 0
+            let probesSent = cellData.probesSent ?? 0
 
             if let existing {
                 // Merge into existing cell
@@ -213,6 +217,9 @@ struct SurveyController {
                 existing.directCount += cellData.routeTypeBreakdown.direct
                 existing.activePacketCount += activePkts
                 existing.passivePacketCount += passivePkts
+                if probesSent > 0 {
+                    existing.probesSent = (existing.probesSent ?? 0) + probesSent
+                }
                 existing.contributionCount += 1
                 existing.lastUpdated = now
 
@@ -298,6 +305,7 @@ struct SurveyController {
                         directCount: cellData.routeTypeBreakdown.direct,
                         activePacketCount: activePkts,
                         passivePacketCount: passivePkts,
+                        probesSent: probesSent > 0 ? probesSent : nil,
                         contributedAt: now,
                         sessionID: sessionTag
                     )
@@ -321,6 +329,7 @@ struct SurveyController {
                     directCount: cellData.routeTypeBreakdown.direct,
                     activePacketCount: activePkts,
                     passivePacketCount: passivePkts,
+                    probesSent: probesSent > 0 ? probesSent : nil,
                     contributionCount: 1,
                     firstSeen: now, lastUpdated: now
                 )
@@ -362,6 +371,7 @@ struct SurveyController {
                         directCount: cellData.routeTypeBreakdown.direct,
                         activePacketCount: activePkts,
                         passivePacketCount: passivePkts,
+                        probesSent: probesSent > 0 ? probesSent : nil,
                         contributedAt: now,
                         sessionID: sessionTag
                     )
@@ -505,7 +515,9 @@ struct SurveyController {
                 snrQuality: cell.snrQuality,
                 activePacketCount: cell.activePacketCount > 0 ? cell.activePacketCount : nil,
                 passivePacketCount: cell.passivePacketCount > 0 ? cell.passivePacketCount : nil,
-                repeaterMetrics: metrics
+                repeaterMetrics: metrics,
+                probesSent: cell.probesSent,
+                lastUpdated: cell.lastUpdated
             )
         }
 
@@ -570,6 +582,9 @@ struct SurveyController {
             cell.directCount -= contribution.directCount
             cell.activePacketCount -= contribution.activePacketCount
             cell.passivePacketCount -= contribution.passivePacketCount
+            if let contribProbes = contribution.probesSent, contribProbes > 0 {
+                cell.probesSent = max(0, (cell.probesSent ?? 0) - contribProbes)
+            }
             cell.contributionCount -= 1
 
             if cell.totalPacketCount <= 0 {

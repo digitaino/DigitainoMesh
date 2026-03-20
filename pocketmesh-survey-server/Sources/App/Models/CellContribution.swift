@@ -42,6 +42,9 @@ final class CellContribution: Model, Content, @unchecked Sendable {
     @OptionalField(key: "session_id")
     var sessionID: String?
 
+    @OptionalField(key: "probes_sent")
+    var probesSent: Int?
+
     init() {}
 
     init(
@@ -49,6 +52,7 @@ final class CellContribution: Model, Content, @unchecked Sendable {
         packetCount: Int, snrWeighted: Double, rssiWeighted: Double?,
         floodCount: Int, directCount: Int,
         activePacketCount: Int = 0, passivePacketCount: Int = 0,
+        probesSent: Int? = nil,
         contributedAt: String,
         sessionID: String? = nil
     ) {
@@ -61,6 +65,7 @@ final class CellContribution: Model, Content, @unchecked Sendable {
         self.directCount = directCount
         self.activePacketCount = activePacketCount
         self.passivePacketCount = passivePacketCount
+        self.probesSent = probesSent
         self.contributedAt = contributedAt
         self.sessionID = sessionID
     }

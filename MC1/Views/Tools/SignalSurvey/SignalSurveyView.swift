@@ -18,6 +18,7 @@ struct SignalSurveyView: View {
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
     @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
+    @AppStorage("surveyDeepScan") private var deepScanPref = false
     @AppStorage("surveyLiveUpload") private var liveUploadPref = false
     @AppStorage("surveyDebugMode") private var debugModeEnabled = false
     @Namespace private var mapScope
@@ -121,8 +122,17 @@ struct SignalSurveyView: View {
             }
         }
         .onAppear {
-            viewModel.probeEnabled = probeEnabledPref
-            viewModel.liveUploadEnabled = liveUploadPref
+            // Only set values that actually changed to avoid triggering didSet side effects
+            // (e.g. restarting the probe loop when navigating back to an active survey).
+            if viewModel.probeEnabled != probeEnabledPref {
+                viewModel.probeEnabled = probeEnabledPref
+            }
+            if viewModel.liveUploadEnabled != liveUploadPref {
+                viewModel.liveUploadEnabled = liveUploadPref
+            }
+            if viewModel.deepScanEnabled != deepScanPref {
+                viewModel.deepScanEnabled = deepScanPref
+            }
             if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref) {
                 viewModel.probeFrequency = freq
             }
@@ -132,6 +142,9 @@ struct SignalSurveyView: View {
         }
         .onChange(of: liveUploadPref) { _, newValue in
             viewModel.liveUploadEnabled = newValue
+        }
+        .onChange(of: deepScanPref) { _, newValue in
+            viewModel.deepScanEnabled = newValue
         }
         .onChange(of: probeFrequencyPref) { _, newValue in
             if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: newValue) {
@@ -502,6 +515,25 @@ struct SignalSurveyView: View {
                         }
                     }
 
+                    // Probe success rate
+                    if let probes = cell.probesSent, probes > 0, cell.packetCount > 0 {
+                        let responses = cell.packetCount
+                        let rate = min(1.0, Double(responses) / Double(probes))
+                        let pct = Int(round(rate * 100))
+                        let rateColor: Color = pct >= 75 ? .green : pct >= 40 ? .yellow : .red
+                        HStack(spacing: 4) {
+                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                .font(.caption2)
+                                .foregroundStyle(rateColor)
+                            Text("Probe Success: \(pct)%")
+                                .font(.caption)
+                                .foregroundStyle(rateColor)
+                            Text("(\(responses)/\(probes))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     // View Packets button
                     if cell.packetCount > 0 {
                         Button {
@@ -526,13 +558,22 @@ struct SignalSurveyView: View {
                     if !cell.uniqueRelayNodes.isEmpty || !cell.uniqueSenders.isEmpty {
                         Divider()
                         VStack(alignment: .leading, spacing: 6) {
-                            // Connected repeaters (bidirectional, confirmed via discover response)
+                            // Connected repeaters (0-hop direct 2-way link)
                             if !cell.connectedRelayNodes.isEmpty {
                                 relayNodeSection(
                                     label: "Connected (2-way)",
                                     icon: "arrow.left.arrow.right",
                                     iconColor: .green,
                                     hexIDs: cell.connectedRelayNodes
+                                )
+                            }
+                            // Mesh reach repeaters (multi-hop, not direct 2-way)
+                            if !cell.meshReachRelayNodes.isEmpty {
+                                relayNodeSection(
+                                    label: "Mesh Reach",
+                                    icon: "point.3.connected.trianglepath.dotted",
+                                    iconColor: .cyan,
+                                    hexIDs: cell.meshReachRelayNodes
                                 )
                             }
                             // Heard-only repeaters (passive RX, one-way)
@@ -544,8 +585,8 @@ struct SignalSurveyView: View {
                                     hexIDs: cell.heardOnlyRelayNodes
                                 )
                             }
-                            // Legacy fallback: show all relay nodes if no connected/heard split
-                            if cell.connectedRelayNodes.isEmpty && cell.heardOnlyRelayNodes.isEmpty && !cell.uniqueRelayNodes.isEmpty {
+                            // Legacy fallback: show all relay nodes if no tier split
+                            if cell.connectedRelayNodes.isEmpty && cell.meshReachRelayNodes.isEmpty && cell.heardOnlyRelayNodes.isEmpty && !cell.uniqueRelayNodes.isEmpty {
                                 relayNodeSection(
                                     label: "Repeater(s)",
                                     icon: "antenna.radiowaves.left.and.right",
@@ -1137,7 +1178,7 @@ struct SignalSurveyView: View {
                             Image(systemName: "dot.radiowaves.left.and.right")
                                 .foregroundStyle(.orange)
                         }
-                        Text("Sends probes to test bidirectional connectivity. A response means the repeater heard you AND you heard it — this is the real test of whether you're connected to the mesh. Locations with no response are dead zones.")
+                        Text("Sends a message on a private channel and listens for heard repeats. A 0-hop repeat means the repeater heard you directly AND you heard it back — the real test of 2-way connectivity. Locations with no repeat are dead zones.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1170,6 +1211,19 @@ struct SignalSurveyView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+
+                        Toggle("Deep Scan", isOn: $deepScanPref)
+
+                        if deepScanPref {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.yellow)
+                                    .font(.caption)
+                                Text("Deep scan sends additional discover + trace probes. This uses more airtime and works best at walking speed or slower.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 } footer: {
                     if probeEnabledPref {
@@ -1191,7 +1245,7 @@ struct SignalSurveyView: View {
                                 Image(systemName: "bubble.left.and.bubble.right")
                                     .foregroundStyle(.cyan)
                             }
-                            Text("Sends a message on a private channel during each probe cycle. Other nodes that hear the message record a heard-repeat, letting you measure real message delivery across the mesh.")
+                            Text("Sends a message on a private channel during each probe. When a repeater hears your message and relays it back with 0 hops, that's proof of a direct 2-way connection — the most important survey metric.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1243,7 +1297,7 @@ struct SignalSurveyView: View {
                             }
                         }
                     } footer: {
-                        Text("Use a dedicated private channel to avoid cluttering conversations. Optional — probing works without this.")
+                        Text("A dedicated private channel avoids cluttering conversations. Required for 2-way connectivity testing — without a channel, probes can only measure passive reception.")
                     }
                 }
 

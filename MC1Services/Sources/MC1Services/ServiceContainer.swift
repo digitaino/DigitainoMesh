@@ -278,22 +278,24 @@ public final class ServiceContainer {
 
         let logger = Logger(subsystem: "com.mc1.services", category: "ServiceContainer")
 
-        // Configure HeardRepeatsService with device info
+        // Configure HeardRepeatsService and SurveyService with device info
         do {
             if let device = try await dataStore.fetchDevice(id: deviceID) {
                 await heardRepeatsService.configure(
                     deviceID: deviceID,
                     localNodeName: device.nodeName
                 )
+                await surveyService.configure(deviceID: deviceID, localNodeName: device.nodeName)
             } else {
                 logger.warning("Device not found for HeardRepeatsService configuration")
+                await surveyService.configure(deviceID: deviceID)
             }
         } catch {
             logger.warning("Failed to fetch device for HeardRepeatsService: \(error)")
+            await surveyService.configure(deviceID: deviceID)
         }
 
-        // Configure SurveyService with device ID and start its event monitoring
-        await surveyService.configure(deviceID: deviceID)
+        // Start SurveyService event monitoring
         await surveyService.startEventMonitoring()
 
         // Start event monitoring for services that need it

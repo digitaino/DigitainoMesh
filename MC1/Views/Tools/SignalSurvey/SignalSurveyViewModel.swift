@@ -149,16 +149,25 @@ final class SignalSurveyViewModel {
         let timeSinceLastProbe: TimeInterval?
         let probeFrequency: ProbeFrequency
         let probeEnabled: Bool
+        let deepScanEnabled: Bool
         let nextProbeMaxIn: TimeInterval?
 
         let totalPoints: Int
         let passivePoints: Int
         let controlPoints: Int
         let tracePoints: Int
+        /// 0-hop active responses (direct 2-way proof)
+        let directPoints: Int
+        /// Multi-hop active responses (mesh reach only)
+        let relayedPoints: Int
 
         let isActive: Bool
         let gridCellCount: Int
         let deadZoneCount: Int
+        /// Unique repeaters confirmed via 0-hop response across all cells
+        let connectedRepeaters: Int
+        /// Unique repeaters only reached via multi-hop across all cells
+        let meshReachRepeaters: Int
         let liveUploadCount: Int
         let liveUploadEnabled: Bool
         let eventMonitoringActive: Bool
@@ -182,8 +191,10 @@ final class SignalSurveyViewModel {
         let latestTimestamp: Date?
         let uniqueSenders: [String]
         let uniqueRelayNodes: [String]
-        /// Repeaters confirmed bidirectional via discover response (active probing).
+        /// Repeaters confirmed bidirectional via 0-hop discover/trace response (direct 2-way link).
         let connectedRelayNodes: [String]
+        /// Repeaters reached via multi-hop trace (mesh reach, but not direct 2-way).
+        let meshReachRelayNodes: [String]
         /// Repeaters only heard passively (one-way RX only).
         let heardOnlyRelayNodes: [String]
         let isDeadZone: Bool
@@ -194,6 +205,8 @@ final class SignalSurveyViewModel {
         /// Value is (hopCount + 1): 1 = direct reach, 2 = one relay hop, etc.
         /// 0 means no trace responses were received.
         let maxMeshDepth: Int
+        /// Number of active probe messages sent from this cell. Nil if probing was not active.
+        let probesSent: Int?
 
         /// Composite identity: coordKey + packetCount so ForEach detects content changes.
         var id: String { "\(coordKey)_\(packetCount)" }
@@ -377,6 +390,7 @@ final class SignalSurveyViewModel {
     /// Whether active probing (node discovery) is enabled during survey.
     var probeEnabled: Bool = false {
         didSet {
+            guard probeEnabled != oldValue else { return }
             guard isActive else { return }
             // Notify SurveyService so it classifies incoming packets as active/passive
             if let surveyService = surveyServiceRef {
@@ -395,6 +409,10 @@ final class SignalSurveyViewModel {
 
     /// Active probe frequency preset controlling distance trigger and cooldown intervals.
     var probeFrequency: ProbeFrequency = .normal
+
+    /// When true, probes also send discover + trace in addition to the channel message.
+    /// This provides extra mesh depth data but uses more airtime and works best at slower speeds.
+    var deepScanEnabled: Bool = false
 
     private var binaryProtocolService: BinaryProtocolService?
     private var messageServiceRef: MessageService?
@@ -425,6 +443,9 @@ final class SignalSurveyViewModel {
     /// Whether channel-based probing is available (a private channel is selected).
     var hasProbeChannel: Bool { selectedProbeChannel != nil }
     private var probeTask: Task<Void, Never>?
+    /// Incremented each time the probe loop starts. In-flight sendProbe tasks check
+    /// this to bail out if a new loop has started since they were spawned.
+    private var probeGeneration: Int = 0
     private var lastProbeHex: HexGrid.AxialCoord?
     private(set) var lastProbeTime: Date = .distantPast
     private var lastProbeLocation: CLLocation?
@@ -433,6 +454,8 @@ final class SignalSurveyViewModel {
 
     /// Locations where probes were sent, for dead zone detection.
     private(set) var probeSendLocations: [(coordinate: CLLocationCoordinate2D, hexCoord: HexGrid.AxialCoord, time: Date)] = []
+    /// Per-cell count of probes sent, keyed by hex coordinate key (e.g. "3_-2").
+    private(set) var probesSentPerCell: [String: Int] = [:]
 
     private static let probeCheckInterval: TimeInterval = 2
     /// How long to wait after a probe before marking its cell as a dead zone.
@@ -481,11 +504,16 @@ final class SignalSurveyViewModel {
             return max(0, probeFrequency.maxInterval - elapsed)
         }()
 
-        let controlPts = allPoints.filter { $0.payloadType == .control }.count
-        let tracePts = allPoints.filter { $0.payloadType == .trace }.count
-        let passivePts = allPoints.filter { !Self.activePayloadTypes.contains($0.payloadType) }.count
+        let activePoints = allPoints.filter(\.isActiveProbe)
+        let controlPts = activePoints.filter { $0.payloadType == .control }.count
+        let tracePts = activePoints.filter { $0.payloadType == .trace }.count
+        let passivePts = allPoints.count - activePoints.count
+        let directPts = activePoints.filter { Self.isDirectTwoWay($0) }.count
+        let relayedPts = activePoints.count - directPts
 
         let deadZones = gridCells.filter(\.isDeadZone).count
+        let connectedCount = Set(gridCells.flatMap(\.connectedRelayNodes)).count
+        let meshReachCount = Set(gridCells.flatMap(\.meshReachRelayNodes)).count
 
         return DebugInfo(
             gpsAccuracy: gpsAccuracy,
@@ -495,14 +523,19 @@ final class SignalSurveyViewModel {
             timeSinceLastProbe: timeSinceProbe,
             probeFrequency: probeFrequency,
             probeEnabled: probeEnabled,
+            deepScanEnabled: deepScanEnabled,
             nextProbeMaxIn: nextProbeMax,
             totalPoints: livePointCount,
             passivePoints: passivePts,
             controlPoints: controlPts,
             tracePoints: tracePts,
+            directPoints: directPts,
+            relayedPoints: relayedPts,
             isActive: isActive,
             gridCellCount: gridCells.count,
             deadZoneCount: deadZones,
+            connectedRepeaters: connectedCount,
+            meshReachRepeaters: meshReachCount,
             liveUploadCount: liveUploadCount,
             liveUploadEnabled: liveUploadEnabled,
             eventMonitoringActive: surveyServiceRef != nil
@@ -568,6 +601,7 @@ final class SignalSurveyViewModel {
             liveUploadCount = 0
             probeCount = 0
             probeSendLocations = []
+            probesSentPerCell = [:]
             gridBuckets = [:]
             liveStatus = SurveyLiveStatus()
             selectedSessionID = session.id
@@ -637,6 +671,7 @@ final class SignalSurveyViewModel {
             lastProbeHex = nil
             lastProbeLocation = nil
             probeSendLocations = []
+            probesSentPerCell = [:]
             liveStatus = SurveyLiveStatus()
 
             if let dataStore, let deviceID {
@@ -816,15 +851,31 @@ final class SignalSurveyViewModel {
     // MARK: - Filtering
 
     /// Active probe payload types used for probing classification.
-    /// `.control` = discover node response (proves bidirectional 2-way link).
-    /// `.trace` = outbound flood probe (one-way, no proof of return path).
-    private static let activePayloadTypes: Set<PayloadType> = [.trace, .control]
+    /// `.control` = discover node response (deep scan only).
+    /// `.trace` = outbound flood probe (deep scan only).
+    /// `.groupText` = channel message heard repeat (primary 2-way proof).
+    private static let activePayloadTypes: Set<PayloadType> = [.trace, .control, .groupText]
+
+    /// Whether an active probe point proves direct 2-way connectivity.
+    ///
+    /// The hop semantics differ by packet type:
+    /// - `.control` / `.trace`: hopCount == 0 means the repeater responded directly.
+    /// - `.groupText` (heard repeat): hopCount == 1 means the repeater relayed our message
+    ///   directly (it's the single hop in the path). hopCount == 0 is impossible for heard
+    ///   repeats since there's always at least the relaying repeater in the path.
+    private static func isDirectTwoWay(_ point: SignalSurveyPointDTO) -> Bool {
+        guard point.isActiveProbe else { return false }
+        if point.payloadType == .groupText {
+            return point.hopCount == 1
+        }
+        return point.hopCount == 0
+    }
 
     private func passesFilter(_ point: SignalSurveyPointDTO) -> Bool {
         switch surveyFilter {
         case .all: true
-        case .passiveOnly: !Self.activePayloadTypes.contains(point.payloadType)
-        case .traceOnly: point.payloadType == .control
+        case .passiveOnly: !point.isActiveProbe
+        case .traceOnly: point.isActiveProbe
         }
     }
 
@@ -907,7 +958,7 @@ final class SignalSurveyViewModel {
 
         // Build data cells
         var cells = gridBuckets.map { coord, points in
-            Self.makeGridCell(coord: coord, points: points, refLat: gridReferenceLatitude)
+            Self.makeGridCell(coord: coord, points: points, refLat: gridReferenceLatitude, probesSent: probesSentPerCell[coord.key])
         }
 
         // Add dead zone cells for probed-but-no-response hexes
@@ -933,10 +984,12 @@ final class SignalSurveyViewModel {
                 uniqueSenders: [],
                 uniqueRelayNodes: [],
                 connectedRelayNodes: [],
+                meshReachRelayNodes: [],
                 heardOnlyRelayNodes: [],
                 isDeadZone: true,
                 bestGatewaySNR: nil,
-                maxMeshDepth: 0
+                maxMeshDepth: 0,
+                probesSent: probesSentPerCell[key]
             ))
         }
 
@@ -967,7 +1020,8 @@ final class SignalSurveyViewModel {
         let updatedCell = Self.makeGridCell(
             coord: hex,
             points: gridBuckets[hex]!,
-            refLat: gridReferenceLatitude
+            refLat: gridReferenceLatitude,
+            probesSent: probesSentPerCell[hex.key]
         )
 
         if let idx = gridCells.firstIndex(where: { $0.coordKey == hex.key }) {
@@ -988,19 +1042,20 @@ final class SignalSurveyViewModel {
     ///
     /// When active probes identify repeaters, the cell color should reflect the
     /// **best** gateway's link quality — having one strong repeater nearby is what
-    /// matters, not the average of strong + weak. Both discover responses (control)
-    /// and trace responses prove bidirectional communication and contribute SNR.
-    /// Max mesh depth is returned separately as a mesh reachability indicator.
+    /// matters, not the average of strong + weak.
+    ///
+    /// Direct 2-way proof differs by packet type (see `isDirectTwoWay`):
+    /// - `.groupText` heard repeat with 1 hop = direct (the repeater is the single hop)
+    /// - `.control` / `.trace` with 0 hops = direct
     ///
     /// Returns `(bestGatewaySNR, maxMeshDepth)`.
-    /// `bestGatewaySNR` is nil when no active probe data is available (passive-only cells use averageSNR).
+    /// `bestGatewaySNR` is nil when no direct probe data is available (passive-only cells use averageSNR).
     private static func computeCellQuality(
         points: [SignalSurveyPointDTO]
     ) -> (bestGatewaySNR: Double?, maxMeshDepth: Int) {
-        let activeProbePoints = points.filter { $0.payloadType == .control || $0.payloadType == .trace }
-
-        // Best SNR from active probe responses (strongest gateway wins)
-        let bestSNR = activeProbePoints.compactMap(\.snr).max()
+        // Best SNR from direct 2-way active probe responses.
+        let directProbePoints = points.filter { isDirectTwoWay($0) }
+        let bestSNR = directProbePoints.compactMap(\.snr).max()
 
         // Maximum mesh depth from trace responses.
         // hopCount is the number of relay hops in the return path:
@@ -1016,7 +1071,8 @@ final class SignalSurveyViewModel {
     private static func makeGridCell(
         coord: HexGrid.AxialCoord,
         points: [SignalSurveyPointDTO],
-        refLat: Double
+        refLat: Double,
+        probesSent: Int? = nil
     ) -> GridCell {
         let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
         let snrValues = points.compactMap(\.snr)
@@ -1073,27 +1129,35 @@ final class SignalSurveyViewModel {
         }
         let relayNodes = consolidatedLatest.sorted { $0.value > $1.value }.map(\.key)
 
-        // Split relay nodes into connected (bidirectional via discover/trace) vs heard-only (passive).
-        // A repeater is "connected" if we have a discover response (control packet) or trace response
-        // with that node in its path. Both prove bidirectional communication with the repeater.
-        // Use prefix matching because control/trace packets produce 2-byte IDs while regular packets use 1-byte hashes.
-        let connectedIDs = Set(points
-            .filter { $0.payloadType == .control || $0.payloadType == .trace }
+        // Split relay nodes into three tiers:
+        //   1. Connected (2-way): direct active probe responses — the repeater heard us
+        //      directly and we heard it back. For groupText heard repeats this is hopCount == 1
+        //      (the repeater is the single hop). For control/trace this is hopCount == 0.
+        //   2. Mesh Reach: multi—hop active responses (deep scan only) — proves mesh
+        //      reachability but the repeater may not hear us directly.
+        //   3. Heard Only: passive packets — one-way RX, no proof of any return path.
+        //
+        // Use prefix matching because control/trace packets produce 2-byte IDs while regular
+        // packets use 1-byte hashes.
+        let directIDs = Set(points
+            .filter { Self.isDirectTwoWay($0) }
             .flatMap(\.pathNodeHexIDs))
-        let connected = relayNodes.filter { relay in
+        let meshReachIDs = Set(points
+            .filter { $0.isActiveProbe && !Self.isDirectTwoWay($0) }
+            .flatMap(\.pathNodeHexIDs))
+
+        func hexIDMatches(_ relay: String, in idSet: Set<String>) -> Bool {
             let r = relay.uppercased()
-            return connectedIDs.contains(where: { id in
+            return idSet.contains(where: { id in
                 let u = id.uppercased()
                 return u == r || u.hasPrefix(r) || r.hasPrefix(u)
             })
         }
-        let heardOnly = relayNodes.filter { relay in
-            let r = relay.uppercased()
-            return !connectedIDs.contains(where: { id in
-                let u = id.uppercased()
-                return u == r || u.hasPrefix(r) || r.hasPrefix(u)
-            })
-        }
+
+        let connected = relayNodes.filter { hexIDMatches($0, in: directIDs) }
+        // Mesh reach: appeared in multi-hop responses but NOT in any 0-hop response
+        let meshReach = relayNodes.filter { !hexIDMatches($0, in: directIDs) && hexIDMatches($0, in: meshReachIDs) }
+        let heardOnly = relayNodes.filter { !hexIDMatches($0, in: directIDs) && !hexIDMatches($0, in: meshReachIDs) }
 
         // Best-gateway quality: cell color reflects strongest discovered repeater
         let (bestGatewaySNR, maxMeshDepth) = computeCellQuality(points: points)
@@ -1115,10 +1179,12 @@ final class SignalSurveyViewModel {
             uniqueSenders: senders,
             uniqueRelayNodes: relayNodes,
             connectedRelayNodes: connected,
+            meshReachRelayNodes: meshReach,
             heardOnlyRelayNodes: heardOnly,
             isDeadZone: false,
             bestGatewaySNR: bestGatewaySNR,
-            maxMeshDepth: maxMeshDepth
+            maxMeshDepth: maxMeshDepth,
+            probesSent: probesSent
         )
     }
 
@@ -1230,12 +1296,14 @@ final class SignalSurveyViewModel {
     /// Starts the periodic probe loop that sends node discovery requests.
     private func startProbeLoop(locationService: LocationService) {
         stopProbeLoop()
+        probeGeneration += 1
 
         // Set reference latitude from current location using fixed 10° bands
         if let loc = locationService.currentLocation {
             probeReferenceLatitude = HexGrid.fixedReferenceLatitude(for: loc.coordinate.latitude)
         }
 
+        let generation = probeGeneration
         probeTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.probeCheckInterval))
@@ -1250,8 +1318,10 @@ final class SignalSurveyViewModel {
                     // Fire-and-forget: decouple probe check cadence from probe execution time.
                     // State updates (lastProbeTime, lastProbeHex, etc.) happen synchronously
                     // at the top of sendProbe before any async radio calls, so this is safe.
+                    // Generation check ensures stale tasks from a previous loop don't send.
                     Task { [weak self] in
-                        await self?.sendProbe(location: location)
+                        guard let self, self.probeGeneration == generation else { return }
+                        await self.sendProbe(location: location)
                     }
                 }
 
@@ -1331,12 +1401,15 @@ final class SignalSurveyViewModel {
         isManualProbing = false
     }
 
-    /// Sends a discover + channel message + flood trace probe cycle and updates tracking state.
+    /// Sends a probe cycle and updates tracking state.
     ///
-    /// 1. Discover (lightweight broadcast): identifies which repeaters hear us directly + link SNR.
-    /// 2. Channel message: flood-routed text that generates heard repeats for mesh coverage measurement.
-    /// 3. Brief delay to separate transmissions.
-    /// 4. Flood trace (no path = flood): floods through the mesh to measure reach/connectivity.
+    /// **Default mode**: Sends a channel message only. A 0-hop heard repeat of this message
+    /// is the ground truth for bidirectional connectivity — it proves the repeater heard us
+    /// directly and we heard it back.
+    ///
+    /// **Deep scan mode** (`deepScanEnabled`): Also sends discover + trace requests.
+    /// These provide extra data (gateway SNR, mesh depth) but use more airtime and work
+    /// best at slower speeds.
     private func sendProbe(location: CLLocation) async {
         guard let bps = binaryProtocolService else {
             logger.warning("Probe skipped: binaryProtocolService is nil")
@@ -1353,21 +1426,24 @@ final class SignalSurveyViewModel {
             referenceLatitude: probeReferenceLatitude
         )
         lastProbeHex = hexCoord
+        probesSentPerCell[hexCoord.key, default: 0] += 1
         probeSendLocations.append((
             coordinate: location.coordinate,
             hexCoord: hexCoord,
             time: Date()
         ))
 
-        // 1. Discover: identify directly-heard repeaters
-        do {
-            let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
-            logger.debug("Probe #\(self.probeCount) discover sent (tag: \(tag))")
-        } catch {
-            logger.warning("Probe #\(self.probeCount) discover failed: \(error.localizedDescription)")
+        // Deep scan: discover first to identify directly-heard repeaters
+        if deepScanEnabled {
+            do {
+                let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
+                logger.debug("Probe #\(self.probeCount) discover sent (tag: \(tag))")
+            } catch {
+                logger.warning("Probe #\(self.probeCount) discover failed: \(error.localizedDescription)")
+            }
         }
 
-        // 2. Channel message: generates heard repeats for mesh coverage measurement
+        // Channel message: the primary probe. Generates heard repeats for 2-way proof.
         if let ms = messageServiceRef, let deviceID, let channel = selectedProbeChannel {
             do {
                 let probeText = "~\(probeCount)"
@@ -1382,16 +1458,18 @@ final class SignalSurveyViewModel {
             }
         }
 
-        // 3. Brief delay to separate transmissions
-        try? await Task.sleep(for: .seconds(0.3))
-        guard !Task.isCancelled else { return }
+        // Deep scan: flood trace to measure mesh depth
+        if deepScanEnabled {
+            // Brief delay to separate transmissions
+            try? await Task.sleep(for: .seconds(0.3))
+            guard !Task.isCancelled else { return }
 
-        // 4. Flood trace: measure mesh reach from this location
-        do {
-            _ = try await bps.sendTrace(flags: pathHashMode)
-            logger.debug("Probe #\(self.probeCount) trace sent")
-        } catch {
-            logger.warning("Probe #\(self.probeCount) trace failed: \(error.localizedDescription)")
+            do {
+                _ = try await bps.sendTrace(flags: pathHashMode)
+                logger.debug("Probe #\(self.probeCount) trace sent")
+            } catch {
+                logger.warning("Probe #\(self.probeCount) trace failed: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -1408,6 +1486,7 @@ final class SignalSurveyViewModel {
 
             // Only add if not already present
             if !gridCells.contains(where: { $0.coordKey == key }) {
+                let probes = probesSentPerCell[key]
                 let center = HexGrid.centerLatLon(from: probe.hexCoord, referenceLatitude: gridReferenceLatitude)
                 gridCells.append(GridCell(
                     coordKey: key,
@@ -1425,12 +1504,32 @@ final class SignalSurveyViewModel {
                     uniqueSenders: [],
                     uniqueRelayNodes: [],
                     connectedRelayNodes: [],
+                    meshReachRelayNodes: [],
                     heardOnlyRelayNodes: [],
                     isDeadZone: true,
                     bestGatewaySNR: nil,
-                    maxMeshDepth: 0
+                    maxMeshDepth: 0,
+                    probesSent: probes
                 ))
                 changed = true
+
+                // Live upload dead zone cell
+                if liveUploadEnabled, let probes, probes > 0 {
+                    let refLat = gridReferenceLatitude
+                    let q = probe.hexCoord.q
+                    let r = probe.hexCoord.r
+                    let sid = activeSession?.id
+                    let service = liveUploadService ?? SurveyUploadService()
+                    if liveUploadService == nil { liveUploadService = service }
+                    Task.detached {
+                        await service.uploadDeadZoneCell(
+                            hexQ: q, hexR: r,
+                            referenceLatitude: refLat,
+                            probesSent: probes,
+                            sessionID: sid
+                        )
+                    }
+                }
             }
         }
 

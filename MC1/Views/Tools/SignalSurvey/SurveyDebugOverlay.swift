@@ -34,6 +34,7 @@ struct SurveyDebugOverlay: View {
                 debugSection("PROBE") {
                     debugRow("Count", "\(info.probeCount)")
                     debugRow("Enabled", info.probeEnabled ? "YES" : "no")
+                    debugRow("Deep scan", info.deepScanEnabled ? "YES" : "no")
                     debugRow("Freq", info.probeFrequency.rawValue)
                     debugRow("Since last", formatSeconds(info.timeSinceLastProbe))
                     if let nextMax = info.nextProbeMaxIn {
@@ -47,8 +48,16 @@ struct SurveyDebugOverlay: View {
                 debugSection("POINTS") {
                     debugRow("Total", "\(info.totalPoints)")
                     debugRow("Passive", "\(info.passivePoints)")
-                    debugRow("Control", "\(info.controlPoints)")
-                    debugRow("Trace", "\(info.tracePoints)")
+                    debugRow("Direct 2-way", "\(info.directPoints)")
+                    debugRow("Relayed", "\(info.relayedPoints)")
+                }
+
+                Divider()
+
+                // Repeaters
+                debugSection("REPEATERS") {
+                    debugRow("2-way direct", "\(info.connectedRepeaters)")
+                    debugRow("Mesh reach", "\(info.meshReachRepeaters)")
                 }
 
                 Divider()

@@ -96,6 +96,8 @@ actor SurveyUploadService {
         let snrQuality: String
         let activePacketCount: Int?
         let passivePacketCount: Int?
+        let probesSent: Int?
+        let lastUpdated: String?
     }
 
     struct CommunityCellsResponse: Codable {
@@ -278,7 +280,8 @@ actor SurveyUploadService {
             referenceLatitude: referenceLatitude,
             activePacketCount: point.isActiveProbe ? 1 : nil,
             passivePacketCount: point.isActiveProbe ? nil : 1,
-            repeaterMetrics: nil
+            repeaterMetrics: nil,
+            probesSent: nil
         )
 
         // Resolve repeater info for any path nodes (using consolidated IDs)
@@ -325,6 +328,72 @@ actor SurveyUploadService {
             Self.logger.debug("Live uploaded point to hex (\(hex.q), \(hex.r))")
         } catch {
             Self.logger.warning("Live upload failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Upload a dead zone cell (probed but no response) to the community map server.
+    /// Called during live upload when a new dead zone is detected.
+    func uploadDeadZoneCell(
+        hexQ: Int,
+        hexR: Int,
+        referenceLatitude: Double,
+        probesSent: Int,
+        sessionID: UUID? = nil
+    ) async {
+        let center = HexGrid.centerLatLon(
+            from: HexGrid.AxialCoord(q: hexQ, r: hexR),
+            referenceLatitude: referenceLatitude
+        )
+
+        let cellData = SurveyExportService.CellData(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            averageSNR: nil,
+            averageRSSI: nil,
+            minSNR: nil,
+            maxSNR: nil,
+            packetCount: 0,
+            routeTypeBreakdown: SurveyExportService.RouteBreakdown(flood: 0, direct: 0),
+            timeRange: nil,
+            repeaterHexIDs: [],
+            hexQ: hexQ,
+            hexR: hexR,
+            referenceLatitude: referenceLatitude,
+            activePacketCount: nil,
+            passivePacketCount: nil,
+            repeaterMetrics: nil,
+            probesSent: probesSent
+        )
+
+        do {
+            let contributorID = try await getOrCreateContributorID()
+
+            let payload = UploadPayload(
+                version: SurveyExportService.formatVersion,
+                contributorID: contributorID,
+                gridType: "hex",
+                cellSizeDegrees: HexGrid.size,
+                referenceLatitude: referenceLatitude,
+                cells: [cellData],
+                repeaters: [],
+                sessionIDs: sessionID.map { [$0.uuidString] }
+            )
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let body = try encoder.encode(payload)
+
+            let url = Self.serverBaseURL.appending(path: "survey")
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(Self.apiKey, forHTTPHeaderField: "X-API-Key")
+            request.httpBody = body
+
+            _ = try await performRequest(request)
+            Self.logger.debug("Live uploaded dead zone at hex (\(hexQ), \(hexR)) with \(probesSent) probes")
+        } catch {
+            Self.logger.warning("Dead zone upload failed: \(error.localizedDescription)")
         }
     }
 

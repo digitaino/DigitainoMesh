@@ -42,6 +42,8 @@ struct UploadCellData: Content {
     let passivePacketCount: Int?
     /// Per-repeater signal metrics. Optional for backward compat with older clients.
     let repeaterMetrics: [RepeaterMetricData]?
+    /// Number of active probe messages sent from this cell. Optional for backward compat.
+    let probesSent: Int?
 }
 
 /// Per-repeater signal metrics within a cell.
@@ -83,6 +85,10 @@ struct CommunityCellResponse: Content {
     let passivePacketCount: Int?
     /// Per-repeater signal metrics. Nil for legacy cells without this data.
     let repeaterMetrics: [RepeaterMetricData]?
+    /// Number of active probe messages sent from this cell. Nil for legacy cells.
+    let probesSent: Int?
+    /// ISO 8601 timestamp of last data update for this cell.
+    let lastUpdated: String?
 }
 
 struct CommunityCellsResponse: Content {

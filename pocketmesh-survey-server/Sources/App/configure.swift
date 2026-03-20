@@ -29,6 +29,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddRepeaterMetrics())
     app.migrations.add(AddRepeaterLastHeard())
     app.migrations.add(AddRouteUserLocation())
+    app.migrations.add(AddProbesSent())
     try app.autoMigrate().wait()
 
     // Register routes
