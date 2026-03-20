@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Build stage
 FROM swift:6.0-noble AS build
 WORKDIR /build
@@ -5,7 +6,8 @@ COPY Package.swift Package.resolved ./
 RUN swift package resolve
 COPY Sources/ Sources/
 COPY Public/ Public/
-RUN swift build -c release && cp -a .build/release/App /tmp/App
+RUN --mount=type=cache,target=/build/.build \
+    swift build -c release && cp -a .build/release/App /tmp/App
 
 # Runtime stage - use swift image to avoid apt-get (includes SQLite + Swift runtime)
 FROM swift:6.0-noble-slim

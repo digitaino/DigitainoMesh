@@ -66,7 +66,7 @@ fi
 echo ""
 echo "--- Rebuilding and restarting ---"
 docker compose down
-docker compose build --no-cache
+DOCKER_BUILDKIT=1 docker compose build
 docker compose up -d
 
 # 5. Verify
