@@ -1,4 +1,30 @@
-# Beta Changes — v0.10.1 (Build 10)
+# Beta Changes — v0.10.1 (Build 11)
+
+Fixed scrolling bug in repeater telemetry status history. Thanks ASTpoetry
+
+## Upstream Merge
+
+- **Optimistic sending** — Channel messages appear instantly in the chat before server confirmation.
+- **Reply with quote** — New toggle in chat settings for quoting the original message in replies.
+- **BLE stability** — Fixes for session reconnect races, RX log pruning, and message auto-fetch coalescing.
+
+## Community Map Filters & Performance
+
+- **Coverage, repeater, and time filters** — The community overlay on both the survey map and the standalone map now has a filter toolbar with coverage type (All/Active/Passive), repeater selection, and time range. Changing any filter re-fetches from the server so results are accurate, not just client-filtered.
+
+- **Per-repeater signal metrics** — When filtering by a specific repeater, cell detail cards show that repeater's individual SNR/RSSI/packet count instead of the cell's aggregate stats. Active/passive counts are hidden when irrelevant to the selected coverage filter.
+
+- **Cell-to-repeater polylines** — Selecting a repeater filter draws dashed lines from each cell to the repeater's location. Lines for off-screen repeaters extend to the map edge with an arrow indicator.
+
+- **MKOverlayRenderer for community cells** — Community hex cells now render via UIKit `MKOverlayRenderer` instead of SwiftUI `MapPolygon` views, handling 5000+ cells without UI lag.
+
+- **"My Cell" button** — During an active survey, a "My Cell" button in the stats bar zooms to your current cell and selects it. Camera zoom now correctly drives the UIKit MKMapView.
+
+---
+
+# Previous Builds
+
+# v0.10.1 (Build 10)
 
 ## Web Share Identity
 
@@ -33,8 +59,6 @@
 - **BLE stability** — Fixes for session reconnect races, RX log pruning, and message auto-fetch coalescing.
 
 ---
-
-# Previous Builds
 
 # v0.10.1 (Build 9)
 
