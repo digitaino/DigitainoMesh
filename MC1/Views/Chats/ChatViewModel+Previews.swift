@@ -160,7 +160,8 @@ extension ChatViewModel {
             reactionSummary: message?.reactionSummary,
             detectedSharedRoute: item.detectedSharedRoute,
             previewState: previewStates[messageID] ?? .idle,
-            loadedPreview: loadedPreviews[messageID]
+            loadedPreview: loadedPreviews[messageID],
+            isSearchMatch: item.isSearchMatch
         )
     }
 

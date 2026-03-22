@@ -285,6 +285,20 @@ final class ChatViewModel {
     /// Contact ID currently having its favorite status toggled (for loading UI)
     var togglingFavoriteID: UUID?
 
+    // MARK: - Search State
+
+    /// Current global search results
+    var globalSearchResults = GlobalSearchResults()
+
+    /// In-flight global search task
+    @ObservationIgnored var globalSearchTask: Task<Void, Never>?
+
+    /// Current within-conversation search state
+    var conversationSearch = ConversationSearchState()
+
+    /// In-flight within-conversation search task
+    @ObservationIgnored var conversationSearchTask: Task<Void, Never>?
+
     // MARK: - Initialization
 
     init() {}

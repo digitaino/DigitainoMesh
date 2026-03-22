@@ -72,6 +72,7 @@ struct ChatsView: View {
                         lastSelectedRoomIsConnected: $lastSelectedRoomIsConnected,
                         routeBeingDeleted: $routeBeingDeleted,
                         onDeleteConversation: handleDeleteConversation,
+                        onSearchResultTap: handleSearchResultTap,
                         onLoadConversations: loadConversations,
                         onHandlePendingNavigation: handlePendingNavigation,
                         onHandlePendingChannelNavigation: handlePendingChannelNavigation,
@@ -101,6 +102,7 @@ struct ChatsView: View {
                         roomToAuthenticate: $roomToAuthenticate,
                         navigationPath: $navigationPath,
                         onDeleteConversation: handleDeleteConversation,
+                        onSearchResultTap: handleSearchResultTap,
                         onLoadConversations: loadConversations,
                         onHandlePendingNavigation: handlePendingNavigation,
                         onHandlePendingChannelNavigation: handlePendingChannelNavigation,
@@ -129,6 +131,13 @@ struct ChatsView: View {
                 }
             }
             .presentationDetents([.medium])
+        }
+        .onChange(of: searchText) { _, newValue in
+            if let deviceID = appState.currentDeviceID, !newValue.isEmpty {
+                viewModel.searchMessagesGlobally(query: newValue, deviceID: deviceID)
+            } else {
+                viewModel.cancelGlobalSearch()
+            }
         }
         .sheet(isPresented: $showingNewChat, onDismiss: {
             if let contact = pendingChatContact {
@@ -368,6 +377,19 @@ struct ChatsView: View {
         guard let session = appState.navigation.pendingRoomSession else { return }
         navigate(to: .room(session))
         appState.navigation.clearPendingRoomNavigation()
+    }
+
+    private func handleSearchResultTap(_ result: MessageSearchResult) {
+        // Find the conversation and navigate to it with scroll target
+        if let contactID = result.contactID,
+           let contact = viewModel.conversations.first(where: { $0.id == contactID }) {
+            appState.navigation.pendingScrollToMessageID = result.id
+            navigate(to: .direct(contact))
+        } else if let channelIndex = result.channelIndex,
+                  let channel = viewModel.channels.first(where: { $0.index == channelIndex && $0.deviceID == result.deviceID }) {
+            appState.navigation.pendingScrollToMessageID = result.id
+            navigate(to: .channel(channel))
+        }
     }
 
     private func handleHashtagTap(name: String) {

@@ -438,6 +438,20 @@ public protocol PersistenceStoreProtocol: Actor {
 
     /// Delete snapshots older than the given date
     func deleteOldNodeStatusSnapshots(olderThan date: Date) async throws
+
+    // MARK: - Message Search
+
+    /// Search messages across all conversations for a device (global search).
+    func searchMessages(deviceID: UUID, searchText: String, limit: Int, offset: Int) async throws -> [MessageSearchResult]
+
+    /// Count total messages matching a search query across all conversations.
+    func searchMessagesCount(deviceID: UUID, searchText: String) async throws -> Int
+
+    /// Search message IDs within a DM conversation.
+    func searchMessageIDs(contactID: UUID, searchText: String, limit: Int) async throws -> [UUID]
+
+    /// Search message IDs within a channel conversation.
+    func searchMessageIDs(deviceID: UUID, channelIndex: UInt8, searchText: String, limit: Int) async throws -> [UUID]
 }
 
 // MARK: - Default Parameter Values

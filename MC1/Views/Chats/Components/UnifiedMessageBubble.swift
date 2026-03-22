@@ -220,6 +220,18 @@ private struct BubbleContent: View {
         }
         .background(bubbleColor)
         .clipShape(.rect(cornerRadius: 16))
+        .overlay {
+            if displayState.isSearchMatch {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+            }
+        }
+        .background {
+            if displayState.isSearchMatch {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.accentColor.opacity(0.12))
+            }
+        }
     }
 }
 

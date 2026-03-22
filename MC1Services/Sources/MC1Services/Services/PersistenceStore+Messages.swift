@@ -714,4 +714,83 @@ extension PersistenceStore {
         })
         try modelContext.save()
     }
+
+    // MARK: - Message Search
+
+    /// Search messages across all conversations for a device.
+    /// Returns lightweight `MessageSearchResult` objects sorted by date (newest first).
+    public func searchMessages(deviceID: UUID, searchText: String, limit: Int = 50, offset: Int = 0) throws -> [MessageSearchResult] {
+        let targetDeviceID = deviceID
+        let query = searchText
+        let predicate = #Predicate<Message> { message in
+            message.deviceID == targetDeviceID && message.text.localizedStandardContains(query)
+        }
+        var descriptor = FetchDescriptor(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\Message.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        descriptor.fetchOffset = offset
+
+        let messages = try modelContext.fetch(descriptor)
+        return messages.map { message in
+            MessageSearchResult(
+                id: message.id,
+                text: message.text,
+                createdAt: message.createdAt,
+                contactID: message.contactID,
+                channelIndex: message.channelIndex,
+                deviceID: message.deviceID,
+                senderNodeName: message.senderNodeName,
+                directionRawValue: message.directionRawValue
+            )
+        }
+    }
+
+    /// Count total messages matching a search query across all conversations.
+    public func searchMessagesCount(deviceID: UUID, searchText: String) throws -> Int {
+        let targetDeviceID = deviceID
+        let query = searchText
+        let predicate = #Predicate<Message> { message in
+            message.deviceID == targetDeviceID && message.text.localizedStandardContains(query)
+        }
+        return try modelContext.fetchCount(FetchDescriptor(predicate: predicate))
+    }
+
+    /// Search message IDs within a DM conversation (for within-conversation search).
+    /// Returns IDs in chronological order (oldest first) for prev/next navigation.
+    public func searchMessageIDs(contactID: UUID, searchText: String, limit: Int = 500) throws -> [UUID] {
+        let targetContactID: UUID? = contactID
+        let query = searchText
+        let predicate = #Predicate<Message> { message in
+            message.contactID == targetContactID && message.text.localizedStandardContains(query)
+        }
+        var descriptor = FetchDescriptor(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\Message.createdAt, order: .forward)]
+        )
+        descriptor.fetchLimit = limit
+
+        return try modelContext.fetch(descriptor).map(\.id)
+    }
+
+    /// Search message IDs within a channel conversation (for within-conversation search).
+    /// Returns IDs in chronological order (oldest first) for prev/next navigation.
+    public func searchMessageIDs(deviceID: UUID, channelIndex: UInt8, searchText: String, limit: Int = 500) throws -> [UUID] {
+        let targetDeviceID = deviceID
+        let targetChannelIndex: UInt8? = channelIndex
+        let query = searchText
+        let predicate = #Predicate<Message> { message in
+            message.deviceID == targetDeviceID &&
+            message.channelIndex == targetChannelIndex &&
+            message.text.localizedStandardContains(query)
+        }
+        var descriptor = FetchDescriptor(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\Message.createdAt, order: .forward)]
+        )
+        descriptor.fetchLimit = limit
+
+        return try modelContext.fetch(descriptor).map(\.id)
+    }
 }

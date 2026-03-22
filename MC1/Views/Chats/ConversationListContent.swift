@@ -10,51 +10,66 @@ struct ConversationListContent: View {
     private let viewModel: ChatViewModel
     private let favoriteConversations: [Conversation]
     private let otherConversations: [Conversation]
+    private let searchText: String
+    private let messageSearchResults: ChatViewModel.GlobalSearchResults
     private let mode: ListMode
     private let hasLoadedOnce: Bool
     private let emptyStateMessage: (title: String, description: String, systemImage: String)
     private let onDeleteConversation: (Conversation) -> Void
+    private let onSearchResultTap: (MessageSearchResult) -> Void
     @Binding private var selectedFilter: ChatFilter
 
     init(
         viewModel: ChatViewModel,
         favoriteConversations: [Conversation],
         otherConversations: [Conversation],
+        searchText: String = "",
+        messageSearchResults: ChatViewModel.GlobalSearchResults = .init(),
         selectedFilter: Binding<ChatFilter>,
         hasLoadedOnce: Bool,
         emptyStateMessage: (title: String, description: String, systemImage: String),
         selection: Binding<ChatRoute?>,
-        onDeleteConversation: @escaping (Conversation) -> Void
+        onDeleteConversation: @escaping (Conversation) -> Void,
+        onSearchResultTap: @escaping (MessageSearchResult) -> Void = { _ in }
     ) {
         self.viewModel = viewModel
         self.favoriteConversations = favoriteConversations
         self.otherConversations = otherConversations
+        self.searchText = searchText
+        self.messageSearchResults = messageSearchResults
         self._selectedFilter = selectedFilter
         self.hasLoadedOnce = hasLoadedOnce
         self.emptyStateMessage = emptyStateMessage
         self.mode = .selection(selection)
         self.onDeleteConversation = onDeleteConversation
+        self.onSearchResultTap = onSearchResultTap
     }
 
     init(
         viewModel: ChatViewModel,
         favoriteConversations: [Conversation],
         otherConversations: [Conversation],
+        searchText: String = "",
+        messageSearchResults: ChatViewModel.GlobalSearchResults = .init(),
         selectedFilter: Binding<ChatFilter>,
         hasLoadedOnce: Bool,
         emptyStateMessage: (title: String, description: String, systemImage: String),
         onNavigate: @escaping (ChatRoute) -> Void,
         onRequestRoomAuth: @escaping (RemoteNodeSessionDTO) -> Void,
-        onDeleteConversation: @escaping (Conversation) -> Void
+        onDeleteConversation: @escaping (Conversation) -> Void,
+        onSearchResultTap: @escaping (MessageSearchResult) -> Void = { _ in }
     ) {
         self.viewModel = viewModel
         self.favoriteConversations = favoriteConversations
         self.otherConversations = otherConversations
+        self.searchText = searchText
+        self.messageSearchResults = messageSearchResults
         self._selectedFilter = selectedFilter
         self.hasLoadedOnce = hasLoadedOnce
         self.emptyStateMessage = emptyStateMessage
         self.mode = .navigation(onNavigate: onNavigate, onRequestRoomAuth: onRequestRoomAuth)
         self.onDeleteConversation = onDeleteConversation
+        self.onSearchResultTap = onSearchResultTap
     }
 
     var body: some View {
@@ -65,7 +80,7 @@ struct ConversationListContent: View {
             TimelineView(.everyMinute) { context in
                 listContent(referenceDate: context.date)
                     .overlay {
-                        if favoriteConversations.isEmpty && otherConversations.isEmpty {
+                        if favoriteConversations.isEmpty && otherConversations.isEmpty && !hasMessageSearchResults && !messageSearchResults.isSearching {
                             ContentUnavailableView {
                                 Label(emptyStateMessage.title, systemImage: emptyStateMessage.systemImage)
                             } description: {
@@ -79,6 +94,70 @@ struct ConversationListContent: View {
                             }
                         }
                     }
+            }
+        }
+    }
+
+    private var hasMessageSearchResults: Bool {
+        !searchText.isEmpty && !messageSearchResults.resultsByConversation.isEmpty
+    }
+
+    @ViewBuilder
+    private func messageSearchResultsSection() -> some View {
+        if hasMessageSearchResults {
+            Section {
+                ForEach(Array(messageSearchResults.resultsByConversation.enumerated()), id: \.offset) { _, group in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(group.conversation.displayName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.primary)
+
+                        let isChannel: Bool = {
+                            if case .channel = group.conversation { return true }
+                            return false
+                        }()
+
+                        ForEach(group.results.prefix(3)) { result in
+                            Button {
+                                onSearchResultTap(result)
+                            } label: {
+                                MessageSearchSnippetRow(
+                                    result: result,
+                                    searchText: searchText,
+                                    isChannel: isChannel
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if group.results.count > 3 {
+                            Text("\(group.results.count - 3) more")
+                                .font(.caption)
+                                .foregroundColor(.accentColor)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            } header: {
+                HStack {
+                    Text("Messages")
+                    if messageSearchResults.isSearching {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if messageSearchResults.totalCount > 0 {
+                        Text("(\(messageSearchResults.totalCount))")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        } else if !searchText.isEmpty && messageSearchResults.isSearching {
+            Section("Messages") {
+                HStack {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Searching…")
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }
@@ -115,6 +194,8 @@ struct ConversationListContent: View {
                 }
                 .accessibilityLabel(L10n.Chats.Chats.Section.conversations)
                 .accessibilityHidden(otherConversations.isEmpty)
+
+                messageSearchResultsSection()
             }
             .listStyle(.plain)
 
@@ -151,6 +232,8 @@ struct ConversationListContent: View {
                 }
                 .accessibilityLabel(L10n.Chats.Chats.Section.conversations)
                 .accessibilityHidden(otherConversations.isEmpty)
+
+                messageSearchResultsSection()
             }
             .listStyle(.plain)
         }

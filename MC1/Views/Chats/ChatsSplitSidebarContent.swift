@@ -21,6 +21,7 @@ struct ChatsSplitSidebarContent: View {
     @Binding var routeBeingDeleted: ChatRoute?
 
     let onDeleteConversation: (Conversation) -> Void
+    let onSearchResultTap: (MessageSearchResult) -> Void
     let onLoadConversations: () async -> Void
     let onHandlePendingNavigation: () -> Void
     let onHandlePendingChannelNavigation: () -> Void
@@ -32,11 +33,14 @@ struct ChatsSplitSidebarContent: View {
             viewModel: viewModel,
             favoriteConversations: filteredFavorites,
             otherConversations: filteredOthers,
+            searchText: searchText,
+            messageSearchResults: viewModel.globalSearchResults,
             selectedFilter: $selectedFilter,
             hasLoadedOnce: hasLoadedOnce,
             emptyStateMessage: emptyStateMessage,
             selection: $selectedRoute,
-            onDeleteConversation: onDeleteConversation
+            onDeleteConversation: onDeleteConversation,
+            onSearchResultTap: onSearchResultTap
         )
         .modifier(ChatsListModifiers(
             viewModel: viewModel,

@@ -16,6 +16,7 @@ struct ChatsStackRootContent: View {
     @Binding var navigationPath: NavigationPath
 
     let onDeleteConversation: (Conversation) -> Void
+    let onSearchResultTap: (MessageSearchResult) -> Void
     let onLoadConversations: () async -> Void
     let onHandlePendingNavigation: () -> Void
     let onHandlePendingChannelNavigation: () -> Void
@@ -27,12 +28,15 @@ struct ChatsStackRootContent: View {
             viewModel: viewModel,
             favoriteConversations: filteredFavorites,
             otherConversations: filteredOthers,
+            searchText: searchText,
+            messageSearchResults: viewModel.globalSearchResults,
             selectedFilter: $selectedFilter,
             hasLoadedOnce: hasLoadedOnce,
             emptyStateMessage: emptyStateMessage,
             onNavigate: { navigationPath.append($0) },
             onRequestRoomAuth: { roomToAuthenticate = $0 },
-            onDeleteConversation: onDeleteConversation
+            onDeleteConversation: onDeleteConversation,
+            onSearchResultTap: onSearchResultTap
         )
         .modifier(ChatsListModifiers(
             viewModel: viewModel,

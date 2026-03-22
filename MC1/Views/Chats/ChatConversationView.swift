@@ -43,6 +43,12 @@ struct ChatConversationView: View {
     @State private var pendingRouteMessage: MessageDTO?
     @State private var pendingRouteInfo: String?
 
+    // MARK: - Search State
+
+    @State private var conversationSearchText = ""
+    @State private var isSearchActive = false
+    @State private var searchScrollTask: Task<Void, Never>?
+
     // MARK: - Other State
 
     @State private var recentEmojisStore = RecentEmojisStore()
@@ -230,6 +236,47 @@ struct ChatConversationView: View {
         } message: {
             Text(L10n.Chats.Chats.Alert.UnableToSend.message)
         }
+        .searchable(
+            text: $conversationSearchText,
+            isPresented: $isSearchActive,
+            placement: .navigationBarDrawer(displayMode: .automatic),
+            prompt: "Search messages"
+        )
+        .onChange(of: conversationSearchText) { _, newValue in
+            chatViewModel.searchWithinConversation(query: newValue)
+        }
+        .onChange(of: isSearchActive) { _, active in
+            if !active {
+                chatViewModel.clearConversationSearch()
+            }
+        }
+        .onChange(of: chatViewModel.conversationSearch.currentMatchID) { _, matchID in
+            guard let matchID else { return }
+            scrollToSearchMatch(targetID: matchID)
+        }
+        .toolbar {
+            if isSearchActive && chatViewModel.conversationSearch.totalMatches > 0 {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button {
+                        chatViewModel.searchPreviousMatch()
+                    } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .disabled(!chatViewModel.conversationSearch.canGoPrevious)
+
+                    Text(chatViewModel.conversationSearch.currentMatchDisplay)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+
+                    Button {
+                        chatViewModel.searchNextMatch()
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .disabled(!chatViewModel.conversationSearch.canGoNext)
+                }
+            }
+        }
     }
 
     // MARK: - Initial Load (.task)
@@ -285,6 +332,9 @@ struct ChatConversationView: View {
     private func performCleanup() {
         mentionScrollTask?.cancel()
         mentionScrollTask = nil
+        searchScrollTask?.cancel()
+        searchScrollTask = nil
+        chatViewModel.clearConversationSearch()
 
         // Save in-progress draft so it survives navigation
         switch conversationType {
@@ -561,6 +611,44 @@ struct ChatConversationView: View {
                 // Expected when view disappears during paging
             } catch {
                 logger.error("Failed to scroll to mention: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Search Navigation
+
+    private func scrollToSearchMatch(targetID: UUID) {
+        if chatViewModel.displayItems.contains(where: { $0.id == targetID }) {
+            scrollToTargetID = targetID
+            scrollToMentionRequest += 1
+            return
+        }
+
+        searchScrollTask?.cancel()
+        searchScrollTask = Task {
+            do {
+                let deadline = ContinuousClock.now + .seconds(10)
+                while !chatViewModel.displayItems.contains(where: { $0.id == targetID }) {
+                    guard chatViewModel.hasMoreMessages else { break }
+                    guard ContinuousClock.now < deadline else {
+                        logger.warning("Search match \(targetID) paging timed out")
+                        break
+                    }
+                    if chatViewModel.isLoadingOlder {
+                        try await Task.sleep(for: .milliseconds(50))
+                        continue
+                    }
+                    await chatViewModel.loadOlderMessages()
+                    try Task.checkCancellation()
+                }
+                if chatViewModel.displayItems.contains(where: { $0.id == targetID }) {
+                    scrollToTargetID = targetID
+                    scrollToMentionRequest += 1
+                }
+            } catch is CancellationError {
+                // Expected when view disappears during paging
+            } catch {
+                logger.error("Failed to scroll to search match: \(error)")
             }
         }
     }

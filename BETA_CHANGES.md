@@ -1,4 +1,18 @@
-# Beta Changes — v0.10.1 (Build 11)
+# Beta Changes — v0.10.1 (Build 12)
+
+## Message Search
+
+- **Global message search** — The search bar in the Chats list now searches message content across all conversations, not just conversation names. Results appear in a "Messages" section below the conversation list, grouped by conversation with highlighted text snippets showing the match in context. Tap a result to jump directly to that message in the conversation.
+
+- **Within-conversation search** — Inside any conversation, pull down to reveal a search bar. Type to find messages within that conversation. A bottom toolbar shows "X of Y" with previous/next chevrons to navigate between matches. The current match is highlighted with an accent-colored border and background on the message bubble.
+
+- **Scalable database queries** — Both search modes use database-level `#Predicate` queries with `localizedStandardContains` (case and diacritic insensitive), leveraging existing composite indexes. Global search returns lightweight result DTOs (8 fields vs 30+) and within-conversation search returns only message IDs, keeping memory usage low even with thousands of messages. Both inputs are 300ms debounced to avoid excessive queries while typing.
+
+---
+
+# Previous Builds
+
+# v0.10.1 (Build 11)
 
 Fixed scrolling bug in repeater telemetry status history. Thanks ASTpoetry
 
@@ -21,8 +35,6 @@ Fixed scrolling bug in repeater telemetry status history. Thanks ASTpoetry
 - **"My Cell" button** — During an active survey, a "My Cell" button in the stats bar zooms to your current cell and selects it. Camera zoom now correctly drives the UIKit MKMapView.
 
 ---
-
-# Previous Builds
 
 # v0.10.1 (Build 10)
 

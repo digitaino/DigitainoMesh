@@ -22,4 +22,5 @@ struct MessageDisplayState {
     var showIncomingHopCount: Bool = false
     var formattedText: AttributedString?
     var detectedSharedRoute: SharedRoute?
+    var isSearchMatch: Bool = false
 }

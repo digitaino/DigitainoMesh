@@ -1526,6 +1526,24 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         nodeStatusSnapshots.removeAll { $0.timestamp < date }
     }
 
+    // MARK: - Message Search
+
+    public func searchMessages(deviceID: UUID, searchText: String, limit: Int, offset: Int) async throws -> [MessageSearchResult] {
+        return [] // Stub
+    }
+
+    public func searchMessagesCount(deviceID: UUID, searchText: String) async throws -> Int {
+        return 0 // Stub
+    }
+
+    public func searchMessageIDs(contactID: UUID, searchText: String, limit: Int) async throws -> [UUID] {
+        return [] // Stub
+    }
+
+    public func searchMessageIDs(deviceID: UUID, channelIndex: UInt8, searchText: String, limit: Int) async throws -> [UUID] {
+        return [] // Stub
+    }
+
     // MARK: - Test Helpers
 
     /// Resets all storage and recorded invocations

@@ -39,5 +39,8 @@ struct MessageDisplayItem: Identifiable, Hashable, Sendable {
     let previewState: PreviewLoadState
     let loadedPreview: LinkPreviewDataDTO?
 
+    // Search match highlight
+    let isSearchMatch: Bool
+
     var id: UUID { messageID }
 }

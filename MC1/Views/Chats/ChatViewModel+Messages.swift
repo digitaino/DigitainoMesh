@@ -384,7 +384,8 @@ extension ChatViewModel {
             reactionSummary: message.reactionSummary,
             detectedSharedRoute: sharedRoute,
             previewState: .idle,
-            loadedPreview: nil
+            loadedPreview: nil,
+            isSearchMatch: false
         )
         displayItems.append(newItem)
         displayItemIndexByID[message.id] = displayItems.count - 1
@@ -433,7 +434,8 @@ extension ChatViewModel {
             reactionSummary: item.reactionSummary,
             detectedSharedRoute: item.detectedSharedRoute,
             previewState: previewStates[messageID] ?? .idle,
-            loadedPreview: loadedPreviews[messageID]
+            loadedPreview: loadedPreviews[messageID],
+            isSearchMatch: item.isSearchMatch
         )
     }
 
@@ -911,7 +913,8 @@ extension ChatViewModel {
                 reactionSummary: message.reactionSummary,
                 detectedSharedRoute: sharedRoute,
                 previewState: previewStates[message.id] ?? .idle,
-                loadedPreview: loadedPreviews[message.id]
+                loadedPreview: loadedPreviews[message.id],
+                isSearchMatch: message.id == conversationSearch.currentMatchID
             )
         }
 
@@ -1000,5 +1003,223 @@ extension ChatViewModel {
                 await loadConversations(deviceID: deviceID)
             }
         } while !sendQueue.isEmpty
+    }
+
+    // MARK: - Global Message Search
+
+    /// Results from a global message search across all conversations
+    struct GlobalSearchResults {
+        var resultsByConversation: [(conversation: Conversation, results: [MessageSearchResult])] = []
+        var totalCount: Int = 0
+        var isSearching: Bool = false
+    }
+
+    /// Search messages across all conversations, grouped by conversation.
+    func searchMessagesGlobally(query: String, deviceID: UUID) {
+        globalSearchTask?.cancel()
+
+        guard !query.isEmpty else {
+            cancelGlobalSearch()
+            return
+        }
+
+        globalSearchResults.isSearching = true
+
+        globalSearchTask = Task {
+            // Debounce 300ms
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+            } catch {
+                return
+            }
+
+            guard let dataStore else {
+                globalSearchResults.isSearching = false
+                return
+            }
+
+            do {
+                let results = try await dataStore.searchMessages(
+                    deviceID: deviceID,
+                    searchText: query,
+                    limit: 50,
+                    offset: 0
+                )
+                let totalCount = try await dataStore.searchMessagesCount(
+                    deviceID: deviceID,
+                    searchText: query
+                )
+
+                guard !Task.isCancelled else { return }
+
+                // Group results by conversation
+                let grouped = groupResultsByConversation(results)
+                globalSearchResults = GlobalSearchResults(
+                    resultsByConversation: grouped,
+                    totalCount: totalCount,
+                    isSearching: false
+                )
+            } catch {
+                guard !Task.isCancelled else { return }
+                logger.error("Global message search failed: \(error.localizedDescription)")
+                globalSearchResults.isSearching = false
+            }
+        }
+    }
+
+    /// Cancel any in-progress global search and clear results.
+    func cancelGlobalSearch() {
+        globalSearchTask?.cancel()
+        globalSearchTask = nil
+        globalSearchResults = GlobalSearchResults()
+    }
+
+    /// Groups search results by conversation, resolving contactID/channelIndex
+    /// against loaded conversations and channels.
+    private func groupResultsByConversation(_ results: [MessageSearchResult]) -> [(conversation: Conversation, results: [MessageSearchResult])] {
+        var grouped: [UUID: (conversation: Conversation, results: [MessageSearchResult])] = [:]
+
+        for result in results {
+            let conversationKey: UUID
+            let conversation: Conversation?
+
+            if let contactID = result.contactID {
+                conversationKey = contactID
+                if let contact = conversations.first(where: { $0.id == contactID }) {
+                    conversation = .direct(contact)
+                } else {
+                    conversation = nil
+                }
+            } else if let channelIndex = result.channelIndex {
+                if let channel = channels.first(where: { $0.index == channelIndex && $0.deviceID == result.deviceID }) {
+                    conversationKey = channel.id
+                    conversation = .channel(channel)
+                } else {
+                    continue
+                }
+            } else {
+                continue
+            }
+
+            guard let conversation else { continue }
+
+            if grouped[conversationKey] != nil {
+                grouped[conversationKey]?.results.append(result)
+            } else {
+                grouped[conversationKey] = (conversation: conversation, results: [result])
+            }
+        }
+
+        // Sort groups by most recent result in each group
+        return grouped.values.sorted { lhs, rhs in
+            let lhsDate = lhs.results.first?.createdAt ?? .distantPast
+            let rhsDate = rhs.results.first?.createdAt ?? .distantPast
+            return lhsDate > rhsDate
+        }
+    }
+
+    // MARK: - Within-Conversation Search
+
+    /// State for searching within the current conversation
+    struct ConversationSearchState {
+        var matchingIDs: [UUID] = []
+        var currentMatchIndex: Int = -1
+        var query: String = ""
+        var isSearching: Bool = false
+
+        var totalMatches: Int { matchingIDs.count }
+        var currentMatchDisplay: String {
+            guard totalMatches > 0, currentMatchIndex >= 0 else { return "" }
+            return "\(currentMatchIndex + 1) of \(totalMatches)"
+        }
+        var currentMatchID: UUID? {
+            guard currentMatchIndex >= 0, currentMatchIndex < matchingIDs.count else { return nil }
+            return matchingIDs[currentMatchIndex]
+        }
+        var canGoNext: Bool { currentMatchIndex < matchingIDs.count - 1 }
+        var canGoPrevious: Bool { currentMatchIndex > 0 }
+    }
+
+    /// Search within the current conversation.
+    func searchWithinConversation(query: String) {
+        conversationSearchTask?.cancel()
+
+        guard !query.isEmpty else {
+            clearConversationSearch()
+            return
+        }
+
+        conversationSearch.query = query
+        conversationSearch.isSearching = true
+
+        conversationSearchTask = Task {
+            // Debounce 300ms
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+            } catch {
+                return
+            }
+
+            guard let dataStore else {
+                conversationSearch.isSearching = false
+                return
+            }
+
+            do {
+                let matchIDs: [UUID]
+                if let contact = currentContact {
+                    matchIDs = try await dataStore.searchMessageIDs(
+                        contactID: contact.id,
+                        searchText: query,
+                        limit: 500
+                    )
+                } else if let channel = currentChannel {
+                    matchIDs = try await dataStore.searchMessageIDs(
+                        deviceID: channel.deviceID,
+                        channelIndex: channel.index,
+                        searchText: query,
+                        limit: 500
+                    )
+                } else {
+                    conversationSearch.isSearching = false
+                    return
+                }
+
+                guard !Task.isCancelled else { return }
+
+                conversationSearch.matchingIDs = matchIDs
+                conversationSearch.isSearching = false
+
+                // Start at the newest match (last in chronological order)
+                if !matchIDs.isEmpty {
+                    conversationSearch.currentMatchIndex = matchIDs.count - 1
+                } else {
+                    conversationSearch.currentMatchIndex = -1
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                logger.error("Conversation search failed: \(error.localizedDescription)")
+                conversationSearch.isSearching = false
+            }
+        }
+    }
+
+    /// Navigate to the next match (older).
+    func searchPreviousMatch() {
+        guard conversationSearch.canGoPrevious else { return }
+        conversationSearch.currentMatchIndex -= 1
+    }
+
+    /// Navigate to the previous match (newer).
+    func searchNextMatch() {
+        guard conversationSearch.canGoNext else { return }
+        conversationSearch.currentMatchIndex += 1
+    }
+
+    /// Clear within-conversation search state.
+    func clearConversationSearch() {
+        conversationSearchTask?.cancel()
+        conversationSearchTask = nil
+        conversationSearch = ConversationSearchState()
     }
 }

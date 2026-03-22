@@ -223,7 +223,8 @@ struct ChatConversationMessagesContent: View {
                         currentUserName: deviceName,
                         isHighContrast: colorSchemeContrast == .increased
                     ),
-                    detectedSharedRoute: item.detectedSharedRoute
+                    detectedSharedRoute: item.detectedSharedRoute,
+                    isSearchMatch: item.isSearchMatch
                 ),
                 callbacks: MessageBubbleCallbacks(
                     onRetry: { onRetryMessage(message) },
