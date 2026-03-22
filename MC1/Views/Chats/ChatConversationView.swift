@@ -320,10 +320,9 @@ struct ChatConversationView: View {
 
         await loadUnseenMentions()
 
-        // Trigger scroll to target message if pending (notification deeplink)
+        // Trigger scroll to target message if pending (notification deeplink or search result tap)
         if let targetID = pendingTarget {
-            scrollToTargetID = targetID
-            scrollToMentionRequest += 1
+            scrollToSearchMatch(targetID: targetID)
         }
     }
 
