@@ -60,9 +60,15 @@ struct MapView: View {
             // Floating controls
             VStack {
                 HStack {
-                    timeFilterBar
+                    if viewModel.showCommunityOverlay {
+                        communityFilterBar
+                    } else {
+                        contactsTimeFilterBar
+                    }
                     Spacer(minLength: 0)
-                    repeaterFilterBadge
+                    if !viewModel.showCommunityOverlay {
+                        repeaterFilterBadge
+                    }
                 }
                 .padding(.top, 8)
                 Spacer()
@@ -74,6 +80,7 @@ struct MapView: View {
             }
             .animation(.snappy(duration: 0.25), value: viewModel.selectedCommunityCell?.id)
             .animation(.snappy(duration: 0.25), value: viewModel.communityRepeaterFilter)
+            .animation(.snappy(duration: 0.25), value: viewModel.showCommunityOverlay)
 
             // Layers menu overlay
             if viewModel.showingLayersMenu {
@@ -124,6 +131,7 @@ struct MapView: View {
                     showCommunityOverlay: viewModel.showCommunityOverlay,
                     selectedCommunityCell: viewModel.selectedCommunityCell,
                     repeaterLocations: viewModel.repeaterLocations,
+                    allRepeaterLocations: viewModel.allRepeaterLocations,
                     selectedContact: $viewModel.selectedContact,
                     cameraRegion: $viewModel.cameraRegion,
                     onDetailTap: { contact in
@@ -265,9 +273,9 @@ struct MapView: View {
         .accessibilityLabel(L10n.Map.Map.Controls.centerAll)
     }
 
-    // MARK: - Time Filter Bar
+    // MARK: - Contacts Time Filter Bar
 
-    private var timeFilterBar: some View {
+    private var contactsTimeFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(MapTimeFilter.allCases) { filter in
@@ -294,6 +302,108 @@ struct MapView: View {
             }
             .padding(.horizontal)
         }
+    }
+
+    // MARK: - Community Filter Bar
+
+    /// Label for the repeater filter button — shows name if available, otherwise hex ID.
+    private var repeaterFilterLabel: String {
+        guard let filter = viewModel.communityRepeaterFilter else { return "All" }
+        if let match = viewModel.communityAvailableRepeaters.first(where: { $0.hexID == filter }) {
+            return match.displayName
+        }
+        return filter
+    }
+
+    @ViewBuilder
+    private var communityFilterBar: some View {
+        HStack(spacing: 8) {
+            Picker("Coverage", selection: $viewModel.communityCoverageFilter) {
+                ForEach(CommunityMapView.CoverageFilter.allCases, id: \.self) { filter in
+                    Text(filter.rawValue).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 180)
+
+            Menu {
+                Button {
+                    viewModel.communityRepeaterFilter = nil
+                } label: {
+                    HStack {
+                        Text("All Repeaters")
+                        if viewModel.communityRepeaterFilter == nil {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+
+                Divider()
+
+                ForEach(viewModel.communityAvailableRepeaters, id: \.hexID) { repeater in
+                    Button {
+                        viewModel.communityRepeaterFilter = repeater.hexID
+                    } label: {
+                        HStack {
+                            Text(repeater.displayName)
+                            if viewModel.communityRepeaterFilter == repeater.hexID {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.caption2)
+                    Text(repeaterFilterLabel)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(viewModel.communityRepeaterFilter != nil ? .cyan : .secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(viewModel.communityRepeaterFilter != nil ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
+                )
+            }
+
+            Menu {
+                ForEach(MapTimeFilter.allCases) { filter in
+                    Button {
+                        viewModel.communityTimeFilter = filter
+                    } label: {
+                        HStack {
+                            Text(filter.displayName)
+                            if viewModel.communityTimeFilter == filter {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.caption2)
+                    Text(viewModel.communityTimeFilter.displayName)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(viewModel.communityTimeFilter != .allTime ? .cyan : .secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(viewModel.communityTimeFilter != .allTime ? Color.cyan.opacity(0.15) : Color.secondary.opacity(0.1))
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 16)
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // MARK: - Refresh Button
@@ -345,10 +455,24 @@ struct MapView: View {
 
     // MARK: - Community Cell Detail Card
 
+    /// Look up per-repeater metrics for the active filter in a cell.
+    private func filteredRepeaterMetric(for cell: SurveyUploadService.CommunityCell) -> SurveyUploadService.RepeaterMetric? {
+        guard let filter = viewModel.communityRepeaterFilter,
+              let metrics = cell.repeaterMetrics else { return nil }
+        let rf = filter.uppercased()
+        return metrics.first { m in
+            let mh = m.hexID.uppercased()
+            return mh == rf || mh.hasPrefix(rf) || rf.hasPrefix(mh)
+        }
+    }
+
     @ViewBuilder
     private var communityCellDetailCard: some View {
         if let cell = viewModel.selectedCommunityCell {
-            let quality = SNRQuality(snr: cell.averageSNR)
+            let repeaterMetric = filteredRepeaterMetric(for: cell)
+            let displaySNR = repeaterMetric?.averageSNR ?? cell.averageSNR
+            let displayPackets = repeaterMetric?.packetCount ?? cell.packetCount
+            let quality = SNRQuality(snr: displaySNR)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
@@ -359,9 +483,15 @@ struct MapView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(quality.qualityLabel)
                             .font(.subheadline.weight(.semibold))
-                        Text("Community data")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if repeaterMetric != nil {
+                            Text(viewModel.repeaterDisplayName(for: viewModel.communityRepeaterFilter!))
+                                .font(.caption)
+                                .foregroundStyle(.cyan)
+                        } else {
+                            Text("Community data")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Spacer()
@@ -381,13 +511,14 @@ struct MapView: View {
 
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        if let snr = cell.averageSNR {
+                        if let snr = displaySNR {
                             Label(String(format: "%.1f dB SNR", snr), systemImage: "antenna.radiowaves.left.and.right")
                                 .font(.caption)
                         }
-                        Label("\(cell.packetCount) packets", systemImage: "number")
+                        Label("\(displayPackets) packets", systemImage: "number")
                             .font(.caption)
-                        if let active = cell.activePacketCount, let passive = cell.passivePacketCount,
+                        if repeaterMetric == nil,
+                           let active = cell.activePacketCount, let passive = cell.passivePacketCount,
                            active > 0 || passive > 0 {
                             HStack(spacing: 6) {
                                 if active > 0 {

@@ -8,6 +8,8 @@ import os
 @MainActor
 final class MapViewModel {
 
+    private static let isoFormatter = ISO8601DateFormatter()
+
     // MARK: - Properties
 
     /// All contacts with valid locations
@@ -37,7 +39,7 @@ final class MapViewModel {
     /// Whether the layers menu is showing
     var showingLayersMenu = false
 
-    /// Time filter for "last heard" filtering
+    /// Time filter for "last heard" filtering (contacts)
     var selectedTimeFilter: MapTimeFilter = .allTime
 
     /// Contacts filtered by the selected time filter
@@ -63,7 +65,10 @@ final class MapViewModel {
                 communityRefreshTask = nil
                 communityCells = []
                 repeaterLocations = []
+                allRepeaterLocations = []
                 communityRepeaterFilter = nil
+                communityCoverageFilter = .all
+                communityTimeFilter = .allTime
                 selectedCommunityCell = nil
             }
         }
@@ -74,8 +79,21 @@ final class MapViewModel {
         didSet { rebuildFilteredCommunityCells() }
     }
 
-    /// Repeater locations loaded from the server for the current viewport
+    /// Repeater locations loaded from the server for the current viewport (used for pins)
     var repeaterLocations: [SurveyUploadService.RepeaterLocation] = []
+
+    /// All known repeater locations (fetched without bounding box) for polylines to off-screen repeaters
+    var allRepeaterLocations: [SurveyUploadService.RepeaterLocation] = []
+
+    /// Coverage filter for the community overlay (All/Active/Passive)
+    var communityCoverageFilter: CommunityMapView.CoverageFilter = .all {
+        didSet { rebuildFilteredCommunityCells() }
+    }
+
+    /// Time filter for the community overlay (how recent the data must be)
+    var communityTimeFilter: MapTimeFilter = .allTime {
+        didSet { rebuildFilteredCommunityCells() }
+    }
 
     /// Optional repeater filter — when set, only cells containing this repeater are shown
     var communityRepeaterFilter: String? {
@@ -95,28 +113,63 @@ final class MapViewModel {
         }
     }
 
-    /// Community cells after applying repeater filter (cached to avoid recomputation on every SwiftUI body eval)
+    /// Community cells after applying all filters (cached to avoid recomputation on every SwiftUI body eval)
     private(set) var filteredCommunityCells: [SurveyUploadService.CommunityCell] = []
 
-    /// Rebuild the filtered community cells from communityCells + communityRepeaterFilter.
+    /// Rebuild the filtered community cells from communityCells + all active filters.
     private func rebuildFilteredCommunityCells() {
-        guard let filter = communityRepeaterFilter else {
-            filteredCommunityCells = communityCells
-            return
+        var result: [SurveyUploadService.CommunityCell]
+        switch communityCoverageFilter {
+        case .all: result = communityCells
+        case .active: result = communityCells.filter { ($0.activePacketCount ?? 0) > 0 }
+        case .passive: result = communityCells.filter { ($0.passivePacketCount ?? 0) > 0 }
         }
-        let rf = filter.uppercased()
-        filteredCommunityCells = communityCells.filter { cell in
-            cell.repeaterHexIDs.contains { id in
-                let uid = id.uppercased()
-                return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
+        if let filter = communityRepeaterFilter {
+            let rf = filter.uppercased()
+            result = result.filter { cell in
+                cell.repeaterHexIDs.contains { id in
+                    let uid = id.uppercased()
+                    return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
+                }
             }
+        }
+        if let maxAge = communityTimeFilter.maxAge {
+            let cutoff = Date().addingTimeInterval(-maxAge)
+            result = result.filter { cell in
+                guard let dateStr = cell.lastUpdated,
+                      let date = Self.isoFormatter.date(from: dateStr) else {
+                    return false
+                }
+                return date >= cutoff
+            }
+        }
+        filteredCommunityCells = result
+    }
+
+    /// Repeaters available for filtering: extracted from visible cells with name lookup.
+    var communityAvailableRepeaters: [(hexID: String, displayName: String)] {
+        let consolidated = CommunityMapView.consolidateHexIDs(communityCells.flatMap(\.repeaterHexIDs))
+
+        // Build name lookup from all known repeater locations (not just viewport)
+        let allLocs = allRepeaterLocations.isEmpty ? repeaterLocations : allRepeaterLocations
+        let namesByHex = Dictionary(allLocs.map { ($0.hexID.uppercased(), $0.name) },
+                                     uniquingKeysWith: { _, new in new })
+
+        return consolidated.sorted().map { hexID in
+            let upper = hexID.uppercased()
+            let name = namesByHex[upper] ?? namesByHex.first(where: { key, _ in
+                key.hasPrefix(upper) || upper.hasPrefix(key)
+            })?.value
+            let display = (name != nil && !name!.isEmpty) ? "\(name!) (\(hexID))" : hexID
+            return (hexID: hexID, displayName: display)
         }
     }
 
     /// Look up a repeater display name for a hex ID using prefix-aware matching.
     func repeaterDisplayName(for hexID: String) -> String {
+        let allLocs = allRepeaterLocations.isEmpty ? repeaterLocations : allRepeaterLocations
         let upper = hexID.uppercased()
-        if let loc = repeaterLocations.first(where: { loc in
+        if let loc = allLocs.first(where: { loc in
             let lh = loc.hexID.uppercased()
             return lh == upper || lh.hasPrefix(upper) || upper.hasPrefix(lh)
         }), !loc.name.isEmpty {
@@ -259,10 +312,22 @@ final class MapViewModel {
         let minLon = center.longitude - span.longitudeDelta / 2
         let maxLon = center.longitude + span.longitudeDelta / 2
 
+        // Map coverage filter to server parameter
+        let coverageParam: String? = {
+            switch communityCoverageFilter {
+            case .active: return "active"
+            case .passive: return "passive"
+            case .all: return nil
+            }
+        }()
+        let maxAgeParam: Int? = communityTimeFilter.maxAge.map { Int($0) }
+
         do {
             async let cellsResult = uploadService.fetchCommunityData(
                 minLat: minLat, maxLat: maxLat,
                 minLon: minLon, maxLon: maxLon,
+                coverage: coverageParam,
+                maxAge: maxAgeParam,
                 repeater: communityRepeaterFilter
             )
             async let repeatersResult = uploadService.fetchRepeaterLocations(
@@ -273,6 +338,21 @@ final class MapViewModel {
             guard !Task.isCancelled else { return }
             communityCells = response.cells
             repeaterLocations = repeaters
+
+            // Fetch all repeater locations once (for polylines to off-screen repeaters + name lookup)
+            if allRepeaterLocations.isEmpty {
+                Task {
+                    do {
+                        let all = try await uploadService.fetchRepeaterLocations(
+                            minLat: -90, maxLat: 90, minLon: -180, maxLon: 180
+                        )
+                        guard !Task.isCancelled else { return }
+                        allRepeaterLocations = all
+                    } catch {
+                        Self.logger.warning("Failed to fetch all repeater locations: \(error.localizedDescription)")
+                    }
+                }
+            }
         } catch {
             guard !Task.isCancelled else { return }
             Self.logger.warning("Failed to load community data: \(error.localizedDescription)")

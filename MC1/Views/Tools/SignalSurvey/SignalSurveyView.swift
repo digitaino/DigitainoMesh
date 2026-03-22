@@ -215,6 +215,7 @@ struct SignalSurveyView: View {
             showCommunityOverlay: viewModel.showCommunityOverlay,
             selectedCommunityCell: viewModel.selectedCommunityCell,
             communityRepeaterLocations: viewModel.communityRepeaterLocations,
+            allRepeaterLocations: viewModel.allRepeaterLocations,
             repeaterAnnotations: viewModel.mapRepeaterAnnotations,
             selectedMapRepeater: viewModel.selectedMapRepeater,
             selectedRepeaterContact: viewModel.selectedRepeaterContact,
@@ -977,10 +978,24 @@ struct SignalSurveyView: View {
 
     // MARK: - Community Cell Detail Card
 
+    /// Look up per-repeater metrics for the active filter in a cell.
+    private func filteredRepeaterMetric(for cell: SurveyUploadService.CommunityCell) -> SurveyUploadService.RepeaterMetric? {
+        guard let filter = viewModel.communityRepeaterFilter,
+              let metrics = cell.repeaterMetrics else { return nil }
+        let rf = filter.uppercased()
+        return metrics.first { m in
+            let mh = m.hexID.uppercased()
+            return mh == rf || mh.hasPrefix(rf) || rf.hasPrefix(mh)
+        }
+    }
+
     @ViewBuilder
     private var communityCellDetailCard: some View {
         if let cell = viewModel.selectedCommunityCell {
-            let quality = SNRQuality(snr: cell.averageSNR)
+            let repeaterMetric = filteredRepeaterMetric(for: cell)
+            let displaySNR = repeaterMetric?.averageSNR ?? cell.averageSNR
+            let displayPackets = repeaterMetric?.packetCount ?? cell.packetCount
+            let quality = SNRQuality(snr: displaySNR)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
@@ -991,9 +1006,15 @@ struct SignalSurveyView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(quality.qualityLabel)
                             .font(.subheadline.weight(.semibold))
-                        Text("Community data")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if repeaterMetric != nil {
+                            Text(viewModel.repeaterDisplayName(for: viewModel.communityRepeaterFilter!))
+                                .font(.caption)
+                                .foregroundStyle(.cyan)
+                        } else {
+                            Text("Community data")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Spacer()
@@ -1011,13 +1032,14 @@ struct SignalSurveyView: View {
 
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        if let snr = cell.averageSNR {
+                        if let snr = displaySNR {
                             Label(String(format: "%.1f dB SNR", snr), systemImage: "antenna.radiowaves.left.and.right")
                                 .font(.caption)
                         }
-                        Label("\(cell.packetCount) packets", systemImage: "number")
+                        Label("\(displayPackets) packets", systemImage: "number")
                             .font(.caption)
-                        if let active = cell.activePacketCount, let passive = cell.passivePacketCount,
+                        if repeaterMetric == nil,
+                           let active = cell.activePacketCount, let passive = cell.passivePacketCount,
                            active > 0 || passive > 0 {
                             HStack(spacing: 6) {
                                 if active > 0 {

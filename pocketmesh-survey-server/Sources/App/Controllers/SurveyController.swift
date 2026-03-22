@@ -578,6 +578,34 @@ struct SurveyController {
 
         let rows = try await sql.raw(sqlQuery).all(decoding: CellRow.self)
 
+        // Fetch per-repeater metrics for all returned cells
+        struct RepeaterMetricRow: Decodable {
+            let cell_id: Int
+            let repeater_hex_id: String
+            let average_snr: Double?
+            let average_rssi: Double?
+            let packet_count: Int?
+            let last_heard: String?
+        }
+        var metricsByCell: [Int: [RepeaterMetricData]] = [:]
+        if !rows.isEmpty {
+            let cellIDs = rows.map(\.id)
+            let placeholders = cellIDs.map { "\($0)" }.joined(separator: ",")
+            let metricsQuery: SQLQueryString =
+                "SELECT cell_id, UPPER(repeater_hex_id) AS repeater_hex_id, average_snr, average_rssi, packet_count, last_heard FROM cell_repeaters WHERE cell_id IN (\(raw: placeholders))"
+            let metricRows = try await sql.raw(metricsQuery).all(decoding: RepeaterMetricRow.self)
+            for mr in metricRows {
+                let data = RepeaterMetricData(
+                    hexID: mr.repeater_hex_id,
+                    averageSNR: mr.average_snr,
+                    averageRSSI: mr.average_rssi,
+                    packetCount: mr.packet_count ?? 0,
+                    lastHeard: mr.last_heard
+                )
+                metricsByCell[mr.cell_id, default: []].append(data)
+            }
+        }
+
         // Optional name resolution (expensive — only when ?names=true)
         struct NamePolicy {
             let displayName: String
@@ -654,7 +682,7 @@ struct SurveyController {
                 snrQuality: snrQuality,
                 activePacketCount: row.active_packet_count > 0 ? row.active_packet_count : nil,
                 passivePacketCount: row.passive_packet_count > 0 ? row.passive_packet_count : nil,
-                repeaterMetrics: nil,
+                repeaterMetrics: metricsByCell[row.id],
                 probesSent: row.probes_sent,
                 lastUpdated: row.last_updated,
                 contributorNames: names

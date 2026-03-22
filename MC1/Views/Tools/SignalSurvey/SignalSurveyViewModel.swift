@@ -302,6 +302,7 @@ final class SignalSurveyViewModel {
             } else {
                 communityCells = []
                 communityRepeaterLocations = []
+                allRepeaterLocations = []
                 selectedCommunityCell = nil
                 communityCoverageFilter = .all
                 communityRepeaterFilter = nil
@@ -317,10 +318,14 @@ final class SignalSurveyViewModel {
     /// Repeater locations loaded from the server for the current viewport.
     private(set) var communityRepeaterLocations: [SurveyUploadService.RepeaterLocation] = []
 
+    /// All known repeater locations (fetched without bounding box) for polylines to off-screen repeaters.
+    private(set) var allRepeaterLocations: [SurveyUploadService.RepeaterLocation] = []
+
     /// Look up a repeater display name for a hex ID using prefix-aware matching.
     func repeaterDisplayName(for hexID: String) -> String {
+        let allLocs = allRepeaterLocations.isEmpty ? communityRepeaterLocations : allRepeaterLocations
         let upper = hexID.uppercased()
-        if let loc = communityRepeaterLocations.first(where: { loc in
+        if let loc = allLocs.first(where: { loc in
             let lh = loc.hexID.uppercased()
             return lh == upper || lh.hasPrefix(upper) || upper.hasPrefix(lh)
         }), !loc.name.isEmpty {
@@ -338,32 +343,17 @@ final class SignalSurveyViewModel {
     /// Time filter for the community overlay (how recent the data must be).
     var communityTimeFilter: MapTimeFilter = .allTime
 
-    /// Repeaters available for filtering: only those referenced in cells AND present in the viewport.
+    /// Repeaters available for filtering: those referenced by visible cells (not filtered by viewport location).
     /// Returns (hexID, displayName) tuples sorted by name, matching the web map behavior.
     var communityAvailableRepeaters: [(hexID: String, displayName: String)] {
         let consolidated = CommunityMapView.consolidateHexIDs(communityCells.flatMap(\.repeaterHexIDs))
 
-        // Build a set of viewport repeater hex IDs (uppercased for prefix matching)
-        let viewportIDs = Set(communityRepeaterLocations.map { $0.hexID.uppercased() })
-
-        // Filter to repeaters whose physical location is in the current viewport (prefix-aware)
-        let filtered: [String]
-        if viewportIDs.isEmpty {
-            filtered = consolidated
-        } else {
-            filtered = consolidated.filter { hexID in
-                let uh = hexID.uppercased()
-                return viewportIDs.contains(where: { vh in
-                    uh == vh || uh.hasPrefix(vh) || vh.hasPrefix(uh)
-                })
-            }
-        }
-
-        // Build name lookup from repeater locations
-        let namesByHex = Dictionary(communityRepeaterLocations.map { ($0.hexID.uppercased(), $0.name) },
+        // Build name lookup from all known repeater locations (not just viewport)
+        let allLocs = allRepeaterLocations.isEmpty ? communityRepeaterLocations : allRepeaterLocations
+        let namesByHex = Dictionary(allLocs.map { ($0.hexID.uppercased(), $0.name) },
                                      uniquingKeysWith: { _, new in new })
 
-        return filtered.sorted().map { hexID in
+        return consolidated.sorted().map { hexID in
             let upper = hexID.uppercased()
             // Prefix-aware name lookup
             let name = namesByHex[upper] ?? namesByHex.first(where: { key, _ in
@@ -464,6 +454,21 @@ final class SignalSurveyViewModel {
             guard !Task.isCancelled else { return }
             communityCells = response.cells
             communityRepeaterLocations = repeaters
+
+            // Fetch all repeater locations once (for polylines to off-screen repeaters + name lookup)
+            if allRepeaterLocations.isEmpty {
+                Task {
+                    do {
+                        let all = try await service.fetchRepeaterLocations(
+                            minLat: -90, maxLat: 90, minLon: -180, maxLon: 180
+                        )
+                        guard !Task.isCancelled else { return }
+                        allRepeaterLocations = all
+                    } catch {
+                        logger.warning("Failed to fetch all repeater locations: \(error.localizedDescription)")
+                    }
+                }
+            }
         } catch {
             guard !Task.isCancelled else { return }
             logger.warning("Community overlay fetch failed: \(error.localizedDescription)")

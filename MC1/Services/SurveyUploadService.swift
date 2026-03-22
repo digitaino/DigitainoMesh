@@ -84,6 +84,15 @@ actor SurveyUploadService {
         let cellsUpdated: Int
     }
 
+    /// Per-repeater signal metrics within a cell.
+    struct RepeaterMetric: Codable {
+        let hexID: String
+        let averageSNR: Double?
+        let averageRSSI: Double?
+        let packetCount: Int
+        let lastHeard: String?
+    }
+
     struct CommunityCell: Codable, Identifiable {
         var id: String { "\(hexQ)_\(hexR)" }
         let latitude: Double
@@ -98,6 +107,8 @@ actor SurveyUploadService {
         let snrQuality: String
         let activePacketCount: Int?
         let passivePacketCount: Int?
+        /// Per-repeater signal metrics. Nil for legacy cells without this data.
+        let repeaterMetrics: [RepeaterMetric]?
         let probesSent: Int?
         let lastUpdated: String?
         let contributorNames: [String]?

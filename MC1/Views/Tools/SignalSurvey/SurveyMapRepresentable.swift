@@ -23,6 +23,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
     let showCommunityOverlay: Bool
     let selectedCommunityCell: SurveyUploadService.CommunityCell?
     let communityRepeaterLocations: [SurveyUploadService.RepeaterLocation]
+    let allRepeaterLocations: [SurveyUploadService.RepeaterLocation]
 
     // MARK: - Repeater Annotations
 
@@ -308,10 +309,11 @@ struct SurveyMapRepresentable: UIViewRepresentable {
             mapView.addOverlay(polyline, level: .aboveLabels)
         }
 
-        // Draw lines from selected community cell to its repeaters
+        // Draw lines from selected community cell to its repeaters (use all locations for off-screen repeaters)
         if let cell = selectedCommunityCell, showCommunityOverlay {
             let cellCenter = CLLocationCoordinate2D(latitude: cell.latitude, longitude: cell.longitude)
-            let locationsByHex = Dictionary(communityRepeaterLocations.map { ($0.hexID.uppercased(), $0) }, uniquingKeysWith: { _, new in new })
+            let locs = allRepeaterLocations.isEmpty ? communityRepeaterLocations : allRepeaterLocations
+            let locationsByHex = Dictionary(locs.map { ($0.hexID.uppercased(), $0) }, uniquingKeysWith: { _, new in new })
 
             for hexID in cell.repeaterHexIDs {
                 let upper = hexID.uppercased()

@@ -15,6 +15,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     let showCommunityOverlay: Bool
     let selectedCommunityCell: SurveyUploadService.CommunityCell?
     let repeaterLocations: [SurveyUploadService.RepeaterLocation]
+    let allRepeaterLocations: [SurveyUploadService.RepeaterLocation]
 
     @Binding var selectedContact: ContactDTO?
     @Binding var cameraRegion: MKCoordinateRegion?
@@ -251,12 +252,13 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             mapView.removeOverlays(existing)
         }
 
-        // Draw lines from selected cell to each of its repeaters (if locations are known)
+        // Draw lines from selected cell to each of its repeaters (use all locations for off-screen repeaters)
         guard let cell = selectedCommunityCell, showCommunityOverlay else { return }
         let cellCenter = CLLocationCoordinate2D(latitude: cell.latitude, longitude: cell.longitude)
 
-        // Build a lookup of repeater locations by hex ID (uppercased for prefix matching)
-        let locationsByHex = Dictionary(repeaterLocations.map { ($0.hexID.uppercased(), $0) }, uniquingKeysWith: { _, new in new })
+        // Build a lookup of repeater locations by hex ID (prefer allRepeaterLocations for off-screen repeaters)
+        let locs = allRepeaterLocations.isEmpty ? repeaterLocations : allRepeaterLocations
+        let locationsByHex = Dictionary(locs.map { ($0.hexID.uppercased(), $0) }, uniquingKeysWith: { _, new in new })
 
         for hexID in cell.repeaterHexIDs {
             let upper = hexID.uppercased()
