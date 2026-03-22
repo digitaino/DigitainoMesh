@@ -3,6 +3,9 @@ import FluentSQLiteDriver
 import Vapor
 
 func configure(_ app: Application) throws {
+    // Enable gzip response compression — reduces JSON payloads ~80% (1.75MB → ~350KB)
+    app.http.server.configuration.responseCompression = .enabled
+
     // Access logging (Apache Combined Log Format style) — runs first so it wraps everything
     app.middleware.use(AccessLogMiddleware())
 

@@ -36,6 +36,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
 
     let mapStyleSelection: MapStyleSelection
     let showsUserLocation: Bool
+    let trackingUserLocation: Bool
 
     // MARK: - Callbacks
 
@@ -64,6 +65,11 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         tap.delegate = context.coordinator
         mapView.addGestureRecognizer(tap)
 
+        // Report initial region so community overlay loads immediately
+        DispatchQueue.main.async {
+            context.coordinator.onRegionChanged?(mapView.region)
+        }
+
         return mapView
     }
 
@@ -88,6 +94,12 @@ struct SurveyMapRepresentable: UIViewRepresentable {
 
         mapView.mapType = mapStyleSelection.mkMapType
         mapView.showsUserLocation = showsUserLocation
+
+        // Handle user location tracking
+        let desiredMode: MKUserTrackingMode = trackingUserLocation ? .follow : .none
+        if mapView.userTrackingMode != desiredMode {
+            mapView.setUserTrackingMode(desiredMode, animated: true)
+        }
 
         // Update overlays
         updateCommunityOverlays(in: mapView, coordinator: coordinator)

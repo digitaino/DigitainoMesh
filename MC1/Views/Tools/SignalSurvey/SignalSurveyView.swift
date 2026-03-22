@@ -218,6 +218,7 @@ struct SignalSurveyView: View {
             selectedRepeaterContact: viewModel.selectedRepeaterContact,
             mapStyleSelection: viewModel.mapStyleSelection,
             showsUserLocation: true,
+            trackingUserLocation: viewModel.trackingUserLocation,
             onCellSelected: { cell in
                 viewModel.trackingUserLocation = false
                 viewModel.selectedCommunityCell = nil
@@ -1690,7 +1691,8 @@ struct SignalSurveyView: View {
                     .controlSize(.small)
                 }
             }
-            .padding(.bottom, 16)
+            // Extra bottom padding when community filter bar is visible to avoid overlap
+            .padding(.bottom, viewModel.showCommunityOverlay ? 60 : 16)
         }
     }
 

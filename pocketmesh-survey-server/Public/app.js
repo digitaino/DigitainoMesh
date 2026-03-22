@@ -109,6 +109,7 @@ let currentRepeaterAnnotations = [];
 let currentRepeatersByHex = {}; // hexID -> annotation, for diff-based updates
 let loadingTimeout = null;
 let cellsAbortController = null; // AbortController for in-flight cell requests
+let repeatersAbortController = null; // AbortController for in-flight repeater requests
 let lastCellData = [];
 let repeaterNames = {}; // hexID -> name mapping from repeater annotations
 let viewportRepeaterHexIDs = new Set(); // hex IDs of repeaters with locations in the current viewport
@@ -563,6 +564,13 @@ function createCellOverlay(cell) {
 async function loadRepeaters() {
     if (!map) return;
 
+    // Cancel any in-flight repeater request
+    if (repeatersAbortController) {
+        repeatersAbortController.abort();
+    }
+    repeatersAbortController = new AbortController();
+    const signal = repeatersAbortController.signal;
+
     const region = map.region;
     const center = region.center;
     const span = region.span;
@@ -579,7 +587,7 @@ async function loadRepeaters() {
     });
 
     try {
-        const response = await fetch(`${API_BASE}/repeaters?${params}`);
+        const response = await fetch(`${API_BASE}/repeaters?${params}`, { signal });
         if (!response.ok) return;
         const data = await response.json();
         renderRepeaters(data.repeaters);
@@ -595,6 +603,7 @@ async function loadRepeaters() {
         // Refresh dropdown with viewport-scoped repeaters
         updateRepeaterDropdown(lastCellData);
     } catch (e) {
+        if (e.name === 'AbortError') return; // Superseded by a newer request
         console.error('Failed to load repeaters:', e);
     }
 }
