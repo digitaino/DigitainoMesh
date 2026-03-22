@@ -70,7 +70,9 @@ final class MapViewModel {
     }
 
     /// Community signal cells currently loaded for the viewport
-    var communityCells: [SurveyUploadService.CommunityCell] = []
+    var communityCells: [SurveyUploadService.CommunityCell] = [] {
+        didSet { rebuildFilteredCommunityCells() }
+    }
 
     /// Repeater locations loaded from the server for the current viewport
     var repeaterLocations: [SurveyUploadService.RepeaterLocation] = []
@@ -78,6 +80,7 @@ final class MapViewModel {
     /// Optional repeater filter — when set, only cells containing this repeater are shown
     var communityRepeaterFilter: String? {
         didSet {
+            rebuildFilteredCommunityCells()
             // Deselect if the selected cell doesn't match the new filter
             if let filter = communityRepeaterFilter, let selected = selectedCommunityCell {
                 let rf = filter.uppercased()
@@ -92,16 +95,34 @@ final class MapViewModel {
         }
     }
 
-    /// Community cells after applying repeater filter
-    var filteredCommunityCells: [SurveyUploadService.CommunityCell] {
-        guard let filter = communityRepeaterFilter else { return communityCells }
+    /// Community cells after applying repeater filter (cached to avoid recomputation on every SwiftUI body eval)
+    private(set) var filteredCommunityCells: [SurveyUploadService.CommunityCell] = []
+
+    /// Rebuild the filtered community cells from communityCells + communityRepeaterFilter.
+    private func rebuildFilteredCommunityCells() {
+        guard let filter = communityRepeaterFilter else {
+            filteredCommunityCells = communityCells
+            return
+        }
         let rf = filter.uppercased()
-        return communityCells.filter { cell in
+        filteredCommunityCells = communityCells.filter { cell in
             cell.repeaterHexIDs.contains { id in
                 let uid = id.uppercased()
                 return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
             }
         }
+    }
+
+    /// Look up a repeater display name for a hex ID using prefix-aware matching.
+    func repeaterDisplayName(for hexID: String) -> String {
+        let upper = hexID.uppercased()
+        if let loc = repeaterLocations.first(where: { loc in
+            let lh = loc.hexID.uppercased()
+            return lh == upper || lh.hasPrefix(upper) || upper.hasPrefix(lh)
+        }), !loc.name.isEmpty {
+            return "\(loc.name) (\(hexID))"
+        }
+        return hexID
     }
 
     /// Whether community data is loading

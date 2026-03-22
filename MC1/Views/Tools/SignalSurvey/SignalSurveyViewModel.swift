@@ -317,6 +317,18 @@ final class SignalSurveyViewModel {
     /// Repeater locations loaded from the server for the current viewport.
     private(set) var communityRepeaterLocations: [SurveyUploadService.RepeaterLocation] = []
 
+    /// Look up a repeater display name for a hex ID using prefix-aware matching.
+    func repeaterDisplayName(for hexID: String) -> String {
+        let upper = hexID.uppercased()
+        if let loc = communityRepeaterLocations.first(where: { loc in
+            let lh = loc.hexID.uppercased()
+            return lh == upper || lh.hasPrefix(upper) || upper.hasPrefix(lh)
+        }), !loc.name.isEmpty {
+            return "\(loc.name) (\(hexID))"
+        }
+        return hexID
+    }
+
     /// Coverage filter for the community overlay (All/Active/Passive).
     var communityCoverageFilter: CommunityMapView.CoverageFilter = .all
 
@@ -326,9 +338,40 @@ final class SignalSurveyViewModel {
     /// Time filter for the community overlay (how recent the data must be).
     var communityTimeFilter: MapTimeFilter = .allTime
 
-    /// All unique repeater hex IDs from current community cell data, consolidated by prefix.
-    var communityAvailableRepeaters: [String] {
-        CommunityMapView.consolidateHexIDs(communityCells.flatMap(\.repeaterHexIDs)).sorted()
+    /// Repeaters available for filtering: only those referenced in cells AND present in the viewport.
+    /// Returns (hexID, displayName) tuples sorted by name, matching the web map behavior.
+    var communityAvailableRepeaters: [(hexID: String, displayName: String)] {
+        let consolidated = CommunityMapView.consolidateHexIDs(communityCells.flatMap(\.repeaterHexIDs))
+
+        // Build a set of viewport repeater hex IDs (uppercased for prefix matching)
+        let viewportIDs = Set(communityRepeaterLocations.map { $0.hexID.uppercased() })
+
+        // Filter to repeaters whose physical location is in the current viewport (prefix-aware)
+        let filtered: [String]
+        if viewportIDs.isEmpty {
+            filtered = consolidated
+        } else {
+            filtered = consolidated.filter { hexID in
+                let uh = hexID.uppercased()
+                return viewportIDs.contains(where: { vh in
+                    uh == vh || uh.hasPrefix(vh) || vh.hasPrefix(uh)
+                })
+            }
+        }
+
+        // Build name lookup from repeater locations
+        let namesByHex = Dictionary(communityRepeaterLocations.map { ($0.hexID.uppercased(), $0.name) },
+                                     uniquingKeysWith: { _, new in new })
+
+        return filtered.sorted().map { hexID in
+            let upper = hexID.uppercased()
+            // Prefix-aware name lookup
+            let name = namesByHex[upper] ?? namesByHex.first(where: { key, _ in
+                key.hasPrefix(upper) || upper.hasPrefix(key)
+            })?.value
+            let display = (name != nil && !name!.isEmpty) ? "\(name!) (\(hexID))" : hexID
+            return (hexID: hexID, displayName: display)
+        }
     }
 
     /// Community cells after applying coverage and repeater filters.

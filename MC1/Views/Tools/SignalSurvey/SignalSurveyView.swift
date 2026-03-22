@@ -870,6 +870,16 @@ struct SignalSurveyView: View {
         .animation(.snappy(duration: 0.25), value: viewModel.showCommunityOverlay)
     }
 
+    /// Label for the repeater filter button — shows name if available, otherwise hex ID.
+    private var repeaterFilterLabel: String {
+        guard let filter = viewModel.communityRepeaterFilter else { return "All" }
+        // Look up name from available repeaters
+        if let match = viewModel.communityAvailableRepeaters.first(where: { $0.hexID == filter }) {
+            return match.displayName
+        }
+        return filter
+    }
+
     // MARK: - Community Filter Bar
 
     @ViewBuilder
@@ -898,13 +908,13 @@ struct SignalSurveyView: View {
 
                     Divider()
 
-                    ForEach(viewModel.communityAvailableRepeaters, id: \.self) { hexID in
+                    ForEach(viewModel.communityAvailableRepeaters, id: \.hexID) { repeater in
                         Button {
-                            viewModel.communityRepeaterFilter = hexID
+                            viewModel.communityRepeaterFilter = repeater.hexID
                         } label: {
                             HStack {
-                                Text(hexID)
-                                if viewModel.communityRepeaterFilter == hexID {
+                                Text(repeater.displayName)
+                                if viewModel.communityRepeaterFilter == repeater.hexID {
                                     Image(systemName: "checkmark")
                                 }
                             }
@@ -914,7 +924,7 @@ struct SignalSurveyView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "antenna.radiowaves.left.and.right")
                             .font(.caption2)
-                        Text(viewModel.communityRepeaterFilter ?? "All")
+                        Text(repeaterFilterLabel)
                             .font(.caption)
                             .lineLimit(1)
                     }
@@ -1045,8 +1055,8 @@ struct SignalSurveyView: View {
                                         viewModel.communityRepeaterFilter = hexID
                                     }
                                 } label: {
-                                    Text(hexID)
-                                        .font(.caption2.monospaced())
+                                    Text(viewModel.repeaterDisplayName(for: hexID))
+                                        .font(.caption2)
                                         .padding(.horizontal, 6)
                                         .padding(.vertical, 2)
                                         .background(

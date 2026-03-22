@@ -326,8 +326,9 @@ struct MapView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.caption2)
-                    Text(filter)
-                        .font(.caption2.monospaced())
+                    Text(viewModel.repeaterDisplayName(for: filter))
+                        .font(.caption2)
+                        .lineLimit(1)
                     Image(systemName: "xmark.circle.fill")
                         .font(.caption2)
                 }
@@ -426,8 +427,8 @@ struct MapView: View {
                                         }
                                     }
                                 } label: {
-                                    Text(hexID)
-                                        .font(.caption2.monospaced())
+                                    Text(viewModel.repeaterDisplayName(for: hexID))
+                                        .font(.caption2)
                                         .padding(.horizontal, 6)
                                         .padding(.vertical, 2)
                                         .background(

@@ -56,10 +56,14 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         mapView.showsUserLocation = showsUserLocation
         mapView.pointOfInterestFilter = .excludingAll
 
-        // Register annotation view for repeater pins
+        // Register annotation views for repeater pins
         mapView.register(
             MKMarkerAnnotationView.self,
             forAnnotationViewWithReuseIdentifier: "SurveyRepeaterPin"
+        )
+        mapView.register(
+            MKMarkerAnnotationView.self,
+            forAnnotationViewWithReuseIdentifier: "CommunityRepeaterPin"
         )
 
         // Add tap gesture for overlay hit testing
@@ -109,6 +113,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         updateSurveyOverlays(in: mapView, coordinator: coordinator)
         updatePointAnnotations(in: mapView, coordinator: coordinator)
         updateRepeaterPins(in: mapView, coordinator: coordinator)
+        updateCommunityRepeaterPins(in: mapView, coordinator: coordinator)
         updateSelectionOverlays(in: mapView, coordinator: coordinator)
         updatePolyline(in: mapView, coordinator: coordinator)
     }
@@ -219,6 +224,37 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         }
     }
 
+    // MARK: - Community Repeater Pin Annotations
+
+    private func updateCommunityRepeaterPins(in mapView: MKMapView, coordinator: Coordinator) {
+        let existing = mapView.annotations.compactMap { $0 as? CommunityRepeaterPin }
+
+        if !showCommunityOverlay {
+            if !existing.isEmpty {
+                mapView.removeAnnotations(existing)
+                coordinator.lastCommunityRepeaterPinIDs = []
+            }
+            return
+        }
+
+        let newIDs = Set(communityRepeaterLocations.map(\.hexID))
+        guard newIDs != coordinator.lastCommunityRepeaterPinIDs else { return }
+
+        let toRemove = existing.filter { !newIDs.contains($0.hexID) }
+        if !toRemove.isEmpty {
+            mapView.removeAnnotations(toRemove)
+        }
+
+        let remainingIDs = Set(existing.map(\.hexID)).subtracting(Set(toRemove.map(\.hexID)))
+        let toAdd = communityRepeaterLocations
+            .filter { !remainingIDs.contains($0.hexID) }
+            .map { CommunityRepeaterPin(repeater: $0) }
+        if !toAdd.isEmpty {
+            mapView.addAnnotations(toAdd)
+        }
+        coordinator.lastCommunityRepeaterPinIDs = newIDs
+    }
+
     // MARK: - Selection Highlight Overlays
 
     private func updateSelectionOverlays(in mapView: MKMapView, coordinator: Coordinator) {
@@ -309,6 +345,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
 
         // Diff tracking
         var lastCommunityCellIDs: Set<String> = []
+        var lastCommunityRepeaterPinIDs: Set<String> = []
         var lastSurveyCellIDs: Set<String> = []
         var lastSurveyCellFingerprints: Set<String> = []
         var lastPointIDs: Set<UUID> = []
@@ -426,6 +463,24 @@ struct SurveyMapRepresentable: UIViewRepresentable {
                 view.displayPriority = .defaultHigh
                 view.titleVisibility = .adaptive
                 view.canShowCallout = false
+                return view
+            }
+
+            if annotation is CommunityRepeaterPin {
+                let view = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: "CommunityRepeaterPin",
+                    for: annotation
+                ) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(
+                    annotation: annotation,
+                    reuseIdentifier: "CommunityRepeaterPin"
+                )
+                view.annotation = annotation
+                view.markerTintColor = .systemCyan
+                view.glyphImage = UIImage(systemName: "antenna.radiowaves.left.and.right")
+                view.displayPriority = .defaultHigh
+                view.titleVisibility = .adaptive
+                view.canShowCallout = false
+                view.clusteringIdentifier = nil
                 return view
             }
 
