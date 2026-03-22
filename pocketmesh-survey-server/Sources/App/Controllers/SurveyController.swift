@@ -534,40 +534,41 @@ struct SurveyController {
             return q
         }
 
+        let includeNames = req.query[String.self, at: "names"] == "true"
+
         let cells = try await applyFilters(CellModel.query(on: req.db))
             .with(\.$repeaters)
             .range(..<limit)
             .all()
 
-        let totalCount = try await applyFilters(CellModel.query(on: req.db))
-            .count()
-
-        // Pre-load contributor display names and visibility policy for attribution
-        let profiles = try await ContributorProfile.query(on: req.db)
-            .filter(\.$displayName != nil)
-            .all()
+        // Contributor name resolution is expensive (2 extra queries) — opt-in via ?names=true
         struct NamePolicy {
             let displayName: String
-            let visibleFrom: String?  // nil = visible for all contributions
+            let visibleFrom: String?
         }
-        let nameByContributor: [String: NamePolicy] = Dictionary(
-            profiles.compactMap { p in
-                p.displayName.map {
-                    (p.contributorID, NamePolicy(displayName: $0, visibleFrom: p.nameVisibleFrom))
-                }
-            },
-            uniquingKeysWith: { _, new in new }
-        )
-
-        // Pre-load contributions for returned cells to resolve contributor names
-        let cellIDs = cells.compactMap(\.id)
-        let contributions = cellIDs.isEmpty ? [] : try await CellContribution.query(on: req.db)
-            .filter(\.$cell.$id ~~ cellIDs)
-            .all()
-        // Group contributions by cell ID (need timestamps for name visibility)
+        var nameByContributor: [String: NamePolicy] = [:]
         var contributionsByCell: [Int: [CellContribution]] = [:]
-        for c in contributions {
-            contributionsByCell[c.$cell.id, default: []].append(c)
+
+        if includeNames {
+            let profiles = try await ContributorProfile.query(on: req.db)
+                .filter(\.$displayName != nil)
+                .all()
+            nameByContributor = Dictionary(
+                profiles.compactMap { p in
+                    p.displayName.map {
+                        (p.contributorID, NamePolicy(displayName: $0, visibleFrom: p.nameVisibleFrom))
+                    }
+                },
+                uniquingKeysWith: { _, new in new }
+            )
+
+            let cellIDs = cells.compactMap(\.id)
+            let contributions = cellIDs.isEmpty ? [] : try await CellContribution.query(on: req.db)
+                .filter(\.$cell.$id ~~ cellIDs)
+                .all()
+            for c in contributions {
+                contributionsByCell[c.$cell.id, default: []].append(c)
+            }
         }
 
         let responseCells = cells.map { cell in
@@ -626,7 +627,7 @@ struct SurveyController {
             )
         }
 
-        return CommunityCellsResponse(cells: responseCells, totalCells: totalCount)
+        return CommunityCellsResponse(cells: responseCells, totalCells: responseCells.count)
     }
 
     // MARK: - GET /api/v1/stats

@@ -296,7 +296,7 @@ final class SignalSurveyViewModel {
         didSet {
             if showCommunityOverlay {
                 if let region = lastCommunityRegion {
-                    Task { await loadCommunityCells(for: region) }
+                    loadCommunityCells(for: region)
                 }
                 startCommunityRefresh()
             } else {
@@ -360,13 +360,25 @@ final class SignalSurveyViewModel {
     /// Upload service for fetching community data.
     private var communityUploadService: SurveyUploadService?
     private var communityRefreshTask: Task<Void, Never>?
+    private var communityLoadTask: Task<Void, Never>?
     private var lastCommunityRegion: MKCoordinateRegion?
 
-    /// Load community cells for a given map region.
-    func loadCommunityCells(for region: MKCoordinateRegion) async {
+    /// Load community cells for a given map region (debounced 300ms).
+    func loadCommunityCells(for region: MKCoordinateRegion) {
         lastCommunityRegion = region
         guard showCommunityOverlay else { return }
 
+        // Cancel any pending debounced load
+        communityLoadTask?.cancel()
+        communityLoadTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await self?.fetchCommunityCells(for: region)
+        }
+    }
+
+    /// Fetch community cells immediately (used by debounced load and periodic refresh).
+    private func fetchCommunityCells(for region: MKCoordinateRegion) async {
         if communityUploadService == nil {
             communityUploadService = SurveyUploadService()
         }
@@ -397,9 +409,10 @@ final class SignalSurveyViewModel {
                 maxAge: maxAgeParam,
                 repeater: communityRepeaterFilter
             )
+            guard !Task.isCancelled else { return }
             communityCells = response.cells
         } catch {
-            // Silently fail — community overlay is best-effort
+            guard !Task.isCancelled else { return }
             logger.warning("Community overlay fetch failed: \(error.localizedDescription)")
         }
     }
@@ -411,7 +424,7 @@ final class SignalSurveyViewModel {
                 try? await Task.sleep(for: .seconds(15))
                 guard !Task.isCancelled else { break }
                 guard let self, let region = self.lastCommunityRegion else { continue }
-                await self.loadCommunityCells(for: region)
+                await self.fetchCommunityCells(for: region)
             }
         }
     }

@@ -104,15 +104,7 @@ struct SignalSurveyView: View {
             SurveyInfoSheet()
         }
         .sheet(isPresented: $showingContributorProfile) {
-            if let token = ContributorVerificationService().getAuthToken() {
-                ContributorProfileView(authToken: token)
-            } else {
-                ContentUnavailableView {
-                    Label("Session Expired", systemImage: "lock")
-                } description: {
-                    Text("Verify again to access your profile.")
-                }
-            }
+            ContributorProfileAutoRenewView()
         }
         .sheet(isPresented: $showingPacketList) {
             CellPacketListView(
@@ -240,7 +232,7 @@ struct SignalSurveyView: View {
             },
             onRegionChanged: { region in
                 if viewModel.showCommunityOverlay {
-                    Task { await viewModel.loadCommunityCells(for: region) }
+                    viewModel.loadCommunityCells(for: region)
                 }
             }
         )
@@ -738,7 +730,9 @@ struct SignalSurveyView: View {
 
             communityFilterBar
 
-            // Survey controls (left-aligned)
+            // Survey controls (left-aligned) — hidden in community-only mode
+            // (communityModeOverlay provides Start Survey in that state)
+            if !viewModel.allPoints.isEmpty || viewModel.isActive {
             VStack(alignment: .leading, spacing: 6) {
                 // Filter picker
                 if viewModel.livePointCount > 0 || viewModel.isActive {
@@ -862,6 +856,7 @@ struct SignalSurveyView: View {
             .sensoryFeedback(.error, trigger: viewModel.probeErrorHaptic)
             .padding(.leading, 16)
             .padding(.bottom, 8)
+            } // end survey controls if
         }
         .animation(.snappy(duration: 0.25), value: viewModel.selectedCell?.coordKey)
         .animation(.snappy(duration: 0.25), value: viewModel.selectedCommunityCell?.id)

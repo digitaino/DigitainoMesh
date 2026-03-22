@@ -108,6 +108,7 @@ let selectedCellData = null;
 let currentRepeaterAnnotations = [];
 let currentRepeatersByHex = {}; // hexID -> annotation, for diff-based updates
 let loadingTimeout = null;
+let cellsAbortController = null; // AbortController for in-flight cell requests
 let lastCellData = [];
 let repeaterNames = {}; // hexID -> name mapping from repeater annotations
 let viewportRepeaterHexIDs = new Set(); // hex IDs of repeaters with locations in the current viewport
@@ -250,6 +251,13 @@ function deselectCell() {
 async function loadCells() {
     if (!map) return;
 
+    // Cancel any in-flight request so we don't render stale data
+    if (cellsAbortController) {
+        cellsAbortController.abort();
+    }
+    cellsAbortController = new AbortController();
+    const signal = cellsAbortController.signal;
+
     const region = map.region;
     const center = region.center;
     const span = region.span;
@@ -263,7 +271,8 @@ async function loadCells() {
         maxLat: maxLat,
         minLon: minLon,
         maxLon: maxLon,
-        limit: 5000
+        limit: 5000,
+        names: 'true'
     });
 
     // Pass active filters to server for pre-filtering
@@ -279,13 +288,14 @@ async function loadCells() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/cells?${params}`);
+        const response = await fetch(`${API_BASE}/cells?${params}`, { signal });
         if (!response.ok) return;
         const data = await response.json();
         lastCellData = data.cells;
         renderCells(data.cells);
         updateRepeaterDropdown(data.cells);
     } catch (e) {
+        if (e.name === 'AbortError') return; // Superseded by a newer request
         console.error('Failed to load cells:', e);
     }
 }
