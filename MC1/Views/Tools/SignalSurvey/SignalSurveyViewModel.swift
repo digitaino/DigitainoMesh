@@ -987,11 +987,14 @@ final class SignalSurveyViewModel {
             selectedCell = cell
         }
 
-        // Follow user location, offset center northward so the current cell
-        // sits above the detail card (which covers ~35% of the bottom).
+        // Follow user location, offset center southward so the user's actual
+        // position appears in the visible area above the detail card.
+        // The detail card covers ~40% of the bottom, so the visible center is at ~30%
+        // from the top. Shifting the map center south by 0.35× the span places the
+        // user location at roughly 1/3 from the top of the screen.
         let span = MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
         let offsetCenter = CLLocationCoordinate2D(
-            latitude: location.coordinate.latitude - span.latitudeDelta * 0.2,
+            latitude: location.coordinate.latitude - span.latitudeDelta * 0.35,
             longitude: location.coordinate.longitude
         )
         cameraPosition = .region(MKCoordinateRegion(center: offsetCenter, span: span))

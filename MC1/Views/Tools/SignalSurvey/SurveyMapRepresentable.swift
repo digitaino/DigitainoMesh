@@ -104,10 +104,11 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         mapView.mapType = mapStyleSelection.mkMapType
         mapView.showsUserLocation = showsUserLocation
 
-        // Handle user location tracking
-        let desiredMode: MKUserTrackingMode = trackingUserLocation ? .follow : .none
-        if mapView.userTrackingMode != desiredMode {
-            mapView.setUserTrackingMode(desiredMode, animated: true)
+        // User location tracking is handled by the ViewModel's updateTrackedCell()
+        // which offsets the camera center so the user location sits above the detail card.
+        // We don't use MKMapView's .follow mode since that centers on the user (no offset).
+        if mapView.userTrackingMode != .none {
+            mapView.setUserTrackingMode(.none, animated: false)
         }
 
         // Update overlays

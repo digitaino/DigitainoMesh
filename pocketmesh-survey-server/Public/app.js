@@ -319,9 +319,15 @@ function applyCoverageFilter(filter) {
     scheduleRefresh(false);
 }
 
-// Apply repeater filter — re-fetch from server with new filter
+// Apply repeater filter — toggle off if same repeater is already active, otherwise set
 function applyRepeaterFilter(hexID) {
-    repeaterFilter = hexID || null;
+    if (hexID && repeaterFilter === hexID) {
+        repeaterFilter = null;
+        const select = document.getElementById('repeater-select');
+        if (select) select.value = '';
+    } else {
+        repeaterFilter = hexID || null;
+    }
     scheduleRefresh(false);
 }
 

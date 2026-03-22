@@ -737,6 +737,33 @@ struct SignalSurveyView: View {
 
             communityCellDetailCard
 
+            // Floating badge to clear repeater filter (visible when filter active but no cell selected)
+            if viewModel.communityRepeaterFilter != nil && viewModel.selectedCommunityCell == nil {
+                HStack {
+                    Button {
+                        viewModel.communityRepeaterFilter = nil
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                .font(.caption2)
+                            Text(viewModel.repeaterDisplayName(for: viewModel.communityRepeaterFilter!))
+                                .font(.caption2)
+                                .lineLimit(1)
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption2)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(.cyan.opacity(0.3), in: Capsule())
+                        .foregroundStyle(.cyan)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .transition(.scale.combined(with: .opacity))
+            }
+
             communityFilterBar
 
             // Survey controls (left-aligned) — hidden in community-only mode
