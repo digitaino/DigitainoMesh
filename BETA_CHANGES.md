@@ -1,4 +1,42 @@
-# Beta Changes — v0.10.1 (Build 9)
+# Beta Changes — v0.10.1 (Build 10)
+
+## Web Share Identity
+
+- **Sharer's name on web links** — Shared route and repeater map web pages now show your MeshCore contact name instead of "You" at the receiver position. When you share a route (`/r/...`) or repeater map (`/m/...`), your device name is included in the upload and displayed on the web page — both in the hop list and on the map marker. Older shares without a name gracefully fall back to "User".
+
+- **Contact name pre-filled for surveys** — The "Include Contact Name" toggle in the survey setup sheet now defaults to on for new installs, so your MeshCore name is automatically associated with community map contributions. You can still toggle it off if you prefer anonymous uploads.
+
+## Community Map Filters & Performance
+
+- **Coverage, repeater, and time filters** — The community overlay on both the survey map and the standalone map now has a filter toolbar with coverage type (All/Active/Passive), repeater selection, and time range. Changing any filter re-fetches from the server so results are accurate, not just client-filtered.
+
+- **Per-repeater signal metrics** — When filtering by a specific repeater, cell detail cards show that repeater's individual SNR/RSSI/packet count instead of the cell's aggregate stats. Active/passive counts are hidden when irrelevant to the selected coverage filter.
+
+- **Cell-to-repeater polylines** — Selecting a repeater filter draws dashed lines from each cell to the repeater's location. Lines for off-screen repeaters extend to the map edge with an arrow indicator.
+
+- **MKOverlayRenderer for community cells** — Community hex cells now render via UIKit `MKOverlayRenderer` instead of SwiftUI `MapPolygon` views, handling 5000+ cells without UI lag.
+
+- **"My Cell" button** — During an active survey, a "My Cell" button in the stats bar zooms to your current cell and selects it. Camera zoom now correctly drives the UIKit MKMapView.
+
+## Server & Performance
+
+- **Server-side filtering** — `/api/v1/cells` now supports `coverage`, `maxAge`, and `repeater` query params, reducing payload size. Spatial index on lat/lon for faster bounding-box queries.
+
+- **Gzip compression** — Server responses are gzip-compressed (~80% reduction). Cache-Control headers added per route type.
+
+- **Raw SQL for cell queries** — Cell fetching uses raw SQL with GROUP_CONCAT for repeater data, replacing N+1 Fluent eager loads.
+
+## Upstream Merge
+
+- **Optimistic sending** — Channel messages appear instantly in the chat before server confirmation.
+- **Reply with quote** — New toggle in chat settings for quoting the original message in replies.
+- **BLE stability** — Fixes for session reconnect races, RX log pruning, and message auto-fetch coalescing.
+
+---
+
+# Previous Builds
+
+# v0.10.1 (Build 9)
 
 ## Signal Survey Enhancements
 
