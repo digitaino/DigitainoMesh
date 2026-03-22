@@ -503,21 +503,43 @@ struct SurveyController {
         }
 
         let limit = req.query[Int.self, at: "limit"] ?? 5000
+        let coverage = req.query[String.self, at: "coverage"]   // "active" or "passive"
+        let maxAge = req.query[Int.self, at: "maxAge"]          // seconds
+        let repeaterFilter = req.query[String.self, at: "repeater"] // hex ID
 
-        let cells = try await CellModel.query(on: req.db)
-            .filter(\.$latitude >= minLat)
-            .filter(\.$latitude <= maxLat)
-            .filter(\.$longitude >= minLon)
-            .filter(\.$longitude <= maxLon)
+        // Compute ISO 8601 cutoff string for maxAge filter
+        let cutoff: String? = maxAge.map {
+            ISO8601DateFormatter().string(from: Date().addingTimeInterval(-Double($0)))
+        }
+
+        // Build base query with bounding box + optional filters
+        func applyFilters(_ query: QueryBuilder<CellModel>) -> QueryBuilder<CellModel> {
+            var q = query
+                .filter(\.$latitude >= minLat)
+                .filter(\.$latitude <= maxLat)
+                .filter(\.$longitude >= minLon)
+                .filter(\.$longitude <= maxLon)
+            if coverage == "active" {
+                q = q.filter(\.$activePacketCount > 0)
+            } else if coverage == "passive" {
+                q = q.filter(\.$passivePacketCount > 0)
+            }
+            if let cutoff {
+                q = q.filter(\.$lastUpdated >= cutoff)
+            }
+            if let repeaterFilter {
+                q = q.join(CellRepeater.self, on: \CellRepeater.$cell.$id == \CellModel.$id)
+                    .filter(CellRepeater.self, \.$repeaterHexID == repeaterFilter)
+            }
+            return q
+        }
+
+        let cells = try await applyFilters(CellModel.query(on: req.db))
             .with(\.$repeaters)
             .range(..<limit)
             .all()
 
-        let totalCount = try await CellModel.query(on: req.db)
-            .filter(\.$latitude >= minLat)
-            .filter(\.$latitude <= maxLat)
-            .filter(\.$longitude >= minLon)
-            .filter(\.$longitude <= maxLon)
+        let totalCount = try await applyFilters(CellModel.query(on: req.db))
             .count()
 
         // Pre-load contributor display names and visibility policy for attribution

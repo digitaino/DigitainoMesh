@@ -266,6 +266,18 @@ async function loadCells() {
         limit: 5000
     });
 
+    // Pass active filters to server for pre-filtering
+    if (coverageFilter !== 'all') {
+        params.set('coverage', coverageFilter);
+    }
+    const maxAgeSecs = getMaxAgeSeconds();
+    if (maxAgeSecs !== null) {
+        params.set('maxAge', maxAgeSecs);
+    }
+    if (repeaterFilter) {
+        params.set('repeater', repeaterFilter);
+    }
+
     try {
         const response = await fetch(`${API_BASE}/cells?${params}`);
         if (!response.ok) return;
@@ -278,45 +290,39 @@ async function loadCells() {
     }
 }
 
-// Apply coverage filter and re-render (full redraw since filter set changes)
+// Apply coverage filter — re-fetch from server with new filter
 function applyCoverageFilter(filter) {
     coverageFilter = filter;
-    // Update button states
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filter);
     });
-    // Clear cache for full redraw — filter change means different cell set
-    if (currentOverlays.length > 0) {
-        map.removeOverlays(currentOverlays);
-    }
-    currentOverlays = [];
-    currentOverlaysByKey = {};
-    renderCells(lastCellData);
+    loadCells();
 }
 
-// Apply repeater filter and re-render (full redraw since filter set changes)
+// Apply repeater filter — re-fetch from server with new filter
 function applyRepeaterFilter(hexID) {
     repeaterFilter = hexID || null;
-    if (currentOverlays.length > 0) {
-        map.removeOverlays(currentOverlays);
-    }
-    currentOverlays = [];
-    currentOverlaysByKey = {};
-    renderCells(lastCellData);
+    loadCells();
 }
 
-// Apply time filter and re-render
+// Apply time filter — re-fetch from server with new filter
 function applyTimeFilter(filter) {
     timeFilter = filter;
     document.querySelectorAll('[data-time]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.time === filter);
     });
-    if (currentOverlays.length > 0) {
-        map.removeOverlays(currentOverlays);
+    loadCells();
+}
+
+// Get the max age in seconds for the current time filter (for server-side filtering)
+function getMaxAgeSeconds() {
+    switch (timeFilter) {
+        case '1h': return 3600;
+        case '1d': return 86400;
+        case '1w': return 604800;
+        case '1m': return 2592000;
+        default: return null;
     }
-    currentOverlays = [];
-    currentOverlaysByKey = {};
-    renderCells(lastCellData);
 }
 
 // Get the cutoff date for the current time filter

@@ -380,9 +380,22 @@ final class SignalSurveyViewModel {
 
         do {
             guard let service = communityUploadService else { return }
+            // Map coverage filter to server parameter
+            let coverageParam: String? = {
+                switch communityCoverageFilter {
+                case .active: return "active"
+                case .passive: return "passive"
+                case .all: return nil
+                }
+            }()
+            let maxAgeParam: Int? = communityTimeFilter.maxAge.map { Int($0) }
+
             let response = try await service.fetchCommunityData(
                 minLat: minLat, maxLat: maxLat,
-                minLon: minLon, maxLon: maxLon
+                minLon: minLon, maxLon: maxLon,
+                coverage: coverageParam,
+                maxAge: maxAgeParam,
+                repeater: communityRepeaterFilter
             )
             communityCells = response.cells
         } catch {

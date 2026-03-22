@@ -429,16 +429,29 @@ actor SurveyUploadService {
         maxLat: Double,
         minLon: Double,
         maxLon: Double,
-        limit: Int = 5000
+        limit: Int = 5000,
+        coverage: String? = nil,
+        maxAge: Int? = nil,
+        repeater: String? = nil
     ) async throws -> CommunityCellsResponse {
         var components = URLComponents(url: Self.serverBaseURL.appending(path: "cells"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "minLat", value: String(minLat)),
             URLQueryItem(name: "maxLat", value: String(maxLat)),
             URLQueryItem(name: "minLon", value: String(minLon)),
             URLQueryItem(name: "maxLon", value: String(maxLon)),
             URLQueryItem(name: "limit", value: String(limit)),
         ]
+        if let coverage {
+            queryItems.append(URLQueryItem(name: "coverage", value: coverage))
+        }
+        if let maxAge {
+            queryItems.append(URLQueryItem(name: "maxAge", value: String(maxAge)))
+        }
+        if let repeater {
+            queryItems.append(URLQueryItem(name: "repeater", value: repeater))
+        }
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             throw SurveyUploadError.invalidResponse

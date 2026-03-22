@@ -26,13 +26,11 @@ struct SignalSurveyView: View {
     @State private var isVerifying = false
     @State private var verificationError: String?
     @State private var showingContributorProfile = false
-    @Namespace private var mapScope
-
     var body: some View {
         ZStack {
             if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
                 ProgressView("Resuming survey…")
-            } else if viewModel.allPoints.isEmpty && !viewModel.isActive {
+            } else if viewModel.allPoints.isEmpty && !viewModel.isActive && !viewModel.showCommunityOverlay {
                 emptyState
             } else {
                 mapContent
@@ -40,9 +38,13 @@ struct SignalSurveyView: View {
                 debugOverlay
                 mapControlsOverlay
                 bottomOverlay
+
+                // Community-only mode: show action buttons when no session data
+                if viewModel.allPoints.isEmpty && !viewModel.isActive {
+                    communityModeOverlay
+                }
             }
         }
-        .mapScope(mapScope)
         .navigationTitle("Signal Survey")
         .toolbar { toolbarContent }
         .task(id: appState.servicesVersion) {
@@ -100,6 +102,17 @@ struct SignalSurveyView: View {
         }
         .sheet(isPresented: $showingInfoSheet) {
             SurveyInfoSheet()
+        }
+        .sheet(isPresented: $showingContributorProfile) {
+            if let token = ContributorVerificationService().getAuthToken() {
+                ContributorProfileView(authToken: token)
+            } else {
+                ContentUnavailableView {
+                    Label("Session Expired", systemImage: "lock")
+                } description: {
+                    Text("Verify again to access your profile.")
+                }
+            }
         }
         .sheet(isPresented: $showingPacketList) {
             CellPacketListView(
@@ -200,160 +213,37 @@ struct SignalSurveyView: View {
     // MARK: - Map Content
 
     private var mapContent: some View {
-        Map(position: $viewModel.cameraPosition, scope: mapScope) {
-            switch viewModel.visualizationMode {
-            case .pointCloud:
-                ForEach(viewModel.displayPoints) { point in
-                    Annotation("", coordinate: CLLocationCoordinate2D(
-                        latitude: point.latitude,
-                        longitude: point.longitude
-                    )) {
-                        Circle()
-                            .fill(point.snrQuality.color.opacity(0.8))
-                            .overlay {
-                                Circle()
-                                    .strokeBorder(point.snrQuality.color, lineWidth: 1)
-                            }
-                            .frame(width: 10, height: 10)
-                    }
-                }
-
-            case .gridHeatmap:
-                // Community overlay cells (faded backdrop, rendered behind user data)
+        SurveyMapRepresentable(
+            gridCells: viewModel.gridCells,
+            displayPoints: viewModel.displayPoints,
+            visualizationMode: viewModel.visualizationMode,
+            selectedCell: viewModel.selectedCell,
+            communityCells: viewModel.filteredCommunityCells,
+            showCommunityOverlay: viewModel.showCommunityOverlay,
+            selectedCommunityCell: viewModel.selectedCommunityCell,
+            repeaterAnnotations: viewModel.mapRepeaterAnnotations,
+            selectedMapRepeater: viewModel.selectedMapRepeater,
+            selectedRepeaterContact: viewModel.selectedRepeaterContact,
+            mapStyleSelection: viewModel.mapStyleSelection,
+            showsUserLocation: true,
+            onCellSelected: { cell in
+                viewModel.trackingUserLocation = false
+                viewModel.selectedCommunityCell = nil
+                viewModel.selectedCell = cell
+            },
+            onCommunityCellSelected: { cell in
+                viewModel.selectedCell = nil
+                viewModel.selectedCommunityCell = cell
+            },
+            onRepeaterTapped: { contact in
+                viewModel.selectedMapRepeater = contact
+            },
+            onRegionChanged: { region in
                 if viewModel.showCommunityOverlay {
-                    ForEach(viewModel.filteredCommunityCells) { cell in
-                        let quality = SNRQuality(snr: cell.averageSNR)
-                        let vertices = HexGrid.vertices(
-                            centerLatitude: cell.latitude,
-                            centerLongitude: cell.longitude,
-                            referenceLatitude: cell.referenceLatitude
-                        )
-
-                        MapPolygon(coordinates: vertices)
-                            .foregroundStyle(quality.color.opacity(0.12))
-                            .stroke(quality.color.opacity(0.25), style: StrokeStyle(lineWidth: 0.5, dash: [3, 2]))
-
-                        Annotation("", coordinate: CLLocationCoordinate2D(
-                            latitude: cell.latitude,
-                            longitude: cell.longitude
-                        )) {
-                            Color.clear
-                                .frame(width: 60, height: 60)
-                                .contentShape(.circle)
-                                .onTapGesture {
-                                    if viewModel.selectedCommunityCell?.id == cell.id {
-                                        viewModel.selectedCommunityCell = nil
-                                    } else {
-                                        viewModel.selectedCommunityCell = cell
-                                        viewModel.selectedCell = nil
-                                    }
-                                }
-                        }
-                    }
-
-                    // Community cell selection highlight
-                    if let selected = viewModel.selectedCommunityCell {
-                        let vertices = HexGrid.vertices(
-                            centerLatitude: selected.latitude,
-                            centerLongitude: selected.longitude,
-                            referenceLatitude: selected.referenceLatitude
-                        )
-                        MapPolygon(coordinates: vertices)
-                            .foregroundStyle(SNRQuality(snr: selected.averageSNR).color.opacity(0.35))
-                            .stroke(Color.cyan, lineWidth: 2)
-                    }
-                }
-
-                // User's own survey cells rendered on top
-                ForEach(viewModel.gridCells) { cell in
-                    if cell.isDeadZone {
-                        MapPolygon(coordinates: cell.vertices)
-                            .foregroundStyle(Color.gray.opacity(0.15))
-                            .stroke(Color.gray.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    } else {
-                        MapPolygon(coordinates: cell.vertices)
-                            .foregroundStyle(
-                                cell.snrQuality.color.opacity(
-                                    0.2 + 0.5 * min(1, Double(cell.packetCount) / 10.0)
-                                )
-                            )
-                            .stroke(cell.snrQuality.color.opacity(0.6), lineWidth: 0.5)
-                    }
-
-                    // Invisible tap target at cell center — oversized for easier tapping
-                    Annotation("", coordinate: CLLocationCoordinate2D(
-                        latitude: cell.centerLatitude,
-                        longitude: cell.centerLongitude
-                    )) {
-                        Color.clear
-                            .frame(width: 60, height: 60)
-                            .contentShape(.circle)
-                            .onTapGesture {
-                                viewModel.trackingUserLocation = false
-                                viewModel.selectedCommunityCell = nil
-                                if viewModel.selectedCell?.coordKey == cell.coordKey {
-                                    viewModel.selectedCell = nil
-                                } else {
-                                    viewModel.selectedCell = cell
-                                }
-                            }
-                    }
-                }
-
-                // Selected cell highlight rendered on top
-                if let selected = viewModel.selectedCell {
-                    MapPolygon(coordinates: selected.vertices)
-                        .foregroundStyle(
-                            selected.isDeadZone
-                                ? Color.gray.opacity(0.3)
-                                : selected.snrQuality.color.opacity(0.5)
-                        )
-                        .stroke(Color.white, lineWidth: 3)
+                    Task { await viewModel.loadCommunityCells(for: region) }
                 }
             }
-
-            // Repeater annotations
-            ForEach(viewModel.mapRepeaterAnnotations, id: \.hexID) { item in
-                Annotation(item.contact.displayName, coordinate: CLLocationCoordinate2D(
-                    latitude: item.contact.latitude,
-                    longitude: item.contact.longitude
-                )) {
-                    Button {
-                        viewModel.selectedMapRepeater = item.contact
-                    } label: {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(6)
-                            .background(Color.cyan)
-                            .clipShape(Circle())
-                            .overlay {
-                                Circle()
-                                    .strokeBorder(Color.white, lineWidth: 1.5)
-                            }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            // Line from selected cell to selected repeater
-            if let cell = viewModel.selectedCell,
-               let repeater = viewModel.selectedRepeaterContact {
-                MapPolyline(coordinates: [
-                    CLLocationCoordinate2D(latitude: cell.centerLatitude, longitude: cell.centerLongitude),
-                    CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
-                ])
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
-            }
-
-            UserAnnotation()
-        }
-        .mapStyle(viewModel.mapStyleSelection.mapStyle)
-        .onMapCameraChange(frequency: .onEnd) { context in
-            if viewModel.showCommunityOverlay {
-                Task { await viewModel.loadCommunityCells(for: context.region) }
-            }
-        }
+        )
         .ignoresSafeArea()
     }
 
@@ -774,7 +664,7 @@ struct SignalSurveyView: View {
             HStack {
                 Spacer()
                 MapControlsToolbar(
-                    mapScope: mapScope,
+                    onLocationTap: { viewModel.trackingUserLocation.toggle() },
                     showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
                     // Visualization toggle
@@ -791,20 +681,6 @@ struct SignalSurveyView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Toggle visualization mode")
-
-                    // Track user location
-                    Button {
-                        viewModel.trackingUserLocation.toggle()
-                    } label: {
-                        Image(systemName: viewModel.trackingUserLocation
-                              ? "location.fill" : "location")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(viewModel.trackingUserLocation ? .blue : .primary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Track current location")
 
                     // Center on data
                     Button {
@@ -1448,17 +1324,6 @@ struct SignalSurveyView: View {
                 } footer: {
                     Text("Your contact name will appear on the community map. Verification uses your device's cryptographic key to prove identity. Anonymous by default.")
                 }
-                .sheet(isPresented: $showingContributorProfile) {
-                    if let token = ContributorVerificationService().getAuthToken() {
-                        ContributorProfileView(authToken: token)
-                    } else {
-                        ContentUnavailableView {
-                            Label("Session Expired", systemImage: "lock")
-                        } description: {
-                            Text("Verify again to access your profile.")
-                        }
-                    }
-                }
 
                 // MARK: Debug
                 Section {
@@ -1744,6 +1609,16 @@ struct SignalSurveyView: View {
                     )
                 }
 
+                if contributorVerified {
+                    Divider()
+
+                    Button {
+                        showingContributorProfile = true
+                    } label: {
+                        Label("My Contributions", systemImage: "person.crop.circle")
+                    }
+                }
+
                 Divider()
 
                 Button {
@@ -1781,6 +1656,46 @@ struct SignalSurveyView: View {
                     showingSessionList = true
                 }
             }
+
+            Button {
+                viewModel.showCommunityOverlay = true
+            } label: {
+                Label("Community Map", systemImage: "globe.americas")
+            }
+        }
+    }
+
+    // MARK: - Community-Only Mode Overlay
+
+    /// Floating action buttons shown when the map is visible but no session data is loaded
+    /// (i.e. the user is browsing community data only).
+    private var communityModeOverlay: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 12) {
+                if appState.services?.surveyService != nil {
+                    Button {
+                        showingSurveySetup = true
+                    } label: {
+                        Label("Start Survey", systemImage: "play.fill")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+
+                if !viewModel.sessions.isEmpty {
+                    Button {
+                        showingSessionList = true
+                    } label: {
+                        Label("Sessions", systemImage: "list.bullet")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+            .padding(.bottom, 16)
         }
     }
 

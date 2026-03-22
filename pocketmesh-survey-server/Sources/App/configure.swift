@@ -32,6 +32,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddProbesSent())
     app.migrations.add(AddContributorProfiles())
     app.migrations.add(AddContributorIdentityFields())
+    app.migrations.add(AddCellSpatialIndex())
     try app.autoMigrate().wait()
 
     // Register routes
