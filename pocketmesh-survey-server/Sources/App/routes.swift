@@ -12,24 +12,37 @@ func routes(_ app: Application) throws {
     let surveyController = SurveyController()
     let shareController = ShareController()
 
-    // Public endpoints (no auth)
-    api.get("cells", use: surveyController.getCells)
-    api.get("repeaters", use: surveyController.getRepeaters)
-    api.get("stats", use: surveyController.getStats)
-    api.get("mapkit-token", use: surveyController.getMapKitToken)
-    api.get("events", use: surveyController.sseEvents)
+    // --- Cache policies ---
+    // Short (30s): viewport data that changes on survey upload
+    let shortCached = api.grouped(CacheControlMiddleware(.shortLived))
+    shortCached.get("cells", use: surveyController.getCells)
+    shortCached.get("repeaters", use: surveyController.getRepeaters)
 
-    // Public shared link data endpoints
-    api.get("routes", ":id", use: shareController.getRoute)
-    api.get("maps", ":id", use: shareController.getRepeaterMap)
+    // Medium (5 min): aggregate/slowly changing data
+    let mediumCached = api.grouped(CacheControlMiddleware(.mediumLived))
+    mediumCached.get("stats", use: surveyController.getStats)
 
-    // Public shared link web pages
+    // MapKit token: cache privately for 30 min (tokens valid ~1 hour)
+    api.grouped(CacheControlMiddleware(.custom(maxAge: 1800)))
+        .get("mapkit-token", use: surveyController.getMapKitToken)
+
+    // SSE: never cache
+    api.grouped(CacheControlMiddleware(.noStore))
+        .get("events", use: surveyController.sseEvents)
+
+    // Shared link data: medium cache
+    mediumCached.get("routes", ":id", use: shareController.getRoute)
+    mediumCached.get("maps", ":id", use: shareController.getRepeaterMap)
+
+    // Shared link web pages
     app.get("r", ":id", use: shareController.serveRoutePage)
     app.get("m", ":id", use: shareController.serveRepeaterMapPage)
 
     // Authenticated endpoints with stricter rate limit (10 requests per minute)
+    // Write endpoints get no-store via the middleware (POST/PUT/DELETE are skipped anyway)
     let writeRateLimit = RateLimitStore(maxRequests: 10, windowSeconds: 60)
     let protected = api
+        .grouped(CacheControlMiddleware(.noStore))
         .grouped(RateLimitMiddleware(store: writeRateLimit))
         .grouped(APIKeyMiddleware())
     protected.post("survey", use: surveyController.uploadSurvey)
@@ -51,7 +64,9 @@ func routes(_ app: Application) throws {
     }
 
     // Contributor self-service endpoints (authenticated by session token from verify)
-    let selfService = api.grouped("me").grouped(ContributorAuthMiddleware())
+    let selfService = api.grouped("me")
+        .grouped(CacheControlMiddleware(.noStore))
+        .grouped(ContributorAuthMiddleware())
     selfService.get("profile", use: surveyController.getMyProfile)
     selfService.get("contributions", use: surveyController.getMyContributions)
     selfService.put("displayname", use: surveyController.updateMyDisplayName)
@@ -59,7 +74,7 @@ func routes(_ app: Application) throws {
     selfService.delete("data", use: surveyController.deleteMyData)
 
     // Admin API endpoints (no API key — protected by Cloudflare Access)
-    let admin = api.grouped("admin")
+    let admin = api.grouped("admin").grouped(CacheControlMiddleware(.noStore))
     admin.get("contributors", use: surveyController.getContributors)
     admin.get("contributor", ":id", "sessions", use: surveyController.getContributorSessions)
     admin.delete("contributor", ":id", "session", ":sessionID", use: surveyController.deleteContributorSession)
