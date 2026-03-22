@@ -23,4 +23,5 @@ struct MessageDisplayState {
     var formattedText: AttributedString?
     var detectedSharedRoute: SharedRoute?
     var isSearchMatch: Bool = false
+    var isHighlighted: Bool = false
 }

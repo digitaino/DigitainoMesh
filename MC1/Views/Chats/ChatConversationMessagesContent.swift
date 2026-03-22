@@ -34,6 +34,7 @@ struct ChatConversationMessagesContent: View {
 
     let unseenMentionIDs: [UUID]
     let scrollToTargetID: UUID?
+    let highlightedMessageID: UUID?
     let newMessagesDividerMessageID: UUID?
 
     // MARK: - Sheet State Bindings
@@ -120,6 +121,7 @@ struct ChatConversationMessagesContent: View {
                 }
             },
             isLoadingOlderMessages: viewModel.isLoadingOlder,
+            highlightedItemID: highlightedMessageID,
             canSwipeToReply: onReply != nil ? { item in !item.isOutgoing } : nil,
             onSwipeToReply: onReply != nil ? { item in
                 if let message = viewModel.message(for: item) {
@@ -224,7 +226,8 @@ struct ChatConversationMessagesContent: View {
                         isHighContrast: colorSchemeContrast == .increased
                     ),
                     detectedSharedRoute: item.detectedSharedRoute,
-                    isSearchMatch: item.isSearchMatch
+                    isSearchMatch: item.isSearchMatch,
+                    isHighlighted: item.id == highlightedMessageID
                 ),
                 callbacks: MessageBubbleCallbacks(
                     onRetry: { onRetryMessage(message) },
@@ -349,6 +352,7 @@ private struct ChannelEmptyMessagesView: View {
             isDividerVisible: .constant(false),
             unseenMentionIDs: [],
             scrollToTargetID: nil,
+            highlightedMessageID: nil,
             newMessagesDividerMessageID: nil,
             selectedMessageForActions: .constant(nil),
             imageViewerData: .constant(nil),
@@ -384,6 +388,7 @@ private struct ChannelEmptyMessagesView: View {
             isDividerVisible: .constant(false),
             unseenMentionIDs: [],
             scrollToTargetID: nil,
+            highlightedMessageID: nil,
             newMessagesDividerMessageID: nil,
             selectedMessageForActions: .constant(nil),
             imageViewerData: .constant(nil),

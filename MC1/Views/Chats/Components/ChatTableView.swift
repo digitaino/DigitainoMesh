@@ -456,6 +456,15 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
         }
     }
 
+    /// Force-reload specific cells so the content closure is re-evaluated.
+    func reloadItems(_ ids: [Item.ID]) {
+        guard var snapshot = dataSource?.snapshot() else { return }
+        let existing = ids.filter { snapshot.itemIdentifiers.contains($0) }
+        guard !existing.isEmpty else { return }
+        snapshot.reloadItems(existing)
+        applySnapshot(snapshot, animatingDifferences: false)
+    }
+
     private func centerItem(id: Item.ID, animated: Bool) {
         guard let itemIndex = itemIndexByID[id] else { return }
         let rowIndex = items.count - 1 - itemIndex
@@ -556,11 +565,19 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
     override func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
         // Clear flag when programmatic scroll animation completes
         let wasScrollingToBottom = isScrollingToBottom
+        let targetID = scrollTargetItemID
         isScrollingToBottom = false
         isScrollingToTarget = false
 
         // Reload target cell after scroll completes to fix UIHostingConfiguration layout timing
         reloadTargetCell()
+
+        // Re-center if estimated row heights caused the initial scroll to miss.
+        // After the first scroll, cells near the target are now properly sized,
+        // so a second non-animated scroll lands accurately.
+        if let targetID, !wasScrollingToBottom {
+            centerItem(id: targetID, animated: false)
+        }
 
         if wasScrollingToBottom {
             // We just finished a programmatic scroll-to-bottom
@@ -820,6 +837,7 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
     @Binding var isDividerVisible: Bool
     var onNearTop: (() -> Void)?
     var isLoadingOlderMessages: Bool = false
+    var highlightedItemID: Item.ID?
     var canSwipeToReply: ((Item) -> Bool)?
     var onSwipeToReply: ((Item) -> Void)?
 
@@ -913,7 +931,20 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
 
         controller.updateItems(items)
 
-        // Perform the scroll after items are updated
+        // Reload cells affected by highlight changes BEFORE scrolling so the
+        // highlight is visible when the cell comes into view.
+        let prevHighlight = context.coordinator.lastHighlightedItemID
+        if highlightedItemID != prevHighlight {
+            context.coordinator.lastHighlightedItemID = highlightedItemID
+            var idsToReload: [Item.ID] = []
+            if let prev = prevHighlight { idsToReload.append(prev) }
+            if let current = highlightedItemID { idsToReload.append(current) }
+            if !idsToReload.isEmpty {
+                controller.reloadItems(idsToReload)
+            }
+        }
+
+        // Perform the scroll after items and highlights are updated
         if shouldForceScroll {
             controller.scrollToBottom(animated: true)
         } else if shouldScrollToMention {
@@ -936,6 +967,7 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
         var lastScrollRequest: Int = 0
         var lastMentionRequest: Int = 0
         var lastDividerScrollRequest: Int = 0
+        var lastHighlightedItemID: Item.ID?
         var setIsAtBottom: ((Bool) -> Void)?
         var setUnreadCount: ((Int) -> Void)?
         var setIsDividerVisible: ((Bool) -> Void)?

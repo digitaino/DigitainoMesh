@@ -226,10 +226,11 @@ private struct BubbleContent: View {
                     .strokeBorder(Color.accentColor, lineWidth: 2)
             }
         }
-        .background {
-            if displayState.isSearchMatch {
+        .overlay {
+            if displayState.isHighlighted {
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.accentColor.opacity(0.12))
+                    .fill(Color.accentColor.opacity(0.3))
+                    .allowsHitTesting(false)
             }
         }
     }

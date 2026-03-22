@@ -72,6 +72,8 @@ struct ConversationListContent: View {
         self.onSearchResultTap = onSearchResultTap
     }
 
+    @State private var expandedSearchGroups: Set<Int> = []
+
     var body: some View {
         if !hasLoadedOnce {
             ProgressView()
@@ -79,6 +81,9 @@ struct ConversationListContent: View {
         } else {
             TimelineView(.everyMinute) { context in
                 listContent(referenceDate: context.date)
+                    .onChange(of: searchText) { _, _ in
+                        expandedSearchGroups.removeAll()
+                    }
                     .overlay {
                         if favoriteConversations.isEmpty && otherConversations.isEmpty && !hasMessageSearchResults && !messageSearchResults.isSearching {
                             ContentUnavailableView {
@@ -106,7 +111,7 @@ struct ConversationListContent: View {
     private func messageSearchResultsSection() -> some View {
         if hasMessageSearchResults {
             Section {
-                ForEach(Array(messageSearchResults.resultsByConversation.enumerated()), id: \.offset) { _, group in
+                ForEach(Array(messageSearchResults.resultsByConversation.enumerated()), id: \.offset) { index, group in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(group.conversation.displayName)
                             .font(.subheadline.weight(.semibold))
@@ -117,7 +122,10 @@ struct ConversationListContent: View {
                             return false
                         }()
 
-                        ForEach(group.results.prefix(3)) { result in
+                        let isExpanded = expandedSearchGroups.contains(index)
+                        let visibleResults = isExpanded ? group.results : Array(group.results.prefix(3))
+
+                        ForEach(visibleResults) { result in
                             Button {
                                 onSearchResultTap(result)
                             } label: {
@@ -130,10 +138,17 @@ struct ConversationListContent: View {
                             .buttonStyle(.plain)
                         }
 
-                        if group.results.count > 3 {
-                            Text("\(group.results.count - 3) more")
-                                .font(.caption)
-                                .foregroundColor(.accentColor)
+                        if group.results.count > 3 && !isExpanded {
+                            Button {
+                                _ = withAnimation {
+                                    expandedSearchGroups.insert(index)
+                                }
+                            } label: {
+                                Text("\(group.results.count - 3) more")
+                                    .font(.caption)
+                                    .foregroundColor(.accentColor)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.vertical, 4)

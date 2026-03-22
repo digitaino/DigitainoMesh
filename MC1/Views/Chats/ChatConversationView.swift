@@ -48,6 +48,8 @@ struct ChatConversationView: View {
     @State private var conversationSearchText = ""
     @State private var isSearchActive = false
     @State private var searchScrollTask: Task<Void, Never>?
+    @State private var highlightedMessageID: UUID?
+    @State private var highlightDismissTask: Task<Void, Never>?
 
     // MARK: - Other State
 
@@ -91,6 +93,7 @@ struct ChatConversationView: View {
             isDividerVisible: $isDividerVisible,
             unseenMentionIDs: unseenMentionIDs,
             scrollToTargetID: scrollToTargetID,
+            highlightedMessageID: highlightedMessageID,
             newMessagesDividerMessageID: chatViewModel.newMessagesDividerMessageID,
             selectedMessageForActions: $selectedMessageForActions,
             imageViewerData: $imageViewerData,
@@ -333,6 +336,8 @@ struct ChatConversationView: View {
         mentionScrollTask = nil
         searchScrollTask?.cancel()
         searchScrollTask = nil
+        highlightDismissTask?.cancel()
+        highlightDismissTask = nil
         chatViewModel.clearConversationSearch()
 
         // Save in-progress draft so it survives navigation
@@ -617,15 +622,10 @@ struct ChatConversationView: View {
     // MARK: - Search Navigation
 
     private func scrollToSearchMatch(targetID: UUID) {
-        if chatViewModel.displayItems.contains(where: { $0.id == targetID }) {
-            scrollToTargetID = targetID
-            scrollToMentionRequest += 1
-            return
-        }
-
         searchScrollTask?.cancel()
         searchScrollTask = Task {
             do {
+                // Page through older messages until the target is loaded
                 let deadline = ContinuousClock.now + .seconds(10)
                 while !chatViewModel.displayItems.contains(where: { $0.id == targetID }) {
                     guard chatViewModel.hasMoreMessages else { break }
@@ -640,15 +640,35 @@ struct ChatConversationView: View {
                     await chatViewModel.loadOlderMessages()
                     try Task.checkCancellation()
                 }
-                if chatViewModel.displayItems.contains(where: { $0.id == targetID }) {
-                    scrollToTargetID = targetID
-                    scrollToMentionRequest += 1
+
+                guard chatViewModel.displayItems.contains(where: { $0.id == targetID }) else {
+                    return
                 }
+
+                // Small yield to ensure SwiftUI has processed the displayItems update
+                // through updateUIViewController before issuing the scroll command.
+                try await Task.sleep(for: .milliseconds(50))
+                try Task.checkCancellation()
+
+                scrollToTargetID = targetID
+                scrollToMentionRequest += 1
+                flashHighlight(messageID: targetID)
             } catch is CancellationError {
                 // Expected when view disappears during paging
             } catch {
                 logger.error("Failed to scroll to search match: \(error)")
             }
+        }
+    }
+
+    /// Briefly highlight a message to draw attention after scroll completes.
+    private func flashHighlight(messageID: UUID) {
+        highlightDismissTask?.cancel()
+        highlightedMessageID = messageID
+        highlightDismissTask = Task {
+            try? await Task.sleep(for: .seconds(2.0))
+            guard !Task.isCancelled else { return }
+            highlightedMessageID = nil
         }
     }
 
