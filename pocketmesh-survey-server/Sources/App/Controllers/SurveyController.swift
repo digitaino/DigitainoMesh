@@ -1,5 +1,6 @@
 import Crypto
 import Fluent
+import SQLKit
 import Vapor
 import Foundation
 
@@ -502,46 +503,82 @@ struct SurveyController {
             throw Abort(.badRequest, reason: "Missing bounding box parameters")
         }
 
-        let limit = req.query[Int.self, at: "limit"] ?? 5000
-        let coverage = req.query[String.self, at: "coverage"]   // "active" or "passive"
-        let maxAge = req.query[Int.self, at: "maxAge"]          // seconds
-        let repeaterFilter = req.query[String.self, at: "repeater"] // hex ID
-
-        // Compute ISO 8601 cutoff string for maxAge filter
-        let cutoff: String? = maxAge.map {
-            ISO8601DateFormatter().string(from: Date().addingTimeInterval(-Double($0)))
+        guard let sql = req.db as? SQLDatabase else {
+            throw Abort(.internalServerError, reason: "SQL database required")
         }
 
-        // Build base query with bounding box + optional filters
-        func applyFilters(_ query: QueryBuilder<CellModel>) -> QueryBuilder<CellModel> {
-            var q = query
-                .filter(\.$latitude >= minLat)
-                .filter(\.$latitude <= maxLat)
-                .filter(\.$longitude >= minLon)
-                .filter(\.$longitude <= maxLon)
-            if coverage == "active" {
-                q = q.filter(\.$activePacketCount > 0)
-            } else if coverage == "passive" {
-                q = q.filter(\.$passivePacketCount > 0)
-            }
-            if let cutoff {
-                q = q.filter(\.$lastUpdated >= cutoff)
-            }
-            if let repeaterFilter {
-                q = q.join(CellRepeater.self, on: \CellRepeater.$cell.$id == \CellModel.$id)
-                    .filter(CellRepeater.self, \.$repeaterHexID == repeaterFilter)
-            }
-            return q
-        }
-
+        let limit = req.query[Int.self, at: "limit"] ?? 10_000
+        let coverage = req.query[String.self, at: "coverage"]
+        let maxAge = req.query[Int.self, at: "maxAge"]
+        let repeaterFilter = req.query[String.self, at: "repeater"]
         let includeNames = req.query[String.self, at: "names"] == "true"
 
-        let cells = try await applyFilters(CellModel.query(on: req.db))
-            .with(\.$repeaters)
-            .range(..<limit)
-            .all()
+        // Build reusable WHERE/JOIN fragments using parameterized bindings.
+        // Used for both the COUNT query and the main SELECT.
+        var joinFragment: SQLQueryString = ""
+        if let repeaterFilter {
+            let upper = repeaterFilter.uppercased()
+            joinFragment = " JOIN cell_repeaters rf ON rf.cell_id = c.id AND UPPER(rf.repeater_hex_id) = \(bind: upper)"
+        }
 
-        // Contributor name resolution is expensive (2 extra queries) — opt-in via ?names=true
+        var whereFragment: SQLQueryString = " WHERE c.latitude >= \(bind: minLat) AND c.latitude <= \(bind: maxLat)"
+        whereFragment += " AND c.longitude >= \(bind: minLon) AND c.longitude <= \(bind: maxLon)"
+
+        if coverage == "active" {
+            whereFragment += " AND c.active_packet_count > 0"
+        } else if coverage == "passive" {
+            whereFragment += " AND c.passive_packet_count > 0"
+        }
+        if let maxAge {
+            let cutoff = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-Double(maxAge)))
+            whereFragment += " AND c.last_updated >= \(bind: cutoff)"
+        }
+
+        // Fast COUNT to detect truncation (no GROUP BY, no JOIN on cr)
+        var countQuery: SQLQueryString = "SELECT COUNT(*) AS cnt FROM cells c"
+        countQuery += joinFragment
+        countQuery += whereFragment
+
+        struct CountRow: Decodable { let cnt: Int }
+        let totalMatching = try await sql.raw(countQuery).first(decoding: CountRow.self)?.cnt ?? 0
+
+        // Main query: single pass with GROUP_CONCAT for repeater hex IDs
+        var sqlQuery: SQLQueryString = """
+            SELECT c.id, c.latitude, c.longitude, c.hex_q, c.hex_r, c.reference_latitude,
+                   c.total_snr_weighted, c.total_rssi_weighted, c.total_packet_count,
+                   c.contribution_count, c.active_packet_count, c.passive_packet_count,
+                   c.probes_sent, c.last_updated,
+                   CASE WHEN c.total_packet_count > 0
+                        THEN c.total_snr_weighted / c.total_packet_count
+                        ELSE NULL END AS avg_snr,
+                   GROUP_CONCAT(DISTINCT UPPER(cr.repeater_hex_id)) AS repeater_ids
+            FROM cells c
+            LEFT JOIN cell_repeaters cr ON cr.cell_id = c.id
+            """
+        sqlQuery += joinFragment
+        sqlQuery += whereFragment
+        sqlQuery += " GROUP BY c.id LIMIT \(bind: limit)"
+
+        struct CellRow: Decodable {
+            let id: Int
+            let latitude: Double
+            let longitude: Double
+            let hex_q: Int
+            let hex_r: Int
+            let reference_latitude: Double
+            let total_packet_count: Int
+            let contribution_count: Int
+            let active_packet_count: Int
+            let passive_packet_count: Int
+            let probes_sent: Int?
+            let last_updated: String?
+            let avg_snr: Double?
+            let repeater_ids: String?
+        }
+
+        let rows = try await sql.raw(sqlQuery).all(decoding: CellRow.self)
+
+        // Optional name resolution (expensive — only when ?names=true)
         struct NamePolicy {
             let displayName: String
             let visibleFrom: String?
@@ -562,7 +599,7 @@ struct SurveyController {
                 uniquingKeysWith: { _, new in new }
             )
 
-            let cellIDs = cells.compactMap(\.id)
+            let cellIDs = rows.map(\.id)
             let contributions = cellIDs.isEmpty ? [] : try await CellContribution.query(on: req.db)
                 .filter(\.$cell.$id ~~ cellIDs)
                 .all()
@@ -571,36 +608,33 @@ struct SurveyController {
             }
         }
 
-        let responseCells = cells.map { cell in
-            // Build per-repeater metrics from CellRepeater records that have signal data
-            let metrics: [RepeaterMetricData]? = {
-                let withData = cell.repeaters.filter { $0.packetCount != nil }
-                guard !withData.isEmpty else { return nil }
-                return withData.map { r in
-                    RepeaterMetricData(
-                        hexID: r.repeaterHexID,
-                        averageSNR: r.averageSNR,
-                        averageRSSI: r.averageRSSI,
-                        packetCount: r.packetCount ?? 0,
-                        lastHeard: r.lastHeard
-                    )
-                }
+        let responseCells = rows.map { row in
+            // Parse repeater hex IDs from GROUP_CONCAT result
+            let repeaterHexIDs: [String] = {
+                guard let ids = row.repeater_ids, !ids.isEmpty else { return [] }
+                return Self.consolidateHexIDs(ids.split(separator: ",").map(String.init))
             }()
 
-            // Resolve contributor names for this cell (respecting nameVisibleFrom)
+            let snrQuality: String = {
+                guard let snr = row.avg_snr else { return "unknown" }
+                if snr >= 10 { return "excellent" }
+                if snr >= 0 { return "good" }
+                if snr >= -10 { return "fair" }
+                if snr >= -15 { return "poor" }
+                return "veryPoor"
+            }()
+
+            // Resolve contributor names for this cell
             let names: [String]? = {
-                guard let cellID = cell.id,
-                      let cellContribs = contributionsByCell[cellID] else { return nil }
+                guard let cellContribs = contributionsByCell[row.id] else { return nil }
                 var resolved = Set<String>()
                 for contrib in cellContribs {
                     guard let policy = nameByContributor[contrib.contributorID] else { continue }
                     if let visibleFrom = policy.visibleFrom {
-                        // Only show name if contribution was made after visibleFrom
                         if contrib.contributedAt >= visibleFrom {
                             resolved.insert(policy.displayName)
                         }
                     } else {
-                        // No visibleFrom = retroactive opt-in, show for all
                         resolved.insert(policy.displayName)
                     }
                 }
@@ -608,26 +642,30 @@ struct SurveyController {
             }()
 
             return CommunityCellResponse(
-                latitude: cell.latitude,
-                longitude: cell.longitude,
-                hexQ: cell.hexQ,
-                hexR: cell.hexR,
-                referenceLatitude: cell.referenceLatitude,
-                averageSNR: cell.averageSNR,
-                packetCount: cell.totalPacketCount,
-                contributionCount: cell.contributionCount,
-                repeaterHexIDs: Self.consolidateHexIDs(cell.repeaters.map(\.repeaterHexID)),
-                snrQuality: cell.snrQuality,
-                activePacketCount: cell.activePacketCount > 0 ? cell.activePacketCount : nil,
-                passivePacketCount: cell.passivePacketCount > 0 ? cell.passivePacketCount : nil,
-                repeaterMetrics: metrics,
-                probesSent: cell.probesSent,
-                lastUpdated: cell.lastUpdated,
+                latitude: row.latitude,
+                longitude: row.longitude,
+                hexQ: row.hex_q,
+                hexR: row.hex_r,
+                referenceLatitude: row.reference_latitude,
+                averageSNR: row.avg_snr,
+                packetCount: row.total_packet_count,
+                contributionCount: row.contribution_count,
+                repeaterHexIDs: repeaterHexIDs,
+                snrQuality: snrQuality,
+                activePacketCount: row.active_packet_count > 0 ? row.active_packet_count : nil,
+                passivePacketCount: row.passive_packet_count > 0 ? row.passive_packet_count : nil,
+                repeaterMetrics: nil,
+                probesSent: row.probes_sent,
+                lastUpdated: row.last_updated,
                 contributorNames: names
             )
         }
 
-        return CommunityCellsResponse(cells: responseCells, totalCells: responseCells.count)
+        return CommunityCellsResponse(
+            cells: responseCells,
+            totalCells: responseCells.count,
+            totalMatching: totalMatching > responseCells.count ? totalMatching : nil
+        )
     }
 
     // MARK: - GET /api/v1/stats

@@ -106,6 +106,9 @@ struct CommunityCellResponse: Content {
 struct CommunityCellsResponse: Content {
     let cells: [CommunityCellResponse]
     let totalCells: Int
+    /// Total cells matching the query before LIMIT. When greater than totalCells,
+    /// the client knows results were truncated and can prompt the user to zoom in.
+    let totalMatching: Int?
 }
 
 // MARK: - Stats Response

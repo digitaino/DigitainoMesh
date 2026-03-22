@@ -106,6 +106,9 @@ actor SurveyUploadService {
     struct CommunityCellsResponse: Codable {
         let cells: [CommunityCell]
         let totalCells: Int
+        /// Total cells matching the query before any server-side limit.
+        /// When present and greater than totalCells, results were truncated.
+        let totalMatching: Int?
     }
 
     struct CommunityStats: Codable {
@@ -429,7 +432,7 @@ actor SurveyUploadService {
         maxLat: Double,
         minLon: Double,
         maxLon: Double,
-        limit: Int = 5000,
+        limit: Int? = nil,
         coverage: String? = nil,
         maxAge: Int? = nil,
         repeater: String? = nil
@@ -440,8 +443,10 @@ actor SurveyUploadService {
             URLQueryItem(name: "maxLat", value: String(maxLat)),
             URLQueryItem(name: "minLon", value: String(minLon)),
             URLQueryItem(name: "maxLon", value: String(maxLon)),
-            URLQueryItem(name: "limit", value: String(limit)),
         ]
+        if let limit {
+            queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
         if let coverage {
             queryItems.append(URLQueryItem(name: "coverage", value: coverage))
         }

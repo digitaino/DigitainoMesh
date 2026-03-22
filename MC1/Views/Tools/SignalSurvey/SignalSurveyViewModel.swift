@@ -405,7 +405,6 @@ final class SignalSurveyViewModel {
             let response = try await service.fetchCommunityData(
                 minLat: minLat, maxLat: maxLat,
                 minLon: minLon, maxLon: maxLon,
-                limit: 1000,
                 coverage: coverageParam,
                 maxAge: maxAgeParam,
                 repeater: communityRepeaterFilter

@@ -107,13 +107,29 @@ let selectedHighlightOverlay = null;
 let selectedCellData = null;
 let currentRepeaterAnnotations = [];
 let currentRepeatersByHex = {}; // hexID -> annotation, for diff-based updates
-let loadingTimeout = null;
 let cellsAbortController = null; // AbortController for in-flight cell requests
 let repeatersAbortController = null; // AbortController for in-flight repeater requests
+let refreshTimeout = null; // Single debounce timer for all data refresh calls
 let lastCellData = [];
 let repeaterNames = {}; // hexID -> name mapping from repeater annotations
 let viewportRepeaterHexIDs = new Set(); // hex IDs of repeaters with locations in the current viewport
 let eventSource = null; // SSE connection
+
+// Debounced refresh: coalesces all loadCells + loadRepeaters calls within a
+// 300ms window into a single fetch. Prevents redundant concurrent requests when
+// multiple triggers fire at once (filter change + region change, SSE + poll, etc).
+function scheduleRefresh(immediate) {
+    clearTimeout(refreshTimeout);
+    if (immediate) {
+        loadCells();
+        loadRepeaters();
+    } else {
+        refreshTimeout = setTimeout(() => {
+            loadCells();
+            loadRepeaters();
+        }, 300);
+    }
+}
 
 // MapKit JS initialization callback
 function initMapKit() {
@@ -147,11 +163,7 @@ function initMapKit() {
     // in the new viewport are kept; only new ones are added and out-of-viewport
     // ones removed. No full redraw needed on pan/zoom.
     map.addEventListener('region-change-end', function() {
-        clearTimeout(loadingTimeout);
-        loadingTimeout = setTimeout(() => {
-            loadCells();
-            loadRepeaters();
-        }, 300);
+        scheduleRefresh(false);
     });
 
     // Handle overlay selection for popups
@@ -166,8 +178,7 @@ function initMapKit() {
     });
 
     // Initial load
-    loadCells();
-    loadRepeaters();
+    scheduleRefresh(true);
     loadStats();
 
     // Connect to server-sent events for real-time push updates.
@@ -186,8 +197,7 @@ function connectSSE() {
 
     eventSource.addEventListener('upload', function() {
         // New survey data was uploaded — refresh cells, repeaters, and stats
-        loadCells();
-        loadRepeaters();
+        scheduleRefresh(false);
         loadStats();
     });
 
@@ -204,8 +214,7 @@ function connectSSE() {
                     clearInterval(eventSource._fallbackInterval);
                     eventSource._fallbackInterval = null;
                 } else {
-                    loadCells();
-                    loadRepeaters();
+                    scheduleRefresh(true);
                 }
             }, 30000);
         }
@@ -272,7 +281,6 @@ async function loadCells() {
         maxLat: maxLat,
         minLon: minLon,
         maxLon: maxLon,
-        limit: 5000,
         names: 'true'
     });
 
@@ -295,6 +303,7 @@ async function loadCells() {
         lastCellData = data.cells;
         renderCells(data.cells);
         updateRepeaterDropdown(data.cells);
+        showTruncationBanner(data.totalMatching, data.totalCells);
     } catch (e) {
         if (e.name === 'AbortError') return; // Superseded by a newer request
         console.error('Failed to load cells:', e);
@@ -307,13 +316,13 @@ function applyCoverageFilter(filter) {
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filter);
     });
-    loadCells();
+    scheduleRefresh(false);
 }
 
 // Apply repeater filter — re-fetch from server with new filter
 function applyRepeaterFilter(hexID) {
     repeaterFilter = hexID || null;
-    loadCells();
+    scheduleRefresh(false);
 }
 
 // Apply time filter — re-fetch from server with new filter
@@ -322,7 +331,7 @@ function applyTimeFilter(filter) {
     document.querySelectorAll('[data-time]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.time === filter);
     });
-    loadCells();
+    scheduleRefresh(false);
 }
 
 // Get the max age in seconds for the current time filter (for server-side filtering)
@@ -870,6 +879,26 @@ function dismissPopup() {
         popupElement.remove();
         popupElement = null;
     }
+}
+
+// Show or hide a truncation banner when the server returned fewer cells than matched
+function showTruncationBanner(totalMatching, totalReturned) {
+    let banner = document.getElementById('truncation-banner');
+    if (!totalMatching || totalMatching <= totalReturned) {
+        if (banner) banner.style.display = 'none';
+        return;
+    }
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'truncation-banner';
+        banner.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);' +
+            'background:rgba(30,30,30,0.9);color:#facc15;padding:8px 16px;border-radius:8px;' +
+            'font-size:13px;z-index:1000;backdrop-filter:blur(8px);border:1px solid rgba(250,204,21,0.3);' +
+            'pointer-events:none;';
+        document.body.appendChild(banner);
+    }
+    banner.textContent = `Showing ${totalReturned.toLocaleString()} of ${totalMatching.toLocaleString()} cells — zoom in to see all`;
+    banner.style.display = 'block';
 }
 
 // Load stats
