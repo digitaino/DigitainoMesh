@@ -97,7 +97,11 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
     private var isRunning = false
     private var receiveTask: Task<Void, Never>?
     private var autoMessageFetchTask: Task<Void, Never>?
+    private var autoMessageDrainTask: Task<Void, Never>?
     private var isAutoFetchingMessages = false
+    private var autoMessageDrainRequested = false
+    private var isGetMessageInFlight = false
+    private var getMessageWaiters: [CheckedContinuation<MessageResult, Error>] = []
 
     // MARK: - Connection State
 
@@ -130,6 +134,7 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
     }
 
     private func updateConnectionState(_ state: ConnectionState) {
+        logger.info("Session connection state -> \(String(describing: state))")
         _connectionState = state
         for continuation in connectionStateContinuations.values {
             continuation.yield(state)
@@ -169,9 +174,11 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
     /// The session becomes ready for use after this method returns successfully.
     /// Subscribe to events via ``events()`` to receive incoming messages and notifications.
     ///
+    /// - Parameter reconnectingAttempt: When non-nil, publishes `.reconnecting(attempt:)`
+    ///   instead of `.connecting` before establishing the transport/session.
     /// - Throws: ``MeshTransportError`` if the transport connection fails.
     ///           ``MeshCoreError/timeout`` if the device doesn't respond to appStart.
-    public func start() async throws {
+    public func start(reconnectingAttempt: Int? = nil) async throws {
         // Guard against being called multiple times
         if isRunning {
             logger.warning("Session already running - skipping redundant start()")
@@ -179,7 +186,11 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
         }
 
         logger.info("Starting MeshCore session...")
-        updateConnectionState(.connecting)
+        if let reconnectingAttempt {
+            updateConnectionState(.reconnecting(attempt: max(1, reconnectingAttempt)))
+        } else {
+            updateConnectionState(.connecting)
+        }
         logger.info("Connecting via transport...")
         do {
             try await transport.connect()
@@ -352,8 +363,11 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
     /// Call this to disable the automatic fetching started by ``startAutoMessageFetching()``.
     public func stopAutoMessageFetching() {
         isAutoFetchingMessages = false
+        autoMessageDrainRequested = false
         autoMessageFetchTask?.cancel()
         autoMessageFetchTask = nil
+        autoMessageDrainTask?.cancel()
+        autoMessageDrainTask = nil
     }
 
     private func autoMessageFetchLoop() async {
@@ -361,15 +375,35 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
             guard isAutoFetchingMessages else { break }
 
             if case .messagesWaiting = event {
-                do {
-                    while isAutoFetchingMessages {
-                        let result = try await getMessage()
-                        if case .noMoreMessages = result { break }
-                        try await Task.sleep(for: .milliseconds(100))
-                    }
-                } catch {
-                    logger.debug("Auto message fetch error: \(error.localizedDescription)")
+                requestAutoMessageDrain()
+            }
+        }
+    }
+
+    private func requestAutoMessageDrain() {
+        autoMessageDrainRequested = true
+
+        guard autoMessageDrainTask == nil else { return }
+        autoMessageDrainTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runAutoMessageDrainLoop()
+        }
+    }
+
+    private func runAutoMessageDrainLoop() async {
+        defer { autoMessageDrainTask = nil }
+
+        while isAutoFetchingMessages, autoMessageDrainRequested, !Task.isCancelled {
+            autoMessageDrainRequested = false
+
+            do {
+                while isAutoFetchingMessages, !Task.isCancelled {
+                    let result = try await getMessage()
+                    if case .noMoreMessages = result { break }
+                    try await Task.sleep(for: .milliseconds(100))
                 }
+            } catch {
+                logger.debug("Auto message fetch error: \(error.localizedDescription)")
             }
         }
     }
@@ -1535,6 +1569,26 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
     ///            or indication that no more messages are waiting.
     /// - Throws: ``MeshCoreError`` if the fetch fails.
     public func getMessage(timeout: TimeInterval? = nil) async throws -> MessageResult {
+        if isGetMessageInFlight {
+            return try await withCheckedThrowingContinuation { continuation in
+                getMessageWaiters.append(continuation)
+            }
+        }
+
+        isGetMessageInFlight = true
+        defer { isGetMessageInFlight = false }
+
+        do {
+            let result = try await performGetMessage(timeout: timeout)
+            finishGetMessageWaiters(with: .success(result))
+            return result
+        } catch {
+            finishGetMessageWaiters(with: .failure(error))
+            throw error
+        }
+    }
+
+    private func performGetMessage(timeout: TimeInterval? = nil) async throws -> MessageResult {
         let timeoutSeconds = timeout ?? configuration.defaultTimeout
 
         let stream = await dispatcher.subscribe { event in
@@ -1585,6 +1639,20 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
             }
 
             return result
+        }
+    }
+
+    private func finishGetMessageWaiters(with result: Result<MessageResult, Error>) {
+        let waiters = getMessageWaiters
+        getMessageWaiters.removeAll(keepingCapacity: false)
+
+        for waiter in waiters {
+            switch result {
+            case .success(let messageResult):
+                waiter.resume(returning: messageResult)
+            case .failure(let error):
+                waiter.resume(throwing: error)
+            }
         }
     }
 

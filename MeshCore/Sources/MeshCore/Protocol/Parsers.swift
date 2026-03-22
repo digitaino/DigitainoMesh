@@ -8,7 +8,7 @@ enum PacketSize {
     /// Full contact structure size.
     static let contact = 147
     /// Minimum size for self info response.
-    static let selfInfoMinimum = 55
+    static let selfInfoMinimum = 57
     /// Minimum size for message sent confirmation.
     static let messageSentMinimum = 9
     /// Minimum size for version 1 contact messages.
@@ -202,7 +202,7 @@ public enum Parsers {
 
     /// Parser for local device configuration info.
     enum SelfInfo {
-        /// Parses self info response (55+ bytes).
+        /// Parses self info response (57+ bytes).
         ///
         /// - Parameter data: Raw self info data.
         /// - Returns: A `.selfInfo` event or `.parseFailure`.

@@ -56,6 +56,7 @@ struct ChatConversationView: View {
     @AppStorage("autoPlayGIFs") private var autoPlayGIFs = true
     @AppStorage("showIncomingPath") private var showIncomingPath = false
     @AppStorage("showIncomingHopCount") private var showIncomingHopCount = false
+    @AppStorage("replyWithQuote") private var replyWithQuote = false
 
     // MARK: - Init
 
@@ -91,7 +92,18 @@ struct ChatConversationView: View {
             onScrollToMention: { scrollToNextMention() },
             onRetryMessage: { retryMessage($0) },
             onReply: { message in
-                chatViewModel.composingText = buildReplyText(for: message)
+                let mentionName: String
+                switch conversationType {
+                case .dm(let contact):
+                    mentionName = contact.name
+                case .channel:
+                    mentionName = message.senderNodeName ?? L10n.Chats.Chats.Message.Sender.unknown
+                }
+                if replyWithQuote {
+                    chatViewModel.composingText = MentionUtilities.buildReplyText(mentionName: mentionName, messageText: message.text)
+                } else {
+                    chatViewModel.composingText = MentionUtilities.createMention(for: mentionName) + " "
+                }
                 isInputFocused = true
             }
         )
@@ -400,9 +412,9 @@ struct ChatConversationView: View {
                 if chatViewModel.messages.contains(where: { $0.id == messageID }) {
                     needsReload = true
                 }
-            case .heardRepeatRecorded(let messageID, _):
+            case .heardRepeatRecorded(let messageID, let count):
                 if chatViewModel.messages.contains(where: { $0.id == messageID }) {
-                    needsReload = true
+                    chatViewModel.updateHeardRepeats(for: messageID, count: count)
                 }
             case .reactionReceived(let messageID, let summary):
                 if chatViewModel.messages.contains(where: { $0.id == messageID }) {
@@ -634,8 +646,18 @@ struct ChatConversationView: View {
             recentEmojisStore.recordUsage(emoji)
             Task { await chatViewModel.sendReaction(emoji: emoji, to: message) }
         case .reply:
-            let replyText = buildReplyText(for: message)
-            chatViewModel.composingText = replyText
+            let mentionName: String
+            switch conversationType {
+            case .dm(let contact):
+                mentionName = contact.name
+            case .channel:
+                mentionName = message.senderNodeName ?? L10n.Chats.Chats.Message.Sender.unknown
+            }
+            if replyWithQuote {
+                chatViewModel.composingText = MentionUtilities.buildReplyText(mentionName: mentionName, messageText: message.text)
+            } else {
+                chatViewModel.composingText = MentionUtilities.createMention(for: mentionName) + " "
+            }
             isInputFocused = true
         case .copy:
             UIPasteboard.general.string = message.text
@@ -686,16 +708,6 @@ struct ChatConversationView: View {
         }
     }
 
-    private func buildReplyText(for message: MessageDTO) -> String {
-        let mentionName: String
-        switch conversationType {
-        case .dm(let contact):
-            mentionName = contact.name
-        case .channel:
-            mentionName = message.senderNodeName ?? L10n.Chats.Chats.Message.Sender.unknown
-        }
-        return MentionUtilities.buildReplyText(mentionName: mentionName, messageText: message.text)
-    }
 
     /// The true location for the route share location picker.
     /// Prefers the location recorded on the pending message; falls back to current GPS.

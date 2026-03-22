@@ -562,6 +562,9 @@
 /* Location: UnifiedMessageBubble.swift - Context menu action to reply */
 "chats.message.action.reply" = "回复";
 
+/* Location: MessageActionsSheet.swift - Context menu action to mention */
+"chats.message.action.mention" = "Mention";
+
 /* Location: UnifiedMessageBubble.swift - Context menu action to copy */
 "chats.message.action.copy" = "复制";
 

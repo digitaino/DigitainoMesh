@@ -11,6 +11,7 @@ private let logger = Logger(subsystem: "com.mc1", category: "BLEStatus")
 struct BLEStatusIndicatorView: View {
     @Environment(\.appState) private var appState
     @State private var showingDeviceSelection = false
+    @State private var showingAdvancedSettings = false
     @State private var isSendingAdvert = false
     @State private var successFeedbackTrigger = false
     @State private var errorFeedbackTrigger = false
@@ -32,6 +33,9 @@ struct BLEStatusIndicatorView: View {
             DeviceSelectionSheet()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
+        }
+        .navigationDestination(isPresented: $showingAdvancedSettings) {
+            AdvancedSettingsView()
         }
     }
 
@@ -58,6 +62,7 @@ struct BLEStatusIndicatorView: View {
             successFeedbackTrigger: successFeedbackTrigger,
             errorFeedbackTrigger: errorFeedbackTrigger,
             onSendAdvert: { flood in sendAdvert(flood: flood) },
+            onAdvancedSettings: { showingAdvancedSettings = true },
             onChangeDevice: { showingDeviceSelection = true },
             onDisconnect: {
                 logger.info("Disconnect tapped in BLE status menu")
@@ -207,6 +212,7 @@ private struct ConnectedMenu: View {
     let successFeedbackTrigger: Bool
     let errorFeedbackTrigger: Bool
     let onSendAdvert: (Bool) -> Void
+    let onAdvancedSettings: () -> Void
     let onChangeDevice: () -> Void
     let onDisconnect: () -> Void
 
@@ -253,9 +259,15 @@ private struct ConnectedMenu: View {
 
             Section {
                 Button {
+                    onAdvancedSettings()
+                } label: {
+                    Label(L10n.Settings.AdvancedSettings.title, systemImage: "gearshape")
+                }
+
+                Button {
                     onChangeDevice()
                 } label: {
-                    Label(L10n.Settings.BleStatus.changeDevice, systemImage: "gearshape")
+                    Label(L10n.Settings.BleStatus.changeDevice, systemImage: "antenna.radiowaves.left.and.right")
                 }
 
                 Button(role: .destructive) {

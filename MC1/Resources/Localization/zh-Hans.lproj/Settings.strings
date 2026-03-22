@@ -1233,3 +1233,7 @@
 
 /* Error when key fails Ed25519 validation */
 "importKey.error.invalidKey" = "不是有效的 Ed25519 私钥";
+
+// Reply with Quote
+"replyWithQuote.toggle" = "Reply with Quote";
+"replyWithQuote.footer" = "Replying includes a preview of the original message.";

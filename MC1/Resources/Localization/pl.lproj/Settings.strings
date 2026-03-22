@@ -1260,3 +1260,7 @@
 
 /* Error when key fails Ed25519 validation */
 "importKey.error.invalidKey" = "To nie jest prawidłowy klucz prywatny Ed25519";
+
+// Reply with Quote
+"replyWithQuote.toggle" = "Reply with Quote";
+"replyWithQuote.footer" = "Replying includes a preview of the original message.";

@@ -1260,3 +1260,7 @@
 
 /* Error when key fails Ed25519 validation */
 "importKey.error.invalidKey" = "Ce n'est pas une clé privée Ed25519 valide";
+
+// Reply with Quote
+"replyWithQuote.toggle" = "Reply with Quote";
+"replyWithQuote.footer" = "Replying includes a preview of the original message.";

@@ -136,6 +136,7 @@ final class DiscoveryViewModel {
         } else {
             result = result.filter { node in
                 node.name.localizedStandardContains(searchText)
+                    || node.publicKey.hexString().hasPrefix(searchText.uppercased())
             }
         }
 

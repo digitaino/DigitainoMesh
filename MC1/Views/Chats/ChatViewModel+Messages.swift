@@ -455,7 +455,6 @@ extension ChatViewModel {
         guard let contact = currentContact,
               let messageService,
               !text.isEmpty else {
-            composingText = text
             return
         }
 

@@ -565,6 +565,9 @@
 /* Location: MessageActionsSheet.swift - Context menu action to direct message sender */
 "chats.message.action.directMessage" = "Direct Message";
 
+/* Location: MessageActionsSheet.swift - Context menu action to mention */
+"chats.message.action.mention" = "Mention";
+
 /* Location: UnifiedMessageBubble.swift - Context menu action to copy */
 "chats.message.action.copy" = "Copy";
 
