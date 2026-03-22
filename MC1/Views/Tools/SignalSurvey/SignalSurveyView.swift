@@ -223,6 +223,7 @@ struct SignalSurveyView: View {
             mapStyleSelection: viewModel.mapStyleSelection,
             showsUserLocation: true,
             trackingUserLocation: viewModel.trackingUserLocation,
+            targetRegion: $viewModel.targetRegion,
             onCellSelected: { cell in
                 viewModel.trackingUserLocation = false
                 viewModel.selectedCommunityCell = nil

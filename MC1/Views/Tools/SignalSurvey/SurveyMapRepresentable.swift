@@ -41,6 +41,10 @@ struct SurveyMapRepresentable: UIViewRepresentable {
     let showsUserLocation: Bool
     let trackingUserLocation: Bool
 
+    /// Region the map should animate to. Set by the ViewModel when the camera changes
+    /// (e.g. zoom to current cell, center on data). Cleared after applying.
+    @Binding var targetRegion: MKCoordinateRegion?
+
     // MARK: - Callbacks
 
     var onCellSelected: (SignalSurveyViewModel.GridCell?) -> Void
@@ -109,6 +113,14 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         // We don't use MKMapView's .follow mode since that centers on the user (no offset).
         if mapView.userTrackingMode != .none {
             mapView.setUserTrackingMode(.none, animated: false)
+        }
+
+        // Apply target region from ViewModel (zoom to cell, center on data, etc.)
+        if let region = targetRegion {
+            mapView.setRegion(region, animated: true)
+            DispatchQueue.main.async { [self] in
+                self.targetRegion = nil
+            }
         }
 
         // Update overlays

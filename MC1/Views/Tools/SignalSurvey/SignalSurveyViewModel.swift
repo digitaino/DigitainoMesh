@@ -88,6 +88,19 @@ final class SignalSurveyViewModel {
     // MARK: - Map State
 
     var cameraPosition: MapCameraPosition = .automatic
+
+    /// The region that `SurveyMapRepresentable` should animate to.
+    /// Set via `setCameraRegion(_:)` instead of assigning `cameraPosition` directly.
+    /// Cleared by the representable after applying to avoid re-centering on every SwiftUI update.
+    var targetRegion: MKCoordinateRegion?
+
+    /// Set camera position to a region, updating both the SwiftUI `cameraPosition`
+    /// and the UIKit `targetRegion` so `SurveyMapRepresentable` can apply it.
+    func setCameraRegion(_ region: MKCoordinateRegion) {
+        cameraPosition = .region(region)
+        targetRegion = region
+    }
+
     var mapStyleSelection: MapStyleSelection = .standard
     var showingLayersMenu = false
 
@@ -908,7 +921,7 @@ final class SignalSurveyViewModel {
         // Uses fixed 10° bands so all clients produce identical grids.
         if livePointCount == 1 {
             gridReferenceLatitude = HexGrid.fixedReferenceLatitude(for: point.latitude)
-            cameraPosition = .region(MKCoordinateRegion(
+            setCameraRegion(MKCoordinateRegion(
                 center: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude),
                 span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
             ))
@@ -1012,7 +1025,7 @@ final class SignalSurveyViewModel {
             latitude: location.coordinate.latitude - span.latitudeDelta * 0.35,
             longitude: location.coordinate.longitude
         )
-        cameraPosition = .region(MKCoordinateRegion(center: offsetCenter, span: span))
+        setCameraRegion(MKCoordinateRegion(center: offsetCenter, span: span))
     }
 
     // MARK: - Filtering
@@ -1456,7 +1469,7 @@ final class SignalSurveyViewModel {
             latitudeDelta: min(180, (maxLat - minLat) * 1.5 + 0.005),
             longitudeDelta: min(360, (maxLon - minLon) * 1.5 + 0.005)
         )
-        cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
+        setCameraRegion(MKCoordinateRegion(center: center, span: span))
     }
 
     /// Zooms the map to fit the selected cell and the resolved repeater annotation.
@@ -1486,9 +1499,7 @@ final class SignalSurveyViewModel {
             latitudeDelta: min(180, (maxLat - minLat) * 2.0 + 0.003),
             longitudeDelta: min(360, (maxLon - minLon) * 2.0 + 0.003)
         )
-        withAnimation(.easeInOut(duration: 0.5)) {
-            cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
-        }
+        setCameraRegion(MKCoordinateRegion(center: center, span: span))
     }
 
     // MARK: - Session Management
