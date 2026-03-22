@@ -25,8 +25,8 @@ actor ChallengeStore {
 
         // Generate 32-byte random nonce
         var nonce = Data(count: 32)
-        nonce.withUnsafeMutableBytes { buffer in
-            _ = SecRandomCopyBytes(kSecRandomDefault, 32, buffer.baseAddress!)
+        for i in 0..<32 {
+            nonce[i] = UInt8.random(in: 0...255)
         }
 
         challenges[contributorID] = PendingChallenge(

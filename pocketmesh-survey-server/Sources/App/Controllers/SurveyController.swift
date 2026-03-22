@@ -792,7 +792,7 @@ struct SurveyController {
 
         var cellsFixed = 0
         var repeatersRemoved = 0
-        var repeatersUpgraded = 0
+        let repeatersUpgraded = 0
 
         for cell in allCells {
             let repeaters = cell.repeaters
@@ -1444,8 +1444,8 @@ struct SurveyController {
 
         // Generate a session token for self-service API access
         var tokenBytes = Data(count: 32)
-        tokenBytes.withUnsafeMutableBytes { buffer in
-            _ = SecRandomCopyBytes(kSecRandomDefault, 32, buffer.baseAddress!)
+        for i in 0..<32 {
+            tokenBytes[i] = UInt8.random(in: 0...255)
         }
         let rawToken = tokenBytes.base64EncodedString()
         let tokenHash = SHA256.hash(data: Data(rawToken.utf8))
