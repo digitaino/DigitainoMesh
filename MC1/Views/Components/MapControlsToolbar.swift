@@ -10,6 +10,9 @@ struct MapControlsToolbar<CustomContent: View>: View {
     /// Custom action for location button. Used when MapScope isn't available (e.g., MKMapViewRepresentable).
     var onLocationTap: (() -> Void)?
 
+    /// Whether user location tracking is currently active (changes button appearance).
+    var isTrackingLocation: Bool = false
+
     /// Binding to control layers menu visibility. Parent view handles menu presentation.
     @Binding var showingLayersMenu: Bool
 
@@ -44,9 +47,9 @@ struct MapControlsToolbar<CustomContent: View>: View {
                 .contentShape(.rect)
         } else if let onLocationTap {
             Button(action: onLocationTap) {
-                Image(systemName: "location.fill")
+                Image(systemName: isTrackingLocation ? "location.fill" : "location")
                     .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isTrackingLocation ? .blue : .primary)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }

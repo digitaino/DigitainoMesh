@@ -44,6 +44,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
     var onCommunityCellSelected: (SurveyUploadService.CommunityCell?) -> Void
     var onRepeaterTapped: (ContactDTO) -> Void
     var onRegionChanged: (MKCoordinateRegion) -> Void
+    var onTrackingStopped: (() -> Void)?
 
     // MARK: - UIViewRepresentable
 
@@ -81,6 +82,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         coordinator.onCommunityCellSelected = onCommunityCellSelected
         coordinator.onRepeaterTapped = onRepeaterTapped
         coordinator.onRegionChanged = onRegionChanged
+        coordinator.onTrackingStopped = onTrackingStopped
 
         // Store current data for tap hit testing
         coordinator.currentGridCells = gridCells
@@ -279,6 +281,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         var onCommunityCellSelected: ((SurveyUploadService.CommunityCell?) -> Void)?
         var onRepeaterTapped: ((ContactDTO) -> Void)?
         var onRegionChanged: ((MKCoordinateRegion) -> Void)?
+        var onTrackingStopped: (() -> Void)?
 
         var isUpdatingFromSwiftUI = false
         var hasReportedInitialRegion = false
@@ -475,6 +478,13 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             guard !isUpdatingFromSwiftUI else { return }
             onRegionChanged?(mapView.region)
+        }
+
+        func mapView(_ mapView: MKMapView, didChange mode: MKUserTrackingMode, animated: Bool) {
+            // When MKMapView stops tracking (e.g. user pans the map), notify the parent
+            if mode == .none {
+                onTrackingStopped?()
+            }
         }
     }
 }

@@ -40,7 +40,8 @@ struct SignalSurveyView: View {
                 bottomOverlay
 
                 // Community-only mode: show action buttons when no session data
-                if viewModel.allPoints.isEmpty && !viewModel.isActive {
+                // Hide when a community cell is selected to avoid overlap with detail card
+                if viewModel.allPoints.isEmpty && !viewModel.isActive && viewModel.selectedCommunityCell == nil {
                     communityModeOverlay
                 }
             }
@@ -235,6 +236,9 @@ struct SignalSurveyView: View {
                 if viewModel.showCommunityOverlay {
                     viewModel.loadCommunityCells(for: region)
                 }
+            },
+            onTrackingStopped: {
+                viewModel.trackingUserLocation = false
             }
         )
         .ignoresSafeArea()
@@ -658,6 +662,7 @@ struct SignalSurveyView: View {
                 Spacer()
                 MapControlsToolbar(
                     onLocationTap: { viewModel.trackingUserLocation.toggle() },
+                    isTrackingLocation: viewModel.trackingUserLocation,
                     showingLayersMenu: $viewModel.showingLayersMenu
                 ) {
                     // Visualization toggle
@@ -1075,7 +1080,7 @@ struct SignalSurveyView: View {
             }
         }()
 
-        return HStack(spacing: 2) {
+        return HStack(alignment: .bottom, spacing: 2) {
             ForEach(1...5, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(i <= level ? quality.color : Color.secondary.opacity(0.2))

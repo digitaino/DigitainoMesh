@@ -117,30 +117,51 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     // MARK: - Community Overlay Management
 
     private func updateCommunityOverlays(in mapView: MKMapView, coordinator: Coordinator) {
-        let existingOverlays = mapView.overlays.compactMap { $0 as? CommunityHexOverlay }
-
         if !showCommunityOverlay {
             // Remove all community overlays when disabled
-            if !existingOverlays.isEmpty {
-                mapView.removeOverlays(existingOverlays)
+            if !coordinator.lastOverlayCellIDs.isEmpty {
+                let existing = mapView.overlays.compactMap { $0 as? CommunityHexOverlay }
+                if !existing.isEmpty {
+                    mapView.removeOverlays(existing)
+                }
                 coordinator.lastOverlayCellIDs = []
+                coordinator.overlaysByID = [:]
             }
             return
         }
 
-        // Check if cells actually changed
+        // Incremental diff: only add/remove overlays that changed
         let newIDs = Set(communityCells.map(\.id))
         guard newIDs != coordinator.lastOverlayCellIDs else { return }
 
-        // Remove old overlays and add new ones
-        if !existingOverlays.isEmpty {
-            mapView.removeOverlays(existingOverlays)
+        let idsToRemove = coordinator.lastOverlayCellIDs.subtracting(newIDs)
+        let idsToAdd = newIDs.subtracting(coordinator.lastOverlayCellIDs)
+
+        // Remove overlays for cells no longer in the set
+        if !idsToRemove.isEmpty {
+            let toRemove = idsToRemove.compactMap { coordinator.overlaysByID[$0] }
+            if !toRemove.isEmpty {
+                mapView.removeOverlays(toRemove)
+            }
+            for id in idsToRemove {
+                coordinator.overlaysByID.removeValue(forKey: id)
+            }
         }
 
-        let overlays = communityCells.map { CommunityHexOverlay.make(from: $0) }
-        if !overlays.isEmpty {
-            mapView.addOverlays(overlays, level: .aboveRoads)
+        // Add overlays for new cells
+        if !idsToAdd.isEmpty {
+            let cellsByID = Dictionary(communityCells.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+            let toAdd = idsToAdd.compactMap { id -> CommunityHexOverlay? in
+                guard let cell = cellsByID[id] else { return nil }
+                let overlay = CommunityHexOverlay.make(from: cell)
+                coordinator.overlaysByID[id] = overlay
+                return overlay
+            }
+            if !toAdd.isEmpty {
+                mapView.addOverlays(toAdd, level: .aboveRoads)
+            }
         }
+
         coordinator.lastOverlayCellIDs = newIDs
     }
 
@@ -238,6 +259,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         var lastShowLabels: Bool = true
         var lastSelectedContactID: UUID?
         var lastOverlayCellIDs: Set<String> = []
+        var overlaysByID: [String: CommunityHexOverlay] = [:]
 
         // Lazily created map view owned by coordinator
         lazy var mapView: MKMapView = {
