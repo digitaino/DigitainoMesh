@@ -10,10 +10,11 @@ struct MessagePathContent: View {
     let viewModel: MessagePathViewModel
     let receiverName: String
     let userLocation: CLLocation?
-    var onReplyWithRoute: ((String) -> Void)?
+    var onReplyWithRoute: ((String, ShareFormat) -> Void)?
 
     @State private var copyHapticTrigger = 0
     @State private var showingRouteMap = false
+    @State private var showingShareFormatPicker = false
 
     /// Pre-computed route info text for the reply button
     private var routeInfoText: String? {
@@ -116,12 +117,17 @@ struct MessagePathContent: View {
                 // Reply with Route
                 if let onReplyWithRoute, let routeInfo = routeInfoText {
                     Button {
-                        onReplyWithRoute(routeInfo)
+                        showingShareFormatPicker = true
                     } label: {
                         Label("Reply with Route", systemImage: "arrowshape.turn.up.left")
                     }
                     .buttonStyle(.borderless)
                     .padding(.top, 4)
+                    .sheet(isPresented: $showingShareFormatPicker) {
+                        ShareFormatPickerSheet { format in
+                            onReplyWithRoute(routeInfo, format)
+                        }
+                    }
                 }
             }
         }

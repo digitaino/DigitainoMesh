@@ -1,3 +1,4 @@
+import Crypto
 import Fluent
 import Vapor
 import Foundation
@@ -456,6 +457,31 @@ struct SurveyController {
         )
         try await log.save(on: req.db)
 
+        // Persist display name to contributor profile if provided
+        if let displayName = payload.displayName, !displayName.isEmpty {
+            let existing = try await ContributorProfile.query(on: req.db)
+                .filter(\.$contributorID == payload.contributorID)
+                .first()
+            if let existing {
+                existing.displayName = displayName
+                // Set nameVisibleFrom on first name assignment (forward-only by default)
+                if existing.nameVisibleFrom == nil {
+                    existing.nameVisibleFrom = now
+                }
+                existing.updatedAt = now
+                try await existing.save(on: req.db)
+            } else {
+                let profile = ContributorProfile(
+                    contributorID: payload.contributorID,
+                    displayName: displayName,
+                    createdAt: now,
+                    updatedAt: now,
+                    nameVisibleFrom: now
+                )
+                try await profile.save(on: req.db)
+            }
+        }
+
         // Notify connected web map clients about the new data
         await SSEBroadcaster.shared.broadcast(
             event: "upload",
@@ -494,6 +520,34 @@ struct SurveyController {
             .filter(\.$longitude <= maxLon)
             .count()
 
+        // Pre-load contributor display names and visibility policy for attribution
+        let profiles = try await ContributorProfile.query(on: req.db)
+            .filter(\.$displayName != nil)
+            .all()
+        struct NamePolicy {
+            let displayName: String
+            let visibleFrom: String?  // nil = visible for all contributions
+        }
+        let nameByContributor: [String: NamePolicy] = Dictionary(
+            profiles.compactMap { p in
+                p.displayName.map {
+                    (p.contributorID, NamePolicy(displayName: $0, visibleFrom: p.nameVisibleFrom))
+                }
+            },
+            uniquingKeysWith: { _, new in new }
+        )
+
+        // Pre-load contributions for returned cells to resolve contributor names
+        let cellIDs = cells.compactMap(\.id)
+        let contributions = cellIDs.isEmpty ? [] : try await CellContribution.query(on: req.db)
+            .filter(\.$cell.$id ~~ cellIDs)
+            .all()
+        // Group contributions by cell ID (need timestamps for name visibility)
+        var contributionsByCell: [Int: [CellContribution]] = [:]
+        for c in contributions {
+            contributionsByCell[c.$cell.id, default: []].append(c)
+        }
+
         let responseCells = cells.map { cell in
             // Build per-repeater metrics from CellRepeater records that have signal data
             let metrics: [RepeaterMetricData]? = {
@@ -508,6 +562,26 @@ struct SurveyController {
                         lastHeard: r.lastHeard
                     )
                 }
+            }()
+
+            // Resolve contributor names for this cell (respecting nameVisibleFrom)
+            let names: [String]? = {
+                guard let cellID = cell.id,
+                      let cellContribs = contributionsByCell[cellID] else { return nil }
+                var resolved = Set<String>()
+                for contrib in cellContribs {
+                    guard let policy = nameByContributor[contrib.contributorID] else { continue }
+                    if let visibleFrom = policy.visibleFrom {
+                        // Only show name if contribution was made after visibleFrom
+                        if contrib.contributedAt >= visibleFrom {
+                            resolved.insert(policy.displayName)
+                        }
+                    } else {
+                        // No visibleFrom = retroactive opt-in, show for all
+                        resolved.insert(policy.displayName)
+                    }
+                }
+                return resolved.isEmpty ? nil : resolved.sorted()
             }()
 
             return CommunityCellResponse(
@@ -525,7 +599,8 @@ struct SurveyController {
                 passivePacketCount: cell.passivePacketCount > 0 ? cell.passivePacketCount : nil,
                 repeaterMetrics: metrics,
                 probesSent: cell.probesSent,
-                lastUpdated: cell.lastUpdated
+                lastUpdated: cell.lastUpdated,
+                contributorNames: names
             )
         }
 
@@ -617,6 +692,46 @@ struct SurveyController {
             deletedContributions: contributions.count,
             cellsRemoved: cellsRemoved,
             cellsUpdated: cellsUpdated
+        )
+    }
+
+    // MARK: - PUT /api/v1/contributor/:contributorID/displayname
+
+    @Sendable
+    func updateDisplayName(req: Request) async throws -> UpdateDisplayNameResponse {
+        guard let contributorID = req.parameters.get("contributorID") else {
+            throw Abort(.badRequest, reason: "Missing contributor ID")
+        }
+
+        let body = try req.content.decode(UpdateDisplayNameRequest.self)
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        let existing = try await ContributorProfile.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .first()
+
+        if let existing {
+            existing.displayName = body.displayName
+            // Set nameVisibleFrom on first name assignment (forward-only by default)
+            if existing.nameVisibleFrom == nil {
+                existing.nameVisibleFrom = now
+            }
+            existing.updatedAt = now
+            try await existing.save(on: req.db)
+        } else {
+            let profile = ContributorProfile(
+                contributorID: contributorID,
+                displayName: body.displayName,
+                createdAt: now,
+                updatedAt: now,
+                nameVisibleFrom: now
+            )
+            try await profile.save(on: req.db)
+        }
+
+        return UpdateDisplayNameResponse(
+            contributorID: contributorID,
+            displayName: body.displayName
         )
     }
 
@@ -794,6 +909,10 @@ struct SurveyController {
             .unique()
             .all(\.$contributorID)
 
+        // Pre-load all contributor profiles for efficient lookup
+        let profiles = try await ContributorProfile.query(on: req.db).all()
+        let profileMap = Dictionary(uniqueKeysWithValues: profiles.map { ($0.contributorID, $0) })
+
         var contributors: [AdminContributorInfo] = []
 
         for contributorID in contributorIDs {
@@ -817,6 +936,8 @@ struct SurveyController {
             let sessionIDs = Set(contributions.compactMap(\.sessionID))
             let sessionCount = sessionIDs.count
 
+            let profile = profileMap[contributorID]
+
             contributors.append(AdminContributorInfo(
                 contributorID: contributorID,
                 cellCount: cellCount,
@@ -825,7 +946,13 @@ struct SurveyController {
                 firstSeen: firstSeen,
                 lastSeen: lastSeen,
                 clientIPs: clientIPs,
-                sessionCount: sessionCount
+                sessionCount: sessionCount,
+                notes: profile?.notes,
+                displayName: profile?.displayName,
+                verified: profile?.verified ?? false,
+                legacyUUID: profile?.legacyUUID,
+                publicKeyHash: profile?.publicKeyHash,
+                nameVisibleFrom: profile?.nameVisibleFrom
             ))
         }
 
@@ -1110,5 +1237,535 @@ struct SurveyController {
         })
 
         return Response(status: .ok, headers: headers, body: body)
+    }
+
+    // MARK: - PUT /api/v1/admin/contributor/:id/notes
+
+    @Sendable
+    func updateContributorNotes(req: Request) async throws -> UpdateContributorNotesResponse {
+        guard let contributorID = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing contributor ID")
+        }
+
+        let body = try req.content.decode(UpdateContributorNotesRequest.self)
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        // Upsert into contributor_profiles
+        if let existing = try await ContributorProfile.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .first()
+        {
+            existing.notes = body.notes
+            existing.updatedAt = now
+            try await existing.save(on: req.db)
+        } else {
+            let profile = ContributorProfile(
+                contributorID: contributorID,
+                notes: body.notes,
+                createdAt: now,
+                updatedAt: now
+            )
+            try await profile.save(on: req.db)
+        }
+
+        return UpdateContributorNotesResponse(
+            contributorID: contributorID,
+            notes: body.notes
+        )
+    }
+
+    // MARK: - POST /api/v1/admin/contributors/merge
+
+    @Sendable
+    func mergeContributors(req: Request) async throws -> MergeContributorsResponse {
+        let body = try req.content.decode(MergeContributorsRequest.self)
+
+        guard !body.sourceIDs.isEmpty else {
+            throw Abort(.badRequest, reason: "sourceIDs must not be empty")
+        }
+        guard !body.sourceIDs.contains(body.targetID) else {
+            throw Abort(.badRequest, reason: "targetID must not be in sourceIDs")
+        }
+
+        var totalContributionsReassigned = 0
+        var totalUploadsReassigned = 0
+        var removedSourceIDs: [String] = []
+
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        for sourceID in body.sourceIDs {
+            // Reassign cell contributions
+            let contributions = try await CellContribution.query(on: req.db)
+                .filter(\.$contributorID == sourceID)
+                .all()
+            for contribution in contributions {
+                contribution.contributorID = body.targetID
+                try await contribution.save(on: req.db)
+            }
+            totalContributionsReassigned += contributions.count
+
+            // Reassign upload logs
+            let uploads = try await UploadLog.query(on: req.db)
+                .filter(\.$contributorID == sourceID)
+                .all()
+            for upload in uploads {
+                upload.contributorID = body.targetID
+                try await upload.save(on: req.db)
+            }
+            totalUploadsReassigned += uploads.count
+
+            // Merge profile notes into target
+            if let sourceProfile = try await ContributorProfile.query(on: req.db)
+                .filter(\.$contributorID == sourceID)
+                .first()
+            {
+                // Merge notes into target profile
+                let targetProfile = try await ContributorProfile.query(on: req.db)
+                    .filter(\.$contributorID == body.targetID)
+                    .first()
+
+                if let targetProfile {
+                    // Append source notes to target if both have notes
+                    if let sourceNotes = sourceProfile.notes, !sourceNotes.isEmpty {
+                        if let existingNotes = targetProfile.notes, !existingNotes.isEmpty {
+                            targetProfile.notes = existingNotes + "\n[Merged from \(sourceID.prefix(8))...] " + sourceNotes
+                        } else {
+                            targetProfile.notes = "[Merged from \(sourceID.prefix(8))...] " + sourceNotes
+                        }
+                        targetProfile.updatedAt = now
+                        try await targetProfile.save(on: req.db)
+                    }
+                } else if sourceProfile.notes != nil || sourceProfile.displayName != nil {
+                    // Create target profile with source data
+                    let newProfile = ContributorProfile(
+                        contributorID: body.targetID,
+                        notes: sourceProfile.notes,
+                        createdAt: now,
+                        updatedAt: now
+                    )
+                    try await newProfile.save(on: req.db)
+                }
+
+                // Delete source profile
+                try await sourceProfile.delete(on: req.db)
+            }
+
+            removedSourceIDs.append(sourceID)
+        }
+
+        req.logger.info("Merged \(body.sourceIDs.count) contributors into \(body.targetID.prefix(8))...: \(totalContributionsReassigned) contributions, \(totalUploadsReassigned) uploads")
+
+        return MergeContributorsResponse(
+            contributionsReassigned: totalContributionsReassigned,
+            uploadsReassigned: totalUploadsReassigned,
+            sourceIDsRemoved: removedSourceIDs
+        )
+    }
+
+    // MARK: - POST /api/v1/contributor/:contributorID/challenge
+
+    @Sendable
+    func requestChallenge(req: Request) async throws -> ChallengeResponse {
+        guard let contributorID = req.parameters.get("contributorID") else {
+            throw Abort(.badRequest, reason: "Missing contributor ID")
+        }
+
+        let body = try req.content.decode(ChallengeRequest.self)
+
+        guard let publicKeyData = Data(base64Encoded: body.publicKey),
+              publicKeyData.count == 32 else {
+            throw Abort(.badRequest, reason: "Invalid public key — must be 32 bytes base64-encoded")
+        }
+
+        let nonce = await ChallengeStore.shared.createChallenge(
+            contributorID: contributorID,
+            publicKey: publicKeyData
+        )
+
+        return ChallengeResponse(
+            nonce: nonce.base64EncodedString(),
+            expiresIn: 300
+        )
+    }
+
+    // MARK: - POST /api/v1/contributor/:contributorID/verify
+
+    @Sendable
+    func verifyChallenge(req: Request) async throws -> VerifyResponse {
+        guard let contributorID = req.parameters.get("contributorID") else {
+            throw Abort(.badRequest, reason: "Missing contributor ID")
+        }
+
+        let body = try req.content.decode(VerifyRequest.self)
+
+        guard let publicKeyData = Data(base64Encoded: body.publicKey),
+              publicKeyData.count == 32 else {
+            throw Abort(.badRequest, reason: "Invalid public key")
+        }
+
+        guard let nonceData = Data(base64Encoded: body.nonce),
+              nonceData.count == 32 else {
+            throw Abort(.badRequest, reason: "Invalid nonce")
+        }
+
+        guard let signatureData = Data(base64Encoded: body.signature),
+              signatureData.count == 64 else {
+            throw Abort(.badRequest, reason: "Invalid signature — must be 64 bytes base64-encoded")
+        }
+
+        // Retrieve and consume the pending challenge
+        guard let challenge = await ChallengeStore.shared.consumeChallenge(contributorID: contributorID) else {
+            throw Abort(.gone, reason: "Challenge expired or not found — request a new one")
+        }
+
+        // Verify the nonce matches
+        guard challenge.nonce == nonceData else {
+            throw Abort(.badRequest, reason: "Nonce mismatch")
+        }
+
+        // Verify the public key matches
+        guard challenge.publicKey == publicKeyData else {
+            throw Abort(.badRequest, reason: "Public key mismatch")
+        }
+
+        // Verify the Ed25519 signature using Swift Crypto
+        let signingKey = try Curve25519.Signing.PublicKey(rawRepresentation: publicKeyData)
+        guard signingKey.isValidSignature(signatureData, for: nonceData) else {
+            throw Abort(.unauthorized, reason: "Signature verification failed")
+        }
+
+        // Verification passed — migrate to public-key-based contributor ID
+        let now = ISO8601DateFormatter().string(from: Date())
+        let publicKeyHash = SHA256.hash(data: publicKeyData)
+        let hashHex = publicKeyHash.compactMap { String(format: "%02x", $0) }.joined()
+
+        let oldContributorID = contributorID  // UUID from URL param
+        let newContributorID = hashHex        // deterministic public-key-based ID
+
+        // Generate a session token for self-service API access
+        var tokenBytes = Data(count: 32)
+        tokenBytes.withUnsafeMutableBytes { buffer in
+            _ = SecRandomCopyBytes(kSecRandomDefault, 32, buffer.baseAddress!)
+        }
+        let rawToken = tokenBytes.base64EncodedString()
+        let tokenHash = SHA256.hash(data: Data(rawToken.utf8))
+            .compactMap { String(format: "%02x", $0) }.joined()
+        let tokenExpires = ISO8601DateFormatter().string(
+            from: Date().addingTimeInterval(3600)  // 1-hour TTL
+        )
+
+        // Check if already migrated (profile with hash-based ID exists)
+        let existingByHash = try await ContributorProfile.query(on: req.db)
+            .filter(\.$contributorID == newContributorID)
+            .first()
+
+        if let existingByHash {
+            // Already migrated — just refresh verification and token
+            existingByHash.verified = true
+            existingByHash.publicKeyHash = hashHex
+            existingByHash.authToken = tokenHash
+            existingByHash.authTokenExpires = tokenExpires
+            existingByHash.updatedAt = now
+            try await existingByHash.save(on: req.db)
+
+            req.logger.info("Contributor \(newContributorID.prefix(16))... re-verified (already migrated)")
+
+            return VerifyResponse(
+                verified: true,
+                contributorID: newContributorID,
+                migrated: false,
+                newContributorID: newContributorID,
+                authToken: rawToken,
+                authTokenExpires: tokenExpires
+            )
+        }
+
+        // Perform UUID → hash migration inside a transaction
+        let migrated = try await req.db.transaction { db in
+            // 1. Reassign cell contributions
+            let contributions = try await CellContribution.query(on: db)
+                .filter(\.$contributorID == oldContributorID)
+                .all()
+            for contribution in contributions {
+                contribution.contributorID = newContributorID
+                try await contribution.save(on: db)
+            }
+
+            // 2. Reassign upload logs
+            let uploads = try await UploadLog.query(on: db)
+                .filter(\.$contributorID == oldContributorID)
+                .all()
+            for upload in uploads {
+                upload.contributorID = newContributorID
+                try await upload.save(on: db)
+            }
+
+            // 3. Migrate or create profile
+            let oldProfile = try await ContributorProfile.query(on: db)
+                .filter(\.$contributorID == oldContributorID)
+                .first()
+
+            if let oldProfile {
+                // Update existing profile in-place (preserves UNIQUE constraint)
+                oldProfile.legacyUUID = oldContributorID
+                oldProfile.contributorID = newContributorID
+                oldProfile.publicKeyHash = hashHex
+                oldProfile.verified = true
+                oldProfile.authToken = tokenHash
+                oldProfile.authTokenExpires = tokenExpires
+                oldProfile.updatedAt = now
+                // Name only applies forward — don't make it retroactive
+                if oldProfile.displayName != nil && oldProfile.nameVisibleFrom == nil {
+                    oldProfile.nameVisibleFrom = now
+                }
+                try await oldProfile.save(on: db)
+            } else {
+                let newProfile = ContributorProfile(
+                    contributorID: newContributorID,
+                    publicKeyHash: hashHex,
+                    verified: true,
+                    createdAt: now,
+                    updatedAt: now,
+                    legacyUUID: oldContributorID
+                )
+                newProfile.authToken = tokenHash
+                newProfile.authTokenExpires = tokenExpires
+                try await newProfile.save(on: db)
+            }
+
+            return true
+        }
+
+        req.logger.info("Contributor \(oldContributorID.prefix(8))... migrated to \(newContributorID.prefix(16))... (\(migrated ? "success" : "failed"))")
+
+        return VerifyResponse(
+            verified: true,
+            contributorID: newContributorID,
+            migrated: true,
+            newContributorID: newContributorID,
+            authToken: rawToken,
+            authTokenExpires: tokenExpires
+        )
+    }
+
+    // MARK: - Self-Service: GET /api/v1/me/profile
+
+    @Sendable
+    func getMyProfile(req: Request) async throws -> MyProfileResponse {
+        guard let contributorID = req.authenticatedContributorID else {
+            throw Abort(.unauthorized)
+        }
+
+        let profile = try await ContributorProfile.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .first()
+
+        let contributions = try await CellContribution.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .all()
+
+        let uploads = try await UploadLog.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .sort(\.$uploadedAt)
+            .all()
+
+        let sessionIDs = Set(contributions.compactMap(\.sessionID))
+
+        return MyProfileResponse(
+            contributorID: contributorID,
+            legacyUUID: profile?.legacyUUID,
+            displayName: profile?.displayName,
+            nameVisibleFrom: profile?.nameVisibleFrom,
+            verified: profile?.verified ?? false,
+            cellCount: contributions.count,
+            uploadCount: uploads.count,
+            sessionCount: sessionIDs.count,
+            firstSeen: uploads.first?.uploadedAt,
+            lastSeen: uploads.last?.uploadedAt
+        )
+    }
+
+    // MARK: - Self-Service: GET /api/v1/me/contributions
+
+    @Sendable
+    func getMyContributions(req: Request) async throws -> MyContributionsResponse {
+        guard let contributorID = req.authenticatedContributorID else {
+            throw Abort(.unauthorized)
+        }
+
+        let contributions = try await CellContribution.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .all()
+
+        // Group by session
+        var sessionMap: [String: (cellCount: Int, packetCount: Int, contributedAt: String?)] = [:]
+        for c in contributions {
+            let sid = c.sessionID ?? "unknown"
+            let existing = sessionMap[sid] ?? (cellCount: 0, packetCount: 0, contributedAt: nil)
+            sessionMap[sid] = (
+                cellCount: existing.cellCount + 1,
+                packetCount: existing.packetCount + c.packetCount,
+                contributedAt: max(existing.contributedAt ?? "", c.contributedAt).isEmpty
+                    ? c.contributedAt : max(existing.contributedAt ?? "", c.contributedAt)
+            )
+        }
+
+        let sessions = sessionMap.map { (sid, info) in
+            MySessionInfo(
+                sessionID: sid,
+                cellCount: info.cellCount,
+                packetCount: info.packetCount,
+                contributedAt: info.contributedAt
+            )
+        }.sorted { ($0.contributedAt ?? "") > ($1.contributedAt ?? "") }
+
+        let totalPackets = contributions.reduce(0) { $0 + $1.packetCount }
+
+        return MyContributionsResponse(
+            contributorID: contributorID,
+            sessions: sessions,
+            totalCells: contributions.count,
+            totalPackets: totalPackets
+        )
+    }
+
+    // MARK: - Self-Service: PUT /api/v1/me/displayname
+
+    @Sendable
+    func updateMyDisplayName(req: Request) async throws -> UpdateDisplayNameResponse {
+        guard let contributorID = req.authenticatedContributorID else {
+            throw Abort(.unauthorized)
+        }
+
+        let body = try req.content.decode(UpdateDisplayNameRequest.self)
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        let existing = try await ContributorProfile.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .first()
+
+        if let existing {
+            existing.displayName = body.displayName
+            if existing.nameVisibleFrom == nil {
+                existing.nameVisibleFrom = now
+            }
+            existing.updatedAt = now
+            try await existing.save(on: req.db)
+        } else {
+            let profile = ContributorProfile(
+                contributorID: contributorID,
+                displayName: body.displayName,
+                createdAt: now,
+                updatedAt: now,
+                nameVisibleFrom: now
+            )
+            try await profile.save(on: req.db)
+        }
+
+        return UpdateDisplayNameResponse(
+            contributorID: contributorID,
+            displayName: body.displayName
+        )
+    }
+
+    // MARK: - Self-Service: PUT /api/v1/me/name-retroactive
+
+    @Sendable
+    func updateNameRetroactive(req: Request) async throws -> NameRetroactiveResponse {
+        guard let contributorID = req.authenticatedContributorID else {
+            throw Abort(.unauthorized)
+        }
+
+        let body = try req.content.decode(NameRetroactiveRequest.self)
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        guard let profile = try await ContributorProfile.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .first() else {
+            throw Abort(.notFound, reason: "Contributor profile not found")
+        }
+
+        guard profile.displayName != nil else {
+            throw Abort(.badRequest, reason: "Set a display name first")
+        }
+
+        if body.applyToAll {
+            // Remove the visibility cutoff — name shows for all contributions
+            profile.nameVisibleFrom = nil
+        } else {
+            // Restore forward-only (set to now if it was nil)
+            if profile.nameVisibleFrom == nil {
+                profile.nameVisibleFrom = now
+            }
+        }
+        profile.updatedAt = now
+        try await profile.save(on: req.db)
+
+        return NameRetroactiveResponse(
+            contributorID: contributorID,
+            nameVisibleFrom: profile.nameVisibleFrom
+        )
+    }
+
+    // MARK: - Self-Service: DELETE /api/v1/me/data
+
+    @Sendable
+    func deleteMyData(req: Request) async throws -> DeleteContributorResponse {
+        guard let contributorID = req.authenticatedContributorID else {
+            throw Abort(.unauthorized)
+        }
+
+        // Reuse the existing deletion logic
+        let contributions = try await CellContribution.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .with(\.$cell)
+            .all()
+
+        var cellsRemoved = 0
+        var cellsUpdated = 0
+
+        for contribution in contributions {
+            let cell = contribution.cell
+
+            cell.totalSNRWeighted -= contribution.snrWeighted
+            cell.totalRSSIWeighted -= contribution.rssiWeighted ?? 0
+            cell.totalPacketCount -= contribution.packetCount
+            cell.floodCount -= contribution.floodCount
+            cell.directCount -= contribution.directCount
+            cell.activePacketCount -= contribution.activePacketCount
+            cell.passivePacketCount -= contribution.passivePacketCount
+            if let contribProbes = contribution.probesSent, contribProbes > 0 {
+                cell.probesSent = max(0, (cell.probesSent ?? 0) - contribProbes)
+            }
+            cell.contributionCount -= 1
+
+            if cell.totalPacketCount <= 0 {
+                try await cell.delete(on: req.db)
+                cellsRemoved += 1
+            } else {
+                try await cell.save(on: req.db)
+                cellsUpdated += 1
+            }
+
+            try await contribution.delete(on: req.db)
+        }
+
+        // Delete upload logs
+        try await UploadLog.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .delete()
+
+        // Delete contributor profile
+        try await ContributorProfile.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .delete()
+
+        req.logger.info("Self-service delete: contributor \(contributorID.prefix(16))... removed \(contributions.count) contributions, \(cellsRemoved) cells")
+
+        return DeleteContributorResponse(
+            deletedContributions: contributions.count,
+            cellsRemoved: cellsRemoved,
+            cellsUpdated: cellsUpdated
+        )
     }
 }

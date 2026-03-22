@@ -34,6 +34,9 @@ func routes(_ app: Application) throws {
         .grouped(APIKeyMiddleware())
     protected.post("survey", use: surveyController.uploadSurvey)
     protected.delete("contributor", ":contributorID", use: surveyController.deleteContributor)
+    protected.put("contributor", ":contributorID", "displayname", use: surveyController.updateDisplayName)
+    protected.post("contributor", ":contributorID", "challenge", use: surveyController.requestChallenge)
+    protected.post("contributor", ":contributorID", "verify", use: surveyController.verifyChallenge)
     protected.post("admin", "fix-coordinates", use: surveyController.fixCellCoordinates)
     protected.post("admin", "normalize-repeaters", use: surveyController.normalizeRepeaters)
 
@@ -47,6 +50,14 @@ func routes(_ app: Application) throws {
         return try await req.fileio.asyncStreamFile(at: adminPath)
     }
 
+    // Contributor self-service endpoints (authenticated by session token from verify)
+    let selfService = api.grouped("me").grouped(ContributorAuthMiddleware())
+    selfService.get("profile", use: surveyController.getMyProfile)
+    selfService.get("contributions", use: surveyController.getMyContributions)
+    selfService.put("displayname", use: surveyController.updateMyDisplayName)
+    selfService.put("name-retroactive", use: surveyController.updateNameRetroactive)
+    selfService.delete("data", use: surveyController.deleteMyData)
+
     // Admin API endpoints (no API key — protected by Cloudflare Access)
     let admin = api.grouped("admin")
     admin.get("contributors", use: surveyController.getContributors)
@@ -54,4 +65,6 @@ func routes(_ app: Application) throws {
     admin.delete("contributor", ":id", "session", ":sessionID", use: surveyController.deleteContributorSession)
     admin.get("uploads", use: surveyController.getUploads)
     admin.post("purge-bogus", use: surveyController.purgeBogusContributors)
+    admin.put("contributor", ":id", "notes", use: surveyController.updateContributorNotes)
+    admin.post("contributors", "merge", use: surveyController.mergeContributors)
 }

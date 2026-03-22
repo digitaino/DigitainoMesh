@@ -6,8 +6,8 @@ import SwiftUI
 enum MessageAction: Equatable {
     case react(String)
     case reply
-    case replyWithRoute(String)
-    case replyWithRepeaterMap(url: URL, description: String)
+    case replyWithRoute(String, shareFormat: ShareFormat)
+    case replyWithRepeaterMap(url: URL?, description: String)
     case copy
     case sendAgain
     case blockSender
@@ -106,8 +106,8 @@ struct MessageActionsSheet: View {
                             contacts: contacts,
                             discoveredNodes: discoveredNodes,
                             pathViewModel: pathViewModel,
-                            onReplyWithRoute: { routeInfo in
-                                performAction(.replyWithRoute(routeInfo))
+                            onReplyWithRoute: { routeInfo, shareFormat in
+                                performAction(.replyWithRoute(routeInfo, shareFormat: shareFormat))
                             },
                             onReplyWithRepeaterMap: { url, description in
                                 performAction(.replyWithRepeaterMap(url: url, description: description))
@@ -347,8 +347,8 @@ private struct ActionsDetailsSection: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
-    var onReplyWithRoute: ((String) -> Void)?
-    var onReplyWithRepeaterMap: ((URL, String) -> Void)?
+    var onReplyWithRoute: ((String, ShareFormat) -> Void)?
+    var onReplyWithRepeaterMap: ((URL?, String) -> Void)?
 
     @Environment(\.appState) private var appState
 
@@ -405,8 +405,8 @@ private struct ActionsExpandableDetailRow: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
-    var onReplyWithRoute: ((String) -> Void)?
-    var onReplyWithRepeaterMap: ((URL, String) -> Void)?
+    var onReplyWithRoute: ((String, ShareFormat) -> Void)?
+    var onReplyWithRepeaterMap: ((URL?, String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -466,12 +466,13 @@ private struct ActionsExpandedContent: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
-    var onReplyWithRoute: ((String) -> Void)?
-    var onReplyWithRepeaterMap: ((URL, String) -> Void)?
+    var onReplyWithRoute: ((String, ShareFormat) -> Void)?
+    var onReplyWithRepeaterMap: ((URL?, String) -> Void)?
 
     @State private var showingRepeatsMap = false
     @State private var isSharing = false
     @State private var showingLocationPicker = false
+    @State private var showingShareFormatPicker = false
 
     /// Location recorded on the message at receive time — preferred over current GPS.
     private var messageLocation: CLLocation? {
@@ -507,7 +508,7 @@ private struct ActionsExpandedContent: View {
                     }
 
                     Button {
-                        showingLocationPicker = true
+                        showingShareFormatPicker = true
                     } label: {
                         if isSharing {
                             ProgressView()
@@ -519,7 +520,16 @@ private struct ActionsExpandedContent: View {
                         }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(isSharing || trueLocationCoordinate == nil)
+                    .disabled(isSharing)
+                    .sheet(isPresented: $showingShareFormatPicker) {
+                        ShareFormatPickerSheet { format in
+                            if format == .textOnly {
+                                shareHeardRepeatsTextOnly(repeats: repeats)
+                            } else {
+                                showingLocationPicker = true
+                            }
+                        }
+                    }
                     .sheet(isPresented: $showingLocationPicker) {
                         if let coord = trueLocationCoordinate {
                             ShareLocationPickerSheet(trueLocation: coord) { chosenCoordinate in
@@ -647,6 +657,26 @@ private struct ActionsExpandedContent: View {
             let description = "📡 \(repeats.count) \(repeatWord) via \(hexList)"
             onReplyWithRepeaterMap?(url, description)
         }
+    }
+
+    /// Text-only share: build description without uploading to server.
+    private func shareHeardRepeatsTextOnly(repeats: [MessageRepeatDTO]) {
+        var repeaterHexIDs: Set<String> = []
+        for repeatDTO in repeats {
+            let hashes = RouteAggregator.parseHopHashes(
+                pathNodes: repeatDTO.pathNodes,
+                hashSize: repeatDTO.hashSize
+            )
+            for hash in hashes {
+                let hexID = hash.map { String(format: "%02X", $0) }.joined()
+                repeaterHexIDs.insert(hexID)
+            }
+        }
+
+        let hexList = repeaterHexIDs.sorted().joined(separator: ", ")
+        let repeatWord = repeats.count == 1 ? "repeat" : "repeats"
+        let description = "📡 \(repeats.count) \(repeatWord) via \(hexList)"
+        onReplyWithRepeaterMap?(nil, description)
     }
 }
 

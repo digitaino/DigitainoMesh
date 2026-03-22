@@ -823,6 +823,11 @@ function showCellPopup(cell) {
                 <span class="detail-label">Contributions</span>
                 <span class="detail-value">${cell.contributionCount}</span>
             </div>
+            ${cell.contributorNames && cell.contributorNames.length > 0 ? `
+            <div class="detail-row">
+                <span class="detail-label">Contributors</span>
+                <span class="detail-value">${cell.contributorNames.join(', ')}</span>
+            </div>` : ''}
             ${repeatersHTML}
         </div>
     `;

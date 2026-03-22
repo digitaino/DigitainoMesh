@@ -69,6 +69,8 @@ actor SurveyUploadService {
         /// Session UUIDs included in this upload for server-side deduplication.
         /// Re-uploading the same session replaces previous data instead of accumulating.
         let sessionIDs: [String]?
+        /// Optional contact name to associate with this contributor on the community map.
+        let displayName: String?
     }
 
     struct UploadResponse: Codable {
@@ -98,6 +100,7 @@ actor SurveyUploadService {
         let passivePacketCount: Int?
         let probesSent: Int?
         let lastUpdated: String?
+        let contributorNames: [String]?
     }
 
     struct CommunityCellsResponse: Codable {
@@ -120,6 +123,14 @@ actor SurveyUploadService {
     /// In-memory cache of contributor ID, shared across all instances.
     /// Prevents generating a new UUID on every call if keychain is failing.
     private static let cachedContributorID = ContributorIDCache()
+
+    /// Optional display name to include with uploads. Set from the survey setup sheet.
+    var displayName: String?
+
+    /// Set the display name for uploads. Convenience for calling from non-isolated contexts.
+    func setDisplayName(_ name: String?) {
+        displayName = name
+    }
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -166,7 +177,8 @@ actor SurveyUploadService {
             referenceLatitude: result.referenceLatitude,
             cells: result.cells,
             repeaters: result.repeaters,
-            sessionIDs: [sessionID.uuidString]
+            sessionIDs: [sessionID.uuidString],
+            displayName: displayName
         )
 
         Self.logger.info("Upload: \(result.cells.count) cells for session \(sessionID.uuidString.prefix(8))")
@@ -222,7 +234,8 @@ actor SurveyUploadService {
             referenceLatitude: result.referenceLatitude,
             cells: result.cells,
             repeaters: result.repeaters,
-            sessionIDs: sessionIDs.map(\.uuidString)
+            sessionIDs: sessionIDs.map(\.uuidString),
+            displayName: displayName
         )
 
         Self.logger.info("Batch upload: \(result.cells.count) merged cells from \(sessionIDs.count) sessions")
@@ -319,7 +332,8 @@ actor SurveyUploadService {
                 referenceLatitude: referenceLatitude,
                 cells: [cellData],
                 repeaters: resolvedRepeaters,
-                sessionIDs: sessionID.map { [$0.uuidString] }
+                sessionIDs: sessionID.map { [$0.uuidString] },
+                displayName: displayName
             )
 
             let encoder = JSONEncoder()
@@ -385,7 +399,8 @@ actor SurveyUploadService {
                 referenceLatitude: referenceLatitude,
                 cells: [cellData],
                 repeaters: [],
-                sessionIDs: sessionID.map { [$0.uuidString] }
+                sessionIDs: sessionID.map { [$0.uuidString] },
+                displayName: displayName
             )
 
             let encoder = JSONEncoder()
@@ -504,7 +519,7 @@ actor SurveyUploadService {
     /// Uses a process-wide in-memory cache so that even if keychain reads fail
     /// (e.g. entitlement issues in debug builds), we return the same ID for the
     /// lifetime of the app process instead of generating a new UUID per call.
-    private func getOrCreateContributorID() async throws -> String {
+    func getOrCreateContributorID() async throws -> String {
         // Fast path: return cached value
         if let cached = Self.cachedContributorID.value {
             return cached
@@ -522,6 +537,14 @@ actor SurveyUploadService {
         storeInKeychain(newID)
         Self.logger.info("Generated new contributor ID")
         return newID
+    }
+
+    /// Update the stored contributor ID after migration to a public-key-based ID.
+    /// Updates both the in-memory cache and the Keychain.
+    func updateContributorID(_ newID: String) {
+        Self.cachedContributorID.value = newID
+        storeInKeychain(newID)
+        Self.logger.info("Updated contributor ID to public key hash")
     }
 
     private func retrieveFromKeychain() -> String? {

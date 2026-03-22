@@ -21,6 +21,11 @@ struct SignalSurveyView: View {
     @AppStorage("surveyDeepScan") private var deepScanPref = false
     @AppStorage("surveyLiveUpload") private var liveUploadPref = false
     @AppStorage("surveyDebugMode") private var debugModeEnabled = false
+    @AppStorage("surveyIncludeDisplayName") private var includeDisplayName = false
+    @AppStorage("surveyContributorVerified") private var contributorVerified = false
+    @State private var isVerifying = false
+    @State private var verificationError: String?
+    @State private var showingContributorProfile = false
     @Namespace private var mapScope
 
     var body: some View {
@@ -89,7 +94,8 @@ struct SignalSurveyView: View {
                     let parts = cell.coordKey.split(separator: "_")
                     guard parts.count == 2, let q = Int(parts[0]), let r = Int(parts[1]) else { return nil }
                     return (q: q, r: r)
-                }
+                },
+                displayName: includeDisplayName ? appState.connectedDevice?.nodeName : nil
             )
         }
         .sheet(isPresented: $showingInfoSheet) {
@@ -1391,6 +1397,69 @@ struct SignalSurveyView: View {
                     }
                 }
 
+                // MARK: Contributor Identity
+                Section {
+                    Toggle("Include Contact Name", isOn: $includeDisplayName)
+                    if includeDisplayName {
+                        HStack {
+                            Text("Name")
+                            Spacer()
+                            Text(appState.connectedDevice?.nodeName ?? "Not connected")
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack {
+                            Text("Verified")
+                            Spacer()
+                            if isVerifying {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else if contributorVerified {
+                                Label("Verified", systemImage: "checkmark.seal.fill")
+                                    .foregroundStyle(.green)
+                                    .font(.subheadline)
+                            } else if appState.connectedDevice != nil {
+                                Button("Verify Now") {
+                                    Task { await performVerification() }
+                                }
+                                .font(.subheadline)
+                            } else {
+                                Text("Connect device to verify")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if let verificationError {
+                            Text(verificationError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+
+                        if contributorVerified {
+                            Button {
+                                showingContributorProfile = true
+                            } label: {
+                                Label("My Contributions", systemImage: "person.crop.circle")
+                            }
+                            .font(.subheadline)
+                        }
+                    }
+                } footer: {
+                    Text("Your contact name will appear on the community map. Verification uses your device's cryptographic key to prove identity. Anonymous by default.")
+                }
+                .sheet(isPresented: $showingContributorProfile) {
+                    if let token = ContributorVerificationService().getAuthToken() {
+                        ContributorProfileView(authToken: token)
+                    } else {
+                        ContentUnavailableView {
+                            Label("Session Expired", systemImage: "lock")
+                        } description: {
+                            Text("Verify again to access your profile.")
+                        }
+                    }
+                }
+
                 // MARK: Debug
                 Section {
                     Toggle("Debug Overlay", isOn: $debugModeEnabled)
@@ -1416,7 +1485,14 @@ struct SignalSurveyView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") {
                         showingSurveySetup = false
+                        // Set display name for uploads before starting
+                        viewModel.displayNameForUpload = includeDisplayName ? appState.connectedDevice?.nodeName : nil
                         Task {
+                            // Auto-verify if name enabled, device connected, and not yet verified
+                            if includeDisplayName && !contributorVerified && appState.services?.settingsService != nil {
+                                await performVerification()
+                            }
+
                             guard let service = appState.services?.surveyService else { return }
                             await viewModel.startSurvey(
                                 surveyService: service,
@@ -1433,6 +1509,46 @@ struct SignalSurveyView: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    // MARK: - Contributor Verification
+
+    private func performVerification() async {
+        guard let settingsService = appState.services?.settingsService else {
+            verificationError = "Device not connected"
+            return
+        }
+
+        isVerifying = true
+        verificationError = nil
+        defer { isVerifying = false }
+
+        do {
+            let uploadService = SurveyUploadService()
+            let contributorID = try await uploadService.getOrCreateContributorID()
+            let verificationService = ContributorVerificationService()
+            let result = try await verificationService.verify(
+                settingsService: settingsService,
+                contributorID: contributorID
+            )
+            contributorVerified = result.verified
+            if !result.verified {
+                verificationError = "Verification failed"
+            } else {
+                // If migrated, update stored contributor ID to public key hash
+                if let newID = result.newContributorID {
+                    await uploadService.updateContributorID(newID)
+                }
+                // Store auth token for self-service API access
+                if let token = result.authToken {
+                    verificationService.storeAuthToken(
+                        token, expires: result.authTokenExpires
+                    )
+                }
+            }
+        } catch {
+            verificationError = error.localizedDescription
+        }
     }
 
     // MARK: - Probe Channel Menu
@@ -1777,6 +1893,7 @@ struct BatchUploadView: View {
     var deviceID: UUID?
     var probesSentPerCell: [String: Int] = [:]
     var deadZoneHexCoords: [(q: Int, r: Int)] = []
+    var displayName: String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var isUploading = false
@@ -1966,6 +2083,7 @@ struct BatchUploadView: View {
             }
 
             let service = SurveyUploadService()
+            await service.setDisplayName(displayName)
             let response = try await service.uploadMultipleSessions(
                 sessionIDs: Array(selectedSessions),
                 dataStore: dataStore,

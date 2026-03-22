@@ -669,7 +669,7 @@ struct ChatConversationView: View {
                 try? await Task.sleep(for: .milliseconds(300))
                 blockSenderContext = BlockSenderContext(senderName: name, deviceID: channel.deviceID)
             }
-        case .replyWithRoute(let routeInfo):
+        case .replyWithRoute(let routeInfo, let shareFormat):
             let replyText: String
             switch conversationType {
             case .dm:
@@ -681,7 +681,12 @@ struct ChatConversationView: View {
             chatViewModel.composingText = replyText
             isInputFocused = true
 
-            // Show location picker before uploading (same privacy system as repeater maps)
+            if shareFormat == .textOnly {
+                // Text-only: no upload, no location picker — just the route description
+                break
+            }
+
+            // Web link: show location picker before uploading (same privacy system as repeater maps)
             let hasLocation = (message.userLatitude != nil && message.userLongitude != nil)
                 || appState.locationService.currentLocation != nil
             if hasLocation {
@@ -700,8 +705,13 @@ struct ChatConversationView: View {
                 }
             }
         case .replyWithRepeaterMap(let url, let description):
-            // Standalone descriptive message — not a reply-quote
-            chatViewModel.composingText = "\(description)\n\(url.absoluteString)\n"
+            if let url {
+                // Web link: include URL with description
+                chatViewModel.composingText = "\(description)\n\(url.absoluteString)\n"
+            } else {
+                // Text-only: just the description
+                chatViewModel.composingText = "\(description)\n"
+            }
             isInputFocused = true
         case .delete:
             Task { await chatViewModel.deleteMessage(message) }

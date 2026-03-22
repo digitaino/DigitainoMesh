@@ -280,6 +280,9 @@ final class SignalSurveyViewModel {
     /// Whether each survey point is uploaded to the community map in real time.
     var liveUploadEnabled: Bool = false
 
+    /// Optional display name to include with uploads (set from survey setup sheet).
+    var displayNameForUpload: String?
+
     /// Upload service instance for live point uploads. Created on demand.
     private var liveUploadService: SurveyUploadService?
 
@@ -829,7 +832,10 @@ final class SignalSurveyViewModel {
             let contacts = repeaterContacts
             let activeSessionID = activeSession?.id
             let service = liveUploadService ?? SurveyUploadService()
-            if liveUploadService == nil { liveUploadService = service }
+            if liveUploadService == nil {
+                liveUploadService = service
+                Task { await service.setDisplayName(displayNameForUpload) }
+            }
             Task.detached {
                 await service.uploadLivePoint(
                     point,
@@ -1638,7 +1644,10 @@ final class SignalSurveyViewModel {
                     let r = probe.hexCoord.r
                     let sid = activeSession?.id
                     let service = liveUploadService ?? SurveyUploadService()
-                    if liveUploadService == nil { liveUploadService = service }
+                    if liveUploadService == nil {
+                        liveUploadService = service
+                        Task { await service.setDisplayName(displayNameForUpload) }
+                    }
                     Task.detached {
                         await service.uploadDeadZoneCell(
                             hexQ: q, hexR: r,

@@ -78,9 +78,17 @@ private struct MetricChartContent: View {
         chart
             .chartXSelection(value: $selectedDate)
             .chartGesture { proxy in
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        proxy.selectXValue(at: value.location.x)
+                LongPressGesture(minimumDuration: 0.2)
+                    .sequenced(before: DragGesture(minimumDistance: 0))
+                    .onChanged { state in
+                        switch state {
+                        case .second(true, let drag):
+                            if let drag {
+                                proxy.selectXValue(at: drag.location.x)
+                            }
+                        default:
+                            break
+                        }
                     }
                     .onEnded { _ in
                         selectedDate = nil

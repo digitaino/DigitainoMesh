@@ -14,6 +14,8 @@ struct UploadPayload: Content {
     /// When provided, the server replaces any existing contributions for these sessions
     /// from this contributor, making uploads idempotent per session.
     let sessionIDs: [String]?
+    /// Optional display name to associate with this contributor on the community map.
+    let displayName: String?
 }
 
 struct UploadRepeaterInfo: Content {
@@ -97,6 +99,8 @@ struct CommunityCellResponse: Content {
     let probesSent: Int?
     /// ISO 8601 timestamp of last data update for this cell.
     let lastUpdated: String?
+    /// Display names of contributors who surveyed this cell. Nil when no names available.
+    let contributorNames: [String]?
 }
 
 struct CommunityCellsResponse: Content {
@@ -161,6 +165,12 @@ struct AdminContributorInfo: Content {
     let lastSeen: String?
     let clientIPs: [String]
     let sessionCount: Int
+    let notes: String?
+    let displayName: String?
+    let verified: Bool
+    let legacyUUID: String?
+    let publicKeyHash: String?
+    let nameVisibleFrom: String?
 }
 
 struct AdminContributorsResponse: Content {
@@ -306,4 +316,113 @@ struct SharedRepeaterMapResponse: Content {
     let userLatitude: Double?
     let userLongitude: Double?
     let createdAt: String
+}
+
+// MARK: - Admin Contributor Notes
+
+struct UpdateContributorNotesRequest: Content {
+    let notes: String
+}
+
+struct UpdateContributorNotesResponse: Content {
+    let contributorID: String
+    let notes: String
+}
+
+// MARK: - Update Display Name
+
+struct UpdateDisplayNameRequest: Content {
+    let displayName: String
+}
+
+struct UpdateDisplayNameResponse: Content {
+    let contributorID: String
+    let displayName: String
+}
+
+// MARK: - Admin Merge Contributors
+
+struct MergeContributorsRequest: Content {
+    let sourceIDs: [String]
+    let targetID: String
+}
+
+struct MergeContributorsResponse: Content {
+    let contributionsReassigned: Int
+    let uploadsReassigned: Int
+    let sourceIDsRemoved: [String]
+}
+
+// MARK: - Public Key Verification
+
+struct ChallengeRequest: Content {
+    /// Base64-encoded 32-byte Ed25519 public key
+    let publicKey: String
+}
+
+struct ChallengeResponse: Content {
+    /// Base64-encoded 32-byte nonce to sign
+    let nonce: String
+    /// Seconds until the challenge expires
+    let expiresIn: Int
+}
+
+struct VerifyRequest: Content {
+    /// Base64-encoded 32-byte Ed25519 public key
+    let publicKey: String
+    /// Base64-encoded 32-byte nonce (from challenge response)
+    let nonce: String
+    /// Base64-encoded 64-byte Ed25519 signature of the nonce
+    let signature: String
+}
+
+struct VerifyResponse: Content {
+    let verified: Bool
+    let contributorID: String
+    /// True if the contributor's UUID was migrated to a public-key-based ID.
+    let migrated: Bool
+    /// The new public-key-based contributor ID (SHA256 hex), if migrated.
+    let newContributorID: String?
+    /// Short-lived session token for self-service API calls.
+    let authToken: String?
+    /// ISO 8601 expiry for the auth token.
+    let authTokenExpires: String?
+}
+
+// MARK: - Self-Service Profile
+
+struct MyProfileResponse: Content {
+    let contributorID: String
+    let legacyUUID: String?
+    let displayName: String?
+    let nameVisibleFrom: String?
+    let verified: Bool
+    let cellCount: Int
+    let uploadCount: Int
+    let sessionCount: Int
+    let firstSeen: String?
+    let lastSeen: String?
+}
+
+struct MyContributionsResponse: Content {
+    let contributorID: String
+    let sessions: [MySessionInfo]
+    let totalCells: Int
+    let totalPackets: Int
+}
+
+struct MySessionInfo: Content {
+    let sessionID: String
+    let cellCount: Int
+    let packetCount: Int
+    let contributedAt: String?
+}
+
+struct NameRetroactiveRequest: Content {
+    let applyToAll: Bool
+}
+
+struct NameRetroactiveResponse: Content {
+    let contributorID: String
+    let nameVisibleFrom: String?
 }
