@@ -62,12 +62,47 @@ final class MapViewModel {
                 communityRefreshTask?.cancel()
                 communityRefreshTask = nil
                 communityCells = []
+                repeaterLocations = []
+                communityRepeaterFilter = nil
+                selectedCommunityCell = nil
             }
         }
     }
 
     /// Community signal cells currently loaded for the viewport
     var communityCells: [SurveyUploadService.CommunityCell] = []
+
+    /// Repeater locations loaded from the server for the current viewport
+    var repeaterLocations: [SurveyUploadService.RepeaterLocation] = []
+
+    /// Optional repeater filter — when set, only cells containing this repeater are shown
+    var communityRepeaterFilter: String? {
+        didSet {
+            // Deselect if the selected cell doesn't match the new filter
+            if let filter = communityRepeaterFilter, let selected = selectedCommunityCell {
+                let rf = filter.uppercased()
+                let matches = selected.repeaterHexIDs.contains { id in
+                    let uid = id.uppercased()
+                    return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
+                }
+                if !matches {
+                    selectedCommunityCell = nil
+                }
+            }
+        }
+    }
+
+    /// Community cells after applying repeater filter
+    var filteredCommunityCells: [SurveyUploadService.CommunityCell] {
+        guard let filter = communityRepeaterFilter else { return communityCells }
+        let rf = filter.uppercased()
+        return communityCells.filter { cell in
+            cell.repeaterHexIDs.contains { id in
+                let uid = id.uppercased()
+                return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
+            }
+        }
+    }
 
     /// Whether community data is loading
     var isLoadingCommunity = false
@@ -191,7 +226,7 @@ final class MapViewModel {
         }
     }
 
-    /// Fetch community cells for a region (shared by on-demand and periodic refresh).
+    /// Fetch community cells and repeater locations for a region.
     private func fetchCommunityCells(for region: MKCoordinateRegion) async {
         isLoadingCommunity = true
         defer { isLoadingCommunity = false }
@@ -204,15 +239,22 @@ final class MapViewModel {
         let maxLon = center.longitude + span.longitudeDelta / 2
 
         do {
-            let response = try await uploadService.fetchCommunityData(
+            async let cellsResult = uploadService.fetchCommunityData(
+                minLat: minLat, maxLat: maxLat,
+                minLon: minLon, maxLon: maxLon,
+                repeater: communityRepeaterFilter
+            )
+            async let repeatersResult = uploadService.fetchRepeaterLocations(
                 minLat: minLat, maxLat: maxLat,
                 minLon: minLon, maxLon: maxLon
             )
+            let (response, repeaters) = try await (cellsResult, repeatersResult)
             guard !Task.isCancelled else { return }
             communityCells = response.cells
+            repeaterLocations = repeaters
         } catch {
             guard !Task.isCancelled else { return }
-            Self.logger.warning("Failed to load community cells: \(error.localizedDescription)")
+            Self.logger.warning("Failed to load community data: \(error.localizedDescription)")
         }
     }
 

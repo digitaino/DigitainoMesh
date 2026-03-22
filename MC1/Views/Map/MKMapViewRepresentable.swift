@@ -14,6 +14,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     let communityCells: [SurveyUploadService.CommunityCell]
     let showCommunityOverlay: Bool
     let selectedCommunityCell: SurveyUploadService.CommunityCell?
+    let repeaterLocations: [SurveyUploadService.RepeaterLocation]
 
     @Binding var selectedContact: ContactDTO?
     @Binding var cameraRegion: MKCoordinateRegion?
@@ -25,6 +26,8 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     var onRegionChanged: ((MKCoordinateRegion) -> Void)?
     /// Called when a community cell is tapped (nil to deselect)
     var onCommunityCellSelected: ((SurveyUploadService.CommunityCell?) -> Void)?
+    /// Called when a repeater annotation is tapped — filters cells to that repeater
+    var onRepeaterTapped: ((String) -> Void)?
     /// Called once with a closure that returns snapshot parameters from the actual MKMapView (bypasses async binding)
     var onSnapshotParamsGetter: ((@escaping () -> (camera: MKMapCamera, size: CGSize)?) -> Void)?
 
@@ -42,6 +45,10 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         mapView.register(
             MKMarkerAnnotationView.self,
             forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier
+        )
+        mapView.register(
+            MKMarkerAnnotationView.self,
+            forAnnotationViewWithReuseIdentifier: "CommunityRepeaterPin"
         )
 
         // Add tap gesture for community cell hit testing
@@ -69,6 +76,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         coordinator.onMessageTap = onMessageTap
         coordinator.onRegionChanged = onRegionChanged
         coordinator.onCommunityCellSelected = onCommunityCellSelected
+        coordinator.onRepeaterTapped = onRepeaterTapped
         coordinator.showLabels = showLabels
         coordinator.showCommunityOverlay = showCommunityOverlay
         coordinator.currentCommunityCells = communityCells
@@ -117,9 +125,11 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        // Update community hex overlays and selection highlight
+        // Update community hex overlays, repeater pins, polylines, and selection highlight
         updateCommunityOverlays(in: mapView, coordinator: coordinator)
+        updateRepeaterPins(in: mapView, coordinator: coordinator)
         updateSelectionOverlay(in: mapView, coordinator: coordinator)
+        updateCellToRepeaterPolylines(in: mapView, coordinator: coordinator)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -201,6 +211,70 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         }
     }
 
+    // MARK: - Repeater Pin Management
+
+    private func updateRepeaterPins(in mapView: MKMapView, coordinator: Coordinator) {
+        let existing = mapView.annotations.compactMap { $0 as? CommunityRepeaterPin }
+
+        if !showCommunityOverlay {
+            if !existing.isEmpty {
+                mapView.removeAnnotations(existing)
+                coordinator.lastRepeaterPinIDs = []
+            }
+            return
+        }
+
+        let newIDs = Set(repeaterLocations.map(\.hexID))
+        guard newIDs != coordinator.lastRepeaterPinIDs else { return }
+
+        let toRemove = existing.filter { !newIDs.contains($0.hexID) }
+        if !toRemove.isEmpty {
+            mapView.removeAnnotations(toRemove)
+        }
+
+        let remainingIDs = Set(existing.map(\.hexID)).subtracting(Set(toRemove.map(\.hexID)))
+        let toAdd = repeaterLocations
+            .filter { !remainingIDs.contains($0.hexID) }
+            .map { CommunityRepeaterPin(repeater: $0) }
+        if !toAdd.isEmpty {
+            mapView.addAnnotations(toAdd)
+        }
+        coordinator.lastRepeaterPinIDs = newIDs
+    }
+
+    // MARK: - Cell-to-Repeater Polylines
+
+    private func updateCellToRepeaterPolylines(in mapView: MKMapView, coordinator: Coordinator) {
+        // Remove existing polylines
+        let existing = mapView.overlays.compactMap { $0 as? SurveyCellPolyline }
+        if !existing.isEmpty {
+            mapView.removeOverlays(existing)
+        }
+
+        // Draw lines from selected cell to each of its repeaters (if locations are known)
+        guard let cell = selectedCommunityCell, showCommunityOverlay else { return }
+        let cellCenter = CLLocationCoordinate2D(latitude: cell.latitude, longitude: cell.longitude)
+
+        // Build a lookup of repeater locations by hex ID (uppercased for prefix matching)
+        let locationsByHex = Dictionary(repeaterLocations.map { ($0.hexID.uppercased(), $0) }, uniquingKeysWith: { _, new in new })
+
+        for hexID in cell.repeaterHexIDs {
+            let upper = hexID.uppercased()
+            // Try exact match, then prefix match
+            let loc = locationsByHex[upper] ?? locationsByHex.first(where: { key, _ in
+                key.hasPrefix(upper) || upper.hasPrefix(key)
+            })?.value
+            guard let loc else { continue }
+
+            var coords = [
+                cellCenter,
+                CLLocationCoordinate2D(latitude: loc.latitude, longitude: loc.longitude)
+            ]
+            let polyline = SurveyCellPolyline(coordinates: &coords, count: 2)
+            mapView.addOverlay(polyline, level: .aboveLabels)
+        }
+    }
+
     // MARK: - Annotation Management
 
     private func updateAnnotations(in mapView: MKMapView, coordinator: Coordinator) {
@@ -269,6 +343,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         var onMessageTap: ((ContactDTO) -> Void)?
         var onRegionChanged: ((MKCoordinateRegion) -> Void)?
         var onCommunityCellSelected: ((SurveyUploadService.CommunityCell?) -> Void)?
+        var onRepeaterTapped: ((String) -> Void)?
 
         // Configuration
         var showLabels: Bool = true
@@ -301,6 +376,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         var lastSelectedContactID: UUID?
         var lastOverlayCellIDs: Set<String> = []
         var overlaysByID: [String: CommunityHexOverlay] = [:]
+        var lastRepeaterPinIDs: Set<String> = []
 
         // Lazily created map view owned by coordinator
         lazy var mapView: MKMapView = {
@@ -325,6 +401,17 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                     if hitRect.contains(point) {
                         return // Let MKMapView's built-in selection handle it
                     }
+                }
+            }
+
+            // Check if tap hit a repeater pin — filter cells by that repeater
+            for annotation in mapView.annotations {
+                guard let repeaterPin = annotation as? CommunityRepeaterPin else { continue }
+                let annotationPoint = mapView.convert(repeaterPin.coordinate, toPointTo: mapView)
+                let hitRect = CGRect(x: annotationPoint.x - 22, y: annotationPoint.y - 44, width: 44, height: 44)
+                if hitRect.contains(point) {
+                    onRepeaterTapped?(repeaterPin.hexID)
+                    return
                 }
             }
 
@@ -424,6 +511,26 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                 return view
             }
 
+            // Handle community repeater pins
+            if annotation is CommunityRepeaterPin {
+                let view = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: "CommunityRepeaterPin",
+                    for: annotation
+                ) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(
+                    annotation: annotation,
+                    reuseIdentifier: "CommunityRepeaterPin"
+                )
+                view.annotation = annotation
+                view.markerTintColor = .systemCyan
+                view.glyphImage = UIImage(systemName: "antenna.radiowaves.left.and.right")
+                view.displayPriority = .defaultHigh
+                view.titleVisibility = .adaptive
+                view.canShowCallout = false
+                // Don't cluster repeater pins with contacts
+                view.clusteringIdentifier = nil
+                return view
+            }
+
             // Handle contact annotations
             guard let contactAnnotation = annotation as? ContactAnnotation else {
                 return nil
@@ -468,6 +575,15 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                 renderer.fillColor = color.withAlphaComponent(0.35)
                 renderer.strokeColor = .cyan
                 renderer.lineWidth = 2
+                return renderer
+            }
+
+            // Cell-to-repeater polyline
+            if let polyline = overlay as? SurveyCellPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = .cyan
+                renderer.lineWidth = 2
+                renderer.lineDashPattern = [8, 4]
                 return renderer
             }
 
@@ -593,5 +709,20 @@ extension MKCoordinateRegion {
         abs(center.longitude - other.center.longitude) < tolerance &&
         abs(span.latitudeDelta - other.span.latitudeDelta) < tolerance &&
         abs(span.longitudeDelta - other.span.longitudeDelta) < tolerance
+    }
+}
+
+// MARK: - Community Repeater Pin
+
+/// MKAnnotation for repeater pins shown on the community overlay.
+final class CommunityRepeaterPin: NSObject, MKAnnotation {
+    let hexID: String
+    let coordinate: CLLocationCoordinate2D
+    var title: String?
+
+    init(repeater: SurveyUploadService.RepeaterLocation) {
+        self.hexID = repeater.hexID
+        self.coordinate = CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
+        self.title = repeater.name.isEmpty ? repeater.hexID : repeater.name
     }
 }

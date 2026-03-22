@@ -59,13 +59,21 @@ struct MapView: View {
 
             // Floating controls
             VStack {
-                timeFilterBar
-                    .padding(.top, 8)
+                HStack {
+                    timeFilterBar
+                    Spacer(minLength: 0)
+                    repeaterFilterBadge
+                }
+                .padding(.top, 8)
                 Spacer()
-                communityCellDetailCard
-                mapControls
+                HStack(alignment: .bottom) {
+                    communityCellDetailCard
+                    Spacer(minLength: 0)
+                    mapControls
+                }
             }
             .animation(.snappy(duration: 0.25), value: viewModel.selectedCommunityCell?.id)
+            .animation(.snappy(duration: 0.25), value: viewModel.communityRepeaterFilter)
 
             // Layers menu overlay
             if viewModel.showingLayersMenu {
@@ -112,9 +120,10 @@ struct MapView: View {
                     mapType: viewModel.mapStyleSelection.mkMapType,
                     showLabels: viewModel.showLabels,
                     showsUserLocation: true,
-                    communityCells: viewModel.communityCells,
+                    communityCells: viewModel.filteredCommunityCells,
                     showCommunityOverlay: viewModel.showCommunityOverlay,
                     selectedCommunityCell: viewModel.selectedCommunityCell,
+                    repeaterLocations: viewModel.repeaterLocations,
                     selectedContact: $viewModel.selectedContact,
                     cameraRegion: $viewModel.cameraRegion,
                     onDetailTap: { contact in
@@ -129,6 +138,15 @@ struct MapView: View {
                     onCommunityCellSelected: { cell in
                         withAnimation(.snappy(duration: 0.25)) {
                             viewModel.selectedCommunityCell = cell
+                        }
+                    },
+                    onRepeaterTapped: { hexID in
+                        withAnimation(.snappy(duration: 0.25)) {
+                            if viewModel.communityRepeaterFilter == hexID {
+                                viewModel.communityRepeaterFilter = nil
+                            } else {
+                                viewModel.communityRepeaterFilter = hexID
+                            }
                         }
                     },
                     onSnapshotParamsGetter: { getter in
@@ -188,13 +206,6 @@ struct MapView: View {
     // MARK: - Map Controls
 
     private var mapControls: some View {
-        HStack {
-            Spacer()
-            mapControlsStack
-        }
-    }
-
-    private var mapControlsStack: some View {
         MapControlsToolbar(
             onLocationTap: { centerOnUserLocation() },
             showingLayersMenu: $viewModel.showingLayersMenu
@@ -302,6 +313,35 @@ struct MapView: View {
         .disabled(viewModel.isLoading)
     }
 
+    // MARK: - Repeater Filter Badge
+
+    @ViewBuilder
+    private var repeaterFilterBadge: some View {
+        if let filter = viewModel.communityRepeaterFilter {
+            Button {
+                withAnimation(.snappy(duration: 0.25)) {
+                    viewModel.communityRepeaterFilter = nil
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.caption2)
+                    Text(filter)
+                        .font(.caption2.monospaced())
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption2)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(.cyan.opacity(0.3), in: Capsule())
+                .foregroundStyle(.cyan)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 16)
+            .transition(.scale.combined(with: .opacity))
+        }
+    }
+
     // MARK: - Community Cell Detail Card
 
     @ViewBuilder
@@ -377,19 +417,37 @@ struct MapView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 4) {
                             ForEach(cell.repeaterHexIDs, id: \.self) { hexID in
-                                Text(hexID)
-                                    .font(.caption2.monospaced())
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.cyan.opacity(0.15), in: Capsule())
+                                Button {
+                                    withAnimation(.snappy(duration: 0.25)) {
+                                        if viewModel.communityRepeaterFilter == hexID {
+                                            viewModel.communityRepeaterFilter = nil
+                                        } else {
+                                            viewModel.communityRepeaterFilter = hexID
+                                        }
+                                    }
+                                } label: {
+                                    Text(hexID)
+                                        .font(.caption2.monospaced())
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            viewModel.communityRepeaterFilter == hexID
+                                                ? Color.cyan.opacity(0.35)
+                                                : Color.cyan.opacity(0.15),
+                                            in: Capsule()
+                                        )
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
             }
-            .padding()
+            .padding(12)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .padding(.horizontal, 16)
+            .padding(.leading, 16)
+            .padding(.bottom, 4)
+            .frame(maxWidth: 300, alignment: .leading)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

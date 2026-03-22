@@ -119,6 +119,18 @@ actor SurveyUploadService {
         let lastUpload: String?
     }
 
+    struct RepeaterLocation: Codable, Identifiable {
+        var id: String { hexID }
+        let hexID: String
+        let name: String
+        let latitude: Double
+        let longitude: Double
+    }
+
+    struct RepeatersResponse: Codable {
+        let repeaters: [RepeaterLocation]
+    }
+
     // MARK: - Dependencies
 
     private let session: URLSession
@@ -473,6 +485,31 @@ actor SurveyUploadService {
         let request = URLRequest(url: url)
         let data = try await performRequest(request)
         return try JSONDecoder().decode(CommunityStats.self, from: data)
+    }
+
+    /// Fetch repeater locations for a map region.
+    func fetchRepeaterLocations(
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double
+    ) async throws -> [RepeaterLocation] {
+        var components = URLComponents(url: Self.serverBaseURL.appending(path: "repeaters"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "minLat", value: String(minLat)),
+            URLQueryItem(name: "maxLat", value: String(maxLat)),
+            URLQueryItem(name: "minLon", value: String(minLon)),
+            URLQueryItem(name: "maxLon", value: String(maxLon)),
+        ]
+
+        guard let url = components.url else {
+            throw SurveyUploadError.invalidResponse
+        }
+
+        let request = URLRequest(url: url)
+        let data = try await performRequest(request)
+        let response = try JSONDecoder().decode(RepeatersResponse.self, from: data)
+        return response.repeaters
     }
 
     // MARK: - HTTP

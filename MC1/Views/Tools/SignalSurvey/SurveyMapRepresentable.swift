@@ -22,6 +22,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
     let communityCells: [SurveyUploadService.CommunityCell]
     let showCommunityOverlay: Bool
     let selectedCommunityCell: SurveyUploadService.CommunityCell?
+    let communityRepeaterLocations: [SurveyUploadService.RepeaterLocation]
 
     // MARK: - Repeater Annotations
 
@@ -255,22 +256,42 @@ struct SurveyMapRepresentable: UIViewRepresentable {
     // MARK: - Cell-to-Repeater Polyline
 
     private func updatePolyline(in mapView: MKMapView, coordinator: Coordinator) {
-        // Remove existing polyline
+        // Remove existing polylines
         let existing = mapView.overlays.compactMap { $0 as? SurveyCellPolyline }
         if !existing.isEmpty {
             mapView.removeOverlays(existing)
         }
 
-        // Add new polyline if applicable
-        guard let cell = selectedCell,
-              let repeater = selectedRepeaterContact else { return }
+        // Draw line from selected survey cell to selected repeater contact
+        if let cell = selectedCell, let repeater = selectedRepeaterContact {
+            var coords = [
+                CLLocationCoordinate2D(latitude: cell.centerLatitude, longitude: cell.centerLongitude),
+                CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
+            ]
+            let polyline = SurveyCellPolyline(coordinates: &coords, count: 2)
+            mapView.addOverlay(polyline, level: .aboveLabels)
+        }
 
-        var coords = [
-            CLLocationCoordinate2D(latitude: cell.centerLatitude, longitude: cell.centerLongitude),
-            CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
-        ]
-        let polyline = SurveyCellPolyline(coordinates: &coords, count: 2)
-        mapView.addOverlay(polyline, level: .aboveLabels)
+        // Draw lines from selected community cell to its repeaters
+        if let cell = selectedCommunityCell, showCommunityOverlay {
+            let cellCenter = CLLocationCoordinate2D(latitude: cell.latitude, longitude: cell.longitude)
+            let locationsByHex = Dictionary(communityRepeaterLocations.map { ($0.hexID.uppercased(), $0) }, uniquingKeysWith: { _, new in new })
+
+            for hexID in cell.repeaterHexIDs {
+                let upper = hexID.uppercased()
+                let loc = locationsByHex[upper] ?? locationsByHex.first(where: { key, _ in
+                    key.hasPrefix(upper) || upper.hasPrefix(key)
+                })?.value
+                guard let loc else { continue }
+
+                var coords = [
+                    cellCenter,
+                    CLLocationCoordinate2D(latitude: loc.latitude, longitude: loc.longitude)
+                ]
+                let polyline = SurveyCellPolyline(coordinates: &coords, count: 2)
+                mapView.addOverlay(polyline, level: .aboveLabels)
+            }
+        }
     }
 
     // MARK: - Coordinator

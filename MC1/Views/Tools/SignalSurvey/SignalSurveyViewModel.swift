@@ -301,6 +301,7 @@ final class SignalSurveyViewModel {
                 startCommunityRefresh()
             } else {
                 communityCells = []
+                communityRepeaterLocations = []
                 selectedCommunityCell = nil
                 communityCoverageFilter = .all
                 communityRepeaterFilter = nil
@@ -312,6 +313,9 @@ final class SignalSurveyViewModel {
 
     /// Community cells loaded from the server for the current viewport.
     private(set) var communityCells: [SurveyUploadService.CommunityCell] = []
+
+    /// Repeater locations loaded from the server for the current viewport.
+    private(set) var communityRepeaterLocations: [SurveyUploadService.RepeaterLocation] = []
 
     /// Coverage filter for the community overlay (All/Active/Passive).
     var communityCoverageFilter: CommunityMapView.CoverageFilter = .all
@@ -402,15 +406,21 @@ final class SignalSurveyViewModel {
             }()
             let maxAgeParam: Int? = communityTimeFilter.maxAge.map { Int($0) }
 
-            let response = try await service.fetchCommunityData(
+            async let cellsResult = service.fetchCommunityData(
                 minLat: minLat, maxLat: maxLat,
                 minLon: minLon, maxLon: maxLon,
                 coverage: coverageParam,
                 maxAge: maxAgeParam,
                 repeater: communityRepeaterFilter
             )
+            async let repeatersResult = service.fetchRepeaterLocations(
+                minLat: minLat, maxLat: maxLat,
+                minLon: minLon, maxLon: maxLon
+            )
+            let (response, repeaters) = try await (cellsResult, repeatersResult)
             guard !Task.isCancelled else { return }
             communityCells = response.cells
+            communityRepeaterLocations = repeaters
         } catch {
             guard !Task.isCancelled else { return }
             logger.warning("Community overlay fetch failed: \(error.localizedDescription)")
