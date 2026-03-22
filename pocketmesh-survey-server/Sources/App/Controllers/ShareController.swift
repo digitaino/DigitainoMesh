@@ -84,6 +84,7 @@ struct ShareController {
             hopsJSON: hopsJSON,
             userLatitude: payload.userLatitude,
             userLongitude: payload.userLongitude,
+            userName: payload.userName,
             createdAt: now
         )
         try await route.save(on: req.db)
@@ -121,6 +122,7 @@ struct ShareController {
             hops: hops,
             userLatitude: route.userLatitude,
             userLongitude: route.userLongitude,
+            userName: route.userName,
             createdAt: route.createdAt
         )
     }
@@ -167,6 +169,7 @@ struct ShareController {
             pathsJSON: pathsJSON,
             userLatitude: payload.userLatitude,
             userLongitude: payload.userLongitude,
+            userName: payload.userName,
             createdAt: now
         )
         try await map.save(on: req.db)
@@ -211,6 +214,7 @@ struct ShareController {
             paths: paths,
             userLatitude: map.userLatitude,
             userLongitude: map.userLongitude,
+            userName: map.userName,
             createdAt: map.createdAt
         )
     }
@@ -247,6 +251,7 @@ struct ShareController {
             hops: hops,
             userLatitude: route.userLatitude,
             userLongitude: route.userLongitude,
+            userName: route.userName,
             createdAt: route.createdAt
         )
         let encoder = JSONEncoder()
@@ -293,6 +298,7 @@ struct ShareController {
             paths: paths,
             userLatitude: map.userLatitude,
             userLongitude: map.userLongitude,
+            userName: map.userName,
             createdAt: map.createdAt
         )
         let encoder = JSONEncoder()

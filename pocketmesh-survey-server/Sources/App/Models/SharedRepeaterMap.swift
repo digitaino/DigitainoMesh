@@ -33,19 +33,24 @@ final class SharedRepeaterMap: Model, Content, @unchecked Sendable {
     @OptionalField(key: "user_longitude")
     var userLongitude: Double?
 
+    /// Display name of the person who shared this map (shown instead of "You")
+    @OptionalField(key: "user_name")
+    var userName: String?
+
     /// ISO 8601 timestamp of creation
     @Field(key: "created_at")
     var createdAt: String
 
     init() {}
 
-    init(id: String, repeaterCount: Int, repeatersJSON: String, pathsJSON: String? = nil, userLatitude: Double? = nil, userLongitude: Double? = nil, createdAt: String) {
+    init(id: String, repeaterCount: Int, repeatersJSON: String, pathsJSON: String? = nil, userLatitude: Double? = nil, userLongitude: Double? = nil, userName: String? = nil, createdAt: String) {
         self.id = id
         self.repeaterCount = repeaterCount
         self.repeatersJSON = repeatersJSON
         self.pathsJSON = pathsJSON
         self.userLatitude = userLatitude
         self.userLongitude = userLongitude
+        self.userName = userName
         self.createdAt = createdAt
     }
 }

@@ -19,18 +19,24 @@ function snrQualityColor(snr) {
     return '#991b1b';
 }
 
-// Add a simple "You" marker at the user's shared location.
+// Add a marker at the user's shared location with their name (or "User" as fallback).
 // Returns the coordinate for line-drawing purposes.
-function addUserMarker(lat, lon, color) {
+function addUserMarker(lat, lon, color, name) {
     const coord = new mapkit.Coordinate(lat, lon);
-    const youAnnotation = new mapkit.MarkerAnnotation(coord, {
-        title: 'You',
+    const displayName = name || 'User';
+    const annotation = new mapkit.MarkerAnnotation(coord, {
+        title: displayName,
         color: color,
         glyphText: '📱'
     });
-    map.addAnnotation(youAnnotation);
-    currentMapAnnotations.push(youAnnotation);
+    map.addAnnotation(annotation);
+    currentMapAnnotations.push(annotation);
     return coord;
+}
+
+// Get the sharer's display name from SHARE_DATA, falling back to "User".
+function sharerName() {
+    return (SHARE_DATA && SHARE_DATA.userName) ? SHARE_DATA.userName : 'User';
 }
 
 // Hex grid math — matches app.js and iOS client
@@ -186,14 +192,14 @@ function renderRoute(data) {
         `;
     });
 
-    // Add "You" at the end if user location is available
+    // Add sharer at the end if user location is available
     if (data.userLatitude != null && data.userLongitude != null) {
         hopHTML += '<div class="hop-connector"><div class="line"></div></div>';
         hopHTML += `
             <div class="hop-item">
                 <div class="hop-index" style="background: rgba(59,130,246,0.2); color: #3b82f6">📱</div>
                 <div class="hop-details">
-                    <div class="hop-name">You</div>
+                    <div class="hop-name">${escapeHTML(sharerName())}</div>
                     <div class="hop-hex">receiver</div>
                 </div>
             </div>
@@ -226,7 +232,7 @@ function renderRoute(data) {
     // User location marker and lines
     const hasUserLoc = data.userLatitude != null && data.userLongitude != null;
     if (hasUserLoc) {
-        const userCoord = addUserMarker(data.userLatitude, data.userLongitude, '#3b82f6');
+        const userCoord = addUserMarker(data.userLatitude, data.userLongitude, '#3b82f6', sharerName());
         allAnnotations.push(currentMapAnnotations[currentMapAnnotations.length - 1]);
 
         // Dashed line: user → first located hop
@@ -464,14 +470,14 @@ function renderSingleRepeatView(data, summaryEl, hopListEl, navEl, repeaterByHex
         }
     });
 
-    // Add "You" at the end if we have user location
+    // Add sharer at the end if we have user location
     if (data.userLatitude != null && data.userLongitude != null) {
         listHTML += '<div class="hop-connector"><div class="line" style="background: ' + snrColor + '40"></div></div>';
         listHTML += `
             <div class="hop-item">
                 <div class="hop-index" style="background: rgba(59,130,246,0.2); color: #3b82f6">📱</div>
                 <div class="hop-details">
-                    <div class="hop-name">You</div>
+                    <div class="hop-name">${escapeHTML(sharerName())}</div>
                     <div class="hop-hex ${snrClass}">${path.snr != null ? path.snr.toFixed(1) + ' dB SNR' : 'received'}</div>
                 </div>
             </div>
@@ -574,7 +580,7 @@ function renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex) {
         let userMapCoord = null;
         if (userCoord) {
             userMapCoord = addUserMarker(
-                data.userLatitude, data.userLongitude, '#3b82f6'
+                data.userLatitude, data.userLongitude, '#3b82f6', sharerName()
             );
         }
 
@@ -705,9 +711,9 @@ function renderMapForSingleRepeat(data, path, repeaterByHex) {
     if (userCoord) {
         // User location marker
         userMapCoord = addUserMarker(
-            data.userLatitude, data.userLongitude, '#3b82f6'
+            data.userLatitude, data.userLongitude, '#3b82f6', sharerName()
         );
-        // The "You" marker was added to currentMapAnnotations by addUserMarker
+        // The sharer marker was added to currentMapAnnotations by addUserMarker
         // — include it in pathAnnotations for showItems fitting
         pathAnnotations.push(currentMapAnnotations[currentMapAnnotations.length - 1]);
     }

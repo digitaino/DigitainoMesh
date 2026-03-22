@@ -650,7 +650,8 @@ private struct ActionsExpandedContent: View {
             repeaters: repeaterInfos,
             paths: repeatPaths.isEmpty ? nil : repeatPaths,
             userLatitude: chosenCoordinate?.latitude,
-            userLongitude: chosenCoordinate?.longitude
+            userLongitude: chosenCoordinate?.longitude,
+            userName: appState.connectedDevice?.nodeName
         ) {
             let hexList = repeaterInfos.map(\.hexID).joined(separator: ", ")
             let repeatWord = repeats.count == 1 ? "repeat" : "repeats"

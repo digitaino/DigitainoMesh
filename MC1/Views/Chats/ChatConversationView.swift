@@ -813,7 +813,8 @@ struct ChatConversationView: View {
             distanceText: distanceText,
             hops: hops,
             userLatitude: chosenCoordinate?.latitude,
-            userLongitude: chosenCoordinate?.longitude
+            userLongitude: chosenCoordinate?.longitude,
+            userName: appState.connectedDevice?.nodeName
         )
     }
 

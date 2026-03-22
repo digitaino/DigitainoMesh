@@ -259,6 +259,8 @@ struct CreateSharedRouteRequest: Content {
     let userLatitude: Double?
     /// User longitude at time of share
     let userLongitude: Double?
+    /// Display name of the person sharing (shown on the web page instead of "You")
+    let userName: String?
 }
 
 struct CreateSharedRouteResponse: Content {
@@ -273,6 +275,7 @@ struct SharedRouteResponse: Content {
     let hops: [SharedRouteHop]
     let userLatitude: Double?
     let userLongitude: Double?
+    let userName: String?
     let createdAt: String
 }
 
@@ -304,6 +307,8 @@ struct CreateSharedRepeaterMapRequest: Content {
     let userLatitude: Double?
     /// User longitude at time of share
     let userLongitude: Double?
+    /// Display name of the person sharing (shown on the web page instead of "You")
+    let userName: String?
 }
 
 struct CreateSharedRepeaterMapResponse: Content {
@@ -318,6 +323,7 @@ struct SharedRepeaterMapResponse: Content {
     let paths: [SharedRepeatPath]?
     let userLatitude: Double?
     let userLongitude: Double?
+    let userName: String?
     let createdAt: String
 }
 

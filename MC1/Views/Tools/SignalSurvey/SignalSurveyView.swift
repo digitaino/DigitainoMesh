@@ -21,7 +21,7 @@ struct SignalSurveyView: View {
     @AppStorage("surveyDeepScan") private var deepScanPref = false
     @AppStorage("surveyLiveUpload") private var liveUploadPref = false
     @AppStorage("surveyDebugMode") private var debugModeEnabled = false
-    @AppStorage("surveyIncludeDisplayName") private var includeDisplayName = false
+    @AppStorage("surveyIncludeDisplayName") private var includeDisplayName = true
     @AppStorage("surveyContributorVerified") private var contributorVerified = false
     @State private var isVerifying = false
     @State private var verificationError: String?
