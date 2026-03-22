@@ -522,12 +522,12 @@ struct MapView: View {
                            let active = cell.activePacketCount, let passive = cell.passivePacketCount,
                            active > 0 || passive > 0 {
                             HStack(spacing: 6) {
-                                if active > 0 {
+                                if active > 0 && viewModel.communityCoverageFilter != .passive {
                                     Text("\(active) active")
                                         .font(.caption2)
                                         .foregroundStyle(.green)
                                 }
-                                if passive > 0 {
+                                if passive > 0 && viewModel.communityCoverageFilter != .active {
                                     Text("\(passive) passive")
                                         .font(.caption2)
                                         .foregroundStyle(.yellow)

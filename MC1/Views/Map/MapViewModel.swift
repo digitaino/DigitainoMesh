@@ -87,18 +87,25 @@ final class MapViewModel {
 
     /// Coverage filter for the community overlay (All/Active/Passive)
     var communityCoverageFilter: CommunityMapView.CoverageFilter = .all {
-        didSet { rebuildFilteredCommunityCells() }
+        didSet {
+            rebuildFilteredCommunityCells()
+            refreshCommunityCells()
+        }
     }
 
     /// Time filter for the community overlay (how recent the data must be)
     var communityTimeFilter: MapTimeFilter = .allTime {
-        didSet { rebuildFilteredCommunityCells() }
+        didSet {
+            rebuildFilteredCommunityCells()
+            refreshCommunityCells()
+        }
     }
 
     /// Optional repeater filter — when set, only cells containing this repeater are shown
     var communityRepeaterFilter: String? {
         didSet {
             rebuildFilteredCommunityCells()
+            refreshCommunityCells()
             // Deselect if the selected cell doesn't match the new filter
             if let filter = communityRepeaterFilter, let selected = selectedCommunityCell {
                 let rf = filter.uppercased()
@@ -362,6 +369,15 @@ final class MapViewModel {
         } catch {
             guard !Task.isCancelled else { return }
             Self.logger.warning("Failed to load community data: \(error.localizedDescription)")
+        }
+    }
+
+    /// Re-fetch community cells using the last known region when filters change.
+    private func refreshCommunityCells() {
+        guard showCommunityOverlay, let region = lastCommunityRegion else { return }
+        communityLoadTask?.cancel()
+        communityLoadTask = Task {
+            await fetchCommunityCells(for: region)
         }
     }
 

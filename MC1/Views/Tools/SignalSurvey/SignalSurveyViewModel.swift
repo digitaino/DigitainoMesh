@@ -335,13 +335,19 @@ final class SignalSurveyViewModel {
     }
 
     /// Coverage filter for the community overlay (All/Active/Passive).
-    var communityCoverageFilter: CommunityMapView.CoverageFilter = .all
+    var communityCoverageFilter: CommunityMapView.CoverageFilter = .all {
+        didSet { refreshCommunityCells() }
+    }
 
     /// Optional repeater filter for the community overlay layer.
-    var communityRepeaterFilter: String?
+    var communityRepeaterFilter: String? {
+        didSet { refreshCommunityCells() }
+    }
 
     /// Time filter for the community overlay (how recent the data must be).
-    var communityTimeFilter: MapTimeFilter = .allTime
+    var communityTimeFilter: MapTimeFilter = .allTime {
+        didSet { refreshCommunityCells() }
+    }
 
     /// Repeaters available for filtering: those referenced by visible cells (not filtered by viewport location).
     /// Returns (hexID, displayName) tuples sorted by name, matching the web map behavior.
@@ -478,6 +484,15 @@ final class SignalSurveyViewModel {
         } catch {
             guard !Task.isCancelled else { return }
             logger.warning("Community overlay fetch failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Re-fetch community cells using the last known region when filters change.
+    private func refreshCommunityCells() {
+        guard showCommunityOverlay, let region = lastCommunityRegion else { return }
+        communityLoadTask?.cancel()
+        communityLoadTask = Task { [weak self] in
+            await self?.fetchCommunityCells(for: region)
         }
     }
 
