@@ -24,6 +24,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
     let selectedCommunityCell: SurveyUploadService.CommunityCell?
     let communityRepeaterLocations: [SurveyUploadService.RepeaterLocation]
     let allRepeaterLocations: [SurveyUploadService.RepeaterLocation]
+    let communityRepeaterFilter: String?
 
     // MARK: - Repeater Annotations
 
@@ -315,7 +316,19 @@ struct SurveyMapRepresentable: UIViewRepresentable {
             let locs = allRepeaterLocations.isEmpty ? communityRepeaterLocations : allRepeaterLocations
             let locationsByHex = Dictionary(locs.map { ($0.hexID.uppercased(), $0) }, uniquingKeysWith: { _, new in new })
 
-            for hexID in cell.repeaterHexIDs {
+            // When a repeater filter is active, only draw to that repeater
+            let hexIDs: [String]
+            if let filter = communityRepeaterFilter {
+                let rf = filter.uppercased()
+                hexIDs = cell.repeaterHexIDs.filter { id in
+                    let uid = id.uppercased()
+                    return uid == rf || uid.hasPrefix(rf) || rf.hasPrefix(uid)
+                }
+            } else {
+                hexIDs = cell.repeaterHexIDs
+            }
+
+            for hexID in hexIDs {
                 let upper = hexID.uppercased()
                 let loc = locationsByHex[upper] ?? locationsByHex.first(where: { key, _ in
                     key.hasPrefix(upper) || upper.hasPrefix(key)

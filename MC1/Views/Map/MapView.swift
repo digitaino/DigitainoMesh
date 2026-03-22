@@ -132,6 +132,7 @@ struct MapView: View {
                     selectedCommunityCell: viewModel.selectedCommunityCell,
                     repeaterLocations: viewModel.repeaterLocations,
                     allRepeaterLocations: viewModel.allRepeaterLocations,
+                    communityRepeaterFilter: viewModel.communityRepeaterFilter,
                     selectedContact: $viewModel.selectedContact,
                     cameraRegion: $viewModel.cameraRegion,
                     onDetailTap: { contact in

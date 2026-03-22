@@ -216,6 +216,7 @@ struct SignalSurveyView: View {
             selectedCommunityCell: viewModel.selectedCommunityCell,
             communityRepeaterLocations: viewModel.communityRepeaterLocations,
             allRepeaterLocations: viewModel.allRepeaterLocations,
+            communityRepeaterFilter: viewModel.communityRepeaterFilter,
             repeaterAnnotations: viewModel.mapRepeaterAnnotations,
             selectedMapRepeater: viewModel.selectedMapRepeater,
             selectedRepeaterContact: viewModel.selectedRepeaterContact,

@@ -455,6 +455,12 @@ final class SignalSurveyViewModel {
             communityCells = response.cells
             communityRepeaterLocations = repeaters
 
+            // Refresh selectedCommunityCell from new data so it has current repeaterMetrics
+            if let selected = selectedCommunityCell,
+               let updated = response.cells.first(where: { $0.id == selected.id }) {
+                selectedCommunityCell = updated
+            }
+
             // Fetch all repeater locations once (for polylines to off-screen repeaters + name lookup)
             if allRepeaterLocations.isEmpty {
                 Task {
