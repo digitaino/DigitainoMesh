@@ -22,6 +22,9 @@ final class MapViewModel {
     /// Selected contact for detail display
     var selectedContact: ContactDTO?
 
+    /// Selected community cell for detail overlay
+    var selectedCommunityCell: SurveyUploadService.CommunityCell?
+
     /// Camera region for map centering (MKCoordinateRegion for UIKit MKMapView)
     var cameraRegion: MKCoordinateRegion?
 

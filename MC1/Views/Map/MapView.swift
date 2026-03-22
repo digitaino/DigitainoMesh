@@ -62,8 +62,10 @@ struct MapView: View {
                 timeFilterBar
                     .padding(.top, 8)
                 Spacer()
+                communityCellDetailCard
                 mapControls
             }
+            .animation(.snappy(duration: 0.25), value: viewModel.selectedCommunityCell?.id)
 
             // Layers menu overlay
             if viewModel.showingLayersMenu {
@@ -97,7 +99,7 @@ struct MapView: View {
 
     @ViewBuilder
     private var mapContent: some View {
-        if viewModel.filteredContacts.isEmpty && !viewModel.isLoading {
+        if viewModel.filteredContacts.isEmpty && !viewModel.isLoading && !viewModel.showCommunityOverlay {
             emptyState
         } else {
             // Keep MKMapView always in tree to prevent Metal deallocation crashes
@@ -112,6 +114,7 @@ struct MapView: View {
                     showsUserLocation: true,
                     communityCells: viewModel.communityCells,
                     showCommunityOverlay: viewModel.showCommunityOverlay,
+                    selectedCommunityCell: viewModel.selectedCommunityCell,
                     selectedContact: $viewModel.selectedContact,
                     cameraRegion: $viewModel.cameraRegion,
                     onDetailTap: { contact in
@@ -122,6 +125,11 @@ struct MapView: View {
                     },
                     onRegionChanged: { region in
                         viewModel.loadCommunityCells(for: region)
+                    },
+                    onCommunityCellSelected: { cell in
+                        withAnimation(.snappy(duration: 0.25)) {
+                            viewModel.selectedCommunityCell = cell
+                        }
                     },
                     onSnapshotParamsGetter: { getter in
                         Task { @MainActor in
@@ -292,6 +300,119 @@ struct MapView: View {
             }
         }
         .disabled(viewModel.isLoading)
+    }
+
+    // MARK: - Community Cell Detail Card
+
+    @ViewBuilder
+    private var communityCellDetailCard: some View {
+        if let cell = viewModel.selectedCommunityCell {
+            let quality = SNRQuality(snr: cell.averageSNR)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "globe.americas.fill")
+                        .foregroundStyle(.cyan)
+                        .font(.title3)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(quality.qualityLabel)
+                            .font(.subheadline.weight(.semibold))
+                        Text("Community data")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    communityCellSignalBar(quality: quality)
+
+                    Button {
+                        withAnimation(.snappy(duration: 0.25)) {
+                            viewModel.selectedCommunityCell = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.title3)
+                    }
+                }
+
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let snr = cell.averageSNR {
+                            Label(String(format: "%.1f dB SNR", snr), systemImage: "antenna.radiowaves.left.and.right")
+                                .font(.caption)
+                        }
+                        Label("\(cell.packetCount) packets", systemImage: "number")
+                            .font(.caption)
+                        if let active = cell.activePacketCount, let passive = cell.passivePacketCount,
+                           active > 0 || passive > 0 {
+                            HStack(spacing: 6) {
+                                if active > 0 {
+                                    Text("\(active) active")
+                                        .font(.caption2)
+                                        .foregroundStyle(.green)
+                                }
+                                if passive > 0 {
+                                    Text("\(passive) passive")
+                                        .font(.caption2)
+                                        .foregroundStyle(.yellow)
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("\(cell.contributionCount) contributions", systemImage: "person.2")
+                            .font(.caption)
+                        if !cell.repeaterHexIDs.isEmpty {
+                            Label("\(cell.repeaterHexIDs.count) repeater(s)", systemImage: "point.3.filled.connected.trianglepath.dotted")
+                                .font(.caption)
+                        }
+                    }
+                }
+
+                if !cell.repeaterHexIDs.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            ForEach(cell.repeaterHexIDs, id: \.self) { hexID in
+                                Text(hexID)
+                                    .font(.caption2.monospaced())
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.cyan.opacity(0.15), in: Capsule())
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 16)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func communityCellSignalBar(quality: SNRQuality) -> some View {
+        let level: Int = {
+            switch quality {
+            case .excellent: return 5
+            case .good: return 4
+            case .fair: return 3
+            case .poor: return 2
+            case .veryPoor: return 1
+            case .unknown: return 0
+            }
+        }()
+
+        return HStack(alignment: .bottom, spacing: 2) {
+            ForEach(1...5, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(i <= level ? quality.color : Color.secondary.opacity(0.2))
+                    .frame(width: 6, height: CGFloat(4 + i * 3))
+            }
+        }
     }
 
     // MARK: - Actions

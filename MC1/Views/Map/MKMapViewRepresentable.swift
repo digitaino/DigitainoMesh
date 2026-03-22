@@ -13,6 +13,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     let showsUserLocation: Bool
     let communityCells: [SurveyUploadService.CommunityCell]
     let showCommunityOverlay: Bool
+    let selectedCommunityCell: SurveyUploadService.CommunityCell?
 
     @Binding var selectedContact: ContactDTO?
     @Binding var cameraRegion: MKCoordinateRegion?
@@ -22,6 +23,8 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     let onMessageTap: (ContactDTO) -> Void
     /// Called when the map region changes and community overlay is active
     var onRegionChanged: ((MKCoordinateRegion) -> Void)?
+    /// Called when a community cell is tapped (nil to deselect)
+    var onCommunityCellSelected: ((SurveyUploadService.CommunityCell?) -> Void)?
     /// Called once with a closure that returns snapshot parameters from the actual MKMapView (bypasses async binding)
     var onSnapshotParamsGetter: ((@escaping () -> (camera: MKMapCamera, size: CGSize)?) -> Void)?
 
@@ -40,6 +43,11 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             MKMarkerAnnotationView.self,
             forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier
         )
+
+        // Add tap gesture for community cell hit testing
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleMapTap(_:)))
+        tap.delegate = context.coordinator
+        mapView.addGestureRecognizer(tap)
 
         // Provide closure to get snapshot params directly from MKMapView (bypasses async binding lag)
         onSnapshotParamsGetter? { [weak mapView] in
@@ -60,8 +68,11 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         coordinator.onDetailTap = onDetailTap
         coordinator.onMessageTap = onMessageTap
         coordinator.onRegionChanged = onRegionChanged
+        coordinator.onCommunityCellSelected = onCommunityCellSelected
         coordinator.showLabels = showLabels
         coordinator.showCommunityOverlay = showCommunityOverlay
+        coordinator.currentCommunityCells = communityCells
+        coordinator.currentSelectedCommunityCell = selectedCommunityCell
 
         // Mark as programmatic update to prevent feedback loops
         coordinator.isUpdatingFromSwiftUI = true
@@ -106,8 +117,9 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        // Update community hex overlays
+        // Update community hex overlays and selection highlight
         updateCommunityOverlays(in: mapView, coordinator: coordinator)
+        updateSelectionOverlay(in: mapView, coordinator: coordinator)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -163,6 +175,30 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         }
 
         coordinator.lastOverlayCellIDs = newIDs
+    }
+
+    // MARK: - Selection Overlay Management
+
+    private func updateSelectionOverlay(in mapView: MKMapView, coordinator: Coordinator) {
+        // Remove existing selection overlays
+        let existing = mapView.overlays.compactMap { $0 as? SurveySelectionOverlay }
+        if !existing.isEmpty {
+            mapView.removeOverlays(existing)
+        }
+
+        // Add selection highlight for tapped community cell
+        if let selected = selectedCommunityCell, showCommunityOverlay {
+            let vertices = HexGrid.vertices(
+                centerLatitude: selected.latitude,
+                centerLongitude: selected.longitude,
+                referenceLatitude: selected.referenceLatitude
+            )
+            var coords = vertices.map { $0 }
+            let overlay = SurveySelectionOverlay(coordinates: &coords, count: coords.count)
+            overlay.isCommunity = true
+            overlay.snrQuality = SNRQuality(snr: selected.averageSNR)
+            mapView.addOverlay(overlay, level: .aboveLabels)
+        }
     }
 
     // MARK: - Annotation Management
@@ -223,7 +259,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     // MARK: - Coordinator
 
     @MainActor
-    class Coordinator: NSObject, MKMapViewDelegate {
+    class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         // Binding setters for deferred updates
         var setSelectedContact: ((ContactDTO?) -> Void)?
         var setCameraRegion: ((MKCoordinateRegion?) -> Void)?
@@ -232,10 +268,15 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         var onDetailTap: ((ContactDTO) -> Void)?
         var onMessageTap: ((ContactDTO) -> Void)?
         var onRegionChanged: ((MKCoordinateRegion) -> Void)?
+        var onCommunityCellSelected: ((SurveyUploadService.CommunityCell?) -> Void)?
 
         // Configuration
         var showLabels: Bool = true
         var showCommunityOverlay: Bool = false
+
+        // Community cell data for tap hit testing
+        var currentCommunityCells: [SurveyUploadService.CommunityCell] = []
+        var currentSelectedCommunityCell: SurveyUploadService.CommunityCell?
 
         // State management
         var isUpdatingFromSwiftUI = false
@@ -266,6 +307,72 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             let map = MKMapView()
             return map
         }()
+
+        // MARK: - Community Cell Tap Handler
+
+        @objc func handleMapTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, showCommunityOverlay else { return }
+
+            let point = gesture.location(in: mapView)
+            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+
+            // Check if tap hit a contact annotation view (let MKMapView handle those)
+            for annotation in mapView.annotations {
+                guard annotation is ContactAnnotation || annotation is MKClusterAnnotation else { continue }
+                if mapView.view(for: annotation) != nil {
+                    let annotationPoint = mapView.convert(annotation.coordinate, toPointTo: mapView)
+                    let hitRect = CGRect(x: annotationPoint.x - 22, y: annotationPoint.y - 44, width: 44, height: 44)
+                    if hitRect.contains(point) {
+                        return // Let MKMapView's built-in selection handle it
+                    }
+                }
+            }
+
+            // Check community cells
+            for cell in currentCommunityCells {
+                let vertices = HexGrid.vertices(
+                    centerLatitude: cell.latitude,
+                    centerLongitude: cell.longitude,
+                    referenceLatitude: cell.referenceLatitude
+                )
+                if pointInPolygon(coordinate, vertices: vertices) {
+                    if currentSelectedCommunityCell?.id == cell.id {
+                        onCommunityCellSelected?(nil)
+                    } else {
+                        onCommunityCellSelected?(cell)
+                    }
+                    return
+                }
+            }
+
+            // Tapped empty area — deselect community cell
+            if currentSelectedCommunityCell != nil {
+                onCommunityCellSelected?(nil)
+            }
+        }
+
+        /// Point-in-polygon test using ray casting algorithm.
+        private func pointInPolygon(_ point: CLLocationCoordinate2D, vertices: [CLLocationCoordinate2D]) -> Bool {
+            var inside = false
+            let n = vertices.count
+            var j = n - 1
+            for i in 0..<n {
+                let vi = vertices[i]
+                let vj = vertices[j]
+                if (vi.latitude > point.latitude) != (vj.latitude > point.latitude) &&
+                    point.longitude < (vj.longitude - vi.longitude) * (point.latitude - vi.latitude) / (vj.latitude - vi.latitude) + vi.longitude {
+                    inside.toggle()
+                }
+                j = i
+            }
+            return inside
+        }
+
+        // Allow tap gesture to work alongside MKMapView's built-in gestures
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
 
         // MARK: - Cluster Tap Handler
 
@@ -353,6 +460,17 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                 renderer.lineWidth = 0.5
                 return renderer
             }
+
+            // Selection highlight overlay (community cell tap)
+            if let selection = overlay as? SurveySelectionOverlay {
+                let renderer = MKPolygonRenderer(polygon: selection)
+                let color = CommunityHexOverlay.uiColor(for: selection.snrQuality)
+                renderer.fillColor = color.withAlphaComponent(0.35)
+                renderer.strokeColor = .cyan
+                renderer.lineWidth = 2
+                return renderer
+            }
+
             return MKOverlayRenderer(overlay: overlay)
         }
 
