@@ -80,6 +80,11 @@
             padding: 8px 12px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }
+        th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+        th.sortable:hover { color: #ccc; }
+        th.sortable::after { content: ' \2195'; opacity: 0.3; font-size: 10px; }
+        th.sortable.sort-asc::after { content: ' \2191'; opacity: 1; color: #22d3ee; }
+        th.sortable.sort-desc::after { content: ' \2193'; opacity: 1; color: #22d3ee; }
         td {
             font-size: 13px;
             padding: 10px 12px;
@@ -554,14 +559,14 @@
                 <thead>
                     <tr>
                         <th class="cb-cell"><input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)"></th>
-                        <th>Contributor ID</th>
-                        <th>Name</th>
-                        <th>Cells</th>
-                        <th>Packets</th>
-                        <th>Uploads</th>
-                        <th>Sessions</th>
+                        <th class="sortable" onclick="sortContributors('contributorID')">Contributor ID</th>
+                        <th class="sortable" onclick="sortContributors('displayName')">Name</th>
+                        <th class="sortable" onclick="sortContributors('cellCount')">Cells</th>
+                        <th class="sortable" onclick="sortContributors('totalPacketCount')">Packets</th>
+                        <th class="sortable" onclick="sortContributors('uploadCount')">Uploads</th>
+                        <th class="sortable" onclick="sortContributors('sessionCount')">Sessions</th>
                         <th>IPs</th>
-                        <th>Last Seen</th>
+                        <th class="sortable" onclick="sortContributors('lastSeen')">Last Seen</th>
                         <th>Notes</th>
                         <th></th>
                     </tr>
@@ -609,13 +614,13 @@
             <table id="repeaters-table" class="hidden">
                 <thead>
                     <tr>
-                        <th>Hex ID</th>
-                        <th>Name</th>
+                        <th class="sortable" onclick="sortRepeaters('hexID')">Hex ID</th>
+                        <th class="sortable" onclick="sortRepeaters('name')">Name</th>
                         <th>Location</th>
-                        <th>Cells</th>
-                        <th>Packets</th>
-                        <th>Last Heard</th>
-                        <th>Updated</th>
+                        <th class="sortable" onclick="sortRepeaters('cellCount')">Cells</th>
+                        <th class="sortable" onclick="sortRepeaters('totalPacketCount')">Packets</th>
+                        <th class="sortable" onclick="sortRepeaters('lastHeard')">Last Heard</th>
+                        <th class="sortable" onclick="sortRepeaters('lastUpdated')">Updated</th>
                         <th>Contributor</th>
                         <th>Visible</th>
                         <th>Notes</th>
@@ -650,6 +655,8 @@
     <script>
         const API_BASE = '/api/v1';
         let contributorsData = [];
+        let contributorsSortKey = null;
+        let contributorsSortAsc = true;
         let uploadsLoaded = false;
         let selectedContributorID = null;
         let mapkitReady = false;
@@ -713,6 +720,58 @@
             } catch {
                 return iso;
             }
+        }
+
+        // Generic sort helper: compares two values for a given key
+        function compareValues(a, b, key, asc) {
+            let va = a[key], vb = b[key];
+            // Treat null/undefined as lowest
+            if (va == null) va = '';
+            if (vb == null) vb = '';
+            // Date strings (ISO format) — compare as strings (works for ISO 8601)
+            if (typeof va === 'string' && typeof vb === 'string') {
+                const cmp = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+                return asc ? cmp : -cmp;
+            }
+            // Numbers
+            if (va < vb) return asc ? -1 : 1;
+            if (va > vb) return asc ? 1 : -1;
+            return 0;
+        }
+
+        function updateSortHeaders(tableId, key, asc) {
+            const ths = document.querySelectorAll(`#${tableId} th.sortable`);
+            ths.forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                // Match by onclick attribute containing the key
+                if (th.getAttribute('onclick')?.includes(`'${key}'`)) {
+                    th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+                }
+            });
+        }
+
+        function sortContributors(key) {
+            if (contributorsSortKey === key) {
+                contributorsSortAsc = !contributorsSortAsc;
+            } else {
+                contributorsSortKey = key;
+                contributorsSortAsc = true;
+            }
+            contributorsData.sort((a, b) => compareValues(a, b, key, contributorsSortAsc));
+            updateSortHeaders('contributors-table', key, contributorsSortAsc);
+            renderContributors();
+        }
+
+        function sortRepeaters(key) {
+            if (repeatersSortKey === key) {
+                repeatersSortAsc = !repeatersSortAsc;
+            } else {
+                repeatersSortKey = key;
+                repeatersSortAsc = true;
+            }
+            repeatersData.sort((a, b) => compareValues(a, b, key, repeatersSortAsc));
+            updateSortHeaders('repeaters-table', key, repeatersSortAsc);
+            renderRepeaters();
         }
 
         // Load contributors
@@ -1383,6 +1442,8 @@
 
         // ===================== Repeaters =====================
         let repeatersData = [];
+        let repeatersSortKey = null;
+        let repeatersSortAsc = true;
         let repeatersLoaded = false;
         let repeaterNotesSaveTimers = {};
         let expandedRepeaterID = null;
