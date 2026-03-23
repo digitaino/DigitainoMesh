@@ -130,6 +130,40 @@ struct SurveyRouteController {
         )
     }
 
+    // MARK: - GET /api/v1/me/survey-routes
+
+    @Sendable
+    func getMyRoutes(req: Request) async throws -> MySurveyRoutesResponse {
+        guard let contributorID = req.authenticatedContributorID else {
+            throw Abort(.unauthorized, reason: "Not authenticated")
+        }
+
+        let routes = try await SurveyRoute.query(on: req.db)
+            .filter(\.$contributorID == contributorID)
+            .sort(\.$createdAt, .descending)
+            .all()
+
+        let infos = routes.map { route in
+            SurveyRouteResponse(
+                id: route.id ?? "",
+                contributorID: route.contributorID,
+                waypointCount: route.waypointCount,
+                status: route.status,
+                completedCount: route.completedCount,
+                skippedCount: route.skippedCount,
+                excludedSurveyed: route.excludedSurveyed,
+                referenceLatitude: route.referenceLatitude,
+                planSessionCode: route.planSessionCode,
+                createdAt: route.createdAt,
+                startedAt: route.startedAt,
+                finishedAt: route.finishedAt,
+                updatedAt: route.updatedAt
+            )
+        }
+
+        return MySurveyRoutesResponse(routes: infos)
+    }
+
     // MARK: - GET /api/v1/admin/survey-routes
 
     @Sendable

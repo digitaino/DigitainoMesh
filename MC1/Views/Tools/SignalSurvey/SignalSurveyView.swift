@@ -27,6 +27,7 @@ struct SignalSurveyView: View {
     @State private var verificationError: String?
     @State private var showingContributorProfile = false
     @State private var showingWebPairing = false
+    @State private var showingMyRoutes = false
     var body: some View {
         ZStack {
             if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
@@ -112,6 +113,9 @@ struct SignalSurveyView: View {
         }
         .sheet(isPresented: $showingContributorProfile) {
             ContributorProfileAutoRenewView()
+        }
+        .sheet(isPresented: $showingMyRoutes) {
+            MySurveyRoutesSheet()
         }
         .sheet(isPresented: $showingWebPairing) {
             WebPairingSheet(viewModel: viewModel)
@@ -1710,6 +1714,12 @@ struct SignalSurveyView: View {
                         showingContributorProfile = true
                     } label: {
                         Label("My Contributions", systemImage: "person.crop.circle")
+                    }
+
+                    Button {
+                        showingMyRoutes = true
+                    } label: {
+                        Label("My Survey Routes", systemImage: "map")
                     }
                 }
 

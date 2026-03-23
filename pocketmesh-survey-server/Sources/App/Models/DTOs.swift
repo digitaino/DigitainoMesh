@@ -591,6 +591,10 @@ struct SurveyRouteResponse: Content {
     let updatedAt: String
 }
 
+struct MySurveyRoutesResponse: Content {
+    let routes: [SurveyRouteResponse]
+}
+
 // MARK: - Admin Survey Routes
 
 struct AdminSurveyRouteInfo: Content {

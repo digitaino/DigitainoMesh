@@ -51,6 +51,26 @@ actor ContributorSelfService {
         let cellsUpdated: Int
     }
 
+    struct MySurveyRoute: Codable, Identifiable {
+        var id: String
+        let contributorID: String
+        let waypointCount: Int
+        let status: String
+        let completedCount: Int
+        let skippedCount: Int
+        let excludedSurveyed: Bool
+        let referenceLatitude: Double
+        let planSessionCode: String?
+        let createdAt: String
+        let startedAt: String?
+        let finishedAt: String?
+        let updatedAt: String
+    }
+
+    private struct MySurveyRoutesResponse: Codable {
+        let routes: [MySurveyRoute]
+    }
+
     private struct NameRetroactiveRequest: Codable {
         let applyToAll: Bool
     }
@@ -96,6 +116,11 @@ actor ContributorSelfService {
     func deleteMyData() async throws -> DeleteResponse {
         let data = try await performRequest(path: "me/data", method: "DELETE")
         return try JSONDecoder().decode(DeleteResponse.self, from: data)
+    }
+
+    func getMyRoutes() async throws -> [MySurveyRoute] {
+        let data = try await performRequest(path: "me/survey-routes", method: "GET")
+        return try JSONDecoder().decode(MySurveyRoutesResponse.self, from: data).routes
     }
 
     // MARK: - Networking
