@@ -35,6 +35,13 @@ struct SurveyMapRepresentable: UIViewRepresentable {
 
     let selectedRepeaterContact: ContactDTO?
 
+    // MARK: - Route Planner
+
+    let routePlannerMode: SignalSurveyViewModel.RoutePlannerMode
+    let drawingPolygonPoints: [CLLocationCoordinate2D]
+    let currentRoute: RoutePlanner.Route?
+    var onDrawingTap: ((CLLocationCoordinate2D) -> Void)?
+
     // MARK: - Map Configuration
 
     let mapStyleSelection: MapStyleSelection
@@ -94,6 +101,8 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         coordinator.onRepeaterTapped = onRepeaterTapped
         coordinator.onRegionChanged = onRegionChanged
         coordinator.onTrackingStopped = onTrackingStopped
+        coordinator.onDrawingTap = onDrawingTap
+        coordinator.routePlannerMode = routePlannerMode
 
         // Store current data for tap hit testing
         coordinator.currentGridCells = gridCells
@@ -131,6 +140,7 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         updateCommunityRepeaterPins(in: mapView, coordinator: coordinator)
         updateSelectionOverlays(in: mapView, coordinator: coordinator)
         updatePolyline(in: mapView, coordinator: coordinator)
+        updateRouteOverlays(in: mapView, coordinator: coordinator)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -358,6 +368,80 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         }
     }
 
+    // MARK: - Route Planner Overlays
+
+    private func updateRouteOverlays(in mapView: MKMapView, coordinator: Coordinator) {
+        // Remove old route overlays and annotations
+        let existingPolygon = mapView.overlays.compactMap { $0 as? RouteSelectionPolygonOverlay }
+        let existingPath = mapView.overlays.compactMap { $0 as? RoutePathPolyline }
+        let existingEdges = mapView.overlays.compactMap { $0 as? RouteDrawingEdgePolyline }
+        let existingVertices = mapView.annotations.compactMap { $0 as? RouteDrawingVertexAnnotation }
+        let existingWaypoints = mapView.annotations.compactMap { $0 as? RouteWaypointAnnotation }
+
+        if !existingPolygon.isEmpty { mapView.removeOverlays(existingPolygon) }
+        if !existingPath.isEmpty { mapView.removeOverlays(existingPath) }
+        if !existingEdges.isEmpty { mapView.removeOverlays(existingEdges) }
+        if !existingVertices.isEmpty { mapView.removeAnnotations(existingVertices) }
+        if !existingWaypoints.isEmpty { mapView.removeAnnotations(existingWaypoints) }
+
+        guard routePlannerMode != .inactive else { return }
+
+        // Drawing mode: show vertex annotations and edge lines
+        if routePlannerMode == .drawingPolygon && !drawingPolygonPoints.isEmpty {
+            // Vertex annotations
+            let vertices = drawingPolygonPoints.enumerated().map { index, coord in
+                RouteDrawingVertexAnnotation(index: index, coordinate: coord, isFirst: index == 0)
+            }
+            mapView.addAnnotations(vertices)
+
+            // Edge lines between consecutive vertices
+            if drawingPolygonPoints.count >= 2 {
+                for i in 0..<drawingPolygonPoints.count - 1 {
+                    let edge = RouteDrawingEdgePolyline.make(from: drawingPolygonPoints[i], to: drawingPolygonPoints[i + 1])
+                    mapView.addOverlay(edge, level: .aboveLabels)
+                }
+                // Close the polygon if >= 3 vertices
+                if drawingPolygonPoints.count >= 3 {
+                    let closeEdge = RouteDrawingEdgePolyline.make(
+                        from: drawingPolygonPoints.last!,
+                        to: drawingPolygonPoints.first!
+                    )
+                    mapView.addOverlay(closeEdge, level: .aboveLabels)
+
+                    // Fill polygon
+                    let polygon = RouteSelectionPolygonOverlay.make(from: drawingPolygonPoints)
+                    mapView.addOverlay(polygon, level: .aboveLabels)
+                }
+            }
+        }
+
+        // Route review or navigation: show polygon boundary, waypoints, and path
+        if let route = currentRoute,
+           routePlannerMode == .reviewingRoute || routePlannerMode == .navigating {
+
+            // Polygon boundary (dashed)
+            let polygon = RouteSelectionPolygonOverlay.make(from: route.polygon)
+            mapView.addOverlay(polygon, level: .aboveLabels)
+
+            // Route path polyline connecting waypoints in order
+            let pathCoords = route.waypoints.map(\.center)
+            if pathCoords.count >= 2 {
+                let path = RoutePathPolyline.make(from: pathCoords)
+                mapView.addOverlay(path, level: .aboveLabels)
+            }
+
+            // Waypoint annotations
+            let waypointAnnotations = route.waypoints.map { wp in
+                RouteWaypointAnnotation(
+                    waypointIndex: wp.id,
+                    coordinate: wp.center,
+                    status: wp.status
+                )
+            }
+            mapView.addAnnotations(waypointAnnotations)
+        }
+    }
+
     // MARK: - Coordinator
 
     @MainActor
@@ -367,6 +451,8 @@ struct SurveyMapRepresentable: UIViewRepresentable {
         var onRepeaterTapped: ((ContactDTO) -> Void)?
         var onRegionChanged: ((MKCoordinateRegion) -> Void)?
         var onTrackingStopped: (() -> Void)?
+        var onDrawingTap: ((CLLocationCoordinate2D) -> Void)?
+        var routePlannerMode: SignalSurveyViewModel.RoutePlannerMode = .inactive
 
         var isUpdatingFromSwiftUI = false
         var hasReportedInitialRegion = false
@@ -397,6 +483,12 @@ struct SurveyMapRepresentable: UIViewRepresentable {
 
             let point = gesture.location(in: mapView)
             let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+
+            // In drawing mode, add polygon vertex instead of selecting cells
+            if routePlannerMode == .drawingPolygon {
+                onDrawingTap?(coordinate)
+                return
+            }
 
             // First check repeater annotation hits (use view frames for reliable hit testing)
             for annotation in mapView.annotations {
@@ -512,6 +604,78 @@ struct SurveyMapRepresentable: UIViewRepresentable {
                 return view
             }
 
+            if let vertex = annotation as? RouteDrawingVertexAnnotation {
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: "RouteDrawingVertex") ??
+                    MKAnnotationView(annotation: annotation, reuseIdentifier: "RouteDrawingVertex")
+                view.annotation = annotation
+                let size: CGFloat = 24
+                view.frame.size = CGSize(width: size, height: size)
+                view.layer.cornerRadius = size / 2
+                view.backgroundColor = vertex.isFirst ? .systemCyan : UIColor.systemCyan.withAlphaComponent(0.7)
+                view.layer.borderWidth = 2
+                view.layer.borderColor = UIColor.white.cgColor
+
+                // Number label
+                for sub in view.subviews { sub.removeFromSuperview() }
+                let label = UILabel(frame: view.bounds)
+                label.text = "\(vertex.index + 1)"
+                label.font = .boldSystemFont(ofSize: 11)
+                label.textAlignment = .center
+                label.textColor = .black
+                view.addSubview(label)
+                view.displayPriority = .required
+                view.centerOffset = .zero
+                return view
+            }
+
+            if let waypoint = annotation as? RouteWaypointAnnotation {
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: "RouteWaypoint") ??
+                    MKAnnotationView(annotation: annotation, reuseIdentifier: "RouteWaypoint")
+                view.annotation = annotation
+                let size: CGFloat = 26
+                view.frame.size = CGSize(width: size, height: size)
+                view.layer.cornerRadius = size / 2
+
+                switch waypoint.status {
+                case .pending:
+                    view.backgroundColor = UIColor.systemGray.withAlphaComponent(0.3)
+                    view.layer.borderWidth = 2
+                    view.layer.borderColor = UIColor.systemGray.cgColor
+                case .current:
+                    view.backgroundColor = .systemBlue
+                    view.layer.borderWidth = 3
+                    view.layer.borderColor = UIColor.white.cgColor
+                case .completed:
+                    view.backgroundColor = .systemGreen
+                    view.layer.borderWidth = 2
+                    view.layer.borderColor = UIColor.white.cgColor
+                case .skipped:
+                    view.backgroundColor = .systemOrange
+                    view.layer.borderWidth = 2
+                    view.layer.borderColor = UIColor.white.cgColor
+                }
+
+                // Label
+                for sub in view.subviews { sub.removeFromSuperview() }
+                let label = UILabel(frame: view.bounds)
+                switch waypoint.status {
+                case .completed:
+                    label.text = "✓"
+                case .skipped:
+                    label.text = "✕"
+                default:
+                    label.text = "\(waypoint.waypointIndex + 1)"
+                }
+                label.font = .boldSystemFont(ofSize: 11)
+                label.textAlignment = .center
+                label.textColor = .white
+                view.addSubview(label)
+
+                view.displayPriority = waypoint.status == .current ? .required : .defaultHigh
+                view.centerOffset = .zero
+                return view
+            }
+
             if let point = annotation as? SurveyPointAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: "SurveyPointDot") ??
                     MKAnnotationView(annotation: annotation, reuseIdentifier: "SurveyPointDot")
@@ -573,6 +737,34 @@ struct SurveyMapRepresentable: UIViewRepresentable {
                 renderer.strokeColor = .tintColor
                 renderer.lineWidth = 2
                 renderer.lineDashPattern = [8, 4]
+                return renderer
+            }
+
+            // Route selection polygon (drawing area boundary)
+            if let polygon = overlay as? RouteSelectionPolygonOverlay {
+                let renderer = MKPolygonRenderer(polygon: polygon)
+                renderer.fillColor = UIColor.systemCyan.withAlphaComponent(0.1)
+                renderer.strokeColor = UIColor.systemCyan.withAlphaComponent(0.6)
+                renderer.lineWidth = 2
+                renderer.lineDashPattern = [6, 4]
+                return renderer
+            }
+
+            // Route path polyline (connecting waypoints)
+            if let polyline = overlay as? RoutePathPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = UIColor.systemBlue.withAlphaComponent(0.4)
+                renderer.lineWidth = 2
+                renderer.lineDashPattern = [4, 4]
+                return renderer
+            }
+
+            // Drawing edge polyline
+            if let edge = overlay as? RouteDrawingEdgePolyline {
+                let renderer = MKPolylineRenderer(polyline: edge)
+                renderer.strokeColor = UIColor.systemCyan.withAlphaComponent(0.8)
+                renderer.lineWidth = 2
+                renderer.lineDashPattern = [6, 4]
                 return renderer
             }
 

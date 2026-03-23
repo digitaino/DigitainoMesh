@@ -529,6 +529,152 @@ final class SignalSurveyViewModel {
     /// The community cell tapped by the user (for showing detail overlay).
     var selectedCommunityCell: SurveyUploadService.CommunityCell?
 
+    // MARK: - Route Planner
+
+    enum RoutePlannerMode: Equatable {
+        case inactive
+        case drawingPolygon
+        case waitingForWeb(code: String)
+        case reviewingRoute
+        case navigating
+    }
+
+    var routePlannerMode: RoutePlannerMode = .inactive
+
+    /// Polygon vertices placed by the user during drawing mode.
+    var drawingPolygonPoints: [CLLocationCoordinate2D] = []
+
+    /// The generated route, if any.
+    var currentRoute: RoutePlanner.Route?
+
+    /// Whether to exclude already-surveyed cells from the route.
+    var excludeSurveyedCells: Bool = true
+
+    /// The user's current heading (from CLLocationManager), for the directional arrow.
+    var userHeading: CLLocationDirection?
+
+    /// The user's current location, updated during navigation for guidance arrow/distance.
+    var userLocation: CLLocationCoordinate2D?
+
+    /// Polling task for web-to-app polygon delivery.
+    private var webPollingTask: Task<Void, Never>?
+
+    /// Add a vertex to the drawing polygon.
+    func addPolygonVertex(_ coordinate: CLLocationCoordinate2D) {
+        drawingPolygonPoints.append(coordinate)
+    }
+
+    /// Remove the last vertex from the drawing polygon.
+    func undoPolygonVertex() {
+        guard !drawingPolygonPoints.isEmpty else { return }
+        drawingPolygonPoints.removeLast()
+    }
+
+    /// Use the current map viewport as a rectangle polygon.
+    func useViewportAsPolygon(region: MKCoordinateRegion) {
+        let lat = region.center.latitude
+        let lon = region.center.longitude
+        let dLat = region.span.latitudeDelta / 2
+        let dLon = region.span.longitudeDelta / 2
+        drawingPolygonPoints = [
+            CLLocationCoordinate2D(latitude: lat - dLat, longitude: lon - dLon),
+            CLLocationCoordinate2D(latitude: lat - dLat, longitude: lon + dLon),
+            CLLocationCoordinate2D(latitude: lat + dLat, longitude: lon + dLon),
+            CLLocationCoordinate2D(latitude: lat + dLat, longitude: lon - dLon)
+        ]
+    }
+
+    /// Generate a route from the current polygon.
+    func generateRoute() {
+        guard drawingPolygonPoints.count >= 3 else { return }
+
+        var excludeKeys: Set<String> = []
+        if excludeSurveyedCells {
+            // Exclude cells from user's own survey
+            for cell in gridCells {
+                excludeKeys.insert(cell.coordKey)
+            }
+            // Exclude cells from community overlay
+            for cell in communityCells {
+                let key = "\(cell.hexQ)_\(cell.hexR)"
+                excludeKeys.insert(key)
+            }
+        }
+
+        currentRoute = RoutePlanner.generateRoute(
+            polygon: drawingPolygonPoints,
+            excludeCoordKeys: excludeKeys
+        )
+
+        if currentRoute != nil {
+            routePlannerMode = .reviewingRoute
+        }
+    }
+
+    /// Start navigation guidance.
+    func startNavigation() {
+        guard currentRoute != nil else { return }
+        routePlannerMode = .navigating
+    }
+
+    /// Skip the current waypoint and advance to the next.
+    func skipCurrentWaypoint() {
+        guard var route = currentRoute,
+              let index = route.currentWaypointIndex else { return }
+
+        route.waypoints[index].status = .skipped
+        advanceToNextWaypoint(route: &route)
+        currentRoute = route
+    }
+
+    /// Stop navigation and return to route review.
+    func stopNavigation() {
+        routePlannerMode = .reviewingRoute
+    }
+
+    /// Cancel route planning entirely.
+    func cancelRoutePlanning() {
+        routePlannerMode = .inactive
+        drawingPolygonPoints = []
+        currentRoute = nil
+        webPollingTask?.cancel()
+        webPollingTask = nil
+    }
+
+    /// Check if the user has entered the current waypoint's cell and auto-advance.
+    func checkAutoAdvance(userLocation: CLLocationCoordinate2D) {
+        guard routePlannerMode == .navigating,
+              var route = currentRoute,
+              let index = route.currentWaypointIndex else { return }
+
+        let userCoord = HexGrid.axialFromLatLon(
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            referenceLatitude: route.referenceLatitude
+        )
+
+        if userCoord == route.waypoints[index].hexCoord {
+            route.waypoints[index].status = .completed
+            advanceToNextWaypoint(route: &route)
+            currentRoute = route
+        }
+    }
+
+    /// Advance to the next pending waypoint.
+    private func advanceToNextWaypoint(route: inout RoutePlanner.Route) {
+        // Find the next pending waypoint
+        if let nextIndex = route.waypoints.firstIndex(where: { $0.status == .pending }) {
+            route.waypoints[nextIndex].status = .current
+        }
+        // If no pending waypoints remain, navigation is complete
+    }
+
+    /// Receive polygon vertices from web session and generate route.
+    func receiveWebPolygon(_ vertices: [CLLocationCoordinate2D]) {
+        drawingPolygonPoints = vertices
+        generateRoute()
+    }
+
     // MARK: - Active Probing
 
     /// Whether active probing (node discovery) is enabled during survey.

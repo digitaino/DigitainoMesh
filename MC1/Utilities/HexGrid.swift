@@ -95,6 +95,79 @@ enum HexGrid {
         (latitude / 10.0).rounded() * 10.0
     }
 
+    // MARK: - Polygon Operations
+
+    /// Test whether a point lies inside a polygon using the ray-casting algorithm.
+    static func pointInPolygon(
+        latitude: Double,
+        longitude: Double,
+        polygon: [(latitude: Double, longitude: Double)]
+    ) -> Bool {
+        let n = polygon.count
+        guard n >= 3 else { return false }
+
+        var inside = false
+        var j = n - 1
+        for i in 0..<n {
+            let yi = polygon[i].latitude
+            let xi = polygon[i].longitude
+            let yj = polygon[j].latitude
+            let xj = polygon[j].longitude
+
+            if ((yi > latitude) != (yj > latitude)) &&
+                (longitude < (xj - xi) * (latitude - yi) / (yj - yi) + xi) {
+                inside.toggle()
+            }
+            j = i
+        }
+        return inside
+    }
+
+    /// Enumerate all hex cells whose centers fall inside the given polygon.
+    /// Returns cells in no particular order — caller is responsible for ordering.
+    static func cellsInPolygon(
+        vertices: [(latitude: Double, longitude: Double)],
+        referenceLatitude: Double
+    ) -> [AxialCoord] {
+        guard vertices.count >= 3 else { return [] }
+
+        // Compute bounding box of polygon
+        let minLat = vertices.map(\.latitude).min()!
+        let maxLat = vertices.map(\.latitude).max()!
+        let minLon = vertices.map(\.longitude).min()!
+        let maxLon = vertices.map(\.longitude).max()!
+
+        // Convert bbox corners to axial coords to get q/r range
+        let cornerCoords = [
+            axialFromLatLon(latitude: minLat, longitude: minLon, referenceLatitude: referenceLatitude),
+            axialFromLatLon(latitude: minLat, longitude: maxLon, referenceLatitude: referenceLatitude),
+            axialFromLatLon(latitude: maxLat, longitude: minLon, referenceLatitude: referenceLatitude),
+            axialFromLatLon(latitude: maxLat, longitude: maxLon, referenceLatitude: referenceLatitude)
+        ]
+
+        // Expand range by 1 to account for cells near the boundary
+        let qMin = cornerCoords.map(\.q).min()! - 1
+        let qMax = cornerCoords.map(\.q).max()! + 1
+        let rMin = cornerCoords.map(\.r).min()! - 1
+        let rMax = cornerCoords.map(\.r).max()! + 1
+
+        var result: [AxialCoord] = []
+        for q in qMin...qMax {
+            for r in rMin...rMax {
+                let coord = AxialCoord(q: q, r: r)
+                let center = centerLatLon(from: coord, referenceLatitude: referenceLatitude)
+                if pointInPolygon(
+                    latitude: center.latitude,
+                    longitude: center.longitude,
+                    polygon: vertices
+                ) {
+                    result.append(coord)
+                }
+            }
+        }
+        return result
+    }
+
     // MARK: - Cube Rounding
 
     /// Round fractional cube coordinates to the nearest hex center.

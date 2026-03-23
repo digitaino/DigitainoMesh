@@ -11,6 +11,7 @@ func routes(_ app: Application) throws {
 
     let surveyController = SurveyController()
     let shareController = ShareController()
+    let planController = PlanController()
 
     // --- Cache policies ---
     // Short (30s): viewport data that changes on survey upload
@@ -57,6 +58,18 @@ func routes(_ app: Application) throws {
     protected.post("routes", use: shareController.createRoute)
     protected.post("maps", use: shareController.createRepeaterMap)
 
+    // Plan session creation (authenticated)
+    protected.post("plans", "sessions", use: planController.createSession)
+
+    // Plan session polling and polygon submission (public — the code IS the auth)
+    let planPublic = api.grouped(CacheControlMiddleware(.noStore))
+    planPublic.get("plans", "sessions", ":code", use: planController.getSession)
+    planPublic.put("plans", "sessions", ":code", "polygon", use: planController.submitPolygon)
+
+    // Plan web pages
+    app.get("plan", use: planController.servePlanPage)
+    app.get("plan", ":code", use: planController.servePlanPage)
+
     // Admin dashboard (protected by Cloudflare Access at the network level)
     app.get("admin") { req -> Response in
         let adminPath = app.directory.publicDirectory + "admin.html"
@@ -82,4 +95,10 @@ func routes(_ app: Application) throws {
     admin.post("purge-bogus", use: surveyController.purgeBogusContributors)
     admin.put("contributor", ":id", "notes", use: surveyController.updateContributorNotes)
     admin.post("contributors", "merge", use: surveyController.mergeContributors)
+
+    // Admin repeater management
+    admin.get("repeaters", use: surveyController.getAdminRepeaters)
+    admin.put("repeater", ":id", "hidden", use: surveyController.toggleRepeaterHidden)
+    admin.put("repeater", ":id", "notes", use: surveyController.updateRepeaterNotes)
+    admin.delete("repeater", ":id", use: surveyController.deleteRepeater)
 }

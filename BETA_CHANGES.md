@@ -1,60 +1,30 @@
-# Beta Changes — v0.10.1 (Build 13)
+Beta Changes -- v0.10.1 (Build 13)
 
-## Message Search
+Message Search
 
-- **Global message search** — The search bar in the Chats list now searches message content across all conversations, not just conversation names. Results appear in a "Messages" section below the conversation list, grouped by conversation with highlighted text snippets showing the match in context. Tap a result to jump directly to that message in the conversation.
+The search bar in the Chats list now searches message content across all conversations, not just conversation names. Results appear in a "Messages" section grouped by conversation with highlighted text snippets. Tap a result to jump directly to that message -- it flashes briefly so you can spot it. When a conversation has more than 3 matches, tap "X more" to expand all results inline.
 
-- **Within-conversation search** — Inside any conversation, pull down to reveal a search bar. Type to find messages within that conversation. A bottom toolbar shows "X of Y" with previous/next chevrons to navigate between matches. The current match is highlighted with an accent-colored border and background on the message bubble.
+Inside any conversation, pull down to reveal a search bar. A bottom toolbar shows "X of Y" with previous/next arrows to navigate between matches. The current match gets an accent-colored border on the bubble.
 
-- **Scalable database queries** — Both search modes use database-level `#Predicate` queries with `localizedStandardContains` (case and diacritic insensitive), leveraging existing composite indexes. Global search returns lightweight result DTOs (8 fields vs 30+) and within-conversation search returns only message IDs, keeping memory usage low even with thousands of messages. Both inputs are 300ms debounced to avoid excessive queries while typing.
+Both search modes use database-level queries (case and diacritic insensitive) so they stay fast even with thousands of messages.
 
-### Build 13 Improvements
+Upstream Merge
 
-- **Search result highlight flash** — When tapping a global search result, the target message now flashes with an accent-colored overlay for 2 seconds, making it immediately obvious which message matched.
+Channel messages now appear instantly before server confirmation (optimistic sending). New toggle in chat settings for quoting the original message in replies. BLE stability fixes for session reconnect races, RX log pruning, and message auto-fetch coalescing.
 
-- **Improved scroll-to-message accuracy** — Fixed an issue where tapping a search result would land slightly off from the target message. The scroll now re-centers after the animation completes, compensating for estimated row height inaccuracies in the chat table view.
+Community Map Filters and Performance
 
-- **Expandable "X more" in search results** — When a conversation has more than 3 matching messages, the "X more" label is now a tappable button that expands to show all results inline.
+The community overlay on both the survey map and standalone map now has a filter toolbar with coverage type (All/Active/Passive), repeater selection, and time range. Filters re-fetch from the server for accurate results. When filtering by a specific repeater, cell detail cards show that repeater's individual SNR/RSSI/packet count. Selecting a repeater filter draws dashed lines from each cell to the repeater's location with arrows for off-screen repeaters. Community hex cells now render via UIKit MKOverlayRenderer, handling 5000+ cells without lag. A "My Cell" button during active surveys zooms to your current cell.
 
----
+Bug Fix
 
-# Previous Builds
-
-# v0.10.1 (Build 12)
-
-## Message Search
-
-- **Global message search** — The search bar in the Chats list now searches message content across all conversations, not just conversation names. Results appear in a "Messages" section below the conversation list, grouped by conversation with highlighted text snippets showing the match in context. Tap a result to jump directly to that message in the conversation.
-
-- **Within-conversation search** — Inside any conversation, pull down to reveal a search bar. Type to find messages within that conversation. A bottom toolbar shows "X of Y" with previous/next chevrons to navigate between matches. The current match is highlighted with an accent-colored border and background on the message bubble.
-
-- **Scalable database queries** — Both search modes use database-level `#Predicate` queries with `localizedStandardContains` (case and diacritic insensitive), leveraging existing composite indexes. Global search returns lightweight result DTOs (8 fields vs 30+) and within-conversation search returns only message IDs, keeping memory usage low even with thousands of messages. Both inputs are 300ms debounced to avoid excessive queries while typing.
-
-# v0.10.1 (Build 11)
-
-Fixed scrolling bug in repeater telemetry status history. Thanks ASTpoetry
-
-## Upstream Merge
-
-- **Optimistic sending** — Channel messages appear instantly in the chat before server confirmation.
-- **Reply with quote** — New toggle in chat settings for quoting the original message in replies.
-- **BLE stability** — Fixes for session reconnect races, RX log pruning, and message auto-fetch coalescing.
-
-## Community Map Filters & Performance
-
-- **Coverage, repeater, and time filters** — The community overlay on both the survey map and the standalone map now has a filter toolbar with coverage type (All/Active/Passive), repeater selection, and time range. Changing any filter re-fetches from the server so results are accurate, not just client-filtered.
-
-- **Per-repeater signal metrics** — When filtering by a specific repeater, cell detail cards show that repeater's individual SNR/RSSI/packet count instead of the cell's aggregate stats. Active/passive counts are hidden when irrelevant to the selected coverage filter.
-
-- **Cell-to-repeater polylines** — Selecting a repeater filter draws dashed lines from each cell to the repeater's location. Lines for off-screen repeaters extend to the map edge with an arrow indicator.
-
-- **MKOverlayRenderer for community cells** — Community hex cells now render via UIKit `MKOverlayRenderer` instead of SwiftUI `MapPolygon` views, handling 5000+ cells without UI lag.
-
-- **"My Cell" button** — During an active survey, a "My Cell" button in the stats bar zooms to your current cell and selects it. Camera zoom now correctly drives the UIKit MKMapView.
+Fixed scrolling bug in repeater telemetry status history. Thanks ASTpoetry.
 
 ---
 
-# v0.10.1 (Build 10)
+Previous Builds
+
+v0.10.1 (Build 10)
 
 ## Web Share Identity
 

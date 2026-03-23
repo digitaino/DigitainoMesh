@@ -21,6 +21,7 @@ struct RepeaterSettingsView: View {
     @State private var viewModel = RepeaterSettingsViewModel()
     @State private var showRebootConfirmation = false
     @State private var showingLocationPicker = false
+    @State private var navigateToCLI = false
 
     /// Bandwidth options in kHz for CLI protocol (derived from RadioOptions.bandwidthsHz)
     private var bandwidthOptionsKHz: [Double] {
@@ -37,9 +38,25 @@ struct RepeaterSettingsView: View {
             makeSecuritySection()
             makeDeviceInfoSection()
             makeActionsSection()
+
+            Section {
+                Button {
+                    // Ensure the CLI view model exists and attach the session
+                    if appState.cliToolViewModel == nil {
+                        appState.cliToolViewModel = CLIToolViewModel()
+                    }
+                    appState.cliToolViewModel?.attachSession(session)
+                    navigateToCLI = true
+                } label: {
+                    Label(L10n.Tools.Tools.cli, systemImage: "terminal")
+                }
+            }
         }
         .navigationTitle(L10n.RemoteNodes.RemoteNodes.Settings.title)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $navigateToCLI) {
+            CLIToolView()
+        }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()

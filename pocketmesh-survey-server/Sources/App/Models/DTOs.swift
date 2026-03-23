@@ -435,3 +435,74 @@ struct NameRetroactiveResponse: Content {
     let contributorID: String
     let nameVisibleFrom: String?
 }
+
+// MARK: - Plan Sessions
+
+struct PolygonVertex: Content {
+    let latitude: Double
+    let longitude: Double
+}
+
+struct CreatePlanSessionResponse: Content {
+    let code: String
+    let url: String
+    let expiresAt: String
+}
+
+struct PlanSessionResponse: Content {
+    let code: String
+    let status: String
+    let polygon: [PolygonVertex]?
+}
+
+struct SubmitPolygonRequest: Content {
+    let polygon: [PolygonVertex]
+}
+
+struct SubmitPolygonResponse: Content {
+    let status: String
+}
+
+// MARK: - Admin Repeaters
+
+struct AdminRepeaterInfo: Content {
+    let id: Int
+    let hexID: String
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    let lastUpdated: String
+    let hidden: Bool
+    let notes: String?
+    let lastContributorID: String?
+    let cellCount: Int
+    let totalPacketCount: Int
+    let lastHeard: String?
+}
+
+struct AdminRepeatersResponse: Content {
+    let repeaters: [AdminRepeaterInfo]
+}
+
+struct ToggleRepeaterHiddenRequest: Content {
+    let hidden: Bool
+}
+
+struct ToggleRepeaterHiddenResponse: Content {
+    let hexID: String
+    let hidden: Bool
+}
+
+struct UpdateRepeaterNotesRequest: Content {
+    let notes: String
+}
+
+struct UpdateRepeaterNotesResponse: Content {
+    let hexID: String
+    let notes: String
+}
+
+struct DeleteRepeaterResponse: Content {
+    let hexID: String
+    let cellRepeatersRemoved: Int
+}

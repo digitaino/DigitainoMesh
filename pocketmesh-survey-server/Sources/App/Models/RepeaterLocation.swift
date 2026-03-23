@@ -26,6 +26,18 @@ final class RepeaterLocation: Model, Content, @unchecked Sendable {
     @Field(key: "last_updated")
     var lastUpdated: String
 
+    /// Whether this repeater is hidden from public API responses (admin toggle).
+    @OptionalField(key: "hidden")
+    var hidden: Bool?
+
+    /// Admin notes about this repeater.
+    @OptionalField(key: "notes")
+    var notes: String?
+
+    /// Contributor ID of the last person who uploaded this repeater's location.
+    @OptionalField(key: "last_contributor_id")
+    var lastContributorID: String?
+
     init() {}
 
     init(hexID: String, name: String, latitude: Double, longitude: Double, lastUpdated: String) {

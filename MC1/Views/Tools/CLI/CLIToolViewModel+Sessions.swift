@@ -5,6 +5,34 @@ import MC1Services
 // MARK: - Session and Login Management
 
 extension CLIToolViewModel {
+
+    // MARK: - Pre-authenticated Session Attachment
+
+    /// Attaches a pre-authenticated remote node session to the CLI tool.
+    /// Used when navigating from RepeaterSettingsView where the user already logged in.
+    /// Reuses the existing session ID so no re-authentication is needed.
+    func attachSession(_ session: RemoteNodeSessionDTO) {
+        // Already have this session? Just switch to it.
+        if let existing = remoteSessions.first(where: { $0.id == session.id }) {
+            activeSession = existing
+            return
+        }
+
+        // Ensure we have a local session as a base (configure may not have run yet)
+        if activeSession == nil {
+            activeSession = .local(deviceName: localDeviceName.isEmpty ? "device" : localDeviceName)
+        }
+
+        let cliSession = CLISession.remote(
+            id: session.id,
+            name: session.name,
+            pathLength: 0 // Not critical for CLI; actual routing handled by service layer
+        )
+        remoteSessions.append(cliSession)
+        activeSession = cliSession
+        appendOutput("\(L10n.Tools.Tools.Cli.loginSuccess) @\(session.name)", type: .success)
+    }
+
     func handleSessionCommand(_ args: String) {
         let subcommand = args.trimmingCharacters(in: .whitespaces).lowercased()
 

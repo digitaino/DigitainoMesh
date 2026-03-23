@@ -38,6 +38,8 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddCellSpatialIndex())
     app.migrations.add(AddRepeaterCellIndex())
     app.migrations.add(AddShareUserName())
+    app.migrations.add(AddPlanSessions())
+    app.migrations.add(AddRepeaterAdminFields())
     try app.autoMigrate().wait()
 
     // Register routes

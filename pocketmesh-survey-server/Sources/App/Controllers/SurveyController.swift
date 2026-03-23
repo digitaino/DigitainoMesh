@@ -410,6 +410,7 @@ struct SurveyController {
                     exact.latitude = info.latitude
                     exact.longitude = info.longitude
                     exact.lastUpdated = now
+                    exact.lastContributorID = payload.contributorID
                     try await exact.save(on: req.db)
                     continue
                 }
@@ -425,6 +426,7 @@ struct SurveyController {
                     shorter.latitude = info.latitude
                     shorter.longitude = info.longitude
                     shorter.lastUpdated = now
+                    shorter.lastContributorID = payload.contributorID
                     try await shorter.save(on: req.db)
                     continue
                 }
@@ -444,6 +446,7 @@ struct SurveyController {
                     longitude: info.longitude,
                     lastUpdated: now
                 )
+                repeater.lastContributorID = payload.contributorID
                 try await repeater.save(on: req.db)
             }
         }
@@ -834,6 +837,12 @@ struct SurveyController {
         let maxLon = req.query[Double.self, at: "maxLon"]
 
         var query = RepeaterLocation.query(on: req.db)
+
+        // Exclude hidden repeaters from public responses
+        query = query.group(.or) { group in
+            group.filter(\.$hidden == nil)
+            group.filter(\.$hidden == false)
+        }
 
         // Apply bounding box filter if all params provided
         if let minLat, let maxLat, let minLon, let maxLon {
@@ -1449,6 +1458,140 @@ struct SurveyController {
             uploadsReassigned: totalUploadsReassigned,
             sourceIDsRemoved: removedSourceIDs
         )
+    }
+
+    // MARK: - GET /api/v1/admin/repeaters
+
+    @Sendable
+    func getAdminRepeaters(req: Request) async throws -> AdminRepeatersResponse {
+        guard let sql = req.db as? SQLDatabase else {
+            throw Abort(.internalServerError, reason: "SQL database required")
+        }
+
+        struct RepeaterRow: Decodable {
+            let id: Int
+            let hex_id: String
+            let name: String
+            let latitude: Double
+            let longitude: Double
+            let last_updated: String
+            let hidden: Bool?
+            let notes: String?
+            let last_contributor_id: String?
+            let cell_count: Int
+            let total_packet_count: Int
+            let last_heard: String?
+        }
+
+        let query: SQLQueryString = """
+            SELECT rl.id, rl.hex_id, rl.name, rl.latitude, rl.longitude, rl.last_updated,
+                   rl.hidden, rl.notes, rl.last_contributor_id,
+                   COUNT(DISTINCT cr.cell_id) AS cell_count,
+                   COALESCE(SUM(cr.packet_count), 0) AS total_packet_count,
+                   MAX(cr.last_heard) AS last_heard
+            FROM repeater_locations rl
+            LEFT JOIN cell_repeaters cr ON UPPER(cr.repeater_hex_id) = UPPER(rl.hex_id)
+            GROUP BY rl.id
+            ORDER BY rl.name ASC
+            """
+
+        let rows = try await sql.raw(query).all(decoding: RepeaterRow.self)
+
+        let repeaters = rows.map { row in
+            AdminRepeaterInfo(
+                id: row.id,
+                hexID: row.hex_id,
+                name: row.name,
+                latitude: row.latitude,
+                longitude: row.longitude,
+                lastUpdated: row.last_updated,
+                hidden: row.hidden ?? false,
+                notes: row.notes,
+                lastContributorID: row.last_contributor_id,
+                cellCount: row.cell_count,
+                totalPacketCount: row.total_packet_count,
+                lastHeard: row.last_heard
+            )
+        }
+
+        return AdminRepeatersResponse(repeaters: repeaters)
+    }
+
+    // MARK: - PUT /api/v1/admin/repeater/:id/hidden
+
+    @Sendable
+    func toggleRepeaterHidden(req: Request) async throws -> ToggleRepeaterHiddenResponse {
+        guard let idString = req.parameters.get("id"),
+              let id = Int(idString) else {
+            throw Abort(.badRequest, reason: "Missing or invalid repeater ID")
+        }
+
+        let body = try req.content.decode(ToggleRepeaterHiddenRequest.self)
+
+        guard let repeater = try await RepeaterLocation.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Repeater not found")
+        }
+
+        repeater.hidden = body.hidden
+        try await repeater.save(on: req.db)
+
+        req.logger.info("Repeater \(repeater.hexID) hidden=\(body.hidden)")
+
+        return ToggleRepeaterHiddenResponse(hexID: repeater.hexID, hidden: body.hidden)
+    }
+
+    // MARK: - PUT /api/v1/admin/repeater/:id/notes
+
+    @Sendable
+    func updateRepeaterNotes(req: Request) async throws -> UpdateRepeaterNotesResponse {
+        guard let idString = req.parameters.get("id"),
+              let id = Int(idString) else {
+            throw Abort(.badRequest, reason: "Missing or invalid repeater ID")
+        }
+
+        let body = try req.content.decode(UpdateRepeaterNotesRequest.self)
+
+        guard let repeater = try await RepeaterLocation.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Repeater not found")
+        }
+
+        repeater.notes = body.notes.isEmpty ? nil : body.notes
+        try await repeater.save(on: req.db)
+
+        return UpdateRepeaterNotesResponse(hexID: repeater.hexID, notes: body.notes)
+    }
+
+    // MARK: - DELETE /api/v1/admin/repeater/:id
+
+    @Sendable
+    func deleteRepeater(req: Request) async throws -> DeleteRepeaterResponse {
+        guard let idString = req.parameters.get("id"),
+              let id = Int(idString) else {
+            throw Abort(.badRequest, reason: "Missing or invalid repeater ID")
+        }
+
+        guard let repeater = try await RepeaterLocation.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Repeater not found")
+        }
+
+        let hexID = repeater.hexID.uppercased()
+
+        // Delete all cell_repeater references for this repeater
+        let cellRepeaters = try await CellRepeater.query(on: req.db).all()
+        var removed = 0
+        for cr in cellRepeaters {
+            if cr.repeaterHexID.uppercased() == hexID {
+                try await cr.delete(on: req.db)
+                removed += 1
+            }
+        }
+
+        // Delete the repeater location
+        try await repeater.delete(on: req.db)
+
+        req.logger.info("Deleted repeater \(hexID): \(removed) cell_repeater references removed")
+
+        return DeleteRepeaterResponse(hexID: hexID, cellRepeatersRemoved: removed)
     }
 
     // MARK: - POST /api/v1/contributor/:contributorID/challenge

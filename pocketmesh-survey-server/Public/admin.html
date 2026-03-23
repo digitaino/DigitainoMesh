@@ -431,6 +431,89 @@
         }
         .cell-popup-row .val { color: #e5e5e5; font-variant-numeric: tabular-nums; }
 
+        /* Toggle switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            transition: 0.2s;
+        }
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 2px;
+            bottom: 2px;
+            background: #888;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: rgba(34,211,238,0.3); }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); background: #22d3ee; }
+
+        /* Repeater rows */
+        tr.repeater-hidden td { opacity: 0.45; }
+        tr.repeater-hidden .repeater-name { text-decoration: line-through; }
+        .repeater-search {
+            width: 100%;
+            max-width: 300px;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #e5e5e5;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+        .repeater-search:focus { outline: none; border-color: rgba(34,211,238,0.4); }
+        .repeater-search::placeholder { color: #555; }
+        .repeater-location {
+            font-size: 10px;
+            color: #888;
+            font-variant-numeric: tabular-nums;
+        }
+        .repeater-notes-row td {
+            padding: 0 12px 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .repeater-notes-panel {
+            padding: 10px 12px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+        }
+        .repeater-notes-textarea {
+            width: 100%;
+            min-height: 50px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: #e5e5e5;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 12px;
+            padding: 8px;
+            resize: vertical;
+        }
+        .repeater-notes-textarea:focus { outline: none; border-color: rgba(34,211,238,0.4); }
+        .repeater-notes-saved {
+            font-size: 10px;
+            color: #22c55e;
+            margin-left: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .repeater-notes-saved.visible { opacity: 1; }
+
         @media (max-width: 768px) {
             body { padding: 12px; }
             .stats-row { gap: 8px; }
@@ -454,6 +537,7 @@
     <div class="tabs">
         <div class="tab active" onclick="switchTab('contributors')">Contributors</div>
         <div class="tab" onclick="switchTab('uploads')">Upload Log</div>
+        <div class="tab" onclick="switchTab('repeaters')">Repeaters</div>
         <div style="flex:1"></div>
         <button class="btn btn-danger" onclick="purgeBogus()">Purge Bogus Contributors</button>
     </div>
@@ -514,6 +598,31 @@
                     </tr>
                 </thead>
                 <tbody id="uploads-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab-repeaters" class="hidden">
+        <input type="text" class="repeater-search" id="repeater-search" placeholder="Search by name or hex ID..." oninput="filterRepeaters()">
+        <div class="card">
+            <div class="loading" id="repeaters-loading">Loading repeaters...</div>
+            <table id="repeaters-table" class="hidden">
+                <thead>
+                    <tr>
+                        <th>Hex ID</th>
+                        <th>Name</th>
+                        <th>Location</th>
+                        <th>Cells</th>
+                        <th>Packets</th>
+                        <th>Last Heard</th>
+                        <th>Updated</th>
+                        <th>Contributor</th>
+                        <th>Visible</th>
+                        <th>Notes</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="repeaters-body"></tbody>
             </table>
         </div>
     </div>
@@ -1076,8 +1185,10 @@
 
             document.getElementById('tab-contributors').classList.toggle('hidden', tab !== 'contributors');
             document.getElementById('tab-uploads').classList.toggle('hidden', tab !== 'uploads');
+            document.getElementById('tab-repeaters').classList.toggle('hidden', tab !== 'repeaters');
 
             if (tab === 'uploads') loadUploads();
+            if (tab === 'repeaters') loadRepeaters();
         }
 
         // Toast notification
@@ -1265,6 +1376,185 @@
             } finally {
                 document.getElementById('merge-confirm-btn').disabled = false;
                 document.getElementById('merge-confirm-btn').textContent = 'Merge';
+            }
+        }
+
+        // ===================== Repeaters =====================
+        let repeatersData = [];
+        let repeatersLoaded = false;
+        let repeaterNotesSaveTimers = {};
+        let expandedRepeaterID = null;
+
+        async function loadRepeaters() {
+            if (repeatersLoaded) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/repeaters`);
+                const data = await res.json();
+                repeatersData = data.repeaters;
+                renderRepeaters();
+                repeatersLoaded = true;
+            } catch (e) {
+                document.getElementById('repeaters-loading').textContent = 'Failed to load: ' + e.message;
+            }
+        }
+
+        function renderRepeaters() {
+            const tbody = document.getElementById('repeaters-body');
+            const searchTerm = (document.getElementById('repeater-search').value || '').toLowerCase();
+            tbody.innerHTML = '';
+
+            const filtered = repeatersData.filter(r => {
+                if (!searchTerm) return true;
+                return r.name.toLowerCase().includes(searchTerm)
+                    || r.hexID.toLowerCase().includes(searchTerm);
+            });
+
+            for (const r of filtered) {
+                const isHidden = r.hidden;
+                const isExpanded = expandedRepeaterID === r.id;
+
+                const tr = document.createElement('tr');
+                tr.className = (isHidden ? 'repeater-hidden ' : '') + 'clickable';
+                if (isExpanded) tr.classList.add('selected');
+
+                const notesPreview = r.notes
+                    ? `<span class="notes-preview" title="${escapeHtml(r.notes)}">${escapeHtml(r.notes)}</span>`
+                    : '<span class="dim">\u2014</span>';
+
+                const contributorLabel = r.lastContributorID
+                    ? `<span class="mono" title="${escapeHtml(r.lastContributorID)}">${escapeHtml(r.lastContributorID.substring(0, 8))}...</span>`
+                    : '<span class="dim">\u2014</span>';
+
+                tr.innerHTML = `
+                    <td class="mono">${escapeHtml(r.hexID)}</td>
+                    <td class="repeater-name">${escapeHtml(r.name)}</td>
+                    <td><span class="repeater-location">${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}</span></td>
+                    <td>${r.cellCount}</td>
+                    <td>${r.totalPacketCount.toLocaleString()}</td>
+                    <td>${formatDate(r.lastHeard)}</td>
+                    <td>${formatDate(r.lastUpdated)}</td>
+                    <td>${contributorLabel}</td>
+                    <td onclick="event.stopPropagation()">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${!isHidden ? 'checked' : ''} onchange="toggleRepeaterHidden(${r.id}, !this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td>${notesPreview}</td>
+                    <td onclick="event.stopPropagation()"><button class="btn btn-danger" onclick="deleteRepeater(${r.id}, '${escapeHtml(r.hexID)}', '${escapeHtml(r.name)}')">Delete</button></td>
+                `;
+                tr.addEventListener('click', () => toggleRepeaterExpand(r.id));
+                tbody.appendChild(tr);
+
+                // Expanded notes row
+                if (isExpanded) {
+                    const notesTr = document.createElement('tr');
+                    notesTr.className = 'repeater-notes-row';
+                    notesTr.innerHTML = `
+                        <td colspan="11">
+                            <div class="repeater-notes-panel">
+                                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">
+                                    Notes <span class="repeater-notes-saved" id="rn-saved-${r.id}">Saved</span>
+                                </label>
+                                <textarea class="repeater-notes-textarea" id="rn-textarea-${r.id}"
+                                    oninput="onRepeaterNotesInput(${r.id})"
+                                    placeholder="Add notes about this repeater...">${escapeHtml(r.notes || '')}</textarea>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(notesTr);
+                }
+            }
+
+            document.getElementById('repeaters-loading').classList.add('hidden');
+            document.getElementById('repeaters-table').classList.remove('hidden');
+        }
+
+        function filterRepeaters() {
+            renderRepeaters();
+        }
+
+        function toggleRepeaterExpand(id) {
+            expandedRepeaterID = expandedRepeaterID === id ? null : id;
+            renderRepeaters();
+        }
+
+        async function toggleRepeaterHidden(id, hidden) {
+            try {
+                const res = await fetch(`${API_BASE}/admin/repeater/${id}/hidden`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hidden })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+                const data = await res.json();
+                // Update local data
+                const r = repeatersData.find(r => r.id === id);
+                if (r) r.hidden = data.hidden;
+                renderRepeaters();
+                showToast(`${data.hexID} ${data.hidden ? 'hidden' : 'visible'}`, 'success');
+            } catch (e) {
+                showToast('Toggle failed: ' + e.message, 'error');
+                renderRepeaters(); // Re-render to reset checkbox state
+            }
+        }
+
+        function onRepeaterNotesInput(id) {
+            if (repeaterNotesSaveTimers[id]) clearTimeout(repeaterNotesSaveTimers[id]);
+            repeaterNotesSaveTimers[id] = setTimeout(() => saveRepeaterNotes(id), 1000);
+        }
+
+        async function saveRepeaterNotes(id) {
+            const textarea = document.getElementById(`rn-textarea-${id}`);
+            const saved = document.getElementById(`rn-saved-${id}`);
+            if (!textarea) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/repeater/${id}/notes`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notes: textarea.value })
+                });
+                if (!res.ok) throw new Error('Failed to save');
+
+                // Update local data
+                const r = repeatersData.find(r => r.id === id);
+                if (r) r.notes = textarea.value;
+
+                // Flash "Saved" indicator
+                if (saved) {
+                    saved.classList.add('visible');
+                    setTimeout(() => saved.classList.remove('visible'), 2000);
+                }
+            } catch (e) {
+                showToast('Failed to save notes: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteRepeater(id, hexID, name) {
+            if (!confirm(`Delete repeater ${name} (${hexID})?\n\nThis will remove the repeater and all cell-repeater references. This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/repeater/${id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+                const data = await res.json();
+                showToast(`Deleted ${data.hexID}: ${data.cellRepeatersRemoved} cell references removed`, 'success');
+
+                // Remove from local data and re-render
+                repeatersData = repeatersData.filter(r => r.id !== id);
+                if (expandedRepeaterID === id) expandedRepeaterID = null;
+                renderRepeaters();
+                loadStats();
+            } catch (e) {
+                showToast('Delete failed: ' + e.message, 'error');
             }
         }
 
