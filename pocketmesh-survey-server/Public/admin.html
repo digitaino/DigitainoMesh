@@ -119,6 +119,10 @@
         .status-submitted { background: rgba(34,197,94,0.15); color: #22c55e; }
         .status-consumed { background: rgba(136,136,136,0.15); color: #888; }
         .status-expired { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .status-created { background: rgba(34,211,238,0.15); color: #22d3ee; }
+        .status-in_progress { background: rgba(234,179,8,0.15); color: #eab308; }
+        .status-completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+        .status-abandoned { background: rgba(239,68,68,0.15); color: #ef4444; }
         .type-route { background: rgba(34,211,238,0.15); color: #22d3ee; }
         .type-map { background: rgba(168,85,247,0.15); color: #a855f7; }
         .shared-link {
@@ -560,6 +564,7 @@
         <div class="stat-card"><span class="value" id="s-repeaters">&mdash;</span><span class="label">Repeaters</span></div>
         <div class="stat-card"><span class="value" id="s-shared">&mdash;</span><span class="label">Shared Links</span></div>
         <div class="stat-card"><span class="value" id="s-plans">&mdash;</span><span class="label">Plan Sessions</span></div>
+        <div class="stat-card"><span class="value" id="s-survey-routes">&mdash;</span><span class="label">Survey Routes</span></div>
     </div>
 
     <div class="tabs">
@@ -568,6 +573,7 @@
         <div class="tab" onclick="switchTab('repeaters')">Repeaters</div>
         <div class="tab" onclick="switchTab('shared')">Shared Links</div>
         <div class="tab" onclick="switchTab('plans')">Route Plans</div>
+        <div class="tab" onclick="switchTab('survey-routes')">Survey Routes</div>
         <div style="flex:1"></div>
         <button class="btn btn-danger" onclick="purgeBogus()">Purge Bogus Contributors</button>
     </div>
@@ -696,6 +702,32 @@
                     </tr>
                 </thead>
                 <tbody id="plans-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab-survey-routes" class="hidden">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <button class="btn" onclick="refreshSurveyRoutes()">Refresh</button>
+        </div>
+        <div class="card">
+            <div class="loading" id="survey-routes-loading">Loading survey routes...</div>
+            <table id="survey-routes-table" class="hidden">
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="sortSurveyRoutes('id')">ID</th>
+                        <th class="sortable" onclick="sortSurveyRoutes('contributorID')">Contributor</th>
+                        <th class="sortable" onclick="sortSurveyRoutes('status')">Status</th>
+                        <th class="sortable" onclick="sortSurveyRoutes('waypointCount')">Waypoints</th>
+                        <th>Progress</th>
+                        <th class="sortable" onclick="sortSurveyRoutes('createdAt')">Created</th>
+                        <th class="sortable" onclick="sortSurveyRoutes('finishedAt')">Finished</th>
+                        <th>Source</th>
+                        <th>Notes</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="survey-routes-body"></tbody>
             </table>
         </div>
     </div>
@@ -1317,11 +1349,13 @@
             document.getElementById('tab-repeaters').classList.toggle('hidden', tab !== 'repeaters');
             document.getElementById('tab-shared').classList.toggle('hidden', tab !== 'shared');
             document.getElementById('tab-plans').classList.toggle('hidden', tab !== 'plans');
+            document.getElementById('tab-survey-routes').classList.toggle('hidden', tab !== 'survey-routes');
 
             if (tab === 'uploads') loadUploads();
             if (tab === 'repeaters') loadRepeaters();
             if (tab === 'shared') loadSharedLinks();
             if (tab === 'plans') loadPlanSessions();
+            if (tab === 'survey-routes') loadSurveyRoutes();
         }
 
         // Toast notification
@@ -1862,6 +1896,169 @@
                 planSessionsData = planSessionsData.filter(s => s.code !== code);
                 document.getElementById('s-plans').textContent = planSessionsData.length;
                 renderPlanSessions();
+            } catch (e) {
+                showToast('Delete failed: ' + e.message, 'error');
+            }
+        }
+
+        // ===================== Survey Routes =====================
+        let surveyRoutesData = [];
+        let surveyRoutesSortKey = null;
+        let surveyRoutesSortAsc = true;
+        let surveyRoutesLoaded = false;
+        let surveyRouteNotesSaveTimers = {};
+        let expandedSurveyRouteID = null;
+
+        async function loadSurveyRoutes() {
+            if (surveyRoutesLoaded) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/survey-routes`);
+                const data = await res.json();
+                surveyRoutesData = data.routes;
+                document.getElementById('s-survey-routes').textContent = surveyRoutesData.length;
+                renderSurveyRoutes();
+                surveyRoutesLoaded = true;
+            } catch (e) {
+                document.getElementById('survey-routes-loading').textContent = 'Failed to load: ' + e.message;
+            }
+        }
+
+        function refreshSurveyRoutes() {
+            surveyRoutesLoaded = false;
+            document.getElementById('survey-routes-loading').textContent = 'Loading survey routes...';
+            document.getElementById('survey-routes-loading').classList.remove('hidden');
+            document.getElementById('survey-routes-table').classList.add('hidden');
+            loadSurveyRoutes();
+        }
+
+        function sortSurveyRoutes(key) {
+            if (surveyRoutesSortKey === key) {
+                surveyRoutesSortAsc = !surveyRoutesSortAsc;
+            } else {
+                surveyRoutesSortKey = key;
+                surveyRoutesSortAsc = true;
+            }
+            surveyRoutesData.sort((a, b) => compareValues(a, b, key, surveyRoutesSortAsc));
+            updateSortHeaders('survey-routes-table', key, surveyRoutesSortAsc);
+            renderSurveyRoutes();
+        }
+
+        function renderSurveyRoutes() {
+            const tbody = document.getElementById('survey-routes-body');
+            tbody.innerHTML = '';
+
+            for (const r of surveyRoutesData) {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable' + (expandedSurveyRouteID === r.id ? ' selected' : '');
+
+                const statusLabel = r.status === 'in_progress' ? 'In Progress'
+                    : r.status.charAt(0).toUpperCase() + r.status.slice(1);
+                const statusClass = `status-${r.status}`;
+
+                // Progress: "12/30 (3 skipped)"
+                let progressHtml = `${r.completedCount}/${r.waypointCount}`;
+                if (r.skippedCount > 0) {
+                    progressHtml += ` <span class="dim">(${r.skippedCount} skipped)</span>`;
+                }
+
+                // Source
+                const sourceHtml = r.planSessionCode
+                    ? `<span class="mono" style="font-size:11px">${escapeHtml(r.planSessionCode)}</span>`
+                    : '<span class="dim">Local</span>';
+
+                // Notes preview
+                const notesPreview = r.notes
+                    ? `<span class="notes-preview" title="${escapeHtml(r.notes)}">${escapeHtml(r.notes)}</span>`
+                    : '<span class="dim">\u2014</span>';
+
+                tr.innerHTML = `
+                    <td class="mono">${escapeHtml(r.id)}</td>
+                    <td class="contributor-id-cell"><span class="mono contributor-id" title="${escapeHtml(r.contributorID)}">${escapeHtml(r.contributorID.substring(0, 8))}...</span></td>
+                    <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+                    <td>${r.waypointCount}</td>
+                    <td>${progressHtml}</td>
+                    <td>${formatDate(r.createdAt)}</td>
+                    <td>${formatDate(r.finishedAt)}</td>
+                    <td>${sourceHtml}</td>
+                    <td>${notesPreview}</td>
+                    <td><button class="btn btn-danger" onclick="event.stopPropagation(); deleteSurveyRoute('${escapeHtml(r.id)}')">Delete</button></td>
+                `;
+                tr.addEventListener('click', () => toggleSurveyRouteExpand(r.id));
+                tbody.appendChild(tr);
+
+                // Expanded notes row
+                if (expandedSurveyRouteID === r.id) {
+                    const notesTr = document.createElement('tr');
+                    notesTr.className = 'repeater-notes-row';
+                    notesTr.innerHTML = `
+                        <td colspan="10">
+                            <div class="repeater-notes-panel">
+                                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">
+                                    Notes <span class="repeater-notes-saved" id="srn-saved-${escapeHtml(r.id)}">Saved</span>
+                                </label>
+                                <textarea class="repeater-notes-textarea" id="srn-textarea-${escapeHtml(r.id)}"
+                                    oninput="onSurveyRouteNotesInput('${escapeHtml(r.id)}')"
+                                    placeholder="Add notes about this survey route...">${escapeHtml(r.notes || '')}</textarea>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(notesTr);
+                }
+            }
+
+            document.getElementById('survey-routes-loading').classList.add('hidden');
+            document.getElementById('survey-routes-table').classList.remove('hidden');
+        }
+
+        function toggleSurveyRouteExpand(id) {
+            expandedSurveyRouteID = expandedSurveyRouteID === id ? null : id;
+            renderSurveyRoutes();
+        }
+
+        function onSurveyRouteNotesInput(id) {
+            if (surveyRouteNotesSaveTimers[id]) clearTimeout(surveyRouteNotesSaveTimers[id]);
+            surveyRouteNotesSaveTimers[id] = setTimeout(() => saveSurveyRouteNotes(id), 1000);
+        }
+
+        async function saveSurveyRouteNotes(id) {
+            const textarea = document.getElementById(`srn-textarea-${id}`);
+            const saved = document.getElementById(`srn-saved-${id}`);
+            if (!textarea) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/survey-route/${encodeURIComponent(id)}/notes`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notes: textarea.value })
+                });
+                if (!res.ok) throw new Error('Failed to save');
+
+                const r = surveyRoutesData.find(r => r.id === id);
+                if (r) r.notes = textarea.value;
+
+                if (saved) {
+                    saved.classList.add('visible');
+                    setTimeout(() => saved.classList.remove('visible'), 2000);
+                }
+            } catch (e) {
+                showToast('Failed to save notes: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteSurveyRoute(id) {
+            if (!confirm(`Delete survey route ${id}?\n\nThis cannot be undone.`)) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/survey-route/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+                showToast(`Deleted survey route ${id}`, 'success');
+                surveyRoutesData = surveyRoutesData.filter(r => r.id !== id);
+                if (expandedSurveyRouteID === id) expandedSurveyRouteID = null;
+                document.getElementById('s-survey-routes').textContent = surveyRoutesData.length;
+                renderSurveyRoutes();
             } catch (e) {
                 showToast('Delete failed: ' + e.message, 'error');
             }

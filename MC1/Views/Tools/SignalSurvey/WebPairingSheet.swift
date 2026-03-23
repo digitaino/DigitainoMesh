@@ -150,7 +150,7 @@ struct WebPairingSheet: View {
                     }
 
                     await MainActor.run {
-                        viewModel.receiveWebPolygon(coords)
+                        viewModel.receiveWebPolygon(coords, planSessionCode: code)
                         dismiss()
                     }
                     return

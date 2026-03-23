@@ -40,6 +40,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddShareUserName())
     app.migrations.add(AddPlanSessions())
     app.migrations.add(AddRepeaterAdminFields())
+    app.migrations.add(AddSurveyRoutes())
     try app.autoMigrate().wait()
 
     // Register routes

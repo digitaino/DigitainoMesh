@@ -539,6 +539,16 @@ final class SignalSurveyViewModel {
         case navigating
     }
 
+    /// Summary shown briefly after stopping/completing/cancelling navigation.
+    struct RouteCompletionSummary: Equatable {
+        let totalWaypoints: Int
+        let completedCount: Int
+        let skippedCount: Int
+        let remainingCount: Int
+        let duration: TimeInterval?
+        let wasCompleted: Bool
+    }
+
     var routePlannerMode: RoutePlannerMode = .inactive
 
     /// Polygon vertices placed by the user during drawing mode.
@@ -556,8 +566,23 @@ final class SignalSurveyViewModel {
     /// The user's current location, updated during navigation for guidance arrow/distance.
     var userLocation: CLLocationCoordinate2D?
 
+    /// Route completion summary, shown transiently after stop/cancel/complete.
+    var routeCompletionSummary: RouteCompletionSummary?
+
+    /// Timestamp of when navigation started (for duration tracking).
+    private var navigationStartTime: Date?
+
     /// Polling task for web-to-app polygon delivery.
     private var webPollingTask: Task<Void, Never>?
+
+    /// Server-assigned route ID after upload. Nil if the route has not been uploaded.
+    var serverRouteID: String?
+
+    /// Plan session code if the polygon was received via web pairing (used when uploading).
+    private var webPlanSessionCode: String?
+
+    /// Service for survey route lifecycle API calls.
+    private let surveyRouteService = SurveyRouteService()
 
     /// Add a vertex to the drawing polygon.
     func addPolygonVertex(_ coordinate: CLLocationCoordinate2D) {
@@ -614,7 +639,9 @@ final class SignalSurveyViewModel {
     /// Start navigation guidance.
     func startNavigation() {
         guard currentRoute != nil else { return }
+        navigationStartTime = Date()
         routePlannerMode = .navigating
+        updateServerRouteStatus("in_progress")
     }
 
     /// Skip the current waypoint and advance to the next.
@@ -627,16 +654,49 @@ final class SignalSurveyViewModel {
         currentRoute = route
     }
 
-    /// Stop navigation and return to route review.
+    /// Stop navigation and return to route review, showing a summary of progress.
     func stopNavigation() {
+        if let route = currentRoute {
+            let duration = navigationStartTime.map { Date().timeIntervalSince($0) }
+            routeCompletionSummary = RouteCompletionSummary(
+                totalWaypoints: route.waypoints.count,
+                completedCount: route.completedCount,
+                skippedCount: route.waypoints.filter { $0.status == .skipped }.count,
+                remainingCount: route.remainingCount,
+                duration: duration,
+                wasCompleted: false
+            )
+        }
         routePlannerMode = .reviewingRoute
     }
 
     /// Cancel route planning entirely.
     func cancelRoutePlanning() {
+        // Show summary if any navigation progress was made
+        if let route = currentRoute,
+           route.completedCount > 0 || route.waypoints.contains(where: { $0.status == .skipped }) {
+            let duration = navigationStartTime.map { Date().timeIntervalSince($0) }
+            routeCompletionSummary = RouteCompletionSummary(
+                totalWaypoints: route.waypoints.count,
+                completedCount: route.completedCount,
+                skippedCount: route.waypoints.filter { $0.status == .skipped }.count,
+                remainingCount: route.remainingCount,
+                duration: duration,
+                wasCompleted: false
+            )
+        }
+        // Report abandoned if any navigation progress was made
+        if let route = currentRoute,
+           route.completedCount > 0 || route.waypoints.contains(where: { $0.status == .skipped }) {
+            updateServerRouteStatus("abandoned", completedCount: route.completedCount,
+                                    skippedCount: route.waypoints.filter { $0.status == .skipped }.count)
+        }
         routePlannerMode = .inactive
         drawingPolygonPoints = []
         currentRoute = nil
+        navigationStartTime = nil
+        serverRouteID = nil
+        webPlanSessionCode = nil
         webPollingTask?.cancel()
         webPollingTask = nil
     }
@@ -660,19 +720,92 @@ final class SignalSurveyViewModel {
         }
     }
 
-    /// Advance to the next pending waypoint.
+    /// Advance to the next pending waypoint, or complete the route if none remain.
     private func advanceToNextWaypoint(route: inout RoutePlanner.Route) {
-        // Find the next pending waypoint
         if let nextIndex = route.waypoints.firstIndex(where: { $0.status == .pending }) {
             route.waypoints[nextIndex].status = .current
+        } else {
+            // All waypoints visited — route is complete
+            let completedCount = route.waypoints.filter { $0.status == .completed }.count
+            let skippedCount = route.waypoints.filter { $0.status == .skipped }.count
+            let duration = navigationStartTime.map { Date().timeIntervalSince($0) }
+            routeCompletionSummary = RouteCompletionSummary(
+                totalWaypoints: route.waypoints.count,
+                completedCount: completedCount,
+                skippedCount: skippedCount,
+                remainingCount: 0,
+                duration: duration,
+                wasCompleted: true
+            )
+            routePlannerMode = .reviewingRoute
+            updateServerRouteStatus("completed", completedCount: completedCount, skippedCount: skippedCount)
         }
-        // If no pending waypoints remain, navigation is complete
     }
 
     /// Receive polygon vertices from web session and generate route.
-    func receiveWebPolygon(_ vertices: [CLLocationCoordinate2D]) {
+    /// Web-drawn routes are auto-uploaded since they already went through the server.
+    func receiveWebPolygon(_ vertices: [CLLocationCoordinate2D], planSessionCode: String? = nil) {
+        webPlanSessionCode = planSessionCode
         drawingPolygonPoints = vertices
         generateRoute()
+
+        // Auto-upload web-drawn routes
+        if currentRoute != nil, planSessionCode != nil {
+            uploadRouteToServer()
+        }
+    }
+
+    /// Dismiss the route completion summary card.
+    func dismissRouteSummary() {
+        routeCompletionSummary = nil
+    }
+
+    /// Upload the current route to the server. Called explicitly by the user for local routes,
+    /// or automatically for web-drawn routes.
+    func uploadRouteToServer() {
+        guard let route = currentRoute, serverRouteID == nil else { return }
+        let polygon = drawingPolygonPoints
+        let waypointCount = route.waypoints.count
+        let excludedSurveyed = route.excludedSurveyedCells
+        let refLat = route.referenceLatitude
+        let planCode = webPlanSessionCode
+
+        Task {
+            do {
+                let contributorID = try await SurveyUploadService().getOrCreateContributorID()
+                let routeID = try await surveyRouteService.createRoute(
+                    polygon: polygon,
+                    waypointCount: waypointCount,
+                    excludedSurveyed: excludedSurveyed,
+                    referenceLatitude: refLat,
+                    contributorID: contributorID,
+                    planSessionCode: planCode
+                )
+                await MainActor.run {
+                    self.serverRouteID = routeID
+                }
+            } catch {
+                // Fire-and-forget: log but don't block the local flow
+                logger.warning("Failed to upload survey route: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Fire-and-forget status update to the server (only if the route was uploaded).
+    private func updateServerRouteStatus(_ status: String, completedCount: Int? = nil, skippedCount: Int? = nil) {
+        guard let routeID = serverRouteID else { return }
+        Task {
+            do {
+                try await surveyRouteService.updateStatus(
+                    routeID: routeID,
+                    status: status,
+                    completedCount: completedCount,
+                    skippedCount: skippedCount
+                )
+            } catch {
+                logger.warning("Failed to update survey route status: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Active Probing

@@ -545,3 +545,83 @@ struct AdminPlanSessionsResponse: Content {
 struct DeletePlanSessionResponse: Content {
     let code: String
 }
+
+// MARK: - Survey Routes
+
+struct CreateSurveyRouteRequest: Content {
+    let polygon: [PolygonVertex]
+    let waypointCount: Int
+    let excludedSurveyed: Bool
+    let referenceLatitude: Double
+    let contributorID: String
+    let planSessionCode: String?
+}
+
+struct CreateSurveyRouteResponse: Content {
+    let id: String
+    let status: String
+    let createdAt: String
+}
+
+struct UpdateSurveyRouteStatusRequest: Content {
+    let status: String
+    let completedCount: Int?
+    let skippedCount: Int?
+}
+
+struct UpdateSurveyRouteStatusResponse: Content {
+    let id: String
+    let status: String
+    let updatedAt: String
+}
+
+struct SurveyRouteResponse: Content {
+    let id: String
+    let contributorID: String
+    let waypointCount: Int
+    let status: String
+    let completedCount: Int
+    let skippedCount: Int
+    let excludedSurveyed: Bool
+    let referenceLatitude: Double
+    let planSessionCode: String?
+    let createdAt: String
+    let startedAt: String?
+    let finishedAt: String?
+    let updatedAt: String
+}
+
+// MARK: - Admin Survey Routes
+
+struct AdminSurveyRouteInfo: Content {
+    let id: String
+    let contributorID: String
+    let waypointCount: Int
+    let status: String
+    let completedCount: Int
+    let skippedCount: Int
+    let planSessionCode: String?
+    let createdAt: String
+    let startedAt: String?
+    let finishedAt: String?
+    let updatedAt: String
+    let notes: String?
+    let vertexCount: Int
+}
+
+struct AdminSurveyRoutesResponse: Content {
+    let routes: [AdminSurveyRouteInfo]
+}
+
+struct UpdateSurveyRouteNotesRequest: Content {
+    let notes: String
+}
+
+struct UpdateSurveyRouteNotesResponse: Content {
+    let id: String
+    let notes: String
+}
+
+struct DeleteSurveyRouteResponse: Content {
+    let id: String
+}

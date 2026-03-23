@@ -12,6 +12,7 @@ func routes(_ app: Application) throws {
     let surveyController = SurveyController()
     let shareController = ShareController()
     let planController = PlanController()
+    let surveyRouteController = SurveyRouteController()
 
     // --- Cache policies ---
     // Short (30s): viewport data that changes on survey upload
@@ -60,6 +61,11 @@ func routes(_ app: Application) throws {
 
     // Plan session creation (authenticated)
     protected.post("plans", "sessions", use: planController.createSession)
+
+    // Survey route lifecycle (authenticated)
+    protected.post("survey-routes", use: surveyRouteController.createRoute)
+    protected.put("survey-routes", ":id", "status", use: surveyRouteController.updateStatus)
+    protected.get("survey-routes", ":id", use: surveyRouteController.getRoute)
 
     // Plan session polling and polygon submission (public — the code IS the auth)
     let planPublic = api.grouped(CacheControlMiddleware(.noStore))
@@ -110,4 +116,9 @@ func routes(_ app: Application) throws {
     // Admin plan sessions management
     admin.get("plan-sessions", use: planController.getAdminPlanSessions)
     admin.delete("plan-session", ":code", use: planController.deletePlanSession)
+
+    // Admin survey routes management
+    admin.get("survey-routes", use: surveyRouteController.getAdminRoutes)
+    admin.put("survey-route", ":id", "notes", use: surveyRouteController.updateNotes)
+    admin.delete("survey-route", ":id", use: surveyRouteController.deleteRoute)
 }
