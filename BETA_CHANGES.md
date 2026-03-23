@@ -1,4 +1,26 @@
-Beta Changes -- v0.10.1 (Build 13)
+Beta Changes -- v0.10.1 (Build 14)
+
+Plan Survey Route (Experimental)
+
+New "Draw on Web" option in the survey route planner. Creates a 6-character pairing code and shareable link -- open the link on any device with a larger screen, draw a polygon on the map to define your survey area, and the polygon is sent back to your phone. The route planner then generates a walking/driving route through the polygon's hex cells.
+
+CLI Console from Repeater Settings
+
+After logging in as admin on a repeater, a new "CLI" button in the settings view opens the CLI console pre-authenticated to that repeater. No need to re-login from the Tools tab -- the existing session is reused.
+
+Admin Dashboard -- Repeater Management
+
+New "Repeaters" tab in the admin dashboard at mesh.digitaino.com/admin. Lists all known repeaters with cell count, packet count, last heard time, and contributing user. Toggle visibility to hide repeaters from the public API/community map. Add admin notes. Delete repeaters and their cell associations.
+
+Bug Fixes
+
+Fixed date display in admin dashboard where yesterday's contributions showed as "Today" if the contribution time was later in the day than the current time. Improved error messages for "Draw on Web" session creation failures -- now shows actual HTTP status instead of a generic error code.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 13)
 
 Message Search
 
