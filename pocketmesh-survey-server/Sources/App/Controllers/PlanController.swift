@@ -145,6 +145,60 @@ struct PlanController {
         return SubmitPolygonResponse(status: "submitted")
     }
 
+    // MARK: - GET /api/v1/admin/plan-sessions
+
+    @Sendable
+    func getAdminPlanSessions(req: Request) async throws -> AdminPlanSessionsResponse {
+        let sessions = try await PlanSession.query(on: req.db)
+            .sort(\.$createdAt, .descending)
+            .all()
+
+        let now = Date()
+        let isoFormatter = ISO8601DateFormatter()
+
+        let infos = sessions.map { session -> AdminPlanSessionInfo in
+            let vertexCount: Int?
+            if let json = session.polygonJSON, let data = json.data(using: .utf8),
+               let vertices = try? JSONDecoder().decode([PolygonVertex].self, from: data) {
+                vertexCount = vertices.count
+            } else {
+                vertexCount = nil
+            }
+
+            let isExpired: Bool
+            if let expiresAt = isoFormatter.date(from: session.expiresAt) {
+                isExpired = expiresAt < now
+            } else {
+                isExpired = false
+            }
+
+            return AdminPlanSessionInfo(
+                code: session.id ?? "",
+                status: session.status,
+                vertexCount: vertexCount,
+                createdAt: session.createdAt,
+                expiresAt: session.expiresAt,
+                isExpired: isExpired
+            )
+        }
+
+        return AdminPlanSessionsResponse(sessions: infos)
+    }
+
+    // MARK: - DELETE /api/v1/admin/plan-session/:code
+
+    @Sendable
+    func deletePlanSession(req: Request) async throws -> DeletePlanSessionResponse {
+        guard let code = req.parameters.get("code") else {
+            throw Abort(.badRequest, reason: "Missing session code")
+        }
+        guard let session = try await PlanSession.find(code, on: req.db) else {
+            throw Abort(.notFound, reason: "Plan session not found")
+        }
+        try await session.delete(on: req.db)
+        return DeletePlanSessionResponse(code: code)
+    }
+
     // MARK: - GET /plan and /plan/:code — Serve web page
 
     @Sendable

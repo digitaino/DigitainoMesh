@@ -108,6 +108,27 @@
             margin: 1px 2px;
         }
 
+        .status-badge, .type-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+        .status-waiting { background: rgba(234,179,8,0.15); color: #eab308; }
+        .status-submitted { background: rgba(34,197,94,0.15); color: #22c55e; }
+        .status-consumed { background: rgba(136,136,136,0.15); color: #888; }
+        .status-expired { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .type-route { background: rgba(34,211,238,0.15); color: #22d3ee; }
+        .type-map { background: rgba(168,85,247,0.15); color: #a855f7; }
+        .shared-link {
+            color: #22d3ee;
+            text-decoration: none;
+            font-family: 'SF Mono', Monaco, Consolas, monospace;
+            font-size: 12px;
+        }
+        .shared-link:hover { text-decoration: underline; }
+
         .btn {
             padding: 6px 12px;
             border: 1px solid rgba(255,255,255,0.15);
@@ -537,12 +558,16 @@
         <div class="stat-card"><span class="value" id="s-cells">&mdash;</span><span class="label">Cells</span></div>
         <div class="stat-card"><span class="value" id="s-uploads">&mdash;</span><span class="label">Uploads</span></div>
         <div class="stat-card"><span class="value" id="s-repeaters">&mdash;</span><span class="label">Repeaters</span></div>
+        <div class="stat-card"><span class="value" id="s-shared">&mdash;</span><span class="label">Shared Links</span></div>
+        <div class="stat-card"><span class="value" id="s-plans">&mdash;</span><span class="label">Plan Sessions</span></div>
     </div>
 
     <div class="tabs">
         <div class="tab active" onclick="switchTab('contributors')">Contributors</div>
         <div class="tab" onclick="switchTab('uploads')">Upload Log</div>
         <div class="tab" onclick="switchTab('repeaters')">Repeaters</div>
+        <div class="tab" onclick="switchTab('shared')">Shared Links</div>
+        <div class="tab" onclick="switchTab('plans')">Route Plans</div>
         <div style="flex:1"></div>
         <button class="btn btn-danger" onclick="purgeBogus()">Purge Bogus Contributors</button>
     </div>
@@ -628,6 +653,49 @@
                     </tr>
                 </thead>
                 <tbody id="repeaters-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab-shared" class="hidden">
+        <div class="card">
+            <div class="loading" id="shared-loading">Loading shared links...</div>
+            <table id="shared-table" class="hidden">
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="sortShared('id')">ID</th>
+                        <th class="sortable" onclick="sortShared('type')">Type</th>
+                        <th class="sortable" onclick="sortShared('userName')">User</th>
+                        <th class="sortable" onclick="sortShared('itemCount')">Count</th>
+                        <th>Distance</th>
+                        <th class="sortable" onclick="sortShared('createdAt')">Created</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="shared-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab-plans" class="hidden">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <button class="btn" onclick="refreshPlanSessions()">Refresh</button>
+        </div>
+        <div class="card">
+            <div class="loading" id="plans-loading">Loading plan sessions...</div>
+            <table id="plans-table" class="hidden">
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="sortPlans('code')">Code</th>
+                        <th class="sortable" onclick="sortPlans('status')">Status</th>
+                        <th class="sortable" onclick="sortPlans('vertexCount')">Vertices</th>
+                        <th class="sortable" onclick="sortPlans('createdAt')">Created</th>
+                        <th class="sortable" onclick="sortPlans('expiresAt')">Expires</th>
+                        <th>Actions</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="plans-body"></tbody>
             </table>
         </div>
     </div>
@@ -1247,9 +1315,13 @@
             document.getElementById('tab-contributors').classList.toggle('hidden', tab !== 'contributors');
             document.getElementById('tab-uploads').classList.toggle('hidden', tab !== 'uploads');
             document.getElementById('tab-repeaters').classList.toggle('hidden', tab !== 'repeaters');
+            document.getElementById('tab-shared').classList.toggle('hidden', tab !== 'shared');
+            document.getElementById('tab-plans').classList.toggle('hidden', tab !== 'plans');
 
             if (tab === 'uploads') loadUploads();
             if (tab === 'repeaters') loadRepeaters();
+            if (tab === 'shared') loadSharedLinks();
+            if (tab === 'plans') loadPlanSessions();
         }
 
         // Toast notification
@@ -1616,6 +1688,180 @@
                 if (expandedRepeaterID === id) expandedRepeaterID = null;
                 renderRepeaters();
                 loadStats();
+            } catch (e) {
+                showToast('Delete failed: ' + e.message, 'error');
+            }
+        }
+
+        // ===================== Shared Links =====================
+        let sharedLinksData = [];
+        let sharedSortKey = null;
+        let sharedSortAsc = true;
+        let sharedLoaded = false;
+
+        async function loadSharedLinks() {
+            if (sharedLoaded) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/shared-links`);
+                const data = await res.json();
+                sharedLinksData = data.links;
+                document.getElementById('s-shared').textContent = sharedLinksData.length;
+                renderSharedLinks();
+                sharedLoaded = true;
+            } catch (e) {
+                document.getElementById('shared-loading').textContent = 'Failed to load: ' + e.message;
+            }
+        }
+
+        function sortShared(key) {
+            if (sharedSortKey === key) {
+                sharedSortAsc = !sharedSortAsc;
+            } else {
+                sharedSortKey = key;
+                sharedSortAsc = true;
+            }
+            sharedLinksData.sort((a, b) => compareValues(a, b, key, sharedSortAsc));
+            updateSortHeaders('shared-table', key, sharedSortAsc);
+            renderSharedLinks();
+        }
+
+        function renderSharedLinks() {
+            const tbody = document.getElementById('shared-body');
+            tbody.innerHTML = '';
+
+            for (const link of sharedLinksData) {
+                const tr = document.createElement('tr');
+                const prefix = link.type === 'route' ? '/r/' : '/m/';
+                const typeClass = link.type === 'route' ? 'type-route' : 'type-map';
+                const typeLabel = link.type === 'route' ? 'Route' : 'Map';
+                const countLabel = link.type === 'route'
+                    ? `${link.itemCount} hop${link.itemCount !== 1 ? 's' : ''}`
+                    : `${link.itemCount} repeater${link.itemCount !== 1 ? 's' : ''}`;
+
+                tr.innerHTML = `
+                    <td><a href="${prefix}${escapeHtml(link.id)}" target="_blank" class="shared-link">${escapeHtml(link.id)}</a></td>
+                    <td><span class="type-badge ${typeClass}">${typeLabel}</span></td>
+                    <td>${link.userName ? escapeHtml(link.userName) : '<span class="dim">\u2014</span>'}</td>
+                    <td>${countLabel}</td>
+                    <td>${link.distanceText ? escapeHtml(link.distanceText) : '<span class="dim">\u2014</span>'}</td>
+                    <td>${formatDate(link.createdAt)}</td>
+                    <td><button class="btn btn-danger" onclick="deleteSharedLink('${escapeHtml(link.id)}', '${link.type}')">Delete</button></td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            document.getElementById('shared-loading').classList.add('hidden');
+            document.getElementById('shared-table').classList.remove('hidden');
+        }
+
+        async function deleteSharedLink(id, type) {
+            const typeLabel = type === 'route' ? 'route' : 'repeater map';
+            if (!confirm(`Delete shared ${typeLabel} ${id}?\n\nThis will remove the shared link permanently.`)) return;
+
+            try {
+                const endpoint = type === 'route'
+                    ? `${API_BASE}/admin/shared-route/${id}`
+                    : `${API_BASE}/admin/shared-map/${id}`;
+                const res = await fetch(endpoint, { method: 'DELETE' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+                showToast(`Deleted shared ${typeLabel} ${id}`, 'success');
+                sharedLinksData = sharedLinksData.filter(l => !(l.id === id && l.type === type));
+                document.getElementById('s-shared').textContent = sharedLinksData.length;
+                renderSharedLinks();
+            } catch (e) {
+                showToast('Delete failed: ' + e.message, 'error');
+            }
+        }
+
+        // ===================== Route Plans =====================
+        let planSessionsData = [];
+        let plansSortKey = null;
+        let plansSortAsc = true;
+        let plansLoaded = false;
+
+        async function loadPlanSessions() {
+            if (plansLoaded) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/plan-sessions`);
+                const data = await res.json();
+                planSessionsData = data.sessions;
+                document.getElementById('s-plans').textContent = planSessionsData.length;
+                renderPlanSessions();
+                plansLoaded = true;
+            } catch (e) {
+                document.getElementById('plans-loading').textContent = 'Failed to load: ' + e.message;
+            }
+        }
+
+        function refreshPlanSessions() {
+            plansLoaded = false;
+            document.getElementById('plans-loading').textContent = 'Loading plan sessions...';
+            document.getElementById('plans-loading').classList.remove('hidden');
+            document.getElementById('plans-table').classList.add('hidden');
+            loadPlanSessions();
+        }
+
+        function sortPlans(key) {
+            if (plansSortKey === key) {
+                plansSortAsc = !plansSortAsc;
+            } else {
+                plansSortKey = key;
+                plansSortAsc = true;
+            }
+            planSessionsData.sort((a, b) => compareValues(a, b, key, plansSortAsc));
+            updateSortHeaders('plans-table', key, plansSortAsc);
+            renderPlanSessions();
+        }
+
+        function renderPlanSessions() {
+            const tbody = document.getElementById('plans-body');
+            tbody.innerHTML = '';
+
+            for (const s of planSessionsData) {
+                const tr = document.createElement('tr');
+                const effectiveStatus = (s.isExpired && s.status === 'waiting') ? 'expired' : s.status;
+                const statusClass = `status-${effectiveStatus}`;
+                const statusLabel = effectiveStatus.charAt(0).toUpperCase() + effectiveStatus.slice(1);
+
+                let actionsHtml = '';
+                if (s.status === 'waiting' && !s.isExpired) {
+                    actionsHtml = `<a href="/plan/${escapeHtml(s.code)}" target="_blank" class="btn btn-primary">Draw</a>`;
+                } else if (s.status === 'submitted') {
+                    actionsHtml = `<span class="dim">Polygon ready (${s.vertexCount || '?'} pts)</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="mono">${escapeHtml(s.code)}</td>
+                    <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+                    <td>${s.vertexCount != null ? s.vertexCount + ' pts' : '<span class="dim">\u2014</span>'}</td>
+                    <td>${formatDate(s.createdAt)}</td>
+                    <td>${formatDate(s.expiresAt)}</td>
+                    <td>${actionsHtml}</td>
+                    <td><button class="btn btn-danger" onclick="deletePlanSession('${escapeHtml(s.code)}')">Delete</button></td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            document.getElementById('plans-loading').classList.add('hidden');
+            document.getElementById('plans-table').classList.remove('hidden');
+        }
+
+        async function deletePlanSession(code) {
+            if (!confirm(`Delete plan session ${code}?\n\nThis cannot be undone.`)) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/plan-session/${code}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+                showToast(`Deleted plan session ${code}`, 'success');
+                planSessionsData = planSessionsData.filter(s => s.code !== code);
+                document.getElementById('s-plans').textContent = planSessionsData.length;
+                renderPlanSessions();
             } catch (e) {
                 showToast('Delete failed: ' + e.message, 'error');
             }

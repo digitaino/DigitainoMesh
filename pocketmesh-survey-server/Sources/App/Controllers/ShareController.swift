@@ -310,6 +310,70 @@ struct ShareController {
         return Response(status: .ok, headers: headers, body: .init(string: html))
     }
 
+    // MARK: - GET /api/v1/admin/shared-links
+
+    @Sendable
+    func getAdminSharedLinks(req: Request) async throws -> AdminSharedLinksResponse {
+        let routes = try await SharedRoute.query(on: req.db).all()
+        let maps = try await SharedRepeaterMap.query(on: req.db).all()
+
+        var links: [AdminSharedLinkInfo] = []
+
+        for route in routes {
+            links.append(AdminSharedLinkInfo(
+                id: route.id ?? "",
+                type: "route",
+                userName: route.userName,
+                itemCount: route.hopCount,
+                distanceText: route.distanceText,
+                createdAt: route.createdAt
+            ))
+        }
+
+        for map in maps {
+            links.append(AdminSharedLinkInfo(
+                id: map.id ?? "",
+                type: "map",
+                userName: map.userName,
+                itemCount: map.repeaterCount,
+                distanceText: nil,
+                createdAt: map.createdAt
+            ))
+        }
+
+        links.sort { $0.createdAt > $1.createdAt }
+
+        return AdminSharedLinksResponse(links: links)
+    }
+
+    // MARK: - DELETE /api/v1/admin/shared-route/:id
+
+    @Sendable
+    func deleteSharedRoute(req: Request) async throws -> DeleteSharedLinkResponse {
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing route ID")
+        }
+        guard let route = try await SharedRoute.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Shared route not found")
+        }
+        try await route.delete(on: req.db)
+        return DeleteSharedLinkResponse(id: id, type: "route")
+    }
+
+    // MARK: - DELETE /api/v1/admin/shared-map/:id
+
+    @Sendable
+    func deleteSharedMap(req: Request) async throws -> DeleteSharedLinkResponse {
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing map ID")
+        }
+        guard let map = try await SharedRepeaterMap.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Shared map not found")
+        }
+        try await map.delete(on: req.db)
+        return DeleteSharedLinkResponse(id: id, type: "map")
+    }
+
     // MARK: - HTML Templates
 
     private static func routePageHTML(title: String, routeJSON: String) -> String {

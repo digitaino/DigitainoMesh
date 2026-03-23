@@ -506,3 +506,42 @@ struct DeleteRepeaterResponse: Content {
     let hexID: String
     let cellRepeatersRemoved: Int
 }
+
+// MARK: - Admin Shared Links
+
+struct AdminSharedLinkInfo: Content {
+    let id: String
+    let type: String
+    let userName: String?
+    let itemCount: Int
+    let distanceText: String?
+    let createdAt: String
+}
+
+struct AdminSharedLinksResponse: Content {
+    let links: [AdminSharedLinkInfo]
+}
+
+struct DeleteSharedLinkResponse: Content {
+    let id: String
+    let type: String
+}
+
+// MARK: - Admin Plan Sessions
+
+struct AdminPlanSessionInfo: Content {
+    let code: String
+    let status: String
+    let vertexCount: Int?
+    let createdAt: String
+    let expiresAt: String
+    let isExpired: Bool
+}
+
+struct AdminPlanSessionsResponse: Content {
+    let sessions: [AdminPlanSessionInfo]
+}
+
+struct DeletePlanSessionResponse: Content {
+    let code: String
+}
