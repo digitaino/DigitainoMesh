@@ -234,7 +234,7 @@ struct PlanController {
             <div id="plan-panel">
                 <div id="code-entry" style="display:none">
                     <h2>Plan Survey Route</h2>
-                    <p>Enter the code shown in PocketMesh to link this session.</p>
+                    <p>Enter the code shown in DigitainoMesh to link this session.</p>
                     <div class="code-input-row">
                         <input type="text" id="code-input" maxlength="6" placeholder="ABC123" autocomplete="off" spellcheck="false" />
                         <button id="code-submit" onclick="submitCode()">Connect</button>
@@ -262,7 +262,7 @@ struct PlanController {
                 </div>
                 <div id="success-mode" style="display:none">
                     <h2>Sent!</h2>
-                    <p>The survey area has been sent to your device. Return to PocketMesh to review your route.</p>
+                    <p>The survey area has been sent to your device. Return to DigitainoMesh to review your route.</p>
                 </div>
                 <div class="plan-footer">
                     <a href="https://mesh.digitaino.com">DigitainoMesh</a>
