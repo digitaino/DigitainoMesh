@@ -165,9 +165,10 @@ function renderRoute(data) {
             </div>
         `;
     }
+    const locatedHops = data.hops.filter(h => h.latitude != null && h.longitude != null);
     summaryHTML += `
         <div class="summary-stat">
-            <span class="value">${data.hops.length}</span>
+            <span class="value">${locatedHops.length}</span>
             <span class="label">Located</span>
         </div>
     `;
@@ -208,7 +209,6 @@ function renderRoute(data) {
     hopListEl.innerHTML = hopHTML;
 
     // Map: add annotations and polyline for located hops
-    const locatedHops = data.hops.filter(h => h.latitude != null && h.longitude != null);
 
     if (locatedHops.length === 0) {
         map.center = new mapkit.Coordinate(30.27, -97.74);
