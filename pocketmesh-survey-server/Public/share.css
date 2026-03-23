@@ -215,6 +215,23 @@
     color: #888;
 }
 
+/* Unlocated hop styling */
+.hop-item.unlocated {
+    opacity: 0.45;
+}
+
+.hop-item.unlocated .hop-index {
+    background: rgba(255, 255, 255, 0.1);
+    color: #888;
+}
+
+.hop-connector.unlocated .line {
+    background: rgba(255, 255, 255, 0.1);
+    border-left: 2px dashed rgba(255, 255, 255, 0.15);
+    background: none;
+    width: 0;
+}
+
 /* SNR quality colors */
 .snr-excellent { color: #22c55e; }
 .snr-good { color: #eab308; }

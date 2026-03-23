@@ -177,13 +177,13 @@ function renderRoute(data) {
     // Hop list
     let hopHTML = '';
     data.hops.forEach((hop, i) => {
+        const located = hop.latitude != null && hop.longitude != null;
         if (i > 0) {
-            hopHTML += '<div class="hop-connector"><div class="line"></div></div>';
+            hopHTML += `<div class="hop-connector${located ? '' : ' unlocated'}"><div class="line"></div></div>`;
         }
         const name = hop.name || hop.hexID;
-        const located = hop.latitude != null && hop.longitude != null;
         hopHTML += `
-            <div class="hop-item">
+            <div class="hop-item${located ? '' : ' unlocated'}">
                 <div class="hop-index">${i + 1}</div>
                 <div class="hop-details">
                     <div class="hop-name">${escapeHTML(name)}</div>
