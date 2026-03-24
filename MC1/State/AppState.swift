@@ -852,6 +852,10 @@ public final class AppState {
                 return
             }
 
+            for info in repeaterInfos {
+                logger.info("Sharing repeater: \(info.name) pk=\(info.publicKey.prefix(8))… lastHeard=\(info.lastHeard ?? "nil")")
+            }
+
             let result = try await repeaterSharingService.shareRepeaters(repeaterInfos, authToken: authToken)
             let fingerprint = RepeaterSharingService.fingerprint(from: repeaterInfos)
             await repeaterSharingService.recordShare(fingerprint: fingerprint)

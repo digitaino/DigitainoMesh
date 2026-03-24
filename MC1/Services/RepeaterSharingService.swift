@@ -27,7 +27,7 @@ actor RepeaterSharingService {
     }
 
     struct RepeaterInfo: Codable {
-        let hexID: String
+        let publicKey: String
         let name: String
         let latitude: Double
         let longitude: Double
@@ -61,7 +61,7 @@ actor RepeaterSharingService {
     /// Compute a fingerprint from repeater info for change detection.
     static func fingerprint(from repeaters: [RepeaterInfo]) -> String {
         let sorted = repeaters
-            .map { "\($0.hexID):\($0.latitude):\($0.longitude):\($0.name):\($0.lastHeard ?? "")" }
+            .map { "\($0.publicKey):\($0.latitude):\($0.longitude):\($0.name):\($0.lastHeard ?? "")" }
             .sorted()
         let joined = sorted.joined(separator: "|")
         // Simple hash — just needs to detect changes, not be cryptographic
@@ -105,17 +105,19 @@ actor RepeaterSharingService {
 
     /// Extracts shareable repeater info from contact DTOs.
     /// Only includes repeaters that have valid locations.
+    /// Uses `lastModified` (the contact table update timestamp) which matches
+    /// what the Nodes list displays — i.e. when the client last heard from this repeater.
     static func repeaterInfos(from contacts: [ContactDTO]) -> [RepeaterInfo] {
         let formatter = ISO8601DateFormatter()
         return contacts
             .filter { $0.type == .repeater && $0.hasLocation }
             .map { contact in
-                let hexID = contact.publicKey.prefix(2).hexString()
-                let lastHeard: String? = contact.lastAdvertTimestamp > 0
-                    ? formatter.string(from: Date(timeIntervalSince1970: TimeInterval(contact.lastAdvertTimestamp)))
+                let publicKeyHex = contact.publicKey.map { String(format: "%02X", $0) }.joined()
+                let lastHeard: String? = contact.lastModified > 0
+                    ? formatter.string(from: Date(timeIntervalSince1970: TimeInterval(contact.lastModified)))
                     : nil
                 return RepeaterInfo(
-                    hexID: hexID,
+                    publicKey: publicKeyHex,
                     name: contact.name,
                     latitude: contact.latitude,
                     longitude: contact.longitude,

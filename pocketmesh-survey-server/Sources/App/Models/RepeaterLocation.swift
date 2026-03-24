@@ -38,6 +38,14 @@ final class RepeaterLocation: Model, Content, @unchecked Sendable {
     @OptionalField(key: "last_contributor_id")
     var lastContributorID: String?
 
+    /// Full public key of the repeater (hex-encoded, 64 chars for 32 bytes).
+    @OptionalField(key: "public_key")
+    var publicKey: String?
+
+    /// ISO 8601 timestamp of when any client last heard this repeater (newest across all sharing clients).
+    @OptionalField(key: "last_heard")
+    var lastHeard: String?
+
     init() {}
 
     init(hexID: String, name: String, latitude: Double, longitude: Double, lastUpdated: String) {

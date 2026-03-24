@@ -680,7 +680,7 @@ struct ShareRepeatersRequest: Content {
 }
 
 struct ShareRepeaterInfo: Content {
-    let hexID: String
+    let publicKey: String
     let name: String
     let latitude: Double
     let longitude: Double

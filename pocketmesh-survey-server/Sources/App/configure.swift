@@ -42,6 +42,8 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddRepeaterAdminFields())
     app.migrations.add(AddSurveyRoutes())
     app.migrations.add(AddCellAdminFields())
+    app.migrations.add(AddRepeaterPublicKey())
+    app.migrations.add(AddRepeaterLastHeardColumn())
     try app.autoMigrate().wait()
 
     // Register routes

@@ -394,7 +394,7 @@ struct SurveyController {
 
         // Upsert repeater locations from resolved info (with prefix normalization)
         if let repeaterInfos = payload.repeaters {
-            let infos = repeaterInfos.map { RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude, lastHeard: nil) }
+            let infos = repeaterInfos.map { RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude, lastHeard: nil, publicKey: nil) }
             try await Self.upsertRepeaterLocations(infos: infos, contributorID: payload.contributorID, on: req.db, logger: req.logger)
         }
 
@@ -1438,7 +1438,7 @@ struct SurveyController {
                    cp.display_name AS last_contributor_name,
                    COUNT(DISTINCT cr.cell_id) AS cell_count,
                    COALESCE(SUM(cr.packet_count), 0) AS total_packet_count,
-                   MAX(cr.last_heard) AS last_heard
+                   COALESCE(rl.last_heard, MAX(cr.last_heard)) AS last_heard
             FROM repeater_locations rl
             LEFT JOIN cell_repeaters cr ON UPPER(cr.repeater_hex_id) = UPPER(rl.hex_id)
             LEFT JOIN contributor_profiles cp ON cp.contributor_id = rl.last_contributor_id
@@ -2081,8 +2081,23 @@ struct SurveyController {
             throw Abort(.badRequest, reason: "Too many repeaters (max 500)")
         }
 
-        let infos = body.repeaters.map {
-            RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude, lastHeard: $0.lastHeard)
+        let infos = body.repeaters.compactMap { repeater -> RepeaterUpsertInfo? in
+            let pk = repeater.publicKey.uppercased()
+            // Derive hex ID: first 4 hex chars (2 bytes) as the base prefix
+            guard pk.count >= 4 else { return nil }
+            let hexID = String(pk.prefix(4))
+            return RepeaterUpsertInfo(
+                hexID: hexID,
+                name: repeater.name,
+                latitude: repeater.latitude,
+                longitude: repeater.longitude,
+                lastHeard: repeater.lastHeard,
+                publicKey: pk
+            )
+        }
+
+        for info in infos {
+            req.logger.info("Repeater upsert: hexID=\(info.hexID) pk=\(info.publicKey?.prefix(8) ?? "nil")… lastHeard=\(info.lastHeard ?? "nil")")
         }
 
         let result = try await Self.upsertRepeaterLocations(
@@ -2121,37 +2136,69 @@ struct SurveyController {
                   (-180...180).contains(info.longitude) else { continue }
 
             let normalized = info.hexID.uppercased()
-            let timestamp = info.lastHeard ?? now
+            let fullKeyUpper = info.publicKey?.uppercased()
 
-            // Look for exact match first
+            // Helper: update an existing record
+            // - lastUpdated = now (when the server received this update)
+            // - lastHeard = newest client-reported timestamp across all contributors
+            func updateExisting(_ existing: RepeaterLocation) {
+                existing.name = info.name
+                existing.latitude = info.latitude
+                existing.longitude = info.longitude
+                existing.lastContributorID = contributorID
+                existing.lastUpdated = now
+                if let pk = fullKeyUpper { existing.publicKey = pk }
+                // Only advance lastHeard if the client sent a timestamp that's newer
+                if let clientHeard = info.lastHeard {
+                    if let existingHeard = existing.lastHeard {
+                        if clientHeard > existingHeard {
+                            existing.lastHeard = clientHeard
+                        }
+                    } else {
+                        existing.lastHeard = clientHeard
+                    }
+                }
+            }
+
+            // Look for exact match on hexID first
             let exact = try await RepeaterLocation.query(on: db)
                 .filter(\.$hexID == normalized)
                 .first()
 
             if let exact {
-                exact.name = info.name
-                exact.latitude = info.latitude
-                exact.longitude = info.longitude
-                exact.lastUpdated = timestamp
-                exact.lastContributorID = contributorID
+                updateExisting(exact)
                 try await exact.save(on: db)
                 accepted += 1
                 updated += 1
                 continue
             }
 
-            // Check if a shorter prefix exists — upgrade it
+            // Check if an existing record matches via public key prefix
+            // (the existing hexID is a prefix of our full public key, or vice versa)
             let allRepeaters = try await RepeaterLocation.query(on: db).all()
+
+            if let fullKey = fullKeyUpper {
+                // Find any existing record whose hexID is a prefix of our full key
+                if let match = allRepeaters.first(where: {
+                    let eid = $0.hexID.uppercased()
+                    return fullKey.hasPrefix(eid)
+                }) {
+                    updateExisting(match)
+                    match.publicKey = fullKey
+                    try await match.save(on: db)
+                    accepted += 1
+                    updated += 1
+                    continue
+                }
+            }
+
+            // Fallback: check if a shorter prefix exists — upgrade it
             if let shorter = allRepeaters.first(where: {
                 let eid = $0.hexID.uppercased()
                 return normalized.hasPrefix(eid) && normalized.count > eid.count
             }) {
                 shorter.hexID = normalized
-                shorter.name = info.name
-                shorter.latitude = info.latitude
-                shorter.longitude = info.longitude
-                shorter.lastUpdated = timestamp
-                shorter.lastContributorID = contributorID
+                updateExisting(shorter)
                 try await shorter.save(on: db)
                 accepted += 1
                 updated += 1
@@ -2172,9 +2219,11 @@ struct SurveyController {
                 name: info.name,
                 latitude: info.latitude,
                 longitude: info.longitude,
-                lastUpdated: timestamp
+                lastUpdated: now
             )
             repeater.lastContributorID = contributorID
+            repeater.lastHeard = info.lastHeard
+            if let pk = fullKeyUpper { repeater.publicKey = pk }
             try await repeater.save(on: db)
             accepted += 1
             created += 1
@@ -2191,4 +2240,5 @@ struct RepeaterUpsertInfo {
     let latitude: Double
     let longitude: Double
     let lastHeard: String?
+    let publicKey: String?
 }
