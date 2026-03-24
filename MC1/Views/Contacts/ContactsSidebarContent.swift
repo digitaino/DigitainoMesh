@@ -31,6 +31,10 @@ struct ContactsSidebarContent: View {
     let onSyncContacts: () async -> Void
     let onAnnounceOfflineStateIfNeeded: () -> Void
 
+    @State private var isSharingRepeaters = false
+    @State private var repeaterShareResult: String?
+    @State private var showRepeaterShareResult = false
+
     var body: some View {
         Group {
             if !viewModel.hasLoadedOnce {
@@ -135,6 +139,22 @@ struct ContactsSidebarContent: View {
                         Label(L10n.Contacts.Contacts.List.syncNodes, systemImage: "arrow.triangle.2.circlepath")
                     }
                     .disabled(viewModel.isSyncing)
+
+                    Divider()
+
+                    Button {
+                        Task {
+                            isSharingRepeaters = true
+                            await appState.performRepeaterShareNow { result in
+                                repeaterShareResult = result
+                                showRepeaterShareResult = true
+                            }
+                            isSharingRepeaters = false
+                        }
+                    } label: {
+                        Label("Share Repeater Data", systemImage: "antenna.radiowaves.left.and.right.circle")
+                    }
+                    .disabled(isSharingRepeaters)
                 } label: {
                     Label(L10n.Contacts.Contacts.List.options, systemImage: "ellipsis.circle")
                 }
@@ -244,6 +264,13 @@ struct ContactsSidebarContent: View {
             }
         } message: {
             Text(viewModel.errorMessage ?? L10n.Contacts.Contacts.Common.errorOccurred)
+        }
+        .alert("Repeater Sharing", isPresented: $showRepeaterShareResult) {
+            Button("OK", role: .cancel) {
+                repeaterShareResult = nil
+            }
+        } message: {
+            Text(repeaterShareResult ?? "")
         }
     }
 }

@@ -684,6 +684,7 @@ struct ShareRepeaterInfo: Content {
     let name: String
     let latitude: Double
     let longitude: Double
+    let lastHeard: String?
 }
 
 struct ShareRepeatersResponse: Content {

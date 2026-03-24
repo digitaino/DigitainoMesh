@@ -23,7 +23,6 @@ struct SignalSurveyView: View {
     @AppStorage("surveyDebugMode") private var debugModeEnabled = false
     @AppStorage("surveyIncludeDisplayName") private var includeDisplayName = true
     @AppStorage("surveyContributorVerified") private var contributorVerified = false
-    @AppStorage("shareRepeatersEnabled") private var shareRepeatersEnabled = false
     @State private var isVerifying = false
     @State private var verificationError: String?
     @State private var showingContributorProfile = false
@@ -191,20 +190,6 @@ struct SignalSurveyView: View {
         }
         .onChange(of: deepScanPref) { _, newValue in
             viewModel.deepScanEnabled = newValue
-        }
-        .onChange(of: shareRepeatersEnabled) { _, newValue in
-            if newValue && !contributorVerified {
-                // Auto-trigger verification when enabling repeater sharing
-                Task {
-                    await performVerification()
-                    if !contributorVerified {
-                        shareRepeatersEnabled = false
-                    }
-                    appState.updateRepeaterSharing()
-                }
-            } else {
-                appState.updateRepeaterSharing()
-            }
         }
         .onChange(of: probeFrequencyPref) { _, newValue in
             if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: newValue) {
@@ -1378,12 +1363,8 @@ struct SignalSurveyView: View {
 
                     Toggle("Live Upload", isOn: $liveUploadPref)
 
-                    Toggle("Share Repeater Locations", isOn: $shareRepeatersEnabled)
-
                 } footer: {
-                    if shareRepeatersEnabled {
-                        Text("Your known repeater locations are periodically shared with the community map while the app is open. This works independently of survey mode and requires verification.")
-                    } else if liveUploadPref {
+                    if liveUploadPref {
                         Text("Each received packet will be uploaded to the community map in real time. You can also export and upload a full session later from the toolbar menu.")
                     } else {
                         Text("Data stays on your device. You can export and upload to the community map after the session from the toolbar menu.")

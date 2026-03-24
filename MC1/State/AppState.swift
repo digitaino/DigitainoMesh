@@ -724,10 +724,8 @@ public final class AppState {
     /// Start or stop the repeater sharing timer based on user preference and auth state.
     func updateRepeaterSharing() {
         let enabled = UserDefaults.standard.bool(forKey: "shareRepeatersEnabled")
-        let verificationService = ContributorVerificationService()
-        let authToken = verificationService.getAuthToken()
 
-        guard enabled, authToken != nil else {
+        guard enabled else {
             repeaterSharingTask?.cancel()
             repeaterSharingTask = nil
             return
@@ -749,16 +747,63 @@ public final class AppState {
         }
     }
 
+    /// Attempt to re-verify the contributor identity if the auth token has expired.
+    /// Returns the new auth token on success, or nil if verification could not be performed.
+    func autoRenewVerificationIfNeeded() async -> String? {
+        let verificationService = ContributorVerificationService()
+
+        // If token is still valid, return it
+        if let token = verificationService.getAuthToken() {
+            return token
+        }
+
+        // Token expired — try to re-verify if device is connected
+        guard let settingsService = services?.settingsService else {
+            logger.info("Auto-renew: device not connected, cannot re-verify")
+            return nil
+        }
+
+        logger.info("Auto-renew: auth token expired, attempting re-verification…")
+
+        do {
+            let uploadService = SurveyUploadService()
+            let contributorID = try await uploadService.getOrCreateContributorID()
+            let result = try await verificationService.verify(
+                settingsService: settingsService,
+                contributorID: contributorID
+            )
+
+            guard result.verified else {
+                logger.warning("Auto-renew: verification failed")
+                return nil
+            }
+
+            if let newID = result.newContributorID {
+                await uploadService.updateContributorID(newID)
+            }
+
+            if let token = result.authToken {
+                verificationService.storeAuthToken(token, expires: result.authTokenExpires)
+                UserDefaults.standard.set(true, forKey: "surveyContributorVerified")
+                logger.info("Auto-renew: verification succeeded, new token stored")
+                return token
+            }
+
+            return nil
+        } catch {
+            logger.error("Auto-renew: verification error: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     /// Perform a single repeater share attempt if there are changes or enough time has elapsed.
     private func performRepeaterShareIfNeeded() async {
         guard let deviceID = currentDeviceID,
               let dataStore = offlineDataStore else { return }
 
-        let verificationService = ContributorVerificationService()
-        guard let authToken = verificationService.getAuthToken() else {
-            // Token expired — stop sharing
-            repeaterSharingTask?.cancel()
-            repeaterSharingTask = nil
+        // Get valid auth token, auto-renewing if expired
+        guard let authToken = await autoRenewVerificationIfNeeded() else {
+            logger.info("Repeater sharing: no valid auth token, skipping this cycle")
             return
         }
 
@@ -781,6 +826,41 @@ public final class AppState {
             logger.info("Shared \(repeaterInfos.count) repeaters: \(result.created) created, \(result.updated) updated")
         } catch {
             logger.error("Repeater sharing failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Manually trigger an immediate repeater share, returning a user-facing result string.
+    func performRepeaterShareNow(completion: @escaping (String) -> Void) async {
+        guard let deviceID = currentDeviceID,
+              let dataStore = offlineDataStore else {
+            completion("No device data available")
+            return
+        }
+
+        // Auto-renew token if expired
+        guard let authToken = await autoRenewVerificationIfNeeded() else {
+            completion("Not verified — connect device to verify identity")
+            return
+        }
+
+        do {
+            let contacts = try await dataStore.fetchContacts(deviceID: deviceID)
+            let repeaterInfos = RepeaterSharingService.repeaterInfos(from: contacts)
+
+            guard !repeaterInfos.isEmpty else {
+                completion("No repeaters with known locations")
+                return
+            }
+
+            let result = try await repeaterSharingService.shareRepeaters(repeaterInfos, authToken: authToken)
+            let fingerprint = RepeaterSharingService.fingerprint(from: repeaterInfos)
+            await repeaterSharingService.recordShare(fingerprint: fingerprint)
+
+            completion("Shared \(repeaterInfos.count) repeaters (\(result.created) new, \(result.updated) updated)")
+            logger.info("Manual repeater share: \(repeaterInfos.count) repeaters, \(result.created) created, \(result.updated) updated")
+        } catch {
+            completion("Failed: \(error.localizedDescription)")
+            logger.error("Manual repeater share failed: \(error.localizedDescription)")
         }
     }
 

@@ -31,6 +31,7 @@ actor RepeaterSharingService {
         let name: String
         let latitude: Double
         let longitude: Double
+        let lastHeard: String?
     }
 
     struct RepeaterResponse: Codable {
@@ -60,7 +61,7 @@ actor RepeaterSharingService {
     /// Compute a fingerprint from repeater info for change detection.
     static func fingerprint(from repeaters: [RepeaterInfo]) -> String {
         let sorted = repeaters
-            .map { "\($0.hexID):\($0.latitude):\($0.longitude):\($0.name)" }
+            .map { "\($0.hexID):\($0.latitude):\($0.longitude):\($0.name):\($0.lastHeard ?? "")" }
             .sorted()
         let joined = sorted.joined(separator: "|")
         // Simple hash — just needs to detect changes, not be cryptographic
@@ -105,15 +106,20 @@ actor RepeaterSharingService {
     /// Extracts shareable repeater info from contact DTOs.
     /// Only includes repeaters that have valid locations.
     static func repeaterInfos(from contacts: [ContactDTO]) -> [RepeaterInfo] {
-        contacts
+        let formatter = ISO8601DateFormatter()
+        return contacts
             .filter { $0.type == .repeater && $0.hasLocation }
             .map { contact in
                 let hexID = contact.publicKey.prefix(2).hexString()
+                let lastHeard: String? = contact.lastAdvertTimestamp > 0
+                    ? formatter.string(from: Date(timeIntervalSince1970: TimeInterval(contact.lastAdvertTimestamp)))
+                    : nil
                 return RepeaterInfo(
                     hexID: hexID,
                     name: contact.name,
                     latitude: contact.latitude,
-                    longitude: contact.longitude
+                    longitude: contact.longitude,
+                    lastHeard: lastHeard
                 )
             }
     }

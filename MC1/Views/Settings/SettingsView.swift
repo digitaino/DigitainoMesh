@@ -79,6 +79,12 @@ private struct SettingsListContent: View {
                     TintedLabel(L10n.Settings.LiveActivity.title, systemImage: "platter.filled.bottom.and.arrow.down.iphone")
                 }
 
+                NavigationLink {
+                    CommunitySharingSettingsView()
+                } label: {
+                    TintedLabel("Community Sharing", systemImage: "globe.americas")
+                }
+
                 Button {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         openURL(url)

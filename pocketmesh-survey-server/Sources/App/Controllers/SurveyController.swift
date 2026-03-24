@@ -394,7 +394,7 @@ struct SurveyController {
 
         // Upsert repeater locations from resolved info (with prefix normalization)
         if let repeaterInfos = payload.repeaters {
-            let infos = repeaterInfos.map { RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude) }
+            let infos = repeaterInfos.map { RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude, lastHeard: nil) }
             try await Self.upsertRepeaterLocations(infos: infos, contributorID: payload.contributorID, on: req.db, logger: req.logger)
         }
 
@@ -2082,7 +2082,7 @@ struct SurveyController {
         }
 
         let infos = body.repeaters.map {
-            RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude)
+            RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude, lastHeard: $0.lastHeard)
         }
 
         let result = try await Self.upsertRepeaterLocations(
@@ -2121,6 +2121,7 @@ struct SurveyController {
                   (-180...180).contains(info.longitude) else { continue }
 
             let normalized = info.hexID.uppercased()
+            let timestamp = info.lastHeard ?? now
 
             // Look for exact match first
             let exact = try await RepeaterLocation.query(on: db)
@@ -2131,7 +2132,7 @@ struct SurveyController {
                 exact.name = info.name
                 exact.latitude = info.latitude
                 exact.longitude = info.longitude
-                exact.lastUpdated = now
+                exact.lastUpdated = timestamp
                 exact.lastContributorID = contributorID
                 try await exact.save(on: db)
                 accepted += 1
@@ -2149,7 +2150,7 @@ struct SurveyController {
                 shorter.name = info.name
                 shorter.latitude = info.latitude
                 shorter.longitude = info.longitude
-                shorter.lastUpdated = now
+                shorter.lastUpdated = timestamp
                 shorter.lastContributorID = contributorID
                 try await shorter.save(on: db)
                 accepted += 1
@@ -2171,7 +2172,7 @@ struct SurveyController {
                 name: info.name,
                 latitude: info.latitude,
                 longitude: info.longitude,
-                lastUpdated: now
+                lastUpdated: timestamp
             )
             repeater.lastContributorID = contributorID
             try await repeater.save(on: db)
@@ -2189,4 +2190,5 @@ struct RepeaterUpsertInfo {
     let name: String
     let latitude: Double
     let longitude: Double
+    let lastHeard: String?
 }
