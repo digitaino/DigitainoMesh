@@ -526,6 +526,7 @@ struct SurveyController {
 
         var whereFragment: SQLQueryString = " WHERE c.latitude >= \(bind: minLat) AND c.latitude <= \(bind: maxLat)"
         whereFragment += " AND c.longitude >= \(bind: minLon) AND c.longitude <= \(bind: maxLon)"
+        whereFragment += " AND (c.hidden IS NULL OR c.hidden = 0)"
 
         if coverage == "active" {
             whereFragment += " AND c.active_packet_count > 0"
@@ -1592,6 +1593,120 @@ struct SurveyController {
         req.logger.info("Deleted repeater \(hexID): \(removed) cell_repeater references removed")
 
         return DeleteRepeaterResponse(hexID: hexID, cellRepeatersRemoved: removed)
+    }
+
+    // MARK: - GET /api/v1/admin/cells
+
+    @Sendable
+    func getAdminCells(req: Request) async throws -> AdminCellsResponse {
+        guard let sql = req.db as? SQLDatabase else {
+            throw Abort(.internalServerError, reason: "SQL database required")
+        }
+
+        let searchQ = req.query[Int.self, at: "hexQ"]
+        let searchR = req.query[Int.self, at: "hexR"]
+        let searchID = req.query[Int.self, at: "id"]
+        let hiddenOnly = req.query[String.self, at: "hidden"] == "true"
+
+        struct CellAdminRow: Decodable {
+            let id: Int
+            let hex_q: Int
+            let hex_r: Int
+            let latitude: Double
+            let longitude: Double
+            let total_snr_weighted: Double
+            let total_packet_count: Int
+            let contribution_count: Int
+            let last_updated: String
+            let hidden: Bool?
+            let notes: String?
+        }
+
+        var query: SQLQueryString = """
+            SELECT id, hex_q, hex_r, latitude, longitude, total_snr_weighted,
+                   total_packet_count, contribution_count, last_updated,
+                   hidden, notes
+            FROM cells WHERE 1=1
+            """
+
+        if let searchID {
+            query += " AND id = \(bind: searchID)"
+        }
+        if let searchQ, let searchR {
+            query += " AND hex_q = \(bind: searchQ) AND hex_r = \(bind: searchR)"
+        }
+        if hiddenOnly {
+            query += " AND hidden = 1"
+        }
+
+        query += " ORDER BY last_updated DESC LIMIT 500"
+
+        let rows = try await sql.raw(query).all(decoding: CellAdminRow.self)
+
+        let cells = rows.map { row in
+            let avgSNR = row.total_packet_count > 0
+                ? row.total_snr_weighted / Double(row.total_packet_count)
+                : nil
+            return AdminCellInfo(
+                id: row.id,
+                hexQ: row.hex_q,
+                hexR: row.hex_r,
+                latitude: row.latitude,
+                longitude: row.longitude,
+                averageSNR: avgSNR,
+                packetCount: row.total_packet_count,
+                contributionCount: row.contribution_count,
+                lastUpdated: row.last_updated,
+                hidden: row.hidden ?? false,
+                notes: row.notes
+            )
+        }
+
+        return AdminCellsResponse(cells: cells)
+    }
+
+    // MARK: - PUT /api/v1/admin/cell/:id/hidden
+
+    @Sendable
+    func toggleCellHidden(req: Request) async throws -> ToggleCellHiddenResponse {
+        guard let idString = req.parameters.get("id"),
+              let id = Int(idString) else {
+            throw Abort(.badRequest, reason: "Missing or invalid cell ID")
+        }
+
+        let body = try req.content.decode(ToggleCellHiddenRequest.self)
+
+        guard let cell = try await CellModel.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Cell not found")
+        }
+
+        cell.hidden = body.hidden
+        try await cell.save(on: req.db)
+
+        req.logger.info("Cell \(cell.hexQ),\(cell.hexR) (id=\(id)) hidden=\(body.hidden)")
+
+        return ToggleCellHiddenResponse(id: id, hexQ: cell.hexQ, hexR: cell.hexR, hidden: body.hidden)
+    }
+
+    // MARK: - PUT /api/v1/admin/cell/:id/notes
+
+    @Sendable
+    func updateCellNotes(req: Request) async throws -> UpdateCellNotesResponse {
+        guard let idString = req.parameters.get("id"),
+              let id = Int(idString) else {
+            throw Abort(.badRequest, reason: "Missing or invalid cell ID")
+        }
+
+        let body = try req.content.decode(UpdateCellNotesRequest.self)
+
+        guard let cell = try await CellModel.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Cell not found")
+        }
+
+        cell.notes = body.notes.isEmpty ? nil : body.notes
+        try await cell.save(on: req.db)
+
+        return UpdateCellNotesResponse(id: id, hexQ: cell.hexQ, hexR: cell.hexR, notes: body.notes)
     }
 
     // MARK: - POST /api/v1/contributor/:contributorID/challenge

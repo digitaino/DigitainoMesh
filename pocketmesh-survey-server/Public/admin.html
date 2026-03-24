@@ -568,6 +568,7 @@
         <div class="tab" onclick="switchTab('repeaters')">Repeaters</div>
         <div class="tab" onclick="switchTab('shared')">Shared Links</div>
         <div class="tab" onclick="switchTab('survey-routes')">Survey Routes</div>
+        <div class="tab" onclick="switchTab('cells')">Cells</div>
         <div style="flex:1"></div>
         <button class="btn btn-danger" onclick="purgeBogus()">Purge Bogus Contributors</button>
     </div>
@@ -699,6 +700,36 @@
                     </tr>
                 </thead>
                 <tbody id="survey-routes-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab-cells" class="hidden">
+        <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+            <input type="text" class="repeater-search" id="cell-search" placeholder="Search by hexQ,hexR (e.g. 42,-17) or cell ID..." style="flex:1">
+            <button class="btn btn-primary" onclick="searchCells()">Search</button>
+            <button class="btn" onclick="loadHiddenCells()">Show Hidden</button>
+        </div>
+        <div class="card">
+            <div class="loading hidden" id="cells-loading">Loading cells...</div>
+            <div id="cells-empty" style="padding:24px;text-align:center;color:#666">
+                Search for cells by hex coordinates or ID, or click "Show Hidden" to see all hidden cells.
+            </div>
+            <table id="cells-table" class="hidden">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Hex Q,R</th>
+                        <th>Location</th>
+                        <th>Avg SNR</th>
+                        <th>Packets</th>
+                        <th>Contribs</th>
+                        <th>Updated</th>
+                        <th>Visible</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="cells-body"></tbody>
             </table>
         </div>
     </div>
@@ -1320,6 +1351,7 @@
             document.getElementById('tab-repeaters').classList.toggle('hidden', tab !== 'repeaters');
             document.getElementById('tab-shared').classList.toggle('hidden', tab !== 'shared');
             document.getElementById('tab-survey-routes').classList.toggle('hidden', tab !== 'survey-routes');
+            document.getElementById('tab-cells').classList.toggle('hidden', tab !== 'cells');
 
             if (tab === 'uploads') loadUploads();
             if (tab === 'repeaters') loadRepeaters();
@@ -1941,6 +1973,176 @@
                 showToast('Delete failed: ' + e.message, 'error');
             }
         }
+
+        // ===================== Cells =====================
+        let cellsAdminData = [];
+        let cellNotesSaveTimers = {};
+        let expandedCellID = null;
+
+        function searchCells() {
+            const raw = document.getElementById('cell-search').value.trim();
+            if (!raw) return;
+
+            let params = new URLSearchParams();
+            const commaMatch = raw.match(/^(-?\d+)\s*,\s*(-?\d+)$/);
+            if (commaMatch) {
+                params.set('hexQ', commaMatch[1]);
+                params.set('hexR', commaMatch[2]);
+            } else if (/^\d+$/.test(raw)) {
+                params.set('id', raw);
+            } else {
+                showToast('Enter hexQ,hexR (e.g. 42,-17) or a numeric cell ID', 'error');
+                return;
+            }
+            fetchCells(params);
+        }
+
+        function loadHiddenCells() {
+            fetchCells(new URLSearchParams({ hidden: 'true' }));
+        }
+
+        async function fetchCells(params) {
+            document.getElementById('cells-empty').classList.add('hidden');
+            document.getElementById('cells-loading').classList.remove('hidden');
+            document.getElementById('cells-loading').textContent = 'Loading cells...';
+            document.getElementById('cells-table').classList.add('hidden');
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/cells?${params}`);
+                const data = await res.json();
+                cellsAdminData = data.cells;
+                renderAdminCells();
+            } catch (e) {
+                document.getElementById('cells-loading').textContent = 'Failed to load: ' + e.message;
+            }
+        }
+
+        function renderAdminCells() {
+            const tbody = document.getElementById('cells-body');
+            tbody.innerHTML = '';
+
+            if (cellsAdminData.length === 0) {
+                document.getElementById('cells-loading').textContent = 'No cells found';
+                document.getElementById('cells-loading').classList.remove('hidden');
+                document.getElementById('cells-table').classList.add('hidden');
+                return;
+            }
+
+            for (const c of cellsAdminData) {
+                const isHidden = c.hidden;
+                const isExpanded = expandedCellID === c.id;
+
+                const tr = document.createElement('tr');
+                tr.className = (isHidden ? 'repeater-hidden ' : '') + 'clickable';
+                if (isExpanded) tr.classList.add('selected');
+
+                const snrText = c.averageSNR != null ? c.averageSNR.toFixed(1) + ' dB' : '\u2014';
+                const notesPreview = c.notes
+                    ? `<span class="notes-preview" title="${escapeHtml(c.notes)}">${escapeHtml(c.notes)}</span>`
+                    : '<span class="dim">\u2014</span>';
+
+                tr.innerHTML = `
+                    <td class="mono dim">${c.id}</td>
+                    <td class="mono">${c.hexQ}, ${c.hexR}</td>
+                    <td><span class="repeater-location">${c.latitude.toFixed(5)}, ${c.longitude.toFixed(5)}</span></td>
+                    <td>${snrText}</td>
+                    <td>${c.packetCount.toLocaleString()}</td>
+                    <td>${c.contributionCount}</td>
+                    <td>${formatDate(c.lastUpdated)}</td>
+                    <td onclick="event.stopPropagation()">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${!isHidden ? 'checked' : ''} onchange="toggleCellHidden(${c.id}, !this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td>${notesPreview}</td>
+                `;
+                tr.addEventListener('click', () => toggleCellExpand(c.id));
+                tbody.appendChild(tr);
+
+                if (isExpanded) {
+                    const notesTr = document.createElement('tr');
+                    notesTr.className = 'repeater-notes-row';
+                    notesTr.innerHTML = `
+                        <td colspan="9">
+                            <div class="repeater-notes-panel">
+                                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">
+                                    Notes <span class="repeater-notes-saved" id="cn-saved-${c.id}">Saved</span>
+                                </label>
+                                <textarea class="repeater-notes-textarea" id="cn-textarea-${c.id}"
+                                    oninput="onCellNotesInput(${c.id})"
+                                    placeholder="Add notes about this cell...">${escapeHtml(c.notes || '')}</textarea>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(notesTr);
+                }
+            }
+
+            document.getElementById('cells-loading').classList.add('hidden');
+            document.getElementById('cells-table').classList.remove('hidden');
+        }
+
+        function toggleCellExpand(id) {
+            expandedCellID = expandedCellID === id ? null : id;
+            renderAdminCells();
+        }
+
+        async function toggleCellHidden(id, hidden) {
+            try {
+                const res = await fetch(`${API_BASE}/admin/cell/${id}/hidden`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hidden })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.reason || res.statusText);
+                }
+                const data = await res.json();
+                const c = cellsAdminData.find(c => c.id === id);
+                if (c) c.hidden = data.hidden;
+                renderAdminCells();
+                showToast(`Cell ${data.hexQ},${data.hexR} ${data.hidden ? 'hidden' : 'visible'}`, 'success');
+            } catch (e) {
+                showToast('Toggle failed: ' + e.message, 'error');
+                renderAdminCells();
+            }
+        }
+
+        function onCellNotesInput(id) {
+            if (cellNotesSaveTimers[id]) clearTimeout(cellNotesSaveTimers[id]);
+            cellNotesSaveTimers[id] = setTimeout(() => saveCellNotes(id), 1000);
+        }
+
+        async function saveCellNotes(id) {
+            const textarea = document.getElementById(`cn-textarea-${id}`);
+            const saved = document.getElementById(`cn-saved-${id}`);
+            if (!textarea) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/cell/${id}/notes`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notes: textarea.value })
+                });
+                if (!res.ok) throw new Error('Failed to save');
+
+                const c = cellsAdminData.find(c => c.id === id);
+                if (c) c.notes = textarea.value;
+
+                if (saved) {
+                    saved.classList.add('visible');
+                    setTimeout(() => saved.classList.remove('visible'), 2000);
+                }
+            } catch (e) {
+                showToast('Failed to save notes: ' + e.message, 'error');
+            }
+        }
+
+        document.getElementById('cell-search').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') searchCells();
+        });
 
         // Init
         loadStats();

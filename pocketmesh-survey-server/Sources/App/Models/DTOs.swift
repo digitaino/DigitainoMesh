@@ -507,6 +507,48 @@ struct DeleteRepeaterResponse: Content {
     let cellRepeatersRemoved: Int
 }
 
+// MARK: - Admin Cells
+
+struct AdminCellInfo: Content {
+    let id: Int
+    let hexQ: Int
+    let hexR: Int
+    let latitude: Double
+    let longitude: Double
+    let averageSNR: Double?
+    let packetCount: Int
+    let contributionCount: Int
+    let lastUpdated: String
+    let hidden: Bool
+    let notes: String?
+}
+
+struct AdminCellsResponse: Content {
+    let cells: [AdminCellInfo]
+}
+
+struct ToggleCellHiddenRequest: Content {
+    let hidden: Bool
+}
+
+struct ToggleCellHiddenResponse: Content {
+    let id: Int
+    let hexQ: Int
+    let hexR: Int
+    let hidden: Bool
+}
+
+struct UpdateCellNotesRequest: Content {
+    let notes: String
+}
+
+struct UpdateCellNotesResponse: Content {
+    let id: Int
+    let hexQ: Int
+    let hexR: Int
+    let notes: String
+}
+
 // MARK: - Admin Shared Links
 
 struct AdminSharedLinkInfo: Content {

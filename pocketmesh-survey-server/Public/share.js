@@ -92,6 +92,63 @@ let cellOverlays = [];
 let cellOverlaysByKey = {};
 let cellLoadingTimeout = null;
 
+// ---- Map position hash utilities ----
+
+function parseHashPosition() {
+    const hash = window.location.hash;
+    if (!hash || hash.length < 2) return null;
+    const params = new URLSearchParams(hash.substring(1));
+    const lat = parseFloat(params.get('lat'));
+    const lon = parseFloat(params.get('lon'));
+    const z = parseFloat(params.get('z'));
+    if (isNaN(lat) || isNaN(lon) || isNaN(z)) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180 || z < 100) return null;
+    return { lat, lon, z };
+}
+
+let hashUpdateTimer = null;
+function updateHashPosition() {
+    clearTimeout(hashUpdateTimer);
+    hashUpdateTimer = setTimeout(() => {
+        if (!map) return;
+        const center = map.center;
+        const z = Math.round(map.cameraDistance);
+        const lat = center.latitude.toFixed(5);
+        const lon = center.longitude.toFixed(5);
+        const newHash = `#lat=${lat}&lon=${lon}&z=${z}`;
+        if (window.location.hash !== newHash) {
+            history.replaceState(null, '', newHash);
+        }
+    }, 500);
+}
+
+async function copyMapLink() {
+    try {
+        await navigator.clipboard.writeText(window.location.href);
+        showCopyToast('Link copied!');
+    } catch {
+        const input = document.createElement('input');
+        input.value = window.location.href;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+        showCopyToast('Link copied!');
+    }
+}
+
+function showCopyToast(msg) {
+    let toast = document.getElementById('copy-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'copy-toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+}
+
 function togglePanel() {
     document.getElementById('share-panel').classList.toggle('expanded');
 }
@@ -136,12 +193,31 @@ function initShareMap() {
         renderRepeaterMap(SHARE_DATA);
     }
 
+    // Override auto-fit with hash position if present (after a brief delay
+    // to let showItems animation settle)
+    const hashPos = parseHashPosition();
+    if (hashPos) {
+        setTimeout(() => {
+            map.center = new mapkit.Coordinate(hashPos.lat, hashPos.lon);
+            map.cameraDistance = hashPos.z;
+        }, 600);
+    }
+
     // Load community signal cell overlay and refresh on pan/zoom
     map.addEventListener('region-change-end', function() {
         clearTimeout(cellLoadingTimeout);
         cellLoadingTimeout = setTimeout(() => { loadCellOverlay(); }, 300);
+        updateHashPosition();
     });
     loadCellOverlay();
+
+    // Share button overlay
+    const shareBtn = document.createElement('button');
+    shareBtn.id = 'copy-link-btn';
+    shareBtn.innerHTML = '&#x1F517; Copy Link';
+    shareBtn.title = 'Copy a shareable link to this map view';
+    shareBtn.onclick = copyMapLink;
+    document.body.appendChild(shareBtn);
 }
 
 // MARK: - Route Rendering

@@ -59,6 +59,13 @@ final class CellModel: Model, Content, @unchecked Sendable {
     @OptionalField(key: "probes_sent")
     var probesSent: Int?
 
+    // Admin fields
+    @OptionalField(key: "hidden")
+    var hidden: Bool?
+
+    @OptionalField(key: "notes")
+    var notes: String?
+
     // Metadata
     @Field(key: "contribution_count")
     var contributionCount: Int

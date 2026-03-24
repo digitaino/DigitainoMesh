@@ -109,6 +109,11 @@ func routes(_ app: Application) throws {
     admin.put("repeater", ":id", "notes", use: surveyController.updateRepeaterNotes)
     admin.delete("repeater", ":id", use: surveyController.deleteRepeater)
 
+    // Admin cell management
+    admin.get("cells", use: surveyController.getAdminCells)
+    admin.put("cell", ":id", "hidden", use: surveyController.toggleCellHidden)
+    admin.put("cell", ":id", "notes", use: surveyController.updateCellNotes)
+
     // Admin shared links management
     admin.get("shared-links", use: shareController.getAdminSharedLinks)
     admin.delete("shared-route", ":id", use: shareController.deleteSharedRoute)
