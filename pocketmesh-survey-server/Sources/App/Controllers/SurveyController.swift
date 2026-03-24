@@ -394,61 +394,8 @@ struct SurveyController {
 
         // Upsert repeater locations from resolved info (with prefix normalization)
         if let repeaterInfos = payload.repeaters {
-            for info in repeaterInfos {
-                guard (-90...90).contains(info.latitude),
-                      (-180...180).contains(info.longitude) else { continue }
-
-                let normalized = info.hexID.uppercased()
-
-                // Look for exact match first
-                let exact = try await RepeaterLocation.query(on: req.db)
-                    .filter(\.$hexID == normalized)
-                    .first()
-
-                if let exact {
-                    exact.name = info.name
-                    exact.latitude = info.latitude
-                    exact.longitude = info.longitude
-                    exact.lastUpdated = now
-                    exact.lastContributorID = payload.contributorID
-                    try await exact.save(on: req.db)
-                    continue
-                }
-
-                // Check if a shorter prefix exists — upgrade it
-                let allRepeaters = try await RepeaterLocation.query(on: req.db).all()
-                if let shorter = allRepeaters.first(where: {
-                    let eid = $0.hexID.uppercased()
-                    return normalized.hasPrefix(eid) && normalized.count > eid.count
-                }) {
-                    shorter.hexID = normalized
-                    shorter.name = info.name
-                    shorter.latitude = info.latitude
-                    shorter.longitude = info.longitude
-                    shorter.lastUpdated = now
-                    shorter.lastContributorID = payload.contributorID
-                    try await shorter.save(on: req.db)
-                    continue
-                }
-
-                // Check if a longer version already exists — skip
-                if allRepeaters.contains(where: {
-                    let eid = $0.hexID.uppercased()
-                    return eid.hasPrefix(normalized) && eid.count > normalized.count
-                }) {
-                    continue
-                }
-
-                let repeater = RepeaterLocation(
-                    hexID: normalized,
-                    name: info.name,
-                    latitude: info.latitude,
-                    longitude: info.longitude,
-                    lastUpdated: now
-                )
-                repeater.lastContributorID = payload.contributorID
-                try await repeater.save(on: req.db)
-            }
+            let infos = repeaterInfos.map { RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude) }
+            try await Self.upsertRepeaterLocations(infos: infos, contributorID: payload.contributorID, on: req.db, logger: req.logger)
         }
 
         // Log upload
@@ -1479,6 +1426,7 @@ struct SurveyController {
             let hidden: Bool?
             let notes: String?
             let last_contributor_id: String?
+            let last_contributor_name: String?
             let cell_count: Int
             let total_packet_count: Int
             let last_heard: String?
@@ -1487,11 +1435,13 @@ struct SurveyController {
         let query: SQLQueryString = """
             SELECT rl.id, rl.hex_id, rl.name, rl.latitude, rl.longitude, rl.last_updated,
                    rl.hidden, rl.notes, rl.last_contributor_id,
+                   cp.display_name AS last_contributor_name,
                    COUNT(DISTINCT cr.cell_id) AS cell_count,
                    COALESCE(SUM(cr.packet_count), 0) AS total_packet_count,
                    MAX(cr.last_heard) AS last_heard
             FROM repeater_locations rl
             LEFT JOIN cell_repeaters cr ON UPPER(cr.repeater_hex_id) = UPPER(rl.hex_id)
+            LEFT JOIN contributor_profiles cp ON cp.contributor_id = rl.last_contributor_id
             GROUP BY rl.id
             ORDER BY rl.name ASC
             """
@@ -1509,6 +1459,7 @@ struct SurveyController {
                 hidden: row.hidden ?? false,
                 notes: row.notes,
                 lastContributorID: row.last_contributor_id,
+                lastContributorName: row.last_contributor_name,
                 cellCount: row.cell_count,
                 totalPacketCount: row.total_packet_count,
                 lastHeard: row.last_heard
@@ -2115,4 +2066,127 @@ struct SurveyController {
             cellsUpdated: cellsUpdated
         )
     }
+
+    // MARK: - Self-Service: POST /api/v1/me/repeaters
+
+    @Sendable
+    func upsertMyRepeaters(req: Request) async throws -> ShareRepeatersResponse {
+        guard let contributorID = req.authenticatedContributorID else {
+            throw Abort(.unauthorized)
+        }
+
+        let body = try req.content.decode(ShareRepeatersRequest.self)
+
+        guard body.repeaters.count <= 500 else {
+            throw Abort(.badRequest, reason: "Too many repeaters (max 500)")
+        }
+
+        let infos = body.repeaters.map {
+            RepeaterUpsertInfo(hexID: $0.hexID, name: $0.name, latitude: $0.latitude, longitude: $0.longitude)
+        }
+
+        let result = try await Self.upsertRepeaterLocations(
+            infos: infos,
+            contributorID: contributorID,
+            on: req.db,
+            logger: req.logger
+        )
+
+        req.logger.info("Repeater share from \(contributorID.prefix(16))...: \(result.created) created, \(result.updated) updated, \(result.accepted) accepted")
+
+        return ShareRepeatersResponse(
+            accepted: result.accepted,
+            updated: result.updated,
+            created: result.created
+        )
+    }
+
+    // MARK: - Repeater Upsert Helper
+
+    /// Shared repeater upsert logic used by both survey upload and background repeater sharing.
+    @discardableResult
+    private static func upsertRepeaterLocations(
+        infos: [RepeaterUpsertInfo],
+        contributorID: String,
+        on db: Database,
+        logger: Logger
+    ) async throws -> (accepted: Int, updated: Int, created: Int) {
+        let now = ISO8601DateFormatter().string(from: Date())
+        var accepted = 0
+        var updated = 0
+        var created = 0
+
+        for info in infos {
+            guard (-90...90).contains(info.latitude),
+                  (-180...180).contains(info.longitude) else { continue }
+
+            let normalized = info.hexID.uppercased()
+
+            // Look for exact match first
+            let exact = try await RepeaterLocation.query(on: db)
+                .filter(\.$hexID == normalized)
+                .first()
+
+            if let exact {
+                exact.name = info.name
+                exact.latitude = info.latitude
+                exact.longitude = info.longitude
+                exact.lastUpdated = now
+                exact.lastContributorID = contributorID
+                try await exact.save(on: db)
+                accepted += 1
+                updated += 1
+                continue
+            }
+
+            // Check if a shorter prefix exists — upgrade it
+            let allRepeaters = try await RepeaterLocation.query(on: db).all()
+            if let shorter = allRepeaters.first(where: {
+                let eid = $0.hexID.uppercased()
+                return normalized.hasPrefix(eid) && normalized.count > eid.count
+            }) {
+                shorter.hexID = normalized
+                shorter.name = info.name
+                shorter.latitude = info.latitude
+                shorter.longitude = info.longitude
+                shorter.lastUpdated = now
+                shorter.lastContributorID = contributorID
+                try await shorter.save(on: db)
+                accepted += 1
+                updated += 1
+                continue
+            }
+
+            // Check if a longer version already exists — skip
+            if allRepeaters.contains(where: {
+                let eid = $0.hexID.uppercased()
+                return eid.hasPrefix(normalized) && eid.count > normalized.count
+            }) {
+                accepted += 1
+                continue
+            }
+
+            let repeater = RepeaterLocation(
+                hexID: normalized,
+                name: info.name,
+                latitude: info.latitude,
+                longitude: info.longitude,
+                lastUpdated: now
+            )
+            repeater.lastContributorID = contributorID
+            try await repeater.save(on: db)
+            accepted += 1
+            created += 1
+        }
+
+        return (accepted: accepted, updated: updated, created: created)
+    }
+}
+
+/// Lightweight struct for passing repeater info to the shared upsert helper.
+struct RepeaterUpsertInfo {
+    let hexID: String
+    let name: String
+    let latitude: Double
+    let longitude: Double
 }

@@ -1591,9 +1591,11 @@
                     ? `<span class="notes-preview" title="${escapeHtml(r.notes)}">${escapeHtml(r.notes)}</span>`
                     : '<span class="dim">\u2014</span>';
 
-                const contributorLabel = r.lastContributorID
-                    ? `<span class="mono" title="${escapeHtml(r.lastContributorID)}">${escapeHtml(r.lastContributorID.substring(0, 8))}...</span>`
-                    : '<span class="dim">\u2014</span>';
+                const contributorLabel = r.lastContributorName
+                    ? `<span title="${escapeHtml(r.lastContributorID || '')}">${escapeHtml(r.lastContributorName)}</span>`
+                    : r.lastContributorID
+                        ? `<span class="mono" title="${escapeHtml(r.lastContributorID)}">${escapeHtml(r.lastContributorID.substring(0, 8))}...</span>`
+                        : '<span class="dim">\u2014</span>';
 
                 tr.innerHTML = `
                     <td class="mono">${escapeHtml(r.hexID)}</td>

@@ -475,6 +475,7 @@ struct AdminRepeaterInfo: Content {
     let hidden: Bool
     let notes: String?
     let lastContributorID: String?
+    let lastContributorName: String?
     let cellCount: Int
     let totalPacketCount: Int
     let lastHeard: String?
@@ -670,4 +671,23 @@ struct UpdateSurveyRouteNotesResponse: Content {
 
 struct DeleteSurveyRouteResponse: Content {
     let id: String
+}
+
+// MARK: - Background Repeater Sharing
+
+struct ShareRepeatersRequest: Content {
+    let repeaters: [ShareRepeaterInfo]
+}
+
+struct ShareRepeaterInfo: Content {
+    let hexID: String
+    let name: String
+    let latitude: Double
+    let longitude: Double
+}
+
+struct ShareRepeatersResponse: Content {
+    let accepted: Int
+    let updated: Int
+    let created: Int
 }

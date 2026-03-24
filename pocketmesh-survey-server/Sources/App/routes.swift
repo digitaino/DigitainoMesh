@@ -92,6 +92,7 @@ func routes(_ app: Application) throws {
     selfService.put("name-retroactive", use: surveyController.updateNameRetroactive)
     selfService.delete("data", use: surveyController.deleteMyData)
     selfService.get("survey-routes", use: surveyRouteController.getMyRoutes)
+    selfService.post("repeaters", use: surveyController.upsertMyRepeaters)
 
     // Admin API endpoints (no API key — protected by Cloudflare Access)
     let admin = api.grouped("admin").grouped(CacheControlMiddleware(.noStore))

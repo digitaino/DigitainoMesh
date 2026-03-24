@@ -121,6 +121,14 @@ public final class AppState {
     /// Message event broadcaster for UI updates
     let messageEventBroadcaster = MessageEventBroadcaster()
 
+    // MARK: - Repeater Sharing
+
+    /// Service for periodically sharing known repeater locations with the community server.
+    private let repeaterSharingService = RepeaterSharingService()
+
+    /// Background task that periodically shares repeaters while the app is foregrounded.
+    private var repeaterSharingTask: Task<Void, Never>?
+
     // MARK: - Signal Survey
 
     /// Whether a signal survey session is currently recording.
@@ -353,6 +361,11 @@ public final class AppState {
         await services.syncCoordinator.setDataChangeCallbacks(
             onContactsChanged: { @MainActor [weak self] in
                 self?.contactsVersion += 1
+                // Debounce repeater sharing check on contact changes
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(30))
+                    self?.updateRepeaterSharing()
+                }
             },
             onConversationsChanged: { @MainActor [weak self] in
                 self?.conversationsVersion += 1
@@ -650,6 +663,10 @@ public final class AppState {
         activeRecoveryFallbackTask?.cancel()
         activeRecoveryFallbackTask = nil
 
+        // Stop repeater sharing timer
+        repeaterSharingTask?.cancel()
+        repeaterSharingTask = nil
+
         liveActivityManager.handleEnterBackground()
 
         // Keep battery polling alive when the live activity is visible on the lock screen
@@ -696,6 +713,74 @@ public final class AppState {
         if let services {
             await batteryMonitor.checkMissedBatteryThreshold(device: connectedDevice, services: services)
             batteryMonitor.startRefreshLoop(services: services, device: connectedDevice)
+        }
+
+        // Resume repeater sharing if enabled
+        updateRepeaterSharing()
+    }
+
+    // MARK: - Repeater Sharing Lifecycle
+
+    /// Start or stop the repeater sharing timer based on user preference and auth state.
+    func updateRepeaterSharing() {
+        let enabled = UserDefaults.standard.bool(forKey: "shareRepeatersEnabled")
+        let verificationService = ContributorVerificationService()
+        let authToken = verificationService.getAuthToken()
+
+        guard enabled, authToken != nil else {
+            repeaterSharingTask?.cancel()
+            repeaterSharingTask = nil
+            return
+        }
+
+        // Already running — don't start another
+        guard repeaterSharingTask == nil else { return }
+
+        repeaterSharingTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await self.performRepeaterShareIfNeeded()
+                do {
+                    try await Task.sleep(for: .seconds(RepeaterSharingService.minimumInterval))
+                } catch {
+                    break  // cancelled
+                }
+            }
+        }
+    }
+
+    /// Perform a single repeater share attempt if there are changes or enough time has elapsed.
+    private func performRepeaterShareIfNeeded() async {
+        guard let deviceID = currentDeviceID,
+              let dataStore = offlineDataStore else { return }
+
+        let verificationService = ContributorVerificationService()
+        guard let authToken = verificationService.getAuthToken() else {
+            // Token expired — stop sharing
+            repeaterSharingTask?.cancel()
+            repeaterSharingTask = nil
+            return
+        }
+
+        do {
+            let contacts = try await dataStore.fetchContacts(deviceID: deviceID)
+            let repeaterInfos = RepeaterSharingService.repeaterInfos(from: contacts)
+
+            guard !repeaterInfos.isEmpty else { return }
+
+            let fingerprint = RepeaterSharingService.fingerprint(from: repeaterInfos)
+
+            let shouldShare = await repeaterSharingService.shouldShare()
+            let hasChanges = await repeaterSharingService.hasChanges(fingerprint: fingerprint)
+
+            guard shouldShare || hasChanges else { return }
+
+            let result = try await repeaterSharingService.shareRepeaters(repeaterInfos, authToken: authToken)
+            await repeaterSharingService.recordShare(fingerprint: fingerprint)
+
+            logger.info("Shared \(repeaterInfos.count) repeaters: \(result.created) created, \(result.updated) updated")
+        } catch {
+            logger.error("Repeater sharing failed: \(error.localizedDescription)")
         }
     }
 
