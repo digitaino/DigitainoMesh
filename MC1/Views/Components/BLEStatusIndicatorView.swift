@@ -236,6 +236,12 @@ private struct ConnectedMenu: View {
                             .foregroundStyle(.secondary)
                         }
                     }
+
+                    Button {
+                        onAdvancedSettings()
+                    } label: {
+                        Label(L10n.Settings.AdvancedSettings.title, systemImage: "gearshape")
+                    }
                 }
             }
 
@@ -258,12 +264,6 @@ private struct ConnectedMenu: View {
             }
 
             Section {
-                Button {
-                    onAdvancedSettings()
-                } label: {
-                    Label(L10n.Settings.AdvancedSettings.title, systemImage: "gearshape")
-                }
-
                 Button {
                     onChangeDevice()
                 } label: {
