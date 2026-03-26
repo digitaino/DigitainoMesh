@@ -9,8 +9,12 @@ struct SharedRouteMapSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let sharedRoute: SharedRoute
+    var hexPath: HexPath?
 
     @State private var mapViewModel = SharedRouteMapViewModel()
+    @State private var isSharing = false
+    @State private var shareURL: URL?
+    @State private var showShareConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -25,12 +29,34 @@ struct SharedRouteMapSheet: View {
                     mapToolbar
                 }
             }
-            .navigationTitle("Shared Route")
+            .navigationTitle(hexPath != nil ? "Path Map" : "Shared Route")
             .navigationBarTitleDisplayMode(.inline)
             .liquidGlassToolbarBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.Localizable.Common.close) { dismiss() }
+                }
+                if hexPath != nil {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            Task { await sharePathToServer() }
+                        } label: {
+                            if isSharing {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                        }
+                        .disabled(isSharing || mapViewModel.isLoading)
+                    }
+                }
+            }
+            .alert("Link Copied", isPresented: $showShareConfirmation) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                if let url = shareURL {
+                    Text(url.absoluteString)
                 }
             }
         }
@@ -157,5 +183,45 @@ struct SharedRouteMapSheet: View {
             }
         }
         .animation(.spring(response: 0.3), value: mapViewModel.showingLayersMenu)
+    }
+
+    // MARK: - Share
+
+    private func sharePathToServer() async {
+        guard let hexPath else { return }
+        isSharing = true
+        defer { isSharing = false }
+
+        let hops = hexPath.hexIDs.enumerated().map { index, hexID -> RouteShareService.RouteHop in
+            let matched = mapViewModel.repeaterAnnotations.first { annotation in
+                guard let pathInfo = mapViewModel.pathState[annotation.annotationID] else { return false }
+                return pathInfo.hopIndex == index + 1
+            }
+            if let annotation = matched {
+                return RouteShareService.RouteHop(
+                    hexID: hexID,
+                    name: annotation.title,
+                    latitude: annotation.coordinate.latitude,
+                    longitude: annotation.coordinate.longitude
+                )
+            } else {
+                return RouteShareService.RouteHop(hexID: hexID, name: nil, latitude: nil, longitude: nil)
+            }
+        }
+
+        let location = appState.locationService.currentLocation
+        let service = RouteShareService()
+        let url = await service.sharePath(
+            hops: hops,
+            userLatitude: location?.coordinate.latitude,
+            userLongitude: location?.coordinate.longitude,
+            userName: appState.connectedDevice?.nodeName
+        )
+
+        if let url {
+            shareURL = url
+            UIPasteboard.general.string = url.absoluteString
+            showShareConfirmation = true
+        }
     }
 }

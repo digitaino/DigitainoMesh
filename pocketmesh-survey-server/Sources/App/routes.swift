@@ -41,6 +41,7 @@ func routes(_ app: Application) throws {
     app.get("r", ":id", use: shareController.serveRoutePage)
     app.get("m", ":id", use: shareController.serveRepeaterMapPage)
     app.get("p", ":id", use: shareController.servePathPage)
+    app.get("path", use: shareController.servePathCreatorPage)
 
     // Authenticated endpoints with stricter rate limit (10 requests per minute)
     // Write endpoints get no-store via the middleware (POST/PUT/DELETE are skipped anyway)
@@ -69,6 +70,12 @@ func routes(_ app: Application) throws {
     protected.post("survey-routes", use: surveyRouteController.createRoute)
     protected.put("survey-routes", ":id", "status", use: surveyRouteController.updateStatus)
     protected.get("survey-routes", ":id", use: surveyRouteController.getRoute)
+
+    // Public path creation (rate-limited, no API key — for web form at /path)
+    let publicWrite = api.grouped("public")
+        .grouped(CacheControlMiddleware(.noStore))
+        .grouped(RateLimitMiddleware(store: writeRateLimit))
+    publicWrite.post("paths", use: shareController.createPublicPath)
 
     // Plan session polling and polygon submission (public — the code IS the auth)
     let planPublic = api.grouped(CacheControlMiddleware(.noStore))

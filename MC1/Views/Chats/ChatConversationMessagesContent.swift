@@ -134,7 +134,7 @@ struct ChatConversationMessagesContent: View {
             SharedRouteMapSheet(sharedRoute: route)
         }
         .sheet(item: $hexPathForMap) { path in
-            SharedRouteMapSheet(sharedRoute: path.asSharedRoute)
+            SharedRouteMapSheet(sharedRoute: path.asSharedRoute, hexPath: path)
         }
         .overlay(alignment: .bottomTrailing) {
             VStack(spacing: 12) {

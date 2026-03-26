@@ -537,6 +537,24 @@ struct ShareController {
         return Response(status: .ok, headers: headers, body: .init(string: html))
     }
 
+    // MARK: - GET /path — Path creator web page
+
+    @Sendable
+    func servePathCreatorPage(req: Request) async throws -> Response {
+        let html = Self.pathCreatorPageHTML()
+        var headers = HTTPHeaders()
+        headers.add(name: .contentType, value: "text/html; charset=utf-8")
+        return Response(status: .ok, headers: headers, body: .init(string: html))
+    }
+
+    // MARK: - POST /api/v1/public/paths — Public path creation (no API key, rate-limited)
+
+    @Sendable
+    func createPublicPath(req: Request) async throws -> CreateSharedPathResponse {
+        // Reuse the same logic as authenticated createPath
+        try await createPath(req: req)
+    }
+
     // MARK: - DELETE /api/v1/admin/shared-path/:id
 
     @Sendable
@@ -673,6 +691,242 @@ struct ShareController {
                     </div>
                 </div>
             </div>
+        </body>
+        </html>
+        """
+    }
+
+    private static func pathCreatorPageHTML() -> String {
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Path Map — DigitainoMesh</title>
+            <link rel="stylesheet" href="/style.css" />
+            <link rel="stylesheet" href="/share.css" />
+            <style>
+                #creator-panel {
+                    position: fixed;
+                    top: 16px;
+                    left: 16px;
+                    right: 16px;
+                    max-width: 420px;
+                    margin: 0 auto;
+                    background: rgba(15, 15, 15, 0.92);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 16px;
+                    padding: 20px;
+                    z-index: 1000;
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                }
+                #creator-panel h2 {
+                    font-size: 16px;
+                    font-weight: 600;
+                    margin: 0 0 4px 0;
+                    color: #fff;
+                }
+                #creator-panel .subtitle {
+                    font-size: 12px;
+                    color: #888;
+                    margin-bottom: 14px;
+                }
+                #hex-input {
+                    width: 100%;
+                    padding: 10px 12px;
+                    background: rgba(255, 255, 255, 0.06);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    border-radius: 8px;
+                    color: #e5e5e5;
+                    font-family: 'SF Mono', SFMono-Regular, Menlo, monospace;
+                    font-size: 14px;
+                    outline: none;
+                    resize: vertical;
+                    min-height: 48px;
+                    text-transform: uppercase;
+                }
+                #hex-input::placeholder { color: #555; text-transform: none; }
+                #hex-input:focus { border-color: rgba(34, 211, 238, 0.5); }
+                .btn-row {
+                    display: flex;
+                    gap: 8px;
+                    margin-top: 12px;
+                }
+                .btn {
+                    flex: 1;
+                    padding: 10px 16px;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: opacity 0.15s;
+                }
+                .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+                .btn-primary {
+                    background: #22d3ee;
+                    color: #000;
+                }
+                .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+                .btn-secondary {
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    color: #e5e5e5;
+                }
+                .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.15); }
+                #status-msg {
+                    margin-top: 10px;
+                    font-size: 12px;
+                    color: #888;
+                    min-height: 18px;
+                }
+                #status-msg.error { color: #ef4444; }
+                #status-msg.success { color: #22c55e; }
+                #result-link {
+                    display: none;
+                    margin-top: 12px;
+                    padding: 10px 12px;
+                    background: rgba(34, 211, 238, 0.08);
+                    border: 1px solid rgba(34, 211, 238, 0.25);
+                    border-radius: 8px;
+                }
+                #result-link a {
+                    color: #22d3ee;
+                    text-decoration: none;
+                    font-size: 13px;
+                    word-break: break-all;
+                }
+                #result-link a:hover { text-decoration: underline; }
+                #result-link .copy-hint {
+                    font-size: 11px;
+                    color: #666;
+                    margin-top: 4px;
+                }
+                @media (max-width: 640px) {
+                    #creator-panel { top: 8px; left: 8px; right: 8px; padding: 16px; }
+                }
+            </style>
+        </head>
+        <body>
+            <div id="map" style="opacity:0.3"></div>
+            <div id="creator-panel">
+                <h2>Path Map</h2>
+                <div class="subtitle">Enter hex IDs separated by commas or spaces to create a shareable path map.</div>
+                <textarea id="hex-input" rows="2" placeholder="A3, 7F42, B5C9, DE"></textarea>
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="generate-btn" disabled onclick="generatePath()">Generate Map</button>
+                </div>
+                <div id="status-msg"></div>
+                <div id="result-link">
+                    <a id="path-url" href="#" target="_blank"></a>
+                    <div class="copy-hint" id="copy-hint">Click to open · link copied to clipboard</div>
+                </div>
+            </div>
+            <script>
+                const hexInput = document.getElementById('hex-input');
+                const generateBtn = document.getElementById('generate-btn');
+                const statusMsg = document.getElementById('status-msg');
+                const resultLink = document.getElementById('result-link');
+                const pathUrl = document.getElementById('path-url');
+
+                // Validate input: 2+ hex tokens (2-64 hex chars each)
+                function parseHexIDs(text) {
+                    const tokens = text.trim().split(/[\\s,]+/).filter(t => t.length > 0);
+                    const hexPattern = /^[0-9a-fA-F]+$/;
+                    const valid = tokens.filter(t => hexPattern.test(t) && t.length >= 2 && t.length <= 64
+                        && (t.length <= 6 || t.length === 64));
+                    return valid.length >= 2 ? valid : null;
+                }
+
+                hexInput.addEventListener('input', function() {
+                    const ids = parseHexIDs(this.value);
+                    generateBtn.disabled = !ids;
+                    // Hide previous result when editing
+                    resultLink.style.display = 'none';
+                    statusMsg.textContent = '';
+                    statusMsg.className = '';
+                });
+
+                async function generatePath() {
+                    const ids = parseHexIDs(hexInput.value);
+                    if (!ids) return;
+
+                    generateBtn.disabled = true;
+                    statusMsg.textContent = 'Creating path map...';
+                    statusMsg.className = '';
+                    resultLink.style.display = 'none';
+
+                    try {
+                        const hops = ids.map(id => ({ hexID: id.toUpperCase() }));
+                        const res = await fetch('/api/v1/public/paths', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ hops: hops })
+                        });
+
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            throw new Error(err.reason || 'Failed to create path');
+                        }
+
+                        const data = await res.json();
+                        statusMsg.textContent = ids.length + ' hops · link created';
+                        statusMsg.className = 'success';
+                        pathUrl.href = data.url;
+                        pathUrl.textContent = data.url;
+                        resultLink.style.display = 'block';
+
+                        // Copy to clipboard
+                        if (navigator.clipboard) {
+                            navigator.clipboard.writeText(data.url).catch(() => {});
+                        }
+                    } catch (e) {
+                        statusMsg.textContent = e.message;
+                        statusMsg.className = 'error';
+                    } finally {
+                        generateBtn.disabled = !parseHexIDs(hexInput.value);
+                    }
+                }
+
+                // Allow Enter to submit (Shift+Enter for newline)
+                hexInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!generateBtn.disabled) generatePath();
+                    }
+                });
+            </script>
+            <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.core.js"
+                    crossorigin async
+                    data-callback="initCreatorMap"
+                    data-libraries="map"></script>
+            <script>
+                // Minimal background map for visual appeal
+                function initCreatorMap() {
+                    mapkit.init({
+                        authorizationCallback: function(done) {
+                            fetch('/api/v1/mapkit-token')
+                                .then(r => r.text()).then(t => done(t))
+                                .catch(() => {});
+                        }
+                    });
+                    new mapkit.Map('map', {
+                        colorScheme: mapkit.Map.ColorSchemes.Dark,
+                        mapType: mapkit.Map.MapTypes.MutedStandard,
+                        showsCompass: mapkit.FeatureVisibility.Hidden,
+                        showsZoomControl: false,
+                        showsMapTypeControl: false,
+                        isScrollEnabled: false,
+                        isZoomEnabled: false,
+                        isRotateEnabled: false,
+                        center: new mapkit.Coordinate(30.27, -97.74),
+                        cameraDistance: 200000
+                    });
+                }
+            </script>
         </body>
         </html>
         """
