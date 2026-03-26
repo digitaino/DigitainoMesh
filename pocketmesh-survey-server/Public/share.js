@@ -186,6 +186,9 @@ function initShareMap() {
         isScrollEnabled: true
     });
 
+    // Auto-expand the panel so content is visible on load
+    document.getElementById('share-panel').classList.add('expanded');
+
     if (SHARE_TYPE === 'route') {
         renderRoute(SHARE_DATA);
     } else if (SHARE_TYPE === 'path') {
@@ -406,6 +409,17 @@ function renderPath(data) {
     if (locatedHops.length === 0) {
         map.center = new mapkit.Coordinate(30.27, -97.74);
         map.cameraDistance = 50000;
+        // Show a centered overlay message
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);' +
+            'background:rgba(15,15,15,0.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);' +
+            'border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:20px 28px;' +
+            'text-align:center;z-index:500;max-width:320px;';
+        overlay.innerHTML = '<div style="font-size:28px;margin-bottom:8px">📍</div>' +
+            '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:4px">No Located Hops</div>' +
+            '<div style="font-size:12px;color:#888">None of the ' + data.hopCount +
+            ' repeaters in this path have known locations in the community database.</div>';
+        document.body.appendChild(overlay);
         return;
     }
 

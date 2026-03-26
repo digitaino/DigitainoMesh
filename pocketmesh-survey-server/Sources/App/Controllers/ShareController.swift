@@ -408,29 +408,30 @@ struct ShareController {
             }
         }
 
-        // Server-side resolution: fill in missing locations from community repeater database
+        // Server-side resolution: fill in missing locations from community repeater database.
+        // The DB stores 4-char hex IDs (2 bytes from public key prefix), so we need to handle:
+        // - Exact match: input hex == stored hex (e.g. "F1CE" == "F1CE")
+        // - Prefix match: input is shorter and stored hex starts with it (e.g. "F1" matches "F1CE")
+        // - Reverse prefix: input is longer and starts with stored hex (e.g. "F1CE3A" matches "F1CE")
+        // - Public key prefix match: for 6+ char IDs, match against full public key
+        let allRepeaters = try await RepeaterLocation.query(on: req.db)
+            .filter(\.$hidden != true)
+            .all()
+
         var resolvedHops = payload.hops
         for i in 0..<resolvedHops.count {
             if resolvedHops[i].latitude == nil || resolvedHops[i].longitude == nil {
                 let hexID = resolvedHops[i].hexID.uppercased()
-                // Try exact hex_id match first
-                if let repeater = try await RepeaterLocation.query(on: req.db)
-                    .filter(\.$hexID == hexID)
-                    .filter(\.$hidden != true)
-                    .first() {
-                    resolvedHops[i] = SharedRouteHop(
-                        hexID: resolvedHops[i].hexID,
-                        name: resolvedHops[i].name ?? repeater.name,
-                        latitude: repeater.latitude,
-                        longitude: repeater.longitude
-                    )
-                }
-                // Try public key prefix match for longer hex IDs
-                else if hexID.count >= 6, let repeater = try await RepeaterLocation.query(on: req.db)
-                    .filter(\.$publicKey != nil)
-                    .filter(\.$hidden != true)
-                    .all()
-                    .first(where: { ($0.publicKey ?? "").uppercased().hasPrefix(hexID) }) {
+
+                // Find best match: exact > prefix > reverse prefix > public key prefix
+                let match = allRepeaters.first { $0.hexID.uppercased() == hexID }
+                    ?? allRepeaters.first { $0.hexID.uppercased().hasPrefix(hexID) }
+                    ?? allRepeaters.first { hexID.hasPrefix($0.hexID.uppercased()) }
+                    ?? (hexID.count >= 6
+                        ? allRepeaters.first { ($0.publicKey ?? "").uppercased().hasPrefix(hexID) }
+                        : nil)
+
+                if let repeater = match {
                     resolvedHops[i] = SharedRouteHop(
                         hexID: resolvedHops[i].hexID,
                         name: resolvedHops[i].name ?? repeater.name,
