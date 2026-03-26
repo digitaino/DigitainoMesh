@@ -415,7 +415,10 @@ struct ShareController {
         // - Reverse prefix: input is longer and starts with stored hex (e.g. "F1CE3A" matches "F1CE")
         // - Public key prefix match: for 6+ char IDs, match against full public key
         let allRepeaters = try await RepeaterLocation.query(on: req.db)
-            .filter(\.$hidden != true)
+            .group(.or) { group in
+                group.filter(\.$hidden == nil)
+                group.filter(\.$hidden == false)
+            }
             .all()
 
         var resolvedHops = payload.hops

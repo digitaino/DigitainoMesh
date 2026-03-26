@@ -120,6 +120,7 @@
         .status-completed { background: rgba(34,197,94,0.15); color: #22c55e; }
         .status-abandoned { background: rgba(239,68,68,0.15); color: #ef4444; }
         .type-route { background: rgba(34,211,238,0.15); color: #22d3ee; }
+        .type-path { background: rgba(34,197,94,0.15); color: #22c55e; }
         .type-map { background: rgba(168,85,247,0.15); color: #a855f7; }
         .shared-link {
             color: #22d3ee;
@@ -1768,10 +1769,10 @@
 
             for (const link of sharedLinksData) {
                 const tr = document.createElement('tr');
-                const prefix = link.type === 'route' ? '/r/' : '/m/';
-                const typeClass = link.type === 'route' ? 'type-route' : 'type-map';
-                const typeLabel = link.type === 'route' ? 'Route' : 'Map';
-                const countLabel = link.type === 'route'
+                const prefix = link.type === 'route' ? '/r/' : link.type === 'path' ? '/p/' : '/m/';
+                const typeClass = link.type === 'route' ? 'type-route' : link.type === 'path' ? 'type-path' : 'type-map';
+                const typeLabel = link.type === 'route' ? 'Route' : link.type === 'path' ? 'Path' : 'Map';
+                const countLabel = link.type === 'route' || link.type === 'path'
                     ? `${link.itemCount} hop${link.itemCount !== 1 ? 's' : ''}`
                     : `${link.itemCount} repeater${link.itemCount !== 1 ? 's' : ''}`;
 
@@ -1792,13 +1793,12 @@
         }
 
         async function deleteSharedLink(id, type) {
-            const typeLabel = type === 'route' ? 'route' : 'repeater map';
+            const typeLabel = type === 'route' ? 'route' : type === 'path' ? 'path' : 'repeater map';
             if (!confirm(`Delete shared ${typeLabel} ${id}?\n\nThis will remove the shared link permanently.`)) return;
 
             try {
-                const endpoint = type === 'route'
-                    ? `${API_BASE}/admin/shared-route/${id}`
-                    : `${API_BASE}/admin/shared-map/${id}`;
+                const endpointType = type === 'route' ? 'shared-route' : type === 'path' ? 'shared-path' : 'shared-map';
+                const endpoint = `${API_BASE}/admin/${endpointType}/${id}`;
                 const res = await fetch(endpoint, { method: 'DELETE' });
                 if (!res.ok) {
                     const err = await res.json();
