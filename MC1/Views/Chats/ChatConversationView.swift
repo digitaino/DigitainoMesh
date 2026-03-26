@@ -848,10 +848,9 @@ struct ChatConversationView: View {
 
         let userLocation = appState.locationService.currentLocation
 
-        // Use the same resolution lists as the message path view:
-        // repeater-typed contacts first, then discovered repeater nodes.
-        // Using all contacts (unfiltered) can pick the wrong match when
-        // 1-byte hex IDs collide between a repeater and a non-repeater contact.
+        // Use the same merged-pool + bidirectional anchor resolution as the
+        // message path view to ensure the shared route matches what the user
+        // sees on the iOS client.
         let repeaterContacts = chatViewModel.allContacts.filter { $0.type == .repeater }
 
         var discoveredNodes: [DiscoveredNodeDTO] = []
@@ -860,20 +859,63 @@ struct ChatConversationView: View {
             discoveredNodes = allDiscovered.filter { $0.nodeType == .repeater }
         }
 
-        // Build RouteHop array by resolving each hop
-        let hops: [RouteShareService.RouteHop] = hopHashes.map { hashBytes in
+        // Merged pool of all repeater-type nodes for unified resolution
+        let allNodes: [AnyResolvable] =
+            repeaterContacts.map { AnyResolvable($0) } +
+            discoveredNodes.map { AnyResolvable($0) }
+
+        // Determine sender location as forward anchor
+        let senderAnchor: CLLocation? = {
+            guard let senderKey = message.senderKeyPrefix,
+                  let sender = chatViewModel.allContacts.first(where: { $0.publicKeyPrefix == senderKey }),
+                  sender.hasLocation else { return nil }
+            return CLLocation(latitude: sender.latitude, longitude: sender.longitude)
+        }()
+
+        // Forward pass: sender → receiver
+        var forwardMatches: [AnyResolvable?] = []
+        var forwardAnchor = senderAnchor
+        var forwardHadAnchor: [Bool] = []
+        for hash in hopHashes {
+            let had = forwardAnchor != nil
+            let match = RepeaterResolver.bestMatch(for: hash, in: allNodes, userLocation: userLocation, anchorLocation: forwardAnchor)
+            forwardMatches.append(match)
+            forwardHadAnchor.append(had)
+            if let m = match, m.hasLocation {
+                forwardAnchor = CLLocation(latitude: m.latitude, longitude: m.longitude)
+            }
+        }
+
+        // Backward pass: receiver → sender
+        var backwardMatches: [AnyResolvable?] = []
+        var backwardAnchor = userLocation
+        var backwardHadAnchor: [Bool] = []
+        for hash in hopHashes.reversed() {
+            let had = backwardAnchor != nil
+            let match = RepeaterResolver.bestMatch(for: hash, in: allNodes, userLocation: userLocation, anchorLocation: backwardAnchor)
+            backwardMatches.append(match)
+            backwardHadAnchor.append(had)
+            if let m = match, m.hasLocation {
+                backwardAnchor = CLLocation(latitude: m.latitude, longitude: m.longitude)
+            }
+        }
+        backwardMatches.reverse()
+        backwardHadAnchor.reverse()
+
+        // Merge: pick the result from the closer end for each hop
+        let hops: [RouteShareService.RouteHop] = hopHashes.enumerated().map { i, hashBytes in
             let hexID = hashBytes.map { String(format: "%02X", $0) }.joined()
 
-            // Try to resolve name and location — matching the message path view
-            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: repeaterContacts, userLocation: userLocation) {
-                return RouteShareService.RouteHop(
-                    hexID: hexID,
-                    name: match.resolvableName,
-                    latitude: match.hasLocation ? match.latitude : nil,
-                    longitude: match.hasLocation ? match.longitude : nil
-                )
+            let useBackward: Bool
+            if forwardHadAnchor[i] && backwardHadAnchor[i] {
+                useBackward = (hopHashes.count - 1 - i) < i
+            } else {
+                useBackward = backwardHadAnchor[i] && !forwardHadAnchor[i]
             }
-            if let match = RepeaterResolver.bestMatch(for: hashBytes, in: discoveredNodes, userLocation: userLocation) {
+
+            let match = useBackward ? backwardMatches[i] : forwardMatches[i]
+
+            if let match {
                 return RouteShareService.RouteHop(
                     hexID: hexID,
                     name: match.resolvableName,
@@ -897,9 +939,7 @@ struct ChatConversationView: View {
 
         let hopCount = Int(message.pathLength & 0x3F)
 
-        // Compute distance directly from the resolved hop coordinates.
-        // This is more accurate than parsing the route info string because
-        // the hops here were resolved with repeater-priority matching.
+        // Compute distance from the resolved hop coordinates
         let locatedCoords: [CLLocationCoordinate2D] = hops.compactMap { hop in
             guard let lat = hop.latitude, let lon = hop.longitude else { return nil }
             return CLLocationCoordinate2D(latitude: lat, longitude: lon)

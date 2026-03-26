@@ -22,6 +22,7 @@ struct MessageDisplayState {
     var showIncomingHopCount: Bool = false
     var formattedText: AttributedString?
     var detectedSharedRoute: SharedRoute?
+    var detectedHexPath: HexPath?
     var isSearchMatch: Bool = false
     var isHighlighted: Bool = false
 }

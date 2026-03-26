@@ -316,6 +316,7 @@ struct ShareController {
     func getAdminSharedLinks(req: Request) async throws -> AdminSharedLinksResponse {
         let routes = try await SharedRoute.query(on: req.db).all()
         let maps = try await SharedRepeaterMap.query(on: req.db).all()
+        let paths = try await SharedPath.query(on: req.db).all()
 
         var links: [AdminSharedLinkInfo] = []
 
@@ -338,6 +339,17 @@ struct ShareController {
                 itemCount: map.repeaterCount,
                 distanceText: nil,
                 createdAt: map.createdAt
+            ))
+        }
+
+        for path in paths {
+            links.append(AdminSharedLinkInfo(
+                id: path.id ?? "",
+                type: "path",
+                userName: path.userName,
+                itemCount: path.hopCount,
+                distanceText: nil,
+                createdAt: path.createdAt
             ))
         }
 
@@ -372,6 +384,171 @@ struct ShareController {
         }
         try await map.delete(on: req.db)
         return DeleteSharedLinkResponse(id: id, type: "map")
+    }
+
+    // MARK: - POST /api/v1/paths
+
+    @Sendable
+    func createPath(req: Request) async throws -> CreateSharedPathResponse {
+        let payload = try req.content.decode(CreateSharedPathRequest.self)
+
+        guard !payload.hops.isEmpty else {
+            throw Abort(.badRequest, reason: "hops array must not be empty")
+        }
+        guard payload.hops.count <= 20 else {
+            throw Abort(.badRequest, reason: "Too many hops (max 20)")
+        }
+
+        // Validate coordinates
+        for hop in payload.hops {
+            if let lat = hop.latitude, let lon = hop.longitude {
+                guard (-90...90).contains(lat), (-180...180).contains(lon) else {
+                    throw Abort(.badRequest, reason: "Invalid coordinates for hop \(hop.hexID)")
+                }
+            }
+        }
+
+        // Server-side resolution: fill in missing locations from community repeater database
+        var resolvedHops = payload.hops
+        for i in 0..<resolvedHops.count {
+            if resolvedHops[i].latitude == nil || resolvedHops[i].longitude == nil {
+                let hexID = resolvedHops[i].hexID.uppercased()
+                // Try exact hex_id match first
+                if let repeater = try await RepeaterLocation.query(on: req.db)
+                    .filter(\.$hexID == hexID)
+                    .filter(\.$hidden != true)
+                    .first() {
+                    resolvedHops[i] = SharedRouteHop(
+                        hexID: resolvedHops[i].hexID,
+                        name: resolvedHops[i].name ?? repeater.name,
+                        latitude: repeater.latitude,
+                        longitude: repeater.longitude
+                    )
+                }
+                // Try public key prefix match for longer hex IDs
+                else if hexID.count >= 6, let repeater = try await RepeaterLocation.query(on: req.db)
+                    .filter(\.$publicKey != nil)
+                    .filter(\.$hidden != true)
+                    .all()
+                    .first(where: { ($0.publicKey ?? "").uppercased().hasPrefix(hexID) }) {
+                    resolvedHops[i] = SharedRouteHop(
+                        hexID: resolvedHops[i].hexID,
+                        name: resolvedHops[i].name ?? repeater.name,
+                        latitude: repeater.latitude,
+                        longitude: repeater.longitude
+                    )
+                }
+            }
+        }
+
+        let shortID = try await Self.uniqueShortID(for: SharedPath.self, on: req.db)
+        let now = ISO8601DateFormatter().string(from: Date())
+
+        let encoder = JSONEncoder()
+        let hopsData = try encoder.encode(resolvedHops)
+        let hopsJSON = String(data: hopsData, encoding: .utf8) ?? "[]"
+
+        let path = SharedPath(
+            id: shortID,
+            hopCount: resolvedHops.count,
+            hopsJSON: hopsJSON,
+            userLatitude: payload.userLatitude,
+            userLongitude: payload.userLongitude,
+            userName: payload.userName,
+            createdAt: now
+        )
+        try await path.save(on: req.db)
+
+        let baseURL = Environment.get("BASE_URL") ?? "https://mesh.digitaino.com"
+        return CreateSharedPathResponse(
+            id: shortID,
+            url: "\(baseURL)/p/\(shortID)"
+        )
+    }
+
+    // MARK: - GET /api/v1/paths/:id
+
+    @Sendable
+    func getPath(req: Request) async throws -> SharedPathResponse {
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing path ID")
+        }
+
+        guard let path = try await SharedPath.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Path not found")
+        }
+
+        let hops: [SharedRouteHop]
+        if let data = path.hopsJSON.data(using: .utf8) {
+            hops = (try? JSONDecoder().decode([SharedRouteHop].self, from: data)) ?? []
+        } else {
+            hops = []
+        }
+
+        return SharedPathResponse(
+            id: path.id ?? id,
+            hopCount: path.hopCount,
+            hops: hops,
+            userLatitude: path.userLatitude,
+            userLongitude: path.userLongitude,
+            userName: path.userName,
+            createdAt: path.createdAt
+        )
+    }
+
+    // MARK: - GET /p/:id — Serve path web page
+
+    @Sendable
+    func servePathPage(req: Request) async throws -> Response {
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest)
+        }
+
+        guard let path = try await SharedPath.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Path not found")
+        }
+
+        let hops: [SharedRouteHop]
+        if let data = path.hopsJSON.data(using: .utf8) {
+            hops = (try? JSONDecoder().decode([SharedRouteHop].self, from: data)) ?? []
+        } else {
+            hops = []
+        }
+
+        let hopsList = hops.map { $0.hexID }.joined(separator: ", ")
+        let rawTitle = "\(path.hopCount) hop\(path.hopCount == 1 ? "" : "s"): \(hopsList)"
+        let title = Self.htmlEscape(rawTitle)
+
+        let pathData = SharedPathResponse(
+            id: path.id ?? id,
+            hopCount: path.hopCount,
+            hops: hops,
+            userLatitude: path.userLatitude,
+            userLongitude: path.userLongitude,
+            userName: path.userName,
+            createdAt: path.createdAt
+        )
+        let encoder = JSONEncoder()
+        let pathJSON = String(data: try encoder.encode(pathData), encoding: .utf8) ?? "{}"
+
+        let html = Self.pathPageHTML(title: title, pathJSON: pathJSON)
+        var headers = HTTPHeaders()
+        headers.add(name: .contentType, value: "text/html; charset=utf-8")
+        return Response(status: .ok, headers: headers, body: .init(string: html))
+    }
+
+    // MARK: - DELETE /api/v1/admin/shared-path/:id
+
+    @Sendable
+    func deleteSharedPath(req: Request) async throws -> DeleteSharedLinkResponse {
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing path ID")
+        }
+        guard let path = try await SharedPath.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Shared path not found")
+        }
+        try await path.delete(on: req.db)
+        return DeleteSharedLinkResponse(id: id, type: "path")
     }
 
     // MARK: - HTML Templates
@@ -449,6 +626,46 @@ struct ShareController {
                         <span id="repeat-nav-label"></span>
                         <button class="nav-btn" onclick="nextRepeat()">›</button>
                     </div>
+                    <div id="route-summary"></div>
+                    <div id="hop-list"></div>
+                    <div class="share-footer">
+                        Shared via <a href="https://mesh.digitaino.com">DigitainoMesh</a>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+    }
+
+    private static func pathPageHTML(title: String, pathJSON: String) -> String {
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>\(title) — DigitainoMesh</title>
+            <link rel="stylesheet" href="/style.css" />
+            <link rel="stylesheet" href="/share.css" />
+            <script>const SHARE_DATA = \(Self.jsonForScript(pathJSON)); const SHARE_TYPE = 'path';</script>
+            <script src="/share.js"></script>
+            <script src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.core.js"
+                    crossorigin async
+                    data-callback="initShareMap"
+                    data-libraries="map,annotations,overlays"></script>
+        </head>
+        <body>
+            <div id="map"></div>
+            <div id="share-panel">
+                <div id="panel-header" onclick="togglePanel()">
+                    <h2>Shared Path</h2>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <button id="cell-toggle" class="cell-toggle-btn active" onclick="event.stopPropagation();toggleCellOverlay()" title="Toggle community signal overlay">📶</button>
+                        <span id="panel-toggle">▲</span>
+                    </div>
+                </div>
+                <div id="panel-body">
                     <div id="route-summary"></div>
                     <div id="hop-list"></div>
                     <div class="share-footer">

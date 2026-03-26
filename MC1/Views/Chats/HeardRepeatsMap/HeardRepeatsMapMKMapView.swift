@@ -64,14 +64,14 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
     private func updateAnnotations(in mapView: MKMapView, coordinator: Coordinator) {
         // Update repeater annotations
         let currentRepeaters = mapView.annotations.compactMap { $0 as? RepeaterAnnotation }
-        let currentRepeaterIDs = Set(currentRepeaters.map { $0.repeater.id })
-        let newRepeaterIDs = Set(repeaterAnnotations.map { $0.repeater.id })
+        let currentRepeaterIDs = Set(currentRepeaters.map { $0.annotationID })
+        let newRepeaterIDs = Set(repeaterAnnotations.map { $0.annotationID })
 
-        let repeatersToRemove = currentRepeaters.filter { !newRepeaterIDs.contains($0.repeater.id) }
+        let repeatersToRemove = currentRepeaters.filter { !newRepeaterIDs.contains($0.annotationID) }
         mapView.removeAnnotations(repeatersToRemove)
 
-        let existingRepeaterIDs = currentRepeaterIDs.subtracting(Set(repeatersToRemove.map { $0.repeater.id }))
-        let repeatersToAdd = repeaterAnnotations.filter { !existingRepeaterIDs.contains($0.repeater.id) }
+        let existingRepeaterIDs = currentRepeaterIDs.subtracting(Set(repeatersToRemove.map { $0.annotationID }))
+        let repeatersToAdd = repeaterAnnotations.filter { !existingRepeaterIDs.contains($0.annotationID) }
         for annotation in repeatersToAdd {
             annotation.applyLabelMode(labelMode)
         }
@@ -184,9 +184,9 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
                     reuseIdentifier: TracePathRepeaterPinView.reuseID
                 )
 
-                let info = pathState[repeaterAnnotation.repeater.id]
+                let info = pathState[repeaterAnnotation.annotationID]
                 view.configure(
-                    for: repeaterAnnotation.repeater,
+                    displayName: repeaterAnnotation.displayName,
                     inPath: true,
                     hopIndex: info?.hopIndex,
                     isLastHop: false,

@@ -54,6 +54,7 @@ struct ChatConversationMessagesContent: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var hasDismissedDividerFAB = false
     @State private var sharedRouteForMap: SharedRoute?
+    @State private var hexPathForMap: HexPath?
 
     private var showDividerFAB: Bool {
         newMessagesDividerMessageID != nil && !isDividerVisible && !hasDismissedDividerFAB
@@ -131,6 +132,9 @@ struct ChatConversationMessagesContent: View {
         )
         .sheet(item: $sharedRouteForMap) { route in
             SharedRouteMapSheet(sharedRoute: route)
+        }
+        .sheet(item: $hexPathForMap) { path in
+            SharedRouteMapSheet(sharedRoute: path.asSharedRoute)
         }
         .overlay(alignment: .bottomTrailing) {
             VStack(spacing: 12) {
@@ -226,6 +230,7 @@ struct ChatConversationMessagesContent: View {
                         isHighContrast: colorSchemeContrast == .increased
                     ),
                     detectedSharedRoute: item.detectedSharedRoute,
+                    detectedHexPath: item.detectedHexPath,
                     isSearchMatch: item.isSearchMatch,
                     isHighlighted: item.id == highlightedMessageID
                 ),
@@ -259,6 +264,9 @@ struct ChatConversationMessagesContent: View {
                     },
                     onShowSharedRoute: item.detectedSharedRoute.map { route in
                         { [route] in sharedRouteForMap = route }
+                    },
+                    onShowHexPath: item.detectedHexPath.map { path in
+                        { [path] in hexPathForMap = path }
                     }
                 )
             )

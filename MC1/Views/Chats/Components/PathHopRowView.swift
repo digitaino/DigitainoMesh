@@ -15,6 +15,8 @@ struct PathHopRowView: View {
     let nodeName: String
     let nodeID: String?
     let snr: Double?
+    var isAmbiguous: Bool = false
+    var onTapAmbiguous: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top) {
@@ -29,6 +31,18 @@ struct PathHopRowView: View {
 
                     Text(nodeName)
                         .font(.body)
+
+                    if isAmbiguous {
+                        Button {
+                            onTapAmbiguous?()
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                                .font(.body)
+                                .foregroundStyle(.orange)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Ambiguous hop — tap to choose")
+                    }
                 }
 
                 Text(hopLabel)
@@ -96,6 +110,7 @@ struct PathHopRowView: View {
     List {
         PathHopRowView(hopType: .sender, nodeName: "AlphaNode", nodeID: "A3", snr: nil)
         PathHopRowView(hopType: .intermediate(1), nodeName: "RelayNode", nodeID: "7F", snr: nil)
+        PathHopRowView(hopType: .intermediate(2), nodeName: "Ambiguous", nodeID: "80", snr: nil, isAmbiguous: true)
         PathHopRowView(hopType: .receiver, nodeName: "MyDevice", nodeID: nil, snr: 6.2)
     }
 }

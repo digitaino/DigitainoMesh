@@ -9,4 +9,5 @@ struct MessageBubbleCallbacks {
     var onRequestPreviewFetch: (() -> Void)?
     var onManualPreviewFetch: (() -> Void)?
     var onShowSharedRoute: (() -> Void)?
+    var onShowHexPath: (() -> Void)?
 }

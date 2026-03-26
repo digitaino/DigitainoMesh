@@ -55,6 +55,10 @@ final class MessageRouteMapViewModel {
 
     private var contacts: [ContactDTO] = []
     private var repeaters: [ContactDTO] = []
+    private var discoveredRepeaters: [DiscoveredNodeDTO] = []
+
+    /// Merged pool of all repeater-type nodes (contacts + discovered) for unified resolution.
+    private var allNodes: [AnyResolvable] = []
 
     // MARK: - Load & Build
 
@@ -63,7 +67,8 @@ final class MessageRouteMapViewModel {
         services: ServiceContainer,
         deviceID: UUID,
         userLocation: CLLocation?,
-        receiverName: String
+        receiverName: String,
+        hopOverrides: [String: String] = [:]
     ) async {
         isLoading = true
 
@@ -71,11 +76,16 @@ final class MessageRouteMapViewModel {
             let fetched = try await services.dataStore.fetchContacts(deviceID: deviceID)
             contacts = fetched
             repeaters = fetched.filter { $0.type == .repeater }
+
+            let nodes = try await services.dataStore.fetchDiscoveredNodes(deviceID: deviceID)
+            discoveredRepeaters = nodes.filter { $0.nodeType == .repeater }
         } catch {
             logger.error("Failed to load contacts: \(error.localizedDescription)")
         }
 
-        buildRoute(message: message, userLocation: userLocation, receiverName: receiverName, snr: message.snr)
+        allNodes = repeaters.map { AnyResolvable($0) } + discoveredRepeaters.map { AnyResolvable($0) }
+
+        buildRoute(message: message, userLocation: userLocation, receiverName: receiverName, snr: message.snr, hopOverrides: hopOverrides)
         isLoading = false
     }
 
@@ -85,11 +95,14 @@ final class MessageRouteMapViewModel {
         message: MessageDTO,
         userLocation: CLLocation?,
         receiverName: String,
-        snr: Double?
+        snr: Double?,
+        hopOverrides: [String: String] = [:]
     ) {
         var points: [(coordinate: CLLocationCoordinate2D, name: String, hasGap: Bool)] = []
         /// Running index across the entire route sequence for label alternation
         var routeIndex = 0
+        /// Anchor location from the previous located hop, used for context-aware resolution
+        var anchorLocation: CLLocation?
 
         // Sender location
         if let senderKeyPrefix = message.senderKeyPrefix,
@@ -103,27 +116,40 @@ final class MessageRouteMapViewModel {
             endpointAnnotations.append(
                 RouteEndpointAnnotation(type: .sender, coordinate: coord, name: senderContact.displayName, routeIndex: routeIndex)
             )
+            anchorLocation = CLLocation(latitude: senderContact.latitude, longitude: senderContact.longitude)
             routeIndex += 1
         }
 
-        // Intermediate hops
+        // If no sender location, use receiver location as fallback anchor
+        // (resolves from the receiver end of the chain)
+        if anchorLocation == nil {
+            anchorLocation = userLocation
+        }
+
+        // Intermediate hops — first resolve all hops, then build overlays.
+        // Two-pass resolution: forward from sender, backward from receiver,
+        // merge to get best result for each hop.
         let pathHops = parsePathHops(from: message)
-        var hopIndex = 0
+
+        // Resolve hops with bidirectional anchoring
+        let resolvedMatches = resolveHopsBidirectional(
+            pathHops: pathHops,
+            senderLocation: anchorLocation,
+            receiverLocation: userLocation,
+            hopOverrides: hopOverrides
+        )
+
+        var locatedCount = 0
         /// Number of consecutive unlocated hops since the last located point.
         /// Used to decide whether to draw a gap-style (dashed) line segment.
         var pendingUnlocatedCount = 0
 
-        for hop in pathHops {
-            let match = RepeaterResolver.bestMatch(
-                for: hop, in: repeaters, userLocation: userLocation
-            )
-
+        for (originalIndex, match) in resolvedMatches.enumerated() {
             guard let match, match.hasLocation else {
                 pendingUnlocatedCount += 1
                 continue
             }
 
-            hopIndex += 1
             let coord = CLLocationCoordinate2D(
                 latitude: match.latitude,
                 longitude: match.longitude
@@ -133,20 +159,29 @@ final class MessageRouteMapViewModel {
                 continue
             }
 
+            locatedCount += 1
+
             // If there were unlocated hops before this located hop, mark the
             // gap so the line segment between the previous located point and
             // this one uses a gap style.
             let hasGap = pendingUnlocatedCount > 0
             pendingUnlocatedCount = 0
 
-            points.append((coord, match.displayName, hasGap))
-            repeaterAnnotations.append(RepeaterAnnotation(repeater: match))
-            pathState[match.id] = PathInfo(hopIndex: hopIndex, routeIndex: routeIndex)
+            // Use 1-based original position so unlocated hops create visible
+            // gaps in the numbering (e.g. 1, 2, 4 when hop 3 is unlocated).
+            let hopNumber = originalIndex + 1
+
+            points.append((coord, match.resolvableName, hasGap))
+            let annotation = RepeaterAnnotation(resolvable: match)
+            repeaterAnnotations.append(annotation)
+            pathState[annotation.annotationID] = PathInfo(hopIndex: hopNumber, routeIndex: routeIndex)
             routeIndex += 1
         }
 
-        totalHopCount = pathHops.count
-        locatedHopCount = hopIndex
+        // The protocol hop count from pathLength includes all hops the message
+        // traversed, which may be more than the hash bytes stored in pathNodes.
+        totalHopCount = Int(message.pathLength & 0x3F)
+        locatedHopCount = locatedCount
 
         // Receiver location (user's current GPS)
         if let userLocation {
@@ -224,6 +259,82 @@ final class MessageRouteMapViewModel {
 
         let hasGaps = points.contains(where: \.hasGap)
         distanceText = RouteDistanceCalculator.formatTotal(totalMeters, hasGaps: hasGaps)
+    }
+
+    // MARK: - Bidirectional Hop Resolution
+
+    /// Resolves hops using both forward (sender→receiver) and backward (receiver→sender) anchoring,
+    /// then picks the best result for each hop based on which end was closer.
+    /// Uses the merged pool of contacts + discovered nodes for unified resolution.
+    private func resolveHopsBidirectional(
+        pathHops: [Data],
+        senderLocation: CLLocation?,
+        receiverLocation: CLLocation?,
+        hopOverrides: [String: String]
+    ) -> [AnyResolvable?] {
+        guard !pathHops.isEmpty else { return [] }
+
+        // Check overrides first — these always win
+        let overrideMatches: [AnyResolvable?] = pathHops.map { hop in
+            let hexKey = hop.hexString()
+            if let name = hopOverrides[hexKey] {
+                return allNodes.first(where: { $0.resolvableName == name })
+            }
+            return nil
+        }
+
+        // Forward pass: anchor from sender
+        var forwardMatches: [AnyResolvable?] = []
+        var forwardAnchor = senderLocation
+        var forwardHadAnchor: [Bool] = []
+
+        for hop in pathHops {
+            let hadAnchor = forwardAnchor != nil
+            let match = RepeaterResolver.bestMatch(
+                for: hop, in: allNodes, userLocation: receiverLocation, anchorLocation: forwardAnchor
+            )
+            forwardMatches.append(match)
+            forwardHadAnchor.append(hadAnchor)
+            if let match, match.hasLocation {
+                forwardAnchor = CLLocation(latitude: match.latitude, longitude: match.longitude)
+            }
+        }
+
+        // Backward pass: anchor from receiver
+        var backwardMatches: [AnyResolvable?] = []
+        var backwardAnchor = receiverLocation
+        var backwardHadAnchor: [Bool] = []
+
+        for hop in pathHops.reversed() {
+            let hadAnchor = backwardAnchor != nil
+            let match = RepeaterResolver.bestMatch(
+                for: hop, in: allNodes, userLocation: receiverLocation, anchorLocation: backwardAnchor
+            )
+            backwardMatches.append(match)
+            backwardHadAnchor.append(hadAnchor)
+            if let match, match.hasLocation {
+                backwardAnchor = CLLocation(latitude: match.latitude, longitude: match.longitude)
+            }
+        }
+        backwardMatches.reverse()
+        backwardHadAnchor.reverse()
+
+        // Merge: override > closer-end anchor > forward
+        var result: [AnyResolvable?] = []
+        for i in pathHops.indices {
+            if let overrideMatch = overrideMatches[i] {
+                result.append(overrideMatch)
+            } else if forwardHadAnchor[i] && backwardHadAnchor[i] {
+                let distFromSender = i
+                let distFromReceiver = pathHops.count - 1 - i
+                result.append(distFromReceiver < distFromSender ? backwardMatches[i] : forwardMatches[i])
+            } else if backwardHadAnchor[i] && !forwardHadAnchor[i] {
+                result.append(backwardMatches[i])
+            } else {
+                result.append(forwardMatches[i])
+            }
+        }
+        return result
     }
 
     // MARK: - Path Parsing

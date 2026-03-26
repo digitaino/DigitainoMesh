@@ -2,6 +2,36 @@ import CoreLocation
 import Foundation
 import MC1Services
 
+/// Type-erased wrapper so contacts and discovered nodes can be resolved in a single pool.
+struct AnyResolvable: RepeaterResolvable {
+    let publicKey: Data
+    let latitude: Double
+    let longitude: Double
+    let hasLocation: Bool
+    let lastAdvertTimestamp: UInt32
+    let recencyDate: Date
+    let resolvableName: String
+
+    init(_ node: some RepeaterResolvable) {
+        self.publicKey = node.publicKey
+        self.latitude = node.latitude
+        self.longitude = node.longitude
+        self.hasLocation = node.hasLocation
+        self.lastAdvertTimestamp = node.lastAdvertTimestamp
+        self.recencyDate = node.recencyDate
+        self.resolvableName = node.resolvableName
+    }
+}
+
+/// Result of a repeater resolution including ambiguity information.
+struct ResolverResult<T: RepeaterResolvable> {
+    let best: T
+    /// All matching candidates, sorted best-first.
+    let candidates: [T]
+    /// Whether the resolution is ambiguous (more than one candidate).
+    var isAmbiguous: Bool { candidates.count > 1 }
+}
+
 /// Resolves repeater collisions by proximity and recency.
 enum RepeaterResolver {
     /// Match using a PathHop: exact public key match first, then hash bytes fallback.
@@ -17,46 +47,102 @@ enum RepeaterResolver {
         return bestMatch(for: hop.hashBytes, in: nodes, userLocation: userLocation)
     }
 
-    /// Match using hash bytes (1-3 byte prefix)
+    /// Match using hash bytes (1-3 byte prefix), returning the best match.
     static func bestMatch<T: RepeaterResolvable>(
         for hashBytes: Data,
         in nodes: [T],
-        userLocation: CLLocation?
+        userLocation: CLLocation?,
+        anchorLocation: CLLocation? = nil
     ) -> T? {
+        resolve(for: hashBytes, in: nodes, userLocation: userLocation, anchorLocation: anchorLocation)?.best
+    }
+
+    /// Match using hash bytes with full candidate information for disambiguation.
+    static func resolve<T: RepeaterResolvable>(
+        for hashBytes: Data,
+        in nodes: [T],
+        userLocation: CLLocation?,
+        anchorLocation: CLLocation? = nil
+    ) -> ResolverResult<T>? {
+        let sorted = sortedCandidates(for: hashBytes, in: nodes, userLocation: userLocation, anchorLocation: anchorLocation)
+        guard let best = sorted.first else { return nil }
+        return ResolverResult(best: best, candidates: sorted)
+    }
+
+    /// Returns all matching candidates sorted by the standard heuristic (best first).
+    ///
+    /// When `anchorLocation` is provided (e.g. the location of the previous hop in a route),
+    /// geographic proximity to the anchor takes priority over recency. This produces much
+    /// better results for route resolution because a repeater 500 ft from the previous hop
+    /// is far more likely to be the actual relay than one 100 miles away, regardless of
+    /// which was heard more recently.
+    static func sortedCandidates<T: RepeaterResolvable>(
+        for hashBytes: Data,
+        in nodes: [T],
+        userLocation: CLLocation?,
+        anchorLocation: CLLocation? = nil
+    ) -> [T] {
         let prefixLen = hashBytes.count
-        let candidates = nodes.compactMap { node -> (T, Double?)? in
+        let candidates = nodes.compactMap { node -> (node: T, userDistance: Double?, anchorDistance: Double?)? in
             guard node.publicKey.prefix(prefixLen) == hashBytes else { return nil }
 
-            let distance: Double?
+            let userDistance: Double?
             if let userLocation, node.hasLocation {
                 let nodeLocation = CLLocation(latitude: node.latitude, longitude: node.longitude)
-                distance = userLocation.distance(from: nodeLocation)
+                userDistance = userLocation.distance(from: nodeLocation)
             } else {
-                distance = nil
+                userDistance = nil
             }
 
-            return (node, distance)
+            let anchorDistance: Double?
+            if let anchorLocation, node.hasLocation {
+                let nodeLocation = CLLocation(latitude: node.latitude, longitude: node.longitude)
+                anchorDistance = anchorLocation.distance(from: nodeLocation)
+            } else {
+                anchorDistance = nil
+            }
+
+            return (node, userDistance, anchorDistance)
         }
 
-        guard !candidates.isEmpty else { return nil }
+        guard !candidates.isEmpty else { return [] }
 
         // With short prefixes (1 byte = 256 values) collisions are common.
-        // Prioritise recency first so that a repeater heard hours ago beats
-        // one last seen months ago, then use distance as a tiebreaker among
-        // similarly-recent candidates.
+        //
+        // When an anchor location is available (from a neighboring hop in the route),
+        // proximity to the anchor is the strongest signal — a repeater close to the
+        // previous hop almost certainly relayed this message. We use anchor distance
+        // as the primary sort criterion, with recency as a tiebreaker.
+        //
+        // Without an anchor, we fall back to recency-first sorting with distance
+        // from the user as a secondary criterion.
         let sorted = candidates.sorted { lhs, rhs in
-            // 1. Most recently advertised wins
-            if lhs.0.lastAdvertTimestamp != rhs.0.lastAdvertTimestamp {
-                return lhs.0.lastAdvertTimestamp > rhs.0.lastAdvertTimestamp
+            if anchorLocation != nil {
+                // Anchor-aware sorting: proximity to the previous/next hop wins
+                switch (lhs.anchorDistance, rhs.anchorDistance) {
+                case let (left?, right?):
+                    if left != right { return left < right }
+                case (.some, .none):
+                    return true
+                case (.none, .some):
+                    return false
+                case (.none, .none):
+                    break
+                }
             }
 
-            // 2. Secondary recency (lastModified / lastHeard)
-            if lhs.0.recencyDate != rhs.0.recencyDate {
-                return lhs.0.recencyDate > rhs.0.recencyDate
+            // Recency: most recently advertised wins
+            if lhs.node.lastAdvertTimestamp != rhs.node.lastAdvertTimestamp {
+                return lhs.node.lastAdvertTimestamp > rhs.node.lastAdvertTimestamp
             }
 
-            // 3. Among equally-recent candidates, prefer located over unlocated
-            switch (lhs.1, rhs.1) {
+            // Secondary recency (lastModified / lastHeard)
+            if lhs.node.recencyDate != rhs.node.recencyDate {
+                return lhs.node.recencyDate > rhs.node.recencyDate
+            }
+
+            // Among equally-recent candidates, prefer located over unlocated
+            switch (lhs.userDistance, rhs.userDistance) {
             case let (left?, right?):
                 if left != right { return left < right }
             case (.some, .none):
@@ -67,10 +153,10 @@ enum RepeaterResolver {
                 break
             }
 
-            // 4. Alphabetical fallback
-            return lhs.0.resolvableName.localizedStandardCompare(rhs.0.resolvableName) == .orderedAscending
+            // Alphabetical fallback
+            return lhs.node.resolvableName.localizedStandardCompare(rhs.node.resolvableName) == .orderedAscending
         }
 
-        return sorted.first?.0
+        return sorted.map(\.node)
     }
 }

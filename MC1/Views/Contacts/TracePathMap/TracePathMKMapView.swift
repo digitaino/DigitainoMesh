@@ -88,15 +88,15 @@ struct TracePathMKMapView: UIViewRepresentable {
         pathState: [UUID: TracePathMapViewModel.RepeaterPathInfo]
     ) {
         let currentAnnotations = mapView.annotations.compactMap { $0 as? RepeaterAnnotation }
-        let currentIDs = Set(currentAnnotations.map { $0.repeater.id })
+        let currentIDs = Set(currentAnnotations.map { $0.annotationID })
         let newIDs = Set(repeaters.map { $0.id })
 
         // Remove old
-        let toRemove = currentAnnotations.filter { !newIDs.contains($0.repeater.id) }
+        let toRemove = currentAnnotations.filter { !newIDs.contains($0.annotationID) }
         mapView.removeAnnotations(toRemove)
 
         // Add new
-        let existingIDs = currentIDs.subtracting(Set(toRemove.map { $0.repeater.id }))
+        let existingIDs = currentIDs.subtracting(Set(toRemove.map { $0.annotationID }))
         let toAdd = repeaters.filter { !existingIDs.contains($0.id) }
             .map { repeater -> RepeaterAnnotation in
                 let annotation = RepeaterAnnotation(repeater: repeater)
@@ -115,7 +115,7 @@ struct TracePathMKMapView: UIViewRepresentable {
         if !changedIDs.isEmpty {
             let toReAdd = mapView.annotations
                 .compactMap { $0 as? RepeaterAnnotation }
-                .filter { changedIDs.contains($0.repeater.id) }
+                .filter { changedIDs.contains($0.annotationID) }
             mapView.removeAnnotations(toReAdd)
             mapView.addAnnotations(toReAdd)
         }
@@ -125,11 +125,11 @@ struct TracePathMKMapView: UIViewRepresentable {
             guard let view = mapView.view(for: annotation) as? TracePathRepeaterPinView else {
                 continue
             }
-            let info = pathState[annotation.repeater.id] ?? TracePathMapViewModel.RepeaterPathInfo(
+            let info = pathState[annotation.annotationID] ?? TracePathMapViewModel.RepeaterPathInfo(
                 inPath: false, hopIndex: nil, isLastHop: false
             )
             view.configure(
-                for: annotation.repeater,
+                displayName: annotation.displayName,
                 inPath: info.inPath,
                 hopIndex: info.hopIndex,
                 isLastHop: info.isLastHop,
@@ -240,19 +240,21 @@ struct TracePathMKMapView: UIViewRepresentable {
                     reuseIdentifier: TracePathRepeaterPinView.reuseID
                 )
 
-                let info = pathState[repeaterAnnotation.repeater.id]
+                let info = pathState[repeaterAnnotation.annotationID]
                     ?? TracePathMapViewModel.RepeaterPathInfo(inPath: false, hopIndex: nil, isLastHop: false)
 
-                view.configure(
-                    for: repeaterAnnotation.repeater,
-                    inPath: info.inPath,
-                    hopIndex: info.hopIndex,
-                    isLastHop: info.isLastHop,
-                    titleMode: labelMode
-                )
+                if let contact = repeaterAnnotation.repeater {
+                    view.configure(
+                        for: contact,
+                        inPath: info.inPath,
+                        hopIndex: info.hopIndex,
+                        isLastHop: info.isLastHop,
+                        titleMode: labelMode
+                    )
 
-                view.onTap = { [weak self] in
-                    self?.onRepeaterTap?(repeaterAnnotation.repeater)
+                    view.onTap = { [weak self] in
+                        self?.onRepeaterTap?(contact)
+                    }
                 }
 
                 return view
@@ -323,11 +325,16 @@ struct TracePathMKMapView: UIViewRepresentable {
 // MARK: - Repeater Annotation
 
 final class RepeaterAnnotation: NSObject, MKAnnotation {
-    let repeater: ContactDTO
+    /// Optional backing contact — present when created from a ContactDTO.
+    let repeater: ContactDTO?
 
-    var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
-    }
+    /// Stable identifier for pathState lookup and annotation diffing.
+    let annotationID: UUID
+
+    /// Display name of the repeater.
+    let displayName: String
+
+    let coordinate: CLLocationCoordinate2D
 
     /// Mutable title — swapped between display name and hex short by the coordinator.
     dynamic var title: String?
@@ -337,8 +344,22 @@ final class RepeaterAnnotation: NSObject, MKAnnotation {
 
     init(repeater: ContactDTO) {
         self.repeater = repeater
+        self.annotationID = repeater.id
+        self.displayName = repeater.displayName
+        self.coordinate = CLLocationCoordinate2D(latitude: repeater.latitude, longitude: repeater.longitude)
         self.title = repeater.displayName
         self.hexShortName = repeater.publicKey.prefix(2).map { String(format: "%02X", $0) }.joined()
+        super.init()
+    }
+
+    /// Creates an annotation from any resolvable node (contact or discovered node).
+    init(resolvable: some RepeaterResolvable, id: UUID = UUID()) {
+        self.repeater = nil
+        self.annotationID = id
+        self.displayName = resolvable.resolvableName
+        self.coordinate = CLLocationCoordinate2D(latitude: resolvable.latitude, longitude: resolvable.longitude)
+        self.title = resolvable.resolvableName
+        self.hexShortName = resolvable.publicKey.prefix(2).map { String(format: "%02X", $0) }.joined()
         super.init()
     }
 
@@ -350,7 +371,7 @@ final class RepeaterAnnotation: NSObject, MKAnnotation {
         case .hexShort:
             title = hexShortName
         case .name:
-            title = repeater.displayName
+            title = displayName
         }
     }
 }

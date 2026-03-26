@@ -327,6 +327,33 @@ struct SharedRepeaterMapResponse: Content {
     let createdAt: String
 }
 
+// MARK: - Shared Path
+
+struct CreateSharedPathRequest: Content {
+    let hops: [SharedRouteHop]
+    /// User latitude at time of share
+    let userLatitude: Double?
+    /// User longitude at time of share
+    let userLongitude: Double?
+    /// Display name of the person sharing
+    let userName: String?
+}
+
+struct CreateSharedPathResponse: Content {
+    let id: String
+    let url: String
+}
+
+struct SharedPathResponse: Content {
+    let id: String
+    let hopCount: Int
+    let hops: [SharedRouteHop]
+    let userLatitude: Double?
+    let userLongitude: Double?
+    let userName: String?
+    let createdAt: String
+}
+
 // MARK: - Admin Contributor Notes
 
 struct UpdateContributorNotesRequest: Content {

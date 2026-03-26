@@ -13,6 +13,7 @@ struct ToolsView: View {
         case nodeDiscovery
         case trafficMap
         case signalSurvey
+        case pathMapGenerator
         case cli
 
         var title: String {
@@ -24,6 +25,7 @@ struct ToolsView: View {
             case .nodeDiscovery: L10n.Tools.Tools.nodeDiscovery
             case .trafficMap: L10n.Tools.Tools.trafficMap
             case .signalSurvey: "Signal Survey"
+            case .pathMapGenerator: "Path Map"
             case .cli: L10n.Tools.Tools.cli
             }
         }
@@ -37,12 +39,13 @@ struct ToolsView: View {
             case .nodeDiscovery: "dot.radiowaves.left.and.right"
             case .trafficMap: "map.circle"
             case .signalSurvey: "antenna.radiowaves.left.and.right"
+            case .pathMapGenerator: "point.3.connected.trianglepath.dotted"
             case .cli: "terminal"
             }
         }
 
         var requiresRadio: Bool {
-            self != .lineOfSight && self != .trafficMap && self != .signalSurvey
+            self != .lineOfSight && self != .trafficMap && self != .signalSurvey && self != .pathMapGenerator
         }
     }
 
@@ -211,6 +214,7 @@ struct ToolsView: View {
         case .nodeDiscovery: NodeDiscoveryView()
         case .trafficMap: TrafficHeatmapView()
         case .signalSurvey: SignalSurveyView()
+        case .pathMapGenerator: PathMapGeneratorView()
         case .cli: CLIToolView()
         }
     }
@@ -225,6 +229,7 @@ struct ToolsView: View {
         case .nodeDiscovery: NodeDiscoveryView()
         case .trafficMap: TrafficHeatmapView()
         case .signalSurvey: SignalSurveyView()
+        case .pathMapGenerator: PathMapGeneratorView()
         case .cli: CLIToolView()
         case .none: ContentUnavailableView(L10n.Tools.Tools.selectTool, systemImage: "wrench.and.screwdriver")
         }

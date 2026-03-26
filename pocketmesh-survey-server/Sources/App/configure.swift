@@ -44,6 +44,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddCellAdminFields())
     app.migrations.add(AddRepeaterPublicKey())
     app.migrations.add(AddRepeaterLastHeardColumn())
+    app.migrations.add(AddSharedPaths())
     try app.autoMigrate().wait()
 
     // Register routes

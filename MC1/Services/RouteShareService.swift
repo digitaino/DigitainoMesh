@@ -117,6 +117,46 @@ actor RouteShareService {
         }
     }
 
+    // MARK: - Share Path
+
+    private struct CreatePathRequest: Codable {
+        let hops: [RouteHop]
+        let userLatitude: Double?
+        let userLongitude: Double?
+        let userName: String?
+    }
+
+    private struct CreatePathResponse: Codable {
+        let id: String
+        let url: String
+    }
+
+    /// Upload a hex path (no sender/receiver, no distance) and return the share URL.
+    /// Returns nil if the upload fails.
+    func sharePath(
+        hops: [RouteHop],
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil,
+        userName: String? = nil
+    ) async -> URL? {
+        let payload = CreatePathRequest(
+            hops: hops,
+            userLatitude: userLatitude,
+            userLongitude: userLongitude,
+            userName: userName
+        )
+
+        do {
+            let data = try await post(path: "paths", body: payload)
+            let response = try JSONDecoder().decode(CreatePathResponse.self, from: data)
+            Self.logger.info("Shared path: \(response.url, privacy: .public)")
+            return URL(string: response.url)
+        } catch {
+            Self.logger.error("Failed to share path: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
     // MARK: - HTTP
 
     private func post<T: Encodable>(path: String, body: T) async throws -> Data {

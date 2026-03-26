@@ -366,6 +366,8 @@ extension ChatViewModel {
         let flags = Self.computeDisplayFlags(for: message, previous: previous)
         let sharedRoute: SharedRoute? = message.isOutgoing ? nil : SharedRouteParser.parse(message.text)
         cachedSharedRoutes[message.id] = sharedRoute
+        // Detect hex path chains only when no formal shared route was found
+        let hexPath: HexPath? = (sharedRoute == nil && !message.isOutgoing) ? HexPathParser.detectInMessage(message.text) : nil
         let newItem = MessageDisplayItem(
             messageID: message.id,
             showTimestamp: flags.showTimestamp,
@@ -383,6 +385,7 @@ extension ChatViewModel {
             maxRetryAttempts: message.maxRetryAttempts,
             reactionSummary: message.reactionSummary,
             detectedSharedRoute: sharedRoute,
+            detectedHexPath: hexPath,
             previewState: .idle,
             loadedPreview: nil,
             isSearchMatch: false
@@ -433,6 +436,7 @@ extension ChatViewModel {
             maxRetryAttempts: item.maxRetryAttempts,
             reactionSummary: item.reactionSummary,
             detectedSharedRoute: item.detectedSharedRoute,
+            detectedHexPath: item.detectedHexPath,
             previewState: previewStates[messageID] ?? .idle,
             loadedPreview: loadedPreviews[messageID],
             isSearchMatch: item.isSearchMatch
@@ -895,6 +899,9 @@ extension ChatViewModel {
                 sharedRoute = nil
             }
 
+            // Detect hex path chains only when no formal shared route was found
+            let hexPath: HexPath? = (sharedRoute == nil && !message.isOutgoing) ? HexPathParser.detectInMessage(message.text) : nil
+
             return MessageDisplayItem(
                 messageID: message.id,
                 showTimestamp: flags.showTimestamp,
@@ -912,6 +919,7 @@ extension ChatViewModel {
                 maxRetryAttempts: message.maxRetryAttempts,
                 reactionSummary: message.reactionSummary,
                 detectedSharedRoute: sharedRoute,
+                detectedHexPath: hexPath,
                 previewState: previewStates[message.id] ?? .idle,
                 loadedPreview: loadedPreviews[message.id],
                 isSearchMatch: message.id == conversationSearch.currentMatchID

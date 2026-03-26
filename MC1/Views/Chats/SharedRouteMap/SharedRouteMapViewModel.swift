@@ -82,7 +82,7 @@ final class SharedRouteMapViewModel {
         var hopIndex = 0
         var pendingUnlocatedCount = 0
 
-        for hop in hops {
+        for (originalIndex, hop) in hops.enumerated() {
             // Try repeaters first, then all contacts, then discovered nodes
             let contactMatch: ContactDTO? =
                 RepeaterResolver.bestMatch(for: hop, in: repeaters, userLocation: userLocation)
@@ -127,12 +127,16 @@ final class SharedRouteMapViewModel {
             let hasGap = pendingUnlocatedCount > 0
             pendingUnlocatedCount = 0
 
+            // Use 1-based original position so unlocated hops create visible
+            // gaps in the numbering (e.g. 1, 2, 4 when hop 3 is unlocated).
+            let hopNumber = originalIndex + 1
+
             locatedPoints.append((coord, name, hasGap))
 
             // RepeaterAnnotation requires ContactDTO
             if let contact = contactMatch {
                 repeaterAnnotations.append(RepeaterAnnotation(repeater: contact))
-                pathState[contact.id] = RouteMapPathInfo(hopIndex: hopIndex, routeIndex: routeIndex)
+                pathState[contact.id] = RouteMapPathInfo(hopIndex: hopNumber, routeIndex: routeIndex)
             }
             routeIndex += 1
         }

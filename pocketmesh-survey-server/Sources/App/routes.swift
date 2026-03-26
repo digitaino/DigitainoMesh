@@ -35,10 +35,12 @@ func routes(_ app: Application) throws {
     // Shared link data: medium cache
     mediumCached.get("routes", ":id", use: shareController.getRoute)
     mediumCached.get("maps", ":id", use: shareController.getRepeaterMap)
+    mediumCached.get("paths", ":id", use: shareController.getPath)
 
     // Shared link web pages
     app.get("r", ":id", use: shareController.serveRoutePage)
     app.get("m", ":id", use: shareController.serveRepeaterMapPage)
+    app.get("p", ":id", use: shareController.servePathPage)
 
     // Authenticated endpoints with stricter rate limit (10 requests per minute)
     // Write endpoints get no-store via the middleware (POST/PUT/DELETE are skipped anyway)
@@ -58,6 +60,7 @@ func routes(_ app: Application) throws {
     // Authenticated shared link creation
     protected.post("routes", use: shareController.createRoute)
     protected.post("maps", use: shareController.createRepeaterMap)
+    protected.post("paths", use: shareController.createPath)
 
     // Plan session creation (authenticated)
     protected.post("plans", "sessions", use: planController.createSession)
@@ -119,6 +122,7 @@ func routes(_ app: Application) throws {
     admin.get("shared-links", use: shareController.getAdminSharedLinks)
     admin.delete("shared-route", ":id", use: shareController.deleteSharedRoute)
     admin.delete("shared-map", ":id", use: shareController.deleteSharedMap)
+    admin.delete("shared-path", ":id", use: shareController.deleteSharedPath)
 
     // Admin plan sessions management
     admin.get("plan-sessions", use: planController.getAdminPlanSessions)

@@ -9,6 +9,8 @@ struct MessageRouteMapSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let message: MessageDTO
+    /// Optional path view model for hop overrides and anchor-aware resolution.
+    var pathViewModel: MessagePathViewModel?
 
     @State private var mapViewModel = MessageRouteMapViewModel()
 
@@ -55,7 +57,8 @@ struct MessageRouteMapSheet: View {
                 deviceID: message.deviceID,
                 userLocation: userLocation,
                 receiverName: appState.connectedDevice?.nodeName
-                    ?? L10n.Chats.Chats.Path.Receiver.you
+                    ?? L10n.Chats.Chats.Path.Receiver.you,
+                hopOverrides: pathViewModel?.hopOverrides ?? [:]
             )
         }
     }
@@ -81,7 +84,7 @@ struct MessageRouteMapSheet: View {
     private var infoBanner: some View {
         VStack {
             HStack {
-                Text(L10n.Chats.Chats.Path.RouteMap.hops(mapViewModel.locatedHopCount))
+                Text(L10n.Chats.Chats.Path.RouteMap.hops(mapViewModel.totalHopCount))
 
                 let unlocatedCount = mapViewModel.totalHopCount - mapViewModel.locatedHopCount
                 if unlocatedCount > 0 {

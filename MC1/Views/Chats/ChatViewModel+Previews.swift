@@ -159,6 +159,7 @@ extension ChatViewModel {
             maxRetryAttempts: item.maxRetryAttempts,
             reactionSummary: message?.reactionSummary,
             detectedSharedRoute: item.detectedSharedRoute,
+            detectedHexPath: item.detectedHexPath,
             previewState: previewStates[messageID] ?? .idle,
             loadedPreview: loadedPreviews[messageID],
             isSearchMatch: item.isSearchMatch

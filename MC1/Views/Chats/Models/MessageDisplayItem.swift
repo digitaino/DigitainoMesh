@@ -35,6 +35,9 @@ struct MessageDisplayItem: Identifiable, Hashable, Sendable {
     // Shared route detected in message text (e.g., "RX via ...")
     let detectedSharedRoute: SharedRoute?
 
+    // Hex path chain detected in message text (e.g., "A3 7F 42 B5")
+    let detectedHexPath: HexPath?
+
     // Preview state (owned by ViewModel, not view)
     let previewState: PreviewLoadState
     let loadedPreview: LinkPreviewDataDTO?

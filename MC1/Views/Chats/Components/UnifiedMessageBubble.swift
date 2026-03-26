@@ -101,6 +101,14 @@ struct UnifiedMessageBubble: View {
                         )
                     }
 
+                    // Hex path card (for messages with detected hex chains, when no shared route detected)
+                    if displayState.detectedSharedRoute == nil, let hexPath = displayState.detectedHexPath {
+                        HexPathCard(
+                            hexPath: hexPath,
+                            onTap: { callbacks.onShowHexPath?() }
+                        )
+                    }
+
                     // Link preview (if applicable, skip for image URLs shown in bubble)
                     if previewsEnabled && !(displayState.isImageURL && displayState.showInlineImages) {
                         BubbleLinkPreviewContent(

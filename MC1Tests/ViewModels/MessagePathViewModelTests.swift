@@ -120,15 +120,19 @@ struct MessagePathViewModelTests {
         #expect(viewModel.senderNodeID(for: message) == "0A")
     }
 
-    // MARK: - repeaterName
+    // MARK: - resolveAllHops
 
-    @Test("repeaterName returns unknown when no contacts match")
-    func repeaterNameUnknownNoMatch() {
+    @Test("resolveAllHops produces empty results when no contacts match")
+    func resolveAllHopsEmptyNoMatch() {
         let viewModel = MessagePathViewModel()
         viewModel.repeaters = []
         viewModel.discoveredRepeaters = []
-        let name = viewModel.repeaterName(for: Data([0x01, 0x02]), userLocation: nil)
-        #expect(name == L10n.Chats.Chats.Path.Hop.unknown)
+
+        let message = createMessage(senderKeyPrefix: nil)
+        viewModel.resolveAllHops(message: message, userLocation: nil)
+
+        // No path nodes in the message, so resolved hops should be empty
+        #expect(viewModel.resolvedHops.isEmpty)
     }
 
     // MARK: - loadContacts

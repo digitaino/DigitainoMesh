@@ -188,6 +188,8 @@ function initShareMap() {
 
     if (SHARE_TYPE === 'route') {
         renderRoute(SHARE_DATA);
+    } else if (SHARE_TYPE === 'path') {
+        renderPath(SHARE_DATA);
     } else if (SHARE_TYPE === 'repeaterMap') {
         repeatMapData = SHARE_DATA;
         renderRepeaterMap(SHARE_DATA);
@@ -357,6 +359,85 @@ function renderRoute(data) {
     // Fit map to show all points (including user marker if present)
     const padding = new mapkit.Padding(60, 40, 100, 40);
     map.showItems(allAnnotations, { padding: padding, animate: true });
+}
+
+// MARK: - Path Rendering (no sender/receiver, just intermediate hops)
+
+function renderPath(data) {
+    const summaryEl = document.getElementById('route-summary');
+    const hopListEl = document.getElementById('hop-list');
+
+    const locatedHops = data.hops.filter(h => h.latitude != null && h.longitude != null);
+
+    // Summary stats: hop count + located count
+    let summaryHTML = `
+        <div class="summary-stat">
+            <span class="value">${data.hopCount}</span>
+            <span class="label">Hop${data.hopCount === 1 ? '' : 's'}</span>
+        </div>
+        <div class="summary-stat">
+            <span class="value">${locatedHops.length}</span>
+            <span class="label">Located</span>
+        </div>
+    `;
+    summaryEl.innerHTML = summaryHTML;
+
+    // Hop list
+    let hopHTML = '';
+    data.hops.forEach((hop, i) => {
+        const located = hop.latitude != null && hop.longitude != null;
+        if (i > 0) {
+            hopHTML += `<div class="hop-connector${located ? '' : ' unlocated'}"><div class="line"></div></div>`;
+        }
+        const name = hop.name || hop.hexID;
+        hopHTML += `
+            <div class="hop-item${located ? '' : ' unlocated'}">
+                <div class="hop-index">${i + 1}</div>
+                <div class="hop-details">
+                    <div class="hop-name">${escapeHTML(name)}</div>
+                    <div class="hop-hex">${hop.hexID}${located ? '' : ' · no location'}</div>
+                </div>
+            </div>
+        `;
+    });
+    hopListEl.innerHTML = hopHTML;
+
+    // Map: add annotations and polyline for located hops
+    if (locatedHops.length === 0) {
+        map.center = new mapkit.Coordinate(30.27, -97.74);
+        map.cameraDistance = 50000;
+        return;
+    }
+
+    // Annotations
+    const annotations = locatedHops.map((hop, i) => {
+        const coord = new mapkit.Coordinate(hop.latitude, hop.longitude);
+        return new mapkit.MarkerAnnotation(coord, {
+            title: hop.name || hop.hexID,
+            subtitle: `Hop ${data.hops.indexOf(hop) + 1}`,
+            color: '#22d3ee',
+            glyphText: `${data.hops.indexOf(hop) + 1}`
+        });
+    });
+    map.addAnnotations(annotations);
+
+    // Polyline between located hops
+    if (locatedHops.length >= 2) {
+        const coords = locatedHops.map(h => new mapkit.Coordinate(h.latitude, h.longitude));
+        const polyline = new mapkit.PolylineOverlay(coords, {
+            style: new mapkit.Style({
+                strokeColor: '#22d3ee',
+                strokeOpacity: 0.8,
+                lineWidth: 3,
+                lineDash: [8, 4]
+            })
+        });
+        map.addOverlay(polyline);
+    }
+
+    // Fit map to show all points
+    const padding = new mapkit.Padding(60, 40, 100, 40);
+    map.showItems(annotations, { padding: padding, animate: true });
 }
 
 // MARK: - Repeater Map Rendering

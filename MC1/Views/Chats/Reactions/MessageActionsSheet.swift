@@ -156,6 +156,13 @@ struct MessageActionsSheet: View {
                 repeats = await services.heardRepeatsService.refreshRepeats(for: message.id)
             } else if availability.canViewPath {
                 await pathViewModel.loadContacts(services: services, deviceID: message.deviceID)
+                let userLoc: CLLocation? = {
+                    if let lat = message.userLatitude, let lon = message.userLongitude {
+                        return CLLocation(latitude: lat, longitude: lon)
+                    }
+                    return appState.locationService.currentLocation
+                }()
+                pathViewModel.resolveAllHops(message: message, userLocation: userLoc)
             }
         }
     }
@@ -388,7 +395,8 @@ private struct ActionsDetailsSection: View {
                     message: message,
                     contacts: contacts.isEmpty ? pathViewModel.allContacts : contacts,
                     discoveredNodes: discoveredNodes.isEmpty ? pathViewModel.allDiscoveredNodes : discoveredNodes,
-                    userLocation: messageLocation ?? appState.locationService.currentLocation
+                    userLocation: messageLocation ?? appState.locationService.currentLocation,
+                    resolvedDistanceText: pathViewModel.routeDistanceText
                 )
             }
         }
@@ -706,8 +714,12 @@ private struct ActionsIncomingDetailsRows: View {
     var contacts: [ContactDTO] = []
     var discoveredNodes: [DiscoveredNodeDTO] = []
     var userLocation: CLLocation?
+    /// Pre-computed distance from the path view model's resolved hops (single source of truth).
+    /// Falls back to independent computation when nil (e.g. heard-repeats mode).
+    var resolvedDistanceText: String?
 
     private var distanceText: String? {
+        if let resolvedDistanceText { return resolvedDistanceText }
         guard let result = RouteDistanceCalculator.computeRouteDistance(
             message: message,
             contacts: contacts,

@@ -51,6 +51,22 @@ final class TracePathRepeaterPinView: MKMarkerAnnotationView {
         isLastHop: Bool,
         titleMode: AnnotationLabelMode = .name
     ) {
+        configure(
+            displayName: repeater.displayName,
+            inPath: inPath,
+            hopIndex: hopIndex,
+            isLastHop: isLastHop,
+            titleMode: titleMode
+        )
+    }
+
+    func configure(
+        displayName: String,
+        inPath: Bool,
+        hopIndex: Int?,
+        isLastHop: Bool,
+        titleMode: AnnotationLabelMode = .name
+    ) {
         // Clustering: in-path pins are always visible, others cluster
         if inPath {
             clusteringIdentifier = nil
@@ -79,16 +95,16 @@ final class TracePathRepeaterPinView: MKMarkerAnnotationView {
         isAccessibilityElement = true
         if inPath {
             if isLastHop {
-                accessibilityLabel = L10n.Contacts.Contacts.Trace.Map.Pin.inPathLabel(repeater.displayName, hopIndex ?? 0)
+                accessibilityLabel = L10n.Contacts.Contacts.Trace.Map.Pin.inPathLabel(displayName, hopIndex ?? 0)
                 accessibilityHint = L10n.Contacts.Contacts.Trace.Map.Pin.removableHint
                 accessibilityTraits = [.button, .selected]
             } else {
-                accessibilityLabel = L10n.Contacts.Contacts.Trace.Map.Pin.inPathLabel(repeater.displayName, hopIndex ?? 0)
+                accessibilityLabel = L10n.Contacts.Contacts.Trace.Map.Pin.inPathLabel(displayName, hopIndex ?? 0)
                 accessibilityHint = L10n.Contacts.Contacts.Trace.Map.Pin.notRemovableHint
                 accessibilityTraits = [.button, .selected, .notEnabled]
             }
         } else {
-            accessibilityLabel = L10n.Contacts.Contacts.Trace.Map.Pin.availableLabel(repeater.displayName)
+            accessibilityLabel = L10n.Contacts.Contacts.Trace.Map.Pin.availableLabel(displayName)
             accessibilityHint = L10n.Contacts.Contacts.Trace.Map.Pin.addHint
             accessibilityTraits = .button
         }
