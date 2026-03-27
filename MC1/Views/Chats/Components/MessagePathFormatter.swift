@@ -7,7 +7,7 @@ enum MessagePathFormatter {
     /// - Parameter message: The message DTO containing path information
     /// - Returns: Formatted path string (e.g., "Direct", "Flood", "A3,7F,42", or "A3,7F…B2,C1")
     static func format(_ message: MessageDTO) -> String {
-        if message.isDirectRouted {
+        if message.isDirect {
             return L10n.Chats.Chats.Message.Path.direct
         }
 

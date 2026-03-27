@@ -180,8 +180,8 @@ private struct BubbleContent: View {
         }
     }
 
-    private var isFloodRouted: Bool {
-        message.isFloodRouted
+    private var isDirect: Bool {
+        message.isDirect
     }
 
     var body: some View {
@@ -189,9 +189,9 @@ private struct BubbleContent: View {
             VStack(alignment: .leading, spacing: 4) {
                 MessageText(message.text, baseColor: textColor, isOutgoing: message.isOutgoing, currentUserName: deviceName, precomputedText: displayState.formattedText)
 
-                if !message.isOutgoing && (displayState.showIncomingHopCount && isFloodRouted || displayState.showIncomingPath) {
+                if !message.isOutgoing && (displayState.showIncomingHopCount && !isDirect || displayState.showIncomingPath) {
                     HStack(spacing: 4) {
-                        if displayState.showIncomingHopCount && isFloodRouted {
+                        if displayState.showIncomingHopCount && !isDirect {
                             BubbleHopCountFooter(hopCount: message.hopCount)
                         }
                         if displayState.showIncomingPath {

@@ -21,7 +21,7 @@ struct MessageActionAvailability {
         canSendDM = hasChannelSender
         canShowRepeatDetails = message.isOutgoing && message.heardRepeats > 0
         canViewPath = !message.isOutgoing
-            && message.isFloodRouted
+            && !message.isDirect
             && !(message.pathNodes?.isEmpty ?? true)
         canDelete = true
     }

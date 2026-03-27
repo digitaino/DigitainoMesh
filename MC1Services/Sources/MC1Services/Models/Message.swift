@@ -460,6 +460,11 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         decodePathLen(pathLength)?.hopCount ?? Int(pathLength & 63)
     }
 
+    /// Whether this message was received directly (0 hops) or via flood routing
+    public var isDirect: Bool {
+        pathLength == 0xFF || hopCount == 0
+    }
+
     /// Whether this message was flood-routed (broadcast).
     /// Priority: channelIndex (channels are always flood) → routeType from RxLog → pathLength inference.
     public var isFloodRouted: Bool {
