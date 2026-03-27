@@ -42,6 +42,7 @@ struct MC1App: App {
                     try? Tips.configure([
                         .displayFrequency(.immediate)
                     ])
+                    await RepeaterSharingTip.appLaunched.donate()
 
                     #if DEBUG
                     if isScreenshotMode {

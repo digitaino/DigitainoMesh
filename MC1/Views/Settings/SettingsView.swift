@@ -39,6 +39,7 @@ private struct SettingsListContent: View {
     @Binding var showingDeviceSelection: Bool
     @Bindable var demoModeManager: DemoModeManager
     private let liveActivityTip = LiveActivityTip()
+    private let repeaterSharingTip = RepeaterSharingTip()
 
     var body: some View {
         List {
@@ -78,6 +79,8 @@ private struct SettingsListContent: View {
                 )) {
                     TintedLabel(L10n.Settings.LiveActivity.title, systemImage: "platter.filled.bottom.and.arrow.down.iphone")
                 }
+
+                TipView(repeaterSharingTip, arrowEdge: .bottom)
 
                 NavigationLink {
                     CommunitySharingSettingsView()
