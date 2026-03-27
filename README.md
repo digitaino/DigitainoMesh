@@ -21,6 +21,9 @@ Features and fixes added in this fork on top of upstream:
 - **Channel DM & Contact Card** — Long-press a channel message to direct-message the sender or tap their name to view their contact card, without leaving the channel
 - **Reply with Route** — Reply to a message with its route info (hop count, distance, and repeater hex IDs) from the expanded path details view
 - **Shared Route Map** — When a message contains route info (from Reply with Route), an inline card appears below the bubble. Tap it to open an interactive map plotting the shared route through repeaters, reusing the same map renderer as message route maps
+- **Path Map Generator** — Enter hex IDs manually (from message paths) to visualize repeater routes on an interactive map. Supports 2–6 character hex hashes and full 64-character public keys. Share the path as a web link (`mesh.digitaino.com/p/...`). Chat messages containing hex path chains are auto-detected with an inline card
+- **Web Path Creator** — Public web page at `mesh.digitaino.com/path` for creating shareable path maps in a browser without the app. Server-side resolution fills in repeater locations from the community database
+- **Background Repeater Location Sharing** — Opt-in periodic upload of your device's known repeater GPS coordinates to the community server. Enriches the community map for all users. Throttled to 15-minute intervals, only sent when data changes, requires contributor verification
 - **Route Distance on Maps** — Message route maps and heard repeats maps display the total chain distance along the path, with a "≥" prefix when intermediate repeaters lack location data
 - **Swipe to Reply** — Swipe right on an incoming message in channels or DMs to quickly reply, with haptic feedback and a visual reply indicator (UIKit-based gesture avoids scroll blocking)
 - **Message Draft Persistence** — Unsent message text is preserved when navigating away from a conversation and restored when returning

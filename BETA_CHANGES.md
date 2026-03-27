@@ -1,4 +1,48 @@
-Beta Changes -- v0.10.1 (Build 14)
+Beta Changes -- v0.10.1 (Build 15)
+
+Path Map
+
+New "Path Map" tool in the Tools tab. Enter hex IDs (comma or space-separated) to visualize the path through repeaters on an interactive map. Hex IDs are resolved against your local contacts and discovered nodes. Supports 2–6 character hex hashes and full 64-character public keys. Includes map controls for layers, label modes, and centering on the path.
+
+Once the map is generated, tap "Share" to upload the path and create a shareable web link (e.g. mesh.digitaino.com/p/abc123). The web page shows the same hop-by-hop map with a collapsible details panel.
+
+Chat Path Detection
+
+Messages containing hex path chains (3+ hex tokens) are now automatically detected. An inline "Path Map" card appears below the message bubble — tap it to open the path on a map. Messages with "RX via" (which produce the existing Shared Route card) are excluded to avoid conflicts.
+
+Web Path Creator
+
+New public web page at mesh.digitaino.com/path for creating shareable path maps in a browser without the app. Enter hex IDs in the form, and the server resolves repeater locations from the community database and generates a short link. Rate-limited, no API key required.
+
+Background Repeater Location Sharing
+
+New opt-in feature that periodically shares your device's known repeater locations with the community server. When enabled, repeater GPS coordinates from your contacts and discovered nodes are uploaded to enrich the community map for everyone. Requires contributor verification via your device's cryptographic key. Uploads are throttled to a 15-minute minimum interval and only sent when repeater data changes. Includes a "Share Now" button for immediate manual uploads.
+
+My Survey Routes
+
+New view in Signal Survey showing your uploaded survey routes from the community server. Displays route status (Created, In Progress, Completed, Abandoned), waypoint progress, skipped waypoints, and origin (web or local). Auth sessions auto-renew when tokens expire.
+
+Repeater Resolver Improvements
+
+The repeater resolver now supports anchor-aware resolution for path visualization. When a previous or next hop location is known, the resolver prioritizes repeaters geographically close to that anchor point, significantly improving accuracy over recency-only matching. Also handles full 32-byte public key inputs by truncating to the matching prefix length.
+
+Server-Side Path Resolution
+
+When creating shared paths (from the app or the web form), the server auto-resolves missing repeater locations using the community repeater database. Uses cascading match logic: exact hex ID, then prefix matching (handles 2-char IDs matching 4-char stored IDs), then public key prefix matching.
+
+Admin Dashboard
+
+New tabs in the admin dashboard: Shared Links (view/delete shared routes, maps, and paths), Survey Routes (lifecycle status, notes, deletion), Plan Sessions (view/manage planning sessions). All tables have sortable column headers. Repeaters and cells can now be hidden from public maps with admin notes.
+
+Bug Fixes
+
+Fixed server-side repeater resolution excluding all repeaters because the hidden field is nullable — NULL != true evaluates to NULL in SQLite, so no repeaters were returned. Fixed admin dashboard linking path shares to /m/ instead of /p/. Fixed shared path web pages not auto-expanding the details panel. Added "No Located Hops" overlay on web path pages when no repeaters could be resolved. Corrected repeater timestamp semantics for lastHeard field. Full public key is now sent with repeater location uploads for better resolution.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 14)
 
 Plan Survey Route (Experimental)
 
