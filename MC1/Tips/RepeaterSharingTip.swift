@@ -2,9 +2,8 @@ import SwiftUI
 import TipKit
 
 /// Tip shown in Settings to encourage users to enable repeater location sharing.
-/// Appears once after the app updates to a version with this feature.
+/// Displays once the first time the user visits the Settings screen.
 struct RepeaterSharingTip: Tip {
-    static let appLaunched = Tips.Event(id: "repeaterSharingAppLaunched")
 
     var title: Text {
         Text("Help Improve the Community Map")
@@ -20,9 +19,5 @@ struct RepeaterSharingTip: Tip {
 
     var options: [TipOption] {
         [Tips.MaxDisplayCount(1)]
-    }
-
-    var rules: [Rule] {
-        #Rule(Self.appLaunched) { $0.donations.count >= 1 }
     }
 }

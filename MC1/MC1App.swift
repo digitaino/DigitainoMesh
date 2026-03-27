@@ -39,10 +39,17 @@ struct MC1App: App {
             ContentView()
                 .environment(\.appState, appState)
                 .task {
+                    // Reset TipKit datastore once per new build so new tips display correctly
+                    let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+                    let lastTipResetBuild = UserDefaults.standard.string(forKey: "lastTipKitResetBuild") ?? ""
+                    if currentBuild != lastTipResetBuild {
+                        try? Tips.resetDatastore()
+                        UserDefaults.standard.set(currentBuild, forKey: "lastTipKitResetBuild")
+                    }
+
                     try? Tips.configure([
                         .displayFrequency(.immediate)
                     ])
-                    await RepeaterSharingTip.appLaunched.donate()
 
                     #if DEBUG
                     if isScreenshotMode {

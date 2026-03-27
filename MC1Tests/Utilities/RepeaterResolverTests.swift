@@ -262,4 +262,201 @@ struct RepeaterResolverTests {
 
         #expect(match?.displayName == "Newer")
     }
+
+    // MARK: - Anchor Location Tests
+
+    @Test("anchor location overrides recency — prefers closer to anchor")
+    func anchorOverridesRecency() {
+        // NearAnchor is close to anchor but older, FarFromAnchor is far but newer
+        let nearAnchor = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x01,
+            name: "NearAnchor",
+            lastAdvertTimestamp: 10,
+            latitude: 37.001,
+            longitude: -122.001
+        )
+        let farFromAnchor = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x02,
+            name: "FarFromAnchor",
+            lastAdvertTimestamp: 200,
+            latitude: 39.0,
+            longitude: -124.0
+        )
+
+        let anchorLocation = CLLocation(latitude: 37.0, longitude: -122.0)
+        let match = RepeaterResolver.bestMatch(
+            for: Data([0x3F]),
+            in: [nearAnchor, farFromAnchor],
+            userLocation: nil,
+            anchorLocation: anchorLocation
+        )
+
+        #expect(match?.displayName == "NearAnchor")
+    }
+
+    @Test("without anchor, recency wins over proximity")
+    func withoutAnchorRecencyWins() {
+        // Same nodes but no anchor — newer node should win
+        let nearUser = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x01,
+            name: "NearButOlder",
+            lastAdvertTimestamp: 10,
+            latitude: 37.001,
+            longitude: -122.001
+        )
+        let farButNewer = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x02,
+            name: "FarButNewer",
+            lastAdvertTimestamp: 200,
+            latitude: 39.0,
+            longitude: -124.0
+        )
+
+        let match = RepeaterResolver.bestMatch(
+            for: Data([0x3F]),
+            in: [nearUser, farButNewer],
+            userLocation: nil,
+            anchorLocation: nil
+        )
+
+        #expect(match?.displayName == "FarButNewer")
+    }
+
+    @Test("anchor prefers located node over unlocated node")
+    func anchorPrefersLocatedOverUnlocated() {
+        let located = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x01,
+            name: "Located",
+            lastAdvertTimestamp: 10,
+            latitude: 37.001,
+            longitude: -122.001
+        )
+        let unlocated = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x02,
+            name: "Unlocated",
+            lastAdvertTimestamp: 200,
+            latitude: 0,
+            longitude: 0
+        )
+
+        let anchorLocation = CLLocation(latitude: 37.0, longitude: -122.0)
+        let match = RepeaterResolver.bestMatch(
+            for: Data([0x3F]),
+            in: [located, unlocated],
+            userLocation: nil,
+            anchorLocation: anchorLocation
+        )
+
+        #expect(match?.displayName == "Located")
+    }
+
+    // MARK: - Resolve / ResolverResult Tests
+
+    @Test("resolve returns candidates sorted best-first")
+    func resolveSortsCandidates() {
+        let closer = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x01,
+            name: "Closer",
+            lastAdvertTimestamp: 10,
+            latitude: 37.001,
+            longitude: -122.001
+        )
+        let farther = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x02,
+            name: "Farther",
+            lastAdvertTimestamp: 200,
+            latitude: 39.0,
+            longitude: -124.0
+        )
+
+        let anchorLocation = CLLocation(latitude: 37.0, longitude: -122.0)
+        let result = RepeaterResolver.resolve(
+            for: Data([0x3F]),
+            in: [closer, farther],
+            userLocation: nil,
+            anchorLocation: anchorLocation
+        )
+
+        #expect(result != nil)
+        #expect(result?.best.displayName == "Closer")
+        #expect(result?.candidates.count == 2)
+        #expect(result?.isAmbiguous == true)
+    }
+
+    @Test("resolve returns non-ambiguous for single match")
+    func resolveNonAmbiguousSingleMatch() {
+        let only = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x01,
+            name: "OnlyMatch",
+            lastAdvertTimestamp: 10,
+            latitude: 37.0,
+            longitude: -122.0
+        )
+
+        let result = RepeaterResolver.resolve(
+            for: Data([0x3F]),
+            in: [only],
+            userLocation: nil
+        )
+
+        #expect(result != nil)
+        #expect(result?.isAmbiguous == false)
+    }
+
+    @Test("resolve returns nil when no candidates match")
+    func resolveNilWhenNoMatch() {
+        let node = createRepeater(
+            prefix: 0xAA,
+            secondByte: 0x01,
+            name: "NoMatch",
+            lastAdvertTimestamp: 10,
+            latitude: 0,
+            longitude: 0
+        )
+
+        let result = RepeaterResolver.resolve(
+            for: Data([0x3F]),
+            in: [node],
+            userLocation: nil
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test("alphabetical fallback when all else is equal")
+    func alphabeticalFallback() {
+        let alpha = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x01,
+            name: "Alpha",
+            lastAdvertTimestamp: 100,
+            latitude: 0,
+            longitude: 0
+        )
+        let beta = createRepeater(
+            prefix: 0x3F,
+            secondByte: 0x02,
+            name: "Beta",
+            lastAdvertTimestamp: 100,
+            latitude: 0,
+            longitude: 0
+        )
+
+        let match = RepeaterResolver.bestMatch(
+            for: Data([0x3F]),
+            in: [beta, alpha],
+            userLocation: nil
+        )
+
+        #expect(match?.displayName == "Alpha")
+    }
 }

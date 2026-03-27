@@ -479,8 +479,15 @@ private struct ActionsExpandedContent: View {
 
     @State private var showingRepeatsMap = false
     @State private var isSharing = false
-    @State private var showingLocationPicker = false
     @State private var showingShareFormatPicker = false
+    /// Set to true when the user picks "Web Link" — the location picker opens
+    /// after the format picker sheet fully dismisses (via onChange).
+    @State private var pendingLocationPicker = false
+    @State private var showingLocationPicker = false
+    /// When true, the share was attempted but no location is available — skip the
+    /// location picker and share without a location.
+    @State private var noLocationAvailable = false
+
 
     /// Location recorded on the message at receive time — preferred over current GPS.
     private var messageLocation: CLLocation? {
@@ -534,24 +541,47 @@ private struct ActionsExpandedContent: View {
                             if format == .textOnly {
                                 shareHeardRepeatsTextOnly(repeats: repeats)
                             } else {
-                                showingLocationPicker = true
-                            }
-                        }
-                    }
-                    .sheet(isPresented: $showingLocationPicker) {
-                        if let coord = trueLocationCoordinate {
-                            ShareLocationPickerSheet(trueLocation: coord) { chosenCoordinate in
-                                Task {
-                                    await shareHeardRepeaters(
-                                        repeats: repeats,
-                                        chosenCoordinate: chosenCoordinate
-                                    )
-                                }
+                                pendingLocationPicker = true
                             }
                         }
                     }
                 }
                 .padding(.top, 8)
+                // Open the location picker after the format picker fully dismisses.
+                // Using onChange instead of onDismiss avoids timing races.
+                .onChange(of: showingShareFormatPicker) { _, isShowing in
+                    if !isShowing && pendingLocationPicker {
+                        pendingLocationPicker = false
+                        if trueLocationCoordinate != nil {
+                            showingLocationPicker = true
+                        } else {
+                            noLocationAvailable = true
+                        }
+                    }
+                }
+                // Use fullScreenCover instead of .sheet to avoid nested-sheet
+                // conflicts — this view is already inside MessageActionsSheet.
+                .fullScreenCover(isPresented: $showingLocationPicker) {
+                    ShareLocationPickerSheet(trueLocation: trueLocationCoordinate!) { chosenCoordinate in
+                        Task {
+                            await shareHeardRepeaters(
+                                repeats: repeats,
+                                chosenCoordinate: chosenCoordinate
+                            )
+                        }
+                    }
+                }
+                .onChange(of: noLocationAvailable) { _, shouldShare in
+                    if shouldShare {
+                        noLocationAvailable = false
+                        Task {
+                            await shareHeardRepeaters(
+                                repeats: repeats,
+                                chosenCoordinate: nil
+                            )
+                        }
+                    }
+                }
             }
         } else if availability.canViewPath {
             MessagePathContent(
