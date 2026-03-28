@@ -881,11 +881,6 @@
 /* Location: TracePathMapView.swift - Purpose: Hops count in results banner */
 "contacts.trace.map.hops" = "%d sauts";
 
-/* Location: TracePathMapView.swift - Purpose: Empty state title */
-"contacts.trace.map.empty.title" = "Aucun répéteur avec position";
-
-/* Location: TracePathMapView.swift - Purpose: Empty state description */
-"contacts.trace.map.empty.description" = "Utilisez la vue Liste pour construire des chemins avec des répéteurs qui n'ont pas de données de position.";
 
 /* Location: TracePathMapView.swift - Purpose: Clear button */
 "contacts.trace.map.clear" = "Effacer";

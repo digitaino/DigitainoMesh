@@ -1874,12 +1874,6 @@ public enum L10n {
               return L10n.tr("Contacts", "contacts.trace.map.cluster.label", p1, fallback: "%d repeaters")
             }
           }
-          public enum Empty {
-            /// Location: TracePathMapView.swift - Purpose: Empty state description
-            public static let description = L10n.tr("Contacts", "contacts.trace.map.empty.description", fallback: "Use List view to build paths with repeaters that don't have location data.")
-            /// Location: TracePathMapView.swift - Purpose: Empty state title
-            public static let title = L10n.tr("Contacts", "contacts.trace.map.empty.title", fallback: "No Repeaters with Location")
-          }
           public enum Pin {
             /// Location: TracePathRepeaterPinView.swift - Accessibility hint for adding repeater to path
             public static let addHint = L10n.tr("Contacts", "contacts.trace.map.pin.addHint", fallback: "Double tap to add to path")

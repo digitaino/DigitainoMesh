@@ -31,11 +31,6 @@ struct TracePathMapView: View {
                 resultsBanner(result: result)
             }
 
-            // Empty state
-            if mapViewModel.repeatersWithLocation.isEmpty {
-                emptyState
-            }
-
             // Floating buttons
             floatingButtons
 
@@ -147,21 +142,6 @@ struct TracePathMapView: View {
         .padding(.top, 8)
         .transition(.move(edge: .top).combined(with: .opacity))
         .animation(.spring(response: 0.3), value: result.id)
-    }
-
-    // MARK: - Empty State
-
-    private var emptyState: some View {
-        VStack {
-            Spacer()
-            ContentUnavailableView(
-                L10n.Contacts.Contacts.Trace.Map.Empty.title,
-                systemImage: "map",
-                description: Text(L10n.Contacts.Contacts.Trace.Map.Empty.description)
-            )
-            Spacer()
-        }
-        .background(.regularMaterial)
     }
 
     // MARK: - Floating Buttons
