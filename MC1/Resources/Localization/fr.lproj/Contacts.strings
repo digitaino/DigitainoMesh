@@ -354,7 +354,7 @@
 "contacts.detail.alert.block.title" = "Bloquer le contact";
 
 /* Location: ContactDetailView.swift - Purpose: Block contact alert message */
-"contacts.detail.alert.block.message" = "Vous ne recevrez plus de messages de %@. Les conversations de cet utilisateur seront masquées de votre liste de Messages, et leurs messages de canal n'apparaîtront pas. Le déblocage inversera ces actions et rendra visibles tous les messages qu'ils ont envoyés.";
+"contacts.detail.alert.block.message" = "Vous ne recevrez plus de messages de %@. Leurs conversations seront masquées de votre liste de Messages et les nouveaux messages de canal seront supprimés. Le déblocage permettra de nouveaux messages, mais les messages supprimés ne pourront pas être récupérés.";
 
 /* Location: ContactDetailView.swift - Purpose: Delete contact alert title */
 "contacts.detail.alert.delete.title" = "Supprimer %@";
