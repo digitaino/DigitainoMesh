@@ -321,6 +321,11 @@ extension SyncCoordinator {
                 self.logger.warning("Dedup check failed, proceeding with save: \(error)")
             }
 
+            // Discard messages from blocked senders
+            if await self.isBlockedSender(senderNodeName) {
+                return
+            }
+
             // Check if this is a reaction
             if await self.handleChannelReaction(
                 text: messageText,
