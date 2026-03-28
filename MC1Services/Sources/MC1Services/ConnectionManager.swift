@@ -131,11 +131,14 @@ public enum DevicePlatform: Sendable {
         ("Xiao C6", .esp32),
         // ESP32 — RAK
         ("RAK 3112", .esp32),
+        // ESP32 — M5Stack
+        ("Unit C6L", .esp32),
         // ESP32 — Other
         ("Station G2", .esp32),
         ("Meshadventurer", .esp32),
         ("Generic ESP32", .esp32),
         ("ThinkNode M2", .esp32),
+        ("ThinkNode M5", .esp32),
         // nRF52 — Heltec
         ("MeshPocket", .nrf52),
         ("Mesh Pocket", .nrf52),
@@ -158,6 +161,8 @@ public enum DevicePlatform: Sendable {
         ("ThinkNode-M1", .nrf52),
         ("ThinkNode M3", .nrf52),
         ("ThinkNode-M6", .nrf52),
+        // nRF52 — GAT562
+        ("GAT562", .nrf52),
         // nRF52 — Other
         ("Ikoka", .nrf52),
         ("ProMicro", .nrf52),
