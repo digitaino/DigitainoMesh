@@ -887,7 +887,7 @@ private struct ContactNetworkPathSection: View {
                             .foregroundStyle(.primary)
                     }
                 } icon: {
-                    Image(systemName: "chevron.forward.2")
+                    Image(systemName: "arrowshape.bounce.right")
                         .foregroundStyle(.secondary)
                 }
             }
