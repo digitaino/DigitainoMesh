@@ -42,6 +42,15 @@ final class RepeaterStatusViewModel {
     /// Whether telemetry has been loaded at least once (for refresh logic)
     var telemetryLoaded = false
 
+    /// Discovery state
+    var isDiscovering: Bool { discoverTask != nil }
+    var discoverySecondsRemaining = 0
+    private var discoverTask: Task<Void, Never>?
+
+    private static let discoveryDuration = 60
+    private static let pollIntervalTicks = 5
+    private static let discoverCommand = "discover.neighbors"
+
     /// Whether the telemetry disclosure group is expanded
     var telemetryExpanded = false
 
@@ -294,6 +303,56 @@ final class RepeaterStatusViewModel {
         } else {
             pendingNeighborEntries = entries
         }
+    }
+
+    // MARK: - Discovery
+
+    func startDiscovery(for session: RemoteNodeSessionDTO) {
+        guard let repeaterAdminService, !isDiscovering else { return }
+
+        discoverySecondsRemaining = Self.discoveryDuration
+
+        discoverTask = Task {
+            do {
+                _ = try await repeaterAdminService.sendCommand(
+                    sessionID: session.id,
+                    command: Self.discoverCommand
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+                discoverySecondsRemaining = 0
+                discoverTask = nil
+                return
+            }
+
+            let startTime = Date.now
+            var tickCount = 0
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+
+                let elapsed = Int(Date.now.timeIntervalSince(startTime))
+                let remaining = max(0, Self.discoveryDuration - elapsed)
+                discoverySecondsRemaining = remaining
+
+                tickCount += 1
+                if tickCount.isMultiple(of: Self.pollIntervalTicks) {
+                    await requestNeighbors(for: session)
+                }
+
+                if remaining <= 0 { break }
+            }
+
+            discoverySecondsRemaining = 0
+            discoverTask = nil
+        }
+    }
+
+    func stopDiscovery() {
+        discoverTask?.cancel()
+        discoverTask = nil
+        discoverySecondsRemaining = 0
     }
 
     // MARK: - Telemetry
