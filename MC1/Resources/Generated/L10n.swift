@@ -1126,7 +1126,7 @@ public enum L10n {
         /// Location: ContactDetailView.swift - Purpose: Footer for path routing
         public static let pathFooter = L10n.tr("Contacts", "contacts.detail.pathFooter", fallback: "Messages route through the path shown. Reset Path to use flood routing instead.")
         /// Location: ContactDetailView.swift - Purpose: Generalized ping button for non-repeater nodes
-        public static let ping = L10n.tr("Contacts", "contacts.detail.ping", fallback: "Ping")
+        public static let ping = L10n.tr("Contacts", "contacts.detail.ping", fallback: "Zero-Hop Ping")
         /// Location: ContactDetailView.swift - Purpose: Ping failure VoiceOver announcement
         public static let pingFailureAnnouncement = L10n.tr("Contacts", "contacts.detail.pingFailureAnnouncement", fallback: "Ping failed")
         /// Location: ContactDetailView.swift - Purpose: Ping failure accessibility label
@@ -1195,7 +1195,7 @@ public enum L10n {
           public enum Block {
             /// Location: ContactDetailView.swift - Purpose: Block contact alert message
             public static func message(_ p1: Any) -> String {
-              return L10n.tr("Contacts", "contacts.detail.alert.block.message", String(describing: p1), fallback: "You won't receive messages from %@. Conversations from this user will be hidden from your Chats list, and their channel messages will not appear. Unblocking will reverse these actions and make visible any messages they have sent.")
+              return L10n.tr("Contacts", "contacts.detail.alert.block.message", String(describing: p1), fallback: "You won't receive messages from %@. Their conversations will be hidden from your Chats list and new channel messages will be discarded. Unblocking will allow new messages, but discarded messages cannot be recovered.")
             }
             /// Location: ContactDetailView.swift - Purpose: Block contact alert title
             public static let title = L10n.tr("Contacts", "contacts.detail.alert.block.title", fallback: "Block Contact")

@@ -234,7 +234,7 @@
 "contacts.detail.pingRepeater" = "Ping du répéteur";
 
 /* Location: ContactDetailView.swift - Purpose: Generalized ping button for non-repeater nodes */
-"contacts.detail.ping" = "Ping";
+"contacts.detail.ping" = "Ping Zero-Hop";
 
 /* Location: ContactDetailView.swift - Purpose: Ping no response message */
 "contacts.detail.pingNoResponse" = "Pas de réponse";
