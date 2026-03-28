@@ -9,6 +9,7 @@ private let logger = Logger(subsystem: "com.mc1", category: "MC1App")
 @main
 struct MC1App: App {
     @State private var appState: AppState
+    @State private var awaitingDataProtection = false
     @Environment(\.scenePhase) private var scenePhase
 
     #if DEBUG
@@ -23,13 +24,32 @@ struct MC1App: App {
         do {
             container = try PersistenceStore.createContainer()
         } catch {
-            logger.fault("Container creation failed, retrying: \(error)")
-            do {
-                container = try PersistenceStore.createContainer()
-            } catch {
-                logger.fault("Container creation failed after retry: \(error)")
-                fatalError("Unrecoverable: ModelContainer creation failed after retry")
+            logger.error("Container creation failed: \(error)")
+
+            if UIApplication.shared.isProtectedDataAvailable {
+                // Data is accessible — this is a genuine failure, not BFU.
+                // Retry once for transient file system issues.
+                logger.info("Retrying container creation")
+                do {
+                    container = try PersistenceStore.createContainer()
+                } catch {
+                    logger.fault("Container creation failed after retry: \(error)")
+                    fatalError("ModelContainer creation failed after retry while data is available")
+                }
+                _appState = State(initialValue: AppState(modelContainer: container))
+                return
             }
+
+            // Before first unlock: the encrypted store is inaccessible. Create a throwaway
+            // in-memory container so the struct can initialize. The .task body will wait for
+            // data protection and replace this with the real store before doing any work.
+            logger.warning("Protected data unavailable (before first unlock), deferring initialization")
+            do {
+                container = try PersistenceStore.createContainer(inMemory: true)
+            } catch {
+                fatalError("In-memory ModelContainer creation failed: \(error)")
+            }
+            _awaitingDataProtection = State(initialValue: true)
         }
         _appState = State(initialValue: AppState(modelContainer: container))
     }
@@ -39,6 +59,18 @@ struct MC1App: App {
             ContentView()
                 .environment(\.appState, appState)
                 .task {
+                    if awaitingDataProtection {
+                        await waitForProtectedData()
+                        do {
+                            let container = try PersistenceStore.createContainer()
+                            appState = AppState(modelContainer: container)
+                            awaitingDataProtection = false
+                        } catch {
+                            logger.fault("Container creation failed after unlock: \(error)")
+                            fatalError("ModelContainer creation failed after protected data became available")
+                        }
+                    }
+
                     // Reset TipKit datastore once per new build so new tips display correctly
                     let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
                     let lastTipResetBuild = UserDefaults.standard.string(forKey: "lastTipKitResetBuild") ?? ""
@@ -97,6 +129,25 @@ struct MC1App: App {
         await appState.initialize()
     }
     #endif
+
+    private func waitForProtectedData() async {
+        guard !UIApplication.shared.isProtectedDataAvailable else { return }
+        let notification = UIApplication.protectedDataDidBecomeAvailableNotification
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await _ in NotificationCenter.default.notifications(named: notification) {
+                    return
+                }
+            }
+            group.addTask {
+                while await !UIApplication.shared.isProtectedDataAvailable {
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+            await group.next()
+            group.cancelAll()
+        }
+    }
 
     private func handleScenePhaseChange(from oldPhase: ScenePhase, to newPhase: ScenePhase) {
         switch newPhase {
