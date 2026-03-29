@@ -555,6 +555,7 @@ struct RemoteNodeIdentitySection: View {
 struct NodeContactInfoSection: View {
     @Bindable var settings: NodeSettingsHelper
     var focusedField: FocusState<NodeSettingsField?>.Binding
+    @State private var contactText = ""
 
     var body: some View {
         ExpandableSettingsSection(
@@ -567,10 +568,7 @@ struct NodeContactInfoSection: View {
             onLoad: { await settings.fetchContactInfo() },
             footer: L10n.RemoteNodes.RemoteNodes.Settings.contactInfoFooter
         ) {
-            TextField(L10n.RemoteNodes.RemoteNodes.Settings.contactInfoPlaceholder, text: Binding(
-                get: { settings.ownerInfo ?? "" },
-                set: { settings.ownerInfo = $0 }
-            ), axis: .vertical)
+            TextField(L10n.RemoteNodes.RemoteNodes.Settings.contactInfoPlaceholder, text: $contactText, axis: .vertical)
                 .lineLimit(3...6)
                 .focused(focusedField, equals: .contactInfo)
                 .overlay(alignment: .bottomTrailing) {
@@ -579,17 +577,28 @@ struct NodeContactInfoSection: View {
                         .foregroundStyle(settings.ownerInfoCharCount > 119 ? .red : .secondary)
                         .padding(4)
                 }
+                .onChange(of: settings.ownerInfo, initial: true) { _, newValue in
+                    contactText = newValue ?? ""
+                }
+                .onChange(of: contactText) { _, newValue in
+                    settings.ownerInfo = newValue
+                }
 
             Button {
                 Task { await settings.applyContactInfoSettings() }
             } label: {
-                if settings.contactInfoApplySuccess {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .transition(.scale.combined(with: .opacity))
-                } else {
-                    Text(L10n.RemoteNodes.RemoteNodes.Settings.applyContactInfo)
+                HStack {
+                    Spacer()
+                    if settings.contactInfoApplySuccess {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Text(L10n.RemoteNodes.RemoteNodes.Settings.applyContactInfo)
+                    }
+                    Spacer()
                 }
+                .animation(.default, value: settings.contactInfoApplySuccess)
             }
             .disabled(!settings.contactInfoSettingsModified || settings.isApplying || settings.ownerInfoCharCount > 119)
         }
