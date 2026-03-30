@@ -1629,16 +1629,21 @@ final class SignalSurveyViewModel {
         // within the cell data only.
         let allIDs = Array(latestByRelay.keys).map { $0.uppercased() }
 
+        // Only consider repeaters for hex ID resolution — rooms and chat contacts
+        // should never appear as relay nodes in the signal survey.
+        let repeaterContacts = allContacts.filter { $0.type == .repeater }
+
         // Build a mapping from short IDs to their contact-resolved canonical form.
-        // For each short ID, resolve against known contacts; if the resolved contact's
-        // public key prefix (at a longer length) exists among the cell IDs, use that.
-        // Otherwise, extend the short ID to a 2-byte prefix from the contact's public key.
+        // For each short ID, resolve against known repeater contacts; if the resolved
+        // contact's public key prefix (at a longer length) exists among the cell IDs,
+        // use that. Otherwise, extend the short ID to a 2-byte prefix from the contact's
+        // public key.
         var canonicalMap: [String: String] = [:] // short ID → canonical longer ID
         for id in allIDs {
             // Only try to extend IDs that are short (1-byte = 2 chars)
             guard id.count == 2 else { continue }
             guard let hashBytes = Data(hexString: id) else { continue }
-            guard let contact = RepeaterResolver.bestMatch(for: hashBytes, in: allContacts, userLocation: nil) else { continue }
+            guard let contact = RepeaterResolver.bestMatch(for: hashBytes, in: repeaterContacts, userLocation: nil) else { continue }
             // Use 2-byte prefix (4 hex chars) from the matched contact's public key
             let prefix2 = contact.publicKey.prefix(2).map { String(format: "%02X", $0) }.joined()
             // Only create mapping if the 2-byte prefix is actually different (longer)
@@ -1647,10 +1652,32 @@ final class SignalSurveyViewModel {
             }
         }
 
-        // Now consolidate: group raw IDs by their canonical form
+        // Identify hex IDs that resolve to non-repeater contacts (rooms, chats).
+        // These should be excluded from the relay node list — rooms can appear in
+        // pathNodeHexIDs from discover responses but aren't meaningful relay nodes.
+        // We check each unique ID (both short and long) against the full contacts list.
+        // An ID is excluded only if it matches a non-repeater AND does not also match
+        // a repeater (to handle shared prefixes safely).
+        var nonRepeaterIDs = Set<String>()
+        for id in allIDs {
+            guard let hashBytes = Data(hexString: id) else { continue }
+            // Check if this ID matches any repeater
+            let matchesRepeater = RepeaterResolver.bestMatch(for: hashBytes, in: repeaterContacts, userLocation: nil) != nil
+            if !matchesRepeater {
+                // Check if it matches a non-repeater contact
+                if let contact = RepeaterResolver.bestMatch(for: hashBytes, in: allContacts, userLocation: nil),
+                   contact.type != .repeater {
+                    nonRepeaterIDs.insert(id)
+                }
+            }
+        }
+
+        // Now consolidate: group raw IDs by their canonical form, skipping non-repeaters
         var canonicalLatest: [String: Date] = [:]
         for (rawID, ts) in latestByRelay {
             let rawUp = rawID.uppercased()
+            // Skip IDs known to be non-repeater contacts
+            if nonRepeaterIDs.contains(rawUp) { continue }
             // Determine the canonical ID for this raw ID
             let canonical: String
             if let resolved = canonicalMap[rawUp] {
@@ -1659,7 +1686,7 @@ final class SignalSurveyViewModel {
             } else if rawUp.count == 2 {
                 // Short ID couldn't be resolved — check if any longer ID in the
                 // cell data starts with it. Only merge if exactly one match.
-                let longerMatches = allIDs.filter { $0.hasPrefix(rawUp) && $0 != rawUp }
+                let longerMatches = allIDs.filter { $0.hasPrefix(rawUp) && $0 != rawUp && !nonRepeaterIDs.contains($0) }
                 if longerMatches.count == 1 {
                     canonical = longerMatches[0]
                 } else {
@@ -1669,6 +1696,8 @@ final class SignalSurveyViewModel {
             } else {
                 canonical = rawUp
             }
+            // Also check if the canonical form itself is a non-repeater
+            if nonRepeaterIDs.contains(canonical) { continue }
             canonicalLatest[canonical] = max(canonicalLatest[canonical] ?? .distantPast, ts)
         }
         let relayNodes = canonicalLatest.sorted { $0.value > $1.value }.map(\.key)
