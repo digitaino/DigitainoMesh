@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 extension PersistenceStore {
@@ -106,6 +107,42 @@ extension PersistenceStore {
 
         try modelContext.save()
         return contact.id
+    }
+
+    /// Batch save or update contacts from ContactFrames with a single commit.
+    /// Reduces database write transactions during initial sync (e.g. 45 contacts → 1 save).
+    public func saveContactsBatch(deviceID: UUID, frames: [ContactFrame]) throws -> [UUID] {
+        let logger = Logger(subsystem: "com.mc1", category: "PersistenceStore")
+        logger.info("saveContactsBatch: fetching existing contacts for device \(deviceID.uuidString.prefix(8))")
+
+        let targetDeviceID = deviceID
+        let predicate = #Predicate<Contact> { contact in
+            contact.deviceID == targetDeviceID
+        }
+        let existing = try modelContext.fetch(FetchDescriptor(predicate: predicate))
+        let existingByKey = Dictionary(uniqueKeysWithValues: existing.map { ($0.publicKey, $0) })
+        logger.info("saveContactsBatch: found \(existing.count) existing, processing \(frames.count) frames")
+
+        var ids: [UUID] = []
+        var updatedCount = 0
+        var insertedCount = 0
+        for frame in frames {
+            if let match = existingByKey[frame.publicKey] {
+                match.update(from: frame)
+                ids.append(match.id)
+                updatedCount += 1
+            } else {
+                let contact = Contact(deviceID: deviceID, from: frame)
+                modelContext.insert(contact)
+                ids.append(contact.id)
+                insertedCount += 1
+            }
+        }
+
+        logger.info("saveContactsBatch: committing \(updatedCount) updates + \(insertedCount) inserts")
+        try modelContext.save()
+        logger.info("saveContactsBatch: commit complete")
+        return ids
     }
 
     /// Save or update a contact from DTO

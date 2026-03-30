@@ -34,6 +34,9 @@ public protocol PersistenceStoreProtocol: Actor {
     /// Fetch a message by ACK code
     func fetchMessage(ackCode: UInt32) async throws -> MessageDTO?
 
+    /// Fetch a message by deduplication key (packet hash linkage for survey ↔ chat)
+    func fetchMessage(deduplicationKey: String) async throws -> MessageDTO?
+
     /// Fetch messages for a contact
     func fetchMessages(contactID: UUID, limit: Int, offset: Int) async throws -> [MessageDTO]
 
@@ -136,6 +139,11 @@ public protocol PersistenceStoreProtocol: Actor {
     /// Save or update a contact from a ContactFrame
     @discardableResult
     func saveContact(deviceID: UUID, from frame: ContactFrame) async throws -> UUID
+
+    /// Batch save or update contacts from ContactFrames with a single commit.
+    /// Reduces database write transactions during initial sync.
+    @discardableResult
+    func saveContactsBatch(deviceID: UUID, frames: [ContactFrame]) async throws -> [UUID]
 
     /// Save or update a contact from DTO
     func saveContact(_ dto: ContactDTO) async throws

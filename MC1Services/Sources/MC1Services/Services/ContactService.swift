@@ -127,24 +127,31 @@ public actor ContactService {
 
             syncProgressHandler?(0, meshContacts.count)
 
-            var receivedCount = 0
             var lastTimestamp: UInt32 = 0
 
             // Build set of public keys from device for cleanup
             let devicePublicKeys = Set(meshContacts.map(\.publicKey))
 
-            for meshContact in meshContacts {
-                let frame = meshContact.toContactFrame()
-                _ = try await dataStore.saveContact(deviceID: deviceID, from: frame)
-                receivedCount += 1
+            // Convert all contacts to frames
+            let frames = meshContacts.map { $0.toContactFrame() }
 
+            // Batch save all contacts in a single database transaction.
+            // This avoids N individual save() calls that create concurrent write
+            // contention with other ModelContext instances (e.g. DebugLogBuffer).
+            logger.info("syncContacts: batch saving \(frames.count) contacts for device \(deviceID.uuidString.prefix(8))…")
+            _ = try await dataStore.saveContactsBatch(deviceID: deviceID, frames: frames)
+            logger.info("syncContacts: batch save complete")
+
+            // Compute last timestamp from all contacts
+            for meshContact in meshContacts {
                 let modifiedTimestamp = UInt32(meshContact.lastModified.timeIntervalSince1970)
                 if modifiedTimestamp > lastTimestamp {
                     lastTimestamp = modifiedTimestamp
                 }
-
-                syncProgressHandler?(receivedCount, meshContacts.count)
             }
+
+            let receivedCount = meshContacts.count
+            syncProgressHandler?(receivedCount, meshContacts.count)
 
             // On full sync, remove local contacts that no longer exist on device
             if since == nil {

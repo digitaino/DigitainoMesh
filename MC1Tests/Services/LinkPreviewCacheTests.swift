@@ -248,6 +248,7 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     // Message Operations
     func saveMessage(_ dto: MessageDTO) async throws {}
     func fetchMessage(id: UUID) async throws -> MessageDTO? { nil }
+    func fetchMessage(deduplicationKey: String) async throws -> MessageDTO? { nil }
     func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? { nil }
     func fetchMessages(contactID: UUID, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
     func fetchMessages(deviceID: UUID, channelIndex: UInt8, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
@@ -267,6 +268,7 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     func fetchContact(deviceID: UUID, publicKey: Data) async throws -> ContactDTO? { nil }
     func fetchContact(deviceID: UUID, publicKeyPrefix: Data) async throws -> ContactDTO? { nil }
     @discardableResult func saveContact(deviceID: UUID, from frame: ContactFrame) async throws -> UUID { UUID() }
+    @discardableResult func saveContactsBatch(deviceID: UUID, frames: [ContactFrame]) async throws -> [UUID] { frames.map { _ in UUID() } }
     func saveContact(_ dto: ContactDTO) async throws {}
     func deleteContact(id: UUID) async throws {}
     func updateContactLastMessage(contactID: UUID, date: Date?) async throws {}

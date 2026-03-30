@@ -65,6 +65,11 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         return messages[id]
     }
 
+    public func fetchMessage(deduplicationKey: String) async throws -> MessageDTO? {
+        if let error = stubbedFetchMessageError { throw error }
+        return messages.values.first { $0.deduplicationKey == deduplicationKey }
+    }
+
     public func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? {
         if let error = stubbedFetchMessageError {
             throw error
@@ -510,6 +515,16 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         contacts[id] = dto
         savedContacts.append(dto)
         return id
+    }
+
+    public func saveContactsBatch(deviceID: UUID, frames: [ContactFrame]) async throws -> [UUID] {
+        if let error = stubbedSaveContactError { throw error }
+        var ids: [UUID] = []
+        for frame in frames {
+            let id = try await saveContact(deviceID: deviceID, from: frame)
+            ids.append(id)
+        }
+        return ids
     }
 
     public func saveContact(_ dto: ContactDTO) async throws {

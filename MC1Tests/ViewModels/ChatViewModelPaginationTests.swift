@@ -142,6 +142,10 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
         messages[id]
     }
 
+    func fetchMessage(deduplicationKey: String) async throws -> MessageDTO? {
+        messages.values.first { $0.deduplicationKey == deduplicationKey }
+    }
+
     func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? {
         messages.values.first { $0.ackCode == ackCode }
     }
@@ -230,6 +234,7 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
 
     func fetchContactPublicKeysByPrefix(deviceID: UUID) async throws -> [UInt8: [Data]] { [:] }
     @discardableResult func saveContact(deviceID: UUID, from frame: ContactFrame) async throws -> UUID { UUID() }
+    @discardableResult func saveContactsBatch(deviceID: UUID, frames: [ContactFrame]) async throws -> [UUID] { frames.map { _ in UUID() } }
     func saveContact(_ dto: ContactDTO) async throws { contacts[dto.id] = dto }
     func deleteContact(id: UUID) async throws { contacts.removeValue(forKey: id) }
     func updateContactLastMessage(contactID: UUID, date: Date?) async throws {}
