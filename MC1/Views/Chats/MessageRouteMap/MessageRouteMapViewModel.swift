@@ -120,11 +120,13 @@ final class MessageRouteMapViewModel {
             routeIndex += 1
         }
 
-        // If no sender location, use receiver location as fallback anchor
-        // (resolves from the receiver end of the chain)
-        if anchorLocation == nil {
-            anchorLocation = userLocation
-        }
+        // NOTE: Do NOT fall back to userLocation when the sender has no location.
+        // The forward anchor must represent the sender end of the chain. Setting it
+        // to the receiver location causes the forward pass to resolve the first hop
+        // based on proximity to the *receiver*, picking the wrong repeater when
+        // multiple candidates share the same hash prefix. The bidirectional merge
+        // step already handles the no-sender-anchor case by preferring the backward
+        // (receiver-anchored) pass for hops closer to the receiver.
 
         // Intermediate hops — first resolve all hops, then build overlays.
         // Two-pass resolution: forward from sender, backward from receiver,

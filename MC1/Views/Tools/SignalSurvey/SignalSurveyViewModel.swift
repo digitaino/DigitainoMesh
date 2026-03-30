@@ -1618,32 +1618,53 @@ final class SignalSurveyViewModel {
         }
 
         // Consolidate hex IDs: different hash sizes produce different lengths for the
-        // same repeater (e.g. "88" from 1-byte pathNodes vs "8850" from discover response).
-        // Keep the **longest** form for better specificity — multi-byte firmware is being
-        // rolled out and longer IDs reduce collision risk between repeaters.
+        // same repeater (e.g. "0C" from 1-byte pathNodes vs "0C13" from discover response).
+        // Keep the **longest** form for better specificity.
+        //
+        // IMPORTANT: Only merge a short ID into a longer one when the short ID has
+        // exactly ONE longer match. If multiple longer IDs share the same short prefix
+        // (e.g. "0C" matches both "0C13" and "0CB3"), the short prefix is ambiguous and
+        // must NOT be merged — it stays as a separate entry so we don't attribute packets
+        // from one repeater to a completely different node.
         let allIDs = Array(latestByRelay.keys).map { $0.uppercased() }
+
+        // Group IDs by length, then try to merge shorter into longer
+        let sorted = allIDs.sorted { $0.count < $1.count }
         var displayIDs: [String] = []
-        for id in allIDs {
-            let dominated = displayIDs.contains(where: { $0.hasPrefix(id) || id.hasPrefix($0) })
-            if dominated {
-                // Keep the longer of the two (more specific)
-                displayIDs = displayIDs.map { existing in
-                    // existing starts with id → existing is longer or equal, keep existing
-                    if existing.hasPrefix(id) { return existing }
-                    // id starts with existing → id is longer, replace with id
-                    if id.hasPrefix(existing) { return id }
-                    return existing
+        var mergedShorts = Set<String>() // short IDs that were unambiguously merged
+
+        for id in sorted {
+            // Find all existing displayIDs that are a prefix of this ID
+            let shorterMatches = displayIDs.filter { id.hasPrefix($0) && id != $0 }
+            if shorterMatches.count == 1, let shorter = shorterMatches.first {
+                // Check if this shorter prefix also matches any OTHER longer ID we haven't
+                // processed yet. If so, the prefix is ambiguous — don't merge.
+                let otherLongerMatches = sorted.filter {
+                    $0.hasPrefix(shorter) && $0 != shorter && $0 != id
                 }
-            } else {
+                if otherLongerMatches.isEmpty {
+                    // Unambiguous: replace the shorter ID with this longer one
+                    displayIDs = displayIDs.map { $0 == shorter ? id : $0 }
+                    mergedShorts.insert(shorter)
+                } else {
+                    // Ambiguous prefix — keep both separately
+                    if !displayIDs.contains(id) { displayIDs.append(id) }
+                }
+            } else if !displayIDs.contains(where: { $0.hasPrefix(id) || id.hasPrefix($0) }) {
+                displayIDs.append(id)
+            } else if !displayIDs.contains(id) {
+                // Longer ID whose prefix already has multiple matches — add separately
                 displayIDs.append(id)
             }
         }
         displayIDs = Array(Set(displayIDs)) // deduplicate
+
         var consolidatedLatest: [String: Date] = [:]
         for dID in displayIDs {
             for (rawID, ts) in latestByRelay {
                 let rawUp = rawID.uppercased()
-                if rawUp == dID || dID.hasPrefix(rawUp) || rawUp.hasPrefix(dID) {
+                // Only consolidate when the raw ID was unambiguously merged into this display ID
+                if rawUp == dID || (mergedShorts.contains(rawUp) && dID.hasPrefix(rawUp)) {
                     consolidatedLatest[dID] = max(consolidatedLatest[dID] ?? .distantPast, ts)
                 }
             }
@@ -1658,20 +1679,32 @@ final class SignalSurveyViewModel {
         //      reachability but the repeater may not hear us directly.
         //   3. Heard Only: passive packets — one-way RX, no proof of any return path.
         //
-        // Use prefix matching because control/trace packets produce 2-byte IDs while regular
-        // packets use 1-byte hashes.
+        // For 2-way (connected), only consider the LAST path node — the repeater that
+        // directly relayed back to us. Using all path nodes would falsely mark upstream
+        // hops as directly connected.
         let directIDs = Set(points
             .filter { Self.isDirectTwoWay($0) }
-            .flatMap(\.pathNodeHexIDs))
+            .compactMap(\.pathNodeHexIDs.last))
+        // For mesh reach, all path nodes are relevant — any repeater in a multi-hop
+        // active response is mesh-reachable.
         let meshReachIDs = Set(points
             .filter { $0.isActiveProbe && !Self.isDirectTwoWay($0) }
             .flatMap(\.pathNodeHexIDs))
 
+        /// Check if a relay node's hex ID matches any ID in a set.
+        /// Uses prefix matching only in the direction short→long (a 1-byte hash "0C"
+        /// can match a 2-byte ID "0C13") but NOT the reverse — "0CB3" must not match
+        /// a relay labeled "0C" because they could be different nodes.
         func hexIDMatches(_ relay: String, in idSet: Set<String>) -> Bool {
             let r = relay.uppercased()
             return idSet.contains(where: { id in
                 let u = id.uppercased()
-                return u == r || u.hasPrefix(r) || r.hasPrefix(u)
+                if u == r { return true }
+                // Only match if the shorter one is a prefix of the longer AND the
+                // shorter is a plausible hash prefix (1-byte = 2 chars)
+                if u.count < r.count { return r.hasPrefix(u) && u.count == 2 }
+                if r.count < u.count { return u.hasPrefix(r) && r.count == 2 }
+                return false
             })
         }
 
