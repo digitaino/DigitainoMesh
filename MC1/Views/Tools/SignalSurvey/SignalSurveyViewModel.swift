@@ -1439,7 +1439,7 @@ final class SignalSurveyViewModel {
 
         // Build data cells
         var cells = gridBuckets.map { coord, points in
-            Self.makeGridCell(coord: coord, points: points, refLat: gridReferenceLatitude, probesSent: probesSentPerCell[coord.key])
+            Self.makeGridCell(coord: coord, points: points, refLat: gridReferenceLatitude, probesSent: probesSentPerCell[coord.key], allContacts: allContacts)
         }
 
         // Add dead zone cells for probed-but-no-response hexes
@@ -1542,7 +1542,8 @@ final class SignalSurveyViewModel {
             coord: hex,
             points: gridBuckets[hex] ?? [point],
             refLat: gridReferenceLatitude,
-            probesSent: probesSentPerCell[hex.key]
+            probesSent: probesSentPerCell[hex.key],
+            allContacts: allContacts
         )
 
         if let idx = gridCells.firstIndex(where: { $0.coordKey == hex.key }) {
@@ -1593,7 +1594,8 @@ final class SignalSurveyViewModel {
         coord: HexGrid.AxialCoord,
         points: [SignalSurveyPointDTO],
         refLat: Double,
-        probesSent: Int? = nil
+        probesSent: Int? = nil,
+        allContacts: [ContactDTO] = []
     ) -> GridCell {
         let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
         let snrValues = points.compactMap(\.snr)
@@ -1619,57 +1621,57 @@ final class SignalSurveyViewModel {
 
         // Consolidate hex IDs: different hash sizes produce different lengths for the
         // same repeater (e.g. "0C" from 1-byte pathNodes vs "0C13" from discover response).
-        // Keep the **longest** form for better specificity.
         //
-        // IMPORTANT: Only merge a short ID into a longer one when the short ID has
-        // exactly ONE longer match. If multiple longer IDs share the same short prefix
-        // (e.g. "0C" matches both "0C13" and "0CB3"), the short prefix is ambiguous and
-        // must NOT be merged — it stays as a separate entry so we don't attribute packets
-        // from one repeater to a completely different node.
+        // Strategy: resolve each short hex ID against the full contacts list to determine
+        // the canonical longer form. This prevents merging "0C" into "0CB3" when the actual
+        // node is "0C13" — the contact resolver uses recency and proximity to pick the
+        // correct match. If no contact resolves, fall back to unambiguous prefix matching
+        // within the cell data only.
         let allIDs = Array(latestByRelay.keys).map { $0.uppercased() }
 
-        // Group IDs by length, then try to merge shorter into longer
-        let sorted = allIDs.sorted { $0.count < $1.count }
-        var displayIDs: [String] = []
-        var mergedShorts = Set<String>() // short IDs that were unambiguously merged
+        // Build a mapping from short IDs to their contact-resolved canonical form.
+        // For each short ID, resolve against known contacts; if the resolved contact's
+        // public key prefix (at a longer length) exists among the cell IDs, use that.
+        // Otherwise, extend the short ID to a 2-byte prefix from the contact's public key.
+        var canonicalMap: [String: String] = [:] // short ID → canonical longer ID
+        for id in allIDs {
+            // Only try to extend IDs that are short (1-byte = 2 chars)
+            guard id.count == 2 else { continue }
+            guard let hashBytes = Data(hexString: id) else { continue }
+            guard let contact = RepeaterResolver.bestMatch(for: hashBytes, in: allContacts, userLocation: nil) else { continue }
+            // Use 2-byte prefix (4 hex chars) from the matched contact's public key
+            let prefix2 = contact.publicKey.prefix(2).map { String(format: "%02X", $0) }.joined()
+            // Only create mapping if the 2-byte prefix is actually different (longer)
+            if prefix2.uppercased() != id {
+                canonicalMap[id] = prefix2.uppercased()
+            }
+        }
 
-        for id in sorted {
-            // Find all existing displayIDs that are a prefix of this ID
-            let shorterMatches = displayIDs.filter { id.hasPrefix($0) && id != $0 }
-            if shorterMatches.count == 1, let shorter = shorterMatches.first {
-                // Check if this shorter prefix also matches any OTHER longer ID we haven't
-                // processed yet. If so, the prefix is ambiguous — don't merge.
-                let otherLongerMatches = sorted.filter {
-                    $0.hasPrefix(shorter) && $0 != shorter && $0 != id
-                }
-                if otherLongerMatches.isEmpty {
-                    // Unambiguous: replace the shorter ID with this longer one
-                    displayIDs = displayIDs.map { $0 == shorter ? id : $0 }
-                    mergedShorts.insert(shorter)
+        // Now consolidate: group raw IDs by their canonical form
+        var canonicalLatest: [String: Date] = [:]
+        for (rawID, ts) in latestByRelay {
+            let rawUp = rawID.uppercased()
+            // Determine the canonical ID for this raw ID
+            let canonical: String
+            if let resolved = canonicalMap[rawUp] {
+                // Short ID was resolved via contacts → use the 2-byte form
+                canonical = resolved
+            } else if rawUp.count == 2 {
+                // Short ID couldn't be resolved — check if any longer ID in the
+                // cell data starts with it. Only merge if exactly one match.
+                let longerMatches = allIDs.filter { $0.hasPrefix(rawUp) && $0 != rawUp }
+                if longerMatches.count == 1 {
+                    canonical = longerMatches[0]
                 } else {
-                    // Ambiguous prefix — keep both separately
-                    if !displayIDs.contains(id) { displayIDs.append(id) }
+                    // Ambiguous or no match — keep the short form
+                    canonical = rawUp
                 }
-            } else if !displayIDs.contains(where: { $0.hasPrefix(id) || id.hasPrefix($0) }) {
-                displayIDs.append(id)
-            } else if !displayIDs.contains(id) {
-                // Longer ID whose prefix already has multiple matches — add separately
-                displayIDs.append(id)
+            } else {
+                canonical = rawUp
             }
+            canonicalLatest[canonical] = max(canonicalLatest[canonical] ?? .distantPast, ts)
         }
-        displayIDs = Array(Set(displayIDs)) // deduplicate
-
-        var consolidatedLatest: [String: Date] = [:]
-        for dID in displayIDs {
-            for (rawID, ts) in latestByRelay {
-                let rawUp = rawID.uppercased()
-                // Only consolidate when the raw ID was unambiguously merged into this display ID
-                if rawUp == dID || (mergedShorts.contains(rawUp) && dID.hasPrefix(rawUp)) {
-                    consolidatedLatest[dID] = max(consolidatedLatest[dID] ?? .distantPast, ts)
-                }
-            }
-        }
-        let relayNodes = consolidatedLatest.sorted { $0.value > $1.value }.map(\.key)
+        let relayNodes = canonicalLatest.sorted { $0.value > $1.value }.map(\.key)
 
         // Split relay nodes into three tiers:
         //   1. Connected (2-way): direct active probe responses — the repeater heard us
@@ -1682,26 +1684,34 @@ final class SignalSurveyViewModel {
         // For 2-way (connected), only consider the LAST path node — the repeater that
         // directly relayed back to us. Using all path nodes would falsely mark upstream
         // hops as directly connected.
+        //
+        // Canonicalize the raw hex IDs from points using the same contact-based resolution
+        // so that a 1-byte "0C" from a direct probe response correctly maps to "0C13"
+        // instead of ambiguously matching "0CB3".
+        func canonicalize(_ hexID: String) -> String {
+            let up = hexID.uppercased()
+            return canonicalMap[up] ?? up
+        }
+
         let directIDs = Set(points
             .filter { Self.isDirectTwoWay($0) }
-            .compactMap(\.pathNodeHexIDs.last))
+            .compactMap { $0.pathNodeHexIDs.last.map { canonicalize($0) } })
         // For mesh reach, all path nodes are relevant — any repeater in a multi-hop
         // active response is mesh-reachable.
         let meshReachIDs = Set(points
             .filter { $0.isActiveProbe && !Self.isDirectTwoWay($0) }
-            .flatMap(\.pathNodeHexIDs))
+            .flatMap { $0.pathNodeHexIDs.map { canonicalize($0) } })
 
         /// Check if a relay node's hex ID matches any ID in a set.
-        /// Uses prefix matching only in the direction short→long (a 1-byte hash "0C"
-        /// can match a 2-byte ID "0C13") but NOT the reverse — "0CB3" must not match
-        /// a relay labeled "0C" because they could be different nodes.
+        /// Both relay and set IDs should already be canonicalized, so exact matching
+        /// is the primary check. Prefix matching is still used as a fallback for IDs
+        /// that couldn't be resolved via contacts.
         func hexIDMatches(_ relay: String, in idSet: Set<String>) -> Bool {
             let r = relay.uppercased()
+            if idSet.contains(r) { return true }
+            // Fallback: short↔long prefix matching for unresolved IDs
             return idSet.contains(where: { id in
                 let u = id.uppercased()
-                if u == r { return true }
-                // Only match if the shorter one is a prefix of the longer AND the
-                // shorter is a plausible hash prefix (1-byte = 2 chars)
                 if u.count < r.count { return r.hasPrefix(u) && u.count == 2 }
                 if r.count < u.count { return u.hasPrefix(r) && r.count == 2 }
                 return false
