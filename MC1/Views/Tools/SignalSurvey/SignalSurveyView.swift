@@ -26,8 +26,8 @@ struct SignalSurveyView: View {
     @State private var isVerifying = false
     @State private var verificationError: String?
     @State private var showingContributorProfile = false
-    @State private var showingWebPairing = false
-    @State private var showingMyRoutes = false
+    @State private var showingCompletionSummary = false
+    @State private var pendingUploadPrompt = false
     var body: some View {
         ZStack {
             if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
@@ -47,10 +47,6 @@ struct SignalSurveyView: View {
                     communityModeOverlay
                 }
 
-                // Route planner overlays
-                if viewModel.routePlannerMode != .inactive {
-                    routePlannerOverlay
-                }
             }
         }
         .navigationTitle("Signal Survey")
@@ -114,11 +110,20 @@ struct SignalSurveyView: View {
         .sheet(isPresented: $showingContributorProfile) {
             ContributorProfileAutoRenewView()
         }
-        .sheet(isPresented: $showingMyRoutes) {
-            MySurveyRoutesSheet()
-        }
-        .sheet(isPresented: $showingWebPairing) {
-            WebPairingSheet(viewModel: viewModel)
+        .sheet(isPresented: $showingCompletionSummary, onDismiss: {
+            if pendingUploadPrompt {
+                pendingUploadPrompt = false
+                showingUploadPrompt = true
+            }
+            viewModel.surveyCompletionStats = nil
+        }) {
+            if let stats = viewModel.surveyCompletionStats {
+                SurveyCompletionSheet(
+                    stats: stats,
+                    resolveRepeater: { viewModel.repeaterDisplayName(for: $0) }
+                )
+                .presentationDetents([.medium, .large])
+            }
         }
         .sheet(isPresented: $showingPacketList) {
             CellPacketListView(
@@ -233,12 +238,6 @@ struct SignalSurveyView: View {
             repeaterAnnotations: viewModel.mapRepeaterAnnotations,
             selectedMapRepeater: viewModel.selectedMapRepeater,
             selectedRepeaterContact: viewModel.selectedRepeaterContact,
-            routePlannerMode: viewModel.routePlannerMode,
-            drawingPolygonPoints: viewModel.drawingPolygonPoints,
-            currentRoute: viewModel.currentRoute,
-            onDrawingTap: { coordinate in
-                viewModel.addPolygonVertex(coordinate)
-            },
             mapStyleSelection: viewModel.mapStyleSelection,
             showsUserLocation: true,
             trackingUserLocation: viewModel.trackingUserLocation,
@@ -1613,13 +1612,18 @@ struct SignalSurveyView: View {
                 Task {
                     guard let service = appState.services?.surveyService else { return }
                     let wasLiveUpload = viewModel.liveUploadEnabled
+                    let session = viewModel.activeSession
                     await viewModel.stopSurvey(
                         surveyService: service,
                         locationService: appState.locationService,
                         dataStore: appState.offlineDataStore,
                         deviceID: appState.currentDeviceID
                     )
-                    if !wasLiveUpload {
+                    if let session {
+                        viewModel.surveyCompletionStats = viewModel.computeCompletionStats(session: session)
+                        pendingUploadPrompt = !wasLiveUpload
+                        showingCompletionSummary = true
+                    } else if !wasLiveUpload {
                         showingUploadPrompt = true
                     }
                 }
@@ -1719,32 +1723,6 @@ struct SignalSurveyView: View {
                     } label: {
                         Label("My Contributions", systemImage: "person.crop.circle")
                     }
-
-                    Button {
-                        showingMyRoutes = true
-                    } label: {
-                        Label("My Survey Routes", systemImage: "map")
-                    }
-                }
-
-                Divider()
-
-                if !viewModel.isActive {
-                    Menu {
-                        Button {
-                            viewModel.routePlannerMode = .drawingPolygon
-                        } label: {
-                            Label("Draw on Map", systemImage: "hand.draw")
-                        }
-
-                        Button {
-                            showingWebPairing = true
-                        } label: {
-                            Label("Draw on Web", systemImage: "display")
-                        }
-                    } label: {
-                        Label("Plan Route", systemImage: "map.circle")
-                    }
                 }
 
                 Divider()
@@ -1797,36 +1775,6 @@ struct SignalSurveyView: View {
 
     /// Floating action buttons shown when the map is visible but no session data is loaded
     /// (i.e. the user is browsing community data only).
-    // MARK: - Route Planner Overlay
-
-    private var routePlannerOverlay: some View {
-        VStack {
-            // Top instruction banner during drawing mode
-            if viewModel.routePlannerMode == .drawingPolygon {
-                HStack(spacing: 8) {
-                    Image(systemName: "hand.draw")
-                        .font(.caption)
-                    Text("Tap to place corners")
-                        .font(.caption.weight(.medium))
-                    if !viewModel.drawingPolygonPoints.isEmpty {
-                        Text("· \(viewModel.drawingPolygonPoints.count) pts")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-                .padding(.top, 8)
-            }
-
-            Spacer()
-
-            // Bottom controls
-            RoutePlannerControls(viewModel: viewModel)
-        }
-    }
-
     private var communityModeOverlay: some View {
         VStack {
             Spacer()

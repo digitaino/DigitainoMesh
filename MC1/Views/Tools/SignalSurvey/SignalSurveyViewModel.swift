@@ -142,6 +142,34 @@ final class SignalSurveyViewModel {
     }
     private(set) var sessionStats: [UUID: SessionStats] = [:]
 
+    // MARK: - Survey Completion
+
+    /// Stats computed when a survey session stops, shown in the completion summary sheet.
+    struct SurveyCompletionStats {
+        let duration: TimeInterval
+        let totalPackets: Int
+        let totalCells: Int
+        // Coverage breakdown
+        let connectedCells: Int
+        let meshReachCells: Int
+        let heardOnlyCells: Int
+        let deadZoneCells: Int
+        // Repeater stats
+        let totalUniqueRepeaters: Int
+        let bestCoverageRepeater: (hexID: String, packetCount: Int)?
+        let bestConnectedRepeater: (hexID: String, connectedCellCount: Int)?
+        // Community map impact (nil if no community data loaded)
+        let communityImpact: CommunityImpact?
+
+        struct CommunityImpact {
+            let newCells: Int
+            let updatedCells: Int
+            let oldestUpdatedAge: TimeInterval?
+        }
+    }
+
+    var surveyCompletionStats: SurveyCompletionStats?
+
     // MARK: - Survey Filter
 
     enum SurveyFilter: String, CaseIterable {
@@ -529,285 +557,6 @@ final class SignalSurveyViewModel {
     /// The community cell tapped by the user (for showing detail overlay).
     var selectedCommunityCell: SurveyUploadService.CommunityCell?
 
-    // MARK: - Route Planner
-
-    enum RoutePlannerMode: Equatable {
-        case inactive
-        case drawingPolygon
-        case waitingForWeb(code: String)
-        case reviewingRoute
-        case navigating
-    }
-
-    /// Summary shown briefly after stopping/completing/cancelling navigation.
-    struct RouteCompletionSummary: Equatable {
-        let totalWaypoints: Int
-        let completedCount: Int
-        let skippedCount: Int
-        let remainingCount: Int
-        let duration: TimeInterval?
-        let wasCompleted: Bool
-    }
-
-    var routePlannerMode: RoutePlannerMode = .inactive
-
-    /// Polygon vertices placed by the user during drawing mode.
-    var drawingPolygonPoints: [CLLocationCoordinate2D] = []
-
-    /// The generated route, if any.
-    var currentRoute: RoutePlanner.Route?
-
-    /// Whether to exclude already-surveyed cells from the route.
-    var excludeSurveyedCells: Bool = true
-
-    /// The user's current heading (from CLLocationManager), for the directional arrow.
-    var userHeading: CLLocationDirection?
-
-    /// The user's current location, updated during navigation for guidance arrow/distance.
-    var userLocation: CLLocationCoordinate2D?
-
-    /// Route completion summary, shown transiently after stop/cancel/complete.
-    var routeCompletionSummary: RouteCompletionSummary?
-
-    /// Timestamp of when navigation started (for duration tracking).
-    private var navigationStartTime: Date?
-
-    /// Polling task for web-to-app polygon delivery.
-    private var webPollingTask: Task<Void, Never>?
-
-    /// Server-assigned route ID after upload. Nil if the route has not been uploaded.
-    var serverRouteID: String?
-
-    /// Plan session code if the polygon was received via web pairing (used when uploading).
-    private var webPlanSessionCode: String?
-
-    /// Service for survey route lifecycle API calls.
-    private let surveyRouteService = SurveyRouteService()
-
-    /// Add a vertex to the drawing polygon.
-    func addPolygonVertex(_ coordinate: CLLocationCoordinate2D) {
-        drawingPolygonPoints.append(coordinate)
-    }
-
-    /// Remove the last vertex from the drawing polygon.
-    func undoPolygonVertex() {
-        guard !drawingPolygonPoints.isEmpty else { return }
-        drawingPolygonPoints.removeLast()
-    }
-
-    /// Use the current map viewport as a rectangle polygon.
-    func useViewportAsPolygon(region: MKCoordinateRegion) {
-        let lat = region.center.latitude
-        let lon = region.center.longitude
-        let dLat = region.span.latitudeDelta / 2
-        let dLon = region.span.longitudeDelta / 2
-        drawingPolygonPoints = [
-            CLLocationCoordinate2D(latitude: lat - dLat, longitude: lon - dLon),
-            CLLocationCoordinate2D(latitude: lat - dLat, longitude: lon + dLon),
-            CLLocationCoordinate2D(latitude: lat + dLat, longitude: lon + dLon),
-            CLLocationCoordinate2D(latitude: lat + dLat, longitude: lon - dLon)
-        ]
-    }
-
-    /// Generate a route from the current polygon.
-    func generateRoute() {
-        guard drawingPolygonPoints.count >= 3 else { return }
-
-        var excludeKeys: Set<String> = []
-        if excludeSurveyedCells {
-            // Exclude cells from user's own survey
-            for cell in gridCells {
-                excludeKeys.insert(cell.coordKey)
-            }
-            // Exclude cells from community overlay
-            for cell in communityCells {
-                let key = "\(cell.hexQ)_\(cell.hexR)"
-                excludeKeys.insert(key)
-            }
-        }
-
-        currentRoute = RoutePlanner.generateRoute(
-            polygon: drawingPolygonPoints,
-            excludeCoordKeys: excludeKeys
-        )
-
-        if currentRoute != nil {
-            routePlannerMode = .reviewingRoute
-        }
-    }
-
-    /// Start navigation guidance.
-    func startNavigation() {
-        guard currentRoute != nil else { return }
-        navigationStartTime = Date()
-        routePlannerMode = .navigating
-        updateServerRouteStatus("in_progress")
-    }
-
-    /// Skip the current waypoint and advance to the next.
-    func skipCurrentWaypoint() {
-        guard var route = currentRoute,
-              let index = route.currentWaypointIndex else { return }
-
-        route.waypoints[index].status = .skipped
-        advanceToNextWaypoint(route: &route)
-        currentRoute = route
-    }
-
-    /// Stop navigation and return to route review, showing a summary of progress.
-    func stopNavigation() {
-        if let route = currentRoute {
-            let duration = navigationStartTime.map { Date().timeIntervalSince($0) }
-            routeCompletionSummary = RouteCompletionSummary(
-                totalWaypoints: route.waypoints.count,
-                completedCount: route.completedCount,
-                skippedCount: route.waypoints.filter { $0.status == .skipped }.count,
-                remainingCount: route.remainingCount,
-                duration: duration,
-                wasCompleted: false
-            )
-        }
-        routePlannerMode = .reviewingRoute
-    }
-
-    /// Cancel route planning entirely.
-    func cancelRoutePlanning() {
-        // Show summary if any navigation progress was made
-        if let route = currentRoute,
-           route.completedCount > 0 || route.waypoints.contains(where: { $0.status == .skipped }) {
-            let duration = navigationStartTime.map { Date().timeIntervalSince($0) }
-            routeCompletionSummary = RouteCompletionSummary(
-                totalWaypoints: route.waypoints.count,
-                completedCount: route.completedCount,
-                skippedCount: route.waypoints.filter { $0.status == .skipped }.count,
-                remainingCount: route.remainingCount,
-                duration: duration,
-                wasCompleted: false
-            )
-        }
-        // Report abandoned if any navigation progress was made
-        if let route = currentRoute,
-           route.completedCount > 0 || route.waypoints.contains(where: { $0.status == .skipped }) {
-            updateServerRouteStatus("abandoned", completedCount: route.completedCount,
-                                    skippedCount: route.waypoints.filter { $0.status == .skipped }.count)
-        }
-        routePlannerMode = .inactive
-        drawingPolygonPoints = []
-        currentRoute = nil
-        navigationStartTime = nil
-        serverRouteID = nil
-        webPlanSessionCode = nil
-        webPollingTask?.cancel()
-        webPollingTask = nil
-    }
-
-    /// Check if the user has entered the current waypoint's cell and auto-advance.
-    func checkAutoAdvance(userLocation: CLLocationCoordinate2D) {
-        guard routePlannerMode == .navigating,
-              var route = currentRoute,
-              let index = route.currentWaypointIndex else { return }
-
-        let userCoord = HexGrid.axialFromLatLon(
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-            referenceLatitude: route.referenceLatitude
-        )
-
-        if userCoord == route.waypoints[index].hexCoord {
-            route.waypoints[index].status = .completed
-            advanceToNextWaypoint(route: &route)
-            currentRoute = route
-        }
-    }
-
-    /// Advance to the next pending waypoint, or complete the route if none remain.
-    private func advanceToNextWaypoint(route: inout RoutePlanner.Route) {
-        if let nextIndex = route.waypoints.firstIndex(where: { $0.status == .pending }) {
-            route.waypoints[nextIndex].status = .current
-        } else {
-            // All waypoints visited — route is complete
-            let completedCount = route.waypoints.filter { $0.status == .completed }.count
-            let skippedCount = route.waypoints.filter { $0.status == .skipped }.count
-            let duration = navigationStartTime.map { Date().timeIntervalSince($0) }
-            routeCompletionSummary = RouteCompletionSummary(
-                totalWaypoints: route.waypoints.count,
-                completedCount: completedCount,
-                skippedCount: skippedCount,
-                remainingCount: 0,
-                duration: duration,
-                wasCompleted: true
-            )
-            routePlannerMode = .reviewingRoute
-            updateServerRouteStatus("completed", completedCount: completedCount, skippedCount: skippedCount)
-        }
-    }
-
-    /// Receive polygon vertices from web session and generate route.
-    /// Web-drawn routes are auto-uploaded since they already went through the server.
-    func receiveWebPolygon(_ vertices: [CLLocationCoordinate2D], planSessionCode: String? = nil) {
-        webPlanSessionCode = planSessionCode
-        drawingPolygonPoints = vertices
-        generateRoute()
-
-        // Auto-upload web-drawn routes
-        if currentRoute != nil, planSessionCode != nil {
-            uploadRouteToServer()
-        }
-    }
-
-    /// Dismiss the route completion summary card.
-    func dismissRouteSummary() {
-        routeCompletionSummary = nil
-    }
-
-    /// Upload the current route to the server. Called explicitly by the user for local routes,
-    /// or automatically for web-drawn routes.
-    func uploadRouteToServer() {
-        guard let route = currentRoute, serverRouteID == nil else { return }
-        let polygon = drawingPolygonPoints
-        let waypointCount = route.waypoints.count
-        let excludedSurveyed = route.excludedSurveyedCells
-        let refLat = route.referenceLatitude
-        let planCode = webPlanSessionCode
-
-        Task {
-            do {
-                let contributorID = try await SurveyUploadService().getOrCreateContributorID()
-                let routeID = try await surveyRouteService.createRoute(
-                    polygon: polygon,
-                    waypointCount: waypointCount,
-                    excludedSurveyed: excludedSurveyed,
-                    referenceLatitude: refLat,
-                    contributorID: contributorID,
-                    planSessionCode: planCode
-                )
-                await MainActor.run {
-                    self.serverRouteID = routeID
-                }
-            } catch {
-                // Fire-and-forget: log but don't block the local flow
-                logger.warning("Failed to upload survey route: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    /// Fire-and-forget status update to the server (only if the route was uploaded).
-    private func updateServerRouteStatus(_ status: String, completedCount: Int? = nil, skippedCount: Int? = nil) {
-        guard let routeID = serverRouteID else { return }
-        Task {
-            do {
-                try await surveyRouteService.updateStatus(
-                    routeID: routeID,
-                    status: status,
-                    completedCount: completedCount,
-                    skippedCount: skippedCount
-                )
-            } catch {
-                logger.warning("Failed to update survey route status: \(error.localizedDescription)")
-            }
-        }
-    }
-
     // MARK: - Active Probing
 
     /// Whether active probing (node discovery) is enabled during survey.
@@ -996,6 +745,97 @@ final class SignalSurveyViewModel {
     func resolveRepeater(hexID: String) -> ContactDTO? {
         guard let hashBytes = Data(hexString: hexID) else { return nil }
         return RepeaterResolver.bestMatch(for: hashBytes, in: repeaterContacts, userLocation: nil)
+    }
+
+    /// Compute stats from the current grid cells for the survey completion summary.
+    /// Should be called right after `stopSurvey()` while grid data is still loaded.
+    func computeCompletionStats(session: SurveySessionDTO) -> SurveyCompletionStats {
+        let duration: TimeInterval
+        if let endedAt = session.endedAt {
+            duration = endedAt.timeIntervalSince(session.startedAt)
+        } else {
+            duration = Date().timeIntervalSince(session.startedAt)
+        }
+
+        let totalPackets = gridCells.reduce(0) { $0 + $1.packetCount }
+
+        // Coverage breakdown — classify each cell by its best connectivity tier
+        let connectedCells = gridCells.count(where: { !$0.connectedRelayNodes.isEmpty })
+        let meshReachCells = gridCells.count(where: {
+            $0.connectedRelayNodes.isEmpty && !$0.meshReachRelayNodes.isEmpty
+        })
+        let heardOnlyCells = gridCells.count(where: {
+            $0.connectedRelayNodes.isEmpty && $0.meshReachRelayNodes.isEmpty && !$0.heardOnlyRelayNodes.isEmpty
+        })
+        let deadZoneCells = gridCells.count(where: \.isDeadZone)
+
+        // Repeater stats — aggregate across all cells
+        var allUniqueRepeaters = Set<String>()
+        var repeaterPacketCounts: [String: Int] = [:]
+        var repeaterConnectedCellCounts: [String: Int] = [:]
+
+        for cell in gridCells {
+            for relay in cell.uniqueRelayNodes {
+                allUniqueRepeaters.insert(relay)
+            }
+            // Count packets per repeater by looking at each cell's relay nodes
+            // (this is an approximation — we attribute the cell's packet count to each relay)
+            for relay in cell.connectedRelayNodes {
+                repeaterPacketCounts[relay, default: 0] += cell.activePacketCount
+                repeaterConnectedCellCounts[relay, default: 0] += 1
+            }
+            for relay in cell.heardOnlyRelayNodes {
+                repeaterPacketCounts[relay, default: 0] += cell.packetCount - cell.activePacketCount
+            }
+        }
+
+        let bestCoverage = repeaterPacketCounts.max(by: { $0.value < $1.value })
+        let bestConnected = repeaterConnectedCellCounts.max(by: { $0.value < $1.value })
+
+        // Community map impact
+        let communityImpact: SurveyCompletionStats.CommunityImpact?
+        if !communityCells.isEmpty {
+            let communityKeys = Set(communityCells.map { "\($0.hexQ)_\($0.hexR)" })
+            let userKeys = Set(gridCells.map(\.coordKey))
+            let newCells = userKeys.subtracting(communityKeys).count
+            let updatedCells = userKeys.intersection(communityKeys).count
+
+            // Find oldest updated cell's community data age
+            var oldestAge: TimeInterval?
+            for cell in communityCells {
+                let key = "\(cell.hexQ)_\(cell.hexR)"
+                if userKeys.contains(key),
+                   let dateStr = cell.lastUpdated,
+                   let date = Self.isoFormatter.date(from: dateStr) {
+                    let age = Date().timeIntervalSince(date)
+                    if oldestAge == nil || age > oldestAge! {
+                        oldestAge = age
+                    }
+                }
+            }
+
+            communityImpact = .init(
+                newCells: newCells,
+                updatedCells: updatedCells,
+                oldestUpdatedAge: oldestAge
+            )
+        } else {
+            communityImpact = nil
+        }
+
+        return SurveyCompletionStats(
+            duration: duration,
+            totalPackets: totalPackets,
+            totalCells: gridCells.count,
+            connectedCells: connectedCells,
+            meshReachCells: meshReachCells,
+            heardOnlyCells: heardOnlyCells,
+            deadZoneCells: deadZoneCells,
+            totalUniqueRepeaters: allUniqueRepeaters.count,
+            bestCoverageRepeater: bestCoverage.map { ($0.key, $0.value) },
+            bestConnectedRepeater: bestConnected.map { ($0.key, $0.value) },
+            communityImpact: communityImpact
+        )
     }
 
     // MARK: - Session Management
