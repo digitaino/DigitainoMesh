@@ -166,9 +166,114 @@ final class SignalSurveyViewModel {
             let updatedCells: Int
             let oldestUpdatedAge: TimeInterval?
         }
+
+        /// Reconstruct from a persisted DTO (for viewing historical session stats).
+        init(from dto: SurveyCompletionStatsDTO) {
+            self.duration = dto.duration
+            self.totalPackets = dto.totalPackets
+            self.totalCells = dto.totalCells
+            self.connectedCells = dto.connectedCells
+            self.meshReachCells = dto.meshReachCells
+            self.heardOnlyCells = dto.heardOnlyCells
+            self.deadZoneCells = dto.deadZoneCells
+            self.totalUniqueRepeaters = dto.totalUniqueRepeaters
+            self.bestCoverageRepeater = dto.bestCoverageRepeaterHexID.map {
+                ($0, dto.bestCoverageRepeaterPacketCount ?? 0)
+            }
+            self.bestConnectedRepeater = dto.bestConnectedRepeaterHexID.map {
+                ($0, dto.bestConnectedRepeaterCellCount ?? 0)
+            }
+            if let newCells = dto.communityNewCells {
+                self.communityImpact = CommunityImpact(
+                    newCells: newCells,
+                    updatedCells: dto.communityUpdatedCells ?? 0,
+                    oldestUpdatedAge: dto.communityOldestUpdatedAge
+                )
+            } else {
+                self.communityImpact = nil
+            }
+        }
+
+        /// Memberwise init for direct construction.
+        init(
+            duration: TimeInterval, totalPackets: Int, totalCells: Int,
+            connectedCells: Int, meshReachCells: Int, heardOnlyCells: Int, deadZoneCells: Int,
+            totalUniqueRepeaters: Int,
+            bestCoverageRepeater: (hexID: String, packetCount: Int)?,
+            bestConnectedRepeater: (hexID: String, connectedCellCount: Int)?,
+            communityImpact: CommunityImpact?
+        ) {
+            self.duration = duration
+            self.totalPackets = totalPackets
+            self.totalCells = totalCells
+            self.connectedCells = connectedCells
+            self.meshReachCells = meshReachCells
+            self.heardOnlyCells = heardOnlyCells
+            self.deadZoneCells = deadZoneCells
+            self.totalUniqueRepeaters = totalUniqueRepeaters
+            self.bestCoverageRepeater = bestCoverageRepeater
+            self.bestConnectedRepeater = bestConnectedRepeater
+            self.communityImpact = communityImpact
+        }
     }
 
     var surveyCompletionStats: SurveyCompletionStats?
+
+    /// Personal records broken by the most recent survey.
+    var personalRecords: PersonalRecords?
+
+    /// Which stats are new personal records for the current completion.
+    struct PersonalRecords: Equatable {
+        var longestDuration: Bool = false
+        var mostPackets: Bool = false
+        var mostCells: Bool = false
+        var mostConnectedCells: Bool = false
+        var mostUniqueRepeaters: Bool = false
+
+        var hasAny: Bool {
+            longestDuration || mostPackets || mostCells || mostConnectedCells || mostUniqueRepeaters
+        }
+    }
+
+    /// Convert the ViewModel's SurveyCompletionStats to a Codable DTO for persistence.
+    func statsDTO(from stats: SurveyCompletionStats) -> SurveyCompletionStatsDTO {
+        SurveyCompletionStatsDTO(
+            duration: stats.duration,
+            totalPackets: stats.totalPackets,
+            totalCells: stats.totalCells,
+            connectedCells: stats.connectedCells,
+            meshReachCells: stats.meshReachCells,
+            heardOnlyCells: stats.heardOnlyCells,
+            deadZoneCells: stats.deadZoneCells,
+            totalUniqueRepeaters: stats.totalUniqueRepeaters,
+            bestCoverageRepeaterHexID: stats.bestCoverageRepeater?.hexID,
+            bestCoverageRepeaterPacketCount: stats.bestCoverageRepeater?.packetCount,
+            bestConnectedRepeaterHexID: stats.bestConnectedRepeater?.hexID,
+            bestConnectedRepeaterCellCount: stats.bestConnectedRepeater?.connectedCellCount,
+            communityNewCells: stats.communityImpact?.newCells,
+            communityUpdatedCells: stats.communityImpact?.updatedCells,
+            communityOldestUpdatedAge: stats.communityImpact?.oldestUpdatedAge
+        )
+    }
+
+    /// Compare current stats against all historical sessions to find personal records.
+    func computePersonalRecords(current: SurveyCompletionStatsDTO) -> PersonalRecords {
+        let historical = sessions.compactMap(\.completionStats)
+        guard !historical.isEmpty else {
+            // First session with stats — everything is a record
+            return PersonalRecords(
+                longestDuration: true, mostPackets: true, mostCells: true,
+                mostConnectedCells: true, mostUniqueRepeaters: true
+            )
+        }
+        var records = PersonalRecords()
+        if current.duration > (historical.map(\.duration).max() ?? 0) { records.longestDuration = true }
+        if current.totalPackets > (historical.map(\.totalPackets).max() ?? 0) { records.mostPackets = true }
+        if current.totalCells > (historical.map(\.totalCells).max() ?? 0) { records.mostCells = true }
+        if current.connectedCells > (historical.map(\.connectedCells).max() ?? 0) { records.mostConnectedCells = true }
+        if current.totalUniqueRepeaters > (historical.map(\.totalUniqueRepeaters).max() ?? 0) { records.mostUniqueRepeaters = true }
+        return records
+    }
 
     // MARK: - Survey Filter
 
@@ -291,6 +396,19 @@ final class SignalSurveyViewModel {
             if trackingUserLocation {
                 updateTrackedCell()
             }
+        }
+    }
+
+    /// Programmatically select and center on a specific grid cell by coordinate key.
+    /// Used when navigating from chat messages back to the survey map.
+    func focusOnCell(coordKey: String, latitude: Double, longitude: Double) {
+        trackingUserLocation = false
+        if let cell = gridCells.first(where: { $0.coordKey == coordKey }) {
+            selectedCell = cell
+            setCameraRegion(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: cell.centerLatitude, longitude: cell.centerLongitude),
+                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+            ))
         }
     }
 

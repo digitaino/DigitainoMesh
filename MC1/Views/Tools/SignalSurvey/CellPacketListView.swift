@@ -9,6 +9,7 @@ struct CellPacketListView: View {
     let relayFilter: String?
     let contactsByName: [String: ContactDTO]
     var onNavigateToContact: ((ContactDTO) -> Void)?
+    var onViewInChat: ((SignalSurveyPointDTO) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -30,7 +31,8 @@ struct CellPacketListView: View {
                         PacketRow(
                             point: point,
                             contact: point.fromContactName.flatMap { contactsByName[$0] },
-                            onNavigateToContact: onNavigateToContact
+                            onNavigateToContact: onNavigateToContact,
+                            onViewInChat: onViewInChat
                         )
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
@@ -62,6 +64,7 @@ private struct PacketRow: View {
     let point: SignalSurveyPointDTO
     let contact: ContactDTO?
     var onNavigateToContact: ((ContactDTO) -> Void)?
+    var onViewInChat: ((SignalSurveyPointDTO) -> Void)?
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -160,6 +163,18 @@ private struct PacketRow: View {
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            // Line 5: View in Chat link (for chat-type packets)
+            if point.payloadType == .groupText || point.payloadType == .textMessage {
+                Button {
+                    onViewInChat?(point)
+                } label: {
+                    Label("View in Chat", systemImage: "bubble.left.and.bubble.right")
+                        .font(.caption)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

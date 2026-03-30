@@ -8,7 +8,7 @@ Once the map is generated, tap "Share" to upload the path and create a shareable
 
 Chat Path Detection
 
-Messages containing hex path chains (3+ hex tokens) are now automatically detected. An inline "Path Map" card appears below the message bubble — tap it to open the path on a map. Messages with "RX via" (which produce the existing Shared Route card) are excluded to avoid conflicts.
+Messages containing hex path chains (3+ hex tokens) are now automatically detected. An inline "Path Map" card appears below the message bubble — tap it to open the path on a map. 
 
 Web Path Creator
 
@@ -20,7 +20,7 @@ New opt-in feature that periodically shares your device's known repeater locatio
 
 My Survey Routes
 
-New view in Signal Survey showing your uploaded survey routes from the community server. Displays route status (Created, In Progress, Completed, Abandoned), waypoint progress, skipped waypoints, and origin (web or local). Auth sessions auto-renew when tokens expire.
+New view in Signal Survey showing your uploaded survey routes from the community server. Displays route status (Created, In Progress, Completed, Abandoned), waypoint progress, skipped waypoints, and origin (web or local). 
 
 Repeater Resolver Improvements
 

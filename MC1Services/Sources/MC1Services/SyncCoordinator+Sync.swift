@@ -200,6 +200,13 @@ extension SyncCoordinator {
             // Defer advert-driven contact fetches during sync to avoid BLE contention
             await services.advertisementService.setSyncingContacts(true)
 
+            // 0. Warm up the database to avoid lazy-init crashes on first fetch
+            do {
+                try await services.dataStore.warmUp()
+            } catch {
+                logger.warning("Database warm-up failed: \(error.localizedDescription)")
+            }
+
             // 1. Wire message handlers FIRST (before events can arrive)
             await wireMessageHandlers(services: services, deviceID: deviceID)
 

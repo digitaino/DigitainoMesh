@@ -275,8 +275,11 @@ public actor SyncCoordinator {
     /// Refresh the blocked names cache from the data store (contacts + channel senders)
     public func refreshBlockedContactsCache(deviceID: UUID, dataStore: any PersistenceStoreProtocol) async {
         do {
+            logger.info("refreshBlockedContactsCache: fetching blocked contacts for device \(deviceID)…")
             let blockedContacts = try await dataStore.fetchBlockedContacts(deviceID: deviceID)
+            logger.info("refreshBlockedContactsCache: fetched \(blockedContacts.count) blocked contacts, now fetching blocked senders…")
             let blockedSenders = try await dataStore.fetchBlockedChannelSenders(deviceID: deviceID)
+            logger.info("refreshBlockedContactsCache: fetched \(blockedSenders.count) blocked senders")
             blockedNames = Set(blockedContacts.map(\.name))
                 .union(Set(blockedSenders.map(\.name)))
             logger.debug("Refreshed blocked names cache: \(self.blockedNames.count) entries")

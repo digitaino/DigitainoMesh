@@ -204,4 +204,26 @@ extension PersistenceStore {
         descriptor.fetchLimit = 1
         return try modelContext.fetchCount(descriptor) > 0
     }
+
+    /// Saves completion stats for a session (JSON-encoded `SurveyCompletionStatsDTO`).
+    public func saveCompletionStats(sessionID: UUID, stats: SurveyCompletionStatsDTO) throws {
+        let targetID = sessionID
+        var descriptor = FetchDescriptor<SurveySession>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        descriptor.fetchLimit = 1
+        guard let session = try modelContext.fetch(descriptor).first else { return }
+        session.completionStatsData = try JSONEncoder().encode(stats)
+        try modelContext.save()
+    }
+
+    /// Fetch a survey point by its packet hash (for linking chat messages to survey cells).
+    public func fetchSurveyPoint(packetHash: String) throws -> SignalSurveyPointDTO? {
+        let targetHash = packetHash
+        var descriptor = FetchDescriptor<SignalSurveyPoint>(
+            predicate: #Predicate { $0.packetHash == targetHash }
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first.map { SignalSurveyPointDTO(from: $0) }
+    }
 }

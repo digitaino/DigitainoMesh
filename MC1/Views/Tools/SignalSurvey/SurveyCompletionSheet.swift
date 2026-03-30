@@ -5,6 +5,7 @@ import SwiftUI
 struct SurveyCompletionSheet: View {
     let stats: SignalSurveyViewModel.SurveyCompletionStats
     let resolveRepeater: (String) -> String
+    var personalRecords: SignalSurveyViewModel.PersonalRecords?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -37,9 +38,9 @@ struct SurveyCompletionSheet: View {
 
     private var sessionOverviewSection: some View {
         infoSection(icon: "clock", iconColor: .blue, title: "Session Overview") {
-            statRow(label: "Duration", value: formatDuration(stats.duration))
-            statRow(label: "Total Packets", value: "\(stats.totalPackets)")
-            statRow(label: "Cells Logged", value: "\(stats.totalCells)")
+            statRow(label: "Duration", value: formatDuration(stats.duration), isRecord: personalRecords?.longestDuration == true)
+            statRow(label: "Total Packets", value: "\(stats.totalPackets)", isRecord: personalRecords?.mostPackets == true)
+            statRow(label: "Cells Logged", value: "\(stats.totalCells)", isRecord: personalRecords?.mostCells == true)
         }
     }
 
@@ -47,7 +48,7 @@ struct SurveyCompletionSheet: View {
 
     private var coverageBreakdownSection: some View {
         infoSection(icon: "map", iconColor: .green, title: "Coverage Breakdown") {
-            coverageRow(label: "Connected (2-way)", count: stats.connectedCells, color: .green, icon: "checkmark.circle.fill")
+            coverageRow(label: "Connected (2-way)", count: stats.connectedCells, color: .green, icon: "checkmark.circle.fill", isRecord: personalRecords?.mostConnectedCells == true)
             coverageRow(label: "Mesh Reach", count: stats.meshReachCells, color: .cyan, icon: "arrow.triangle.branch")
             coverageRow(label: "Heard Only", count: stats.heardOnlyCells, color: .orange, icon: "ear.fill")
             if stats.deadZoneCells > 0 {
@@ -60,7 +61,7 @@ struct SurveyCompletionSheet: View {
 
     private var repeaterStatsSection: some View {
         infoSection(icon: "antenna.radiowaves.left.and.right", iconColor: .purple, title: "Repeater Stats") {
-            statRow(label: "Unique Repeaters", value: "\(stats.totalUniqueRepeaters)")
+            statRow(label: "Unique Repeaters", value: "\(stats.totalUniqueRepeaters)", isRecord: personalRecords?.mostUniqueRepeaters == true)
             if let best = stats.bestCoverageRepeater {
                 statRow(
                     label: "Most Packets",
@@ -116,11 +117,14 @@ struct SurveyCompletionSheet: View {
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func statRow(label: String, value: String, highlight: Bool = false) -> some View {
+    private func statRow(label: String, value: String, highlight: Bool = false, isRecord: Bool = false) -> some View {
         HStack {
             Text(label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if isRecord {
+                recordBadge
+            }
             Spacer()
             Text(value)
                 .font(.subheadline.weight(highlight ? .bold : .medium))
@@ -128,7 +132,7 @@ struct SurveyCompletionSheet: View {
         }
     }
 
-    private func coverageRow(label: String, count: Int, color: Color, icon: String) -> some View {
+    private func coverageRow(label: String, count: Int, color: Color, icon: String, isRecord: Bool = false) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.caption)
@@ -137,10 +141,23 @@ struct SurveyCompletionSheet: View {
             Text(label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if isRecord {
+                recordBadge
+            }
             Spacer()
             Text("\(count)")
                 .font(.subheadline.weight(.medium).monospacedDigit())
         }
+    }
+
+    private var recordBadge: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "trophy.fill")
+                .font(.caption2)
+            Text("Record!")
+                .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(.yellow)
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {

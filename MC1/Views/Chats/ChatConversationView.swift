@@ -822,7 +822,23 @@ struct ChatConversationView: View {
             isInputFocused = true
         case .delete:
             Task { await chatViewModel.deleteMessage(message) }
+        case .viewOnSurveyMap:
+            Task { await navigateToSurveyCellForMessage(message) }
         }
+    }
+
+    private func navigateToSurveyCellForMessage(_ message: MessageDTO) async {
+        guard let dataStore = appState.offlineDataStore,
+              let dedupKey = message.deduplicationKey,
+              let point = try? await dataStore.fetchSurveyPoint(packetHash: dedupKey) else { return }
+        let refLat = HexGrid.fixedReferenceLatitude(for: point.latitude)
+        let hex = HexGrid.axialFromLatLon(latitude: point.latitude, longitude: point.longitude, referenceLatitude: refLat)
+        appState.navigation.navigateToSurveyCell(
+            sessionID: point.surveySessionID,
+            coordKey: hex.key,
+            latitude: point.latitude,
+            longitude: point.longitude
+        )
     }
 
 

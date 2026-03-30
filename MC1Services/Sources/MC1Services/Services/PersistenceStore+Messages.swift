@@ -276,6 +276,16 @@ extension PersistenceStore {
         return try modelContext.fetchCount(FetchDescriptor(predicate: predicate)) > 0
     }
 
+    /// Fetch a message by its deduplication key (packet hash).
+    /// Used to link survey packets to their corresponding chat messages.
+    public func fetchMessage(deduplicationKey: String) throws -> MessageDTO? {
+        let targetKey = deduplicationKey
+        let predicate = #Predicate<Message> { $0.deduplicationKey == targetKey }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first.map { MessageDTO(from: $0) }
+    }
+
     /// Save a new message
     public func saveMessage(_ dto: MessageDTO) throws {
         let message = Message(

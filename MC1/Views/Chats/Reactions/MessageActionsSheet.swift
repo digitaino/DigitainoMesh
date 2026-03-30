@@ -12,6 +12,7 @@ enum MessageAction: Equatable {
     case sendAgain
     case blockSender
     case delete
+    case viewOnSurveyMap
 }
 
 /// Sheet-based message actions UI (ElementX style)
@@ -305,6 +306,14 @@ private struct ActionsButtonsSection: View {
                 title: L10n.Chats.Chats.Message.Action.sendAgain,
                 icon: "arrow.uturn.forward",
                 action: { onSelectAction(.sendAgain) }
+            )
+        }
+
+        if availability.canViewOnSurveyMap {
+            ActionButton(
+                title: "View on Survey Map",
+                icon: "map",
+                action: { onSelectAction(.viewOnSurveyMap) }
             )
         }
     }

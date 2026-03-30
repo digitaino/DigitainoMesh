@@ -28,6 +28,7 @@ struct SignalSurveyView: View {
     @State private var showingContributorProfile = false
     @State private var showingCompletionSummary = false
     @State private var pendingUploadPrompt = false
+    @State private var showingHistoricalStats: SurveySessionDTO?
     var body: some View {
         ZStack {
             if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
@@ -116,10 +117,21 @@ struct SignalSurveyView: View {
                 showingUploadPrompt = true
             }
             viewModel.surveyCompletionStats = nil
+            viewModel.personalRecords = nil
         }) {
             if let stats = viewModel.surveyCompletionStats {
                 SurveyCompletionSheet(
                     stats: stats,
+                    resolveRepeater: { viewModel.repeaterDisplayName(for: $0) },
+                    personalRecords: viewModel.personalRecords
+                )
+                .presentationDetents([.medium, .large])
+            }
+        }
+        .sheet(item: $showingHistoricalStats) { session in
+            if let statsDTO = session.completionStats {
+                SurveyCompletionSheet(
+                    stats: SignalSurveyViewModel.SurveyCompletionStats(from: statsDTO),
                     resolveRepeater: { viewModel.repeaterDisplayName(for: $0) }
                 )
                 .presentationDetents([.medium, .large])
@@ -134,6 +146,20 @@ struct SignalSurveyView: View {
                 onNavigateToContact: { contact in
                     showingPacketList = false
                     appState.navigation.navigateToContactDetail(contact)
+                },
+                onViewInChat: { point in
+                    showingPacketList = false
+                    Task {
+                        guard let dataStore = appState.offlineDataStore else { return }
+                        guard let message = try? await dataStore.fetchMessage(deduplicationKey: point.packetHash) else { return }
+                        if let channelIndex = message.channelIndex {
+                            guard let channel = try? await dataStore.fetchChannel(deviceID: message.deviceID, index: channelIndex) else { return }
+                            appState.navigation.navigateToChannel(with: channel, scrollToMessageID: message.id)
+                        } else if let contactID = message.contactID {
+                            guard let contact = try? await dataStore.fetchContact(id: contactID) else { return }
+                            appState.navigation.navigateToChat(with: contact, scrollToMessageID: message.id)
+                        }
+                    }
                 }
             )
             .presentationDetents([.medium, .large])
@@ -218,6 +244,18 @@ struct SignalSurveyView: View {
         }
         .onChange(of: viewModel.liveStatus) { _, newStatus in
             appState.surveyLiveStatus = newStatus
+        }
+        .onChange(of: appState.navigation.pendingSurveyCellFocus) { _, focus in
+            guard let focus else { return }
+            appState.navigation.clearPendingSurveyCellFocus()
+            viewModel.selectedSessionID = focus.sessionID
+            if let dataStore = appState.offlineDataStore,
+               let session = viewModel.sessions.first(where: { $0.id == focus.sessionID }) {
+                Task {
+                    await viewModel.loadPoints(dataStore: dataStore, sessionID: focus.sessionID, session: session)
+                    viewModel.focusOnCell(coordKey: focus.coordKey, latitude: focus.latitude, longitude: focus.longitude)
+                }
+            }
         }
     }
 
@@ -1620,7 +1658,16 @@ struct SignalSurveyView: View {
                         deviceID: appState.currentDeviceID
                     )
                     if let session {
-                        viewModel.surveyCompletionStats = viewModel.computeCompletionStats(session: session)
+                        let stats = viewModel.computeCompletionStats(session: session)
+                        viewModel.surveyCompletionStats = stats
+                        // Persist stats and compute personal records
+                        let dto = viewModel.statsDTO(from: stats)
+                        viewModel.personalRecords = viewModel.computePersonalRecords(current: dto)
+                        if let dataStore = appState.offlineDataStore {
+                            try? await dataStore.saveCompletionStats(sessionID: session.id, stats: dto)
+                            // Reload sessions so the saved stats appear in session list
+                            await viewModel.loadSessions(dataStore: dataStore, deviceID: session.deviceID)
+                        }
                         pendingUploadPrompt = !wasLiveUpload
                         showingCompletionSummary = true
                     } else if !wasLiveUpload {
@@ -1864,46 +1911,62 @@ struct SignalSurveyView: View {
     }
 
     private func sessionRow(_ session: SurveySessionDTO) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(session.name ?? "Session")
-                .font(.headline)
-                .foregroundStyle(.primary)
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(session.name ?? "Session")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
 
-            Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-            HStack(spacing: 8) {
-                if let endedAt = session.endedAt {
-                    let minutes = Int(endedAt.timeIntervalSince(session.startedAt) / 60)
-                    Text("\(minutes)m")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Active")
-                        .font(.caption2)
-                        .foregroundStyle(.green)
+                HStack(spacing: 8) {
+                    if let endedAt = session.endedAt {
+                        let minutes = Int(endedAt.timeIntervalSince(session.startedAt) / 60)
+                        Text("\(minutes)m")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Active")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                    }
+
+                    if let stats = viewModel.sessionStats[session.id] {
+                        Label("\(stats.pointCount)", systemImage: "wave.3.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
+                        Label("\(stats.cellCount)", systemImage: "hexagon")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if session.id == viewModel.selectedSessionID {
+                        Text("Selected")
+                            .font(.caption2)
+                            .foregroundStyle(Color.accentColor)
+                    }
                 }
+            }
 
-                if let stats = viewModel.sessionStats[session.id] {
-                    Label("\(stats.pointCount)", systemImage: "wave.3.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+            Spacer()
 
-                    Label("\(stats.cellCount)", systemImage: "hexagon")
-                        .font(.caption2)
+            if session.completionStats != nil {
+                Button {
+                    showingHistoricalStats = session
+                } label: {
+                    Image(systemName: "chart.bar.fill")
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
-
-                if session.id == viewModel.selectedSessionID {
-                    Text("Selected")
-                        .font(.caption2)
-                        .foregroundStyle(Color.accentColor)
-                }
+                .buttonStyle(.plain)
             }
         }
     }
 }
+
 // MARK: - Batch Upload View
 
 /// Allows selecting multiple survey sessions for batch upload to the community map.
