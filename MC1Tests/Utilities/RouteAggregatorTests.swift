@@ -69,7 +69,7 @@ struct RouteAggregatorAggregationTests {
         let result = RouteAggregator.aggregate(routes: [], directional: false)
 
         #expect(result.bubbleAnnotations.isEmpty)
-        #expect(result.segmentOverlays.isEmpty)
+        #expect(result.segmentData.isEmpty)
         #expect(result.locatedRepeaterCount == 0)
         #expect(result.segmentCount == 0)
     }
@@ -86,7 +86,7 @@ struct RouteAggregatorAggregationTests {
         #expect(result.locatedRepeaterCount == 1)
         #expect(result.segmentCount == 0)
         #expect(result.bubbleAnnotations.count == 1)
-        #expect(result.segmentOverlays.isEmpty)
+        #expect(result.segmentData.isEmpty)
     }
 
     @Test("aggregate with empty hop array does not crash")
@@ -114,7 +114,7 @@ struct RouteAggregatorAggregationTests {
         #expect(result.locatedRepeaterCount == 2)
         #expect(result.segmentCount == 1)
         #expect(result.bubbleAnnotations.count == 2)
-        #expect(result.segmentOverlays.count == 1)
+        #expect(result.segmentData.count == 1)
     }
 
     @Test("aggregate with three hops produces two segments")
@@ -157,7 +157,7 @@ struct RouteAggregatorAggregationTests {
         let result = RouteAggregator.aggregate(routes: routes, directional: false)
 
         #expect(result.segmentCount == 1)
-        #expect(result.segmentOverlays.first?.frequency == 2)
+        #expect(result.segmentData.first?.frequency == 2)
     }
 
     @Test("aggregate directional keeps A→B and B→A as separate segments")

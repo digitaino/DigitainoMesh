@@ -223,6 +223,12 @@ actor MockPersistenceStore: PersistenceStoreProtocol {
     func updateSnapshotNeighbors(id: UUID, neighbors: [NeighborSnapshotEntry]) async throws {}
     func updateSnapshotTelemetry(id: UUID, telemetry: [TelemetrySnapshotEntry]) async throws {}
     func deleteOldNodeStatusSnapshots(olderThan date: Date) async throws {}
+
+    // Message Search
+    func searchMessages(deviceID: UUID, searchText: String, limit: Int, offset: Int) async throws -> [MessageSearchResult] { [] }
+    func searchMessagesCount(deviceID: UUID, searchText: String) async throws -> Int { 0 }
+    func searchMessageIDs(contactID: UUID, searchText: String, limit: Int) async throws -> [UUID] { [] }
+    func searchMessageIDs(deviceID: UUID, channelIndex: UInt8, searchText: String, limit: Int) async throws -> [UUID] { [] }
 }
 
 // MARK: - Test Helpers
