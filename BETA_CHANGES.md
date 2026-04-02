@@ -1,4 +1,34 @@
-Beta Changes -- v0.10.1 (Build 15)
+Beta Changes -- v0.10.1 (Build 16)
+
+Survey Completion Stats
+
+Survey sessions now save completion stats when you stop recording. The completion sheet shows duration, packet counts, cell breakdown (connected/mesh reach/heard only/dead zone), unique repeaters, best coverage repeater, and best connected repeater. Stats are persisted to the database and can be viewed later from the session list — tap the chart icon on any session row to see its saved stats.
+
+Personal Records
+
+The completion sheet highlights personal bests with a trophy badge. Records are tracked for longest duration, most packets, most cells, most connected cells, and most unique repeaters. Your first survey sets the baseline; subsequent sessions show badges only for improved metrics.
+
+Survey Packet to Chat Navigation
+
+In the survey cell packet list, text message and channel message packets now show a "View in Chat" button. Tap it to jump directly to that message in its conversation (channel or DM), with the message highlighted. Uses the existing scroll-to-message infrastructure with a highlight flash.
+
+Chat to Survey Map Navigation
+
+Long-press a message in any conversation and tap "View on Survey Map" to navigate to the Signal Survey tab and center on the hex cell where that message was captured during a survey. The correct session is loaded automatically and the cell is selected. Only works for messages that were recorded during a survey session.
+
+Contact Sync Crash Fix
+
+Fixed a crash (EXC_BAD_ACCESS) that occurred during initial contact sync on devices with many contacts. The root cause was concurrent SQLite write contention — 45+ individual database save() calls during contact sync would race with background debug log writes from a separate persistence actor sharing the same SQLite file. Contacts are now saved in a single batch transaction, eliminating the concurrent write issue.
+
+TipKit Prompt for Repeater Location Sharing
+
+A TipKit prompt now encourages users to enable background repeater location sharing, appearing contextually when relevant.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 15)
 
 Path Map
 
@@ -8,7 +38,7 @@ Once the map is generated, tap "Share" to upload the path and create a shareable
 
 Chat Path Detection
 
-Messages containing hex path chains (3+ hex tokens) are now automatically detected. An inline "Path Map" card appears below the message bubble — tap it to open the path on a map. 
+Messages containing hex path chains (3+ hex tokens) are now automatically detected. An inline "Path Map" card appears below the message bubble — tap it to open the path on a map.
 
 Web Path Creator
 
@@ -20,7 +50,7 @@ New opt-in feature that periodically shares your device's known repeater locatio
 
 My Survey Routes
 
-New view in Signal Survey showing your uploaded survey routes from the community server. Displays route status (Created, In Progress, Completed, Abandoned), waypoint progress, skipped waypoints, and origin (web or local). 
+New view in Signal Survey showing your uploaded survey routes from the community server. Displays route status (Created, In Progress, Completed, Abandoned), waypoint progress, skipped waypoints, and origin (web or local).
 
 Repeater Resolver Improvements
 
