@@ -489,33 +489,44 @@ extension SyncCoordinator {
             logger.debug("Looking up RxLogEntry for channel \(channelIndex) with senderTimestamp: \(senderTimestamp)")
         }
 
-        do {
-            if let rxEntry = try await services.dataStore.findRxLogEntry(
-                channelIndex: channelIndex,
-                senderTimestamp: senderTimestamp,
-                withinSeconds: 10,
-                contactName: contactName
-            ) {
-                let pathLength = rxEntry.pathLength
-                let pathNodes = rxEntry.pathNodes
-                if channelIndex != nil {
-                    logger.info("Correlated channel message to RxLogEntry: pathLength=\(pathLength), pathNodes=\(pathNodes.count) bytes")
+        // Try up to 2 times for channel messages — the RxLogEntry may not have
+        // been persisted yet when the message handler fires (race condition
+        // between the RxLog event stream and the message polling pipeline).
+        let maxAttempts = channelIndex != nil ? 2 : 1
+
+        for attempt in 1...maxAttempts {
+            do {
+                if let rxEntry = try await services.dataStore.findRxLogEntry(
+                    channelIndex: channelIndex,
+                    senderTimestamp: senderTimestamp,
+                    withinSeconds: 10,
+                    contactName: contactName
+                ) {
+                    let pathLength = rxEntry.pathLength
+                    let pathNodes = rxEntry.pathNodes
+                    if channelIndex != nil {
+                        logger.info("Correlated channel message to RxLogEntry (attempt \(attempt)): pathLength=\(pathLength), pathNodes=\(pathNodes.count) bytes")
+                    } else {
+                        logger.debug("Correlated incoming direct message to RxLogEntry, pathLength: \(pathLength), pathNodes: \(pathNodes.count) bytes")
+                    }
+                    return RxLogLookupResult(pathNodes: pathNodes, pathLength: pathLength, packetHash: rxEntry.packetHash)
+                } else if attempt < maxAttempts {
+                    // Wait briefly for the RxLog entry to be persisted
+                    try await Task.sleep(for: .milliseconds(200))
                 } else {
-                    logger.debug("Correlated incoming direct message to RxLogEntry, pathLength: \(pathLength), pathNodes: \(pathNodes.count) bytes")
+                    if channelIndex != nil {
+                        logger.warning("No RxLogEntry found for channel \(channelIndex!), senderTimestamp: \(senderTimestamp) after \(maxAttempts) attempts")
+                    } else {
+                        logger.debug("No RxLogEntry found for direct message from \(contactName ?? "unknown")")
+                    }
                 }
-                return RxLogLookupResult(pathNodes: pathNodes, pathLength: pathLength, packetHash: rxEntry.packetHash)
-            } else {
+            } catch {
                 if channelIndex != nil {
-                    logger.warning("No RxLogEntry found for channel \(channelIndex!), senderTimestamp: \(senderTimestamp)")
+                    logger.error("Failed to lookup RxLogEntry for channel message: \(error)")
                 } else {
-                    logger.debug("No RxLogEntry found for direct message from \(contactName ?? "unknown")")
+                    logger.error("Failed to lookup RxLogEntry for direct message: \(error)")
                 }
-            }
-        } catch {
-            if channelIndex != nil {
-                logger.error("Failed to lookup RxLogEntry for channel message: \(error)")
-            } else {
-                logger.error("Failed to lookup RxLogEntry for direct message: \(error)")
+                break
             }
         }
 

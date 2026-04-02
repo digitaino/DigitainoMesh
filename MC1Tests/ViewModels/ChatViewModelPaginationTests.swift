@@ -146,6 +146,10 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
         messages.values.first { $0.deduplicationKey == deduplicationKey }
     }
 
+    func fetchMessageForSurveyPoint(packetHash: String) async throws -> MessageDTO? {
+        messages.values.first { $0.deduplicationKey == packetHash }
+    }
+
     func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? {
         messages.values.first { $0.ackCode == ackCode }
     }

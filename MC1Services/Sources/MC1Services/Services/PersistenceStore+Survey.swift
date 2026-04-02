@@ -1,4 +1,5 @@
 import Foundation
+import MeshCore
 import SwiftData
 
 extension PersistenceStore {
@@ -225,5 +226,62 @@ extension PersistenceStore {
         )
         descriptor.fetchLimit = 1
         return try modelContext.fetch(descriptor).first.map { SignalSurveyPointDTO(from: $0) }
+    }
+
+    /// Fetch a survey point linked to a chat message.
+    ///
+    /// First tries a direct `packetHash` match on the message's `deduplicationKey`
+    /// (works when the RxLog lookup succeeded during message handling). Falls back
+    /// to finding the RxLog entry by `channelIndex` + `senderTimestamp`, extracting
+    /// its `packetHash`, and then matching the survey point by that hash.
+    public func fetchSurveyPointForMessage(
+        deduplicationKey: String?,
+        channelIndex: UInt8?,
+        senderTimestamp: UInt32
+    ) throws -> SignalSurveyPointDTO? {
+        // Fast path: direct packetHash match on deduplication key
+        if let dedupKey = deduplicationKey,
+           let point = try fetchSurveyPoint(packetHash: dedupKey) {
+            return point
+        }
+
+        // Slow path: look up the RxLog entry to get the packetHash
+        let targetTimestamp = Int(senderTimestamp)
+
+        if let channelIndex {
+            let channelIndexInt = Int(channelIndex)
+            let rxPredicate = #Predicate<RxLogEntry> {
+                $0.channelIndex == channelIndexInt &&
+                $0.senderTimestamp == targetTimestamp
+            }
+            var rxDescriptor = FetchDescriptor<RxLogEntry>(predicate: rxPredicate)
+            rxDescriptor.fetchLimit = 1
+            rxDescriptor.sortBy = [SortDescriptor(\.receivedAt, order: .reverse)]
+
+            if let rxEntry = try modelContext.fetch(rxDescriptor).first {
+                return try fetchSurveyPoint(packetHash: rxEntry.packetHash)
+            }
+        } else {
+            // Direct message: match by senderTimestamp only
+            let textMessageType = Int(PayloadType.textMessage.rawValue)
+            let directType = Int(RouteType.direct.rawValue)
+            let tcDirectType = Int(RouteType.tcDirect.rawValue)
+
+            let rxPredicate = #Predicate<RxLogEntry> {
+                $0.senderTimestamp == targetTimestamp &&
+                $0.channelIndex == nil &&
+                $0.payloadType == textMessageType &&
+                ($0.routeType == directType || $0.routeType == tcDirectType)
+            }
+            var rxDescriptor = FetchDescriptor<RxLogEntry>(predicate: rxPredicate)
+            rxDescriptor.fetchLimit = 1
+            rxDescriptor.sortBy = [SortDescriptor(\.receivedAt, order: .reverse)]
+
+            if let rxEntry = try modelContext.fetch(rxDescriptor).first {
+                return try fetchSurveyPoint(packetHash: rxEntry.packetHash)
+            }
+        }
+
+        return nil
     }
 }

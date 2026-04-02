@@ -583,6 +583,13 @@ function renderCells(cells) {
             } else {
                 // No change — keep existing overlay, just update cell data reference
                 existing._cellData = cell;
+                // Still refresh popup data (e.g. per-repeater metrics change
+                // when a repeater filter is applied without affecting the cell
+                // aggregate fingerprint)
+                if (key === selectedKey) {
+                    selectedCellData = cell;
+                    selectedCellUpdated = true;
+                }
             }
         } else {
             // New cell — create and add

@@ -286,6 +286,60 @@ extension PersistenceStore {
         return try modelContext.fetch(descriptor).first.map { MessageDTO(from: $0) }
     }
 
+    /// Fetch a message linked to a survey point by its packet hash.
+    ///
+    /// First tries a direct `deduplicationKey` match (works when the RxLog lookup
+    /// succeeded during message handling). Falls back to finding the RxLog entry
+    /// by `packetHash`, extracting its `senderTimestamp` and `channelIndex`, and
+    /// then matching a message by those fields.
+    public func fetchMessageForSurveyPoint(packetHash: String) throws -> MessageDTO? {
+        // Fast path: direct deduplication key match
+        if let message = try fetchMessage(deduplicationKey: packetHash) {
+            return message
+        }
+
+        // Slow path: look up the RxLog entry by packetHash, then match message
+        // by channel + sender timestamp
+        let targetHash = packetHash
+        let rxPredicate = #Predicate<RxLogEntry> { $0.packetHash == targetHash }
+        var rxDescriptor = FetchDescriptor<RxLogEntry>(predicate: rxPredicate)
+        rxDescriptor.fetchLimit = 1
+
+        guard let rxEntry = try modelContext.fetch(rxDescriptor).first,
+              let senderTimestamp = rxEntry.senderTimestamp else {
+            return nil
+        }
+
+        let targetTimestamp = UInt32(senderTimestamp)
+
+        // Match on either `timestamp` (normal) or `senderTimestamp` (when timestamp
+        // was corrected, the original sender timestamp is stored separately).
+        let optionalTarget: UInt32? = targetTimestamp
+
+        if let channelIndex = rxEntry.channelIndex {
+            // Channel message: match on channelIndex + sender timestamp
+            let chIdx: UInt8? = UInt8(channelIndex)
+            let predicate = #Predicate<Message> {
+                $0.channelIndex == chIdx &&
+                ($0.timestamp == targetTimestamp || $0.senderTimestamp == optionalTarget)
+            }
+            var descriptor = FetchDescriptor<Message>(predicate: predicate)
+            descriptor.fetchLimit = 1
+            descriptor.sortBy = [SortDescriptor(\.createdAt, order: .reverse)]
+            return try modelContext.fetch(descriptor).first.map { MessageDTO(from: $0) }
+        } else {
+            // Direct message: match on timestamp alone (no channelIndex)
+            let predicate = #Predicate<Message> {
+                $0.channelIndex == nil &&
+                ($0.timestamp == targetTimestamp || $0.senderTimestamp == optionalTarget)
+            }
+            var descriptor = FetchDescriptor<Message>(predicate: predicate)
+            descriptor.fetchLimit = 1
+            descriptor.sortBy = [SortDescriptor(\.createdAt, order: .reverse)]
+            return try modelContext.fetch(descriptor).first.map { MessageDTO(from: $0) }
+        }
+    }
+
     /// Save a new message
     public func saveMessage(_ dto: MessageDTO) throws {
         let message = Message(

@@ -29,6 +29,7 @@ struct SignalSurveyView: View {
     @State private var showingCompletionSummary = false
     @State private var pendingUploadPrompt = false
     @State private var showingHistoricalStats: SurveySessionDTO?
+    @State private var showingChatNotFound = false
     var body: some View {
         ZStack {
             if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
@@ -150,14 +151,28 @@ struct SignalSurveyView: View {
                 onViewInChat: { point in
                     showingPacketList = false
                     Task {
-                        guard let dataStore = appState.offlineDataStore else { return }
-                        guard let message = try? await dataStore.fetchMessage(deduplicationKey: point.packetHash) else { return }
+                        guard let dataStore = appState.offlineDataStore else {
+                            showingChatNotFound = true
+                            return
+                        }
+                        guard let message = try? await dataStore.fetchMessageForSurveyPoint(packetHash: point.packetHash) else {
+                            showingChatNotFound = true
+                            return
+                        }
                         if let channelIndex = message.channelIndex {
-                            guard let channel = try? await dataStore.fetchChannel(deviceID: message.deviceID, index: channelIndex) else { return }
+                            guard let channel = try? await dataStore.fetchChannel(deviceID: message.deviceID, index: channelIndex) else {
+                                showingChatNotFound = true
+                                return
+                            }
                             appState.navigation.navigateToChannel(with: channel, scrollToMessageID: message.id)
                         } else if let contactID = message.contactID {
-                            guard let contact = try? await dataStore.fetchContact(id: contactID) else { return }
+                            guard let contact = try? await dataStore.fetchContact(id: contactID) else {
+                                showingChatNotFound = true
+                                return
+                            }
                             appState.navigation.navigateToChat(with: contact, scrollToMessageID: message.id)
+                        } else {
+                            showingChatNotFound = true
                         }
                     }
                 }
@@ -256,6 +271,11 @@ struct SignalSurveyView: View {
                     viewModel.focusOnCell(coordKey: focus.coordKey, latitude: focus.latitude, longitude: focus.longitude)
                 }
             }
+        }
+        .alert("Not Found", isPresented: $showingChatNotFound) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Could not find this message in chat history.")
         }
     }
 

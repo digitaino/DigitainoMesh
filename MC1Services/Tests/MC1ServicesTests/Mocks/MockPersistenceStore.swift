@@ -70,6 +70,10 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         return messages.values.first { $0.deduplicationKey == deduplicationKey }
     }
 
+    public func fetchMessageForSurveyPoint(packetHash: String) async throws -> MessageDTO? {
+        return messages.values.first { $0.deduplicationKey == packetHash }
+    }
+
     public func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? {
         if let error = stubbedFetchMessageError {
             throw error

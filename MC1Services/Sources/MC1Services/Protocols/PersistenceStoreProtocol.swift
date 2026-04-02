@@ -37,6 +37,9 @@ public protocol PersistenceStoreProtocol: Actor {
     /// Fetch a message by deduplication key (packet hash linkage for survey ↔ chat)
     func fetchMessage(deduplicationKey: String) async throws -> MessageDTO?
 
+    /// Fetch a message linked to a survey point, with RxLog-based fallback.
+    func fetchMessageForSurveyPoint(packetHash: String) async throws -> MessageDTO?
+
     /// Fetch messages for a contact
     func fetchMessages(contactID: UUID, limit: Int, offset: Int) async throws -> [MessageDTO]
 

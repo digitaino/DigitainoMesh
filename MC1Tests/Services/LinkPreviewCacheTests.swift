@@ -249,6 +249,7 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     func saveMessage(_ dto: MessageDTO) async throws {}
     func fetchMessage(id: UUID) async throws -> MessageDTO? { nil }
     func fetchMessage(deduplicationKey: String) async throws -> MessageDTO? { nil }
+    func fetchMessageForSurveyPoint(packetHash: String) async throws -> MessageDTO? { nil }
     func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? { nil }
     func fetchMessages(contactID: UUID, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
     func fetchMessages(deviceID: UUID, channelIndex: UInt8, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
