@@ -36,6 +36,9 @@ struct AdvancedSettingsView: View {
             // Messages Settings
             MessagesSettingsSection()
 
+            // Direct Messages Settings
+            DirectMessagesSettingsSection()
+
             // Battery Curve
             BatteryCurveSection(
                 availablePresets: OCVPreset.selectablePresets,
