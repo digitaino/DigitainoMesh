@@ -30,9 +30,6 @@ struct ChatsListModifiers: ViewModifier {
                     BLEStatusIndicatorView()
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    SignalBarsToolbarItem()
-                }
-                ToolbarItem(placement: .automatic) {
                     Menu {
                         Button {
                             showingNewChat = true
@@ -48,6 +45,9 @@ struct ChatsListModifiers: ViewModifier {
                     } label: {
                         Label(L10n.Chats.Chats.Compose.newMessage, systemImage: "square.and.pencil")
                     }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    SignalBarsToolbarItem()
                 }
             }
             .task {

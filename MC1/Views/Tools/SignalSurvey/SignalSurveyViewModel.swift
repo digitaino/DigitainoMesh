@@ -77,13 +77,16 @@ final class SignalSurveyViewModel {
     var errorMessage: String?
 
     /// True while the view is loading sessions and checking for an active survey to resume.
-    /// Prevents the empty state from flashing when the view is recreated after back-button navigation.
-    var isCheckingForActiveSession = false
+    /// Prevents the empty state from flashing when the view is first created.
+    var isCheckingForActiveSession = true
 
     var isActive: Bool {
         if case .active = state { return true }
         return false
     }
+
+    /// Whether the active survey is temporarily paused (stops recording packets but keeps session open).
+    var isPaused: Bool = false
 
     // MARK: - Map State
 
@@ -353,6 +356,8 @@ final class SignalSurveyViewModel {
         /// Best-gateway SNR from discover responses.
         /// Nil when no discover data is available (passive-only cells use averageSNR).
         let bestGatewaySNR: Double?
+        /// Hex ID of the repeater with the best gateway SNR.
+        let bestGatewayHexID: String?
         /// Maximum mesh depth reached by active probes in this cell.
         /// Value is (hopCount + 1): 1 = direct reach, 2 = one relay hop, etc.
         /// 0 means no trace responses were received.
@@ -363,6 +368,10 @@ final class SignalSurveyViewModel {
         let probesSent: Int?
         /// Average TX SNR (how well repeaters heard us) across points with txSnr data.
         let averageTxSNR: Double?
+        /// Minimum TX SNR observed in this cell.
+        let minTxSNR: Double?
+        /// Maximum TX SNR observed in this cell.
+        let maxTxSNR: Double?
 
         /// Composite identity: coordKey + packetCount so ForEach detects content changes.
         var id: String { "\(coordKey)_\(packetCount)" }
@@ -998,9 +1007,14 @@ final class SignalSurveyViewModel {
             self.pathHashMode = pathHashMode
 
             // Start continuous GPS
-            locationService.startContinuousUpdates { _ in
+            locationService.startContinuousUpdates { [weak self] _ in
                 // Location updates flow through LocationService.currentLocation
-                // which the SurveyService's locationProvider reads
+                // which the SurveyService's locationProvider reads.
+                // When "My Cell" tracking is on, also re-center the map on each GPS update.
+                Task { @MainActor in
+                    guard let self, self.trackingUserLocation else { return }
+                    self.updateTrackedCell()
+                }
             }
 
             // Wire live point handler
@@ -1036,6 +1050,32 @@ final class SignalSurveyViewModel {
         )
     }
 
+    /// Temporarily pauses an active survey — stops probing and ignores incoming packets.
+    /// The session remains open so it can be resumed without data loss.
+    func pauseSurvey(surveyService: SurveyService) async {
+        guard isActive, !isPaused else { return }
+        isPaused = true
+        stopProbeLoop()
+        await surveyService.setProbingActive(false)
+        logger.info("Survey paused")
+    }
+
+    /// Resumes a paused survey — re-enables probing and packet recording.
+    func resumeSurvey(
+        surveyService: SurveyService,
+        locationService: LocationService
+    ) async {
+        guard isActive, isPaused else { return }
+        isPaused = false
+        if probeEnabled {
+            await surveyService.setProbingActive(true)
+            if binaryProtocolService != nil {
+                startProbeLoop(locationService: locationService)
+            }
+        }
+        logger.info("Survey resumed")
+    }
+
     func stopSurvey(
         surveyService: SurveyService,
         locationService: LocationService,
@@ -1062,6 +1102,7 @@ final class SignalSurveyViewModel {
             await surveyService.setPointRecordedHandler(nil)
             state = .idle
             activeSession = nil
+            isPaused = false
 
             // Clear probe references
             binaryProtocolService = nil
@@ -1088,6 +1129,8 @@ final class SignalSurveyViewModel {
 
     /// Resume the view model state if the SurveyService still has an active session
     /// (e.g. user navigated away and came back while survey was running).
+    /// Also handles BLE reconnection: if the ViewModel is already active but the new
+    /// SurveyService doesn't know about the session, re-associate it.
     func resumeIfActive(
         surveyService: SurveyService,
         locationService: LocationService,
@@ -1097,8 +1140,54 @@ final class SignalSurveyViewModel {
         pathHashMode: UInt8 = 0,
         dataStore: PersistenceStore
     ) async {
-        // Already active in this view model — nothing to do
-        guard !isActive else { return }
+        // If ViewModel is already active but the new service doesn't have the session
+        // (BLE reconnection scenario), re-associate the session with the new service.
+        if isActive, case .active(let existingSessionID) = state {
+            if await surveyService.currentSessionID == nil {
+                let resumed = await surveyService.resumeSession(id: existingSessionID)
+                if resumed {
+                    // Re-wire references to the new service instances
+                    self.binaryProtocolService = binaryProtocolService
+                    self.messageServiceRef = messageService
+                    self.locationServiceRef = locationService
+                    self.surveyServiceRef = surveyService
+                    self.pathHashMode = pathHashMode
+
+                    // Re-wire live point handler
+                    await surveyService.setPointRecordedHandler { [weak self] point in
+                        await MainActor.run {
+                            self?.handleNewPoint(point)
+                        }
+                    }
+
+                    // Resume probe loop if enabled
+                    if probeEnabled {
+                        await surveyService.setProbingActive(true)
+                        if binaryProtocolService != nil {
+                            startProbeLoop(locationService: locationService)
+                        }
+                    }
+
+                    logger.info("Re-wired active survey to new service after BLE reconnection: \(existingSessionID)")
+                } else {
+                    // Session no longer exists or was ended — clean up ViewModel state
+                    stopProbeLoop()
+                    locationService.stopContinuousUpdates()
+                    state = .idle
+                    activeSession = nil
+                    isPaused = false
+                    self.binaryProtocolService = nil
+                    self.messageServiceRef = nil
+                    self.channelServiceRef = nil
+                    self.locationServiceRef = nil
+                    self.surveyServiceRef = nil
+                    self.deviceID = nil
+                    liveStatus = SurveyLiveStatus()
+                    logger.warning("Survey session \(existingSessionID) no longer open after reconnection — stopped survey")
+                }
+            }
+            return
+        }
 
         guard let sessionID = await surveyService.currentSessionID else { return }
 
@@ -1151,6 +1240,7 @@ final class SignalSurveyViewModel {
     // MARK: - Live Updates
 
     private func handleNewPoint(_ point: SignalSurveyPointDTO) {
+        guard !isPaused else { return }
         logger.debug("handleNewPoint called, total: \(self.livePointCount + 1)")
         livePointCount += 1
         allPoints.append(point)
@@ -1440,10 +1530,13 @@ final class SignalSurveyViewModel {
                     heardOnlyRelayNodes: [],
                     isDeadZone: true,
                     bestGatewaySNR: nil,
+                    bestGatewayHexID: nil,
                     maxMeshDepth: 0,
                     activePacketCount: 0,
                     probesSent: probesSentPerCell[key],
-                    averageTxSNR: nil
+                    averageTxSNR: nil,
+                    minTxSNR: nil,
+                    maxTxSNR: nil
                 ))
             }
         } else if !probesSentPerCell.isEmpty {
@@ -1474,10 +1567,13 @@ final class SignalSurveyViewModel {
                     heardOnlyRelayNodes: [],
                     isDeadZone: true,
                     bestGatewaySNR: nil,
+                    bestGatewayHexID: nil,
                     maxMeshDepth: 0,
                     activePacketCount: 0,
                     probesSent: probes,
-                    averageTxSNR: nil
+                    averageTxSNR: nil,
+                    minTxSNR: nil,
+                    maxTxSNR: nil
                 ))
             }
         }
@@ -1538,14 +1634,16 @@ final class SignalSurveyViewModel {
     /// - `.groupText` heard repeat with 1 hop = direct (the repeater is the single hop)
     /// - `.control` / `.trace` with 0 hops = direct
     ///
-    /// Returns `(bestGatewaySNR, maxMeshDepth)`.
+    /// Returns `(bestGatewaySNR, bestGatewayHexID, maxMeshDepth)`.
     /// `bestGatewaySNR` is nil when no direct probe data is available (passive-only cells use averageSNR).
     private static func computeCellQuality(
         points: [SignalSurveyPointDTO]
-    ) -> (bestGatewaySNR: Double?, maxMeshDepth: Int) {
+    ) -> (bestGatewaySNR: Double?, bestGatewayHexID: String?, maxMeshDepth: Int) {
         // Best SNR from direct 2-way active probe responses.
         let directProbePoints = points.filter { isDirectTwoWay($0) }
-        let bestSNR = directProbePoints.compactMap(\.snr).max()
+        let bestPoint = directProbePoints.max(by: { ($0.snr ?? -.infinity) < ($1.snr ?? -.infinity) })
+        let bestSNR = bestPoint?.snr
+        let bestHexID = bestPoint?.pathNodeHexIDs.last
 
         // Maximum mesh depth from trace responses.
         // hopCount is the number of relay hops in the return path:
@@ -1554,7 +1652,7 @@ final class SignalSurveyViewModel {
         let tracePoints = points.filter { $0.payloadType == .trace }
         let maxDepth = tracePoints.isEmpty ? 0 : (tracePoints.map(\.hopCount).max() ?? 0) + 1
 
-        return (bestSNR, maxDepth)
+        return (bestSNR, bestHexID, maxDepth)
     }
 
     /// Creates a GridCell from a bucket of points at a hex coordinate.
@@ -1723,7 +1821,7 @@ final class SignalSurveyViewModel {
         let heardOnly = relayNodes.filter { !hexIDMatches($0, in: directIDs) && !hexIDMatches($0, in: meshReachIDs) }
 
         // Best-gateway quality: cell color reflects strongest discovered repeater
-        let (bestGatewaySNR, maxMeshDepth) = computeCellQuality(points: points)
+        let (bestGatewaySNR, bestGatewayHexID, maxMeshDepth) = computeCellQuality(points: points)
         let displaySNR = bestGatewaySNR ?? avgSNR
         let activeCount = points.count(where: \.isActiveProbe)
 
@@ -1747,10 +1845,13 @@ final class SignalSurveyViewModel {
             heardOnlyRelayNodes: heardOnly,
             isDeadZone: false,
             bestGatewaySNR: bestGatewaySNR,
+            bestGatewayHexID: bestGatewayHexID,
             maxMeshDepth: maxMeshDepth,
             activePacketCount: activeCount,
             probesSent: probesSent,
-            averageTxSNR: avgTxSNR
+            averageTxSNR: avgTxSNR,
+            minTxSNR: txSnrValues.min(),
+            maxTxSNR: txSnrValues.max()
         )
     }
 
@@ -2072,10 +2173,13 @@ final class SignalSurveyViewModel {
                     heardOnlyRelayNodes: [],
                     isDeadZone: true,
                     bestGatewaySNR: nil,
+                    bestGatewayHexID: nil,
                     maxMeshDepth: 0,
                     activePacketCount: 0,
                     probesSent: probes,
-                    averageTxSNR: nil
+                    averageTxSNR: nil,
+                    minTxSNR: nil,
+                    maxTxSNR: nil
                 ))
                 changed = true
 
@@ -2136,6 +2240,7 @@ final class SignalSurveyViewModel {
 
     /// Computed cell stats filtered to the selected relay, or nil if no filter is active.
     var filteredCellStats: (avgSNR: Double?, avgRSSI: Double?, avgTxSNR: Double?, minSNR: Double?, maxSNR: Double?,
+                            minTxSNR: Double?, maxTxSNR: Double?,
                             packetCount: Int, quality: SNRQuality, latestTimestamp: Date?)? {
         guard selectedRelayFilter != nil else { return nil }
         let points = pointsForSelectedCell(relayFilter: selectedRelayFilter)
@@ -2153,6 +2258,8 @@ final class SignalSurveyViewModel {
             avgTxSNR: avgTxSNR,
             minSNR: snrValues.min(),
             maxSNR: snrValues.max(),
+            minTxSNR: txSnrValues.min(),
+            maxTxSNR: txSnrValues.max(),
             packetCount: points.count,
             quality: SNRQuality(snr: avgSNR),
             latestTimestamp: timestamps.last

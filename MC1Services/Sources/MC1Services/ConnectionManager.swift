@@ -237,6 +237,10 @@ public final class ConnectionManager {
     /// Use this for work that depends on up-to-date synced data (e.g. stale node cleanup).
     public var onDeviceSynced: (() async -> Void)?
 
+    /// Returns whether a signal survey is currently active.
+    /// Used during reconnection to skip orphan session cleanup that would close the active survey.
+    public var isSurveyActiveProvider: (() -> Bool)?
+
     /// Provider for app foreground/background state detection
     public var appStateProvider: AppStateProvider?
 
@@ -498,12 +502,14 @@ public final class ConnectionManager {
         context: String = "",
         forceFullSync: Bool = false
     ) async {
+        let skipOrphanCleanup = isSurveyActiveProvider?() ?? false
         do {
             try await withTimeout(.seconds(120), operationName: "performInitialSync") {
                 try await services.syncCoordinator.onConnectionEstablished(
                     deviceID: deviceID,
                     services: services,
-                    forceFullSync: forceFullSync
+                    forceFullSync: forceFullSync,
+                    skipSurveyOrphanCleanup: skipOrphanCleanup
                 )
             }
         } catch {

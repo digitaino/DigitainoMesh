@@ -272,7 +272,8 @@ public final class ServiceContainer {
     public func startEventMonitoring(
         deviceID: UUID,
         enableAutoFetch: Bool = true,
-        enableAdvertisementMonitoring: Bool = true
+        enableAdvertisementMonitoring: Bool = true,
+        skipSurveyOrphanCleanup: Bool = false
     ) async {
         guard !isMonitoringEvents else { return }
 
@@ -285,14 +286,14 @@ public final class ServiceContainer {
                     deviceID: deviceID,
                     localNodeName: device.nodeName
                 )
-                await surveyService.configure(deviceID: deviceID, localNodeName: device.nodeName)
+                await surveyService.configure(deviceID: deviceID, localNodeName: device.nodeName, skipOrphanCleanup: skipSurveyOrphanCleanup)
             } else {
                 logger.warning("Device not found for HeardRepeatsService configuration")
-                await surveyService.configure(deviceID: deviceID)
+                await surveyService.configure(deviceID: deviceID, skipOrphanCleanup: skipSurveyOrphanCleanup)
             }
         } catch {
             logger.warning("Failed to fetch device for HeardRepeatsService: \(error)")
-            await surveyService.configure(deviceID: deviceID)
+            await surveyService.configure(deviceID: deviceID, skipOrphanCleanup: skipSurveyOrphanCleanup)
         }
 
         // Start SurveyService event monitoring

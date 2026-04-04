@@ -46,5 +46,9 @@ struct MessageDisplayItem: Identifiable, Hashable, Sendable {
     // Search match highlight
     let isSearchMatch: Bool
 
+    // Duplicate message collapsing
+    let duplicateCount: Int        // 1 = no duplicates, >1 = collapsed group leader
+    let duplicateGroupIDs: [UUID]  // All message IDs in group (empty when count == 1)
+
     var id: UUID { messageID }
 }

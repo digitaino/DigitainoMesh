@@ -178,7 +178,7 @@ extension SyncCoordinator {
     ///   - deviceID: The connected device UUID
     ///   - services: The ServiceContainer with all services
     ///   - forceFullSync: When true, forces a full contact sync instead of incremental.
-    public func onConnectionEstablished(deviceID: UUID, services: ServiceContainer, forceFullSync: Bool = false) async throws {
+    public func onConnectionEstablished(deviceID: UUID, services: ServiceContainer, forceFullSync: Bool = false, skipSurveyOrphanCleanup: Bool = false) async throws {
         logger.info("Connection established for device \(deviceID)")
 
         // Prevent duplicate sync if already syncing (race condition during rapid auto-reconnect cycles)
@@ -212,7 +212,7 @@ extension SyncCoordinator {
 
             // 2. NOW start event monitoring (handlers are ready), but delay auto-fetch and advert monitoring until after sync
             logger.info("[Sync] Starting event monitoring for device \(deviceID.uuidString.prefix(8))")
-            await services.startEventMonitoring(deviceID: deviceID, enableAutoFetch: false)
+            await services.startEventMonitoring(deviceID: deviceID, enableAutoFetch: false, skipSurveyOrphanCleanup: skipSurveyOrphanCleanup)
 
             // 3. Export device private key for direct message decryption
             do {

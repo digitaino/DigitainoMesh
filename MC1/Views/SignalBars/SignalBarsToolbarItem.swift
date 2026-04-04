@@ -12,11 +12,15 @@ struct SignalBarsToolbarItem: View {
     @State private var lastRxTick: UInt = 0
     @State private var lastTxTick: UInt = 0
 
+    /// When true, always shows even if a survey is active (used in survey view's own toolbar).
+    var showDuringSurvey = false
+
     var body: some View {
         let service = appState.signalBarsService
         if appState.connectionState == .ready || appState.connectionState == .connected,
            let best = service.bestRepeater,
-           isEnabled {
+           isEnabled,
+           showDuringSurvey || !appState.isSurveyActive {
             Button { showingDetail = true } label: {
                 HStack(spacing: 4) {
                     // RX: ▼ tucked above shortest bar

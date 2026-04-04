@@ -17,6 +17,7 @@ extension ChatViewModel {
         // Clear preview state only when switching to a different conversation
         if currentChannel?.id != channel.id {
             clearPreviewState()
+            expandedDuplicateGroups.removeAll()
             newMessagesDividerMessageID = nil
             dividerComputed = false
         }

@@ -147,12 +147,12 @@ struct ChatConversationView: View {
         )
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                SignalBarsToolbarItem()
-            }
-            ToolbarItem(placement: .primaryAction) {
                 Button("Info", systemImage: "info.circle") {
                     showingInfo = true
                 }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                SignalBarsToolbarItem()
             }
         }
         // Info sheet — type-specific

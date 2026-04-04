@@ -211,6 +211,10 @@ final class ChatViewModel {
     /// Cached URL detection results to avoid re-running NSDataDetector on rebuilds
     var cachedURLs: [UUID: URL?] = [:]
 
+    /// Set of message IDs whose duplicate groups are currently expanded.
+    /// Keyed by the first message ID in each group.
+    var expandedDuplicateGroups: Set<UUID> = []
+
     /// Cached shared route detection results per message ID
     @ObservationIgnored var cachedSharedRoutes: [UUID: SharedRoute?] = [:]
 
@@ -381,6 +385,33 @@ final class ChatViewModel {
         }
 
         return DisplayFlags(showTimestamp: showTimestamp, showDirectionGap: showDirectionGap, showSenderName: showSenderName)
+    }
+
+    // MARK: - Duplicate Message Collapsing
+
+    /// Toggle expansion of a duplicate message group, then rebuild display items.
+    func toggleDuplicateGroupExpansion(groupLeaderID: UUID) {
+        if expandedDuplicateGroups.contains(groupLeaderID) {
+            expandedDuplicateGroups.remove(groupLeaderID)
+        } else {
+            expandedDuplicateGroups.insert(groupLeaderID)
+        }
+        buildDisplayItems()
+    }
+
+    /// Determines if two consecutive messages are duplicates (same sender, same text).
+    static func isDuplicateOfPrevious(message: MessageDTO, previous: MessageDTO) -> Bool {
+        guard message.text == previous.text else { return false }
+        guard message.direction == previous.direction else { return false }
+
+        // For channel messages: sender node name must match
+        if message.contactID == nil {
+            return message.senderNodeName == previous.senderNodeName
+                && message.senderNodeName != nil
+        }
+
+        // For DMs: direction match is sufficient (only two parties)
+        return true
     }
 }
 

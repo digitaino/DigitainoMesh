@@ -14,7 +14,6 @@ struct SignalSurveyView: View {
     @State private var showingSurveySetup = false
     @State private var showingInfoSheet = false
     @State private var showingBatchUpload = false
-    @State private var showingUploadPrompt = false
     @State private var batchSelectedSessions: Set<UUID> = []
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
@@ -28,13 +27,13 @@ struct SignalSurveyView: View {
     @State private var verificationError: String?
     @State private var showingContributorProfile = false
     @State private var showingCompletionSummary = false
-    @State private var pendingUploadPrompt = false
+    @State private var completionSessionID: UUID?
     @State private var showingHistoricalStats: SurveySessionDTO?
 
     var body: some View {
         ZStack {
             if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
-                ProgressView("Resuming survey…")
+                Color.clear // Placeholder while loading — avoids empty state flash
             } else if viewModel.allPoints.isEmpty && !viewModel.isActive && !viewModel.showCommunityOverlay {
                 emptyState
             } else {
@@ -131,18 +130,18 @@ struct SignalSurveyView: View {
             ContributorProfileAutoRenewView()
         }
         .fullScreenCover(isPresented: $showingCompletionSummary, onDismiss: {
-            if pendingUploadPrompt {
-                pendingUploadPrompt = false
-                showingUploadPrompt = true
-            }
             viewModel.surveyCompletionStats = nil
             viewModel.personalRecords = nil
+            completionSessionID = nil
         }) {
             if let stats = viewModel.surveyCompletionStats {
                 SurveyCompletionSheet(
                     stats: stats,
                     resolveRepeater: { viewModel.repeaterDisplayName(for: $0) },
-                    personalRecords: viewModel.personalRecords
+                    personalRecords: viewModel.personalRecords,
+                    sessionID: completionSessionID,
+                    dataStore: appState.offlineDataStore,
+                    deviceID: appState.currentDeviceID
                 )
             }
         }
@@ -189,16 +188,6 @@ struct SignalSurveyView: View {
             if let error = viewModel.errorMessage {
                 Text(error)
             }
-        }
-        .alert("Upload Survey Data?", isPresented: $showingUploadPrompt) {
-            Button("Upload Now") {
-                if viewModel.selectedSessionID != nil {
-                    showingExportSheet = true
-                }
-            }
-            Button("Later", role: .cancel) { }
-        } message: {
-            Text("Your survey data hasn't been uploaded to the community map yet. Would you like to upload it now?")
         }
         .onAppear {
             // Only set values that actually changed to avoid triggering didSet side effects
@@ -422,22 +411,41 @@ struct SignalSurveyView: View {
         if let cell = viewModel.selectedCell {
             let displayQuality = viewModel.filteredCellStats?.quality ?? cell.snrQuality
             let displayPacketCount = viewModel.filteredCellStats?.packetCount ?? cell.packetCount
+            let displayRxSNR = viewModel.filteredCellStats?.avgSNR ?? cell.averageSNR
+            // TX signal is only meaningful for directly connected repeaters.
+            // Mesh reach and heard-only repeaters relay through intermediaries,
+            // so their TX SNR doesn't represent the direct link to the user.
+            let isFilteredRepeaterDirect: Bool = {
+                guard let relay = viewModel.selectedRelayFilter else { return true }
+                let r = relay.uppercased()
+                return cell.connectedRelayNodes.contains { node in
+                    let u = node.uppercased()
+                    return u == r || u.hasPrefix(r) || r.hasPrefix(u)
+                }
+            }()
+            let displayTxSNR: Double? = {
+                guard isFilteredRepeaterDirect else { return nil }
+                // When a relay filter is active, use only the filtered TX data (don't
+                // fall back to the unfiltered cell average — that would mix repeaters).
+                if let filtered = viewModel.filteredCellStats {
+                    return filtered.avgTxSNR
+                }
+                return cell.averageTxSNR
+            }()
+            let displayTxQuality = SNRQuality(snr: displayTxSNR)
             VStack(alignment: .leading, spacing: 8) {
-                // Header row with dismiss button
-                HStack(spacing: 10) {
+                // Header: quality + packet count + dismiss
+                HStack(spacing: 8) {
                     if cell.isDeadZone {
                         Image(systemName: "antenna.radiowaves.left.and.right.slash")
                             .foregroundStyle(.secondary)
-                            .font(.title3)
-                    } else {
-                        Image(systemName: "cellularbars", variableValue: displayQuality.barLevel)
-                            .foregroundStyle(displayQuality.color)
-                            .font(.title3)
+                            .font(.subheadline)
                     }
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(cell.isDeadZone ? "No Response" : displayQuality.qualityLabel)
                             .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(cell.isDeadZone ? .secondary : displayQuality.color)
                         if cell.isDeadZone {
                             Text("Probe sent, no response")
                                 .font(.caption)
@@ -458,6 +466,8 @@ struct SignalSurveyView: View {
                             .font(.title3)
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -476,75 +486,88 @@ struct SignalSurveyView: View {
                             } label: {
                                 Text("Clear")
                                     .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
                         .foregroundStyle(Color.accentColor)
                     }
 
-                    // Signal stats row (use filtered stats when relay filter is active)
-                    HStack(spacing: 0) {
+                    // Two-column RX / TX signal section
+                    HStack(alignment: .top, spacing: 0) {
+                        signalColumn(
+                            label: "RX Signal",
+                            arrowName: "arrow.down",
+                            snr: displayRxSNR,
+                            quality: displayQuality,
+                            rssi: {
+                                // When relay filter is active, use only filtered RSSI
+                                if let src = viewModel.filteredCellStats { return src.avgRSSI }
+                                return cell.averageRSSI
+                            }(),
+                            snrRange: {
+                                // When relay filter is active, use only filtered RX range
+                                if let src = viewModel.filteredCellStats {
+                                    guard let lo = src.minSNR, let hi = src.maxSNR else { return nil }
+                                    return (lo, hi)
+                                }
+                                guard let lo = cell.minSNR, let hi = cell.maxSNR else { return nil }
+                                return (lo, hi)
+                            }()
+                        )
+
+                        Rectangle()
+                            .fill(.quaternary)
+                            .frame(width: 0.5)
+                            .padding(.vertical, 4)
+
+                        signalColumn(
+                            label: "TX Signal",
+                            arrowName: "arrow.up",
+                            snr: displayTxSNR,
+                            quality: displayTxQuality,
+                            rssi: nil,
+                            snrRange: {
+                                guard isFilteredRepeaterDirect else { return nil }
+                                // When relay filter is active, use only filtered TX range
+                                if let src = viewModel.filteredCellStats {
+                                    guard let lo = src.minTxSNR, let hi = src.maxTxSNR else { return nil }
+                                    return (lo, hi)
+                                }
+                                guard let lo = cell.minTxSNR, let hi = cell.maxTxSNR else { return nil }
+                                return (lo, hi)
+                            }()
+                        )
+                    }
+
+                    // Shared detail rows (not direction-specific)
+                    VStack(spacing: 3) {
                         if let filtered = viewModel.filteredCellStats {
-                            if let snr = filtered.avgSNR {
-                                cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
-                            }
-                            if let txSnr = filtered.avgTxSNR {
-                                cellStatColumn(label: "Avg TX SNR", value: String(format: "%.1f", txSnr), unit: "dB")
-                            }
-                            if let rssi = filtered.avgRSSI {
-                                cellStatColumn(label: "Avg RSSI", value: String(format: "%.0f", rssi), unit: "dBm")
-                            }
-                            if let minSNR = filtered.minSNR, let maxSNR = filtered.maxSNR {
-                                cellStatColumn(label: "SNR Range", value: String(format: "%.0f – %.0f", minSNR, maxSNR), unit: "dB")
-                            }
                             if let latest = filtered.latestTimestamp {
-                                lastHeardColumn(label: "Last Heard", date: latest, unit: "ago")
+                                lastHeardRow(label: "Last Heard", date: latest)
                             }
                         } else {
                             if let bestGW = cell.bestGatewaySNR {
-                                cellStatColumn(label: "Best Repeater", value: String(format: "%.1f", bestGW), unit: "dB")
-                            }
-                            if let snr = cell.averageSNR {
-                                cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
-                            }
-                            if let txSnr = cell.averageTxSNR {
-                                cellStatColumn(label: "Avg TX SNR", value: String(format: "%.1f", txSnr), unit: "dB")
-                            }
-                            if let rssi = cell.averageRSSI {
-                                cellStatColumn(label: "Avg RSSI", value: String(format: "%.0f", rssi), unit: "dBm")
-                            }
-                            if let minSNR = cell.minSNR, let maxSNR = cell.maxSNR {
-                                cellStatColumn(label: "SNR Range", value: String(format: "%.0f – %.0f", minSNR, maxSNR), unit: "dB")
+                                let hexLabel = cell.bestGatewayHexID.map { " (\($0))" } ?? ""
+                                detailRow(label: "Best Repeater", value: String(format: "%.1f dB", bestGW) + hexLabel)
                             }
                             if let latest = cell.latestTimestamp {
-                                lastHeardColumn(label: "Last Heard", date: latest, unit: "ago")
+                                lastHeardRow(label: "Last Heard", date: latest)
                             }
                             if cell.maxMeshDepth > 0 {
-                                cellStatColumn(label: "Mesh Reach", value: "\(cell.maxMeshDepth)", unit: cell.maxMeshDepth == 1 ? "hop" : "hops")
+                                detailRow(label: "Mesh Reach", value: "\(cell.maxMeshDepth) \(cell.maxMeshDepth == 1 ? "hop" : "hops")")
                             }
                         }
-                    }
 
-                    // Probe success rate (active responses vs probes sent)
-                    if let probes = cell.probesSent, probes > 0, cell.activePacketCount > 0 {
-                        let active = cell.activePacketCount
-                        // A single probe can generate multiple response packets (e.g.
-                        // discover + heard repeats from different repeaters), so active
-                        // can exceed probes. Cap both the ratio and the display count.
-                        let successCount = min(active, probes)
-                        let rate = Double(successCount) / Double(probes)
-                        let pct = Int(round(rate * 100))
-                        let rateColor: Color = pct >= 75 ? .green : pct >= 40 ? .yellow : .red
-                        HStack(spacing: 4) {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
-                                .font(.caption2)
-                                .foregroundStyle(rateColor)
-                            Text("Probe Success: \(pct)%")
-                                .font(.caption)
-                                .foregroundStyle(rateColor)
-                            Text("(\(successCount)/\(probes))")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                        // Probe success rate
+                        if let probes = cell.probesSent, probes > 0, cell.activePacketCount > 0 {
+                            let successCount = min(cell.activePacketCount, probes)
+                            let rate = Double(successCount) / Double(probes)
+                            let pct = Int(round(rate * 100))
+                            let rateColor: Color = pct >= 75 ? .green : pct >= 40 ? .yellow : .red
+                            detailRow(label: "Probe Success", value: "\(pct)% (\(successCount)/\(probes))", valueColor: rateColor)
                         }
                     }
 
@@ -563,7 +586,9 @@ struct SignalSurveyView: View {
                                 Image(systemName: "chevron.right")
                                     .font(.caption2)
                             }
+                            .padding(.vertical, 6)
                             .foregroundStyle(Color.accentColor)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -633,7 +658,10 @@ struct SignalSurveyView: View {
                                                             Image(systemName: "chevron.right")
                                                                 .font(.system(size: 8))
                                                         }
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 6)
                                                         .foregroundStyle(Color.accentColor)
+                                                        .contentShape(Rectangle())
                                                     }
                                                     .buttonStyle(.plain)
                                                 } else {
@@ -652,32 +680,94 @@ struct SignalSurveyView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+            .fixedSize(horizontal: false, vertical: true)
             .liquidGlass(in: .rect(cornerRadius: 16))
             .padding(.horizontal, 16)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
-    private func cellStatColumn(label: String, value: String, unit: String) -> some View {
-        VStack(spacing: 2) {
+    /// Signal column for the two-column RX/TX layout.
+    /// Horizontal: bars on left, stacked stats on right — fills width, saves height.
+    private func signalColumn(
+        label: String, arrowName: String,
+        snr: Double?, quality: SNRQuality,
+        rssi: Double?, snrRange: (min: Double, max: Double)?
+    ) -> some View {
+        HStack(spacing: 6) {
+            // Signal bars (or placeholder)
+            if quality != .unknown {
+                Image(systemName: "cellularbars", variableValue: quality.barLevel)
+                    .foregroundStyle(quality.color)
+                    .font(.system(size: 22))
+                    .overlay(alignment: .topLeading) {
+                        Image(systemName: arrowName)
+                            .font(.system(size: 5, weight: .black))
+                            .foregroundStyle(quality.color)
+                            .offset(x: -1, y: -1)
+                    }
+            } else {
+                Image(systemName: "cellularbars", variableValue: 0)
+                    .foregroundStyle(.quaternary)
+                    .font(.system(size: 22))
+            }
+
+            // Stacked stats
+            VStack(alignment: .leading, spacing: 1) {
+                // Label
+                Text(label)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                if quality != .unknown {
+                    // Quality + SNR on one line
+                    HStack(spacing: 3) {
+                        Text(quality.qualityLabel)
+                            .font(.system(.caption2, weight: .semibold))
+                            .foregroundStyle(quality.color)
+                        if let snr {
+                            Text(String(format: "%.1f", snr))
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    // RSSI
+                    if let rssi {
+                        Text(String(format: "RSSI %.0f dBm", rssi))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                    // SNR range
+                    if let range = snrRange {
+                        Text(String(format: "%.0f–%.0f dB", range.min, range.max))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                } else {
+                    Text("—")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func detailRow(label: String, value: String, valueColor: Color = .primary) -> some View {
+        HStack {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Spacer()
             Text(value)
-                .font(.system(.title3, design: .rounded, weight: .semibold))
-            if !unit.isEmpty {
-                Text(unit)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(valueColor)
         }
-        .frame(maxWidth: .infinity)
     }
 
-    /// "Last Heard" column that auto-refreshes every second via TimelineView.
-    private func lastHeardColumn(label: String, date: Date, unit: String) -> some View {
+    private func lastHeardRow(label: String, date: Date) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            cellStatColumn(label: label, value: relativeTimeString(from: date, now: context.date), unit: unit)
+            detailRow(label: label, value: relativeTimeString(from: date, now: context.date) + " ago")
         }
     }
 
@@ -707,7 +797,7 @@ struct SignalSurveyView: View {
             .foregroundStyle(.secondary)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     ForEach(hexIDs, id: \.self) { hexID in
                         Button {
                             if viewModel.selectedRelayFilter == hexID {
@@ -718,8 +808,8 @@ struct SignalSurveyView: View {
                         } label: {
                             Text(hexID)
                                 .font(.system(.caption, design: .monospaced))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
                                 .background(
                                     viewModel.selectedRelayFilter == hexID
                                         ? Color.accentColor.opacity(0.2)
@@ -733,6 +823,7 @@ struct SignalSurveyView: View {
                                         lineWidth: 1
                                     )
                                 )
+                                .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                     }
@@ -836,10 +927,11 @@ struct SignalSurveyView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.caption2)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
                         .background(.cyan.opacity(0.3), in: Capsule())
                         .foregroundStyle(.cyan)
+                        .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     Spacer()
@@ -850,132 +942,91 @@ struct SignalSurveyView: View {
 
             communityFilterBar
 
-            // Survey controls (left-aligned) — hidden in community-only mode
-            // (communityModeOverlay provides Start Survey in that state)
+            // Survey controls — single horizontal toolbar row
             if !viewModel.allPoints.isEmpty || viewModel.isActive {
-            VStack(alignment: .leading, spacing: 6) {
-                // Filter picker
-                if viewModel.livePointCount > 0 || viewModel.isActive {
-                    Picker("Filter", selection: $viewModel.surveyFilter) {
-                        ForEach(SignalSurveyViewModel.SurveyFilter.allCases, id: \.self) { filter in
-                            Text(filter.rawValue).tag(filter)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 220)
-                }
+            HStack(spacing: 8) {
+                // Start/Stop button
+                surveyToggleButton
 
-                // Probe controls
                 if viewModel.isActive {
-                    HStack(spacing: 6) {
-                        Button {
-                            probeEnabledPref.toggle()
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: viewModel.probeEnabled
-                                      ? "antenna.radiowaves.left.and.right"
-                                      : "antenna.radiowaves.left.and.right.slash")
-                                    .font(.caption)
-                                    .foregroundStyle(viewModel.probeEnabled ? .green : .secondary)
-                                Text(viewModel.probeEnabled
-                                     ? "Probing (\(viewModel.probeCount))"
-                                     : "Probe Off")
-                                    .font(.caption)
-                                    .foregroundStyle(viewModel.probeEnabled ? .green : .secondary)
+                    // Pause/Resume button
+                    Button {
+                        Task {
+                            guard let surveyService = appState.services?.surveyService else { return }
+                            if viewModel.isPaused {
+                                await viewModel.resumeSurvey(
+                                    surveyService: surveyService,
+                                    locationService: appState.locationService
+                                )
+                            } else {
+                                await viewModel.pauseSurvey(surveyService: surveyService)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .liquidGlass(in: .capsule)
                         }
-                        .buttonStyle(.plain)
-
-                        if viewModel.probeEnabled {
-                            Menu {
-                                ForEach(SignalSurveyViewModel.ProbeFrequency.allCases) { freq in
-                                    Button {
-                                        probeFrequencyPref = freq.rawValue
-                                    } label: {
-                                        HStack {
-                                            Text(freq.rawValue)
-                                            if viewModel.probeFrequency == freq {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "gauge.with.dots.needle.33percent")
-                                        .font(.caption)
-                                    Text(viewModel.probeFrequency.rawValue)
-                                        .font(.caption)
-                                }
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .liquidGlass(in: .capsule)
-                            }
-
-                            probeChannelMenu
-                        }
+                    } label: {
+                        Image(systemName: viewModel.isPaused ? "play.fill" : "pause.fill")
                     }
+                    .tint(viewModel.isPaused ? .green : .yellow)
+                    .modifier(GlassButtonStyleModifier())
                 }
 
-                if let errorMsg = viewModel.probeErrorMessage {
-                    Text(errorMsg)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .transition(.opacity)
-                        .task(id: viewModel.probeErrorHaptic) {
-                            try? await Task.sleep(for: .seconds(2))
-                            viewModel.probeErrorMessage = nil
-                        }
+                // Filter menu pill
+                if viewModel.livePointCount > 0 || viewModel.isActive {
+                    surveyFilterMenu
                 }
 
-                // Start/Stop + Manual Probe buttons
-                HStack(spacing: 10) {
-                    surveyToggleButton
+                if viewModel.isActive {
+                    Spacer(minLength: 0)
 
-                    if viewModel.isActive {
-                        Button {
-                            Task { await viewModel.sendManualProbe() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "wave.3.right")
-                                Text("Probe")
-                                    .fontWeight(.semibold)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .foregroundStyle(.white)
-                            .background(viewModel.canSendManualProbe ? Color.orange : Color.secondary)
-                            .clipShape(Capsule())
-                            .opacity(viewModel.canSendManualProbe ? 1.0 : 0.6)
+                    // Probe settings menu — combines toggle, frequency, channel
+                    probeSettingsMenu
+
+                    // Manual Probe button
+                    Button {
+                        Task { await viewModel.sendManualProbe() }
+                    } label: {
+                        Image(systemName: "wave.3.right")
                             .overlay {
-                                Capsule()
+                                Circle()
                                     .stroke(Color.orange, lineWidth: 2)
                                     .scaleEffect(probePulseScale)
                                     .opacity(probePulseScale > 1 ? 0 : 1)
                             }
+                    }
+                    .tint(.orange)
+                    .modifier(GlassButtonStyleModifier())
+                    .disabled(!viewModel.canSendManualProbe || viewModel.isPaused)
+                    .onChange(of: viewModel.probeVisualPulse) { _, _ in
+                        probePulseScale = 1.0
+                        withAnimation(.easeOut(duration: 0.6)) {
+                            probePulseScale = 2.5
                         }
-                        .disabled(!viewModel.canSendManualProbe)
-                        .onChange(of: viewModel.probeVisualPulse) { _, _ in
+                        Task {
+                            try? await Task.sleep(for: .seconds(0.65))
                             probePulseScale = 1.0
-                            withAnimation(.easeOut(duration: 0.6)) {
-                                probePulseScale = 2.5
-                            }
-                            Task {
-                                try? await Task.sleep(for: .seconds(0.65))
-                                probePulseScale = 1.0
-                            }
                         }
                     }
                 }
             }
             .sensoryFeedback(.impact(weight: .heavy, intensity: 1.0), trigger: viewModel.probeSuccessHaptic)
             .sensoryFeedback(.error, trigger: viewModel.probeErrorHaptic)
-            .padding(.leading, 16)
+            .padding(.horizontal, 16)
             .padding(.bottom, 8)
+            .overlay(alignment: .top) {
+                if let errorMsg = viewModel.probeErrorMessage {
+                    Text(errorMsg)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .liquidGlass(in: .capsule)
+                        .offset(y: -24)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .task(id: viewModel.probeErrorHaptic) {
+                            try? await Task.sleep(for: .seconds(2))
+                            viewModel.probeErrorMessage = nil
+                        }
+                }
+            }
             } // end survey controls if
         }
         .animation(.snappy(duration: 0.25), value: viewModel.selectedCell?.coordKey)
@@ -1139,6 +1190,8 @@ struct SignalSurveyView: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                             .font(.title3)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                 }
 
@@ -1191,14 +1244,15 @@ struct SignalSurveyView: View {
                                 } label: {
                                     Text(viewModel.repeaterDisplayName(for: hexID))
                                         .font(.caption2)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 7)
                                         .background(
                                             viewModel.communityRepeaterFilter == hexID
                                                 ? Color.cyan.opacity(0.35)
                                                 : Color.cyan.opacity(0.15),
                                             in: Capsule()
                                         )
+                                        .contentShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -1562,6 +1616,170 @@ struct SignalSurveyView: View {
         }
     }
 
+    // MARK: - Survey Filter Menu
+
+    private var surveyFilterMenu: some View {
+        Menu {
+            ForEach(SignalSurveyViewModel.SurveyFilter.allCases, id: \.self) { filter in
+                Button {
+                    viewModel.surveyFilter = filter
+                } label: {
+                    HStack {
+                        Text(filter.rawValue)
+                        if viewModel.surveyFilter == filter {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: filterIconName)
+                    .font(.caption)
+                Text(viewModel.surveyFilter.rawValue)
+                    .font(.caption)
+            }
+            .foregroundStyle(viewModel.surveyFilter == .all ? Color.secondary : Color.accentColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .liquidGlass(in: .capsule)
+        }
+    }
+
+    private var filterIconName: String {
+        switch viewModel.surveyFilter {
+        case .all: "line.3.horizontal.decrease.circle"
+        case .passiveOnly: "ear"
+        case .traceOnly: "antenna.radiowaves.left.and.right"
+        }
+    }
+
+    // MARK: - Probe Settings Menu (combined toggle + frequency + channel)
+
+    private var probeSettingsMenu: some View {
+        Menu {
+            // Probe toggle
+            Button {
+                probeEnabledPref.toggle()
+            } label: {
+                Label(
+                    viewModel.probeEnabled ? "Disable Probing" : "Enable Probing",
+                    systemImage: viewModel.probeEnabled
+                        ? "antenna.radiowaves.left.and.right.slash"
+                        : "antenna.radiowaves.left.and.right"
+                )
+            }
+
+            if viewModel.probeEnabled {
+                Divider()
+
+                // Frequency
+                Menu {
+                    ForEach(SignalSurveyViewModel.ProbeFrequency.allCases) { freq in
+                        Button {
+                            probeFrequencyPref = freq.rawValue
+                        } label: {
+                            HStack {
+                                Text(freq.rawValue)
+                                if viewModel.probeFrequency == freq {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Frequency: \(viewModel.probeFrequency.rawValue)", systemImage: "gauge.with.dots.needle.33percent")
+                }
+
+                // Channel (inline submenu)
+                Menu {
+                    if viewModel.availableProbeChannels.isEmpty {
+                        Button {
+                            guard let channelService = appState.services?.channelService,
+                                  let dataStore = appState.offlineDataStore,
+                                  let deviceID = appState.currentDeviceID else { return }
+                            Task {
+                                await viewModel.createSurveyChannel(
+                                    channelService: channelService,
+                                    dataStore: dataStore,
+                                    deviceID: deviceID,
+                                    maxChannels: appState.connectedDevice?.maxChannels ?? 8
+                                )
+                            }
+                        } label: {
+                            Label("Create Survey Channel", systemImage: "plus.circle")
+                        }
+                    } else {
+                        ForEach(viewModel.availableProbeChannels, id: \.id) { channel in
+                            Button {
+                                viewModel.selectedProbeChannel = channel
+                            } label: {
+                                HStack {
+                                    Text(channel.displayName)
+                                    if viewModel.selectedProbeChannel?.id == channel.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        Button {
+                            viewModel.selectedProbeChannel = nil
+                        } label: {
+                            HStack {
+                                Text("None")
+                                if viewModel.selectedProbeChannel == nil {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        Button {
+                            guard let channelService = appState.services?.channelService,
+                                  let dataStore = appState.offlineDataStore,
+                                  let deviceID = appState.currentDeviceID else { return }
+                            Task {
+                                await viewModel.createSurveyChannel(
+                                    channelService: channelService,
+                                    dataStore: dataStore,
+                                    deviceID: deviceID,
+                                    maxChannels: appState.connectedDevice?.maxChannels ?? 8
+                                )
+                            }
+                        } label: {
+                            Label("Create Survey Channel", systemImage: "plus.circle")
+                        }
+                    }
+                } label: {
+                    if let channel = viewModel.selectedProbeChannel {
+                        Label("Channel: \(channel.displayName)", systemImage: "bubble.left.and.bubble.right.fill")
+                    } else {
+                        Label("Channel: None", systemImage: "bubble.left.and.bubble.right")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: viewModel.probeEnabled
+                      ? "antenna.radiowaves.left.and.right"
+                      : "antenna.radiowaves.left.and.right.slash")
+                    .font(.caption)
+                if viewModel.probeEnabled {
+                    Text("\(viewModel.probeCount)")
+                        .font(.system(.caption, design: .monospaced))
+                }
+            }
+            .foregroundStyle(viewModel.probeEnabled ? .green : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .liquidGlass(in: .capsule)
+        }
+    }
+
     // MARK: - Probe Channel Menu
 
     private var probeChannelMenu: some View {
@@ -1675,36 +1893,31 @@ struct SignalSurveyView: View {
                             // Reload sessions so the saved stats appear in session list
                             await viewModel.loadSessions(dataStore: dataStore, deviceID: session.deviceID)
                         }
-                        pendingUploadPrompt = !wasLiveUpload
+                        // Pass session ID so the completion sheet can offer inline upload
+                        if !wasLiveUpload {
+                            completionSessionID = session.id
+                        }
                         showingCompletionSummary = true
-                    } else if !wasLiveUpload {
-                        showingUploadPrompt = true
                     }
                 }
             } else {
                 showingSurveySetup = true
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: viewModel.isActive
-                      ? "stop.fill"
-                      : isDisabled ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
-                Text(viewModel.isActive
-                     ? "Stop"
-                     : isDisabled ? "Connect to Start" : "Start Survey")
-                    .fontWeight(.semibold)
+            if viewModel.isActive {
+                Image(systemName: "stop.fill")
+            } else {
+                Label(
+                    isDisabled ? "Connect to Start" : "Start Survey",
+                    systemImage: isDisabled
+                        ? "antenna.radiowaves.left.and.right.slash"
+                        : "antenna.radiowaves.left.and.right"
+                )
+                .fontWeight(.semibold)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .foregroundStyle(.white)
-            .background(
-                viewModel.isActive
-                ? Color.red
-                : isDisabled ? Color.secondary : Color.accentColor
-            )
-            .clipShape(Capsule())
-            .opacity(isDisabled ? 0.6 : 1.0)
         }
+        .tint(viewModel.isActive ? .red : (isDisabled ? .secondary : .accentColor))
+        .modifier(GlassButtonStyleModifier())
         .disabled(isDisabled)
     }
 
@@ -1712,32 +1925,26 @@ struct SignalSurveyView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        // Sessions button — always visible when there are sessions
-        if !viewModel.sessions.isEmpty {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingSessionList = true
-                } label: {
-                    Label("Sessions", systemImage: "list.bullet")
-                }
-            }
-        }
-
-        // Upload button — visible when a session is loaded and not active
-        if !viewModel.sessions.isEmpty && !viewModel.isActive {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    batchSelectedSessions = Set(viewModel.sessions.map(\.id))
-                    showingBatchUpload = true
-                } label: {
-                    Label("Upload", systemImage: "icloud.and.arrow.up")
-                }
-            }
-        }
-
-        // Overflow menu for less common actions
         ToolbarItem(placement: .topBarTrailing) {
-            Menu {
+            HStack(spacing: 0) {
+                if !viewModel.sessions.isEmpty {
+                    Button {
+                        showingSessionList = true
+                    } label: {
+                        Label("Sessions", systemImage: "list.bullet")
+                    }
+                }
+
+                if !viewModel.sessions.isEmpty && !viewModel.isActive {
+                    Button {
+                        batchSelectedSessions = Set(viewModel.sessions.map(\.id))
+                        showingBatchUpload = true
+                    } label: {
+                        Label("Upload", systemImage: "icloud.and.arrow.up")
+                    }
+                }
+
+                Menu {
                 if viewModel.selectedSessionID != nil && !viewModel.isActive {
                     Button {
                         showingExportSheet = true
@@ -1791,6 +1998,11 @@ struct SignalSurveyView: View {
             } label: {
                 Label("More", systemImage: "ellipsis.circle")
             }
+            }
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            SignalBarsToolbarItem(showDuringSurvey: true)
         }
     }
 
@@ -2122,6 +2334,18 @@ struct SignalSurveyView: View {
     }
 }
 
+// MARK: - Glass Button Style (iOS 26+)
+
+/// Applies `.buttonStyle(.glass)` on iOS 26+ with a `.borderedProminent` fallback.
+private struct GlassButtonStyleModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.buttonStyle(.glass)
+        } else {
+            content.buttonStyle(.borderedProminent)
+        }
+    }
+}
 // MARK: - Batch Upload View
 
 /// Allows selecting multiple survey sessions for batch upload to the community map.

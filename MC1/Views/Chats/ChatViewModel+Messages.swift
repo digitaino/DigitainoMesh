@@ -265,6 +265,7 @@ extension ChatViewModel {
         // Clear preview state only when switching to a different conversation
         if currentContact?.id != contact.id {
             clearPreviewState()
+            expandedDuplicateGroups.removeAll()
             newMessagesDividerMessageID = nil
             dividerComputed = false
         }
@@ -362,44 +363,50 @@ extension ChatViewModel {
         messagesByID[message.id] = message
         totalFetchedCount += 1
 
-        // Build display item synchronously for immediate consistency
-        let flags = Self.computeDisplayFlags(for: message, previous: previous)
-        let sharedRoute: SharedRoute? = message.isOutgoing ? nil : SharedRouteParser.parse(message.text)
-        cachedSharedRoutes[message.id] = sharedRoute
-        // Detect hex path chains only when no formal shared route was found
-        let hexPath: HexPath? = (sharedRoute == nil && !message.isOutgoing) ? HexPathParser.detectInMessage(message.text) : nil
-        let newItem = MessageDisplayItem(
-            messageID: message.id,
-            date: message.date,
-            showTimestamp: flags.showTimestamp,
-            showDirectionGap: flags.showDirectionGap,
-            showSenderName: flags.showSenderName,
-            showNewMessagesDivider: false,
-            detectedURL: nil,  // URL detection deferred to avoid main thread blocking
-            isImageURL: false,
-            isOutgoing: message.isOutgoing,
-            status: message.status,
-            containsSelfMention: message.containsSelfMention,
-            mentionSeen: message.mentionSeen,
-            heardRepeats: message.heardRepeats,
-            retryAttempt: message.retryAttempt,
-            maxRetryAttempts: message.maxRetryAttempts,
-            reactionSummary: message.reactionSummary,
-            detectedSharedRoute: sharedRoute,
-            detectedHexPath: hexPath,
-            previewState: .idle,
-            loadedPreview: nil,
-            isSearchMatch: false
-        )
-        displayItems.append(newItem)
-        displayItemIndexByID[message.id] = displayItems.count - 1
+        // Check if this message extends a duplicate group with the previous message
+        if let previous, Self.isDuplicateOfPrevious(message: message, previous: previous) {
+            // Rebuild to recompute groups (the previous representative must update its count)
+            buildDisplayItems()
+        } else {
+            // Non-duplicate: fast O(1) append path
+            let flags = Self.computeDisplayFlags(for: message, previous: previous)
+            let sharedRoute: SharedRoute? = message.isOutgoing ? nil : SharedRouteParser.parse(message.text)
+            cachedSharedRoutes[message.id] = sharedRoute
+            let hexPath: HexPath? = (sharedRoute == nil && !message.isOutgoing) ? HexPathParser.detectInMessage(message.text) : nil
+            let newItem = MessageDisplayItem(
+                messageID: message.id,
+                date: message.date,
+                showTimestamp: flags.showTimestamp,
+                showDirectionGap: flags.showDirectionGap,
+                showSenderName: flags.showSenderName,
+                showNewMessagesDivider: false,
+                detectedURL: nil,
+                isImageURL: false,
+                isOutgoing: message.isOutgoing,
+                status: message.status,
+                containsSelfMention: message.containsSelfMention,
+                mentionSeen: message.mentionSeen,
+                heardRepeats: message.heardRepeats,
+                retryAttempt: message.retryAttempt,
+                maxRetryAttempts: message.maxRetryAttempts,
+                reactionSummary: message.reactionSummary,
+                detectedSharedRoute: sharedRoute,
+                detectedHexPath: hexPath,
+                previewState: .idle,
+                loadedPreview: nil,
+                isSearchMatch: false,
+                duplicateCount: 1,
+                duplicateGroupIDs: []
+            )
+            displayItems.append(newItem)
+            displayItemIndexByID[message.id] = displayItems.count - 1
 
-        // Async URL detection for this message only
-        // Capture messageID (not index) to handle concurrent buildDisplayItems() calls
-        let messageID = message.id
-        let text = message.text
-        Task {
-            await updateURLForDisplayItem(messageID: messageID, text: text)
+            // Async URL detection for this message only
+            let messageID = message.id
+            let text = message.text
+            Task {
+                await updateURLForDisplayItem(messageID: messageID, text: text)
+            }
         }
 
         // Add sender to channelSenders if new and update sender order (for channel messages)
@@ -441,7 +448,9 @@ extension ChatViewModel {
             detectedHexPath: item.detectedHexPath,
             previewState: previewStates[messageID] ?? .idle,
             loadedPreview: loadedPreviews[messageID],
-            isSearchMatch: item.isSearchMatch
+            isSearchMatch: item.isSearchMatch,
+            duplicateCount: item.duplicateCount,
+            duplicateGroupIDs: item.duplicateGroupIDs
         )
     }
 
@@ -561,6 +570,9 @@ extension ChatViewModel {
             // Re-run same-sender reordering across the page boundary to handle
             // clusters that were split between the existing and newly loaded pages
             messages = MessageDTO.reorderSameSenderClusters(messages)
+
+            // Clear expanded groups — group leader IDs may change after prepend
+            expandedDuplicateGroups.removeAll()
 
             // Update lookup dictionary
             for message in olderMessages {
@@ -824,9 +836,12 @@ extension ChatViewModel {
             // Remove from all local collections
             messages.removeAll { $0.id == message.id }
             messagesByID.removeValue(forKey: message.id)
-            displayItems.removeAll { $0.messageID == message.id }
-            // Rebuild index dictionary after removal (indices shift)
-            displayItemIndexByID = Dictionary(uniqueKeysWithValues: displayItems.enumerated().map { ($0.element.messageID, $0.offset) })
+
+            // Clean up expansion state if this was a group leader
+            expandedDuplicateGroups.remove(message.id)
+
+            // Rebuild display items to recompute duplicate groups
+            buildDisplayItems()
 
             // Clean up preview state for deleted message
             cleanupPreviewState(for: message.id)
@@ -861,73 +876,175 @@ extension ChatViewModel {
         await notificationService?.updateBadgeCount()
     }
 
+    // MARK: - Duplicate Grouping
+
+    /// A run of consecutive messages with identical text from the same sender.
+    struct DuplicateGroup {
+        let leaderID: UUID          // First message ID (stable key for expansion tracking)
+        let messages: [MessageDTO]
+        var count: Int { messages.count }
+        var allIDs: [UUID] { messages.map(\.id) }
+    }
+
+    /// Identifies runs of consecutive duplicate messages in the array.
+    private func identifyDuplicateGroups(in messages: [MessageDTO]) -> [DuplicateGroup] {
+        guard let first = messages.first else { return [] }
+
+        var groups: [DuplicateGroup] = []
+        var currentRun: [MessageDTO] = [first]
+
+        for i in 1..<messages.count {
+            let message = messages[i]
+            let prev = messages[i - 1]
+
+            if Self.isDuplicateOfPrevious(message: message, previous: prev) {
+                currentRun.append(message)
+            } else {
+                groups.append(DuplicateGroup(leaderID: currentRun[0].id, messages: currentRun))
+                currentRun = [message]
+            }
+        }
+        groups.append(DuplicateGroup(leaderID: currentRun[0].id, messages: currentRun))
+
+        return groups
+    }
+
     // MARK: - Display Items
 
+    /// Build a single display item from a message with pre-computed flags.
+    private func buildSingleDisplayItem(
+        message: MessageDTO,
+        flags: ChatViewModel.DisplayFlags,
+        duplicateCount: Int,
+        duplicateGroupIDs: [UUID],
+        uncachedMessageIDs: inout [(UUID, String)]
+    ) -> MessageDisplayItem {
+        // Use cached URL if available, otherwise nil (async detection below)
+        let url: URL?
+        if let cached = cachedURLs[message.id] {
+            url = cached
+        } else if previewStates[message.id] != nil || loadedPreviews[message.id] != nil {
+            url = nil
+        } else {
+            url = nil
+            uncachedMessageIDs.append((message.id, message.text))
+        }
+
+        // Shared route detection (synchronous regex, cached per message ID)
+        let sharedRoute: SharedRoute?
+        if let cached = cachedSharedRoutes[message.id] {
+            sharedRoute = cached
+        } else if !message.isOutgoing {
+            let parsed = SharedRouteParser.parse(message.text)
+            cachedSharedRoutes[message.id] = parsed
+            sharedRoute = parsed
+        } else {
+            cachedSharedRoutes[message.id] = nil as SharedRoute?
+            sharedRoute = nil
+        }
+
+        // Detect hex path chains only when no formal shared route was found
+        let hexPath: HexPath? = (sharedRoute == nil && !message.isOutgoing) ? HexPathParser.detectInMessage(message.text) : nil
+
+        return MessageDisplayItem(
+            messageID: message.id,
+            date: message.date,
+            showTimestamp: flags.showTimestamp,
+            showDirectionGap: flags.showDirectionGap,
+            showSenderName: flags.showSenderName,
+            showNewMessagesDivider: message.id == newMessagesDividerMessageID,
+            detectedURL: url,
+            isImageURL: url.map { ImageURLDetector.isImageURL($0) } ?? false,
+            isOutgoing: message.isOutgoing,
+            status: message.status,
+            containsSelfMention: message.containsSelfMention,
+            mentionSeen: message.mentionSeen,
+            heardRepeats: message.heardRepeats,
+            retryAttempt: message.retryAttempt,
+            maxRetryAttempts: message.maxRetryAttempts,
+            reactionSummary: message.reactionSummary,
+            detectedSharedRoute: sharedRoute,
+            detectedHexPath: hexPath,
+            previewState: previewStates[message.id] ?? .idle,
+            loadedPreview: loadedPreviews[message.id],
+            isSearchMatch: message.id == conversationSearch.currentMatchID,
+            duplicateCount: duplicateCount,
+            duplicateGroupIDs: duplicateGroupIDs
+        )
+    }
+
     /// Build display items with pre-computed properties.
-    /// Uses cached URL results for previously processed messages and defers
-    /// async detection for new messages to avoid blocking the main actor.
+    /// Consecutive duplicate messages from the same sender are collapsed into a
+    /// single representative display item unless the group is explicitly expanded.
     func buildDisplayItems() {
         messagesByID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
 
-        var uncachedMessageIDs: [(UUID, String)] = []
+        // Phase 1: Identify duplicate groups
+        let groups = identifyDuplicateGroups(in: messages)
 
-        displayItems = messages.enumerated().map { index, message in
-            // Compute all display flags in single pass to avoid redundant array lookups
-            let previous: MessageDTO? = index > 0 ? messages[index - 1] : nil
-            let flags = Self.computeDisplayFlags(for: message, previous: previous)
-
-            // Use cached URL if available, otherwise nil (async detection below)
-            let url: URL?
-            if let cached = cachedURLs[message.id] {
-                url = cached
-            } else if previewStates[message.id] != nil || loadedPreviews[message.id] != nil {
-                // Message already had a preview fetched — URL was already detected
-                url = nil
-            } else {
-                url = nil
-                uncachedMessageIDs.append((message.id, message.text))
+        // Phase 2: Auto-expand groups containing the new-messages divider or search match
+        for group in groups where group.count > 1 {
+            if let dividerID = newMessagesDividerMessageID, group.allIDs.contains(dividerID) {
+                expandedDuplicateGroups.insert(group.leaderID)
             }
-
-            // Shared route detection (synchronous regex, cached per message ID)
-            let sharedRoute: SharedRoute?
-            if let cached = cachedSharedRoutes[message.id] {
-                sharedRoute = cached
-            } else if !message.isOutgoing {
-                let parsed = SharedRouteParser.parse(message.text)
-                cachedSharedRoutes[message.id] = parsed
-                sharedRoute = parsed
-            } else {
-                cachedSharedRoutes[message.id] = nil as SharedRoute?
-                sharedRoute = nil
+            if let matchID = conversationSearch.currentMatchID, group.allIDs.contains(matchID) {
+                expandedDuplicateGroups.insert(group.leaderID)
             }
-
-            // Detect hex path chains only when no formal shared route was found
-            let hexPath: HexPath? = (sharedRoute == nil && !message.isOutgoing) ? HexPathParser.detectInMessage(message.text) : nil
-
-            return MessageDisplayItem(
-                messageID: message.id,
-                date: message.date,
-                showTimestamp: flags.showTimestamp,
-                showDirectionGap: flags.showDirectionGap,
-                showSenderName: flags.showSenderName,
-                showNewMessagesDivider: message.id == newMessagesDividerMessageID,
-                detectedURL: url,
-                isImageURL: url.map { ImageURLDetector.isImageURL($0) } ?? false,
-                isOutgoing: message.isOutgoing,
-                status: message.status,
-                containsSelfMention: message.containsSelfMention,
-                mentionSeen: message.mentionSeen,
-                heardRepeats: message.heardRepeats,
-                retryAttempt: message.retryAttempt,
-                maxRetryAttempts: message.maxRetryAttempts,
-                reactionSummary: message.reactionSummary,
-                detectedSharedRoute: sharedRoute,
-                detectedHexPath: hexPath,
-                previewState: previewStates[message.id] ?? .idle,
-                loadedPreview: loadedPreviews[message.id],
-                isSearchMatch: message.id == conversationSearch.currentMatchID
-            )
         }
+
+        // Phase 3: Build display items respecting expansion state
+        var items: [MessageDisplayItem] = []
+        var uncachedMessageIDs: [(UUID, String)] = []
+        var previousMessage: MessageDTO?
+
+        for group in groups {
+            let isExpanded = expandedDuplicateGroups.contains(group.leaderID)
+
+            if group.count == 1 {
+                // Single message — no grouping needed
+                let message = group.messages[0]
+                let flags = Self.computeDisplayFlags(for: message, previous: previousMessage)
+                let item = buildSingleDisplayItem(
+                    message: message,
+                    flags: flags,
+                    duplicateCount: 1,
+                    duplicateGroupIDs: [],
+                    uncachedMessageIDs: &uncachedMessageIDs
+                )
+                items.append(item)
+                previousMessage = message
+            } else if isExpanded {
+                // Expanded group — emit all messages, leader gets group info
+                let groupIDs = group.allIDs
+                for (i, message) in group.messages.enumerated() {
+                    let flags = Self.computeDisplayFlags(for: message, previous: previousMessage)
+                    let item = buildSingleDisplayItem(
+                        message: message,
+                        flags: flags,
+                        duplicateCount: i == 0 ? group.count : 1,
+                        duplicateGroupIDs: i == 0 ? groupIDs : [],
+                        uncachedMessageIDs: &uncachedMessageIDs
+                    )
+                    items.append(item)
+                    previousMessage = message
+                }
+            } else {
+                // Collapsed group — emit only the last (newest) message as representative
+                let representative = group.messages.last!
+                let flags = Self.computeDisplayFlags(for: representative, previous: previousMessage)
+                let item = buildSingleDisplayItem(
+                    message: representative,
+                    flags: flags,
+                    duplicateCount: group.count,
+                    duplicateGroupIDs: group.allIDs,
+                    uncachedMessageIDs: &uncachedMessageIDs
+                )
+                items.append(item)
+                previousMessage = representative
+            }
+        }
+
+        displayItems = items
 
         // Build O(1) index lookup
         displayItemIndexByID = Dictionary(uniqueKeysWithValues: displayItems.enumerated().map { ($0.element.messageID, $0.offset) })

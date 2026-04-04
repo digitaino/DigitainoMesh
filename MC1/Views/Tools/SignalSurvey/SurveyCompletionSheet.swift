@@ -1,13 +1,24 @@
+import MC1Services
 import SwiftUI
 
 /// Summary sheet shown after stopping a survey session, displaying
 /// session stats, coverage breakdown, repeater info, and community map impact.
+/// When upload parameters are provided, includes an inline "Upload to Community"
+/// button so the user can upload in one tap without extra screens.
 struct SurveyCompletionSheet: View {
     let stats: SignalSurveyViewModel.SurveyCompletionStats
     let resolveRepeater: (String) -> String
     var personalRecords: SignalSurveyViewModel.PersonalRecords?
 
+    // Optional upload parameters — when provided, shows inline upload button
+    var sessionID: UUID?
+    var dataStore: PersistenceStore?
+    var deviceID: UUID?
+
     @Environment(\.dismiss) private var dismiss
+    @State private var isUploading = false
+    @State private var uploadResult: String?
+    @State private var uploadError: String?
 
     var body: some View {
         NavigationStack {
@@ -20,6 +31,9 @@ struct SurveyCompletionSheet: View {
                     }
                     if let impact = stats.communityImpact {
                         communityImpactSection(impact)
+                    }
+                    if sessionID != nil, dataStore != nil {
+                        uploadSection
                     }
                 }
                 .padding()
@@ -90,6 +104,111 @@ struct SurveyCompletionSheet: View {
             if impact.newCells == 0, let age = impact.oldestUpdatedAge {
                 statRow(label: "Oldest Cell Updated", value: formatAge(age))
             }
+        }
+    }
+
+    // MARK: - Upload Section
+
+    private var uploadSection: some View {
+        infoSection(icon: "square.and.arrow.up", iconColor: .blue, title: "Community Upload") {
+            if isUploading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Uploading...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let uploadResult {
+                Label(uploadResult, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.subheadline)
+            } else if let uploadError {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(uploadError, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                    Button("Retry") {
+                        Task { await uploadToCommunity() }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Share anonymized coverage data with the community map.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        Task { await uploadToCommunity() }
+                    } label: {
+                        Label("Upload to Community Map", systemImage: "globe")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                }
+            }
+        }
+    }
+
+    // MARK: - Upload Logic
+
+    private func uploadToCommunity() async {
+        guard let sessionID, let dataStore else { return }
+
+        isUploading = true
+        uploadError = nil
+        uploadResult = nil
+        defer { isUploading = false }
+
+        do {
+            // Fetch repeater contacts for resolution (best-effort)
+            var repeaterContacts: [ContactDTO] = []
+            if let deviceID {
+                let allContacts = (try? await dataStore.fetchContacts(deviceID: deviceID)) ?? []
+                repeaterContacts = allContacts.filter { $0.type == .repeater }
+            }
+
+            // Load stored probe data for dead zone reconstruction
+            var probesSentPerCell: [String: Int] = [:]
+            var deadZoneHexCoords: [(q: Int, r: Int)] = []
+            if let deviceID {
+                let sessions = try await dataStore.fetchSurveySessions(deviceID: deviceID)
+                if let session = sessions.first(where: { $0.id == sessionID }),
+                   let stored = session.probesSentPerCell, !stored.isEmpty {
+                    probesSentPerCell = stored
+
+                    // Derive dead zone coords: cells with probes sent but no survey point data
+                    let pointCoords = try await dataStore.fetchSurveyPointCoordinates(sessionID: sessionID)
+                    let dataCellKeys = Set(pointCoords.map { coord in
+                        let hex = HexGrid.axialFromLatLon(
+                            latitude: coord.latitude,
+                            longitude: coord.longitude,
+                            referenceLatitude: HexGrid.fixedReferenceLatitude(for: coord.latitude)
+                        )
+                        return hex.key
+                    })
+                    for (key, probes) in stored where probes > 0 && !dataCellKeys.contains(key) {
+                        let parts = key.split(separator: "_")
+                        if parts.count == 2, let q = Int(parts[0]), let r = Int(parts[1]) {
+                            deadZoneHexCoords.append((q: q, r: r))
+                        }
+                    }
+                }
+            }
+
+            let service = SurveyUploadService()
+            let response = try await service.upload(
+                sessionID: sessionID,
+                dataStore: dataStore,
+                repeaterContacts: repeaterContacts,
+                probesSentPerCell: probesSentPerCell,
+                deadZoneHexCoords: deadZoneHexCoords
+            )
+            uploadResult = "\(response.accepted) cells uploaded"
+        } catch {
+            uploadError = error.localizedDescription
         }
     }
 

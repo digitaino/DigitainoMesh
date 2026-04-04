@@ -1,5 +1,21 @@
 Beta Changes -- v0.10.1 (Build 16)
 
+Signal Bars Service
+
+New live repeater signal monitoring system. A round-robin ping engine continuously measures RX signal quality (how well you hear each repeater), TX signal quality (how well each repeater hears you), and round-trip time (RTT) across all reachable repeaters. Timing adapts automatically based on how many repeaters are active. Results appear in a compact firmware-style popover — tap the signal bars icon in any toolbar to see all repeaters ranked by signal strength with RX/TX bars, RTT, and age. The best repeater's signal level is shown as a persistent toolbar indicator. The survey floating pill also shows dual RX/TX bars from the service.
+
+iMessage-Style Swipe Timestamps
+
+Swipe horizontally on chat messages to reveal per-message timestamps, matching iMessage behavior. The timestamps track smoothly with the swipe gesture and update on scroll. Works across all conversation types (channels and DMs).
+
+Two-Column RX/TX Cell Detail Card
+
+The signal survey cell detail card now shows RX and TX data in two side-by-side columns instead of a single row. Each column displays signal bars, quality label, average SNR, and direction-specific detail rows (RSSI under RX, SNR range under each). Shared stats like Last Heard, Best Repeater, Mesh Reach, and Probe Success appear below the columns. Makes it much easier to compare incoming vs outgoing signal quality at a glance.
+
+Streamlined Survey Completion Flow
+
+Stopping a survey now shows a single completion summary sheet with session stats, coverage breakdown, repeater info, personal records, and an inline "Upload to Community Map" button. No more separate export/upload screens — everything is in one place. The summary also shows community map impact (new cells, updated cells) when data was uploaded during the session via live upload.
+
 Survey Completion Stats
 
 Survey sessions now save completion stats when you stop recording. The completion sheet shows duration, packet counts, cell breakdown (connected/mesh reach/heard only/dead zone), unique repeaters, best coverage repeater, and best connected repeater. Stats are persisted to the database and can be viewed later from the session list — tap the chart icon on any session row to see its saved stats.
@@ -8,13 +24,33 @@ Personal Records
 
 The completion sheet highlights personal bests with a trophy badge. Records are tracked for longest duration, most packets, most cells, most connected cells, and most unique repeaters. Your first survey sets the baseline; subsequent sessions show badges only for improved metrics.
 
-Survey Packet to Chat Navigation
+Lifetime Stats Dashboard
 
-In the survey cell packet list, text message and channel message packets now show a "View in Chat" button. Tap it to jump directly to that message in its conversation (channel or DM), with the message highlighted. Uses the existing scroll-to-message infrastructure with a highlight flash.
+The survey session list now shows a summary header with lifetime totals across all sessions — total sessions, total duration, total packets, total cells, and unique repeaters.
 
-Chat to Survey Map Navigation
+TX SNR Tracking in Survey
 
-Long-press a message in any conversation and tap "View on Survey Map" to navigate to the Signal Survey tab and center on the hex cell where that message was captured during a survey. The correct session is loaded automatically and the cell is selected. Only works for messages that were recorded during a survey session.
+Survey points now capture TX SNR (how well the repeater hears you) from discover responses and trace responses. TX data is included in both JSON exports and community map uploads for richer bidirectional signal analysis.
+
+Survey Point Deduplication Fix
+
+Fixed a bug where heard-repeat confirmations from different repeaters sharing the same packet hash were deduplicated into a single survey point. The dedup key now includes the last-path-node hex ID so each repeater's confirmation is recorded separately, giving accurate per-repeater signal data.
+
+TX Signal Filtering Fix
+
+Fixed a bug where selecting a 2-way repeater in the cell detail card showed unfiltered TX signal data instead of that repeater's specific TX data. The issue was that Optional chaining fell through to the cell-wide average when the filtered points had no TX data. RX RSSI and RX SNR range had the same issue and were also fixed.
+
+Improved Tap Targets
+
+Increased touch targets across the survey cell detail card to meet Apple's 44pt HIG minimum. Affected elements: repeater chips, close buttons, Clear filter button, View Packets button, sender name buttons, community repeater chips, and community filter badge. All now use contentShape modifiers for expanded hit areas.
+
+Updated How It Works Guide
+
+The survey info sheet has been rewritten with 10 sections covering radio asymmetry, passive vs active surveys, probe settings (private channel selection, frequency presets with distance triggers), cell detail card usage (repeater chip filtering, RX/TX signal columns), reading the map (color legend, visualization modes), community map (contributing data, live upload, batch upload), sessions & history (pause/resume, personal records, export), and updated tips.
+
+Survey UX Improvements
+
+Full-row tap targets for empty state actions (Past Sessions, etc.) instead of small text buttons. Custom back button returns to the survey dashboard instead of jumping to the Tools tab. Survey session list shows cached point/cell counts for fast loading without fetching all survey points.
 
 Contact Sync Crash Fix
 
@@ -23,6 +59,10 @@ Fixed a crash (EXC_BAD_ACCESS) that occurred during initial contact sync on devi
 TipKit Prompt for Repeater Location Sharing
 
 A TipKit prompt now encourages users to enable background repeater location sharing, appearing contextually when relevant.
+
+Heard Repeats Share Fix
+
+Fixed a bug where sharing heard repeats from a sent message showed a blank sheet because the share panel was presented as a nested sheet (sheet inside sheet). Now uses fullScreenCover instead.
 
 ---
 

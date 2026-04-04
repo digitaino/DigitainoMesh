@@ -235,7 +235,12 @@ struct ChatConversationMessagesContent: View {
                     detectedSharedRoute: item.detectedSharedRoute,
                     detectedHexPath: item.detectedHexPath,
                     isSearchMatch: item.isSearchMatch,
-                    isHighlighted: item.id == highlightedMessageID
+                    isHighlighted: item.id == highlightedMessageID,
+                    duplicateCount: item.duplicateCount,
+                    isDuplicateGroupExpanded: item.duplicateCount > 1 && viewModel.expandedDuplicateGroups.contains(item.duplicateGroupIDs.first ?? item.messageID),
+                    onToggleDuplicateGroup: item.duplicateCount > 1 ? {
+                        viewModel.toggleDuplicateGroupExpansion(groupLeaderID: item.duplicateGroupIDs.first ?? item.messageID)
+                    } : nil
                 ),
                 callbacks: MessageBubbleCallbacks(
                     onRetry: { onRetryMessage(message) },

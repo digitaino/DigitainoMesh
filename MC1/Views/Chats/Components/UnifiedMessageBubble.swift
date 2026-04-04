@@ -125,6 +125,15 @@ struct UnifiedMessageBubble: View {
                             onRetry: callbacks.onRetry
                         )
                     }
+
+                    // Duplicate count badge (for collapsed groups or expanded group leader)
+                    if displayState.duplicateCount > 1 {
+                        DuplicateCountBadge(
+                            count: displayState.duplicateCount,
+                            isExpanded: displayState.isDuplicateGroupExpanded,
+                            onTap: { displayState.onToggleDuplicateGroup?() }
+                        )
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(accessibilityMessageLabel)

@@ -75,10 +75,7 @@ struct ContactsSidebarContent: View {
             }
 
             ToolbarItem(placement: .topBarTrailing) {
-                SignalBarsToolbarItem()
-            }
-
-            ToolbarItem(placement: .automatic) {
+                HStack(spacing: 0) {
                 Menu {
                     ForEach(NodeSortOrder.allCases, id: \.self) { order in
                         Button {
@@ -94,9 +91,6 @@ struct ContactsSidebarContent: View {
                 } label: {
                     Label(L10n.Contacts.Contacts.List.sort, systemImage: "arrow.up.arrow.down")
                 }
-            }
-
-            ToolbarItem(placement: .automatic) {
                 Menu {
                     NavigationLink {
                         BlockedContactsView()
@@ -162,6 +156,10 @@ struct ContactsSidebarContent: View {
                 } label: {
                     Label(L10n.Contacts.Contacts.List.options, systemImage: "ellipsis.circle")
                 }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                SignalBarsToolbarItem()
             }
         }
         .refreshable {

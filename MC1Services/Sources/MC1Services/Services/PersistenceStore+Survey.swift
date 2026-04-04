@@ -26,6 +26,16 @@ extension PersistenceStore {
         try modelContext.save()
     }
 
+    /// Checks whether a survey session exists and is still open (no endedAt set).
+    public func surveySessionIsOpen(id: UUID) -> Bool {
+        let targetID = id
+        var descriptor = FetchDescriptor<SurveySession>(
+            predicate: #Predicate { $0.id == targetID && $0.endedAt == nil }
+        )
+        descriptor.fetchLimit = 1
+        return (try? modelContext.fetch(descriptor).first) != nil
+    }
+
     /// Saves probe-sent-per-cell data for a session (JSON-encoded `[String: Int]`).
     /// This enables reconstructing dead zone cells when loading old sessions.
     public func saveProbesSentPerCell(sessionID: UUID, probesSentPerCell: [String: Int]) throws {

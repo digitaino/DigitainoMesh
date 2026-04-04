@@ -12,9 +12,12 @@ struct SurveyInfoSheet: View {
                     asymmetrySection
                     passiveSurveySection
                     activeSurveySection
-                    hopCountSection
+                    probeSettingsSection
+                    cellDetailSection
+                    signalColumnsSection
                     readingTheMapSection
                     communitySection
+                    sessionManagementSection
                     tipsSection
                 }
                 .padding()
@@ -79,25 +82,104 @@ struct SurveyInfoSheet: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 8) {
-                probeStep(number: 1, text: "Channel message — sends a message on your selected channel. A heard-repeat response proves direct 2-way connectivity.")
+                probeStep(number: 1, text: "Channel message — sends a message on your selected private channel. A heard-repeat response from a repeater proves direct 2-way connectivity.")
                 probeStep(number: 2, text: "Deep Scan (optional) — also sends discover and flood trace requests to map gateway SNR and mesh depth beyond direct reach.")
             }
 
-            Text("Probe frequency controls how often probes are sent based on distance traveled. Choose Driving, Dense, Normal, or Sparse to match your speed.")
+            Text("Channel messages provide the primary proof of 2-way connectivity. Deep Scan adds extra data about multi-hop mesh paths and remote repeater signal quality, but uses more airtime.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private var hopCountSection: some View {
+    private var probeSettingsSection: some View {
         infoSection(
-            icon: "point.3.connected.trianglepath.dotted",
-            iconColor: .cyan,
-            title: "Understanding Hop Count"
+            icon: "wave.3.right",
+            iconColor: .orange,
+            title: "Probe Settings"
         ) {
-            hopRow(hops: "1 hop", description: "Direct bidirectional link — the repeater heard you and responded directly. This is the strongest confirmation of connectivity.")
-            hopRow(hops: "2+ hops", description: "Your probe reached the first repeater, which relayed it deeper into the mesh. You can see downstream repeaters, but they may not hear you directly.")
-            hopRow(hops: "0-hop relay", description: "The repeater listed at hop 0 is the one that forwarded the response to your device — your direct radio neighbor.")
+            Text("Control how and when probes are sent during an active survey.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                settingRow(label: "Private Channel", description: "Select or create a dedicated channel for probe messages. Avoids cluttering public conversations.")
+                settingRow(label: "Probe Frequency", description: "Distance-based trigger for automatic probes. Faster presets send probes more often.")
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Frequency Presets")
+                    .font(.caption.weight(.semibold))
+                frequencyRow(name: "Driving", description: "~15m trigger — best for high-speed travel")
+                frequencyRow(name: "Dense", description: "~25m trigger — walking in urban areas")
+                frequencyRow(name: "Normal", description: "~50m trigger — general walking pace")
+                frequencyRow(name: "Sparse", description: "~100m trigger — hiking or slow exploration")
+            }
+
+            Text("You can also send a manual probe at any time by tapping the wave icon in the toolbar.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var cellDetailSection: some View {
+        infoSection(
+            icon: "square.on.square",
+            iconColor: .purple,
+            title: "Cell Detail Card"
+        ) {
+            Text("Tap any hex cell on the map to see detailed stats. The card shows signal quality, packet counts, and repeater connectivity.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                mapLegendRow(label: "Connected (2-way)", color: .green, icon: "arrow.left.arrow.right",
+                             description: "Repeaters confirmed via direct heard-repeat or discover response")
+                mapLegendRow(label: "Mesh Reach", color: .cyan, icon: "point.3.connected.trianglepath.dotted",
+                             description: "Repeaters reached via multi-hop relay — not direct 2-way")
+                mapLegendRow(label: "Heard (1-way)", color: .secondary, icon: "ear",
+                             description: "Repeaters detected passively — reception only")
+            }
+
+            Text("Tap a repeater chip to filter all stats to that repeater. Both RX and TX signal columns update to show only data for the selected repeater.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            bulletPoint("View individual packets with timestamps and signal data")
+            bulletPoint("Probe success rate shows what percentage of probes got a response")
+        }
+    }
+
+    private var signalColumnsSection: some View {
+        infoSection(
+            icon: "cellularbars",
+            iconColor: .green,
+            title: "RX & TX Signal"
+        ) {
+            Text("The cell detail card shows two signal columns side by side.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                signalExplainer(
+                    direction: "RX Signal",
+                    arrow: "arrow.down",
+                    description: "How well you hear the repeater. Includes SNR (dB), RSSI (dBm), and SNR range. Available from all packet types."
+                )
+                signalExplainer(
+                    direction: "TX Signal",
+                    arrow: "arrow.up",
+                    description: "How well the repeater hears you. Only available from discover responses and heard-repeat confirmations. Requires active probing."
+                )
+            }
+
+            Text("TX data may appear shortly after RX data because it depends on the repeater processing your probe and sending a response back.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("When a non-direct repeater (mesh reach or heard-only) is selected, the TX column shows \"—\" because TX data only applies to direct 2-way links.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -107,20 +189,24 @@ struct SurveyInfoSheet: View {
             iconColor: .blue,
             title: "Reading the Map"
         ) {
-            VStack(alignment: .leading, spacing: 6) {
-                mapLegendRow(label: "Connected (2-way)", color: .green, icon: "arrow.left.arrow.right",
-                             description: "Repeaters confirmed via direct probe response — strongest proof of connectivity")
-                mapLegendRow(label: "Mesh Reach", color: .cyan, icon: "point.3.connected.trianglepath.dotted",
-                             description: "Repeaters reached via multi-hop relay — not direct 2-way")
-                mapLegendRow(label: "Heard (1-way)", color: .secondary, icon: "ear",
-                             description: "Repeaters detected passively — reception only, no TX confirmation")
-                mapLegendRow(label: "Dead Zone", color: .gray, icon: "hexagon",
-                             description: "Active probes were sent but no response was received within the timeout window")
-            }
-
-            Text("Cell colors reflect signal quality (SNR): green = excellent, yellow = good, orange = fair, red = poor. Tap any cell for detailed stats including packet counts and repeater info.")
+            Text("The hex grid divides the area into ~100m cells. Each cell is colored by signal quality.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                colorRow(color: .green, label: "Excellent signal")
+                colorRow(color: .yellow, label: "Good signal")
+                colorRow(color: .orange, label: "Fair signal")
+                colorRow(color: .red, label: "Poor signal")
+                colorRow(color: .gray, label: "Dead zone — probes sent, no response")
+            }
+
+            Text("When active probing is enabled, cells with direct 2-way connectivity are colored by the strongest repeater's SNR. Passive-only cells use the average SNR of all received packets.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            bulletPoint("Switch between Grid Heatmap and Point Cloud visualization modes")
+            bulletPoint("Use the filter menu to show All, Passive Only, or Active Only data")
         }
     }
 
@@ -130,14 +216,41 @@ struct SurveyInfoSheet: View {
             iconColor: .cyan,
             title: "Community Map"
         ) {
-            Text("Aggregated survey data from all contributors, shown as a faded overlay behind your own data.")
+            Text("Aggregated anonymous survey data from all contributors, shown as a faded overlay behind your personal data.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            bulletPoint("Toggle the globe icon on the map to show/hide community data")
-            bulletPoint("Filter community data by coverage type, repeater, and time range")
-            bulletPoint("Enable live upload to share data to the community map in real time")
-            bulletPoint("Upload completed sessions via the menu to contribute")
+            bulletPoint("Toggle the globe icon on the map to show or hide community data")
+            bulletPoint("Filter community data by coverage type (all, active, passive)")
+            bulletPoint("Filter by specific repeater to see one repeater's coverage")
+            bulletPoint("Filter by time range (all time, past week, past month)")
+
+            Text("Contributing Data")
+                .font(.caption.weight(.semibold))
+                .padding(.top, 2)
+
+            bulletPoint("Enable Live Upload to share data to the community map in real time during a survey")
+            bulletPoint("Upload completed sessions from the completion summary or session list")
+            bulletPoint("Use Batch Upload to upload multiple sessions at once")
+            bulletPoint("All uploaded data is anonymized — no GPS coordinates, sender identity, or message content")
+        }
+    }
+
+    private var sessionManagementSection: some View {
+        infoSection(
+            icon: "list.bullet.rectangle",
+            iconColor: .indigo,
+            title: "Sessions & History"
+        ) {
+            Text("Each survey run is saved as a session. Browse and manage sessions from the session list menu.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            bulletPoint("Pause and resume an active survey without losing data")
+            bulletPoint("View previous sessions and their coverage data on the map")
+            bulletPoint("Session completion summary shows detailed stats and personal records")
+            bulletPoint("Personal records track your best survey achievements with trophy badges")
+            bulletPoint("Export session data as anonymized JSON for sharing or analysis")
         }
     }
 
@@ -147,13 +260,15 @@ struct SurveyInfoSheet: View {
             iconColor: .yellow,
             title: "Tips"
         ) {
-            bulletPoint("Enable active probing with a channel to confirm bidirectional connectivity")
-            bulletPoint("Use Deep Scan mode at slower speeds for detailed mesh depth data")
+            bulletPoint("Select a private channel and enable probing to confirm 2-way connectivity")
+            bulletPoint("Use Deep Scan at slower speeds for detailed mesh depth data")
             bulletPoint("Use Driving mode when traveling at speed for denser coverage")
-            bulletPoint("Enable live upload to share survey data to the community map in real time")
-            bulletPoint("Dead zones appear as gray dashed cells where probes got no response")
+            bulletPoint("Enable Live Upload to share data to the community map in real time")
+            bulletPoint("Tap a repeater chip in the cell detail card to see per-repeater stats")
+            bulletPoint("Dead zones show where probes were sent but got no response")
             bulletPoint("Passive data is still valuable — it maps where repeater signals reach")
             bulletPoint("Survey the same area multiple times for more reliable data")
+            bulletPoint("TX signal data comes from active probe responses and may take a moment to appear")
         }
     }
 
@@ -205,17 +320,6 @@ struct SurveyInfoSheet: View {
         }
     }
 
-    private func hopRow(hops: String, description: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(hops)
-                .font(.caption.weight(.semibold))
-            Text(description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.bottom, 4)
-    }
-
     private func mapLegendRow(label: String, color: Color, icon: String, description: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
@@ -229,6 +333,55 @@ struct SurveyInfoSheet: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func settingRow(label: String, description: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+            Text(description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.bottom, 2)
+    }
+
+    private func frequencyRow(name: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(name)
+                .font(.caption2.weight(.medium))
+                .frame(width: 56, alignment: .leading)
+            Text(description)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func signalExplainer(direction: String, arrow: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: arrow)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(direction)
+                    .font(.caption.weight(.semibold))
+                Text(description)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func colorRow(color: Color, label: String) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

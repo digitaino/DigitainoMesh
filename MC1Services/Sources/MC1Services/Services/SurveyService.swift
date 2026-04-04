@@ -89,19 +89,23 @@ public actor SurveyService {
     // MARK: - Configuration
 
     /// Configure the service with device context.
-    /// Also closes any orphaned sessions from previous app runs.
-    public func configure(deviceID: UUID, localNodeName: String? = nil) async {
+    /// Also closes any orphaned sessions from previous app runs, unless `skipOrphanCleanup`
+    /// is true (used when reconnecting while a survey is still logically active).
+    public func configure(deviceID: UUID, localNodeName: String? = nil, skipOrphanCleanup: Bool = false) async {
         self.deviceID = deviceID
         self.localNodeName = localNodeName
 
         // Close any sessions left open from a previous app run (crash, disconnect, etc.)
-        do {
-            let closed = try await dataStore.closeOrphanedSessions(deviceID: deviceID)
-            if closed > 0 {
-                logger.info("Closed \(closed) orphaned survey session(s)")
+        // Skip this when the app knows a survey is still logically active (e.g. BLE reconnection).
+        if !skipOrphanCleanup {
+            do {
+                let closed = try await dataStore.closeOrphanedSessions(deviceID: deviceID)
+                if closed > 0 {
+                    logger.info("Closed \(closed) orphaned survey session(s)")
+                }
+            } catch {
+                logger.error("Failed to close orphaned sessions: \(error.localizedDescription)")
             }
-        } catch {
-            logger.error("Failed to close orphaned sessions: \(error.localizedDescription)")
         }
 
         // One-time backfill: retroactively classify existing survey points as active/passive
@@ -241,6 +245,26 @@ public actor SurveyService {
         activeSessionID = nil
     }
 
+    /// Re-associate this service instance with an existing session that was started
+    /// on a previous service instance (e.g. after BLE reconnection).
+    /// Returns true if the session was found and resumed, false otherwise.
+    @discardableResult
+    public func resumeSession(id: UUID) async -> Bool {
+        guard activeSessionID == nil else {
+            logger.warning("resumeSession: already has active session \(self.activeSessionID!)")
+            return false
+        }
+        // Verify the session exists and is still open (no endedAt)
+        let exists = await dataStore.surveySessionIsOpen(id: id)
+        guard exists else {
+            logger.warning("resumeSession: session \(id) not found or already ended")
+            return false
+        }
+        activeSessionID = id
+        logger.info("Resumed existing survey session: \(id)")
+        return true
+    }
+
     /// Stop the active survey session.
     public func stopSession() async throws {
         guard let sessionID = activeSessionID else {
@@ -272,21 +296,9 @@ public actor SurveyService {
             return
         }
 
-        // Check for duplicate packet
-        do {
-            let exists = try await dataStore.surveyPointExists(
-                sessionID: sessionID,
-                packetHash: entry.packetHash
-            )
-            if exists {
-                logger.debug("Survey: duplicate packet hash, skipping")
-                return
-            }
-        } catch {
-            logger.error("Dedup check failed: \(error.localizedDescription)")
-        }
-
-        // Extract relay/target hex IDs.
+        // Extract relay/target hex IDs BEFORE dedup check, because the last-hop
+        // hex ID is part of the dedup key (heard repeats from different repeaters
+        // share the same packetHash but must be stored as separate survey points).
         //
         // TRACE packets are special: the routing header's path[] array contains SNR
         // values (not hashes) — each repeater appends its SNR as it forwards.
@@ -332,6 +344,30 @@ public actor SurveyService {
             return []
         }()
 
+        // Dedup check using composite key: packetHash + last-hop hex ID.
+        // Heard repeats of the same message from different repeaters share the
+        // same packetHash, but each relay path is a distinct observation worth
+        // recording. Including the last path node in the key preserves them.
+        let dedupKey: String = {
+            if let lastHop = pathHexIDs.last {
+                return entry.packetHash + "_" + lastHop
+            }
+            return entry.packetHash
+        }()
+
+        do {
+            let exists = try await dataStore.surveyPointExists(
+                sessionID: sessionID,
+                packetHash: dedupKey
+            )
+            if exists {
+                logger.debug("Survey: duplicate packet hash+relay, skipping")
+                return
+            }
+        } catch {
+            logger.error("Dedup check failed: \(error.localizedDescription)")
+        }
+
         // Classify as active probe result when probing is enabled.
         // - .control (discover response) and .trace: always active during probing (deep scan).
         // - .groupText: only active when it's a heard repeat of OUR OWN channel message
@@ -364,7 +400,7 @@ public actor SurveyService {
             routeType: entry.routeType,
             payloadType: entry.payloadType,
             pathLength: entry.pathLength,
-            packetHash: entry.packetHash,
+            packetHash: dedupKey,
             fromContactName: entry.fromContactName,
             pathNodeHexIDs: pathHexIDs,
             isActiveProbe: isActive

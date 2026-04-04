@@ -25,4 +25,9 @@ struct MessageDisplayState {
     var detectedHexPath: HexPath?
     var isSearchMatch: Bool = false
     var isHighlighted: Bool = false
+
+    // Duplicate message collapsing
+    var duplicateCount: Int = 1
+    var isDuplicateGroupExpanded: Bool = false
+    var onToggleDuplicateGroup: (() -> Void)?
 }

@@ -206,6 +206,11 @@ public final class AppState {
         connectionManager.onDeviceSynced = { [weak self] in
             self?.performStaleNodeCleanup()
         }
+
+        // Wire survey active provider - prevents orphan cleanup from closing active survey on BLE reconnect
+        connectionManager.isSurveyActiveProvider = { [weak self] in
+            self?.isSurveyActive ?? false
+        }
     }
 
     // MARK: - Lifecycle

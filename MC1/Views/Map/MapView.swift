@@ -29,10 +29,10 @@ struct MapView: View {
                         BLEStatusIndicatorView()
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        SignalBarsToolbarItem()
+                        refreshButton
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        refreshButton
+                        SignalBarsToolbarItem()
                     }
                 }
                 .task {

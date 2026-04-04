@@ -163,7 +163,9 @@ extension ChatViewModel {
             detectedHexPath: item.detectedHexPath,
             previewState: previewStates[messageID] ?? .idle,
             loadedPreview: loadedPreviews[messageID],
-            isSearchMatch: item.isSearchMatch
+            isSearchMatch: item.isSearchMatch,
+            duplicateCount: item.duplicateCount,
+            duplicateGroupIDs: item.duplicateGroupIDs
         )
     }
 
