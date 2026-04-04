@@ -137,6 +137,11 @@ public final class AppState {
     /// Live status broadcast by the survey ViewModel for the floating indicator.
     var surveyLiveStatus = SurveyLiveStatus()
 
+    // MARK: - Signal Bars
+
+    /// Service tracking live repeater signal quality for the toolbar indicator.
+    let signalBarsService = SignalBarsService()
+
     // MARK: - CLI Tool
 
     /// Persistent CLI tool view model (survives tab switches, reset on device disconnect)
@@ -234,6 +239,7 @@ public final class AppState {
             cliToolViewModel?.reset()
             batteryMonitor.stop()
             batteryMonitor.clearThresholds()
+            signalBarsService.stop()
             await liveActivityManager.handleConnectionLost()
             return
         }
@@ -350,6 +356,23 @@ public final class AppState {
 
         // Defer battery bootstrap so connection setup is not blocked by device request timeouts.
         batteryMonitor.start(services: services, device: connectedDevice)
+
+        // Start signal bars service for toolbar repeater signal monitoring
+        if let device = connectedDevice {
+            logger.info("wireServicesIfConnected: starting SignalBarsService for device \(device.id.uuidString.prefix(8)), pathHashMode=\(device.pathHashMode)")
+            signalBarsService.start(deviceID: device.id, pathHashMode: device.pathHashMode)
+            signalBarsService.setSendTraceHandler { [services] (tag: UInt32, flags: UInt8, path: Data) in
+                let sentInfo = try await services.binaryProtocolService.sendTrace(
+                    tag: tag, flags: flags, path: path
+                )
+                return SendTraceResult(suggestedTimeoutMs: Int(sentInfo.suggestedTimeoutMs))
+            }
+            signalBarsService.setSendDiscoverHandler { [services] in
+                _ = try await services.binaryProtocolService.sendNodeDiscoverRequest(
+                    filter: 0x04, prefixOnly: true
+                )
+            }
+        }
 
     }
 

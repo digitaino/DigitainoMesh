@@ -77,25 +77,7 @@ public final class NavigationCoordinator {
         selectedTab = 3  // Tools tab
     }
 
-    /// Pending survey cell focus after cross-tab navigation.
-    var pendingSurveyCellFocus: SurveyCellFocus?
 
-    struct SurveyCellFocus: Equatable {
-        let sessionID: UUID
-        let coordKey: String
-        let latitude: Double
-        let longitude: Double
-    }
-
-    func navigateToSurveyCell(sessionID: UUID, coordKey: String, latitude: Double, longitude: Double) {
-        pendingSurveyCellFocus = SurveyCellFocus(sessionID: sessionID, coordKey: coordKey, latitude: latitude, longitude: longitude)
-        pendingSurveyNavigation = true
-        selectedTab = 3  // Tools tab
-    }
-
-    func clearPendingSurveyCellFocus() {
-        pendingSurveyCellFocus = nil
-    }
 
     func clearPendingSurveyNavigation() {
         pendingSurveyNavigation = false

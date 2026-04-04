@@ -29,6 +29,9 @@ struct ChatsListModifiers: ViewModifier {
                 ToolbarItem(placement: .topBarLeading) {
                     BLEStatusIndicatorView()
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    SignalBarsToolbarItem()
+                }
                 ToolbarItem(placement: .automatic) {
                     Menu {
                         Button {

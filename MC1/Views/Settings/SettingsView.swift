@@ -80,6 +80,15 @@ private struct SettingsListContent: View {
                     TintedLabel(L10n.Settings.LiveActivity.title, systemImage: "platter.filled.bottom.and.arrow.down.iphone")
                 }
 
+                if let deviceID = appState.currentDeviceID {
+                    Toggle(isOn: Binding(
+                        get: { DevicePreferenceStore().isSignalBarsEnabled(deviceID: deviceID) },
+                        set: { DevicePreferenceStore().setSignalBarsEnabled($0, deviceID: deviceID) }
+                    )) {
+                        TintedLabel("Signal Bars", systemImage: "cellularbars")
+                    }
+                }
+
                 TipView(repeaterSharingTip, arrowEdge: .bottom)
 
                 NavigationLink {
@@ -146,6 +155,9 @@ private struct SettingsListContent: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 BLEStatusIndicatorView()
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                SignalBarsToolbarItem()
             }
         }
         .sheet(isPresented: $showingDeviceSelection) {

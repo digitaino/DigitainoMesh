@@ -17,4 +17,15 @@ struct SurveyLiveStatus: Equatable {
 
     /// Hex ID of the most-heard repeater in the current cell (e.g. "07").
     var topRepeaterHexID: String?
+
+    // MARK: - Live Signal Bars (from SignalBarsService)
+
+    /// Best repeater's RX quality (how well we hear them) from SignalBarsService.
+    var bestRepeaterRxQuality: SNRQuality?
+
+    /// Best repeater's TX quality (how well they hear us) from SignalBarsService.
+    var bestRepeaterTxQuality: SNRQuality?
+
+    /// Best repeater's display name or hex ID from SignalBarsService.
+    var bestRepeaterName: String?
 }

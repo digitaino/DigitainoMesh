@@ -12,7 +12,6 @@ enum MessageAction: Equatable {
     case sendAgain
     case blockSender
     case delete
-    case viewOnSurveyMap
 }
 
 /// Sheet-based message actions UI (ElementX style)
@@ -309,13 +308,7 @@ private struct ActionsButtonsSection: View {
             )
         }
 
-        if availability.canViewOnSurveyMap {
-            ActionButton(
-                title: "View on Survey Map",
-                icon: "map",
-                action: { onSelectAction(.viewOnSurveyMap) }
-            )
-        }
+
     }
 }
 

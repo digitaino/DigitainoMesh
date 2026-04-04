@@ -74,6 +74,10 @@ struct ContactsSidebarContent: View {
                 BLEStatusIndicatorView()
             }
 
+            ToolbarItem(placement: .topBarTrailing) {
+                SignalBarsToolbarItem()
+            }
+
             ToolbarItem(placement: .automatic) {
                 Menu {
                     ForEach(NodeSortOrder.allCases, id: \.self) { order in

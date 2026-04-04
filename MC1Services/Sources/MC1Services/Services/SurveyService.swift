@@ -425,6 +425,7 @@ public actor SurveyService {
             horizontalAccuracy: fix.horizontalAccuracy,
             speed: fix.speed,
             snr: response.snr,
+            txSnr: response.snrIn,
             rssi: response.rssi,
             routeType: .flood,
             payloadType: .control,
@@ -479,8 +480,14 @@ public actor SurveyService {
             return hashBytes.prefix(2).map { String(format: "%02X", $0) }.joined()
         }
 
-        // Use the last node's SNR (destination node, farthest reach)
+        // Use the last node's SNR (destination node, farthest reach) as RX SNR.
+        // For traces with >1 hop, the last node's SNR is how that node heard us (TX SNR).
         let destinationSNR = traceInfo.path.last?.snr
+        // First node's SNR is our local reception quality (RX from the nearest repeater).
+        let localSNR = traceInfo.path.first?.snr
+        // For single-hop traces: destinationSNR == localSNR, so txSnr is the remote side.
+        // For multi-hop: last node SNR is the remote repeater's reception → txSnr.
+        let txSnr = traceInfo.path.count > 1 ? destinationSNR : nil
 
         let point = SignalSurveyPointDTO(
             deviceID: deviceID,
@@ -490,7 +497,8 @@ public actor SurveyService {
             altitude: fix.altitude,
             horizontalAccuracy: fix.horizontalAccuracy,
             speed: fix.speed,
-            snr: destinationSNR,
+            snr: localSNR ?? destinationSNR,
+            txSnr: txSnr,
             routeType: .flood,
             payloadType: .trace,
             pathLength: traceInfo.pathLength,

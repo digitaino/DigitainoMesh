@@ -117,6 +117,7 @@ extension PersistenceStore {
             horizontalAccuracy: dto.horizontalAccuracy,
             speed: dto.speed,
             snr: dto.snr,
+            txSnr: dto.txSnr,
             rssi: dto.rssi,
             routeType: Int(dto.routeType.rawValue),
             payloadType: Int(dto.payloadType.rawValue),

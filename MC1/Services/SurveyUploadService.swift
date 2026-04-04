@@ -88,6 +88,7 @@ actor SurveyUploadService {
     struct RepeaterMetric: Codable {
         let hexID: String
         let averageSNR: Double?
+        let averageTxSNR: Double?
         let averageRSSI: Double?
         let packetCount: Int
         let lastHeard: String?
@@ -101,6 +102,7 @@ actor SurveyUploadService {
         let hexR: Int
         let referenceLatitude: Double
         let averageSNR: Double?
+        let averageTxSNR: Double?
         let packetCount: Int
         let contributionCount: Int
         let repeaterHexIDs: [String]
@@ -313,6 +315,7 @@ actor SurveyUploadService {
             latitude: center.latitude,
             longitude: center.longitude,
             averageSNR: point.snr,
+            averageTxSNR: point.txSnr,
             averageRSSI: point.rssi.map { Double($0) },
             minSNR: point.snr,
             maxSNR: point.snr,
@@ -398,6 +401,7 @@ actor SurveyUploadService {
             latitude: center.latitude,
             longitude: center.longitude,
             averageSNR: nil,
+            averageTxSNR: nil,
             averageRSSI: nil,
             minSNR: nil,
             maxSNR: nil,

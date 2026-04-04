@@ -22,6 +22,7 @@ public final class SignalSurveyPoint {
 
     // RF Signal
     public var snr: Double?
+    public var txSnr: Double?
     public var rssi: Int?
 
     // Packet metadata
@@ -52,6 +53,7 @@ public final class SignalSurveyPoint {
         horizontalAccuracy: Double,
         speed: Double? = nil,
         snr: Double? = nil,
+        txSnr: Double? = nil,
         rssi: Int? = nil,
         routeType: Int,
         payloadType: Int,
@@ -71,6 +73,7 @@ public final class SignalSurveyPoint {
         self.horizontalAccuracy = horizontalAccuracy
         self.speed = speed
         self.snr = snr
+        self.txSnr = txSnr
         self.rssi = rssi
         self.routeType = routeType
         self.payloadType = payloadType
@@ -96,6 +99,7 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
     public let horizontalAccuracy: Double
     public let speed: Double?
     public let snr: Double?
+    public let txSnr: Double?
     public let rssi: Int?
     public let routeType: RouteType
     public let payloadType: PayloadType
@@ -117,6 +121,7 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         self.horizontalAccuracy = model.horizontalAccuracy
         self.speed = model.speed
         self.snr = model.snr
+        self.txSnr = model.txSnr
         self.rssi = model.rssi
         self.routeType = RouteType(rawValue: UInt8(model.routeType)) ?? .flood
         self.payloadType = PayloadType(rawValue: UInt8(model.payloadType)) ?? .unknown
@@ -145,6 +150,7 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         horizontalAccuracy: Double,
         speed: Double? = nil,
         snr: Double? = nil,
+        txSnr: Double? = nil,
         rssi: Int? = nil,
         routeType: RouteType,
         payloadType: PayloadType,
@@ -164,6 +170,7 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
         self.horizontalAccuracy = horizontalAccuracy
         self.speed = speed
         self.snr = snr
+        self.txSnr = txSnr
         self.rssi = rssi
         self.routeType = routeType
         self.payloadType = payloadType
@@ -178,6 +185,9 @@ public struct SignalSurveyPointDTO: Sendable, Identifiable, Equatable, Hashable 
 
     /// Classified signal quality based on SNR thresholds.
     public var snrQuality: SNRQuality { SNRQuality(snr: snr) }
+
+    /// Classified TX signal quality (how well repeater heard us).
+    public var txSnrQuality: SNRQuality { SNRQuality(snr: txSnr) }
 
     /// Number of relay hops this packet traversed (decoded from pathLength byte).
     /// 0 means the packet was received directly from the sender with no intermediate relays.

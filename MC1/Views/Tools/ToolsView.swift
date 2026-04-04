@@ -125,6 +125,9 @@ struct ToolsView: View {
                     ToolbarItem(placement: .topBarLeading) {
                         BLEStatusIndicatorView()
                     }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        SignalBarsToolbarItem()
+                    }
                 }
                 .navigationDestination(isPresented: $navigateToSurvey) {
                     SignalSurveyView()
@@ -159,6 +162,9 @@ struct ToolsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     BLEStatusIndicatorView()
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    SignalBarsToolbarItem()
                 }
             }
             .navigationDestination(for: SidebarDestination.self) { destination in

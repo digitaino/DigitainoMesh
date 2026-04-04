@@ -11,7 +11,6 @@ struct MessageActionAvailability {
     let canShowRepeatDetails: Bool
     let canViewPath: Bool
     let canDelete: Bool
-    let canViewOnSurveyMap: Bool
 
     init(message: MessageDTO, senderContact: ContactDTO? = nil) {
         canReply = !message.isOutgoing
@@ -25,6 +24,5 @@ struct MessageActionAvailability {
             && message.pathLength != 0
             && message.pathLength != 0xFF
         canDelete = true
-        canViewOnSurveyMap = message.deduplicationKey != nil
     }
 }

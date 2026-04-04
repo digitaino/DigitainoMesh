@@ -40,6 +40,16 @@ struct DevicePreferenceStore {
         userDefaults.set(source.rawValue, forKey: Self.gpsSourceKey(deviceID: deviceID))
     }
 
+    // MARK: - Signal Bars
+
+    func isSignalBarsEnabled(deviceID: UUID) -> Bool {
+        userDefaults.object(forKey: Self.signalBarsEnabledKey(deviceID: deviceID)) as? Bool ?? true
+    }
+
+    func setSignalBarsEnabled(_ enabled: Bool, deviceID: UUID) {
+        userDefaults.set(enabled, forKey: Self.signalBarsEnabledKey(deviceID: deviceID))
+    }
+
     // MARK: - Keys
 
     private static func autoUpdateLocationKey(deviceID: UUID) -> String {
@@ -48,5 +58,9 @@ struct DevicePreferenceStore {
 
     private static func gpsSourceKey(deviceID: UUID) -> String {
         "device.\(deviceID.uuidString).gpsSource"
+    }
+
+    private static func signalBarsEnabledKey(deviceID: UUID) -> String {
+        "device.\(deviceID.uuidString).signalBarsEnabled"
     }
 }

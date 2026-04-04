@@ -190,6 +190,35 @@ public actor AdvertisementService {
         case .traceData(let traceInfo):
             await handleTraceData(traceInfo: traceInfo, deviceID: deviceID)
 
+        case .rxLogData(let logData) where logData.payloadType != .trace && !logData.pathNodes.isEmpty:
+            // Passive signal tracking: any packet relayed through a repeater tells us
+            // about RX signal quality from the last-hop repeater.
+            if let snr = logData.snr {
+                let hashSize = logData.pathNodes.count / max(Int(logData.pathLength & 0x0F), 1)
+                let lastHopBytes: [UInt8]
+                if hashSize > 0 && hashSize <= logData.pathNodes.count {
+                    lastHopBytes = Array(logData.pathNodes.suffix(hashSize))
+                } else {
+                    lastHopBytes = [logData.pathNodes.last!]
+                }
+                let hexID = lastHopBytes.map { String(format: "%02X", $0) }.joined()
+                await MainActor.run {
+                    var userInfo: [String: Any] = [
+                        "hexID": hexID,
+                        "rxSnr": snr,
+                        "deviceID": deviceID
+                    ]
+                    if let rssi = logData.rssi {
+                        userInfo["rssi"] = rssi
+                    }
+                    NotificationCenter.default.post(
+                        name: .rxLogPacketReceived,
+                        object: nil,
+                        userInfo: userInfo
+                    )
+                }
+            }
+
         case .rxLogData(let logData) where logData.payloadType == .trace:
             if logData.packetPayload.count >= 4, let snr = logData.snr {
                 let tag = logData.packetPayload.readUInt32LE(at: 0)
@@ -208,6 +237,24 @@ public actor AdvertisementService {
                         userInfo: userInfo
                     )
                 }
+            }
+
+        case .discoverResponse(let response):
+            await MainActor.run {
+                let hexID = response.publicKey.prefix(2)
+                    .map { String(format: "%02X", $0) }.joined()
+                NotificationCenter.default.post(
+                    name: .discoverResponseReceived,
+                    object: nil,
+                    userInfo: [
+                        "hexID": hexID,
+                        "rxSnr": response.snr,
+                        "txSnr": response.snrIn,
+                        "rssi": response.rssi,
+                        "publicKey": response.publicKey,
+                        "deviceID": deviceID
+                    ]
+                )
             }
 
         case .contactDeleted(let publicKey):

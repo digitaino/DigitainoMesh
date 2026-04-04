@@ -1,0 +1,141 @@
+import MC1Services
+import SwiftUI
+
+/// Compact toolbar button showing the best repeater's RX+TX signal and hex ID.
+/// Arrows are tucked into the top-leading corner above the shortest bar (firmware style).
+/// Arrows flash briefly when packets are received (▼) or sent (▲).
+struct SignalBarsToolbarItem: View {
+    @Environment(\.appState) private var appState
+    @State private var showingDetail = false
+    @State private var rxFlash = false
+    @State private var txFlash = false
+    @State private var lastRxTick: UInt = 0
+    @State private var lastTxTick: UInt = 0
+
+    var body: some View {
+        let service = appState.signalBarsService
+        if appState.connectionState == .ready || appState.connectionState == .connected,
+           let best = service.bestRepeater,
+           isEnabled {
+            Button { showingDetail = true } label: {
+                HStack(spacing: 4) {
+                    // RX: ▼ tucked above shortest bar
+                    signalGroup(
+                        arrowName: "arrow.down",
+                        arrowColor: best.rxQuality.color,
+                        arrowFlash: rxFlash,
+                        barsValue: best.rxQuality.barLevel,
+                        barsColor: best.rxQuality.color
+                    )
+
+                    // TX: ▲ tucked above shortest bar (or status indicator)
+                    txGroup(for: best)
+
+                    // Hex ID
+                    Text(best.id)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityLabel("Signal: \(best.rxQuality.qualityLabel) from \(best.name ?? best.id)")
+            .popover(isPresented: $showingDetail) {
+                RepeaterSignalPopover()
+                    .presentationCompactAdaptation(.popover)
+            }
+            .onChange(of: service.rxFlashTick) { _, newValue in
+                guard newValue != lastRxTick else { return }
+                lastRxTick = newValue
+                triggerFlash($rxFlash)
+            }
+            .onChange(of: service.txFlashTick) { _, newValue in
+                guard newValue != lastTxTick else { return }
+                lastTxTick = newValue
+                triggerFlash($txFlash)
+            }
+        }
+    }
+
+    // MARK: - Signal Group (arrow tucked above shortest bar)
+
+    /// Overlays a small arrow in the top-leading corner of the cellularbars icon,
+    /// sitting in the empty vertical space above the shortest (leftmost) bar.
+    private func signalGroup(
+        arrowName: String,
+        arrowColor: Color,
+        arrowFlash: Bool,
+        barsValue: Double,
+        barsColor: Color
+    ) -> some View {
+        Image(systemName: "cellularbars", variableValue: barsValue)
+            .foregroundStyle(barsColor)
+            .font(.system(size: 14))
+            .overlay(alignment: .topLeading) {
+                Image(systemName: arrowName)
+                    .font(.system(size: 5, weight: .black))
+                    .foregroundStyle(arrowColor)
+                    .opacity(arrowFlash ? 1.0 : 0.6)
+                    .scaleEffect(arrowFlash ? 1.3 : 1.0)
+                    .animation(.easeOut(duration: 0.15), value: arrowFlash)
+                    .offset(x: -1, y: -1)
+            }
+    }
+
+    // MARK: - TX Group
+
+    @ViewBuilder
+    private func txGroup(for repeater: SignalBarsService.RepeaterSignal) -> some View {
+        switch repeater.txState {
+        case .unknown:
+            HStack(spacing: 1) {
+                txArrow(color: .secondary)
+                Image(systemName: "questionmark")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        case .measuring:
+            HStack(spacing: 1) {
+                txArrow(color: .secondary)
+                ProgressView()
+                    .controlSize(.mini)
+            }
+        case .measured(let quality):
+            signalGroup(
+                arrowName: "arrow.up",
+                arrowColor: quality.color,
+                arrowFlash: txFlash,
+                barsValue: quality.barLevel,
+                barsColor: quality.color
+            )
+        case .failed:
+            HStack(spacing: 1) {
+                txArrow(color: .red)
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func txArrow(color: Color) -> some View {
+        Image(systemName: "arrow.up")
+            .font(.system(size: 5, weight: .black))
+            .foregroundStyle(color)
+            .opacity(txFlash ? 1.0 : 0.6)
+            .scaleEffect(txFlash ? 1.3 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: txFlash)
+    }
+
+    // MARK: - Flash
+
+    private func triggerFlash(_ binding: Binding<Bool>) {
+        binding.wrappedValue = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            binding.wrappedValue = false
+        }
+    }
+
+    private var isEnabled: Bool {
+        guard let deviceID = appState.currentDeviceID else { return true }
+        return DevicePreferenceStore().isSignalBarsEnabled(deviceID: deviceID)
+    }
+}

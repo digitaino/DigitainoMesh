@@ -361,6 +361,8 @@ final class SignalSurveyViewModel {
         let activePacketCount: Int
         /// Number of active probe messages sent from this cell. Nil if probing was not active.
         let probesSent: Int?
+        /// Average TX SNR (how well repeaters heard us) across points with txSnr data.
+        let averageTxSNR: Double?
 
         /// Composite identity: coordKey + packetCount so ForEach detects content changes.
         var id: String { "\(coordKey)_\(packetCount)" }
@@ -1316,6 +1318,12 @@ final class SignalSurveyViewModel {
     private func loadSessionStats(dataStore: PersistenceStore) async {
         var stats: [UUID: SessionStats] = [:]
         for session in sessions {
+            // Fast path: use pre-computed completion stats when available
+            if let cs = session.completionStats {
+                stats[session.id] = SessionStats(pointCount: cs.totalPackets, cellCount: cs.totalCells)
+                continue
+            }
+            // Slow path: legacy sessions without completion stats — compute from coordinates
             do {
                 let pointCount = try await dataStore.countSurveyPoints(sessionID: session.id)
                 let coords = try await dataStore.fetchSurveyPointCoordinates(sessionID: session.id)
@@ -1434,7 +1442,8 @@ final class SignalSurveyViewModel {
                     bestGatewaySNR: nil,
                     maxMeshDepth: 0,
                     activePacketCount: 0,
-                    probesSent: probesSentPerCell[key]
+                    probesSent: probesSentPerCell[key],
+                    averageTxSNR: nil
                 ))
             }
         } else if !probesSentPerCell.isEmpty {
@@ -1467,7 +1476,8 @@ final class SignalSurveyViewModel {
                     bestGatewaySNR: nil,
                     maxMeshDepth: 0,
                     activePacketCount: 0,
-                    probesSent: probes
+                    probesSent: probes,
+                    averageTxSNR: nil
                 ))
             }
         }
@@ -1558,8 +1568,10 @@ final class SignalSurveyViewModel {
         let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
         let snrValues = points.compactMap(\.snr)
         let rssiValues = points.compactMap(\.rssi)
+        let txSnrValues = points.compactMap(\.txSnr)
         let avgSNR = snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count)
         let avgRSSI = rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count)
+        let avgTxSNR = txSnrValues.isEmpty ? nil : txSnrValues.reduce(0, +) / Double(txSnrValues.count)
         let timestamps = points.map(\.timestamp).sorted()
         let senders = Array(Set(points.compactMap(\.fromContactName))).sorted()
         // Only show the 0-hop (directly heard) repeater — the last node in each path chain.
@@ -1737,7 +1749,8 @@ final class SignalSurveyViewModel {
             bestGatewaySNR: bestGatewaySNR,
             maxMeshDepth: maxMeshDepth,
             activePacketCount: activeCount,
-            probesSent: probesSent
+            probesSent: probesSent,
+            averageTxSNR: avgTxSNR
         )
     }
 
@@ -2061,7 +2074,8 @@ final class SignalSurveyViewModel {
                     bestGatewaySNR: nil,
                     maxMeshDepth: 0,
                     activePacketCount: 0,
-                    probesSent: probes
+                    probesSent: probes,
+                    averageTxSNR: nil
                 ))
                 changed = true
 
@@ -2121,19 +2135,22 @@ final class SignalSurveyViewModel {
     }
 
     /// Computed cell stats filtered to the selected relay, or nil if no filter is active.
-    var filteredCellStats: (avgSNR: Double?, avgRSSI: Double?, minSNR: Double?, maxSNR: Double?,
+    var filteredCellStats: (avgSNR: Double?, avgRSSI: Double?, avgTxSNR: Double?, minSNR: Double?, maxSNR: Double?,
                             packetCount: Int, quality: SNRQuality, latestTimestamp: Date?)? {
         guard selectedRelayFilter != nil else { return nil }
         let points = pointsForSelectedCell(relayFilter: selectedRelayFilter)
         guard !points.isEmpty else { return nil }
         let snrValues = points.compactMap(\.snr)
         let rssiValues = points.compactMap(\.rssi)
+        let txSnrValues = points.compactMap(\.txSnr)
         let avgSNR = snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count)
         let avgRSSI = rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count)
+        let avgTxSNR = txSnrValues.isEmpty ? nil : txSnrValues.reduce(0, +) / Double(txSnrValues.count)
         let timestamps = points.map(\.timestamp).sorted()
         return (
             avgSNR: avgSNR,
             avgRSSI: avgRSSI,
+            avgTxSNR: avgTxSNR,
             minSNR: snrValues.min(),
             maxSNR: snrValues.max(),
             packetCount: points.count,

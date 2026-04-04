@@ -9,7 +9,6 @@ struct CellPacketListView: View {
     let relayFilter: String?
     let contactsByName: [String: ContactDTO]
     var onNavigateToContact: ((ContactDTO) -> Void)?
-    var onViewInChat: ((SignalSurveyPointDTO) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -31,8 +30,7 @@ struct CellPacketListView: View {
                         PacketRow(
                             point: point,
                             contact: point.fromContactName.flatMap { contactsByName[$0] },
-                            onNavigateToContact: onNavigateToContact,
-                            onViewInChat: onViewInChat
+                            onNavigateToContact: onNavigateToContact
                         )
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
@@ -64,7 +62,6 @@ private struct PacketRow: View {
     let point: SignalSurveyPointDTO
     let contact: ContactDTO?
     var onNavigateToContact: ((ContactDTO) -> Void)?
-    var onViewInChat: ((SignalSurveyPointDTO) -> Void)?
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -73,14 +70,12 @@ private struct PacketRow: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Line 1: Time + Signal
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 3) {
+            // Row 1: Time + badges
+            HStack(spacing: 6) {
                 Text(Self.timeFormatter.string(from: point.timestamp))
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(.secondary)
-
-                signalIndicator
 
                 Spacer()
 
@@ -88,113 +83,105 @@ private struct PacketRow: View {
                 typeBadge(point.payloadType.displayName, color: .secondary)
             }
 
-            // Line 2: Signal values
-            HStack(spacing: 12) {
+            // Row 2: RX/TX signal bars + values, compact horizontal
+            HStack(spacing: 10) {
+                // RX signal
                 if let snr = point.snr {
-                    Label {
-                        Text(String(format: "%.1f dB", snr))
-                            .font(.caption)
-                    } icon: {
-                        Image(systemName: "waveform")
-                            .font(.caption2)
-                            .foregroundStyle(snrColor)
-                    }
-                }
-
-                if let rssi = point.rssi {
-                    Label {
-                        Text("\(rssi) dBm")
-                            .font(.caption)
-                    } icon: {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if point.hopCount > 0 {
-                    Label {
-                        Text("\(point.hopCount) hop\(point.hopCount == 1 ? "" : "s")")
-                            .font(.caption)
-                    } icon: {
-                        Image(systemName: "arrow.triangle.swap")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            // Line 3: Sender
-            if let senderName = point.fromContactName {
-                HStack(spacing: 4) {
-                    Image(systemName: "person.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-
-                    if let contact {
-                        Button {
-                            onNavigateToContact?(contact)
-                        } label: {
-                            HStack(spacing: 2) {
-                                Text(senderName)
-                                    .font(.caption)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 8))
+                    HStack(spacing: 3) {
+                        Image(systemName: "cellularbars", variableValue: point.snrQuality.barLevel)
+                            .font(.system(size: 12))
+                            .foregroundStyle(point.snrQuality.color)
+                            .overlay(alignment: .topLeading) {
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 4, weight: .black))
+                                    .foregroundStyle(point.snrQuality.color)
+                                    .offset(x: -1, y: -1)
                             }
-                            .foregroundStyle(Color.accentColor)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        Text(senderName)
-                            .font(.caption)
+                        Text(String(format: "%.0f", snr))
+                            .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                // TX signal
+                if let txSnr = point.txSnr {
+                    HStack(spacing: 3) {
+                        Image(systemName: "cellularbars", variableValue: point.txSnrQuality.barLevel)
+                            .font(.system(size: 12))
+                            .foregroundStyle(point.txSnrQuality.color)
+                            .overlay(alignment: .topLeading) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 4, weight: .black))
+                                    .foregroundStyle(point.txSnrQuality.color)
+                                    .offset(x: -1, y: -1)
+                            }
+                        Text(String(format: "%.0f", txSnr))
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // RSSI
+                if let rssi = point.rssi {
+                    Text("\(rssi)dBm")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+
+                // Hops
+                if point.hopCount > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "arrow.triangle.swap")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                        Text("\(point.hopCount)")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
             }
 
-            // Line 4: Relay path
-            if !point.pathNodeHexIDs.isEmpty {
+            // Row 3: Sender + relay path (combined, conditional)
+            if point.fromContactName != nil || !point.pathNodeHexIDs.isEmpty {
                 HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.swap")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    if let senderName = point.fromContactName {
+                        if let contact {
+                            Button {
+                                onNavigateToContact?(contact)
+                            } label: {
+                                HStack(spacing: 2) {
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 8))
+                                    Text(senderName)
+                                        .font(.caption2)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 7))
+                                }
+                                .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            HStack(spacing: 2) {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 8))
+                                Text(senderName)
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+                    }
 
-                    Text("via " + point.pathNodeHexIDs.joined(separator: " → "))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                    if !point.pathNodeHexIDs.isEmpty {
+                        Text("via \(point.pathNodeHexIDs.joined(separator: "→"))")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    Spacer()
                 }
             }
-
-            // Line 5: View in Chat link (for chat-type packets)
-            if point.payloadType == .groupText || point.payloadType == .textMessage {
-                Button {
-                    onViewInChat?(point)
-                } label: {
-                    Label("View in Chat", systemImage: "bubble.left.and.bubble.right")
-                        .font(.caption)
-                        .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var signalIndicator: some View {
-        let quality = point.snrQuality
-        Image(systemName: "cellularbars", variableValue: quality.barLevel)
-            .font(.caption)
-            .foregroundStyle(snrColor)
-    }
-
-    private var snrColor: Color {
-        switch point.snrQuality {
-        case .excellent: .green
-        case .good: .mint
-        case .fair: .yellow
-        case .poor: .orange
-        case .veryPoor: .red
-        case .unknown: .secondary
         }
     }
 
@@ -209,7 +196,7 @@ private struct PacketRow: View {
         Text(text)
             .font(.system(.caption2, design: .monospaced))
             .foregroundStyle(color)
-            .padding(.horizontal, 5)
+            .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(color.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 3))

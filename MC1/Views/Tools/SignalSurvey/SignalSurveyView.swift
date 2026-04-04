@@ -8,6 +8,7 @@ struct SignalSurveyView: View {
 
     @State private var viewModel = SignalSurveyViewModel()
     @State private var showingSessionList = false
+    @State private var showingLifetimeStats = false
     @State private var showingExportSheet = false
     @State private var showingPacketList = false
     @State private var showingSurveySetup = false
@@ -29,7 +30,7 @@ struct SignalSurveyView: View {
     @State private var showingCompletionSummary = false
     @State private var pendingUploadPrompt = false
     @State private var showingHistoricalStats: SurveySessionDTO?
-    @State private var showingChatNotFound = false
+
     var body: some View {
         ZStack {
             if viewModel.isCheckingForActiveSession && viewModel.allPoints.isEmpty && !viewModel.isActive {
@@ -112,7 +113,7 @@ struct SignalSurveyView: View {
         .sheet(isPresented: $showingContributorProfile) {
             ContributorProfileAutoRenewView()
         }
-        .sheet(isPresented: $showingCompletionSummary, onDismiss: {
+        .fullScreenCover(isPresented: $showingCompletionSummary, onDismiss: {
             if pendingUploadPrompt {
                 pendingUploadPrompt = false
                 showingUploadPrompt = true
@@ -126,16 +127,14 @@ struct SignalSurveyView: View {
                     resolveRepeater: { viewModel.repeaterDisplayName(for: $0) },
                     personalRecords: viewModel.personalRecords
                 )
-                .presentationDetents([.medium, .large])
             }
         }
-        .sheet(item: $showingHistoricalStats) { session in
+        .fullScreenCover(item: $showingHistoricalStats) { session in
             if let statsDTO = session.completionStats {
                 SurveyCompletionSheet(
                     stats: SignalSurveyViewModel.SurveyCompletionStats(from: statsDTO),
                     resolveRepeater: { viewModel.repeaterDisplayName(for: $0) }
                 )
-                .presentationDetents([.medium, .large])
             }
         }
         .sheet(isPresented: $showingPacketList) {
@@ -147,34 +146,6 @@ struct SignalSurveyView: View {
                 onNavigateToContact: { contact in
                     showingPacketList = false
                     appState.navigation.navigateToContactDetail(contact)
-                },
-                onViewInChat: { point in
-                    showingPacketList = false
-                    Task {
-                        guard let dataStore = appState.offlineDataStore else {
-                            showingChatNotFound = true
-                            return
-                        }
-                        guard let message = try? await dataStore.fetchMessageForSurveyPoint(packetHash: point.packetHash) else {
-                            showingChatNotFound = true
-                            return
-                        }
-                        if let channelIndex = message.channelIndex {
-                            guard let channel = try? await dataStore.fetchChannel(deviceID: message.deviceID, index: channelIndex) else {
-                                showingChatNotFound = true
-                                return
-                            }
-                            appState.navigation.navigateToChannel(with: channel, scrollToMessageID: message.id)
-                        } else if let contactID = message.contactID {
-                            guard let contact = try? await dataStore.fetchContact(id: contactID) else {
-                                showingChatNotFound = true
-                                return
-                            }
-                            appState.navigation.navigateToChat(with: contact, scrollToMessageID: message.id)
-                        } else {
-                            showingChatNotFound = true
-                        }
-                    }
                 }
             )
             .presentationDetents([.medium, .large])
@@ -258,25 +229,18 @@ struct SignalSurveyView: View {
             }
         }
         .onChange(of: viewModel.liveStatus) { _, newStatus in
-            appState.surveyLiveStatus = newStatus
-        }
-        .onChange(of: appState.navigation.pendingSurveyCellFocus) { _, focus in
-            guard let focus else { return }
-            appState.navigation.clearPendingSurveyCellFocus()
-            viewModel.selectedSessionID = focus.sessionID
-            if let dataStore = appState.offlineDataStore,
-               let session = viewModel.sessions.first(where: { $0.id == focus.sessionID }) {
-                Task {
-                    await viewModel.loadPoints(dataStore: dataStore, sessionID: focus.sessionID, session: session)
-                    viewModel.focusOnCell(coordKey: focus.coordKey, latitude: focus.latitude, longitude: focus.longitude)
+            var enriched = newStatus
+            // Merge live signal bars from SignalBarsService best repeater
+            if let best = appState.signalBarsService.repeaters.first {
+                enriched.bestRepeaterRxQuality = best.rxQuality
+                if case .measured(let quality) = best.txState {
+                    enriched.bestRepeaterTxQuality = quality
                 }
+                enriched.bestRepeaterName = best.name ?? best.id
             }
+            appState.surveyLiveStatus = enriched
         }
-        .alert("Not Found", isPresented: $showingChatNotFound) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Could not find this message in chat history.")
-        }
+
     }
 
     // MARK: - Map Content
@@ -507,6 +471,9 @@ struct SignalSurveyView: View {
                             if let snr = filtered.avgSNR {
                                 cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
                             }
+                            if let txSnr = filtered.avgTxSNR {
+                                cellStatColumn(label: "Avg TX SNR", value: String(format: "%.1f", txSnr), unit: "dB")
+                            }
                             if let rssi = filtered.avgRSSI {
                                 cellStatColumn(label: "Avg RSSI", value: String(format: "%.0f", rssi), unit: "dBm")
                             }
@@ -522,6 +489,9 @@ struct SignalSurveyView: View {
                             }
                             if let snr = cell.averageSNR {
                                 cellStatColumn(label: "Avg SNR", value: String(format: "%.1f", snr), unit: "dB")
+                            }
+                            if let txSnr = cell.averageTxSNR {
+                                cellStatColumn(label: "Avg TX SNR", value: String(format: "%.1f", txSnr), unit: "dB")
                             }
                             if let rssi = cell.averageRSSI {
                                 cellStatColumn(label: "Avg RSSI", value: String(format: "%.0f", rssi), unit: "dBm")
@@ -1886,6 +1856,11 @@ struct SignalSurveyView: View {
                     )
                 } else {
                     List {
+                        // Summary header
+                        sessionListSummaryHeader
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+
                         ForEach(viewModel.sessions) { session in
                             Button {
                                 viewModel.selectedSessionID = session.id
@@ -1923,11 +1898,56 @@ struct SignalSurveyView: View {
             .navigationTitle("Survey Sessions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingLifetimeStats = true
+                    } label: {
+                        Image(systemName: "chart.bar.xaxis")
+                    }
+                    .disabled(viewModel.sessions.isEmpty)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { showingSessionList = false }
                 }
             }
+            .sheet(isPresented: $showingLifetimeStats) {
+                LifetimeStatsView(
+                    sessions: viewModel.sessions,
+                    sessionStats: viewModel.sessionStats
+                )
+            }
         }
+    }
+
+    private var sessionListSummaryHeader: some View {
+        let sessions = viewModel.sessions
+        let totalSessions = sessions.count
+        let totalPackets = viewModel.sessionStats.values.reduce(0) { $0 + $1.pointCount }
+        let totalCells = viewModel.sessionStats.values.reduce(0) { $0 + $1.cellCount }
+        let totalSeconds = sessions.compactMap { s -> TimeInterval? in
+            guard let ended = s.endedAt else { return nil }
+            return ended.timeIntervalSince(s.startedAt)
+        }.reduce(0, +)
+
+        let hours = totalSeconds / 3600
+        let timeStr: String = if hours >= 1 {
+            String(format: "%.1f hrs", hours)
+        } else {
+            "\(Int(totalSeconds / 60)) min"
+        }
+
+        return HStack(spacing: 4) {
+            Text("\(totalSessions) sessions")
+            Text("·").foregroundStyle(.quaternary)
+            Text("\(totalPackets) packets")
+            Text("·").foregroundStyle(.quaternary)
+            Text("\(totalCells) cells")
+            Text("·").foregroundStyle(.quaternary)
+            Text(timeStr)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func sessionRow(_ session: SurveySessionDTO) -> some View {

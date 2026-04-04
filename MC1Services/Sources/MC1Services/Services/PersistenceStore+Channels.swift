@@ -36,9 +36,11 @@ extension PersistenceStore {
         let predicate = #Predicate<BlockedChannelSender> { entry in
             entry.deviceID == targetDeviceID && entry.name == targetName
         }
-b            modelContext.delete(entry)
-            try modelContext.save()
+        let descriptor = FetchDescriptor(predicate: predicate)
+        for entry in try modelContext.fetch(descriptor) {
+            modelContext.delete(entry)
         }
+        try modelContext.save()
     }
 
     public func fetchBlockedChannelSenders(deviceID: UUID) throws -> [BlockedChannelSenderDTO] {

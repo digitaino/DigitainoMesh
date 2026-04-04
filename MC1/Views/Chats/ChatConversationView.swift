@@ -43,8 +43,7 @@ struct ChatConversationView: View {
     @State private var pendingRouteMessage: MessageDTO?
     @State private var pendingRouteInfo: String?
 
-    // Survey map navigation
-    @State private var showingSurveyMapNotFound = false
+
 
     // MARK: - Search State
 
@@ -148,6 +147,9 @@ struct ChatConversationView: View {
         )
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                SignalBarsToolbarItem()
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button("Info", systemImage: "info.circle") {
                     showingInfo = true
                 }
@@ -241,11 +243,6 @@ struct ChatConversationView: View {
             Button(L10n.Chats.Chats.Common.ok, role: .cancel) { }
         } message: {
             Text(L10n.Chats.Chats.Alert.UnableToSend.message)
-        }
-        .alert("Not Found", isPresented: $showingSurveyMapNotFound) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("This message was not captured during a survey session.")
         }
         .searchable(
             text: $conversationSearchText,
@@ -830,34 +827,7 @@ struct ChatConversationView: View {
             isInputFocused = true
         case .delete:
             Task { await chatViewModel.deleteMessage(message) }
-        case .viewOnSurveyMap:
-            Task { await navigateToSurveyCellForMessage(message) }
         }
-    }
-
-    private func navigateToSurveyCellForMessage(_ message: MessageDTO) async {
-        guard let dataStore = appState.offlineDataStore else {
-            showingSurveyMapNotFound = true
-            return
-        }
-        // Use RxLog-based fallback when the deduplication key doesn't directly
-        // match a survey point's packetHash (race condition during message handling).
-        guard let point = try? await dataStore.fetchSurveyPointForMessage(
-            deduplicationKey: message.deduplicationKey,
-            channelIndex: message.channelIndex,
-            senderTimestamp: message.reactionTimestamp
-        ) else {
-            showingSurveyMapNotFound = true
-            return
-        }
-        let refLat = HexGrid.fixedReferenceLatitude(for: point.latitude)
-        let hex = HexGrid.axialFromLatLon(latitude: point.latitude, longitude: point.longitude, referenceLatitude: refLat)
-        appState.navigation.navigateToSurveyCell(
-            sessionID: point.surveySessionID,
-            coordKey: hex.key,
-            latitude: point.latitude,
-            longitude: point.longitude
-        )
     }
 
 

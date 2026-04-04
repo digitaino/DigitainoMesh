@@ -19,8 +19,31 @@ struct SurveyIndicatorView: View {
                     .frame(width: 8, height: 8)
                     .opacity(pulse ? 0.4 : 1.0)
 
-                // Signal quality indicator
-                if status.isDeadZone {
+                // Signal quality indicator — prefer live SignalBarsService RX/TX
+                if let rxQ = status.bestRepeaterRxQuality {
+                    // RX bars with down arrow
+                    Image(systemName: "cellularbars", variableValue: rxQ.barLevel)
+                        .foregroundStyle(rxQ.color)
+                        .font(.system(size: 13))
+                        .overlay(alignment: .topLeading) {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 5, weight: .black))
+                                .foregroundStyle(rxQ.color)
+                                .offset(x: -1, y: -1)
+                        }
+                    // TX bars with up arrow (if measured)
+                    if let txQ = status.bestRepeaterTxQuality {
+                        Image(systemName: "cellularbars", variableValue: txQ.barLevel)
+                            .foregroundStyle(txQ.color)
+                            .font(.system(size: 13))
+                            .overlay(alignment: .topLeading) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 5, weight: .black))
+                                    .foregroundStyle(txQ.color)
+                                    .offset(x: -1, y: -1)
+                            }
+                    }
+                } else if status.isDeadZone {
                     Image(systemName: "antenna.radiowaves.left.and.right.slash")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -34,8 +57,13 @@ struct SurveyIndicatorView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                // Top repeater hex ID
-                if let hexID = status.topRepeaterHexID {
+                // Best repeater name/ID from SignalBarsService or cell top repeater
+                if let name = status.bestRepeaterName {
+                    Text(name)
+                        .font(.system(.caption2, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else if let hexID = status.topRepeaterHexID {
                     Text(hexID)
                         .font(.system(.caption2, design: .monospaced, weight: .medium))
                         .foregroundStyle(.secondary)

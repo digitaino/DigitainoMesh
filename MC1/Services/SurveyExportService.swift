@@ -44,6 +44,7 @@ enum SurveyExportService {
         let latitude: Double
         let longitude: Double
         let averageSNR: Double?
+        let averageTxSNR: Double?
         let averageRSSI: Double?
         let minSNR: Double?
         let maxSNR: Double?
@@ -76,6 +77,7 @@ enum SurveyExportService {
     struct RepeaterMetric: Codable {
         let hexID: String
         let averageSNR: Double?
+        let averageTxSNR: Double?
         let averageRSSI: Double?
         let packetCount: Int
         /// ISO 8601 timestamp of the most recent packet from this repeater in this cell.
@@ -118,11 +120,13 @@ enum SurveyExportService {
             }.values.flatMap { $0 }
 
             let snrs = matchingPoints.compactMap(\.snr)
+            let txSnrs = matchingPoints.compactMap(\.txSnr)
             let rssis = matchingPoints.compactMap(\.rssi)
             let latestTimestamp = matchingPoints.map(\.timestamp).max()
             return RepeaterMetric(
                 hexID: repeaterHex,
                 averageSNR: snrs.isEmpty ? nil : snrs.reduce(0, +) / Double(snrs.count),
+                averageTxSNR: txSnrs.isEmpty ? nil : txSnrs.reduce(0, +) / Double(txSnrs.count),
                 averageRSSI: rssis.isEmpty ? nil : Double(rssis.reduce(0, +)) / Double(rssis.count),
                 packetCount: matchingPoints.count,
                 lastHeard: latestTimestamp.map { isoFormatter.string(from: $0) }
@@ -197,6 +201,7 @@ enum SurveyExportService {
             // Use the exact hex grid center so polygons tessellate without overlap
             let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
             let snrValues = cellPoints.compactMap(\.snr)
+            let txSnrValues = cellPoints.compactMap(\.txSnr)
             let rssiValues = cellPoints.compactMap(\.rssi)
             let floodCount = cellPoints.filter { $0.routeType == .flood || $0.routeType == .tcFlood }.count
             let directCount = cellPoints.count - floodCount
@@ -222,6 +227,7 @@ enum SurveyExportService {
                 latitude: center.latitude,
                 longitude: center.longitude,
                 averageSNR: snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count),
+                averageTxSNR: txSnrValues.isEmpty ? nil : txSnrValues.reduce(0, +) / Double(txSnrValues.count),
                 averageRSSI: rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count),
                 minSNR: snrValues.min(),
                 maxSNR: snrValues.max(),
@@ -263,6 +269,7 @@ enum SurveyExportService {
                     latitude: center.latitude,
                     longitude: center.longitude,
                     averageSNR: nil,
+                    averageTxSNR: nil,
                     averageRSSI: nil,
                     minSNR: nil,
                     maxSNR: nil,
@@ -337,6 +344,7 @@ enum SurveyExportService {
         let cells: [CellData] = buckets.map { coord, cellPoints in
             let center = HexGrid.centerLatLon(from: coord, referenceLatitude: refLat)
             let snrValues = cellPoints.compactMap(\.snr)
+            let txSnrValues = cellPoints.compactMap(\.txSnr)
             let rssiValues = cellPoints.compactMap(\.rssi)
             let floodCount = cellPoints.filter { $0.routeType == .flood || $0.routeType == .tcFlood }.count
             let directCount = cellPoints.count - floodCount
@@ -349,6 +357,7 @@ enum SurveyExportService {
                 latitude: center.latitude,
                 longitude: center.longitude,
                 averageSNR: snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count),
+                averageTxSNR: txSnrValues.isEmpty ? nil : txSnrValues.reduce(0, +) / Double(txSnrValues.count),
                 averageRSSI: rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count),
                 minSNR: snrValues.min(),
                 maxSNR: snrValues.max(),
@@ -383,6 +392,7 @@ enum SurveyExportService {
                     latitude: center.latitude,
                     longitude: center.longitude,
                     averageSNR: nil,
+                    averageTxSNR: nil,
                     averageRSSI: nil,
                     minSNR: nil,
                     maxSNR: nil,

@@ -29,6 +29,7 @@ struct UploadCellData: Content {
     let latitude: Double
     let longitude: Double
     let averageSNR: Double?
+    let averageTxSNR: Double?
     let averageRSSI: Double?
     let minSNR: Double?
     let maxSNR: Double?
@@ -60,6 +61,7 @@ struct UploadTimeRange: Content {
 struct RepeaterMetricData: Content {
     let hexID: String
     let averageSNR: Double?
+    let averageTxSNR: Double?
     let averageRSSI: Double?
     let packetCount: Int
     /// ISO 8601 timestamp of the most recent packet from this repeater in this cell.
