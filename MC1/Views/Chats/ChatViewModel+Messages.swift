@@ -370,6 +370,7 @@ extension ChatViewModel {
         let hexPath: HexPath? = (sharedRoute == nil && !message.isOutgoing) ? HexPathParser.detectInMessage(message.text) : nil
         let newItem = MessageDisplayItem(
             messageID: message.id,
+            date: message.date,
             showTimestamp: flags.showTimestamp,
             showDirectionGap: flags.showDirectionGap,
             showSenderName: flags.showSenderName,
@@ -421,6 +422,7 @@ extension ChatViewModel {
         let item = displayItems[index]
         displayItems[index] = MessageDisplayItem(
             messageID: item.messageID,
+            date: item.date,
             showTimestamp: item.showTimestamp,
             showDirectionGap: item.showDirectionGap,
             showSenderName: item.showSenderName,
@@ -904,6 +906,7 @@ extension ChatViewModel {
 
             return MessageDisplayItem(
                 messageID: message.id,
+                date: message.date,
                 showTimestamp: flags.showTimestamp,
                 showDirectionGap: flags.showDirectionGap,
                 showSenderName: flags.showSenderName,

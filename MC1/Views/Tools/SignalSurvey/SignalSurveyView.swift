@@ -53,7 +53,24 @@ struct SignalSurveyView: View {
             }
         }
         .navigationTitle("Signal Survey")
-        .toolbar { toolbarContent }
+        .navigationBarBackButtonHidden(isShowingMapSubState)
+        .toolbar {
+            if isShowingMapSubState {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        returnToDashboard()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .fontWeight(.semibold)
+                                .imageScale(.medium)
+                            Text("Signal Survey")
+                        }
+                    }
+                }
+            }
+            toolbarContent
+        }
         .task(id: appState.servicesVersion) {
             guard let dataStore = appState.offlineDataStore,
                   let deviceID = appState.currentDeviceID else { return }
@@ -1695,14 +1712,32 @@ struct SignalSurveyView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
+        // Sessions button — always visible when there are sessions
+        if !viewModel.sessions.isEmpty {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showingSessionList = true
                 } label: {
                     Label("Sessions", systemImage: "list.bullet")
                 }
+            }
+        }
 
+        // Upload button — visible when a session is loaded and not active
+        if !viewModel.sessions.isEmpty && !viewModel.isActive {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    batchSelectedSessions = Set(viewModel.sessions.map(\.id))
+                    showingBatchUpload = true
+                } label: {
+                    Label("Upload", systemImage: "icloud.and.arrow.up")
+                }
+            }
+        }
+
+        // Overflow menu for less common actions
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
                 if viewModel.selectedSessionID != nil && !viewModel.isActive {
                     Button {
                         showingExportSheet = true
@@ -1711,18 +1746,7 @@ struct SignalSurveyView: View {
                     }
                 }
 
-                if !viewModel.sessions.isEmpty && !viewModel.isActive {
-                    Button {
-                        batchSelectedSessions = Set(viewModel.sessions.map(\.id))
-                        showingBatchUpload = true
-                    } label: {
-                        Label("Upload Sessions…", systemImage: "icloud.and.arrow.up")
-                    }
-                }
-
                 if !viewModel.sessions.isEmpty {
-                    Divider()
-
                     Button {
                         guard let dataStore = appState.offlineDataStore,
                               let deviceID = appState.currentDeviceID else { return }
@@ -1731,7 +1755,7 @@ struct SignalSurveyView: View {
                             await viewModel.loadAllPoints(dataStore: dataStore, deviceID: deviceID)
                         }
                     } label: {
-                        Label("All Sessions", systemImage: "map.fill")
+                        Label("Show All Sessions on Map", systemImage: "map.fill")
                     }
 
                     Button {
@@ -1739,30 +1763,25 @@ struct SignalSurveyView: View {
                     } label: {
                         Label("Clear Map", systemImage: "eye.slash")
                     }
-                }
 
-                Divider()
-
-                Button {
-                    viewModel.showCommunityOverlay.toggle()
-                } label: {
-                    Label(
-                        viewModel.showCommunityOverlay ? "Hide Community Data" : "Show Community Data",
-                        systemImage: viewModel.showCommunityOverlay ? "globe.americas.fill" : "globe.americas"
-                    )
+                    Divider()
                 }
 
                 if contributorVerified {
-                    Divider()
-
                     Button {
                         showingContributorProfile = true
                     } label: {
                         Label("My Contributions", systemImage: "person.crop.circle")
                     }
+
+                    Divider()
                 }
 
-                Divider()
+                Button {
+                    showingSurveySetup = true
+                } label: {
+                    Label("Survey Settings", systemImage: "gearshape")
+                }
 
                 Button {
                     showingInfoSheet = true
@@ -1775,36 +1794,132 @@ struct SignalSurveyView: View {
         }
     }
 
+    // MARK: - Sub-State Navigation
+
+    /// True when the view is showing a map sub-state that should return to the
+    /// dashboard (empty state) before navigating back to Tools.
+    /// Only applies when browsing community data or viewing a past session
+    /// without an active survey running.
+    private var isShowingMapSubState: Bool {
+        !viewModel.isActive
+        && (viewModel.showCommunityOverlay || !viewModel.allPoints.isEmpty)
+    }
+
+    /// Return to the empty-state dashboard by clearing map sub-state.
+    private func returnToDashboard() {
+        withAnimation {
+            viewModel.showCommunityOverlay = false
+            viewModel.clearSessionData()
+        }
+    }
+
     // MARK: - Empty State
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("Signal Survey", systemImage: "antenna.radiowaves.left.and.right")
-        } description: {
-            Text("Start a survey to record signal quality as you move. Each received packet will be tagged with your GPS location to build a coverage map.")
-        } actions: {
-            if appState.services?.surveyService != nil {
-                Button("Start Survey") {
-                    showingSurveySetup = true
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                Text("Connect a radio to start surveying")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer()
+                    .frame(height: 20)
 
-            if !viewModel.sessions.isEmpty {
-                Button("Browse Sessions") {
-                    showingSessionList = true
-                }
-            }
+                // Hero
+                VStack(spacing: 12) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.tint)
 
-            Button {
-                viewModel.showCommunityOverlay = true
-            } label: {
-                Label("Community Map", systemImage: "globe.americas")
+                    Text("Signal Survey")
+                        .font(.title2.weight(.bold))
+
+                    Text("Map your mesh coverage by walking around. Each received packet is tagged with GPS to build a heat map of signal quality.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 300)
+                }
+
+                // Primary action
+                if appState.services?.surveyService != nil {
+                    Button {
+                        showingSurveySetup = true
+                    } label: {
+                        Label("Start Survey", systemImage: "play.fill")
+                            .font(.headline)
+                            .frame(maxWidth: 260)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                } else {
+                    Label("Connect a radio to start surveying", systemImage: "antenna.radiowaves.left.and.right.slash")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Secondary actions
+                VStack(spacing: 0) {
+                    if !viewModel.sessions.isEmpty {
+                        Button {
+                            showingSessionList = true
+                        } label: {
+                            HStack {
+                                Label("Past Sessions", systemImage: "list.bullet")
+                                Spacer()
+                                Text("\(viewModel.sessions.count)")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider()
+                            .padding(.leading, 52)
+                    }
+
+                    Button {
+                        viewModel.showCommunityOverlay = true
+                    } label: {
+                        HStack {
+                            Label("Community Map", systemImage: "globe.americas")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider()
+                        .padding(.leading, 52)
+
+                    Button {
+                        showingInfoSheet = true
+                    } label: {
+                        HStack {
+                            Label("How It Works", systemImage: "info.circle")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 20)
+
+                Spacer()
             }
+            .frame(maxWidth: .infinity)
         }
     }
 

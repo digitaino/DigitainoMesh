@@ -128,7 +128,10 @@ struct ChatConversationMessagesContent: View {
                 if let message = viewModel.message(for: item) {
                     onReply?(message)
                 }
-            } : nil
+            } : nil,
+            datesByItemID: Dictionary(
+                uniqueKeysWithValues: viewModel.displayItems.map { ($0.id, $0.date) }
+            )
         )
         .sheet(item: $sharedRouteForMap) { route in
             SharedRouteMapSheet(sharedRoute: route)

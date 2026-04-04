@@ -105,6 +105,36 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
     /// Reference to the swipe-to-reply pan gesture recognizer (for delegate identification)
     private var swipeToReplyGestureRecognizer: UIPanGestureRecognizer?
 
+    // MARK: - Swipe to Reveal Timestamps (iMessage-style)
+
+    /// Reference to the timestamp-reveal pan gesture recognizer
+    private var timestampRevealGestureRecognizer: UIPanGestureRecognizer?
+
+    /// Whether the timestamp reveal swipe is currently active
+    private var isTimestampRevealActive = false
+
+    /// Current horizontal offset for timestamp reveal (negative = swiped left)
+    private var timestampRevealOffset: CGFloat = 0
+
+    /// Maximum leftward drag for timestamp reveal
+    private let timestampRevealMax: CGFloat = 80
+
+    /// Timestamp labels keyed by item ID for efficient add/remove during scroll
+    private var timestampLabelsByID: [AnyHashable: UILabel] = [:]
+
+    /// Non-scrolling overlay that hosts timestamp labels above the table view
+    private var timestampOverlay: UIView?
+
+    /// Cached date formatter for timestamp labels (avoid re-creating per frame)
+    private lazy var timestampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+
+    /// Date lookup by item ID for timestamp labels
+    var datesByItemID: [Item.ID: Date] = [:]
+
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -147,6 +177,9 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
 
         // Swipe-to-reply gesture (UIKit-level to avoid SwiftUI/UIKit gesture conflicts)
         setupSwipeToReplyGesture()
+
+        // Swipe-left to reveal timestamps (iMessage-style)
+        setupTimestampRevealGesture()
 
         // Manual keyboard observation (UIKit auto-adjustment doesn't work in SwiftUI embed)
         setupKeyboardObservers()
@@ -211,6 +244,7 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
             // Flip cell back to normal orientation (must be cell, not contentView,
             // because UIHostingConfiguration replaces contentView hierarchy)
             cell.transform = CGAffineTransform(scaleX: 1, y: -1)
+            cell.layer.sublayerTransform = CATransform3DIdentity
             cell.backgroundColor = .clear
             cell.selectionStyle = .none
 
@@ -500,6 +534,11 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
         checkVisibleMentions()
         checkDividerVisibility()
         checkNearTop()
+
+        // Apply shift to any cells that scrolled in during an active reveal
+        if isTimestampRevealActive, timestampRevealOffset > 0 {
+            applyTimestampOffsetToAllCells()
+        }
     }
 
     private func checkVisibleMentions() {
@@ -793,28 +832,198 @@ final class ChatTableViewController<Item: Identifiable & Hashable & Sendable, Ce
         isSwipeActive = false
         hasPassedSwipeThreshold = false
     }
-    // MARK: - UIGestureRecognizerDelegate
+    // MARK: - Swipe to Reveal Timestamps Gesture
 
-    /// Only recognize rightward horizontal swipes, yield to vertical scrolling
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
-              pan === swipeToReplyGestureRecognizer else {
-            return true
-        }
-        let velocity = pan.velocity(in: tableView)
-        // Must be moving rightward and more horizontal than vertical
-        return velocity.x > 0 && abs(velocity.x) > abs(velocity.y) * 1.5
+    private func setupTimestampRevealGesture() {
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleTimestampReveal(_:)))
+        pan.delegate = self
+        tableView.addGestureRecognizer(pan)
+        timestampRevealGestureRecognizer = pan
     }
 
-    /// Don't allow our swipe gesture to recognize simultaneously with table scroll.
-    /// This delegate is only set on the swipe-to-reply gesture recognizer, so it won't
-    /// affect other gesture pairs. gestureRecognizerShouldBegin already filters for
-    /// rightward horizontal swipes.
+    @objc private func handleTimestampReveal(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            isTimestampRevealActive = true
+            timestampRevealOffset = 0
+            addTimestampLabelsToVisibleCells()
+        case .changed:
+            updateTimestampReveal(gesture)
+        case .ended, .cancelled, .failed:
+            animateTimestampRevealReset()
+        default:
+            break
+        }
+    }
+
+    private func updateTimestampReveal(_ gesture: UIPanGestureRecognizer) {
+        guard isTimestampRevealActive else { return }
+
+        let dx = gesture.translation(in: tableView).x
+        // Clamp to [0, timestampRevealMax] — dx is negative for left swipe
+        // Apply rubber-band resistance past the max
+        let raw = -dx
+        let clamped: CGFloat
+        if raw > timestampRevealMax {
+            let over = raw - timestampRevealMax
+            clamped = timestampRevealMax + over * 0.2
+        } else {
+            clamped = min(max(raw, 0), timestampRevealMax)
+        }
+        timestampRevealOffset = min(clamped, timestampRevealMax * 1.2)
+
+        applyTimestampOffsetToAllCells()
+    }
+
+    /// Applies the current timestamp offset to all visible cells and syncs labels.
+    /// Uses sublayerTransform on the cell layer to shift content horizontally
+    /// without touching the cell's affine transform (which holds the y-flip).
+    private func applyTimestampOffsetToAllCells() {
+        guard let overlay = timestampOverlay else { return }
+        let offset = timestampRevealOffset
+        let progress = min(offset / 40, 1.0)
+        let overlayWidth = overlay.bounds.width
+
+        // Track which item IDs are currently visible
+        var visibleIDs = Set<AnyHashable>()
+
+        guard let visibleRows = tableView.indexPathsForVisibleRows else { return }
+
+        // Shift cell content left using sublayerTransform (leaves cell.transform alone)
+        let shiftTransform = CATransform3DMakeTranslation(-offset, 0, 0)
+
+        for indexPath in visibleRows {
+            guard let cell = tableView.cellForRow(at: indexPath) else { continue }
+
+            cell.layer.sublayerTransform = shiftTransform
+
+            let reversedIndex = items.count - 1 - indexPath.row
+            guard reversedIndex >= 0, reversedIndex < items.count else { continue }
+
+            let item = items[reversedIndex]
+            let itemID = AnyHashable(item.id)
+            visibleIDs.insert(itemID)
+
+            let centerInOverlay = tableView.convert(cell.center, to: overlay)
+
+            if let label = timestampLabelsByID[itemID] {
+                // Update existing label position
+                label.center.y = centerInOverlay.y
+                label.alpha = progress
+            } else if let date = datesByItemID[item.id] {
+                // Create label for newly visible cell
+                let label = UILabel()
+                label.text = timestampFormatter.string(from: date)
+                label.font = .systemFont(ofSize: 11)
+                label.textColor = .secondaryLabel
+                label.textAlignment = .right
+                label.sizeToFit()
+
+                let labelWidth = label.bounds.width
+                label.frame = CGRect(
+                    x: overlayWidth - labelWidth - 8,
+                    y: centerInOverlay.y - label.bounds.height / 2,
+                    width: labelWidth,
+                    height: label.bounds.height
+                )
+                label.alpha = progress
+
+                overlay.addSubview(label)
+                timestampLabelsByID[itemID] = label
+            }
+        }
+
+        // Remove labels for cells that scrolled out of view
+        for (id, label) in timestampLabelsByID where !visibleIDs.contains(id) {
+            label.removeFromSuperview()
+            timestampLabelsByID.removeValue(forKey: id)
+        }
+    }
+
+    private func ensureTimestampOverlay() {
+        guard timestampOverlay == nil, let superview = view.superview else { return }
+        let overlay = UIView()
+        overlay.isUserInteractionEnabled = false
+        overlay.clipsToBounds = true
+        overlay.frame = superview.bounds
+        overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        superview.addSubview(overlay)
+        timestampOverlay = overlay
+    }
+
+    private func addTimestampLabelsToVisibleCells() {
+        removeTimestampLabels()
+        ensureTimestampOverlay()
+        // Initial label creation is handled by applyTimestampOffsetToAllCells
+    }
+
+    private func removeTimestampLabels() {
+        for label in timestampLabelsByID.values {
+            label.removeFromSuperview()
+        }
+        timestampLabelsByID.removeAll()
+    }
+
+    private func animateTimestampRevealReset() {
+        isTimestampRevealActive = false
+        timestampRevealOffset = 0
+
+        let labels = Array(timestampLabelsByID.values)
+        let overlay = timestampOverlay
+        let cellsToReset = tableView.visibleCells
+        timestampLabelsByID.removeAll()
+
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0) {
+            for cell in cellsToReset {
+                cell.layer.sublayerTransform = CATransform3DIdentity
+            }
+            for label in labels {
+                label.alpha = 0
+            }
+        } completion: { _ in
+            // Also reset any cells that may have been recycled during the animation
+            for cell in self.tableView.visibleCells {
+                cell.layer.sublayerTransform = CATransform3DIdentity
+            }
+            for label in labels {
+                label.removeFromSuperview()
+            }
+            overlay?.removeFromSuperview()
+            self.timestampOverlay = nil
+        }
+    }
+
+    // MARK: - UIGestureRecognizerDelegate
+
+    /// Route gesture begin checks to the appropriate recognizer
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer else {
+            return true
+        }
+
+        if pan === swipeToReplyGestureRecognizer {
+            let velocity = pan.velocity(in: tableView)
+            return velocity.x > 0 && abs(velocity.x) > abs(velocity.y) * 1.5
+        }
+
+        if pan === timestampRevealGestureRecognizer {
+            let velocity = pan.velocity(in: tableView)
+            return velocity.x < 0 && abs(velocity.x) > abs(velocity.y) * 1.5
+        }
+
+        return true
+    }
+
+    /// Allow timestamp reveal to coexist with table scroll so user can scroll
+    /// vertically while holding the horizontal swipe. Swipe-to-reply stays exclusive.
     func gestureRecognizer(
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        false
+        if gestureRecognizer === timestampRevealGestureRecognizer {
+            return true
+        }
+        return false
     }
 }
 
@@ -840,6 +1049,7 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
     var highlightedItemID: Item.ID?
     var canSwipeToReply: ((Item) -> Bool)?
     var onSwipeToReply: ((Item) -> Void)?
+    var datesByItemID: [Item.ID: Date] = [:]
 
     func makeUIViewController(context: Context) -> ChatTableViewController<Item, Content> {
         let controller = ChatTableViewController<Item, Content>()
@@ -896,6 +1106,9 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
         // Update swipe-to-reply closures
         controller.canSwipeToReply = canSwipeToReply
         controller.onSwipeToReply = onSwipeToReply
+
+        // Update timestamp dates for swipe-to-reveal
+        controller.datesByItemID = datesByItemID
 
         // Check for scroll-to-mention request
         let shouldScrollToMention = scrollToMentionRequest != context.coordinator.lastMentionRequest

@@ -144,6 +144,7 @@ extension ChatViewModel {
 
         displayItems[index] = MessageDisplayItem(
             messageID: item.messageID,
+            date: item.date,
             showTimestamp: item.showTimestamp,
             showDirectionGap: item.showDirectionGap,
             showSenderName: item.showSenderName,
