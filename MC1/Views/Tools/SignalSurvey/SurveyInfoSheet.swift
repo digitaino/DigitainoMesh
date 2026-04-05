@@ -77,16 +77,28 @@ struct SurveyInfoSheet: View {
             iconColor: .green,
             title: "Active Survey (TX + RX)"
         ) {
-            Text("Sends probe packets and listens for responses. A response confirms the repeater heard you AND you heard it — a real bidirectional link.")
+            Text("Sends a channel message and listens for responses. A heard-repeat response confirms the repeater heard you AND you heard it — a real bidirectional link.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            bulletPoint("Each probe sends a message on your selected private channel")
+            bulletPoint("A 0-hop heard repeat proves direct 2-way connectivity")
+            bulletPoint("No extra transmissions beyond the channel message")
+
+            Text("Deep Scan (Optional)")
+                .font(.caption.weight(.semibold))
+                .padding(.top, 2)
+
+            Text("Enable Deep Scan for additional mesh analysis. Each probe adds:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 8) {
-                probeStep(number: 1, text: "Channel message — sends a message on your selected private channel. A heard-repeat response from a repeater proves direct 2-way connectivity.")
-                probeStep(number: 2, text: "Deep Scan (optional) — also sends discover and flood trace requests to map gateway SNR and mesh depth beyond direct reach.")
+                probeStep(number: 1, text: "Discover request — asks repeaters to identify themselves. Their responses include TX signal data (how well they hear you), the only way to measure outbound signal quality.")
+                probeStep(number: 2, text: "Flood trace — maps multi-hop paths and mesh depth beyond direct reach. Identifies the best mesh gateway repeater.")
             }
 
-            Text("Channel messages provide the primary proof of 2-way connectivity. Deep Scan adds extra data about multi-hop mesh paths and remote repeater signal quality, but uses more airtime.")
+            Text("Deep Scan uses more airtime and works best at slower speeds. The cell detail card adapts automatically — showing TX signal columns and mesh gateway analysis when Deep Scan data is available.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -147,6 +159,7 @@ struct SurveyInfoSheet: View {
 
             bulletPoint("View individual packets with timestamps and signal data")
             bulletPoint("Probe success rate shows what percentage of probes got a response")
+            bulletPoint("With Deep Scan, a Mesh Gateway section shows which repeater has the best connection to the broader mesh — measured by reachable nodes, hop depth, and path SNR")
         }
     }
 
@@ -169,11 +182,11 @@ struct SurveyInfoSheet: View {
                 signalExplainer(
                     direction: "TX Signal",
                     arrow: "arrow.up",
-                    description: "How well the repeater hears you. Only available from discover responses and heard-repeat confirmations. Requires active probing."
+                    description: "How well the repeater hears you. Requires Deep Scan — only discover responses carry TX signal data. Heard repeats prove 2-way connectivity but don't include TX quality."
                 )
             }
 
-            Text("TX data may appear shortly after RX data because it depends on the repeater processing your probe and sending a response back.")
+            Text("Heard repeats are the most important signal — they confirm a repeater received your message and relayed it. Without Deep Scan, only the RX column is shown. With Deep Scan enabled, the TX column appears when discover response data is available.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -268,7 +281,7 @@ struct SurveyInfoSheet: View {
             bulletPoint("Dead zones show where probes were sent but got no response")
             bulletPoint("Passive data is still valuable — it maps where repeater signals reach")
             bulletPoint("Survey the same area multiple times for more reliable data")
-            bulletPoint("TX signal data comes from active probe responses and may take a moment to appear")
+            bulletPoint("TX signal and mesh gateway data require Deep Scan mode")
         }
     }
 

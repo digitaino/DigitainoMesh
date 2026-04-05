@@ -323,6 +323,9 @@ struct SignalSurveyView: View {
                                 .font(.caption.weight(.medium))
                         }
                         .foregroundStyle(viewModel.trackingUserLocation ? .blue : .primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -430,7 +433,10 @@ struct SignalSurveyView: View {
                 if let filtered = viewModel.filteredCellStats {
                     return filtered.avgTxSNR
                 }
-                return cell.averageTxSNR
+                // When no filter is active, show the best direct TX SNR rather than the
+                // average across all repeaters — this answers "how well does my best
+                // repeater hear me from here?" which is the meaningful data point.
+                return cell.bestTxSNR ?? cell.averageTxSNR
             }()
             let displayTxQuality = SNRQuality(snr: displayTxSNR)
             VStack(alignment: .leading, spacing: 8) {
@@ -495,20 +501,76 @@ struct SignalSurveyView: View {
                         .foregroundStyle(Color.accentColor)
                     }
 
-                    // Two-column RX / TX signal section
-                    HStack(alignment: .top, spacing: 0) {
+                    // Detect whether this cell has Deep Scan data (TX SNR or trace data).
+                    // This drives whether we show the two-column RX/TX layout or RX-only.
+                    let hasDeepScanData = cell.averageTxSNR != nil || cell.maxMeshDepth > 0 || !cell.meshScores.isEmpty
+
+                    if hasDeepScanData {
+                        // Two-column RX / TX signal section (Deep Scan data available)
+                        HStack(alignment: .top, spacing: 0) {
+                            signalColumn(
+                                label: "RX Signal",
+                                arrowName: "arrow.down",
+                                snr: displayRxSNR,
+                                quality: displayQuality,
+                                rssi: {
+                                    if let src = viewModel.filteredCellStats { return src.avgRSSI }
+                                    return cell.averageRSSI
+                                }(),
+                                snrRange: {
+                                    if let src = viewModel.filteredCellStats {
+                                        guard let lo = src.minSNR, let hi = src.maxSNR else { return nil }
+                                        return (lo, hi)
+                                    }
+                                    guard let lo = cell.minSNR, let hi = cell.maxSNR else { return nil }
+                                    return (lo, hi)
+                                }()
+                            )
+
+                            Rectangle()
+                                .fill(.quaternary)
+                                .frame(width: 0.5)
+                                .padding(.vertical, 4)
+
+                            signalColumn(
+                                label: "TX Signal",
+                                arrowName: "arrow.up",
+                                snr: displayTxSNR,
+                                quality: displayTxQuality,
+                                rssi: nil,
+                                snrRange: {
+                                    guard isFilteredRepeaterDirect else { return nil }
+                                    if let src = viewModel.filteredCellStats {
+                                        guard let lo = src.minTxSNR, let hi = src.maxTxSNR else { return nil }
+                                        return (lo, hi)
+                                    }
+                                    guard let lo = cell.minTxSNR, let hi = cell.maxTxSNR else { return nil }
+                                    return (lo, hi)
+                                }(),
+                                unknownReason: {
+                                    guard displayTxQuality == .unknown else { return nil }
+                                    if !isFilteredRepeaterDirect {
+                                        return "Not direct — TX only applies to 2-way links"
+                                    }
+                                    if cell.connectedRelayNodes.isEmpty {
+                                        return "Waiting for discover response"
+                                    }
+                                    return "Repeats confirmed — TX data from discover responses"
+                                }()
+                            )
+                        }
+                    } else {
+                        // Single-column RX signal (no Deep Scan data)
                         signalColumn(
                             label: "RX Signal",
                             arrowName: "arrow.down",
                             snr: displayRxSNR,
                             quality: displayQuality,
                             rssi: {
-                                // When relay filter is active, use only filtered RSSI
                                 if let src = viewModel.filteredCellStats { return src.avgRSSI }
                                 return cell.averageRSSI
                             }(),
                             snrRange: {
-                                // When relay filter is active, use only filtered RX range
                                 if let src = viewModel.filteredCellStats {
                                     guard let lo = src.minSNR, let hi = src.maxSNR else { return nil }
                                     return (lo, hi)
@@ -517,32 +579,9 @@ struct SignalSurveyView: View {
                                 return (lo, hi)
                             }()
                         )
-
-                        Rectangle()
-                            .fill(.quaternary)
-                            .frame(width: 0.5)
-                            .padding(.vertical, 4)
-
-                        signalColumn(
-                            label: "TX Signal",
-                            arrowName: "arrow.up",
-                            snr: displayTxSNR,
-                            quality: displayTxQuality,
-                            rssi: nil,
-                            snrRange: {
-                                guard isFilteredRepeaterDirect else { return nil }
-                                // When relay filter is active, use only filtered TX range
-                                if let src = viewModel.filteredCellStats {
-                                    guard let lo = src.minTxSNR, let hi = src.maxTxSNR else { return nil }
-                                    return (lo, hi)
-                                }
-                                guard let lo = cell.minTxSNR, let hi = cell.maxTxSNR else { return nil }
-                                return (lo, hi)
-                            }()
-                        )
                     }
 
-                    // Shared detail rows (not direction-specific)
+                    // Shared detail rows
                     VStack(spacing: 3) {
                         if let filtered = viewModel.filteredCellStats {
                             if let latest = filtered.latestTimestamp {
@@ -569,6 +608,59 @@ struct SignalSurveyView: View {
                             let rateColor: Color = pct >= 75 ? .green : pct >= 40 ? .yellow : .red
                             detailRow(label: "Probe Success", value: "\(pct)% (\(successCount)/\(probes))", valueColor: rateColor)
                         }
+                    }
+
+                    // Mesh Gateway section (Deep Scan only)
+                    if let bestGateway = cell.meshScores.first, viewModel.selectedRelayFilter == nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "point.3.connected.trianglepath.dotted")
+                                    .font(.caption2)
+                                    .foregroundStyle(.cyan)
+                                Text("Best Mesh Gateway")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            HStack(spacing: 12) {
+                                VStack(spacing: 1) {
+                                    Text(bestGateway.hexID)
+                                        .font(.system(.caption, design: .monospaced, weight: .medium))
+                                    Text("Repeater")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.tertiary)
+                                }
+
+                                VStack(spacing: 1) {
+                                    Text("\(bestGateway.reachableNodes)")
+                                        .font(.system(.caption, design: .monospaced, weight: .medium))
+                                    Text("Nodes")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.tertiary)
+                                }
+
+                                VStack(spacing: 1) {
+                                    Text("\(bestGateway.maxDepth)")
+                                        .font(.system(.caption, design: .monospaced, weight: .medium))
+                                    Text(bestGateway.maxDepth == 1 ? "Hop" : "Hops")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.tertiary)
+                                }
+
+                                if let avgSNR = bestGateway.avgPathSNR {
+                                    VStack(spacing: 1) {
+                                        Text(String(format: "%.1f", avgSNR))
+                                            .font(.system(.caption, design: .monospaced, weight: .medium))
+                                            .foregroundStyle(SNRQuality(snr: avgSNR).color)
+                                        Text("Path SNR")
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, 4)
                     }
 
                     // View Packets button
@@ -692,7 +784,8 @@ struct SignalSurveyView: View {
     private func signalColumn(
         label: String, arrowName: String,
         snr: Double?, quality: SNRQuality,
-        rssi: Double?, snrRange: (min: Double, max: Double)?
+        rssi: Double?, snrRange: (min: Double, max: Double)?,
+        unknownReason: String? = nil
     ) -> some View {
         HStack(spacing: 6) {
             // Signal bars (or placeholder)
@@ -743,6 +836,12 @@ struct SignalSurveyView: View {
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundStyle(.tertiary)
                     }
+                } else if let reason = unknownReason {
+                    Text(reason)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("—")
                         .font(.caption2)

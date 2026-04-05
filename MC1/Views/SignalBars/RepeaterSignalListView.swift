@@ -5,6 +5,7 @@ import SwiftUI
 /// Each row: hex ID | ▼ RX bars | ▲ TX bars/status | RTT | age
 struct RepeaterSignalPopover: View {
     @Environment(\.appState) private var appState
+    @State private var isApplyingHashMode = false
 
     var body: some View {
         let service = appState.signalBarsService
@@ -76,9 +77,68 @@ struct RepeaterSignalPopover: View {
                 }
                 .frame(maxHeight: 260)
             }
+
+            // Path hash size quick-picker
+            if appState.connectedDevice != nil {
+                Divider()
+                    .padding(.horizontal, 8)
+                pathHashPicker
+            }
         }
         .frame(width: 250)
         .padding(.bottom, 8)
+    }
+
+    // MARK: - Path Hash Size Picker
+
+    private var pathHashPicker: some View {
+        let currentMode = appState.connectedDevice?.pathHashMode ?? 0
+        return HStack(spacing: 6) {
+            Image(systemName: "number")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text("Path Hash")
+                .font(.system(.caption2, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            if isApplyingHashMode {
+                ProgressView()
+                    .controlSize(.mini)
+            }
+
+            Picker("", selection: Binding(
+                get: { currentMode },
+                set: { newMode in
+                    applyHashMode(newMode)
+                }
+            )) {
+                Text("1B").tag(UInt8(0))
+                Text("2B").tag(UInt8(1))
+                Text("3B").tag(UInt8(2))
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 110)
+            .disabled(isApplyingHashMode)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func applyHashMode(_ mode: UInt8) {
+        guard mode != appState.connectedDevice?.pathHashMode else { return }
+        isApplyingHashMode = true
+        Task {
+            defer { isApplyingHashMode = false }
+            do {
+                guard let settingsService = appState.services?.settingsService else { return }
+                _ = try await settingsService.setPathHashModeVerified(mode)
+            } catch {
+                // Silently revert — the picker will sync from device state
+            }
+        }
     }
 }
 

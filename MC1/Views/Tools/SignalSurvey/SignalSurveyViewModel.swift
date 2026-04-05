@@ -328,6 +328,25 @@ final class SignalSurveyViewModel {
         let eventMonitoringActive: Bool
     }
 
+    // MARK: - Mesh Connectivity Score
+
+    /// Per-repeater mesh connectivity metrics computed from trace (Deep Scan) data.
+    /// Measures how well a repeater connects to the broader mesh from a given cell.
+    struct RepeaterMeshScore: Identifiable {
+        let hexID: String
+        /// Number of unique downstream nodes reachable through this repeater via trace paths.
+        let reachableNodes: Int
+        /// Maximum trace depth (hops) achieved through this repeater.
+        let maxDepth: Int
+        /// Average SNR across all trace path hops through this repeater.
+        let avgPathSNR: Double?
+        /// Composite score: reachableNodes * (1 + normalized SNR bonus).
+        /// Higher = better mesh gateway.
+        let score: Double
+
+        var id: String { hexID }
+    }
+
     // MARK: - Grid Cell for Heatmap
 
     struct GridCell: Identifiable {
@@ -368,10 +387,17 @@ final class SignalSurveyViewModel {
         let probesSent: Int?
         /// Average TX SNR (how well repeaters heard us) across points with txSnr data.
         let averageTxSNR: Double?
+        /// Best TX SNR from any direct 2-way repeater in this cell.
+        /// More meaningful than the average when multiple repeaters have different TX quality.
+        let bestTxSNR: Double?
         /// Minimum TX SNR observed in this cell.
         let minTxSNR: Double?
         /// Maximum TX SNR observed in this cell.
         let maxTxSNR: Double?
+        /// Per-repeater mesh connectivity scores from trace (Deep Scan) data.
+        /// Sorted by score descending — first entry is the best mesh gateway.
+        /// Empty when no trace data exists (non-deep-scan sessions).
+        let meshScores: [RepeaterMeshScore]
 
         /// Composite identity: coordKey + packetCount so ForEach detects content changes.
         var id: String { "\(coordKey)_\(packetCount)" }
@@ -1535,8 +1561,10 @@ final class SignalSurveyViewModel {
                     activePacketCount: 0,
                     probesSent: probesSentPerCell[key],
                     averageTxSNR: nil,
+                    bestTxSNR: nil,
                     minTxSNR: nil,
-                    maxTxSNR: nil
+                    maxTxSNR: nil,
+                    meshScores: []
                 ))
             }
         } else if !probesSentPerCell.isEmpty {
@@ -1572,8 +1600,10 @@ final class SignalSurveyViewModel {
                     activePacketCount: 0,
                     probesSent: probes,
                     averageTxSNR: nil,
+                    bestTxSNR: nil,
                     minTxSNR: nil,
-                    maxTxSNR: nil
+                    maxTxSNR: nil,
+                    meshScores: []
                 ))
             }
         }
@@ -1655,6 +1685,81 @@ final class SignalSurveyViewModel {
         return (bestSNR, bestHexID, maxDepth)
     }
 
+    /// Computes per-repeater mesh connectivity scores from trace (Deep Scan) data.
+    ///
+    /// For each connected repeater, this measures:
+    /// - **Reachable nodes**: unique downstream nodes seen in trace paths that include this repeater
+    /// - **Max depth**: deepest trace path through this repeater
+    /// - **Avg path SNR**: average SNR across all hops in trace paths through this repeater
+    /// - **Score**: `reachableNodes × (1 + normalizedSNR)` where SNR is normalized to 0–1
+    ///   using the range [-20, +20] dB. This balances reach breadth with signal quality.
+    private static func computeMeshScores(
+        points: [SignalSurveyPointDTO],
+        connectedIDs: Set<String>,
+        canonicalize: (String) -> String
+    ) -> [RepeaterMeshScore] {
+        let tracePoints = points.filter { $0.payloadType == .trace && $0.pathNodeHexIDs.count >= 2 }
+        guard !tracePoints.isEmpty else { return [] }
+
+        // For each connected repeater, gather metrics from trace paths that include it.
+        // A connected repeater is our direct gateway — trace paths going through it
+        // show which downstream nodes are reachable via that gateway.
+        struct Accumulator {
+            var downstreamNodes: Set<String> = []
+            var maxDepth: Int = 0
+            var snrValues: [Double] = []
+        }
+
+        var accumulators: [String: Accumulator] = [:]
+
+        for point in tracePoints {
+            let canonicalPath = point.pathNodeHexIDs.map { canonicalize($0) }
+            let depth = point.hopCount + 1
+
+            // Find which connected repeaters appear in this trace path.
+            // The first node in the path is typically the direct gateway.
+            for (idx, nodeID) in canonicalPath.enumerated() {
+                let isConnected = connectedIDs.contains(nodeID) ||
+                    connectedIDs.contains(where: { cid in
+                        let u = cid.uppercased(), n = nodeID.uppercased()
+                        if u.count < n.count { return n.hasPrefix(u) && u.count == 2 }
+                        if n.count < u.count { return u.hasPrefix(n) && n.count == 2 }
+                        return false
+                    })
+                guard isConnected else { continue }
+
+                var acc = accumulators[nodeID] ?? Accumulator()
+                // All other nodes in the path are downstream of this gateway
+                for (otherIdx, otherID) in canonicalPath.enumerated() where otherIdx != idx {
+                    acc.downstreamNodes.insert(otherID)
+                }
+                acc.maxDepth = max(acc.maxDepth, depth)
+                if let snr = point.snr {
+                    acc.snrValues.append(snr)
+                }
+                accumulators[nodeID] = acc
+            }
+        }
+
+        // Normalize SNR to [0, 1] using range [-20, +20] dB
+        func normalizedSNR(_ snr: Double) -> Double {
+            min(max((snr + 20) / 40.0, 0), 1)
+        }
+
+        return accumulators.map { (hexID, acc) in
+            let avgSNR = acc.snrValues.isEmpty ? nil : acc.snrValues.reduce(0, +) / Double(acc.snrValues.count)
+            let snrBonus = avgSNR.map { normalizedSNR($0) } ?? 0.5
+            let score = Double(acc.downstreamNodes.count) * (1.0 + snrBonus)
+            return RepeaterMeshScore(
+                hexID: hexID,
+                reachableNodes: acc.downstreamNodes.count,
+                maxDepth: acc.maxDepth,
+                avgPathSNR: avgSNR,
+                score: score
+            )
+        }.sorted { $0.score > $1.score }
+    }
+
     /// Creates a GridCell from a bucket of points at a hex coordinate.
     private static func makeGridCell(
         coord: HexGrid.AxialCoord,
@@ -1670,6 +1775,10 @@ final class SignalSurveyViewModel {
         let avgSNR = snrValues.isEmpty ? nil : snrValues.reduce(0, +) / Double(snrValues.count)
         let avgRSSI = rssiValues.isEmpty ? nil : Double(rssiValues.reduce(0, +)) / Double(rssiValues.count)
         let avgTxSNR = txSnrValues.isEmpty ? nil : txSnrValues.reduce(0, +) / Double(txSnrValues.count)
+        // Best TX SNR from direct 2-way points — more meaningful than the average
+        // when multiple repeaters have varying TX quality.
+        let directTxSnrValues = points.filter { isDirectTwoWay($0) }.compactMap(\.txSnr)
+        let bestTxSNR = directTxSnrValues.max()
         let timestamps = points.map(\.timestamp).sorted()
         let senders = Array(Set(points.compactMap(\.fromContactName))).sorted()
         // Only show the 0-hop (directly heard) repeater — the last node in each path chain.
@@ -1825,6 +1934,13 @@ final class SignalSurveyViewModel {
         let displaySNR = bestGatewaySNR ?? avgSNR
         let activeCount = points.count(where: \.isActiveProbe)
 
+        // Per-repeater mesh connectivity scores from trace data.
+        // For each connected repeater, measure how well it connects to the broader mesh:
+        // - How many unique downstream nodes are reachable through trace paths including it
+        // - Maximum trace depth through it
+        // - Average SNR across trace hops through it
+        let meshScores = computeMeshScores(points: points, connectedIDs: directIDs, canonicalize: canonicalize)
+
         return GridCell(
             coordKey: coord.key,
             centerLatitude: center.latitude,
@@ -1850,8 +1966,10 @@ final class SignalSurveyViewModel {
             activePacketCount: activeCount,
             probesSent: probesSent,
             averageTxSNR: avgTxSNR,
+            bestTxSNR: bestTxSNR,
             minTxSNR: txSnrValues.min(),
-            maxTxSNR: txSnrValues.max()
+            maxTxSNR: txSnrValues.max(),
+            meshScores: meshScores
         )
     }
 
@@ -2068,13 +2186,13 @@ final class SignalSurveyViewModel {
 
     /// Sends a probe cycle and updates tracking state.
     ///
-    /// **Default mode**: Sends a channel message only. A 0-hop heard repeat of this message
-    /// is the ground truth for bidirectional connectivity — it proves the repeater heard us
-    /// directly and we heard it back.
+    /// **Active mode**: Sends a channel message. A 0-hop heard repeat of this message is
+    /// the ground truth for bidirectional connectivity — it proves the repeater heard us
+    /// directly and we heard it back. No TX signal data is collected in this mode.
     ///
-    /// **Deep scan mode** (`deepScanEnabled`): Also sends discover + trace requests.
-    /// These provide extra data (gateway SNR, mesh depth) but use more airtime and work
-    /// best at slower speeds.
+    /// **Deep Scan mode** (`deepScanEnabled`): Also sends a discover request and a flood
+    /// trace. Discover responses provide TX SNR (how well repeaters hear us). Traces map
+    /// multi-hop paths and mesh depth. Uses more airtime; best at slower speeds.
     private func sendProbe(location: CLLocation) async {
         guard let bps = binaryProtocolService else {
             logger.warning("Probe skipped: binaryProtocolService is nil")
@@ -2098,16 +2216,6 @@ final class SignalSurveyViewModel {
             time: Date()
         ))
 
-        // Deep scan: discover first to identify directly-heard repeaters
-        if deepScanEnabled {
-            do {
-                let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
-                logger.debug("Probe #\(self.probeCount) discover sent (tag: \(tag))")
-            } catch {
-                logger.warning("Probe #\(self.probeCount) discover failed: \(error.localizedDescription)")
-            }
-        }
-
         // Channel message: the primary probe. Generates heard repeats for 2-way proof.
         if let ms = messageServiceRef, let deviceID, let channel = selectedProbeChannel {
             do {
@@ -2123,9 +2231,22 @@ final class SignalSurveyViewModel {
             }
         }
 
-        // Deep scan: flood trace to measure mesh depth
+        // Deep scan: discover request + flood trace for TX signal quality and mesh depth.
+        // Discover responses include snrIn (TX SNR — how well repeaters hear us).
+        // Traces map multi-hop paths and mesh depth beyond direct reach.
+        // Both use extra airtime, so they're gated behind the Deep Scan toggle.
         if deepScanEnabled {
             // Brief delay to separate transmissions
+            try? await Task.sleep(for: .seconds(0.3))
+            guard !Task.isCancelled else { return }
+
+            do {
+                let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
+                logger.debug("Probe #\(self.probeCount) discover sent (tag: \(tag))")
+            } catch {
+                logger.warning("Probe #\(self.probeCount) discover failed: \(error.localizedDescription)")
+            }
+
             try? await Task.sleep(for: .seconds(0.3))
             guard !Task.isCancelled else { return }
 
@@ -2178,8 +2299,10 @@ final class SignalSurveyViewModel {
                     activePacketCount: 0,
                     probesSent: probes,
                     averageTxSNR: nil,
+                    bestTxSNR: nil,
                     minTxSNR: nil,
-                    maxTxSNR: nil
+                    maxTxSNR: nil,
+                    meshScores: []
                 ))
                 changed = true
 
