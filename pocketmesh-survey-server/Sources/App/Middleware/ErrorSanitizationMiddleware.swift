@@ -17,9 +17,6 @@ struct ErrorSanitizationMiddleware: AsyncMiddleware {
             // Log the real error for debugging
             request.logger.error("Decoding error on \(request.method) \(request.url.path): \(error)")
             throw Abort(.badRequest, reason: "Invalid request body.")
-        } catch let error as ValidationError {
-            request.logger.error("Validation error on \(request.method) \(request.url.path): \(error)")
-            throw Abort(.badRequest, reason: "Request validation failed.")
         } catch {
             // Any other unexpected error — log it, return 500 with generic message
             request.logger.error("Unexpected error on \(request.method) \(request.url.path): \(error)")
