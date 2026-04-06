@@ -53,6 +53,15 @@ final class MessagePathViewModel {
     /// User-chosen overrides for ambiguous hops, keyed by hop hash hex string.
     var hopOverrides: [String: String] = [:]
 
+    /// In-memory persistence of hop overrides across view model instances.
+    /// Keyed by message UUID → [hopHex: repeaterName].
+    private static var persistedOverrides: [UUID: [String: String]] = [:]
+
+    /// Retrieve persisted overrides for a message (used by uploadRouteToServer).
+    static func overrides(for messageID: UUID) -> [String: String] {
+        persistedOverrides[messageID] ?? [:]
+    }
+
     // MARK: - Cached Resolution Results
 
     /// The resolved hops for the current message, in order.
@@ -132,6 +141,11 @@ final class MessagePathViewModel {
     ///
     /// Call this once after loading contacts, and again after any override change.
     func resolveAllHops(message: MessageDTO, userLocation: CLLocation?) {
+        // Load persisted overrides for this message (supports fresh VM instances)
+        if hopOverrides.isEmpty, let persisted = Self.persistedOverrides[message.id], !persisted.isEmpty {
+            hopOverrides = persisted
+        }
+
         let hops = parsePathHops(from: message)
         guard !hops.isEmpty else {
             resolvedHops = []
@@ -204,6 +218,13 @@ final class MessagePathViewModel {
 
         // Compute route distance from the resolved locations
         computeRouteDistance(message: message, userLocation: userLocation)
+
+        // Persist overrides (including any stale cleanup from resolution)
+        if !hopOverrides.isEmpty {
+            Self.persistedOverrides[message.id] = hopOverrides
+        } else {
+            Self.persistedOverrides.removeValue(forKey: message.id)
+        }
     }
 
     // MARK: - Single Hop Resolution (internal)
@@ -316,12 +337,18 @@ final class MessagePathViewModel {
     /// Set a user override for an ambiguous hop, then re-resolve everything.
     func setOverride(for hashBytes: Data, name: String, message: MessageDTO, userLocation: CLLocation?) {
         hopOverrides[hashBytes.hexString()] = name
+        Self.persistedOverrides[message.id] = hopOverrides
         resolveAllHops(message: message, userLocation: userLocation)
     }
 
     /// Clear a user override for a hop, then re-resolve everything.
     func clearOverride(for hashBytes: Data, message: MessageDTO, userLocation: CLLocation?) {
         hopOverrides.removeValue(forKey: hashBytes.hexString())
+        if hopOverrides.isEmpty {
+            Self.persistedOverrides.removeValue(forKey: message.id)
+        } else {
+            Self.persistedOverrides[message.id] = hopOverrides
+        }
         resolveAllHops(message: message, userLocation: userLocation)
     }
 }

@@ -907,9 +907,23 @@ struct ChatConversationView: View {
         backwardMatches.reverse()
         backwardHadAnchor.reverse()
 
+        // Load user overrides for ambiguous hops (set via disambiguation sheet)
+        let overrides = MessagePathViewModel.overrides(for: message.id)
+
         // Merge: pick the result from the closer end for each hop
         let hops: [RouteShareService.RouteHop] = hopHashes.enumerated().map { i, hashBytes in
             let hexID = hashBytes.map { String(format: "%02X", $0) }.joined()
+
+            // User override takes priority over algorithmic resolution
+            if let overrideName = overrides[hexID],
+               let overrideMatch = allNodes.first(where: { $0.resolvableName == overrideName }) {
+                return RouteShareService.RouteHop(
+                    hexID: hexID,
+                    name: overrideMatch.resolvableName,
+                    latitude: overrideMatch.hasLocation ? overrideMatch.latitude : nil,
+                    longitude: overrideMatch.hasLocation ? overrideMatch.longitude : nil
+                )
+            }
 
             let useBackward: Bool
             if forwardHadAnchor[i] && backwardHadAnchor[i] {
