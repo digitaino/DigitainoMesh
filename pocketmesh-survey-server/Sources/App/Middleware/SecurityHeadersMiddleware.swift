@@ -22,7 +22,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         // and Cloudflare-injected analytics/challenge scripts
         response.headers.replaceOrAdd(
             name: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.apple-mapkit.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.apple-mapkit.com; img-src 'self' data:"
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.apple-mapkit.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.apple-mapkit.com; img-src 'self' data: https://cdn.apple-mapkit.com"
         )
         response.headers.replaceOrAdd(
             name: "X-Frame-Options",
