@@ -62,14 +62,18 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-# 4. Rebuild and restart
+# 4. Build the new image first (server stays up during build)
 echo ""
-echo "--- Rebuilding and restarting ---"
-docker compose down
+echo "--- Building new image ---"
 DOCKER_BUILDKIT=1 docker compose build
+
+# 5. Swap: stop old container and start the new one
+echo ""
+echo "--- Swapping to new image ---"
+docker compose down
 docker compose up -d
 
-# 5. Verify
+# 6. Verify
 echo ""
 echo "--- Verifying ---"
 sleep 3
