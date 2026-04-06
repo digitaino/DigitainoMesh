@@ -271,12 +271,12 @@ struct SurveyController {
                             key.hasPrefix(normalized) || normalized.hasPrefix(key)
                         })?.value
 
-                        // Check if a shorter prefix already exists — upgrade it
+                        // Check if a shorter prefix already exists — keep it as-is
+                        // (changing it would create inconsistency with older cell references)
                         if let match = existingRepeaters.first(where: {
                             let eid = $0.repeaterHexID.uppercased()
                             return normalized.hasPrefix(eid) && normalized.count > eid.count
                         }) {
-                            match.repeaterHexID = normalized
                             // Merge per-repeater metrics using weighted average
                             if let metric {
                                 Self.mergeRepeaterMetrics(existing: match, upload: metric)
@@ -468,7 +468,9 @@ struct SurveyController {
         var joinFragment: SQLQueryString = ""
         if let repeaterFilter {
             let upper = repeaterFilter.uppercased()
-            joinFragment = " JOIN cell_repeaters rf ON rf.cell_id = c.id AND UPPER(rf.repeater_hex_id) = \(bind: upper)"
+            // Prefix-aware match: "0C1377" matches cells with "0C" and vice versa.
+            // This handles mixed hash-size modes (1-byte vs 2-byte vs 3-byte).
+            joinFragment = " JOIN cell_repeaters rf ON rf.cell_id = c.id AND (UPPER(rf.repeater_hex_id) = \(bind: upper) OR \(bind: upper) LIKE UPPER(rf.repeater_hex_id) || '%' OR UPPER(rf.repeater_hex_id) LIKE \(bind: upper) || '%')"
         }
 
         var whereFragment: SQLQueryString = " WHERE c.latitude >= \(bind: minLat) AND c.latitude <= \(bind: maxLat)"
@@ -652,14 +654,31 @@ struct SurveyController {
 
     @Sendable
     func getStats(req: Request) async throws -> StatsResponse {
+        let maxAge = req.query[Int.self, at: "maxAge"]
+
         let totalCells = try await CellModel.query(on: req.db).count()
         let totalContributions = try await UploadLog.query(on: req.db)
             .filter(\.$accepted == true)
             .count()
-        let uniqueRepeaters = try await CellRepeater.query(on: req.db)
-            .unique()
-            .all(\.$repeaterHexID)
-            .count
+
+        // Repeater count: optionally filtered by recency
+        let uniqueRepeaters: Int
+        if let maxAge {
+            let cutoff = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-Double(maxAge)))
+            uniqueRepeaters = try await RepeaterLocation.query(on: req.db)
+                .filter(\.$lastHeard >= cutoff)
+                .group(.or) { group in
+                    group.filter(\.$hidden == nil)
+                    group.filter(\.$hidden == false)
+                }
+                .count()
+        } else {
+            uniqueRepeaters = try await CellRepeater.query(on: req.db)
+                .unique()
+                .all(\.$repeaterHexID)
+                .count
+        }
+
         let uniqueContributors = try await CellContribution.query(on: req.db)
             .unique()
             .all(\.$contributorID)
@@ -784,6 +803,7 @@ struct SurveyController {
         let maxLat = req.query[Double.self, at: "maxLat"]
         let minLon = req.query[Double.self, at: "minLon"]
         let maxLon = req.query[Double.self, at: "maxLon"]
+        let maxAge = req.query[Int.self, at: "maxAge"]
 
         var query = RepeaterLocation.query(on: req.db)
 
@@ -800,6 +820,12 @@ struct SurveyController {
                 .filter(\.$latitude <= maxLat)
                 .filter(\.$longitude >= minLon)
                 .filter(\.$longitude <= maxLon)
+        }
+
+        // Filter by recency — only repeaters heard within maxAge seconds
+        if let maxAge {
+            let cutoff = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-Double(maxAge)))
+            query = query.filter(\.$lastHeard >= cutoff)
         }
 
         let locations = try await query.all()
@@ -2193,12 +2219,13 @@ struct SurveyController {
                 }
             }
 
-            // Fallback: check if a shorter prefix exists — upgrade it
+            // Fallback: check if a shorter prefix exists — update metadata but keep
+            // the shorter hex ID. Changing it would break all existing cell_repeaters
+            // rows that reference the shorter prefix.
             if let shorter = allRepeaters.first(where: {
                 let eid = $0.hexID.uppercased()
                 return normalized.hasPrefix(eid) && normalized.count > eid.count
             }) {
-                shorter.hexID = normalized
                 updateExisting(shorter)
                 try await shorter.save(on: db)
                 accepted += 1
@@ -2206,12 +2233,17 @@ struct SurveyController {
                 continue
             }
 
-            // Check if a longer version already exists — skip
-            if allRepeaters.contains(where: {
+            // Check if a longer version already exists — downgrade it to the
+            // shorter prefix so it stays compatible with all cell_repeaters rows.
+            if let longer = allRepeaters.first(where: {
                 let eid = $0.hexID.uppercased()
                 return eid.hasPrefix(normalized) && eid.count > normalized.count
             }) {
+                longer.hexID = normalized
+                updateExisting(longer)
+                try await longer.save(on: db)
                 accepted += 1
+                updated += 1
                 continue
             }
 

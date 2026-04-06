@@ -678,7 +678,8 @@ async function loadRepeaters() {
         minLat: minLat,
         maxLat: maxLat,
         minLon: minLon,
-        maxLon: maxLon
+        maxLon: maxLon,
+        maxAge: 604800 // 7 days — only show recently heard repeaters
     });
 
     try {
@@ -991,10 +992,10 @@ function showTruncationBanner(totalMatching, totalReturned) {
     banner.style.display = 'block';
 }
 
-// Load stats
+// Load stats — repeater count is filtered to last 7 days
 async function loadStats() {
     try {
-        const response = await fetch(`${API_BASE}/stats`);
+        const response = await fetch(`${API_BASE}/stats?maxAge=604800`);
         if (!response.ok) return;
         const stats = await response.json();
 
