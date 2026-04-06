@@ -9,6 +9,12 @@ func configure(_ app: Application) throws {
     // Access logging (Apache Combined Log Format style) — runs first so it wraps everything
     app.middleware.use(AccessLogMiddleware())
 
+    // Security headers on every response (HSTS, CSP, X-Frame-Options, etc.)
+    app.middleware.use(SecurityHeadersMiddleware())
+
+    // Sanitize error responses — catch decoding/validation errors, return generic messages
+    app.middleware.use(ErrorSanitizationMiddleware())
+
     // Serve static files from Public/
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
 
