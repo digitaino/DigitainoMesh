@@ -18,11 +18,11 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
             name: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains"
         )
-        // Allow Apple MapKit CDN and inline scripts (used by share/plan pages and admin)
-        // Cloudflare may also inject scripts from static.cloudflareinsights.com and challenges.cloudflare.com
+        // CSP: allow Apple MapKit CDN, inline scripts/styles (used throughout),
+        // and Cloudflare-injected analytics/challenge scripts
         response.headers.replaceOrAdd(
             name: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.apple-mapkit.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; connect-src 'self' https://*.apple-mapkit.com; img-src 'self' data:"
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.apple-mapkit.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.apple-mapkit.com; img-src 'self' data:"
         )
         response.headers.replaceOrAdd(
             name: "X-Frame-Options",
