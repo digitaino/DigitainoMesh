@@ -268,6 +268,9 @@ public protocol PersistenceStoreProtocol: Actor {
     /// Append a run to a saved trace path
     func appendTracePathRun(pathID: UUID, run: TracePathRunDTO) async throws
 
+    /// Update the note on a trace path run
+    func updateTracePathRunNote(id: UUID, note: String?) async throws
+
     // MARK: - Heard Repeats
 
     /// Find a sent channel message matching criteria within a time window

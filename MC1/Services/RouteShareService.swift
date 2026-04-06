@@ -124,6 +124,9 @@ actor RouteShareService {
         let userLatitude: Double?
         let userLongitude: Double?
         let userName: String?
+        /// When true, the server trusts the client's hop data as-is and skips
+        /// server-side resolution against the community repeater database.
+        let clientResolved: Bool?
     }
 
     private struct CreatePathResponse: Codable {
@@ -143,7 +146,8 @@ actor RouteShareService {
             hops: hops,
             userLatitude: userLatitude,
             userLongitude: userLongitude,
-            userName: userName
+            userName: userName,
+            clientResolved: true
         )
 
         do {

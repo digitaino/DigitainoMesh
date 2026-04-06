@@ -45,7 +45,8 @@ extension PersistenceStore {
                 date: runDTO.date,
                 success: runDTO.success,
                 roundTripMs: runDTO.roundTripMs,
-                hopsData: (try? JSONEncoder().encode(runDTO.hopsSNR)) ?? Data()
+                hopsData: (try? JSONEncoder().encode(runDTO.hopsSNR)) ?? Data(),
+                note: runDTO.note
             )
             run.savedPath = path
             path.runs.append(run)
@@ -93,11 +94,24 @@ extension PersistenceStore {
             date: runDTO.date,
             success: runDTO.success,
             roundTripMs: runDTO.roundTripMs,
-            hopsData: (try? JSONEncoder().encode(runDTO.hopsSNR)) ?? Data()
+            hopsData: (try? JSONEncoder().encode(runDTO.hopsSNR)) ?? Data(),
+            note: runDTO.note
         )
         run.savedPath = path
         path.runs.append(run)
         modelContext.insert(run)
+        try modelContext.save()
+    }
+
+    public func updateTracePathRunNote(id: UUID, note: String?) throws {
+        let targetID = id
+        let descriptor = FetchDescriptor<TracePathRun>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        guard let run = try modelContext.fetch(descriptor).first else {
+            throw PersistenceStoreError.fetchFailed("TracePathRun not found")
+        }
+        run.note = note
         try modelContext.save()
     }
 

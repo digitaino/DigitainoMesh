@@ -1113,6 +1113,10 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         }
     }
 
+    public func updateTracePathRunNote(id: UUID, note: String?) async throws {
+        // No-op in mock
+    }
+
     // MARK: - Heard Repeats
 
     public func findSentChannelMessage(deviceID: UUID, channelIndex: UInt8, timestamp: UInt32, text: String, withinSeconds: Int) async throws -> MessageDTO? {

@@ -186,8 +186,8 @@ function initShareMap() {
         isScrollEnabled: true
     });
 
-    // Auto-expand the panel so content is visible on load
-    document.getElementById('share-panel').classList.add('expanded');
+    // Panel starts collapsed — summary visible in header; user taps to expand.
+    // This keeps the path/route fully visible on the map without obstruction.
 
     if (SHARE_TYPE === 'route') {
         renderRoute(SHARE_DATA);
@@ -231,6 +231,13 @@ function renderRoute(data) {
     const summaryEl = document.getElementById('route-summary');
     const hopListEl = document.getElementById('hop-list');
 
+    // Compute distances between consecutive hops
+    const dist = computeHopDistances(data.hops, data.userLatitude, data.userLongitude);
+
+    // Use client-provided distanceText if available, otherwise compute from located hops
+    const distanceText = data.distanceText
+        || (dist.total > 0 ? (dist.hasGaps ? '≥ ' : '') + formatDistance(dist.total) : null);
+
     // Summary stats
     let summaryHTML = `
         <div class="summary-stat">
@@ -238,10 +245,10 @@ function renderRoute(data) {
             <span class="label">Hop${data.hopCount === 1 ? '' : 's'}</span>
         </div>
     `;
-    if (data.distanceText) {
+    if (distanceText) {
         summaryHTML += `
             <div class="summary-stat">
-                <span class="value">${data.distanceText}</span>
+                <span class="value">${distanceText}</span>
                 <span class="label">Distance</span>
             </div>
         `;
@@ -255,12 +262,17 @@ function renderRoute(data) {
     `;
     summaryEl.innerHTML = summaryHTML;
 
-    // Hop list
+    // Panel summary (visible when collapsed)
+    const summaryParts = [data.hopCount + ' hop' + (data.hopCount === 1 ? '' : 's')];
+    if (distanceText) summaryParts.push(distanceText);
+    updatePanelSummary(summaryParts.join(' · '));
+
+    // Hop list with per-segment distances
     let hopHTML = '';
     data.hops.forEach((hop, i) => {
         const located = hop.latitude != null && hop.longitude != null;
         if (i > 0) {
-            hopHTML += `<div class="hop-connector${located ? '' : ' unlocated'}"><div class="line"></div></div>`;
+            hopHTML += hopConnectorHTML(dist.segments[i - 1], !located);
         }
         const name = hop.name || hop.hexID;
         hopHTML += `
@@ -276,7 +288,8 @@ function renderRoute(data) {
 
     // Add sharer at the end if user location is available
     if (data.userLatitude != null && data.userLongitude != null) {
-        hopHTML += '<div class="hop-connector"><div class="line"></div></div>';
+        const lastSegDist = dist.segments.length > 0 ? dist.segments[dist.segments.length - 1] : null;
+        hopHTML += hopConnectorHTML(lastSegDist, false);
         hopHTML += `
             <div class="hop-item">
                 <div class="hop-index" style="background: rgba(59,130,246,0.2); color: #3b82f6">📱</div>
@@ -359,8 +372,9 @@ function renderRoute(data) {
         map.addOverlay(polyline);
     }
 
-    // Fit map to show all points (including user marker if present)
-    const padding = new mapkit.Padding(60, 40, 100, 40);
+    // Fit map to show all points (including user marker if present).
+    // Bottom padding accounts for the collapsed panel header.
+    const padding = new mapkit.Padding(60, 40, 80, 40);
     map.showItems(allAnnotations, { padding: padding, animate: true });
 }
 
@@ -372,12 +386,26 @@ function renderPath(data) {
 
     const locatedHops = data.hops.filter(h => h.latitude != null && h.longitude != null);
 
-    // Summary stats: hop count + located count
+    // Compute distances between consecutive hops
+    const dist = computeHopDistances(data.hops, null, null);
+    const distanceText = dist.total > 0 ? (dist.hasGaps ? '≥ ' : '') + formatDistance(dist.total) : null;
+
+    // Summary stats: hop count + distance + located count
     let summaryHTML = `
         <div class="summary-stat">
             <span class="value">${data.hopCount}</span>
             <span class="label">Hop${data.hopCount === 1 ? '' : 's'}</span>
         </div>
+    `;
+    if (distanceText) {
+        summaryHTML += `
+            <div class="summary-stat">
+                <span class="value">${distanceText}</span>
+                <span class="label">Distance</span>
+            </div>
+        `;
+    }
+    summaryHTML += `
         <div class="summary-stat">
             <span class="value">${locatedHops.length}</span>
             <span class="label">Located</span>
@@ -385,12 +413,17 @@ function renderPath(data) {
     `;
     summaryEl.innerHTML = summaryHTML;
 
-    // Hop list
+    // Panel summary (visible when collapsed)
+    const summaryParts = [data.hopCount + ' hop' + (data.hopCount === 1 ? '' : 's')];
+    if (distanceText) summaryParts.push(distanceText);
+    updatePanelSummary(summaryParts.join(' · '));
+
+    // Hop list with per-segment distances
     let hopHTML = '';
     data.hops.forEach((hop, i) => {
         const located = hop.latitude != null && hop.longitude != null;
         if (i > 0) {
-            hopHTML += `<div class="hop-connector${located ? '' : ' unlocated'}"><div class="line"></div></div>`;
+            hopHTML += hopConnectorHTML(dist.segments[i - 1], !located);
         }
         const name = hop.name || hop.hexID;
         hopHTML += `
@@ -449,8 +482,8 @@ function renderPath(data) {
         map.addOverlay(polyline);
     }
 
-    // Fit map to show all points
-    const padding = new mapkit.Padding(60, 40, 100, 40);
+    // Fit map to show all points. Bottom padding for collapsed panel.
+    const padding = new mapkit.Padding(60, 40, 80, 40);
     map.showItems(annotations, { padding: padding, animate: true });
 }
 
@@ -582,6 +615,9 @@ function renderAllRepeatsView(data, summaryEl, hopListEl, navEl, repeaterByHex, 
     });
     hopListEl.innerHTML = listHTML;
 
+    // Panel summary
+    updatePanelSummary(repeaterCount + ' repeater' + (repeaterCount === 1 ? '' : 's') + ' · ' + repeatCount + ' repeat' + (repeatCount === 1 ? '' : 's'));
+
     // Map: all repeaters and all path lines
     clearMapContent();
     renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex);
@@ -615,6 +651,19 @@ function renderSingleRepeatView(data, summaryEl, hopListEl, navEl, repeaterByHex
     `;
     summaryEl.innerHTML = summaryHTML;
 
+    // Panel summary
+    const parts = ['Repeat ' + (repeatIndex + 1) + '/' + repeatCount];
+    if (path.snr != null) parts.push(path.snr.toFixed(1) + ' dB');
+    updatePanelSummary(parts.join(' · '));
+
+    // Build hop objects with coordinates for distance computation
+    const hopObjects = hops.map(hexID => {
+        const key = hexID.toUpperCase();
+        const r = repeaterByHex[key];
+        return r ? { latitude: r.latitude, longitude: r.longitude } : { latitude: null, longitude: null };
+    });
+    const dist = computeHopDistances(hopObjects, data.userLatitude, data.userLongitude);
+
     // Hop list for this single repeat's path
     let listHTML = '';
     hops.forEach((hexID, i) => {
@@ -622,7 +671,7 @@ function renderSingleRepeatView(data, summaryEl, hopListEl, navEl, repeaterByHex
         const repeater = repeaterByHex[key];
 
         if (i > 0) {
-            listHTML += '<div class="hop-connector"><div class="line"></div></div>';
+            listHTML += hopConnectorHTML(dist.segments[i - 1], false);
         }
 
         if (repeater) {
@@ -643,7 +692,12 @@ function renderSingleRepeatView(data, summaryEl, hopListEl, navEl, repeaterByHex
 
     // Add sharer at the end if we have user location
     if (data.userLatitude != null && data.userLongitude != null) {
-        listHTML += '<div class="hop-connector"><div class="line" style="background: ' + snrColor + '40"></div></div>';
+        const lastSegDist = dist.segments.length > 0 ? dist.segments[dist.segments.length - 1] : null;
+        let connectorLine = '<div class="line" style="background: ' + snrColor + '40"></div>';
+        if (lastSegDist != null) {
+            connectorLine += `<span class="hop-distance">${formatDistance(lastSegDist)}</span>`;
+        }
+        listHTML += `<div class="hop-connector">${connectorLine}</div>`;
         listHTML += `
             <div class="hop-item">
                 <div class="hop-index" style="background: rgba(59,130,246,0.2); color: #3b82f6">📱</div>
@@ -815,8 +869,8 @@ function renderMapForAllRepeats(data, repeaterByHex, hopNumberByHex) {
         });
     }
 
-    // Fit to show all points
-    const padding = new mapkit.Padding(60, 40, 160, 40);
+    // Fit to show all points. Bottom padding for collapsed panel.
+    const padding = new mapkit.Padding(60, 40, 80, 40);
     map.showItems(currentMapAnnotations, { padding: padding, animate: true });
 }
 
@@ -940,10 +994,11 @@ function renderMapForSingleRepeat(data, path, repeaterByHex) {
         }
     }
 
-    // Fit to show the path's annotations (not the faded context ones)
+    // Fit to show the path's annotations (not the faded context ones).
+    // Bottom padding for collapsed panel.
     const itemsToShow = pathAnnotations.length > 0 ? pathAnnotations : currentMapAnnotations;
     if (itemsToShow.length > 0) {
-        const padding = new mapkit.Padding(60, 40, 160, 40);
+        const padding = new mapkit.Padding(60, 40, 80, 40);
         map.showItems(itemsToShow, { padding: padding, animate: true });
     }
 }
@@ -1049,6 +1104,94 @@ function toggleCellOverlay() {
         cellOverlays = [];
         cellOverlaysByKey = {};
     }
+}
+
+// MARK: - Distance Utilities
+
+// Great-circle distance between two points using the Haversine formula.
+// Returns distance in meters.
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// Format a distance in meters to a human-readable string.
+// Uses miles for en-US locale, km otherwise.
+function formatDistance(meters) {
+    const useMiles = /^en-(US|GB|LR|MM)/i.test(navigator.language || '');
+    if (useMiles) {
+        const miles = meters / 1609.344;
+        if (miles < 0.1) {
+            const feet = meters * 3.28084;
+            return Math.round(feet) + ' ft';
+        }
+        return miles < 10 ? miles.toFixed(1) + ' mi' : Math.round(miles) + ' mi';
+    } else {
+        if (meters < 1000) return Math.round(meters) + ' m';
+        const km = meters / 1000;
+        return km < 10 ? km.toFixed(1) + ' km' : Math.round(km) + ' km';
+    }
+}
+
+// Compute chain distance between all located hops (and optional user location).
+// Returns { total: meters, segments: [meters|null, ...], hasGaps: bool }
+// segments[i] is the distance between hop i and hop i+1 (null if either is unlocated).
+function computeHopDistances(hops, userLat, userLon) {
+    const segments = [];
+    let total = 0;
+    let hasGaps = false;
+
+    for (let i = 0; i < hops.length - 1; i++) {
+        const a = hops[i];
+        const b = hops[i + 1];
+        const aLocated = a.latitude != null && a.longitude != null;
+        const bLocated = b.latitude != null && b.longitude != null;
+
+        if (aLocated && bLocated) {
+            const d = haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+            segments.push(d);
+            total += d;
+        } else {
+            segments.push(null);
+            hasGaps = true;
+        }
+    }
+
+    // Last hop → user distance
+    if (userLat != null && userLon != null && hops.length > 0) {
+        const last = hops[hops.length - 1];
+        if (last.latitude != null && last.longitude != null) {
+            const d = haversineDistance(last.latitude, last.longitude, userLat, userLon);
+            segments.push(d);
+            total += d;
+        } else {
+            segments.push(null);
+            hasGaps = true;
+        }
+    }
+
+    return { total, segments, hasGaps };
+}
+
+// Build a hop-connector HTML snippet, optionally including a distance label.
+function hopConnectorHTML(distanceMeters, unlocated) {
+    const cls = unlocated ? ' unlocated' : '';
+    if (distanceMeters != null) {
+        return `<div class="hop-connector${cls}"><div class="line"></div><span class="hop-distance">${formatDistance(distanceMeters)}</span></div>`;
+    }
+    return `<div class="hop-connector${cls}"><div class="line"></div></div>`;
+}
+
+// Update the collapsed panel summary text.
+function updatePanelSummary(text) {
+    const el = document.getElementById('panel-summary');
+    if (el) el.textContent = text;
 }
 
 // Utility

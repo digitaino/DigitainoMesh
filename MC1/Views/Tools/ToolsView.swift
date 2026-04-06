@@ -7,6 +7,7 @@ struct ToolsView: View {
 
     private enum ToolSelection: Hashable, CaseIterable {
         case tracePath
+        case repeaterBenchmark
         case lineOfSight
         case rxLog
         case noiseFloor
@@ -19,6 +20,7 @@ struct ToolsView: View {
         var title: String {
             switch self {
             case .tracePath: L10n.Tools.Tools.tracePath
+            case .repeaterBenchmark: "Repeater Benchmark"
             case .lineOfSight: L10n.Tools.Tools.lineOfSight
             case .rxLog: L10n.Tools.Tools.rxLog
             case .noiseFloor: L10n.Tools.Tools.noiseFloor
@@ -33,6 +35,7 @@ struct ToolsView: View {
         var systemImage: String {
             switch self {
             case .tracePath: "point.3.connected.trianglepath.dotted"
+            case .repeaterBenchmark: "gauge.with.dots.needle.33percent"
             case .lineOfSight: "eye"
             case .rxLog: "waveform.badge.magnifyingglass"
             case .noiseFloor: "waveform"
@@ -45,7 +48,7 @@ struct ToolsView: View {
         }
 
         var requiresRadio: Bool {
-            self != .lineOfSight && self != .trafficMap && self != .signalSurvey && self != .pathMapGenerator
+            self != .lineOfSight && self != .trafficMap && self != .signalSurvey && self != .pathMapGenerator && self != .repeaterBenchmark
         }
     }
 
@@ -63,6 +66,7 @@ struct ToolsView: View {
     @State private var navigateToSurvey = false
 
     @State private var lineOfSightViewModel = LineOfSightViewModel()
+    @State private var benchmarkViewModel = BenchmarkViewModel()
 
     private var shouldUseSplitView: Bool {
         horizontalSizeClass == .regular
@@ -214,6 +218,7 @@ struct ToolsView: View {
     private func toolDestination(for tool: ToolSelection) -> some View {
         switch tool {
         case .tracePath: TracePathView()
+        case .repeaterBenchmark: BenchmarkView(viewModel: benchmarkViewModel)
         case .lineOfSight: LineOfSightView()
         case .rxLog: RxLogView()
         case .noiseFloor: NoiseFloorView()
@@ -229,6 +234,7 @@ struct ToolsView: View {
     private var toolDetailView: some View {
         switch selectedTool {
         case .tracePath: TracePathView()
+        case .repeaterBenchmark: BenchmarkView(viewModel: benchmarkViewModel)
         case .lineOfSight: LineOfSightView(viewModel: lineOfSightViewModel, layoutMode: .map)
         case .rxLog: RxLogView()
         case .noiseFloor: NoiseFloorView()

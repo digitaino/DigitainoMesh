@@ -408,39 +408,44 @@ struct ShareController {
             }
         }
 
-        // Server-side resolution: fill in missing locations from community repeater database.
-        // The DB stores 4-char hex IDs (2 bytes from public key prefix), so we need to handle:
-        // - Exact match: input hex == stored hex (e.g. "F1CE" == "F1CE")
-        // - Prefix match: input is shorter and stored hex starts with it (e.g. "F1" matches "F1CE")
-        // - Reverse prefix: input is longer and starts with stored hex (e.g. "F1CE3A" matches "F1CE")
-        // - Public key prefix match: for 6+ char IDs, match against full public key
-        let allRepeaters = try await RepeaterLocation.query(on: req.db)
-            .group(.or) { group in
-                group.filter(\.$hidden == nil)
-                group.filter(\.$hidden == false)
-            }
-            .all()
-
+        // When the iOS client has already performed anchor-aware resolution (including
+        // user corrections for ambiguous repeaters), trust the client's data as-is.
+        // Only perform server-side resolution for web/public path creation.
         var resolvedHops = payload.hops
-        for i in 0..<resolvedHops.count {
-            if resolvedHops[i].latitude == nil || resolvedHops[i].longitude == nil {
-                let hexID = resolvedHops[i].hexID.uppercased()
+        if payload.clientResolved != true {
+            // Server-side resolution: fill in missing locations from community repeater database.
+            // The DB stores 4-char hex IDs (2 bytes from public key prefix), so we need to handle:
+            // - Exact match: input hex == stored hex (e.g. "F1CE" == "F1CE")
+            // - Prefix match: input is shorter and stored hex starts with it (e.g. "F1" matches "F1CE")
+            // - Reverse prefix: input is longer and starts with stored hex (e.g. "F1CE3A" matches "F1CE")
+            // - Public key prefix match: for 6+ char IDs, match against full public key
+            let allRepeaters = try await RepeaterLocation.query(on: req.db)
+                .group(.or) { group in
+                    group.filter(\.$hidden == nil)
+                    group.filter(\.$hidden == false)
+                }
+                .all()
 
-                // Find best match: exact > prefix > reverse prefix > public key prefix
-                let match = allRepeaters.first { $0.hexID.uppercased() == hexID }
-                    ?? allRepeaters.first { $0.hexID.uppercased().hasPrefix(hexID) }
-                    ?? allRepeaters.first { hexID.hasPrefix($0.hexID.uppercased()) }
-                    ?? (hexID.count >= 6
-                        ? allRepeaters.first { ($0.publicKey ?? "").uppercased().hasPrefix(hexID) }
-                        : nil)
+            for i in 0..<resolvedHops.count {
+                if resolvedHops[i].latitude == nil || resolvedHops[i].longitude == nil {
+                    let hexID = resolvedHops[i].hexID.uppercased()
 
-                if let repeater = match {
-                    resolvedHops[i] = SharedRouteHop(
-                        hexID: resolvedHops[i].hexID,
-                        name: resolvedHops[i].name ?? repeater.name,
-                        latitude: repeater.latitude,
-                        longitude: repeater.longitude
-                    )
+                    // Find best match: exact > prefix > reverse prefix > public key prefix
+                    let match = allRepeaters.first { $0.hexID.uppercased() == hexID }
+                        ?? allRepeaters.first { $0.hexID.uppercased().hasPrefix(hexID) }
+                        ?? allRepeaters.first { hexID.hasPrefix($0.hexID.uppercased()) }
+                        ?? (hexID.count >= 6
+                            ? allRepeaters.first { ($0.publicKey ?? "").uppercased().hasPrefix(hexID) }
+                            : nil)
+
+                    if let repeater = match {
+                        resolvedHops[i] = SharedRouteHop(
+                            hexID: resolvedHops[i].hexID,
+                            name: resolvedHops[i].name ?? repeater.name,
+                            latitude: repeater.latitude,
+                            longitude: repeater.longitude
+                        )
+                    }
                 }
             }
         }
@@ -596,7 +601,7 @@ struct ShareController {
             <div id="map"></div>
             <div id="share-panel">
                 <div id="panel-header" onclick="togglePanel()">
-                    <h2>Shared Route</h2>
+                    <h2>Shared Route</h2><span id="panel-summary"></span>
                     <div style="display:flex;align-items:center;gap:8px">
                         <button id="cell-toggle" class="cell-toggle-btn active" onclick="event.stopPropagation();toggleCellOverlay()" title="Toggle community signal overlay">📶</button>
                         <span id="panel-toggle">▲</span>
@@ -636,7 +641,7 @@ struct ShareController {
             <div id="map"></div>
             <div id="share-panel">
                 <div id="panel-header" onclick="togglePanel()">
-                    <h2>Heard Repeaters</h2>
+                    <h2>Heard Repeaters</h2><span id="panel-summary"></span>
                     <div style="display:flex;align-items:center;gap:8px">
                         <button id="cell-toggle" class="cell-toggle-btn active" onclick="event.stopPropagation();toggleCellOverlay()" title="Toggle community signal overlay">📶</button>
                         <span id="panel-toggle">▲</span>
@@ -681,7 +686,7 @@ struct ShareController {
             <div id="map"></div>
             <div id="share-panel">
                 <div id="panel-header" onclick="togglePanel()">
-                    <h2>Shared Path</h2>
+                    <h2>Shared Path</h2><span id="panel-summary"></span>
                     <div style="display:flex;align-items:center;gap:8px">
                         <button id="cell-toggle" class="cell-toggle-btn active" onclick="event.stopPropagation();toggleCellOverlay()" title="Toggle community signal overlay">📶</button>
                         <span id="panel-toggle">▲</span>

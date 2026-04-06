@@ -61,6 +61,9 @@ public final class TracePathRun {
     /// Encoded per-hop SNR data (JSON array of doubles)
     public var hopsData: Data
 
+    /// Optional note tagging this run (e.g., "stock whip antenna")
+    public var note: String?
+
     /// The saved path this run belongs to
     public var savedPath: SavedTracePath?
 
@@ -69,13 +72,15 @@ public final class TracePathRun {
         date: Date = Date(),
         success: Bool,
         roundTripMs: Int,
-        hopsData: Data
+        hopsData: Data,
+        note: String? = nil
     ) {
         self.id = id
         self.date = date
         self.success = success
         self.roundTripMs = roundTripMs
         self.hopsData = hopsData
+        self.note = note
     }
 }
 
@@ -197,6 +202,7 @@ public struct TracePathRunDTO: Sendable, Identifiable, Equatable, Hashable {
     public let success: Bool
     public let roundTripMs: Int
     public let hopsSNR: [Double]
+    public let note: String?
 
     public init(from model: TracePathRun) {
         self.id = model.id
@@ -204,13 +210,15 @@ public struct TracePathRunDTO: Sendable, Identifiable, Equatable, Hashable {
         self.success = model.success
         self.roundTripMs = model.roundTripMs
         self.hopsSNR = model.hopsSNR
+        self.note = model.note
     }
 
-    public init(id: UUID, date: Date, success: Bool, roundTripMs: Int, hopsSNR: [Double]) {
+    public init(id: UUID, date: Date, success: Bool, roundTripMs: Int, hopsSNR: [Double], note: String? = nil) {
         self.id = id
         self.date = date
         self.success = success
         self.roundTripMs = roundTripMs
         self.hopsSNR = hopsSNR
+        self.note = note
     }
 }

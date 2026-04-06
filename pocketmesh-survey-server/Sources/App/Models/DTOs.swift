@@ -339,6 +339,11 @@ struct CreateSharedPathRequest: Content {
     let userLongitude: Double?
     /// Display name of the person sharing
     let userName: String?
+    /// When true, the server trusts the client's hop data as-is and skips
+    /// server-side resolution against the community repeater database.
+    /// iOS clients set this after performing their own anchor-aware resolution
+    /// (including user corrections for ambiguous repeaters).
+    let clientResolved: Bool?
 }
 
 struct CreateSharedPathResponse: Content {
