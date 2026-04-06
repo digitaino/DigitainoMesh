@@ -543,12 +543,13 @@ struct SurveyController {
             let cellIDs = rows.map(\.id)
             let placeholders = cellIDs.map { "\($0)" }.joined(separator: ",")
             let metricsQuery: SQLQueryString =
-                "SELECT cell_id, UPPER(repeater_hex_id) AS repeater_hex_id, average_snr, average_rssi, packet_count, last_heard FROM cell_repeaters WHERE cell_id IN (\(raw: placeholders))"
+                "SELECT cell_id, UPPER(repeater_hex_id) AS repeater_hex_id, average_snr, average_rssi, packet_count, last_heard FROM cell_repeaters WHERE cell_id IN (\(unsafeRaw: placeholders))"
             let metricRows = try await sql.raw(metricsQuery).all(decoding: RepeaterMetricRow.self)
             for mr in metricRows {
                 let data = RepeaterMetricData(
                     hexID: mr.repeater_hex_id,
                     averageSNR: mr.average_snr,
+                    averageTxSNR: nil,
                     averageRSSI: mr.average_rssi,
                     packetCount: mr.packet_count ?? 0,
                     lastHeard: mr.last_heard
