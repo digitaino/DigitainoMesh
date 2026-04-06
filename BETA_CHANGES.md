@@ -1,4 +1,70 @@
-Beta Changes -- v0.10.1 (Build 16)
+Beta Changes -- v0.10.1 (Build 18)
+
+Deep Scan Gating
+
+Discover requests are now gated behind Deep Scan mode. Regular active probing sends channel messages only, reducing RF overhead. When Deep Scan is enabled, full discover + trace probing resumes for comprehensive coverage analysis.
+
+Mesh Gateway Scoring
+
+Trace data is analyzed to identify the best gateway repeater per cell based on mesh connectivity. The cell detail card adapts its layout based on available data — single RX column without deep scan data, two-column RX/TX with a mesh gateway section when deep scan data is present.
+
+Path Hash Size Quick-Picker
+
+New picker in the repeater signal popover lets you switch between 1-byte, 2-byte, and 3-byte path hash modes without navigating to settings.
+
+Client-Authority Route Sharing
+
+When sharing a route from the iOS app, a `clientResolved` flag tells the server to trust the client's bidirectional anchor-aware repeater resolution. Previously the server would re-resolve hex IDs against the community database, often producing different (incorrect) matches, especially for ambiguous 1-byte prefixes.
+
+Hop Distances on Shared Web Pages
+
+Shared route and path web pages now display per-hop distances computed via Haversine formula. Distances are shown between consecutive located hops in the hop connector, with a total chain distance in the summary. Formatting is locale-aware (miles for en-US, km otherwise).
+
+Collapsed Share Panel
+
+Shared route/path web pages now start with the detail panel collapsed so the path lines are visible on the map. A one-line summary (hop count + total distance) is shown in the collapsed header. Tap to expand for full details.
+
+Repeater Benchmark Tool
+
+New tool in the Tools tab for benchmarking repeater signal quality with comparison and history views.
+
+Ambiguous Repeater Selection Fix
+
+User selections in the "Choose Repeater" disambiguation sheet now persist across view rebuilds and are correctly applied when sharing routes to the server. Previously, selections were stored in ephemeral SwiftUI state and lost when the sheet was reopened.
+
+Resolver Staleness Bias
+
+The repeater resolver now checks recency before anchor proximity. If one candidate hasn't been heard in 7+ days and another has, the active one wins regardless of geographic distance. This prevents stale repeaters from incorrectly matching hash prefixes.
+
+Deleted Repeater Cleanup
+
+Deleting a contact now also removes the corresponding DiscoveredNode entry from the database. Previously, deleted repeaters continued appearing in disambiguation because the DiscoveredNode table was not cleaned up.
+
+Stale Node Filtering
+
+Discovered nodes not heard in 7+ days are excluded from the disambiguation sheet, preventing offline or deleted repeaters from cluttering candidate lists.
+
+Web Map: 7-Day Repeater Declutter
+
+Repeater map pins and the "Repeaters" stat on the community web map now only show repeaters heard in the last 7 days, hiding stale/offline repeaters from the map.
+
+Web Map: Prefix-Aware Repeater Filter
+
+The server-side repeater filter now uses bidirectional prefix matching. Filtering by "0C1377" (3-byte) matches cells with "0C" (1-byte) and vice versa, handling mixed hash-size modes correctly.
+
+Web Map: Hex ID Stability
+
+The server no longer upgrades shorter hex IDs to longer ones in the repeater database or cell references. When a shorter prefix already exists (e.g. "0C"), it is preserved. When a shorter prefix is uploaded and a longer one exists, the longer is downgraded to maintain compatibility with all existing cell references.
+
+Server Fix
+
+Fixed missing averageTxSNR parameter in SurveyController metrics query that was causing Docker build failures.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 16)
 
 Signal Bars Service
 

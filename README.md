@@ -39,6 +39,12 @@ Features and fixes added in this fork on top of upstream:
 - **TX SNR Tracking** — Survey points capture TX SNR from discover and trace responses for bidirectional signal analysis in exports and uploads
 - **Batch Contact Sync** — Contacts are saved in a single batch transaction during initial sync, preventing concurrent SQLite write crashes on devices with many contacts
 - **BLE Reconnect Fix** — Fixed a race condition crash during BLE auto-reconnect when services were cleared concurrently
+- **Deep Scan Gating & Mesh Gateway Scoring** — Discover requests are gated behind Deep Scan mode to reduce RF overhead. Trace data identifies the best gateway repeater per cell with an adaptive cell detail card layout
+- **Client-Authority Route Sharing** — Shared routes preserve the iOS client's bidirectional anchor-aware repeater resolution instead of the server re-resolving from the community database
+- **Hop Distances on Shared Pages** — Shared route/path web pages display per-hop and total distances with locale-aware formatting (mi/km)
+- **Repeater Benchmark** — New tool for benchmarking repeater signal quality with comparison and history views
+- **Ambiguous Repeater Persistence** — User selections in the repeater disambiguation sheet persist across view rebuilds and are correctly applied when sharing routes
+- **Web Map Declutter** — Repeater pins and stats on the community web map only show repeaters heard in the last 7 days. Prefix-aware repeater filtering handles mixed hash-size modes
 
 ## Requirements
 
