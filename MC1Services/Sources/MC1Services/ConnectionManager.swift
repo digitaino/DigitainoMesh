@@ -918,6 +918,9 @@ public final class ConnectionManager {
             return false
         }
 
+        currentTransportType = transportType
+        connectionState = syncSucceeded ? .ready : .syncing
+
         // Skip time sync on BLE failure to avoid pressure on a saturated link.
         // WiFi/TCP has no such constraint, so always correct the clock there.
         if syncSucceeded || transportType == .wifi {
@@ -936,8 +939,6 @@ public final class ConnectionManager {
             }
         }
 
-        currentTransportType = transportType
-        connectionState = syncSucceeded ? .ready : .syncing
         if syncSucceeded { await onDeviceSynced?() }
         return true
     }
