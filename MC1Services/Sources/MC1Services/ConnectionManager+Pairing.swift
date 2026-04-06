@@ -272,7 +272,8 @@ extension ConnectionManager {
                 do {
                     try await services.contactService.removeLocalContact(
                         contactID: contact.id,
-                        publicKey: contact.publicKey
+                        publicKey: contact.publicKey,
+                        deviceID: deviceID
                     )
                     removedCount += 1
                     logger.info("Contact not found on device, cleaned up locally: \(contact.name)")

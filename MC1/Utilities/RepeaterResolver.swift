@@ -118,6 +118,22 @@ enum RepeaterResolver {
         // from the user as a secondary criterion.
         let sorted = candidates.sorted { lhs, rhs in
             if anchorLocation != nil {
+                // When one candidate is dramatically more stale than another,
+                // prefer the active one regardless of anchor proximity.
+                // A repeater not heard in weeks may be offline or relocated.
+                let lhsTS = lhs.node.lastAdvertTimestamp
+                let rhsTS = rhs.node.lastAdvertTimestamp
+                if lhsTS > 0 && rhsTS > 0 {
+                    let nowTS = UInt32(Date().timeIntervalSince1970)
+                    let weekSeconds: UInt32 = 7 * 24 * 3600
+                    let staleThreshold = nowTS > weekSeconds ? nowTS - weekSeconds : 0
+                    let lhsStale = lhsTS < staleThreshold
+                    let rhsStale = rhsTS < staleThreshold
+                    if lhsStale != rhsStale {
+                        return rhsStale // non-stale wins
+                    }
+                }
+
                 // Anchor-aware sorting: proximity to the previous/next hop wins
                 switch (lhs.anchorDistance, rhs.anchorDistance) {
                 case let (left?, right?):

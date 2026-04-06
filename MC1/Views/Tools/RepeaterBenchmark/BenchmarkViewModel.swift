@@ -70,8 +70,6 @@ final class BenchmarkViewModel {
     var testRepeater: ContactDTO?
     var targets: [ContactDTO] = []
     var batchSize = 5
-    var includeNeighbors = false
-
     /// All available repeaters for selection
     var availableRepeaters: [ContactDTO] = []
 
@@ -100,11 +98,6 @@ final class BenchmarkViewModel {
 
     /// IDs selected for comparison (pick two, keyed by note)
     var selectedForComparison: Set<String> = []
-
-    // MARK: - Neighbor Data (optional)
-
-    var neighborResults: [NeighbourInfo] = []
-    var isFetchingNeighbors = false
 
     // MARK: - Internal
 
@@ -207,7 +200,6 @@ final class BenchmarkViewModel {
         isSaved = false
         benchmarkCancelled = false
         targetResults = []
-        neighborResults = []
         currentTargetIndex = 0
 
         let hashSize = appState.connectedDevice?.hashSize ?? 1
@@ -252,11 +244,6 @@ final class BenchmarkViewModel {
             }
 
             targetResults[resultIndex].isComplete = true
-        }
-
-        // Optional: fetch neighbor table
-        if includeNeighbors && !benchmarkCancelled {
-            await fetchNeighborTable()
         }
 
         isRunning = false
@@ -442,33 +429,6 @@ final class BenchmarkViewModel {
         availableRepeaters.first { contact in
             let hashSize = appState?.connectedDevice?.hashSize ?? 1
             return Data(contact.publicKey.prefix(hashSize)) == hashBytes
-        }
-    }
-
-    // MARK: - Neighbor Fetch (Optional)
-
-    /// Session ID for the test repeater's admin session (set externally if available)
-    var adminSessionID: UUID?
-
-    private func fetchNeighborTable() async {
-        guard let adminService = appState?.services?.repeaterAdminService,
-              let sessionID = adminSessionID else {
-            logger.info("No admin session for neighbor fetch — skipping")
-            return
-        }
-
-        isFetchingNeighbors = true
-        defer { isFetchingNeighbors = false }
-
-        do {
-            let response = try await adminService.fetchAllNeighbors(
-                sessionID: sessionID,
-                orderBy: .strongestFirst
-            )
-            neighborResults = response.neighbours
-            logger.info("Fetched \(response.neighbours.count) neighbors for benchmark")
-        } catch {
-            logger.error("Failed to fetch neighbors: \(error.localizedDescription)")
         }
     }
 

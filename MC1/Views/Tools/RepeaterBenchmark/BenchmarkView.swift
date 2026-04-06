@@ -66,13 +66,8 @@ struct BenchmarkView: View {
                 testRepeaterRow
                 targetRow
                 batchSizePicker
-                neighborToggle
             } header: {
                 Text("Setup")
-            } footer: {
-                if viewModel.includeNeighbors {
-                    Text("Requires an active admin session with the test repeater.")
-                }
             }
 
             // Run Button
@@ -158,11 +153,6 @@ struct BenchmarkView: View {
         .disabled(viewModel.isRunning)
     }
 
-    private var neighborToggle: some View {
-        Toggle("Include neighbor table", isOn: $viewModel.includeNeighbors)
-            .disabled(viewModel.isRunning)
-    }
-
     // MARK: - Run Button
 
     private var runButton: some View {
@@ -206,15 +196,6 @@ struct BenchmarkView: View {
             )
         }
 
-        if viewModel.isFetchingNeighbors {
-            HStack {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Fetching neighbor table...")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
     // MARK: - Results
@@ -228,22 +209,6 @@ struct BenchmarkView: View {
             )
         }
 
-        if !viewModel.neighborResults.isEmpty {
-            DisclosureGroup("Neighbor Table (\(viewModel.neighborResults.count))") {
-                ForEach(viewModel.neighborResults, id: \.publicKeyPrefix) { neighbor in
-                    HStack {
-                        Text(Data(neighbor.publicKeyPrefix).hexString())
-                            .font(.caption.monospaced())
-                        Spacer()
-                        Text(String(format: "%.1f dB", neighbor.snr))
-                            .foregroundStyle(TraceHop.signalColor(for: neighbor.snr))
-                        Text("\(neighbor.secondsAgo)s ago")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
     }
 
     // MARK: - Save

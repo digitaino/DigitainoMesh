@@ -238,6 +238,13 @@ public actor ContactService {
                 await cleanupHandler?(contactID, .deleted, publicKey)
             }
 
+            // Also remove the matching discovered node so it doesn't linger
+            // in hop disambiguation after the contact is deleted
+            let discoveredNodes = try await dataStore.fetchDiscoveredNodes(deviceID: deviceID)
+            if let matchingNode = discoveredNodes.first(where: { $0.publicKey == publicKey }) {
+                try await dataStore.deleteDiscoveredNode(id: matchingNode.id)
+            }
+
             // Notify that a node was deleted (for clearing storage full flag)
             await nodeDeletedHandler?()
 
@@ -253,10 +260,17 @@ public actor ContactService {
 
     /// Remove a contact's local data and run the full cleanup chain without contacting the device.
     /// Use when the device reports the contact doesn't exist but local data remains.
-    public func removeLocalContact(contactID: UUID, publicKey: Data) async throws {
+    public func removeLocalContact(contactID: UUID, publicKey: Data, deviceID: UUID? = nil) async throws {
         try await dataStore.deleteMessagesForContact(contactID: contactID)
         try await dataStore.deleteContact(id: contactID)
         await cleanupHandler?(contactID, .deleted, publicKey)
+        // Clean up matching discovered node
+        if let deviceID {
+            let discoveredNodes = try await dataStore.fetchDiscoveredNodes(deviceID: deviceID)
+            if let matchingNode = discoveredNodes.first(where: { $0.publicKey == publicKey }) {
+                try await dataStore.deleteDiscoveredNode(id: matchingNode.id)
+            }
+        }
         await nodeDeletedHandler?()
         await syncCoordinator?.notifyContactsChanged()
     }
