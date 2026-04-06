@@ -316,11 +316,16 @@ final class MessagePathViewModel {
     /// Get all candidates for a hop (for the disambiguation UI).
     /// Deduplicates by name so the same repeater from contacts and discovered nodes
     /// only appears once (preferring the contact version which has richer data).
+    /// Filters out very stale discovered nodes (>30 days) that are likely offline.
     func candidates(for hashBytes: Data, userLocation: CLLocation?) -> [HopCandidate] {
         let contactCandidates = RepeaterResolver.sortedCandidates(for: hashBytes, in: repeaters, userLocation: userLocation)
             .map { HopCandidate(from: $0, userLocation: userLocation) }
 
-        let discoveredCandidates = RepeaterResolver.sortedCandidates(for: hashBytes, in: discoveredRepeaters, userLocation: userLocation)
+        // Filter out stale discovered nodes — if not heard in 30+ days, they're
+        // likely offline/deleted and shouldn't clutter the disambiguation sheet.
+        let staleThreshold = UInt32(Date().timeIntervalSince1970) - (30 * 24 * 3600)
+        let freshDiscovered = discoveredRepeaters.filter { $0.lastAdvertTimestamp == 0 || $0.lastAdvertTimestamp > staleThreshold }
+        let discoveredCandidates = RepeaterResolver.sortedCandidates(for: hashBytes, in: freshDiscovered, userLocation: userLocation)
             .map { HopCandidate(from: $0, userLocation: userLocation) }
 
         // Deduplicate: keep contacts over discovered nodes for the same name
