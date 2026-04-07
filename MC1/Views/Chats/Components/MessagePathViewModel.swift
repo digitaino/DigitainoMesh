@@ -156,10 +156,11 @@ final class MessagePathViewModel {
 
         let senderLoc = senderLocation(for: message)
 
-        // Merged pool of all known repeaters (contacts + discovered)
-        let allNodes: [AnyResolvable] =
-            repeaters.map { AnyResolvable($0) } +
-            discoveredRepeaters.map { AnyResolvable($0) }
+        // Centralized pool builder: filters stale discovered nodes and merges
+        // with contacts. All resolution paths use this same method.
+        let allNodes = RepeaterResolver.buildNodePool(
+            repeaters: repeaters, discoveredNodes: discoveredRepeaters
+        )
 
         // Forward pass: sender → receiver
         var forwardResults: [ResolvedHop] = []
@@ -321,10 +322,8 @@ final class MessagePathViewModel {
         let contactCandidates = RepeaterResolver.sortedCandidates(for: hashBytes, in: repeaters, userLocation: userLocation)
             .map { HopCandidate(from: $0, userLocation: userLocation) }
 
-        // Filter out stale discovered nodes — if not heard in 7+ days, they're
-        // likely offline/deleted and shouldn't clutter the disambiguation sheet.
-        let staleThreshold = UInt32(Date().timeIntervalSince1970) - (7 * 24 * 3600)
-        let freshDiscovered = discoveredRepeaters.filter { $0.lastAdvertTimestamp == 0 || $0.lastAdvertTimestamp > staleThreshold }
+        // Use centralized stale filter for discovered nodes
+        let freshDiscovered = RepeaterResolver.filterFresh(discoveredRepeaters)
         let discoveredCandidates = RepeaterResolver.sortedCandidates(for: hashBytes, in: freshDiscovered, userLocation: userLocation)
             .map { HopCandidate(from: $0, userLocation: userLocation) }
 

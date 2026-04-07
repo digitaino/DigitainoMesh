@@ -209,10 +209,19 @@ private struct BubbleContent: View {
         message.pathLength == 0 || message.pathLength == 0xFF
     }
 
+    private var isLargeEmoji: Bool {
+        message.text.isLargeEmoji
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                MessageText(message.text, baseColor: textColor, isOutgoing: message.isOutgoing, currentUserName: deviceName, precomputedText: displayState.formattedText)
+                if isLargeEmoji {
+                    Text(message.text.strippingInvisibleCharacters)
+                        .font(.system(size: 48))
+                } else {
+                    MessageText(message.text, baseColor: textColor, isOutgoing: message.isOutgoing, currentUserName: deviceName, precomputedText: displayState.formattedText)
+                }
 
                 if !message.isOutgoing && (displayState.showIncomingHopCount && !isDirect || displayState.showIncomingPath) {
                     HStack(spacing: 4) {
@@ -235,7 +244,7 @@ private struct BubbleContent: View {
                 )
             }
         }
-        .background(bubbleColor)
+        .background(isLargeEmoji ? .clear : bubbleColor)
         .clipShape(.rect(cornerRadius: 16))
         .overlay {
             if displayState.isSearchMatch {
@@ -620,4 +629,49 @@ private extension View {
         contactName: "Charlie",
         configuration: .directMessage
     )
+}
+
+#Preview("Emoji Only - Single") {
+    VStack(spacing: 12) {
+        let msg1 = Message(
+            deviceID: UUID(),
+            contactID: UUID(),
+            text: "\u{1F44D}",
+            directionRawValue: MessageDirection.incoming.rawValue,
+            statusRawValue: MessageStatus.delivered.rawValue
+        )
+        UnifiedMessageBubble(
+            message: MessageDTO(from: msg1),
+            contactName: "Alice",
+            configuration: .directMessage
+        )
+
+        let msg2 = Message(
+            deviceID: UUID(),
+            contactID: UUID(),
+            text: "\u{2764}\u{FE0F}\u{1F525}\u{1F60E}",
+            directionRawValue: MessageDirection.outgoing.rawValue,
+            statusRawValue: MessageStatus.sent.rawValue
+        )
+        UnifiedMessageBubble(
+            message: MessageDTO(from: msg2),
+            contactName: "Alice",
+            deviceName: "My Device",
+            configuration: .directMessage
+        )
+
+        let msg3 = Message(
+            deviceID: UUID(),
+            contactID: UUID(),
+            text: "Hello \u{1F44B}",
+            directionRawValue: MessageDirection.incoming.rawValue,
+            statusRawValue: MessageStatus.delivered.rawValue
+        )
+        UnifiedMessageBubble(
+            message: MessageDTO(from: msg3),
+            contactName: "Alice",
+            configuration: .directMessage
+        )
+    }
+    .padding()
 }

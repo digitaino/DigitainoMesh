@@ -45,6 +45,8 @@ Features and fixes added in this fork on top of upstream:
 - **Repeater Benchmark** — New tool for benchmarking repeater signal quality with comparison and history views
 - **Ambiguous Repeater Persistence** — User selections in the repeater disambiguation sheet persist across view rebuilds and are correctly applied when sharing routes
 - **Web Map Declutter** — Repeater pins and stats on the community web map only show repeaters heard in the last 7 days. Prefix-aware repeater filtering handles mixed hash-size modes
+- **Human-Readable Reaction Wire Format** — Reactions (tapbacks) are sent as human-readable messages over the mesh (e.g. `👍 reacted to [Name]: "snippet" (hash)`), making them visible on non-iOS clients that display raw message text. Backwards compatible with the old format
+- **Reaction Heard Repeats & Send Again** — Long-press a reaction badge to see how many times your outgoing reaction was repeated through the mesh, with a "Send Again" button to re-broadcast reactions that may not have propagated well
 
 ## Requirements
 

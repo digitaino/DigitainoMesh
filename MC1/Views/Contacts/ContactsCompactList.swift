@@ -13,7 +13,7 @@ struct ContactsCompactList: View {
     var body: some View {
         List {
             Section {
-                NodeSegmentPicker(selection: $selectedSegment, isSearching: isSearching)
+                NodeSegmentPicker(selection: $selectedSegment)
             }
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)

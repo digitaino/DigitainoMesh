@@ -67,11 +67,21 @@ final class BenchmarkViewModel {
 
     // MARK: - Setup State
 
-    var testRepeater: ContactDTO?
+    var testRepeater: ContactDTO? {
+        didSet {
+            // Refresh neighbor data when test repeater changes
+            if testRepeater?.id != oldValue?.id {
+                Task { await loadNeighbors() }
+            }
+        }
+    }
     var targets: [ContactDTO] = []
     var batchSize = 5
     /// All available repeaters for selection
     var availableRepeaters: [ContactDTO] = []
+
+    /// Hash prefixes of repeaters that are direct RX neighbors of the test repeater
+    var neighborHashes: Set<Data> = []
 
     // MARK: - Execution State
 
@@ -141,6 +151,69 @@ final class BenchmarkViewModel {
             savedBenchmarkPaths = allPaths.filter { $0.name.hasPrefix("[Benchmark]") }
         } catch {
             logger.error("Failed to load benchmark history: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Neighbor Analysis
+
+    /// Scan the RX log to find which repeaters are direct radio neighbors of the test repeater.
+    /// A neighbor is any repeater whose hash appears adjacent to the test repeater's hash in a path.
+    func loadNeighbors() async {
+        guard let appState,
+              let testRepeater,
+              let deviceID = appState.connectedDevice?.id,
+              let dataStore = appState.services?.dataStore else {
+            neighborHashes = []
+            return
+        }
+
+        let hashSize = appState.connectedDevice?.hashSize ?? 1
+        let testHash = Data(testRepeater.publicKey.prefix(hashSize))
+
+        do {
+            let entries = try await dataStore.fetchRxLogEntries(deviceID: deviceID, limit: 2000)
+            var neighbors = Set<Data>()
+
+            for entry in entries {
+                let hs = entry.pathHashSize
+                guard hs > 0, !entry.pathNodes.isEmpty else { continue }
+
+                let hops = stride(from: 0, to: entry.pathNodes.count, by: hs).map { start in
+                    Data(entry.pathNodes[start..<min(start + hs, entry.pathNodes.count)])
+                }
+
+                // Find testHash in the path and collect adjacent hops
+                for (i, hop) in hops.enumerated() {
+                    if hop == testHash {
+                        if i > 0 { neighbors.insert(hops[i - 1]) }
+                        if i < hops.count - 1 { neighbors.insert(hops[i + 1]) }
+                    }
+                }
+            }
+
+            // Remove the test repeater's own hash from neighbors
+            neighbors.remove(testHash)
+            neighborHashes = neighbors
+            logger.info("Found \(neighbors.count) RX neighbors for \(testRepeater.resolvableName)")
+        } catch {
+            logger.error("Failed to load RX log for neighbors: \(error.localizedDescription)")
+            neighborHashes = []
+        }
+    }
+
+    /// Whether a repeater is a known direct radio neighbor of the test repeater.
+    func isNeighbor(_ contact: ContactDTO) -> Bool {
+        guard !neighborHashes.isEmpty else { return false }
+        let hashSize = appState?.connectedDevice?.hashSize ?? 1
+        let contactHash = Data(contact.publicKey.prefix(hashSize))
+        return neighborHashes.contains(contactHash)
+    }
+
+    /// Select all neighbor repeaters as targets.
+    func selectAllNeighbors() {
+        let neighbors = selectableTargets.filter { isNeighbor($0) }
+        for neighbor in neighbors where !isTargetSelected(neighbor) {
+            targets.append(neighbor)
         }
     }
 

@@ -401,7 +401,7 @@ private struct RepeaterPickerView: View {
     private var filtered: [ContactDTO] {
         let sorted = repeaters.sorted { a, b in
             if a.isFavorite != b.isFavorite { return a.isFavorite }
-            return a.lastAdvertTimestamp > b.lastAdvertTimestamp
+            return a.lastModified > b.lastModified
         }
         guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else { return sorted }
         let query = searchText.trimmingCharacters(in: .whitespaces)
@@ -448,8 +448,8 @@ private struct RepeaterPickerView: View {
                     Text(hexCode)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
-                    if repeater.lastAdvertTimestamp > 0 {
-                        RelativeTimestampText(timestamp: repeater.lastAdvertTimestamp)
+                    if repeater.lastModified > 0 {
+                        RelativeTimestampText(timestamp: repeater.lastModified)
                     }
                 }
             }
@@ -471,8 +471,12 @@ private struct TargetPickerView: View {
 
     private var filtered: [ContactDTO] {
         let sorted = viewModel.selectableTargets.sorted { a, b in
+            // Neighbors first, then favorites, then by recency
+            let aNeighbor = viewModel.isNeighbor(a)
+            let bNeighbor = viewModel.isNeighbor(b)
+            if aNeighbor != bNeighbor { return aNeighbor }
             if a.isFavorite != b.isFavorite { return a.isFavorite }
-            return a.lastAdvertTimestamp > b.lastAdvertTimestamp
+            return a.lastModified > b.lastModified
         }
         guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else { return sorted }
         let query = searchText.trimmingCharacters(in: .whitespaces)
@@ -485,6 +489,10 @@ private struct TargetPickerView: View {
         }
     }
 
+    private var hasNeighbors: Bool {
+        viewModel.selectableTargets.contains { viewModel.isNeighbor($0) }
+    }
+
     var body: some View {
         List {
             ForEach(filtered) { repeater in
@@ -495,6 +503,16 @@ private struct TargetPickerView: View {
         .navigationTitle("Target Repeaters")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                if hasNeighbors {
+                    Button {
+                        viewModel.selectAllNeighbors()
+                    } label: {
+                        Label("Select Neighbors", systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.subheadline)
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Done") { dismiss() }
             }
@@ -505,35 +523,14 @@ private struct TargetPickerView: View {
         Button {
             viewModel.toggleTarget(repeater)
         } label: {
-            targetLabel(repeater)
+            RepeaterPickerRow(
+                contact: repeater,
+                isSelected: viewModel.isTargetSelected(repeater),
+                badge: viewModel.isNeighbor(repeater) ? "RX" : nil,
+                badgeColor: .green
+            )
         }
         .tint(.primary)
-    }
-
-    private func targetLabel(_ repeater: ContactDTO) -> some View {
-        let hexCode = repeater.publicKey.prefix(3).map { String(format: "%02X", $0) }.joined()
-        let isSelected = viewModel.isTargetSelected(repeater)
-        return HStack {
-            if repeater.isFavorite {
-                Image(systemName: "star.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.yellow)
-            }
-            VStack(alignment: .leading) {
-                Text(repeater.resolvableName)
-                HStack(spacing: 6) {
-                    Text(hexCode)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                    if repeater.lastAdvertTimestamp > 0 {
-                        RelativeTimestampText(timestamp: repeater.lastAdvertTimestamp)
-                    }
-                }
-            }
-            Spacer()
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-        }
     }
 }
 

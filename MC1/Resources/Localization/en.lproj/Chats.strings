@@ -586,6 +586,9 @@
 /* Location: UnifiedMessageBubble.swift - Plural form of repeats */
 "chats.message.repeat.plural" = "repeats";
 
+// Location: ReactionDetailsSheet.swift - Shown when outgoing reaction has no mesh repeats yet
+"chats.message.repeat.noneHeard" = "No repeats heard";
+
 /* Location: UnifiedMessageBubble.swift - Context menu text showing sent time - %@ is formatted date */
 "chats.message.info.sent" = "Sent: %@";
 

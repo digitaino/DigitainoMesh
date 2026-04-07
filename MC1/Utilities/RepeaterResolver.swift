@@ -34,6 +34,35 @@ struct ResolverResult<T: RepeaterResolvable> {
 
 /// Resolves repeater collisions by proximity and recency.
 enum RepeaterResolver {
+
+    // MARK: - Centralized Node Pool
+
+    /// Threshold for considering a discovered node stale: 7 days in seconds.
+    /// Used consistently across all resolution and disambiguation paths.
+    static let staleThresholdSeconds: UInt32 = 7 * 24 * 3600
+
+    /// Builds a unified, filtered pool of resolvable nodes from contacts and discovered nodes.
+    ///
+    /// Filters out stale discovered nodes (not heard in >7 days) to prevent
+    /// deleted/offline repeaters from winning resolution over active ones.
+    /// **All code that resolves hops should use this method** to ensure consistent filtering.
+    static func buildNodePool(
+        repeaters: [ContactDTO],
+        discoveredNodes: [DiscoveredNodeDTO]
+    ) -> [AnyResolvable] {
+        let fresh = filterFresh(discoveredNodes)
+        return repeaters.map { AnyResolvable($0) } + fresh.map { AnyResolvable($0) }
+    }
+
+    /// Filters discovered nodes to remove stale entries not heard in >7 days.
+    /// Use this when you need the filtered list directly (e.g. for disambiguation candidates).
+    static func filterFresh(_ nodes: [DiscoveredNodeDTO]) -> [DiscoveredNodeDTO] {
+        let threshold = UInt32(Date().timeIntervalSince1970) - staleThresholdSeconds
+        return nodes.filter { $0.lastAdvertTimestamp == 0 || $0.lastAdvertTimestamp > threshold }
+    }
+
+    // MARK: - Resolution
+
     /// Match using a PathHop: exact public key match first, then hash bytes fallback.
     static func bestMatch<T: RepeaterResolvable>(
         for hop: PathHop,
@@ -125,8 +154,7 @@ enum RepeaterResolver {
                 let rhsTS = rhs.node.lastAdvertTimestamp
                 if lhsTS > 0 && rhsTS > 0 {
                     let nowTS = UInt32(Date().timeIntervalSince1970)
-                    let weekSeconds: UInt32 = 7 * 24 * 3600
-                    let staleThreshold = nowTS > weekSeconds ? nowTS - weekSeconds : 0
+                    let staleThreshold = nowTS > staleThresholdSeconds ? nowTS - staleThresholdSeconds : 0
                     let lhsStale = lhsTS < staleThreshold
                     let rhsStale = rhsTS < staleThreshold
                     if lhsStale != rhsStale {

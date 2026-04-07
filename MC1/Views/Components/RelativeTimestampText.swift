@@ -31,7 +31,12 @@ struct RelativeTimestampText: View {
         }
 
         if interval >= weekThreshold {
-            return date.formatted(.dateTime.month(.abbreviated).day())
+            let cal = Calendar.current
+            if cal.component(.year, from: date) == cal.component(.year, from: now) {
+                return date.formatted(.dateTime.month(.abbreviated).day())
+            } else {
+                return date.formatted(.dateTime.month(.abbreviated).day().year(.twoDigits))
+            }
         }
 
         return relativeFormatter.localizedString(for: date, relativeTo: now)

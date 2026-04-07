@@ -560,6 +560,8 @@ public enum L10n {
           public static let unavailable = L10n.tr("Chats", "chats.message.path.unavailable", fallback: "Unavailable")
         }
         public enum Repeat {
+          /// No repeats heard
+          public static let noneHeard = L10n.tr("Chats", "chats.message.repeat.noneHeard", fallback: "No repeats heard")
           /// Location: UnifiedMessageBubble.swift - Plural form of repeats
           public static let plural = L10n.tr("Chats", "chats.message.repeat.plural", fallback: "repeats")
           /// Location: UnifiedMessageBubble.swift - Singular form of repeat

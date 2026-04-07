@@ -14,6 +14,8 @@ struct ReactionDetailsSheet: View {
     @State private var reactions: [ReactionDTO] = []
     @State private var selectedEmoji: String?
     @State private var isLoading = true
+    @State private var carrierMessages: [UUID: MessageDTO] = [:]
+    @State private var resendInFlight: UUID?
 
     private var emojiGroups: [(emoji: String, reactions: [ReactionDTO])] {
         Dictionary(grouping: reactions, by: \.emoji)
@@ -84,12 +86,48 @@ struct ReactionDetailsSheet: View {
 
     private var senderListView: some View {
         List(selectedReactions) { reaction in
-            HStack {
-                Text(reaction.senderName)
-                Spacer()
-                Text(reaction.receivedAt, format: .relative(presentation: .named))
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+            if let carrier = carrierMessages[reaction.id] {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(reaction.senderName)
+                        Spacer()
+                        Text(reaction.receivedAt, format: .relative(presentation: .named))
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                    HStack {
+                        if carrier.heardRepeats > 0 {
+                            let word = carrier.heardRepeats == 1
+                                ? L10n.Chats.Chats.Message.Repeat.singular
+                                : L10n.Chats.Chats.Message.Repeat.plural
+                            Label("\(carrier.heardRepeats) \(word)", systemImage: "arrow.triangle.branch")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Label(L10n.Chats.Chats.Message.Repeat.noneHeard, systemImage: "arrow.triangle.branch")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        if carrier.channelIndex != nil {
+                            Button {
+                                Task { await resendReaction(reaction) }
+                            } label: {
+                                Label(L10n.Chats.Chats.Message.Action.sendAgain, systemImage: "arrow.uturn.forward")
+                                    .font(.caption)
+                            }
+                            .disabled(resendInFlight != nil)
+                        }
+                    }
+                }
+            } else {
+                HStack {
+                    Text(reaction.senderName)
+                    Spacer()
+                    Text(reaction.receivedAt, format: .relative(presentation: .named))
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
             }
         }
         .listStyle(.plain)
@@ -106,11 +144,35 @@ struct ReactionDetailsSheet: View {
             if let first = emojiGroups.first {
                 selectedEmoji = first.emoji
             }
+
+            // Fetch carrier messages for own outgoing reactions
+            let localName = appState.localNodeName
+            var carriers: [UUID: MessageDTO] = [:]
+            for reaction in reactions where reaction.senderName == localName {
+                if let sentMsgID = reaction.sentMessageID,
+                   let msg = try? await dataStore.fetchMessage(id: sentMsgID) {
+                    carriers[reaction.id] = msg
+                }
+            }
+            carrierMessages = carriers
         } catch {
             logger.debug("Failed to fetch reactions for message \(messageID): \(error)")
         }
 
         isLoading = false
+    }
+
+    private func resendReaction(_ reaction: ReactionDTO) async {
+        guard let messageService = appState.services?.messageService,
+              let sentMessageID = reaction.sentMessageID else { return }
+        resendInFlight = reaction.id
+        defer { resendInFlight = nil }
+        do {
+            try await messageService.resendChannelMessage(messageID: sentMessageID)
+            await loadReactions()
+        } catch {
+            logger.debug("Failed to resend reaction: \(error)")
+        }
     }
 }
 

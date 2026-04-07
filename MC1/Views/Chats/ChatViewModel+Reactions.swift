@@ -79,7 +79,7 @@ extension ChatViewModel {
         )
 
         do {
-            _ = try await messageService.sendChannelMessage(
+            let sendResult = try await messageService.sendChannelMessage(
                 text: reactionText,
                 channelIndex: channelIndex,
                 deviceID: message.deviceID
@@ -97,7 +97,8 @@ extension ChatViewModel {
                 messageHash: messageHash,
                 rawText: reactionText,
                 channelIndex: channelIndex,
-                deviceID: message.deviceID
+                deviceID: message.deviceID,
+                sentMessageID: sendResult.id
             )
             if let result = await reactionService.persistReactionAndUpdateSummary(
                 reactionDTO,
@@ -134,7 +135,7 @@ extension ChatViewModel {
         )
         do {
             // Send as DM to the contact
-            _ = try await messageService.sendDirectMessage(
+            let sentMessage = try await messageService.sendDirectMessage(
                 text: reactionText,
                 to: contact
             )
@@ -151,7 +152,8 @@ extension ChatViewModel {
                 messageHash: messageHash,
                 rawText: reactionText,
                 contactID: contactID,
-                deviceID: message.deviceID
+                deviceID: message.deviceID,
+                sentMessageID: sentMessage.id
             )
             if let result = await reactionService.persistReactionAndUpdateSummary(
                 reactionDTO,

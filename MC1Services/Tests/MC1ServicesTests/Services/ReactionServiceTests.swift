@@ -17,11 +17,11 @@ struct ReactionServiceTests {
             targetTimestamp: timestamp
         )
 
-        // Verify format: {emoji}@[{sender}]\n{hash}
-        #expect(text.hasPrefix("👍@[AlphaNode]\n"))
+        // Verify human-readable format: {emoji} reacted to [{sender}]: "{snippet}" ({hash})
+        #expect(text.hasPrefix("👍 reacted to [AlphaNode]: \""))
 
-        // Verify 8-char Crockford Base32 identifier is present (lowercase) at end
-        let idPattern = #/\n([0-9a-hj-km-np-tv-z]{8})$/#
+        // Verify 8-char Crockford Base32 identifier in parentheses at end
+        let idPattern = #/\(([0-9a-hj-km-np-tv-z]{8})\)$/#
         #expect(text.firstMatch(of: idPattern) != nil)
     }
 
@@ -37,8 +37,8 @@ struct ReactionServiceTests {
             targetTimestamp: timestamp
         )
 
-        #expect(text.hasPrefix("❤️@[Node]\n"))
-        #expect(text.hasSuffix(text.suffix(8))) // ends with 8-char hash
+        #expect(text.hasPrefix("❤️ reacted to [Node]: \"ok\""))
+        #expect(text.hasSuffix(")")) // ends with hash in parens
     }
 
     @Test("Generated identifier is consistent")
@@ -387,9 +387,10 @@ struct ReactionServiceTests {
             targetText: "Hello world",
             targetTimestamp: 1704067200
         )
-        #expect(text.hasPrefix("👍\n"))
-        #expect(text.count == 10) // emoji + newline + 8 char hash
+        #expect(text.hasPrefix("👍 reacted to: \"Hello world\""))
+        #expect(text.hasSuffix(")")) // ends with hash in parens
         #expect(!text.contains("@["))
+        #expect(!text.contains(" reacted to [")) // no sender bracket in DM format
     }
 
     @Test("Indexes DM message and finds by hash")

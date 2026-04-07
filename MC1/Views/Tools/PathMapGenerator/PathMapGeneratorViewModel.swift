@@ -40,7 +40,7 @@ final class PathMapGeneratorViewModel {
 
     func generateMap(services: ServiceContainer, deviceID: UUID, userLocation: CLLocation?) async {
         guard let path = HexPathParser.parse(inputText) else {
-            errorMessage = "Enter at least 2 valid hex IDs (2-6 hex chars each, or full 64-char keys)"
+            errorMessage = "Enter valid hex IDs (2-6 hex chars each, or full 64-char keys)"
             return
         }
 

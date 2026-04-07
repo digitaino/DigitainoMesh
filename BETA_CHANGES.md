@@ -1,4 +1,30 @@
-Beta Changes -- v0.10.1 (Build 18)
+Beta Changes -- v0.10.1 (Build 19)
+
+Human-Readable Reaction Wire Format
+
+Reactions (tapbacks) are now sent as human-readable messages over the mesh instead of compact binary-style payloads. Channel reactions look like `👍 reacted to [SenderName]: "message snippet" (hash)` and DM reactions look like `👍 reacted to: "snippet" (hash)`. This makes reactions visible on non-iOS clients that display raw message text. Backwards compatible — the parser accepts both old and new formats.
+
+Reaction Heard Repeats & Send Again
+
+When you long-press a reaction badge to open the reaction details sheet, your own outgoing reactions now show how many times the reaction was repeated through the mesh (the same repeat count shown on regular messages). A "Send Again" button lets you re-broadcast a reaction that may not have reached enough repeaters. This works by linking each outgoing reaction to its carrier message in the database.
+
+Simplified Survey UI
+
+Removed the survey focus mode toggle and streamlined the signal survey toolbar. The survey view now always shows the full toolbar without a separate focused/unfocused state. Focus mode buttons (lock, chart, radar) have been removed in favor of the standard toolbar layout.
+
+Repeater Benchmark Improvements
+
+The benchmark tool now includes a repeater picker row component and improved comparison logic. Benchmark view and view model have been updated with additional signal analysis features.
+
+Contacts View Cleanup
+
+Contacts list views (compact, split, empty states, search empty) have been cleaned up with minor layout and consistency improvements.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 18)
 
 Deep Scan Gating
 

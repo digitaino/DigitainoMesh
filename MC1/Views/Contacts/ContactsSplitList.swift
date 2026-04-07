@@ -14,7 +14,7 @@ struct ContactsSplitList: View {
     var body: some View {
         List(selection: $selectedContact) {
             Section {
-                NodeSegmentPicker(selection: $selectedSegment, isSearching: isSearching)
+                NodeSegmentPicker(selection: $selectedSegment)
             }
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)

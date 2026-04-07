@@ -109,7 +109,6 @@ public struct SurveySessionDTO: Sendable, Identifiable, Equatable, Hashable {
     public var probesSentPerCell: [String: Int]?
     /// Completion stats saved when the session stopped. Nil for old sessions.
     public var completionStats: SurveyCompletionStatsDTO?
-
     /// Initialize from SwiftData model.
     public init(from model: SurveySession) {
         self.id = model.id

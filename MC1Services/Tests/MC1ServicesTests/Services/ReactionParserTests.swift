@@ -304,16 +304,17 @@ struct ReactionParserTests {
         #expect(ReactionParser.parseDM(text) == nil)
     }
 
-    @Test("Builds DM reaction text correctly")
+    @Test("Builds DM reaction text in human-readable format")
     func buildsDMReactionText() {
         let text = ReactionParser.buildDMReactionText(
             emoji: "👍",
             targetText: "Hello world",
             targetTimestamp: 1704067200
         )
-        #expect(text.hasPrefix("👍\n"))
-        #expect(text.count == 10) // emoji (grapheme cluster) + newline + 8 char hash
+        #expect(text.hasPrefix("👍 reacted to: \"Hello world\""))
+        #expect(text.hasSuffix(")"))
         #expect(!text.contains("@["))
+        #expect(!text.contains("\n"))
     }
 
     @Test("Parses DM reaction with uppercase hash and normalizes to lowercase")
@@ -364,5 +365,219 @@ struct ReactionParserTests {
 
         let expectedHash = ReactionParser.generateMessageHash(text: targetText, timestamp: timestamp)
         #expect(parsed?.messageHash == expectedHash)
+    }
+
+    // MARK: - Human-Readable Channel Format Tests
+
+    @Test("Parses human-readable channel reaction")
+    func parsesHumanReadableChannel() {
+        let hash = ReactionParser.generateMessageHash(text: "Hello", timestamp: 1704067200)
+        let text = "👍 reacted to [AlphaNode]: \"Hello\" (\(hash))"
+        let result = ReactionParser.parse(text)
+
+        #expect(result != nil)
+        #expect(result?.emoji == "👍")
+        #expect(result?.targetSender == "AlphaNode")
+        #expect(result?.messageHash == hash)
+    }
+
+    @Test("Parses human-readable channel reaction with skin tone emoji")
+    func parsesHumanReadableChannelSkinTone() {
+        let text = "👍🏽 reacted to [Node]: \"Hi\" (a1b2c3d4)"
+        let result = ReactionParser.parse(text)
+
+        #expect(result != nil)
+        #expect(result?.emoji == "👍🏽")
+        #expect(result?.targetSender == "Node")
+    }
+
+    @Test("Parses human-readable channel reaction with quotes in snippet")
+    func parsesHumanReadableChannelWithQuotes() {
+        let hash = ReactionParser.generateMessageHash(text: "She said \"hello\"", timestamp: 100)
+        let text = "❤️ reacted to [Bob]: \"She said \"hello\"\" (\(hash))"
+        let result = ReactionParser.parse(text)
+
+        #expect(result != nil)
+        #expect(result?.emoji == "❤️")
+        #expect(result?.targetSender == "Bob")
+        #expect(result?.messageHash == hash)
+    }
+
+    @Test("Parses human-readable channel reaction with truncated snippet")
+    func parsesHumanReadableChannelTruncated() {
+        let text = "👍 reacted to [Node]: \"This is a very long...\" (a1b2c3d4)"
+        let result = ReactionParser.parse(text)
+
+        #expect(result != nil)
+        #expect(result?.emoji == "👍")
+        #expect(result?.targetSender == "Node")
+        #expect(result?.messageHash == "a1b2c3d4")
+    }
+
+    @Test("Human-readable channel rejects plain text")
+    func humanReadableChannelRejectsPlainText() {
+        #expect(ReactionParser.parse("Just a normal message") == nil)
+    }
+
+    @Test("Human-readable channel rejects missing hash")
+    func humanReadableChannelRejectsMissingHash() {
+        #expect(ReactionParser.parse("👍 reacted to [Node]: \"Hello\"") == nil)
+    }
+
+    // MARK: - Human-Readable DM Format Tests
+
+    @Test("Parses human-readable DM reaction")
+    func parsesHumanReadableDM() {
+        let hash = ReactionParser.generateMessageHash(text: "Hello", timestamp: 1704067200)
+        let text = "👍 reacted to: \"Hello\" (\(hash))"
+        let result = ReactionParser.parseDM(text)
+
+        #expect(result != nil)
+        #expect(result?.emoji == "👍")
+        #expect(result?.messageHash == hash)
+    }
+
+    @Test("Human-readable DM rejects channel format")
+    func humanReadableDMRejectsChannelFormat() {
+        let text = "👍 reacted to [Node]: \"Hello\" (a1b2c3d4)"
+        #expect(ReactionParser.parseDM(text) == nil)
+    }
+
+    @Test("Human-readable DM with heart emoji")
+    func parsesHumanReadableDMHeart() {
+        let text = "❤️ reacted to: \"Thanks!\" (e4d8b1a0)"
+        let result = ReactionParser.parseDM(text)
+
+        #expect(result != nil)
+        #expect(result?.emoji == "❤️")
+        #expect(result?.messageHash == "e4d8b1a0")
+    }
+
+    // MARK: - Human-Readable Build + Round-Trip Tests
+
+    @Test("Builds channel reaction text in human-readable format")
+    func buildsChannelReactionText() {
+        let text = ReactionParser.buildChannelReactionText(
+            emoji: "👍",
+            targetSender: "AlphaNode",
+            targetText: "Hello world",
+            targetTimestamp: 1704067200
+        )
+        #expect(text.hasPrefix("👍 reacted to [AlphaNode]: \"Hello world\""))
+        #expect(text.hasSuffix(")"))
+        #expect(!text.contains("\n"))
+    }
+
+    @Test("Channel round-trip: build then parse produces same emoji, sender, and hash")
+    func channelRoundTrip() {
+        let emoji = "❤️"
+        let sender = "TestNode"
+        let targetText = "How's the signal?"
+        let timestamp: UInt32 = 1704067200
+
+        let text = ReactionParser.buildChannelReactionText(
+            emoji: emoji,
+            targetSender: sender,
+            targetText: targetText,
+            targetTimestamp: timestamp
+        )
+
+        let parsed = ReactionParser.parse(text)
+        #expect(parsed != nil)
+        #expect(parsed?.emoji == emoji)
+        #expect(parsed?.targetSender == sender)
+
+        let expectedHash = ReactionParser.generateMessageHash(text: targetText, timestamp: timestamp)
+        #expect(parsed?.messageHash == expectedHash)
+    }
+
+    @Test("DM round-trip with human-readable format")
+    func dmHumanReadableRoundTrip() {
+        let emoji = "🔥"
+        let targetText = "Great coverage here"
+        let timestamp: UInt32 = 1704067200
+
+        let text = ReactionParser.buildDMReactionText(
+            emoji: emoji,
+            targetText: targetText,
+            targetTimestamp: timestamp
+        )
+
+        let parsed = ReactionParser.parseDM(text)
+        #expect(parsed != nil)
+        #expect(parsed?.emoji == emoji)
+
+        let expectedHash = ReactionParser.generateMessageHash(text: targetText, timestamp: timestamp)
+        #expect(parsed?.messageHash == expectedHash)
+    }
+
+    // MARK: - isReactionText with Human-Readable Format
+
+    @Test("isReactionText recognizes human-readable channel format")
+    func isReactionTextRecognizesHumanReadableChannel() {
+        let text = "👍 reacted to [Node]: \"Hello\" (a1b2c3d4)"
+        #expect(ReactionParser.isReactionText(text, isDM: false) == true)
+    }
+
+    @Test("isReactionText recognizes human-readable DM format")
+    func isReactionTextRecognizesHumanReadableDM() {
+        let text = "👍 reacted to: \"Hello\" (a1b2c3d4)"
+        #expect(ReactionParser.isReactionText(text, isDM: true) == true)
+    }
+
+    // MARK: - Truncation Tests
+
+    @Test("Channel reaction truncates long messages")
+    func channelReactionTruncatesLong() {
+        let longText = String(repeating: "a", count: 200)
+        let text = ReactionParser.buildChannelReactionText(
+            emoji: "👍",
+            targetSender: "Node",
+            targetText: longText,
+            targetTimestamp: 100
+        )
+        // Must fit within 147 bytes
+        #expect(text.utf8.count <= 147)
+        #expect(text.contains("..."))
+
+        // Must still round-trip parse
+        let parsed = ReactionParser.parse(text)
+        #expect(parsed != nil)
+        #expect(parsed?.emoji == "👍")
+        #expect(parsed?.targetSender == "Node")
+    }
+
+    @Test("DM reaction truncates long messages")
+    func dmReactionTruncatesLong() {
+        let longText = String(repeating: "b", count: 200)
+        let text = ReactionParser.buildDMReactionText(
+            emoji: "👍",
+            targetText: longText,
+            targetTimestamp: 100
+        )
+        // Must fit within 150 bytes
+        #expect(text.utf8.count <= 150)
+        #expect(text.contains("..."))
+
+        // Must still round-trip parse
+        let parsed = ReactionParser.parseDM(text)
+        #expect(parsed != nil)
+        #expect(parsed?.emoji == "👍")
+    }
+
+    @Test("Truncation respects multi-byte character boundaries")
+    func truncationRespectsCharBoundaries() {
+        // Each emoji is 4 bytes — truncation should not split one
+        let emojiText = String(repeating: "🎉", count: 50) // 200 bytes
+        let text = ReactionParser.buildDMReactionText(
+            emoji: "👍",
+            targetText: emojiText,
+            targetTimestamp: 100
+        )
+        #expect(text.utf8.count <= 150)
+
+        // The truncated snippet should not contain broken UTF-8
+        let parsed = ReactionParser.parseDM(text)
+        #expect(parsed != nil)
     }
 }

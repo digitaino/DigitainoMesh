@@ -83,7 +83,7 @@ final class MessageRouteMapViewModel {
             logger.error("Failed to load contacts: \(error.localizedDescription)")
         }
 
-        allNodes = repeaters.map { AnyResolvable($0) } + discoveredRepeaters.map { AnyResolvable($0) }
+        allNodes = RepeaterResolver.buildNodePool(repeaters: repeaters, discoveredNodes: discoveredRepeaters)
 
         buildRoute(message: message, userLocation: userLocation, receiverName: receiverName, snr: message.snr, hopOverrides: hopOverrides)
         isLoading = false

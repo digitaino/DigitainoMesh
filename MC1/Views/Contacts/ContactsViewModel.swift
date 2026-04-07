@@ -239,19 +239,18 @@ final class ContactsViewModel {
     ) -> [ContactDTO] {
         var result = contacts
 
-        // If searching, show all types (ignore segment)
-        if searchText.isEmpty {
-            // Filter by segment
-            switch segment {
-            case .favorites:
-                result = result.filter(\.isFavorite)
-            case .contacts:
-                result = result.filter { $0.type == .chat }
-            case .network:
-                result = result.filter { $0.type == .repeater || $0.type == .room }
-            }
-        } else {
-            // Filter by search text (name or public key hex prefix)
+        // Always filter by segment first
+        switch segment {
+        case .favorites:
+            result = result.filter(\.isFavorite)
+        case .contacts:
+            result = result.filter { $0.type == .chat }
+        case .network:
+            result = result.filter { $0.type == .repeater || $0.type == .room }
+        }
+
+        // Then filter by search text within the selected segment
+        if !searchText.isEmpty {
             let query = searchText.trimmingCharacters(in: .whitespaces)
             let hexQuery = query.uppercased()
             let looksLikeHex = hexQuery.allSatisfy { $0.isHexDigit } && !hexQuery.isEmpty

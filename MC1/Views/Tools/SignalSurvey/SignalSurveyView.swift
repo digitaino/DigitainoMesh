@@ -29,6 +29,7 @@ struct SignalSurveyView: View {
     @State private var showingCompletionSummary = false
     @State private var completionSessionID: UUID?
     @State private var showingHistoricalStats: SurveySessionDTO?
+    @State private var isStopping = false
 
     var body: some View {
         ZStack {
@@ -49,6 +50,11 @@ struct SignalSurveyView: View {
                     communityModeOverlay
                 }
 
+            }
+
+            // Stopping interstitial — blocks interaction while survey data is being saved
+            if isStopping {
+                stoppingOverlay
             }
         }
         .navigationTitle("Signal Survey")
@@ -391,6 +397,27 @@ struct SignalSurveyView: View {
         .padding(.leading, 16)
     }
 
+    // MARK: - Stopping Overlay
+
+    private var stoppingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+            VStack(spacing: 16) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.white)
+                Text("Saving survey data…")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+            }
+            .padding(32)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        }
+        .transition(.opacity)
+        .allowsHitTesting(true) // Blocks interaction with views behind
+    }
+
     // MARK: - Debug Overlay
 
     @ViewBuilder
@@ -441,41 +468,43 @@ struct SignalSurveyView: View {
             let displayTxQuality = SNRQuality(snr: displayTxSNR)
             VStack(alignment: .leading, spacing: 8) {
                 // Header: quality + packet count + dismiss
-                HStack(spacing: 8) {
-                    if cell.isDeadZone {
-                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                            .foregroundStyle(.secondary)
-                            .font(.subheadline)
-                    }
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(cell.isDeadZone ? "No Response" : displayQuality.qualityLabel)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(cell.isDeadZone ? .secondary : displayQuality.color)
+                do {
+                    HStack(spacing: 8) {
                         if cell.isDeadZone {
-                            Text("Probe sent, no response")
-                                .font(.caption)
+                            Image(systemName: "antenna.radiowaves.left.and.right.slash")
                                 .foregroundStyle(.secondary)
-                        } else {
-                            Text("\(displayPacketCount) packet\(displayPacketCount == 1 ? "" : "s") received")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.subheadline)
                         }
-                    }
 
-                    Spacer()
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(cell.isDeadZone ? "No Response" : displayQuality.qualityLabel)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(cell.isDeadZone ? .secondary : displayQuality.color)
+                            if cell.isDeadZone {
+                                Text("Probe sent, no response")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("\(displayPacketCount) packet\(displayPacketCount == 1 ? "" : "s") received")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
 
-                    Button {
-                        viewModel.selectedCell = nil
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                        Spacer()
+
+                        Button {
+                            viewModel.selectedCell = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title3)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 if !cell.isDeadZone {
@@ -501,13 +530,67 @@ struct SignalSurveyView: View {
                         .foregroundStyle(Color.accentColor)
                     }
 
-                    // Detect whether this cell has Deep Scan data (TX SNR or trace data).
-                    // This drives whether we show the two-column RX/TX layout or RX-only.
-                    let hasDeepScanData = cell.averageTxSNR != nil || cell.maxMeshDepth > 0 || !cell.meshScores.isEmpty
+                    // Signal section
+                    do {
+                        // Detect whether this cell has Deep Scan data (TX SNR or trace data).
+                        let hasDeepScanData = cell.averageTxSNR != nil || cell.maxMeshDepth > 0 || !cell.meshScores.isEmpty
 
-                    if hasDeepScanData {
-                        // Two-column RX / TX signal section (Deep Scan data available)
-                        HStack(alignment: .top, spacing: 0) {
+                        if hasDeepScanData {
+                            // Two-column RX / TX signal section (Deep Scan data available)
+                            HStack(alignment: .top, spacing: 0) {
+                                signalColumn(
+                                    label: "RX Signal",
+                                    arrowName: "arrow.down",
+                                    snr: displayRxSNR,
+                                    quality: displayQuality,
+                                    rssi: {
+                                        if let src = viewModel.filteredCellStats { return src.avgRSSI }
+                                        return cell.averageRSSI
+                                    }(),
+                                    snrRange: {
+                                        if let src = viewModel.filteredCellStats {
+                                            guard let lo = src.minSNR, let hi = src.maxSNR else { return nil }
+                                            return (lo, hi)
+                                        }
+                                        guard let lo = cell.minSNR, let hi = cell.maxSNR else { return nil }
+                                        return (lo, hi)
+                                    }()
+                                )
+
+                                Rectangle()
+                                    .fill(.quaternary)
+                                    .frame(width: 0.5)
+                                    .padding(.vertical, 4)
+
+                                signalColumn(
+                                    label: "TX Signal",
+                                    arrowName: "arrow.up",
+                                    snr: displayTxSNR,
+                                    quality: displayTxQuality,
+                                    rssi: nil,
+                                    snrRange: {
+                                        guard isFilteredRepeaterDirect else { return nil }
+                                        if let src = viewModel.filteredCellStats {
+                                            guard let lo = src.minTxSNR, let hi = src.maxTxSNR else { return nil }
+                                            return (lo, hi)
+                                        }
+                                        guard let lo = cell.minTxSNR, let hi = cell.maxTxSNR else { return nil }
+                                        return (lo, hi)
+                                    }(),
+                                    unknownReason: {
+                                        guard displayTxQuality == .unknown else { return nil }
+                                        if !isFilteredRepeaterDirect {
+                                            return "Not direct — TX only applies to 2-way links"
+                                        }
+                                        if cell.connectedRelayNodes.isEmpty {
+                                            return "Waiting for discover response"
+                                        }
+                                        return "Repeats confirmed — TX data from discover responses"
+                                    }()
+                                )
+                            }
+                        } else {
+                            // Single-column RX signal (no Deep Scan data)
                             signalColumn(
                                 label: "RX Signal",
                                 arrowName: "arrow.down",
@@ -526,62 +609,10 @@ struct SignalSurveyView: View {
                                     return (lo, hi)
                                 }()
                             )
-
-                            Rectangle()
-                                .fill(.quaternary)
-                                .frame(width: 0.5)
-                                .padding(.vertical, 4)
-
-                            signalColumn(
-                                label: "TX Signal",
-                                arrowName: "arrow.up",
-                                snr: displayTxSNR,
-                                quality: displayTxQuality,
-                                rssi: nil,
-                                snrRange: {
-                                    guard isFilteredRepeaterDirect else { return nil }
-                                    if let src = viewModel.filteredCellStats {
-                                        guard let lo = src.minTxSNR, let hi = src.maxTxSNR else { return nil }
-                                        return (lo, hi)
-                                    }
-                                    guard let lo = cell.minTxSNR, let hi = cell.maxTxSNR else { return nil }
-                                    return (lo, hi)
-                                }(),
-                                unknownReason: {
-                                    guard displayTxQuality == .unknown else { return nil }
-                                    if !isFilteredRepeaterDirect {
-                                        return "Not direct — TX only applies to 2-way links"
-                                    }
-                                    if cell.connectedRelayNodes.isEmpty {
-                                        return "Waiting for discover response"
-                                    }
-                                    return "Repeats confirmed — TX data from discover responses"
-                                }()
-                            )
                         }
-                    } else {
-                        // Single-column RX signal (no Deep Scan data)
-                        signalColumn(
-                            label: "RX Signal",
-                            arrowName: "arrow.down",
-                            snr: displayRxSNR,
-                            quality: displayQuality,
-                            rssi: {
-                                if let src = viewModel.filteredCellStats { return src.avgRSSI }
-                                return cell.averageRSSI
-                            }(),
-                            snrRange: {
-                                if let src = viewModel.filteredCellStats {
-                                    guard let lo = src.minSNR, let hi = src.maxSNR else { return nil }
-                                    return (lo, hi)
-                                }
-                                guard let lo = cell.minSNR, let hi = cell.maxSNR else { return nil }
-                                return (lo, hi)
-                            }()
-                        )
                     }
 
-                    // Shared detail rows
+                    // Detail rows
                     VStack(spacing: 3) {
                         if let filtered = viewModel.filteredCellStats {
                             if let latest = filtered.latestTimestamp {
@@ -609,6 +640,8 @@ struct SignalSurveyView: View {
                             detailRow(label: "Probe Success", value: "\(pct)% (\(successCount)/\(probes))", valueColor: rateColor)
                         }
                     }
+
+
 
                     // Mesh Gateway section (Deep Scan only)
                     if let bestGateway = cell.meshScores.first, viewModel.selectedRelayFilter == nil {
@@ -898,6 +931,7 @@ struct SignalSurveyView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(hexIDs, id: \.self) { hexID in
+                        let isFiltered = viewModel.selectedRelayFilter == hexID
                         Button {
                             if viewModel.selectedRelayFilter == hexID {
                                 viewModel.selectedRelayFilter = nil
@@ -909,16 +943,11 @@ struct SignalSurveyView: View {
                                 .font(.system(.caption, design: .monospaced))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 7)
-                                .background(
-                                    viewModel.selectedRelayFilter == hexID
-                                        ? Color.accentColor.opacity(0.2)
-                                        : Color.secondary.opacity(0.12)
-                                )
+                                .background(isFiltered ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12))
                                 .clipShape(Capsule())
                                 .overlay(
                                     Capsule().strokeBorder(
-                                        viewModel.selectedRelayFilter == hexID
-                                            ? Color.accentColor : Color.clear,
+                                        isFiltered ? Color.accentColor : Color.clear,
                                         lineWidth: 1
                                     )
                                 )
@@ -1975,28 +2004,52 @@ struct SignalSurveyView: View {
                     guard let service = appState.services?.surveyService else { return }
                     let wasLiveUpload = viewModel.liveUploadEnabled
                     let session = viewModel.activeSession
+
+                    // Show interstitial immediately — blocks interaction while saving
+                    isStopping = true
+
+                    // Pre-compute stats BEFORE stopping (while grid data is still fresh).
+                    // These are synchronous in-memory operations — effectively instant.
+                    var stats: SignalSurveyViewModel.SurveyCompletionStats?
+                    var records: SignalSurveyViewModel.PersonalRecords?
+                    var dto: SurveyCompletionStatsDTO?
+                    if let session {
+                        let s = viewModel.computeCompletionStats(session: session)
+                        stats = s
+                        let d = viewModel.statsDTO(from: s)
+                        dto = d
+                        records = viewModel.computePersonalRecords(current: d)
+                    }
+
+                    // Stop the survey — persists probe data, ends session, clears state
                     await viewModel.stopSurvey(
                         surveyService: service,
                         locationService: appState.locationService,
                         dataStore: appState.offlineDataStore,
                         deviceID: appState.currentDeviceID
                     )
-                    if let session {
-                        let stats = viewModel.computeCompletionStats(session: session)
+
+                    // Show completion summary as soon as possible
+                    if let stats, let session {
                         viewModel.surveyCompletionStats = stats
-                        // Persist stats and compute personal records
-                        let dto = viewModel.statsDTO(from: stats)
-                        viewModel.personalRecords = viewModel.computePersonalRecords(current: dto)
-                        if let dataStore = appState.offlineDataStore {
-                            try? await dataStore.saveCompletionStats(sessionID: session.id, stats: dto)
-                            // Reload sessions so the saved stats appear in session list
-                            await viewModel.loadSessions(dataStore: dataStore, deviceID: session.deviceID)
-                        }
-                        // Pass session ID so the completion sheet can offer inline upload
+                        viewModel.personalRecords = records
                         if !wasLiveUpload {
                             completionSessionID = session.id
                         }
+                        isStopping = false
                         showingCompletionSummary = true
+
+                        // Persist stats and reload sessions in background — not blocking the UI
+                        if let dataStore = appState.offlineDataStore, let dto {
+                            let sessionID = session.id
+                            let deviceID = session.deviceID
+                            Task {
+                                try? await dataStore.saveCompletionStats(sessionID: sessionID, stats: dto)
+                                await viewModel.loadSessions(dataStore: dataStore, deviceID: deviceID)
+                            }
+                        }
+                    } else {
+                        isStopping = false
                     }
                 }
             } else {
@@ -2017,7 +2070,7 @@ struct SignalSurveyView: View {
         }
         .tint(viewModel.isActive ? .red : (isDisabled ? .secondary : .accentColor))
         .modifier(GlassButtonStyleModifier())
-        .disabled(isDisabled)
+        .disabled(isDisabled || isStopping)
     }
 
     // MARK: - Toolbar
@@ -2676,4 +2729,6 @@ struct BatchUploadView: View {
         }
     }
 }
+
+
 

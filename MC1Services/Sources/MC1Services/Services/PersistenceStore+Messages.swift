@@ -728,7 +728,8 @@ extension PersistenceStore {
             receivedAt: dto.receivedAt,
             channelIndex: dto.channelIndex,
             contactID: dto.contactID,
-            deviceID: dto.deviceID
+            deviceID: dto.deviceID,
+            sentMessageID: dto.sentMessageID
         )
         modelContext.insert(reaction)
         try modelContext.save()

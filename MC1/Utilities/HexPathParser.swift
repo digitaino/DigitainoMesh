@@ -52,11 +52,11 @@ enum HexPathParser {
     private static let hexCharacterSet = CharacterSet(charactersIn: "0123456789ABCDEFabcdef")
 
     /// Parse a free-form hex chain from user input (lenient mode).
-    /// Accepts: "A3, 7F, 42" or "A3 7F 42" or "A3,7F,42" or mixed delimiters.
-    /// Requires at least 2 valid hex tokens.
+    /// Accepts: "A3, 7F, 42" or "A3 7F 42" or "A3,7F,42" or a single "A3".
+    /// Requires at least 1 valid hex token.
     static func parse(_ text: String) -> HexPath? {
         let tokens = tokenize(text)
-        guard tokens.count >= 2 else { return nil }
+        guard tokens.count >= 1 else { return nil }
 
         let validTokens = tokens.filter { isValidHexToken($0) }
         guard validTokens.count == tokens.count else { return nil }
@@ -67,13 +67,13 @@ enum HexPathParser {
     }
 
     /// Detect a hex chain pattern in a chat message (strict mode).
-    /// Requires 3+ tokens to reduce false positives.
+    /// Requires 2+ tokens to reduce false positives (single tokens are too ambiguous).
     /// Skips messages containing "RX via" (handled by SharedRouteParser).
     static func detectInMessage(_ text: String) -> HexPath? {
         // Don't conflict with the formal "RX via ..." pattern
         if text.contains("RX via") { return nil }
 
-        // Try to find a run of 3+ consecutive hex tokens in the message
+        // Try to find a run of 2+ consecutive hex tokens in the message
         let words = text.components(separatedBy: .whitespacesAndNewlines)
         var currentRun: [String] = []
         var bestRun: [String] = []
@@ -99,7 +99,7 @@ enum HexPathParser {
             bestRun = currentRun
         }
 
-        guard bestRun.count >= 3 else { return nil }
+        guard bestRun.count >= 2 else { return nil }
 
         logger.info("HexPathParser: detected \(bestRun.count) hex IDs in message")
         return HexPath(hexIDs: bestRun, shareURL: nil)

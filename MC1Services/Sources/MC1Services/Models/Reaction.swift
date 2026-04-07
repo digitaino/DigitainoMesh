@@ -40,6 +40,9 @@ public final class Reaction {
     /// Device ID this belongs to
     public var deviceID: UUID
 
+    /// Message ID of the outgoing message that carried this reaction (nil for received reactions)
+    public var sentMessageID: UUID?
+
     public init(
         id: UUID = UUID(),
         messageID: UUID,
@@ -50,7 +53,8 @@ public final class Reaction {
         receivedAt: Date = Date(),
         channelIndex: UInt8? = nil,
         contactID: UUID? = nil,
-        deviceID: UUID
+        deviceID: UUID,
+        sentMessageID: UUID? = nil
     ) {
         self.id = id
         self.messageID = messageID
@@ -62,6 +66,7 @@ public final class Reaction {
         self.channelIndex = channelIndex
         self.contactID = contactID
         self.deviceID = deviceID
+        self.sentMessageID = sentMessageID
     }
 }
 
@@ -78,6 +83,7 @@ public struct ReactionDTO: Sendable, Equatable, Hashable, Identifiable {
     public let channelIndex: UInt8?
     public let contactID: UUID?
     public let deviceID: UUID
+    public let sentMessageID: UUID?
 
     public init(from reaction: Reaction) {
         self.id = reaction.id
@@ -90,6 +96,7 @@ public struct ReactionDTO: Sendable, Equatable, Hashable, Identifiable {
         self.channelIndex = reaction.channelIndex
         self.contactID = reaction.contactID
         self.deviceID = reaction.deviceID
+        self.sentMessageID = reaction.sentMessageID
     }
 
     public init(
@@ -102,7 +109,8 @@ public struct ReactionDTO: Sendable, Equatable, Hashable, Identifiable {
         receivedAt: Date = Date(),
         channelIndex: UInt8? = nil,
         contactID: UUID? = nil,
-        deviceID: UUID
+        deviceID: UUID,
+        sentMessageID: UUID? = nil
     ) {
         self.id = id
         self.messageID = messageID
@@ -114,6 +122,7 @@ public struct ReactionDTO: Sendable, Equatable, Hashable, Identifiable {
         self.channelIndex = channelIndex
         self.contactID = contactID
         self.deviceID = deviceID
+        self.sentMessageID = sentMessageID
     }
 
 }

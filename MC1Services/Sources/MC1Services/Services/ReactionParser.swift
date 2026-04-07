@@ -98,8 +98,10 @@ public struct ParsedDMReaction: Sendable, Equatable {
     }
 }
 
-/// Parses reaction wire format using end-to-start strategy.
-/// Format: `{emoji}@[{sender}]\nxxxxxxxx`
+/// Parses reaction wire format with support for both human-readable and legacy formats.
+///
+/// Human-readable (v2): `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+/// Legacy (v1): `{emoji}@[{sender}]\n{hash}`
 public enum ReactionParser {
 
     /// Returns true if the text matches any known reaction format (PocketMesh or meshcore-open).
@@ -109,93 +111,176 @@ public enum ReactionParser {
         return isDM ? parseDM(text) != nil : parse(text) != nil
     }
 
-    /// Parses reaction text, returns nil if format doesn't match
+    /// Parses channel reaction text. Tries human-readable format first, then legacy.
     public static func parse(_ text: String) -> ParsedReaction? {
-        // Step 1: Split on last newline to get hash
-        guard let newlineIndex = text.lastIndex(of: "\n") else {
-            return nil
-        }
+        if let result = parseHumanReadable(text) { return result }
+        return parseLegacy(text)
+    }
 
-        let rawHash = String(text[text.index(after: newlineIndex)...])
-        guard rawHash.count == 8, isValidCrockfordBase32(rawHash) else {
-            return nil
-        }
-        let messageHash = normalizeCrockfordBase32(rawHash)
+    /// Parses DM reaction text. Tries human-readable format first, then legacy.
+    public static func parseDM(_ text: String) -> ParsedDMReaction? {
+        if let result = parseDMHumanReadable(text) { return result }
+        return parseDMLegacy(text)
+    }
 
-        // Remove hash suffix (everything before the newline)
-        let withoutHash = String(text[..<newlineIndex])
+    // MARK: - Human-Readable Format (v2)
 
-        // Step 2: Find `@[` to locate sender start
-        guard let atBracketIndex = withoutHash.range(of: "@[") else {
-            return nil
-        }
+    /// Parses human-readable channel reaction format.
+    /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+    private static func parseHumanReadable(_ text: String) -> ParsedReaction? {
+        // Step 1: Extract hash from trailing " ({8-char-hash})"
+        guard let hash = extractTrailingHash(text) else { return nil }
+        let withoutHash = String(text[..<text.index(text.endIndex, offsetBy: -(hash.count + 3))])
 
-        let emoji = String(withoutHash[..<atBracketIndex.lowerBound])
+        // Step 2: Find " reacted to [" to locate the sender
+        guard let reactedRange = withoutHash.range(of: " reacted to [") else { return nil }
 
-        // Validate emoji is not empty and starts with emoji character
-        guard !emoji.isEmpty, emoji.first?.isEmoji == true else {
-            return nil
-        }
+        let emoji = String(withoutHash[..<reactedRange.lowerBound])
+        guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
 
-        let afterAtBracket = withoutHash[atBracketIndex.upperBound...]
-
-        // Step 3: Extract sender (everything up to closing bracket)
-        guard afterAtBracket.hasSuffix("]") else {
-            return nil
-        }
-
-        let sender = String(afterAtBracket.dropLast())
-
-        guard !sender.isEmpty else {
-            return nil
-        }
+        // Step 3: Extract sender from "[sender]: " after "reacted to"
+        let afterReacted = withoutHash[reactedRange.upperBound...]
+        guard let closeBracket = afterReacted.range(of: "]: ") else { return nil }
+        let sender = String(afterReacted[..<closeBracket.lowerBound])
+        guard !sender.isEmpty else { return nil }
 
         return ParsedReaction(
             emoji: emoji,
             targetSender: sender,
-            messageHash: messageHash
+            messageHash: hash
         )
     }
 
-    /// Parses DM reaction text, returns nil if format doesn't match.
-    /// Format: `{emoji}\nxxxxxxxx` (no sender field)
-    public static func parseDM(_ text: String) -> ParsedDMReaction? {
-        // Reject channel format (contains `@[`)
-        if text.contains("@[") {
-            return nil
-        }
+    /// Parses human-readable DM reaction format.
+    /// Format: `{emoji} reacted to: "{snippet}" ({hash})`
+    private static func parseDMHumanReadable(_ text: String) -> ParsedDMReaction? {
+        // Reject channel format
+        if text.contains(" reacted to [") { return nil }
 
-        // Split on newline to get hash
-        guard let newlineIndex = text.lastIndex(of: "\n") else {
-            return nil
-        }
+        // Step 1: Extract hash from trailing " ({8-char-hash})"
+        guard let hash = extractTrailingHash(text) else { return nil }
+        let withoutHash = String(text[..<text.index(text.endIndex, offsetBy: -(hash.count + 3))])
+
+        // Step 2: Find " reacted to: " to locate the emoji
+        guard let reactedRange = withoutHash.range(of: " reacted to: ") else { return nil }
+
+        let emoji = String(withoutHash[..<reactedRange.lowerBound])
+        guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
+
+        return ParsedDMReaction(emoji: emoji, messageHash: hash)
+    }
+
+    /// Extracts an 8-char Crockford Base32 hash from a trailing " ({hash})" pattern.
+    /// Returns the normalized hash string, or nil if format doesn't match.
+    private static func extractTrailingHash(_ text: String) -> String? {
+        // Must end with ")"
+        guard text.hasSuffix(")") else { return nil }
+
+        // Find the " (" before the hash
+        let withoutParen = text.dropLast() // remove ")"
+        // The hash is 8 chars, preceded by " ("
+        guard withoutParen.count >= 10 else { return nil } // " (" + 8 chars minimum
+        let hashStart = withoutParen.index(withoutParen.endIndex, offsetBy: -8)
+        let rawHash = String(withoutParen[hashStart...])
+        guard isValidCrockfordBase32(rawHash) else { return nil }
+
+        // Verify " (" precedes the hash
+        let prefix = withoutParen[..<hashStart]
+        guard prefix.hasSuffix(" (") else { return nil }
+
+        return normalizeCrockfordBase32(rawHash)
+    }
+
+    // MARK: - Legacy Format (v1)
+
+    /// Parses legacy channel reaction format.
+    /// Format: `{emoji}@[{sender}]\n{hash}`
+    private static func parseLegacy(_ text: String) -> ParsedReaction? {
+        guard let newlineIndex = text.lastIndex(of: "\n") else { return nil }
 
         let rawHash = String(text[text.index(after: newlineIndex)...])
-        guard rawHash.count == 8, isValidCrockfordBase32(rawHash) else {
-            return nil
-        }
+        guard rawHash.count == 8, isValidCrockfordBase32(rawHash) else { return nil }
         let messageHash = normalizeCrockfordBase32(rawHash)
 
-        // Extract emoji (everything before the newline)
-        let emoji = String(text[..<newlineIndex])
+        let withoutHash = String(text[..<newlineIndex])
 
-        // Validate emoji is not empty and starts with emoji character
-        guard !emoji.isEmpty, emoji.first?.isEmoji == true else {
-            return nil
-        }
+        guard let atBracketIndex = withoutHash.range(of: "@[") else { return nil }
+
+        let emoji = String(withoutHash[..<atBracketIndex.lowerBound])
+        guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
+
+        let afterAtBracket = withoutHash[atBracketIndex.upperBound...]
+        guard afterAtBracket.hasSuffix("]") else { return nil }
+
+        let sender = String(afterAtBracket.dropLast())
+        guard !sender.isEmpty else { return nil }
+
+        return ParsedReaction(emoji: emoji, targetSender: sender, messageHash: messageHash)
+    }
+
+    /// Parses legacy DM reaction format.
+    /// Format: `{emoji}\n{hash}`
+    private static func parseDMLegacy(_ text: String) -> ParsedDMReaction? {
+        if text.contains("@[") { return nil }
+
+        guard let newlineIndex = text.lastIndex(of: "\n") else { return nil }
+
+        let rawHash = String(text[text.index(after: newlineIndex)...])
+        guard rawHash.count == 8, isValidCrockfordBase32(rawHash) else { return nil }
+        let messageHash = normalizeCrockfordBase32(rawHash)
+
+        let emoji = String(text[..<newlineIndex])
+        guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
 
         return ParsedDMReaction(emoji: emoji, messageHash: messageHash)
     }
 
-    /// Builds DM reaction text in wire format.
-    /// Format: `{emoji}\n{hash}`
+    // MARK: - Building
+
+    /// Builds human-readable channel reaction text.
+    /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+    public static func buildChannelReactionText(
+        emoji: String,
+        targetSender: String,
+        targetText: String,
+        targetTimestamp: UInt32
+    ) -> String {
+        let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
+        let overhead = emoji.utf8.count + " reacted to [".utf8.count
+            + targetSender.utf8.count + "]: \"".utf8.count
+            + "\" (".utf8.count + 8 + ")".utf8.count
+        let snippet = truncateToFit(targetText, maxBytes: 147 - overhead)
+        return "\(emoji) reacted to [\(targetSender)]: \"\(snippet)\" (\(hash))"
+    }
+
+    /// Builds human-readable DM reaction text.
+    /// Format: `{emoji} reacted to: "{snippet}" ({hash})`
     public static func buildDMReactionText(
         emoji: String,
         targetText: String,
         targetTimestamp: UInt32
     ) -> String {
         let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
-        return "\(emoji)\n\(hash)"
+        let overhead = emoji.utf8.count + " reacted to: \"".utf8.count
+            + "\" (".utf8.count + 8 + ")".utf8.count
+        let snippet = truncateToFit(targetText, maxBytes: 150 - overhead)
+        return "\(emoji) reacted to: \"\(snippet)\" (\(hash))"
+    }
+
+    /// Truncates a string to fit within a UTF-8 byte budget, appending "..." if truncated.
+    /// Respects character boundaries (never splits a multi-byte character).
+    private static func truncateToFit(_ text: String, maxBytes: Int) -> String {
+        guard maxBytes > 3, text.utf8.count > maxBytes else { return text }
+        let target = maxBytes - 3 // room for "..."
+        var result = ""
+        var byteCount = 0
+        for char in text {
+            let charBytes = String(char).utf8.count
+            if byteCount + charBytes > target { break }
+            result.append(char)
+            byteCount += charBytes
+        }
+        return result + "..."
     }
 
     /// Generates message identifier for reaction wire format (8-char Crockford Base32)

@@ -28,4 +28,5 @@ struct SurveyLiveStatus: Equatable {
 
     /// Best repeater's display name or hex ID from SignalBarsService.
     var bestRepeaterName: String?
+
 }

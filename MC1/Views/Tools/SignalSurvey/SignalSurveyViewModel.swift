@@ -416,7 +416,7 @@ final class SignalSurveyViewModel {
     var selectedCell: GridCell? {
         didSet {
             if selectedCell?.coordKey != oldValue?.coordKey {
-                selectedRelayFilter = nil
+                    selectedRelayFilter = nil
             }
             // Restore camera when dismissing cell card
             if selectedCell == nil, let saved = savedCameraPosition {
@@ -1407,11 +1407,14 @@ final class SignalSurveyViewModel {
     }
 
     private func passesFilter(_ point: SignalSurveyPointDTO) -> Bool {
+        // Existing active/passive/all filter
         switch surveyFilter {
-        case .all: true
-        case .passiveOnly: !point.isActiveProbe
-        case .traceOnly: point.isActiveProbe
+        case .all: break
+        case .passiveOnly: if point.isActiveProbe { return false }
+        case .traceOnly: if !point.isActiveProbe { return false }
         }
+
+        return true
     }
 
     private func applyFilter() {
@@ -2257,6 +2260,7 @@ final class SignalSurveyViewModel {
                 logger.warning("Probe #\(self.probeCount) trace failed: \(error.localizedDescription)")
             }
         }
+
     }
 
     /// Rebuilds dead zone cells from probe history. Called periodically or on grid rebuild.

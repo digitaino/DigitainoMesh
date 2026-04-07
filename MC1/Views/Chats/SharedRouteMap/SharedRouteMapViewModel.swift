@@ -77,52 +77,33 @@ final class SharedRouteMapViewModel {
         let hops = sharedRoute.hashBytesPerHop
         totalHopCount = hops.count
 
+        // Use centralized pool builder for consistent stale filtering
+        let allNodes = RepeaterResolver.buildNodePool(
+            repeaters: repeaters, discoveredNodes: discoveredNodes
+        )
+
         var locatedPoints: [(coordinate: CLLocationCoordinate2D, name: String, hasGap: Bool)] = []
         var routeIndex = 0
         var hopIndex = 0
         var pendingUnlocatedCount = 0
 
         for (originalIndex, hop) in hops.enumerated() {
-            // Try repeaters first, then all contacts, then discovered nodes
-            let contactMatch: ContactDTO? =
-                RepeaterResolver.bestMatch(for: hop, in: repeaters, userLocation: userLocation)
-                ?? RepeaterResolver.bestMatch(for: hop, in: allContacts, userLocation: userLocation)
-            let discoveredMatch: DiscoveredNodeDTO? =
-                contactMatch == nil
-                ? RepeaterResolver.bestMatch(for: hop, in: discoveredNodes, userLocation: userLocation)
-                : nil
-
-            let hasLocation: Bool
-            let latitude: Double
-            let longitude: Double
-            let name: String
-
-            if let contact = contactMatch, contact.hasLocation {
-                hasLocation = true
-                latitude = contact.latitude
-                longitude = contact.longitude
-                name = contact.displayName
-            } else if let node = discoveredMatch, node.hasLocation {
-                hasLocation = true
-                latitude = node.latitude
-                longitude = node.longitude
-                name = node.name
-            } else {
+            guard let match = RepeaterResolver.bestMatch(
+                for: hop, in: allNodes, userLocation: userLocation
+            ), match.hasLocation else {
                 pendingUnlocatedCount += 1
                 continue
             }
 
-            guard hasLocation else {
+            let coord = CLLocationCoordinate2D(
+                latitude: match.latitude, longitude: match.longitude
+            )
+            guard CLLocationCoordinate2DIsValid(coord) else {
                 pendingUnlocatedCount += 1
                 continue
             }
 
             hopIndex += 1
-            let coord = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-            guard CLLocationCoordinate2DIsValid(coord) else {
-                pendingUnlocatedCount += 1
-                continue
-            }
 
             let hasGap = pendingUnlocatedCount > 0
             pendingUnlocatedCount = 0
@@ -131,18 +112,16 @@ final class SharedRouteMapViewModel {
             // gaps in the numbering (e.g. 1, 2, 4 when hop 3 is unlocated).
             let hopNumber = originalIndex + 1
 
-            locatedPoints.append((coord, name, hasGap))
+            locatedPoints.append((coord, match.resolvableName, hasGap))
 
-            // RepeaterAnnotation requires ContactDTO
-            if let contact = contactMatch {
-                repeaterAnnotations.append(RepeaterAnnotation(repeater: contact))
-                pathState[contact.id] = RouteMapPathInfo(hopIndex: hopNumber, routeIndex: routeIndex)
-            }
+            let annotation = RepeaterAnnotation(resolvable: match)
+            repeaterAnnotations.append(annotation)
+            pathState[annotation.annotationID] = RouteMapPathInfo(hopIndex: hopNumber, routeIndex: routeIndex)
             routeIndex += 1
         }
 
         locatedHopCount = hopIndex
-        hasLocatedHops = locatedPoints.count >= 2
+        hasLocatedHops = locatedPoints.count >= 1
 
         // Build line overlays between consecutive located points
         for i in 0..<(locatedPoints.count - 1) {

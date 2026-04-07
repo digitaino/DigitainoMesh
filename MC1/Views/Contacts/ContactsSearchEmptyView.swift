@@ -7,7 +7,7 @@ struct ContactsSearchEmptyView: View {
 
     var body: some View {
         VStack {
-            NodeSegmentPicker(selection: $selectedSegment, isSearching: isSearching)
+            NodeSegmentPicker(selection: $selectedSegment)
 
             Spacer()
 
