@@ -72,7 +72,7 @@ public enum ChannelCrypto {
         }
 
         let timestamp = plaintext.prefix(timestampSize).withUnsafeBytes {
-            $0.loadUnaligned(as: UInt32.self)
+            $0.loadUnaligned(as: UInt32.self).littleEndian
         }
 
         let txtType = plaintext[timestampSize]

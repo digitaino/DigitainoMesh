@@ -61,7 +61,7 @@ struct ChannelCryptoTests {
     private func createEncryptedPayload(timestamp: UInt32, txtType: UInt8 = 0, message: String, secret: Data) -> Data? {
         // Build plaintext: [timestamp: 4B] [txt_type: 1B] [message bytes]
         var plaintext = Data()
-        var ts = timestamp
+        var ts = timestamp.littleEndian
         plaintext.append(Data(bytes: &ts, count: 4))
         plaintext.append(txtType)
         plaintext.append(Data(message.utf8))
