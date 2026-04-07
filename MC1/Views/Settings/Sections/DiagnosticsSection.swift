@@ -7,29 +7,27 @@ struct DiagnosticsSection: View {
     @State private var isExporting = false
     @State private var exportedFileURL: URL?
     @State private var showingClearLogsAlert = false
-    @State private var showError: String?
+    @State private var errorMessage: String?
 
     var body: some View {
         Section {
-            Button {
-                exportLogs()
-            } label: {
-                HStack {
-                    TintedLabel(L10n.Settings.Diagnostics.exportLogs, systemImage: "arrow.up.doc")
-                    Spacer()
-                    if isExporting {
-                        ProgressView()
+            if let url = exportedFileURL {
+                ShareLink(item: url) {
+                    TintedLabel(L10n.Settings.Diagnostics.exportLogs, systemImage: "square.and.arrow.up")
+                }
+            } else {
+                Button {
+                    exportLogs()
+                } label: {
+                    HStack {
+                        TintedLabel(L10n.Settings.Diagnostics.exportLogs, systemImage: "arrow.up.doc")
+                        Spacer()
+                        if isExporting {
+                            ProgressView()
+                        }
                     }
                 }
-            }
-            .disabled(isExporting)
-            .sheet(isPresented: Binding(
-                get: { exportedFileURL != nil },
-                set: { if !$0 { exportedFileURL = nil } }
-            )) {
-                if let url = exportedFileURL {
-                    ShareSheet(items: [url])
-                }
+                .disabled(isExporting)
             }
 
             Button(role: .destructive) {
@@ -50,11 +48,12 @@ struct DiagnosticsSection: View {
         } message: {
             Text(L10n.Settings.Diagnostics.Alert.Clear.message)
         }
-        .errorAlert($showError)
+        .errorAlert($errorMessage)
     }
 
     private func exportLogs() {
         let dataStore = appState.services?.dataStore ?? appState.connectionManager.createStandalonePersistenceStore()
+        exportedFileURL = nil
         isExporting = true
 
         Task { @MainActor in
@@ -64,7 +63,7 @@ struct DiagnosticsSection: View {
             ) {
                 exportedFileURL = url
             } else {
-                showError = L10n.Settings.Diagnostics.Error.exportFailed
+                errorMessage = L10n.Settings.Diagnostics.Error.exportFailed
             }
             isExporting = false
         }
@@ -77,9 +76,7 @@ struct DiagnosticsSection: View {
             do {
                 try await dataStore.clearDebugLogEntries()
             } catch {
-                await MainActor.run {
-                    showError = error.localizedDescription
-                }
+                errorMessage = error.localizedDescription
             }
         }
     }

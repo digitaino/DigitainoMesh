@@ -17,7 +17,7 @@ struct LocationPickerView: View {
     @State private var selectedCoordinate: CLLocationCoordinate2D?
     @State private var visibleRegion: MKCoordinateRegion?
     @State private var isSaving = false
-    @State private var showError: String?
+    @State private var errorMessage: String?
 
     /// Generic initializer for any location-setting context
     init(
@@ -124,7 +124,7 @@ struct LocationPickerView: View {
                     span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
                 ))
             }
-            .errorAlert($showError)
+            .errorAlert($errorMessage)
         }
     }
 
@@ -174,7 +174,7 @@ struct LocationPickerView: View {
                 try await onSave(coord)
                 dismiss()
             } catch {
-                showError = error.localizedDescription
+                errorMessage = error.localizedDescription
             }
             isSaving = false
         }

@@ -14,7 +14,7 @@ struct AdvancedRadioSection: View {
     @State private var hasLoaded = false
     @State private var isApplying = false
     @State private var showSuccess = false
-    @State private var showError: String?
+    @State private var errorMessage: String?
     @State private var retryAlert = RetryAlertState()
     @FocusState private var focusedField: RadioField?
 
@@ -157,7 +157,7 @@ struct AdvancedRadioSection: View {
         .onChange(of: deviceRadioSettingsHash) { _, _ in
             loadCurrentSettings()
         }
-        .errorAlert($showError)
+        .errorAlert($errorMessage)
         .retryAlert(retryAlert)
     }
 
@@ -181,7 +181,7 @@ struct AdvancedRadioSection: View {
               let codeRate = codingRate,
               let power = txPower,
               let settingsService = appState.services?.settingsService else {
-            showError = L10n.Settings.AdvancedRadio.invalidInput
+            errorMessage = L10n.Settings.AdvancedRadio.invalidInput
             return
         }
 
@@ -236,7 +236,7 @@ struct AdvancedRadioSection: View {
                     onMaxRetriesExceeded: { dismiss() }
                 )
             } catch {
-                showError = error.localizedDescription
+                errorMessage = error.localizedDescription
             }
             isApplying = false
         }
