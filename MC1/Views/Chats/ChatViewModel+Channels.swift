@@ -31,12 +31,12 @@ extension ChatViewModel {
         notificationService?.activeChannelIndex = channel.index
         notificationService?.activeChannelDeviceID = channel.deviceID
 
-        // Set flood scope on device when channel or region changes
-        if lastSetRegionScope == .unknown || lastSetRegionScope != .set(channel.regionScope) {
+        // Set flood scope on device when channel has a region configured
+        if let regionScope = channel.regionScope,
+           lastSetRegionScope != .set(channel.regionScope) {
             if let session = appState?.services?.session {
-                let scope: FloodScope = channel.regionScope.map { .region($0) } ?? .disabled
                 do {
-                    try await session.setFloodScope(scope)
+                    try await session.setFloodScope(.region(regionScope))
                     lastSetRegionScope = .set(channel.regionScope)
                 } catch {
                     logger.error("Failed to set flood scope: \(error.localizedDescription)")
