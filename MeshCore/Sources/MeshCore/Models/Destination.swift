@@ -68,6 +68,12 @@ public enum FloodScope: Sendable {
     case channelName(String)
     /// Scope based on a raw 16-byte key.
     case rawKey(Data)
+    /// Scope based on a public region name. The key is derived as `SHA256("#" + name).prefix(16)`,
+    /// matching the firmware convention for public hashtag regions.
+    ///
+    /// Region names from ``MeshCoreSession/requestRegions(from:)`` can be passed directly
+    /// (e.g., `"Europe"`). The `#` prefix is added automatically if not present.
+    case region(String)
 
     /// Generates a 16-byte scope key from the current scope.
     ///
@@ -87,6 +93,11 @@ public enum FloodScope: Sendable {
                 padded.append(0)
             }
             return Data(padded)
+
+        case .region(let name):
+            let prefixed = name.hasPrefix("#") ? name : "#\(name)"
+            let hash = SHA256.hash(data: Data(prefixed.utf8))
+            return Data(hash.prefix(16))
         }
     }
 }

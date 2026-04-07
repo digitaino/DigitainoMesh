@@ -727,7 +727,8 @@ public actor RemoteNodeService {
 
         // Request status (which triggers sync)
         do {
-            _ = try await session.requestStatus(from: remoteSession.publicKey)
+            let contactType: ContactType = remoteSession.isRoom ? .room : .repeater
+            _ = try await session.requestStatus(from: remoteSession.publicKey, type: contactType)
         } catch let error as MeshCoreError {
             throw RemoteNodeError.sessionError(error)
         }
@@ -781,7 +782,8 @@ public actor RemoteNodeService {
         do {
             let effectiveTimeout = timeout ?? RemoteOperationTimeoutPolicy.binaryMaximum
             return try await withTimeout(effectiveTimeout, operationName: "remoteStatus") {
-                try await self.session.requestStatus(from: remoteSession.publicKey)
+                let contactType: ContactType = remoteSession.isRoom ? .room : .repeater
+                return try await self.session.requestStatus(from: remoteSession.publicKey, type: contactType)
             }
         } catch is TimeoutError {
             throw RemoteNodeError.timeout
@@ -806,6 +808,26 @@ public actor RemoteNodeService {
             let effectiveTimeout = timeout ?? RemoteOperationTimeoutPolicy.binaryMaximum
             return try await withTimeout(effectiveTimeout, operationName: "remoteTelemetry") {
                 try await self.session.requestTelemetry(from: remoteSession.publicKey)
+            }
+        } catch is TimeoutError {
+            throw RemoteNodeError.timeout
+        } catch let error as MeshCoreError {
+            throw RemoteNodeError.sessionError(error)
+        }
+    }
+
+    // MARK: - Owner Info
+
+    /// Request owner info from a repeater using binary protocol.
+    public func requestOwnerInfo(sessionID: UUID, timeout: Duration? = nil) async throws -> OwnerInfoResponse {
+        guard let remoteSession = try await dataStore.fetchRemoteNodeSession(id: sessionID) else {
+            throw RemoteNodeError.sessionNotFound
+        }
+
+        do {
+            let effectiveTimeout = timeout ?? RemoteOperationTimeoutPolicy.binaryMaximum
+            return try await withTimeout(effectiveTimeout, operationName: "remoteOwnerInfo") {
+                try await self.session.requestOwnerInfo(from: remoteSession.publicKey)
             }
         } catch is TimeoutError {
             throw RemoteNodeError.timeout

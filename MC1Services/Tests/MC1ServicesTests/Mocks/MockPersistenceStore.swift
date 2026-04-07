@@ -1466,7 +1466,10 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         uptimeSeconds: UInt32?,
         rxAirtimeSeconds: UInt32?,
         packetsSent: UInt32?,
-        packetsReceived: UInt32?
+        packetsReceived: UInt32?,
+        receiveErrors: UInt32?,
+        postedCount: UInt16?,
+        postPushCount: UInt16?
     ) async throws -> UUID {
         let dto = NodeStatusSnapshotDTO(
             nodePublicKey: nodePublicKey,
@@ -1477,7 +1480,10 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
             uptimeSeconds: uptimeSeconds,
             rxAirtimeSeconds: rxAirtimeSeconds,
             packetsSent: packetsSent,
-            packetsReceived: packetsReceived
+            packetsReceived: packetsReceived,
+            receiveErrors: receiveErrors,
+            postedCount: postedCount,
+            postPushCount: postPushCount
         )
         nodeStatusSnapshots.append(dto)
         return dto.id
@@ -1518,6 +1524,9 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
                 rxAirtimeSeconds: existing.rxAirtimeSeconds,
                 packetsSent: existing.packetsSent,
                 packetsReceived: existing.packetsReceived,
+                receiveErrors: existing.receiveErrors,
+                postedCount: existing.postedCount,
+                postPushCount: existing.postPushCount,
                 neighborSnapshots: neighbors,
                 telemetryEntries: existing.telemetryEntries
             )
@@ -1539,6 +1548,9 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
                 rxAirtimeSeconds: existing.rxAirtimeSeconds,
                 packetsSent: existing.packetsSent,
                 packetsReceived: existing.packetsReceived,
+                receiveErrors: existing.receiveErrors,
+                postedCount: existing.postedCount,
+                postPushCount: existing.postPushCount,
                 neighborSnapshots: existing.neighborSnapshots,
                 telemetryEntries: telemetry
             )

@@ -669,7 +669,7 @@ struct MapView: View {
     }
 
     private func centerOnUserLocation() {
-        guard let location = appState.locationService.currentLocation else { return }
+        guard let location = appState.bestAvailableLocation else { return }
         let span = MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         viewModel.cameraRegion = MKCoordinateRegion(center: location.coordinate, span: span)
     }
@@ -779,7 +779,7 @@ private struct ContactDetailSheet: View {
                         Button {
                             activeSheet = .adminAuth
                         } label: {
-                            Label(L10n.Map.Map.Detail.Action.adminAccess, systemImage: "gearshape.2")
+                            Label(L10n.Map.Map.Detail.Action.management, systemImage: "gearshape.2")
                         }
 
                     case .room:
@@ -830,7 +830,11 @@ private struct ContactDetailSheet: View {
                 case .adminAuth:
                     if let role = RemoteNodeRole(contactType: contact.type) {
                         NodeAuthenticationSheet(contact: contact, role: role) { session in
-                            pendingSheet = .adminSettings(session)
+                            if session.isAdmin {
+                                pendingSheet = .adminSettings(session)
+                            } else {
+                                pendingSheet = .telemetryStatus(session)
+                            }
                             activeSheet = nil
                         }
                         .presentationSizing(.page)

@@ -170,6 +170,13 @@ public actor RepeaterAdminService {
         try await remoteNodeService.requestTelemetry(sessionID: sessionID, timeout: timeout)
     }
 
+    // MARK: - Owner Info
+
+    /// Request owner info from a repeater using binary protocol.
+    public func requestOwnerInfo(sessionID: UUID, timeout: Duration? = nil) async throws -> OwnerInfoResponse {
+        try await remoteNodeService.requestOwnerInfo(sessionID: sessionID, timeout: timeout)
+    }
+
     // MARK: - CLI Commands
 
     /// Send a CLI command to a repeater and wait for response (admin only).

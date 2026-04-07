@@ -98,6 +98,8 @@ public enum CommandCode: UInt8, Sendable {
     case sendControlData = 0x37
     /// Requests device statistics.
     case getStats = 0x38
+    /// Sends an anonymous request to a remote node.
+    case sendAnonReq = 0x39
     /// Sets the auto-add configuration bitmask.
     case setAutoAddConfig = 0x3A
     /// Gets the current auto-add configuration bitmask.
@@ -216,6 +218,18 @@ public enum BinaryRequestType: UInt8, Sendable {
     case acl = 0x05
     /// Requests the list of visible neighbor nodes.
     case neighbours = 0x06
+    /// Requests owner information from a repeater.
+    case ownerInfo = 0x07
+}
+
+/// Defines the types of anonymous requests that can be sent to remote nodes.
+public enum AnonRequestType: UInt8, Sendable {
+    /// Requests the list of allowed regions from a repeater.
+    case regions = 0x01
+    /// Requests owner information from a repeater.
+    case owner = 0x02
+    /// Requests basic information (clock, features) from a repeater.
+    case basic = 0x03
 }
 
 /// Defines the types of control data packets.

@@ -800,7 +800,8 @@ public final class ConnectionManager {
             ocvPreset: existingDevice?.ocvPreset
                 ?? OCVPreset.preset(forManufacturer: capabilities.model)?.rawValue,
             customOCVArrayString: existingDevice?.customOCVArrayString,
-            connectionMethods: mergedMethods
+            connectionMethods: mergedMethods,
+            knownRegions: existingDevice?.knownRegions ?? []
         )
 
         // If repeat mode was disabled externally, clear orphaned pre-repeat settings

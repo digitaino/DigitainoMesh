@@ -206,7 +206,7 @@ private struct BubbleContent: View {
     }
 
     private var isDirect: Bool {
-        message.pathLength == 0 || message.pathLength == 0xFF
+        message.isDirect
     }
 
     private var isLargeEmoji: Bool {
@@ -226,7 +226,7 @@ private struct BubbleContent: View {
                 if !message.isOutgoing && (displayState.showIncomingHopCount && !isDirect || displayState.showIncomingPath) {
                     HStack(spacing: 4) {
                         if displayState.showIncomingHopCount && !isDirect {
-                            BubbleHopCountFooter(pathLength: message.pathLength)
+                            BubbleHopCountFooter(hopCount: message.hopCount)
                         }
                         if displayState.showIncomingPath {
                             BubblePathFooter(message: message)
@@ -472,17 +472,17 @@ private struct BubblePathFooter: View {
 }
 
 private struct BubbleHopCountFooter: View {
-    let pathLength: UInt8
+    let hopCount: Int
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "arrowshape.bounce.right")
-            Text("\(pathLength)")
+            Text("\(hopCount)")
         }
         .font(.caption2)  // Not monospaced - only hex paths need alignment
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(L10n.Chats.Chats.Message.HopCount.accessibilityLabel(Int(pathLength)))
+        .accessibilityLabel(L10n.Chats.Chats.Message.HopCount.accessibilityLabel(hopCount))
     }
 }
 

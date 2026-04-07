@@ -24,7 +24,10 @@ public actor NodeSnapshotService {
         uptimeSeconds: UInt32?,
         rxAirtimeSeconds: UInt32?,
         packetsSent: UInt32?,
-        packetsReceived: UInt32?
+        packetsReceived: UInt32?,
+        receiveErrors: UInt32?,
+        postedCount: UInt16? = nil,
+        postPushCount: UInt16? = nil
     ) async -> UUID? {
         do {
             if let latest = try await dataStore.fetchLatestNodeStatusSnapshot(nodePublicKey: nodePublicKey),
@@ -42,7 +45,10 @@ public actor NodeSnapshotService {
                 uptimeSeconds: uptimeSeconds,
                 rxAirtimeSeconds: rxAirtimeSeconds,
                 packetsSent: packetsSent,
-                packetsReceived: packetsReceived
+                packetsReceived: packetsReceived,
+                receiveErrors: receiveErrors,
+                postedCount: postedCount,
+                postPushCount: postPushCount
             )
             logger.info("Saved status snapshot for node")
             return id

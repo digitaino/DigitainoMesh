@@ -213,6 +213,22 @@ struct ProtocolBugFixTests {
         #expect(status.receiveErrors == 0, "receiveErrors should default to 0 when not present")
     }
 
+    @Test("battery response rejects partial extended payload")
+    func batteryResponseRejectsPartialExtendedPayload() {
+        var packet = Data([ResponseCode.battery.rawValue])
+        packet.append(contentsOf: [0xE8, 0x03])  // 1000 mV
+        packet.append(contentsOf: [0x01, 0x02, 0x03])  // partial extended fields only
+
+        let event = PacketParser.parse(packet)
+
+        guard case .parseFailure(_, let reason) = event else {
+            Issue.record("Expected .parseFailure event, got \(event)")
+            return
+        }
+
+        #expect(reason.contains("partial extended payload"))
+    }
+
     @Test("statusResponse parseFromBinaryResponse 52 bytes parses rxAirtime")
     func statusResponseParseFromBinaryResponse52BytesParsesRxAirtime() {
         // 52 bytes: has rxAirtime but no receiveErrors
@@ -236,6 +252,55 @@ struct ProtocolBugFixTests {
         #expect(status.battery == 1000)
         #expect(status.rxAirtime == 5000)
         #expect(status.receiveErrors == 0, "receiveErrors should default to 0 for 52-byte payload")
+    }
+
+    @Test("statusResponse parseFromBinaryResponse room server 52 bytes parses room counters")
+    func statusResponseParseFromBinaryResponseRoomServer52BytesParsesRoomCounters() {
+        var payload = Data(repeating: 0, count: 52)
+        payload[0] = 0x3C
+        payload[1] = 0x0F  // Battery: 3900mV
+        payload[2] = 0x02
+        payload[3] = 0x00  // txQueueLength: 2
+        payload[4] = 0x8D
+        payload[5] = 0xFF  // noiseFloor: -115
+        payload[6] = 0xA9
+        payload[7] = 0xFF  // lastRSSI: -87
+        payload[8] = 0x78
+        payload[12] = 0x2D
+        payload[16] = 0x10
+        payload[17] = 0x0E  // airtime: 3600
+        payload[20] = 0x20
+        payload[21] = 0x1C  // uptime: 7200
+        payload[24] = 0x0C
+        payload[28] = 0x08
+        payload[32] = 0x0E
+        payload[36] = 0x0A
+        payload[40] = 0x03
+        payload[42] = 0x18
+        payload[44] = 0x01
+        payload[46] = 0x02
+        payload[48] = 0x11
+        payload[49] = 0x00  // roomServerPostedCount: 17
+        payload[50] = 0x09
+        payload[51] = 0x00  // roomServerPostPushCount: 9
+
+        let pubkeyPrefix = Data([0x11, 0x22, 0x33, 0x44, 0x55, 0x66])
+        let status = Parsers.StatusResponse.parseFromBinaryResponse(
+            payload,
+            publicKeyPrefix: pubkeyPrefix,
+            layout: .roomServer
+        )
+
+        guard let status = status else {
+            Issue.record("Should parse 52-byte room server payload")
+            return
+        }
+
+        #expect(status.layout == .roomServer)
+        #expect(status.roomServerPostedCount == 17)
+        #expect(status.roomServerPostPushCount == 9)
+        #expect(status.rxAirtime == 0)
+        #expect(status.receiveErrors == 0)
     }
 
     @Test("statusResponse parseFromBinaryResponse 56 bytes parses receiveErrors")
@@ -346,6 +411,69 @@ struct ProtocolBugFixTests {
 
         #expect(status.battery == 1000)
         #expect(status.receiveErrors == 99)
+    }
+
+    // MARK: - Push Status Parse with Room Server Layout
+
+    @Test("statusResponse parse room server layout decodes post counters")
+    func statusResponseParseRoomServerLayoutDecodesPostCounters() {
+        // 59 bytes: room server push payload (1 reserved + 6 pubkey + 52 ServerStats)
+        var payload = Data()
+        payload.append(0x00)  // Reserved byte
+        payload.append(contentsOf: [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF])  // Pubkey prefix
+        payload.append(contentsOf: [0xE8, 0x03])  // Battery: 1000mV
+        payload.append(contentsOf: [0x05, 0x00])  // txQueue: 5
+        payload.append(contentsOf: [0x92, 0xFF])  // noiseFloor: -110
+        payload.append(contentsOf: [0xAB, 0xFF])  // lastRSSI: -85
+        payload.append(Data(repeating: 0, count: 40))  // Remaining common fields (zero)
+        // Room-server tail: n_posted = 17 (0x0011), n_post_push = 9 (0x0009)
+        payload.append(contentsOf: [0x11, 0x00])  // roomServerPostedCount: 17
+        payload.append(contentsOf: [0x09, 0x00])  // roomServerPostPushCount: 9
+
+        #expect(payload.count == 59)
+
+        let event = Parsers.StatusResponse.parse(payload, layout: .roomServer)
+
+        guard case .statusResponse(let status) = event else {
+            Issue.record("Expected statusResponse event, got \(event)")
+            return
+        }
+
+        #expect(status.layout == .roomServer)
+        #expect(status.roomServerPostedCount == 17)
+        #expect(status.roomServerPostPushCount == 9)
+        #expect(status.rxAirtime == 0)
+        #expect(status.receiveErrors == 0)
+        #expect(status.battery == 1000)
+    }
+
+    @Test("statusResponse parse defaults to repeater layout")
+    func statusResponseParseDefaultsToRepeaterLayout() {
+        // Same 59-byte payload as above, parsed without explicit layout
+        var payload = Data()
+        payload.append(0x00)  // Reserved byte
+        payload.append(contentsOf: [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF])  // Pubkey prefix
+        payload.append(contentsOf: [0xE8, 0x03])  // Battery: 1000mV
+        payload.append(contentsOf: [0x05, 0x00])  // txQueue: 5
+        payload.append(contentsOf: [0x92, 0xFF])  // noiseFloor: -110
+        payload.append(contentsOf: [0xAB, 0xFF])  // lastRSSI: -85
+        payload.append(Data(repeating: 0, count: 40))  // Remaining common fields (zero)
+        // Tail bytes: 0x11 0x00 0x09 0x00 — interpreted as rxAirtime UInt32LE = 0x00090011 = 589841
+        payload.append(contentsOf: [0x11, 0x00, 0x09, 0x00])
+
+        #expect(payload.count == 59)
+
+        let event = Parsers.StatusResponse.parse(payload)
+
+        guard case .statusResponse(let status) = event else {
+            Issue.record("Expected statusResponse event, got \(event)")
+            return
+        }
+
+        #expect(status.layout == .repeater)
+        #expect(status.rxAirtime == 0x0009_0011)
+        #expect(status.roomServerPostedCount == nil)
+        #expect(status.roomServerPostPushCount == nil)
     }
 
     // MARK: - Telemetry Request Payload

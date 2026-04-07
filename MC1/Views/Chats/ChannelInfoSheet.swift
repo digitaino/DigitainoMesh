@@ -1,6 +1,9 @@
 import SwiftUI
 import MC1Services
 import CoreImage.CIFilterBuiltins
+import OSLog
+
+private let logger = Logger(subsystem: "com.mc1", category: "ChannelInfoSheet")
 
 /// Sheet displaying channel info with sharing and deletion options
 struct ChannelInfoSheet: View {
@@ -22,6 +25,16 @@ struct ChannelInfoSheet: View {
     @State private var copyHapticTrigger = 0
     @State private var notificationTask: Task<Void, Never>?
     @State private var favoriteTask: Task<Void, Never>?
+    @State private var knownRegions: [String] = []
+    @State private var isRegionExpanded = false
+    @State private var isDiscoveringRegions = false
+    @State private var discoveryMessage: String?
+    @State private var showingRegionManagement = false
+    @State private var discoveryTask: Task<Void, Never>?
+    @State private var discoveredNewRegions: [String] = []
+    @State private var showingDiscoveryResults = false
+    @State private var selectedRegionScope: String?
+    @State private var hasLoadedRegions = false
 
     init(channel: ChannelDTO, onClearMessages: @escaping () -> Void, onDelete: @escaping () -> Void) {
         self.channel = channel
@@ -29,6 +42,7 @@ struct ChannelInfoSheet: View {
         self.onDelete = onDelete
         self._notificationLevel = State(initialValue: channel.notificationLevel)
         self._isFavorite = State(initialValue: channel.isFavorite)
+        self._selectedRegionScope = State(initialValue: channel.regionScope)
     }
 
     var body: some View {
@@ -58,7 +72,28 @@ struct ChannelInfoSheet: View {
                 .onDisappear {
                     notificationTask?.cancel()
                     favoriteTask?.cancel()
+                    discoveryTask?.cancel()
                 }
+
+                // Region Scope Section
+                ChannelInfoRegionSection(
+                    knownRegions: knownRegions,
+                    selectedRegionScope: selectedRegionScope,
+                    isExpanded: $isRegionExpanded,
+                    isDiscovering: $isDiscoveringRegions,
+                    discoveryMessage: $discoveryMessage,
+                    onRegionSelected: { region in
+                        selectRegion(region)
+                    },
+                    onDiscoverTapped: {
+                        runDiscovery { newRegions in
+                            for region in newRegions { addRegion(region) }
+                        }
+                    },
+                    onManageTapped: {
+                        showingRegionManagement = true
+                    }
+                )
 
                 // QR Code Section (only for private channels with secrets)
                 if channel.hasSecret && !channel.isPublicChannel {
@@ -100,6 +135,39 @@ struct ChannelInfoSheet: View {
                     Button(L10n.Chats.Chats.Common.done) {
                         dismiss()
                     }
+                }
+            }
+            .navigationDestination(isPresented: $showingRegionManagement) {
+                RegionManagementView(
+                    knownRegions: $knownRegions,
+                    isDiscovering: $isDiscoveringRegions,
+                    discoveryMessage: $discoveryMessage,
+                    onRemoveRegion: { region in
+                        removeRegion(region)
+                    },
+                    onAddRegion: { region in
+                        addRegion(region)
+                    },
+                    onDiscoverTapped: {
+                        runDiscovery { newRegions in
+                            discoveredNewRegions = newRegions
+                            showingDiscoveryResults = true
+                        }
+                    }
+                )
+            }
+            .navigationDestination(isPresented: $showingDiscoveryResults) {
+                RegionDiscoveryResultsView(discoveredRegions: discoveredNewRegions) { selected in
+                    for region in selected {
+                        addRegion(region)
+                    }
+                }
+            }
+            .task {
+                guard !hasLoadedRegions else { return }
+                hasLoadedRegions = true
+                if let device = try? await appState.offlineDataStore?.fetchDevice(id: channel.deviceID) {
+                    knownRegions = device.knownRegions
                 }
             }
         }
@@ -205,6 +273,144 @@ struct ChannelInfoSheet: View {
             isClearingMessages = false
         }
     }
+
+    private func selectRegion(_ region: String?) {
+        let previousScope = selectedRegionScope
+        selectedRegionScope = region
+        do {
+            try appState.offlineDataStore?.setChannelRegionScope(channel.id, regionScope: region)
+        } catch {
+            logger.error("Failed to save region scope: \(error.localizedDescription)")
+            selectedRegionScope = previousScope
+            return
+        }
+
+        Task {
+            if let session = appState.services?.session {
+                let scope: FloodScope = region.map { .region($0) } ?? .disabled
+                try? await session.setFloodScope(scope)
+            }
+        }
+    }
+
+    private func removeRegion(_ region: String) {
+        do {
+            try appState.offlineDataStore?.removeDeviceKnownRegion(deviceID: channel.deviceID, region: region)
+            knownRegions.removeAll { $0 == region }
+        } catch {
+            logger.error("Failed to remove region: \(error.localizedDescription)")
+        }
+    }
+
+    private func addRegion(_ region: String) {
+        do {
+            try appState.offlineDataStore?.addDeviceKnownRegion(deviceID: channel.deviceID, region: region)
+            if !knownRegions.contains(region) {
+                knownRegions.append(region)
+            }
+        } catch {
+            logger.error("Failed to add region: \(error.localizedDescription)")
+        }
+    }
+
+    private func runDiscovery(onNewRegions: @escaping ([String]) -> Void) {
+        discoveryTask?.cancel()
+        discoveryTask = Task {
+            isDiscoveringRegions = true
+            discoveryMessage = nil
+
+            let newRegions = await discoverNewRegions()
+
+            guard !Task.isCancelled else {
+                isDiscoveringRegions = false
+                return
+            }
+
+            if newRegions.isEmpty {
+                discoveryMessage = L10n.Chats.Chats.ChannelInfo.Region.noNewRegions
+            } else {
+                onNewRegions(newRegions)
+            }
+            isDiscoveringRegions = false
+        }
+    }
+
+    /// Broadcasts a discover probe to find nearby repeaters, then queries only those for regions
+    private func discoverNewRegions() async -> [String] {
+        guard let session = appState.services?.session,
+              let contactService = appState.services?.contactService else {
+            return []
+        }
+        let deviceID = channel.deviceID
+
+        // Phase 1: Broadcast DISCOVER_REQ to find nearby repeaters (~3s)
+        let discoveredPubkeys: Set<Data>
+        do {
+            let tag = try await session.sendNodeDiscoverRequest(
+                filter: NodeDiscoveryFilter.repeaters.filterValue,
+                prefixOnly: false
+            )
+            let tagData = withUnsafeBytes(of: tag.littleEndian) { Data($0) }
+
+            let listenTask = Task { () -> Set<Data> in
+                var keys = Set<Data>()
+                let events = await session.events()
+                for await event in events {
+                    guard !Task.isCancelled else { break }
+                    if case .discoverResponse(let response) = event,
+                       response.tag == tagData {
+                        keys.insert(response.publicKey)
+                    }
+                }
+                return keys
+            }
+
+            try? await Task.sleep(for: .seconds(3))
+            listenTask.cancel()
+            discoveredPubkeys = await listenTask.value
+        } catch {
+            return []
+        }
+
+        guard !Task.isCancelled else { return [] }
+
+        if discoveredPubkeys.isEmpty {
+            discoveryMessage = L10n.Chats.Chats.ChannelInfo.Region.noRepeatersResponded
+            return []
+        }
+
+        // Phase 2: Query only responding repeaters for their regions
+        let repeaters: [ContactDTO]
+        do {
+            repeaters = try await contactService.getContacts(deviceID: deviceID)
+                .filter { $0.type == .repeater && discoveredPubkeys.contains($0.publicKey) }
+        } catch {
+            return []
+        }
+
+        if repeaters.isEmpty {
+            discoveryMessage = L10n.Chats.Chats.ChannelInfo.Region.noRepeatersResponded
+            return []
+        }
+
+        var allRegions = Set<String>()
+
+        await withTaskGroup(of: [String].self) { group in
+            for contact in repeaters {
+                guard !Task.isCancelled else { break }
+                let meshContact = contact.toContactFrame().toMeshContact()
+                group.addTask {
+                    (try? await session.requestRegions(from: meshContact)) ?? []
+                }
+            }
+            for await regions in group {
+                allRegions.formUnion(regions)
+            }
+        }
+
+        let knownSet = Set(knownRegions)
+        return allRegions.subtracting(knownSet).sorted()
+    }
 }
 
 // MARK: - Extracted Views
@@ -247,12 +453,14 @@ private struct ChannelInfoHeaderSection: View {
 private struct ChannelInfoQRCodeSection: View {
     let channel: ChannelDTO
 
+    @State private var qrImage: UIImage?
+
     var body: some View {
         Section {
             HStack {
                 Spacer()
                 VStack(spacing: 12) {
-                    if let qrImage = generateQRCode() {
+                    if let qrImage {
                         Image(uiImage: qrImage)
                             .interpolation(.none)
                             .resizable()
@@ -268,6 +476,9 @@ private struct ChannelInfoQRCodeSection: View {
             }
         } header: {
             Text(L10n.Chats.Chats.ChannelInfo.shareChannel)
+        }
+        .task {
+            qrImage = generateQRCode()
         }
     }
 
@@ -367,6 +578,189 @@ private struct ChannelInfoActionsSection: View {
         } footer: {
             Text(L10n.Chats.Chats.ChannelInfo.deleteFooter)
         }
+    }
+}
+
+private struct ChannelInfoRegionSection: View {
+    let knownRegions: [String]
+    let selectedRegionScope: String?
+    @Binding var isExpanded: Bool
+    @Binding var isDiscovering: Bool
+    @Binding var discoveryMessage: String?
+    let onRegionSelected: (String?) -> Void
+    let onDiscoverTapped: () -> Void
+    let onManageTapped: () -> Void
+
+    private var sortedPartitioned: (public: [String], private: [String]) {
+        let sorted = knownRegions.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        return (sorted.filter { !$0.isPrivateRegion }, sorted.filter { $0.isPrivateRegion })
+    }
+
+    private var regionValueLabel: String {
+        if knownRegions.isEmpty {
+            return L10n.Chats.Chats.ChannelInfo.Region.notConfigured
+        }
+        if let scope = selectedRegionScope {
+            return scope
+        }
+        return L10n.Chats.Chats.ChannelInfo.Region.allRegions
+    }
+
+    var body: some View {
+        Section {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                if knownRegions.isEmpty {
+                    ChannelInfoRegionEmptyContent(
+                        isDiscovering: isDiscovering,
+                        discoveryMessage: discoveryMessage,
+                        onDiscoverTapped: onDiscoverTapped,
+                        onManageTapped: onManageTapped
+                    )
+                } else {
+                    ChannelInfoRegionPickerContent(
+                        selectedRegionScope: selectedRegionScope,
+                        publicRegions: sortedPartitioned.public,
+                        privateRegions: sortedPartitioned.private,
+                        isDiscovering: isDiscovering,
+                        discoveryMessage: discoveryMessage,
+                        onRegionSelected: onRegionSelected,
+                        onDiscoverTapped: onDiscoverTapped,
+                        onManageTapped: onManageTapped
+                    )
+                }
+            } label: {
+                ChannelInfoRegionLabel(regionValueLabel: regionValueLabel)
+            }
+        }
+    }
+}
+
+private struct ChannelInfoRegionLabel: View {
+    let regionValueLabel: String
+
+    var body: some View {
+        HStack {
+            Label(L10n.Chats.Chats.ChannelInfo.region, systemImage: "globe")
+            Spacer()
+            Text(regionValueLabel)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct ChannelInfoRegionActions: View {
+    let isDiscovering: Bool
+    let discoveryMessage: String?
+    let onDiscoverTapped: () -> Void
+    let onManageTapped: () -> Void
+
+    var body: some View {
+        if isDiscovering {
+            HStack {
+                ProgressView()
+                Text(L10n.Chats.Chats.ChannelInfo.Region.discovering)
+                    .foregroundStyle(.secondary)
+            }
+        } else if let discoveryMessage {
+            Text(discoveryMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        Button(L10n.Chats.Chats.ChannelInfo.Region.discover, systemImage: "antenna.radiowaves.left.and.right") {
+            onDiscoverTapped()
+        }
+        .disabled(isDiscovering)
+
+        Button(L10n.Chats.Chats.ChannelInfo.Region.manageRegions, systemImage: "list.bullet") {
+            onManageTapped()
+        }
+    }
+}
+
+private struct ChannelInfoRegionEmptyContent: View {
+    let isDiscovering: Bool
+    let discoveryMessage: String?
+    let onDiscoverTapped: () -> Void
+    let onManageTapped: () -> Void
+
+    var body: some View {
+        Text(L10n.Chats.Chats.ChannelInfo.Region.explanation)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+        ChannelInfoRegionActions(
+            isDiscovering: isDiscovering,
+            discoveryMessage: discoveryMessage,
+            onDiscoverTapped: onDiscoverTapped,
+            onManageTapped: onManageTapped
+        )
+    }
+}
+
+private struct ChannelInfoRegionPickerContent: View {
+    let selectedRegionScope: String?
+    let publicRegions: [String]
+    let privateRegions: [String]
+    let isDiscovering: Bool
+    let discoveryMessage: String?
+    let onRegionSelected: (String?) -> Void
+    let onDiscoverTapped: () -> Void
+    let onManageTapped: () -> Void
+
+    var body: some View {
+        // "All Regions" option
+        Button {
+            onRegionSelected(nil)
+        } label: {
+            HStack {
+                Text(L10n.Chats.Chats.ChannelInfo.Region.allRegions)
+                Spacer()
+                if selectedRegionScope == nil {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+
+        // Public regions
+        ForEach(publicRegions, id: \.self) { region in
+            Button {
+                onRegionSelected(region)
+            } label: {
+                HStack {
+                    Text(region)
+                    Spacer()
+                    if selectedRegionScope == region {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.tint)
+                    }
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        }
+
+        // Private regions (shown disabled)
+        ForEach(privateRegions, id: \.self) { region in
+            HStack {
+                Text(region)
+                Spacer()
+                Text(L10n.Chats.Chats.ChannelInfo.Region.`private`)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(.secondary)
+        }
+
+        ChannelInfoRegionActions(
+            isDiscovering: isDiscovering,
+            discoveryMessage: discoveryMessage,
+            onDiscoverTapped: onDiscoverTapped,
+            onManageTapped: onManageTapped
+        )
     }
 }
 

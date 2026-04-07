@@ -143,7 +143,8 @@ struct ChatConversationView: View {
         }
         .navigationHeader(
             title: conversationType.navigationTitle,
-            subtitle: conversationType.navigationSubtitle
+            subtitle: conversationType.navigationSubtitle,
+            subtitleAccessibilityLabel: conversationType.navigationSubtitleAccessibilityLabel
         )
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -157,8 +158,11 @@ struct ChatConversationView: View {
         }
         // Info sheet — type-specific
         .sheet(isPresented: $showingInfo, onDismiss: {
-            if case .dm = conversationType {
+            switch conversationType {
+            case .dm:
                 Task { await refreshContact() }
+            case .channel:
+                Task { await refreshChannel() }
             }
         }, content: {
             ChatConversationInfoSheet(
@@ -486,13 +490,20 @@ struct ChatConversationView: View {
         return needsReload
     }
 
-    // MARK: - Contact Refresh (DM only)
+    // MARK: - Conversation Refresh
 
     private func refreshContact() async {
         guard case .dm(let contact) = conversationType else { return }
         if let updated = try? await appState.services?.dataStore.fetchContact(id: contact.id) {
             conversationType = conversationType.replacingContact(updated)
             chatViewModel.currentContact = updated
+        }
+    }
+
+    private func refreshChannel() async {
+        guard case .channel(let channel) = conversationType else { return }
+        if let updated = try? await appState.offlineDataStore?.fetchChannel(id: channel.id) {
+            conversationType = conversationType.replacingChannel(updated)
         }
     }
 

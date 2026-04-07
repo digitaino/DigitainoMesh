@@ -91,6 +91,8 @@ public enum L10n {
         public static let manualSharing = L10n.tr("Chats", "chats.channelInfo.manualSharing", fallback: "Manual Sharing")
         /// Location: ChannelInfoSheet.swift - Footer explaining manual sharing
         public static let manualSharingFooter = L10n.tr("Chats", "chats.channelInfo.manualSharingFooter", fallback: "Share the channel name and this secret key for others to join manually.")
+        /// Location: ChannelInfoSheet.swift - Purpose: Region row label
+        public static let region = L10n.tr("Chats", "chats.channelInfo.region", fallback: "Region")
         /// Location: ChannelInfoSheet.swift - QR code instruction text
         public static let scanToJoin = L10n.tr("Chats", "chats.channelInfo.scanToJoin", fallback: "Scan to join this channel")
         /// Location: ChannelInfoSheet.swift - Label for secret key
@@ -124,6 +126,48 @@ public enum L10n {
         public enum DeleteFailed {
           /// Location: ChatsView.swift - Alert title when channel deletion fails
           public static let title = L10n.tr("Chats", "chats.channelInfo.deleteFailed.title", fallback: "Channel Deletion Failed")
+        }
+        public enum Region {
+          /// Location: RegionManagementView.swift - Purpose: Add manually button
+          public static let addManually = L10n.tr("Chats", "chats.channelInfo.region.addManually", fallback: "Add Manually")
+          /// Location: AddRegionView.swift - Purpose: Text field placeholder
+          public static let addRegionPlaceholder = L10n.tr("Chats", "chats.channelInfo.region.addRegionPlaceholder", fallback: "Region name")
+          /// Location: AddRegionView.swift - Purpose: Navigation title
+          public static let addRegionTitle = L10n.tr("Chats", "chats.channelInfo.region.addRegionTitle", fallback: "Add Region")
+          /// Location: RegionDiscoveryResultsView.swift - Purpose: Add selected regions button
+          public static let addSelected = L10n.tr("Chats", "chats.channelInfo.region.addSelected", fallback: "Add")
+          /// Location: ChannelInfoSheet.swift - Purpose: Region value when no scope set
+          public static let allRegions = L10n.tr("Chats", "chats.channelInfo.region.allRegions", fallback: "All Regions")
+          /// Location: ChannelInfoSheet.swift - Purpose: Discover button
+          public static let discover = L10n.tr("Chats", "chats.channelInfo.region.discover", fallback: "Discover Nearby Regions")
+          /// Location: ChannelInfoSheet.swift - Purpose: Discover button loading state
+          public static let discovering = L10n.tr("Chats", "chats.channelInfo.region.discovering", fallback: "Discovering…")
+          /// Location: AddRegionView.swift - Purpose: Duplicate error
+          public static let duplicate = L10n.tr("Chats", "chats.channelInfo.region.duplicate", fallback: "This region is already in your list.")
+          /// Location: ChannelInfoSheet.swift - Purpose: Explanation shown when no regions exist
+          public static let explanation = L10n.tr("Chats", "chats.channelInfo.region.explanation", fallback: "Limit messages to a geographic area")
+          /// Location: AddRegionView.swift - Purpose: Validation error
+          public static let invalidName = L10n.tr("Chats", "chats.channelInfo.region.invalidName", fallback: "Region names cannot contain spaces or start with # or $.")
+          /// Location: RegionManagementView.swift - Purpose: Navigation title
+          public static let manage = L10n.tr("Chats", "chats.channelInfo.region.manage", fallback: "Regions")
+          /// Location: RegionManagementView.swift - Purpose: Manage regions link
+          public static let manageRegions = L10n.tr("Chats", "chats.channelInfo.region.manageRegions", fallback: "Manage Regions")
+          /// Location: RegionDiscoveryResultsView.swift - Purpose: No new regions found
+          public static let noNewRegions = L10n.tr("Chats", "chats.channelInfo.region.noNewRegions", fallback: "No new regions found")
+          /// Location: RegionManagementView.swift - Purpose: Empty state title
+          public static let noRegions = L10n.tr("Chats", "chats.channelInfo.region.noRegions", fallback: "No regions added")
+          /// Location: RegionManagementView.swift - Purpose: Empty state description
+          public static let noRegionsDescription = L10n.tr("Chats", "chats.channelInfo.region.noRegionsDescription", fallback: "Discover regions from nearby repeaters or add them manually.")
+          /// Location: RegionDiscoveryResultsView.swift - Purpose: No repeaters responded
+          public static let noRepeatersResponded = L10n.tr("Chats", "chats.channelInfo.region.noRepeatersResponded", fallback: "No repeaters responded")
+          /// Location: ChannelInfoSheet.swift - Purpose: Region value when no regions configured
+          public static let notConfigured = L10n.tr("Chats", "chats.channelInfo.region.notConfigured", fallback: "Not configured")
+          /// Location: ChannelInfoSheet.swift - Purpose: Private region label
+          public static let `private` = L10n.tr("Chats", "chats.channelInfo.region.private", fallback: "Private")
+          /// Location: ChatConversationType.swift - Purpose: Accessibility label for scoped subtitle
+          public static func scopedAccessibility(_ p1: Any, _ p2: Any) -> String {
+            return L10n.tr("Chats", "chats.channelInfo.region.scopedAccessibility", String(describing: p1), String(describing: p2), fallback: "%@, scoped to %@")
+          }
         }
       }
       public enum ChannelOptions {
@@ -947,6 +991,10 @@ public enum L10n {
         }
         /// Location: AddContactSheet.swift - Purpose: Name section header
         public static let name = L10n.tr("Contacts", "contacts.add.name", fallback: "Name")
+        /// Location: AddContactSheet.swift - Purpose: Paste URL button label
+        public static let pasteURL = L10n.tr("Contacts", "contacts.add.pasteURL", fallback: "Paste Contact URL")
+        /// Location: AddContactSheet.swift - Purpose: Paste URL section footer
+        public static let pasteURLFooter = L10n.tr("Contacts", "contacts.add.pasteURLFooter", fallback: "Paste a meshcore:// contact link to auto-fill the fields above")
         /// Location: AddContactSheet.swift - Purpose: Public key section header
         public static let publicKey = L10n.tr("Contacts", "contacts.add.publicKey", fallback: "Public Key")
         /// Location: AddContactSheet.swift - Purpose: Public key footer
@@ -968,6 +1016,8 @@ public enum L10n {
           public static func invalidSize(_ p1: Int, _ p2: Int) -> String {
             return L10n.tr("Contacts", "contacts.add.error.invalidSize", p1, p2, fallback: "Public key must be %d bytes (%d hex characters)")
           }
+          /// Location: AddContactSheet.swift - Purpose: Invalid paste URL error
+          public static let invalidURL = L10n.tr("Contacts", "contacts.add.error.invalidURL", fallback: "Clipboard does not contain a valid contact URL")
           /// Location: AddContactSheet.swift, DiscoveryView.swift - Purpose: Node list full error with max count
           public static func nodeListFull(_ p1: Int) -> String {
             return L10n.tr("Contacts", "contacts.add.error.nodeListFull", p1, fallback: "Node list is full (max %d nodes)")
@@ -1027,8 +1077,6 @@ public enum L10n {
       public enum Detail {
         /// Location: ContactDetailView.swift - Purpose: Add to favorites button
         public static let addToFavorites = L10n.tr("Contacts", "contacts.detail.addToFavorites", fallback: "Add to Favorites")
-        /// Location: ContactDetailView.swift - Purpose: Admin access button
-        public static let adminAccess = L10n.tr("Contacts", "contacts.detail.adminAccess", fallback: "Admin Access")
         /// Location: ContactDetailView.swift - Purpose: Block contact button
         public static let blockContact = L10n.tr("Contacts", "contacts.detail.blockContact", fallback: "Block Contact")
         /// Location: ContactDetailView.swift - Purpose: Blocked status indicator
@@ -1063,6 +1111,8 @@ public enum L10n {
         public static let lastAdvert = L10n.tr("Contacts", "contacts.detail.lastAdvert", fallback: "Last Advert")
         /// Location: ContactDetailView.swift - Purpose: Location section header
         public static let location = L10n.tr("Contacts", "contacts.detail.location", fallback: "Location")
+        /// Location: ContactDetailView.swift - Purpose: Management button
+        public static let management = L10n.tr("Contacts", "contacts.detail.management", fallback: "Management")
         /// Location: ContactDetailView.swift - Purpose: Name label
         public static let name = L10n.tr("Contacts", "contacts.detail.name", fallback: "Name")
         /// Location: ContactDetailView.swift - Purpose: Network path section header
@@ -1075,6 +1125,8 @@ public enum L10n {
         public static let openInMaps = L10n.tr("Contacts", "contacts.detail.openInMaps", fallback: "Open in Maps")
         /// Location: ContactDetailView.swift - Purpose: Footer for path routing
         public static let pathFooter = L10n.tr("Contacts", "contacts.detail.pathFooter", fallback: "Messages route through the path shown. Reset Path to use flood routing instead.")
+        /// Location: ContactDetailView.swift - Purpose: Generalized ping button for non-repeater nodes
+        public static let ping = L10n.tr("Contacts", "contacts.detail.ping", fallback: "Ping")
         /// Location: ContactDetailView.swift - Purpose: Ping failure VoiceOver announcement
         public static let pingFailureAnnouncement = L10n.tr("Contacts", "contacts.detail.pingFailureAnnouncement", fallback: "Ping failed")
         /// Location: ContactDetailView.swift - Purpose: Ping failure accessibility label
@@ -1111,6 +1163,8 @@ public enum L10n {
         public static func routePrefix(_ p1: Any) -> String {
           return L10n.tr("Contacts", "contacts.detail.routePrefix", String(describing: p1), fallback: "Route: %@")
         }
+        /// Location: ContactDetailView.swift - Purpose: Saved History button for offline telemetry
+        public static let savedHistory = L10n.tr("Contacts", "contacts.detail.savedHistory", fallback: "Telemetry History")
         /// Location: ContactDetailView.swift - Purpose: Discovery countdown
         public static func secondsRemaining(_ p1: Int) -> String {
           return L10n.tr("Contacts", "contacts.detail.secondsRemaining", p1, fallback: "Up to %d seconds remaining")
@@ -1668,7 +1722,7 @@ public enum L10n {
         /// Location: ContactsViewModel.swift - Purpose: Distance sort option
         public static let distance = L10n.tr("Contacts", "contacts.sort.distance", fallback: "Distance")
         /// Location: ContactsViewModel.swift - Purpose: Last heard sort option
-        public static let lastHeard = L10n.tr("Contacts", "contacts.sort.lastHeard", fallback: "Last Heard")
+        public static let lastHeard = L10n.tr("Contacts", "contacts.sort.lastHeard", fallback: "Last Modified")
         /// Location: ContactsViewModel.swift - Purpose: Name sort option
         public static let name = L10n.tr("Contacts", "contacts.sort.name", fallback: "Name")
       }
@@ -2080,10 +2134,12 @@ public enum L10n {
         /// Location: MapView.swift ContactDetailSheet - Purpose: Label for contact type
         public static let type = L10n.tr("Map", "map.detail.type", fallback: "Type")
         public enum Action {
-          /// Location: MapView.swift ContactDetailSheet - Purpose: Button to access repeater admin settings
-          public static let adminAccess = L10n.tr("Map", "map.detail.action.adminAccess", fallback: "Admin Access")
           /// Location: MapView.swift ContactDetailSheet - Purpose: Button to join a room
           public static let joinRoom = L10n.tr("Map", "map.detail.action.joinRoom", fallback: "Join Room")
+          /// Location: MapView.swift ContactDetailSheet - Purpose: Button to manage repeater
+          public static let management = L10n.tr("Map", "map.detail.action.management", fallback: "Management")
+          /// Location: MapView.swift - Purpose: Saved History button for offline telemetry
+          public static let savedHistory = L10n.tr("Map", "map.detail.action.savedHistory", fallback: "Saved History")
           /// Location: MapView.swift ContactDetailSheet - Purpose: Button to send a message
           public static let sendMessage = L10n.tr("Map", "map.detail.action.sendMessage", fallback: "Send Message")
           /// Location: MapView.swift ContactDetailSheet - Purpose: Button to view repeater telemetry
@@ -2323,8 +2379,6 @@ public enum L10n {
       /// Location: Multiple files - Name label
       public static let name = L10n.tr("RemoteNodes", "remoteNodes.name", fallback: "Name")
       public enum Auth {
-        /// Location: NodeAuthenticationSheet.swift - Navigation title for repeater admin access
-        public static let adminAccess = L10n.tr("RemoteNodes", "remoteNodes.auth.adminAccess", fallback: "Admin Access")
         /// Location: NodeAuthenticationSheet.swift - Authentication section header
         public static let authentication = L10n.tr("RemoteNodes", "remoteNodes.auth.authentication", fallback: "Authentication")
         /// Location: NodeAuthenticationSheet.swift - Cancel button
@@ -2337,6 +2391,8 @@ public enum L10n {
         }
         /// Location: NodeAuthenticationSheet.swift - Navigation title for room authentication
         public static let joinRoom = L10n.tr("RemoteNodes", "remoteNodes.auth.joinRoom", fallback: "Join Room")
+        /// Location: NodeAuthenticationSheet.swift - Navigation title for repeater management
+        public static let management = L10n.tr("RemoteNodes", "remoteNodes.auth.management", fallback: "Management")
         /// Location: NodeAuthenticationSheet.swift - Name label
         public static let name = L10n.tr("RemoteNodes", "remoteNodes.auth.name", fallback: "Name")
         /// Location: NodeAuthenticationSheet.swift - Node details section header
@@ -2387,20 +2443,36 @@ public enum L10n {
         public static let neighborCount = L10n.tr("RemoteNodes", "remoteNodes.history.neighborCount", fallback: "Neighbor Count")
         /// Location: NeighborHistoryView.swift - Neighbors section title
         public static let neighbors = L10n.tr("RemoteNodes", "remoteNodes.history.neighbors", fallback: "Neighbors")
+        /// Location: TelemetryHistoryOverviewView.swift - Purpose: Neighbors section header
+        public static let neighborsSection = L10n.tr("RemoteNodes", "remoteNodes.history.neighborsSection", fallback: "Neighbors")
         /// Location: NeighborRow - New neighbor badge
         public static let new = L10n.tr("RemoteNodes", "remoteNodes.history.new", fallback: "New")
         /// Location: NodeStatusHistoryView.swift - Noise floor chart title
         public static let noiseFloor = L10n.tr("RemoteNodes", "remoteNodes.history.noiseFloor", fallback: "Noise Floor")
+        /// Location: TelemetryHistoryOverviewView.swift - Purpose: Empty state when no snapshots exist
+        public static let noSnapshotsMessage = L10n.tr("RemoteNodes", "remoteNodes.history.noSnapshotsMessage", fallback: "Connect to this node at least once to see history.")
         /// Location: NeighborRow - Not seen status
         public static let notSeen = L10n.tr("RemoteNodes", "remoteNodes.history.notSeen", fallback: "Not seen")
+        /// Location: TelemetryHistoryOverviewView.swift - Purpose: Navigation title
+        public static let overviewTitle = L10n.tr("RemoteNodes", "remoteNodes.history.overviewTitle", fallback: "Telemetry History")
         /// Location: NodeStatusHistoryView.swift - Packets received chart title
         public static let packetsReceived = L10n.tr("RemoteNodes", "remoteNodes.history.packetsReceived", fallback: "Packets Received")
         /// Location: NodeStatusHistoryView.swift - Packets sent chart title
         public static let packetsSent = L10n.tr("RemoteNodes", "remoteNodes.history.packetsSent", fallback: "Packets Sent")
+        /// Location: TelemetryHistoryOverviewView.swift - Purpose: Radio section header
+        public static let radioSection = L10n.tr("RemoteNodes", "remoteNodes.history.radioSection", fallback: "Radio")
+        /// Location: NodeStatusHistoryView.swift - Receive errors chart title
+        public static let receiveErrors = L10n.tr("RemoteNodes", "remoteNodes.history.receiveErrors", fallback: "Packet Errors Received")
         /// Location: NodeStatusHistoryView.swift - Footer about data retention
         public static let retentionNotice = L10n.tr("RemoteNodes", "remoteNodes.history.retentionNotice", fallback: "History data older than one year is automatically removed.")
         /// Location: NodeStatusHistoryView.swift - RSSI chart title
         public static let rssi = L10n.tr("RemoteNodes", "remoteNodes.history.rssi", fallback: "RSSI")
+        /// Location: TelemetryHistoryOverviewView.swift - Purpose: Empty state when section data not captured
+        public static func sectionNotCaptured(_ p1: Any) -> String {
+          return L10n.tr("RemoteNodes", "remoteNodes.history.sectionNotCaptured", String(describing: p1), fallback: "This data is captured when you view the %@ section during a live telemetry session.")
+        }
+        /// Location: TelemetryHistoryOverviewView.swift - Purpose: Sensors section header
+        public static let sensorsSection = L10n.tr("RemoteNodes", "remoteNodes.history.sensorsSection", fallback: "Sensors")
         /// Location: NodeStatusHistoryView.swift - SNR chart title
         public static let snr = L10n.tr("RemoteNodes", "remoteNodes.history.snr", fallback: "SNR")
         /// Location: NodeStatusHistoryView.swift - Time range picker
@@ -2459,6 +2531,8 @@ public enum L10n {
         public static let infoTitle = L10n.tr("RemoteNodes", "remoteNodes.room.infoTitle", fallback: "Room Info")
         /// Location: RoomConversationView.swift - Last connected label
         public static let lastConnected = L10n.tr("RemoteNodes", "remoteNodes.room.lastConnected", fallback: "Last Connected")
+        /// Location: RoomInfoSheet.swift - Management button
+        public static let management = L10n.tr("RemoteNodes", "remoteNodes.room.management", fallback: "Management")
         /// Location: RoomConversationView.swift - Empty state title
         public static let noMessagesYet = L10n.tr("RemoteNodes", "remoteNodes.room.noMessagesYet", fallback: "No public messages yet")
         /// Location: RoomConversationView.swift - Permission label
@@ -2471,6 +2545,8 @@ public enum L10n {
         public static let reconnected = L10n.tr("RemoteNodes", "remoteNodes.room.reconnected", fallback: "Room reconnected")
         /// Location: RoomConversationView.swift - Status label
         public static let status = L10n.tr("RemoteNodes", "remoteNodes.room.status", fallback: "Status")
+        /// Location: RoomInfoSheet.swift - Telemetry button
+        public static let telemetry = L10n.tr("RemoteNodes", "remoteNodes.room.telemetry", fallback: "Telemetry")
         /// Location: RoomConversationView.swift - Read-only banner
         public static let viewOnlyBanner = L10n.tr("RemoteNodes", "remoteNodes.room.viewOnlyBanner", fallback: "View only - join as member to post")
         /// Location: RoomConversationView.swift - Hint text for read-only banner
@@ -2487,6 +2563,44 @@ public enum L10n {
             public static let sendingLabel = L10n.tr("RemoteNodes", "remoteNodes.room.message.status.sendingLabel", fallback: "Sending message")
           }
         }
+      }
+      public enum RoomSettings {
+        /// Location: RoomSettingsView.swift - Allow read-only toggle label
+        public static let allowReadOnly = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.allowReadOnly", fallback: "Allow Read-Only")
+        /// Location: RoomSettingsView.swift - Allow read-only footer
+        public static let allowReadOnlyFooter = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.allowReadOnlyFooter", fallback: "Allow users without a password to connect in read-only mode.")
+        /// Location: RoomSettingsView.swift - Apply room settings button
+        public static let applyRoomSettings = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.applyRoomSettings", fallback: "Apply Room Settings")
+        /// Location: RoomSettingsView.swift - Clock ahead error
+        public static let clockAheadError = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.clockAheadError", fallback: "Room clock is ahead of phone time. If it's too far forward, reboot the room then sync time again.")
+        /// Location: RoomSettingsView.swift - Guest password label
+        public static let guestPassword = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.guestPassword", fallback: "Guest Password")
+        /// Location: RoomSettingsView.swift - Identity section footer
+        public static let identityFooter = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.identityFooter", fallback: "Room name and GPS coordinates for map display.")
+        /// Location: RoomSettingsView.swift - No service error
+        public static let noService = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.noService", fallback: "Room service not available")
+        /// Location: RoomSettingsView.swift - Not connected error
+        public static let notConnected = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.notConnected", fallback: "Not connected to room")
+        /// Location: RoomSettingsView.swift - Radio restart warning
+        public static let radioRestartWarning = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.radioRestartWarning", fallback: "Applying these changes will restart the room")
+        /// Location: RoomSettingsView.swift - Reboot confirmation title
+        public static let rebootConfirmTitle = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.rebootConfirmTitle", fallback: "Reboot Room?")
+        /// Location: RoomSettingsView.swift - Reboot confirmation message
+        public static let rebootMessage = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.rebootMessage", fallback: "The room will restart and be temporarily unavailable.")
+        /// Location: RoomSettingsView.swift - Room settings section footer
+        public static let roomSettingsFooter = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.roomSettingsFooter", fallback: "Guest access, advertisement intervals, and flood hops.")
+        /// Location: RoomSettingsView.swift - Room settings section header
+        public static let roomSettingsSection = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.roomSettingsSection", fallback: "Room Settings")
+        /// Location: RoomSettingsView.swift - Navigation title
+        public static let title = L10n.tr("RemoteNodes", "remoteNodes.roomSettings.title", fallback: "Room Settings")
+      }
+      public enum RoomStatus {
+        /// Location: RoomStatusView.swift - Posts pushed label
+        public static let postsPushed = L10n.tr("RemoteNodes", "remoteNodes.roomStatus.postsPushed", fallback: "Posts Pushed")
+        /// Location: RoomStatusView.swift - Posts received label
+        public static let postsReceived = L10n.tr("RemoteNodes", "remoteNodes.roomStatus.postsReceived", fallback: "Posts Received")
+        /// Location: RoomStatusView.swift - Navigation title
+        public static let title = L10n.tr("RemoteNodes", "remoteNodes.roomStatus.title", fallback: "Room Status")
       }
       public enum Settings {
         /// Location: RepeaterSettingsView.swift - Advert interval (0-hop) label
@@ -2550,7 +2664,7 @@ public enum L10n {
         /// Location: RepeaterSettingsView.swift - Firmware label
         public static let firmware = L10n.tr("RemoteNodes", "remoteNodes.settings.firmware", fallback: "Firmware")
         /// Location: RepeaterSettingsViewModel.swift - Flood interval validation error
-        public static let floodIntervalValidation = L10n.tr("RemoteNodes", "remoteNodes.settings.floodIntervalValidation", fallback: "Accepts 3-48 hours")
+        public static let floodIntervalValidation = L10n.tr("RemoteNodes", "remoteNodes.settings.floodIntervalValidation", fallback: "Accepts 0 (off) or 3-168 hours")
         /// Location: RepeaterSettingsViewModel.swift - Flood max hops validation error
         public static let floodMaxValidation = L10n.tr("RemoteNodes", "remoteNodes.settings.floodMaxValidation", fallback: "Accepts 0-64 hops")
         /// Location: RepeaterSettingsView.swift - Frequency label
@@ -2581,8 +2695,8 @@ public enum L10n {
         public static let min = L10n.tr("RemoteNodes", "remoteNodes.settings.min", fallback: "min")
         /// Location: RepeaterSettingsView.swift - New password placeholder
         public static let newPassword = L10n.tr("RemoteNodes", "remoteNodes.settings.newPassword", fallback: "New Password")
-        /// Location: RepeaterSettingsViewModel.swift - No service error
-        public static let noService = L10n.tr("RemoteNodes", "remoteNodes.settings.noService", fallback: "Repeater service not available")
+        /// Location: NodeSettingsHelper.swift - No service error
+        public static let noService = L10n.tr("RemoteNodes", "remoteNodes.settings.noService", fallback: "Service not available")
         /// Location: RepeaterSettingsViewModel.swift - Not connected error
         public static let notConnected = L10n.tr("RemoteNodes", "remoteNodes.settings.notConnected", fallback: "Not connected to repeater")
         /// Location: RepeaterSettingsView.swift - OK button
@@ -2619,6 +2733,10 @@ public enum L10n {
         public static let rebootMessage = L10n.tr("RemoteNodes", "remoteNodes.settings.rebootMessage", fallback: "The repeater will restart and be temporarily unavailable.")
         /// Location: RepeaterSettingsViewModel.swift - Reboot sent success
         public static let rebootSent = L10n.tr("RemoteNodes", "remoteNodes.settings.rebootSent", fallback: "Reboot command sent")
+        /// Location: RepeaterSettingsView.swift - Regions section title
+        public static let regions = L10n.tr("RemoteNodes", "remoteNodes.settings.regions", fallback: "Regions")
+        /// Location: RepeaterSettingsView.swift - Regions section footer
+        public static let regionsFooter = L10n.tr("RemoteNodes", "remoteNodes.settings.regionsFooter", fallback: "Save to Repeater to keep changes across restarts.")
         /// Location: RepeaterSettingsView.swift - Repeater mode toggle
         public static let repeaterMode = L10n.tr("RemoteNodes", "remoteNodes.settings.repeaterMode", fallback: "Repeater Mode")
         /// Location: RepeaterSettingsView.swift - Security section title
@@ -2667,6 +2785,42 @@ public enum L10n {
             return L10n.tr("RemoteNodes", "remoteNodes.settings.accessibility.spreadingFactorLabel", p1, fallback: "Spreading factor %d")
           }
         }
+        public enum Regions {
+          /// Location: RepeaterSettingsViewModel.swift - Region add failure
+          public static let addFailed = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.addFailed", fallback: "Failed to add region")
+          /// Location: RepeaterSettingsView.swift - Add region button
+          public static let addRegion = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.addRegion", fallback: "Add Region")
+          /// Location: RepeaterSettingsView.swift - Add region alert title
+          public static let addRegionTitle = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.addRegionTitle", fallback: "Add Region")
+          /// Location: RepeaterSettingsView.swift - Toggle label for flood allow per region
+          public static let allowFlood = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.allowFlood", fallback: "Allow Flood Traffic")
+          /// Location: RepeaterSettingsView.swift - Wildcard region display name
+          public static let allTraffic = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.allTraffic", fallback: "All Traffic")
+          /// Location: RepeaterSettingsView.swift - Wildcard with asterisk display
+          public static let allTrafficWildcard = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.allTrafficWildcard", fallback: "* (All Traffic)")
+          /// Location: RepeaterSettingsViewModel.swift - No regions on device
+          public static let empty = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.empty", fallback: "No regions configured")
+          /// Location: RepeaterSettingsView.swift - Accessibility hint for flood toggle
+          public static let floodToggleHint = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.floodToggleHint", fallback: "When off, flood packets from this region are dropped")
+          /// Location: RepeaterSettingsView.swift - Home region picker label
+          public static let homeRegion = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.homeRegion", fallback: "Home Region")
+          /// Location: RepeaterSettingsView.swift - No home region set
+          public static let noHome = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.noHome", fallback: "None")
+          /// Location: RepeaterSettingsViewModel.swift - Region has children error
+          public static let notEmpty = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.notEmpty", fallback: "Remove child regions first")
+          /// Location: RepeaterSettingsView.swift - Region name placeholder
+          public static let regionName = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.regionName", fallback: "Region name")
+          /// Location: RepeaterSettingsViewModel.swift - Region remove failure
+          public static let removeFailed = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.removeFailed", fallback: "Failed to remove region")
+          /// Location: RepeaterSettingsViewModel.swift - Region save failure
+          public static let saveFailed = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.saveFailed", fallback: "Failed to save regions")
+          /// Location: RepeaterSettingsViewModel.swift - Region save success
+          public static let saveSuccess = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.saveSuccess", fallback: "Regions saved to device")
+          /// Location: RepeaterSettingsView.swift - Save regions to device button
+          public static let saveToDevice = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.saveToDevice", fallback: "Save to Repeater")
+          /// Location: RepeaterSettingsViewModel.swift - Region not found error
+          public static let unknownRegion = L10n.tr("RemoteNodes", "remoteNodes.settings.regions.unknownRegion", fallback: "Unknown region")
+        }
       }
       public enum Status {
         /// Location: RepeaterStatusView.swift - Battery label
@@ -2679,6 +2833,8 @@ public enum L10n {
         public static func channel(_ p1: Int) -> String {
           return L10n.tr("RemoteNodes", "remoteNodes.status.channel", p1, fallback: "Channel %d")
         }
+        /// Location: RepeaterStatusView.swift - Guest mode badge in header
+        public static let guestMode = L10n.tr("RemoteNodes", "remoteNodes.status.guestMode", fallback: "Guest Mode")
         /// Location: RepeaterStatusView.swift - Hours ago format
         public static func hoursAgo(_ p1: Int) -> String {
           return L10n.tr("RemoteNodes", "remoteNodes.status.hoursAgo", p1, fallback: "%dh ago")
@@ -2699,6 +2855,8 @@ public enum L10n {
         public static let noiseFloor = L10n.tr("RemoteNodes", "remoteNodes.status.noiseFloor", fallback: "Noise Floor")
         /// Location: RepeaterStatusView.swift - No neighbors empty state
         public static let noNeighbors = L10n.tr("RemoteNodes", "remoteNodes.status.noNeighbors", fallback: "No neighbors discovered")
+        /// Location: RepeaterStatusView.swift - No owner info empty state
+        public static let noOwnerInfo = L10n.tr("RemoteNodes", "remoteNodes.status.noOwnerInfo", fallback: "No contact info")
         /// Location: RepeaterStatusView.swift - No sensor data empty state
         public static let noSensorData = L10n.tr("RemoteNodes", "remoteNodes.status.noSensorData", fallback: "No sensor data")
         /// Location: RepeaterStatusView.swift - No telemetry data empty state
@@ -2711,12 +2869,16 @@ public enum L10n {
         }
         /// Location: RepeaterStatusViewModel.swift - Cannot save OCV error
         public static let ocvSaveNoContact = L10n.tr("RemoteNodes", "remoteNodes.status.ocvSaveNoContact", fallback: "Cannot save: contact not found")
+        /// Location: RepeaterStatusView.swift - Owner info section label
+        public static let ownerInfo = L10n.tr("RemoteNodes", "remoteNodes.status.ownerInfo", fallback: "Contact Info")
         /// Location: RepeaterStatusView.swift - Packets received label
         public static let packetsReceived = L10n.tr("RemoteNodes", "remoteNodes.status.packetsReceived", fallback: "Packets Received")
         /// Location: RepeaterStatusView.swift - Packets sent label
         public static let packetsSent = L10n.tr("RemoteNodes", "remoteNodes.status.packetsSent", fallback: "Packets Sent")
         /// Location: RepeaterStatusView.swift - Receive errors label
         public static let receiveErrors = L10n.tr("RemoteNodes", "remoteNodes.status.receiveErrors", fallback: "Packet Errors Received")
+        /// Location: RepeaterStatusView.swift, RoomStatusView.swift - Refresh button accessibility label
+        public static let refresh = L10n.tr("RemoteNodes", "remoteNodes.status.refresh", fallback: "Refresh")
         /// Location: RepeaterStatusViewModel.swift - Request timed out
         public static let requestTimedOut = L10n.tr("RemoteNodes", "remoteNodes.status.requestTimedOut", fallback: "Request timed out")
         /// Location: RepeaterStatusView.swift - Seconds ago format

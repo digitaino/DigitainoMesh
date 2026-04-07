@@ -80,6 +80,9 @@ public enum RadioOptions {
         7_800, 10_400, 15_600, 20_800, 31_250, 41_700, 62_500, 125_000, 250_000, 500_000
     ]
 
+    /// Bandwidth options in kHz for CLI protocol display
+    public static let bandwidthsKHz: [Double] = bandwidthsHz.map { Double($0) / 1000.0 }
+
     /// Valid spreading factor range (SF5-SF12)
     public static let spreadingFactors: ClosedRange<Int> = 5...12
 
@@ -194,6 +197,17 @@ public enum CLIResponse: Sendable, Equatable {
             return .version(trimmed)
         }
 
+        // Freeform text fields: query hint takes priority over broad content heuristics
+        // below (e.g. deviceTime matches any string with ":" and "/", which is common
+        // in repeater names and contact info like "Contact: KD7ABC / 145.230")
+        if query == "get name" {
+            return .name(trimmed)
+        }
+
+        if query == "get owner.info" {
+            return .ownerInfo(trimmed)
+        }
+
         // Clock response: "06:40 - 18/4/2025 UTC" or contains time-like patterns
         if trimmed.contains("UTC") || (trimmed.contains(":") && trimmed.contains("/")) {
             return .deviceTime(trimmed)
@@ -239,16 +253,6 @@ public enum CLIResponse: Sendable, Equatable {
         // Flood max: integer hops
         if query == "get flood.max", let maxHops = Int(trimmed) {
             return .floodMax(maxHops)
-        }
-
-        // Name is plain text - use query hint
-        if query == "get name" {
-            return .name(trimmed)
-        }
-
-        // Owner info: freeform text with pipe-delimited lines
-        if query == "get owner.info" {
-            return .ownerInfo(trimmed)
         }
 
         // Latitude: decimal degrees

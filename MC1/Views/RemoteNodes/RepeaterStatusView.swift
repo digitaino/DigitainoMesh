@@ -9,11 +9,13 @@ struct RepeaterStatusView: View {
     let session: RemoteNodeSessionDTO
     @State private var viewModel = RepeaterStatusViewModel()
     @State private var contacts: [ContactDTO] = []
+    @State private var discoveredNodes: [DiscoveredNodeDTO] = []
 
     var body: some View {
         NavigationStack {
             List {
                 makeHeaderSection()
+                makeOwnerInfoSection()
                 makeStatusSection()
                 makeTelemetrySection()
                 makeNeighborsSection()
@@ -33,9 +35,10 @@ struct RepeaterStatusView: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
+                    .accessibilityLabel(L10n.RemoteNodes.RemoteNodes.Status.refresh)
                     .radioDisabled(
                         for: appState.connectionState,
-                        or: viewModel.isLoadingStatus || viewModel.isLoadingNeighbors || viewModel.isLoadingTelemetry
+                        or: viewModel.helper.isLoadingStatus || viewModel.isLoadingNeighbors || viewModel.helper.isLoadingTelemetry || viewModel.isLoadingOwnerInfo
                     )
                 }
 
@@ -55,22 +58,28 @@ struct RepeaterStatusView: View {
                 viewModel.configure(appState: appState)
                 await viewModel.registerHandlers(appState: appState)
 
-                // Request Status first (includes clock query)
-                await viewModel.requestStatus(for: session)
-                // Note: Telemetry and Neighbors are NOT auto-loaded - user must expand the section
+                // Only request status on first load; user can refresh via toolbar/pull-to-refresh
+                if viewModel.helper.status == nil {
+                    await viewModel.requestStatus(for: session)
+                }
 
                 // Pre-load OCV settings and contacts for neighbor matching
                 if let deviceID = appState.connectedDevice?.id {
-                    await viewModel.loadOCVSettings(publicKey: session.publicKey, deviceID: deviceID)
+                    await viewModel.helper.loadOCVSettings(publicKey: session.publicKey, deviceID: deviceID)
                     if let dataStore = appState.services?.dataStore {
                         contacts = (try? await dataStore.fetchContacts(deviceID: deviceID)) ?? []
+                        discoveredNodes = (try? await dataStore.fetchDiscoveredNodes(deviceID: deviceID)) ?? []
                     }
                 }
             }
             .refreshable {
                 await viewModel.requestStatus(for: session)
+                // Refresh owner info only if already loaded
+                if viewModel.ownerInfoLoaded {
+                    await viewModel.requestOwnerInfo(for: session)
+                }
                 // Refresh telemetry only if already loaded
-                if viewModel.telemetryLoaded {
+                if viewModel.helper.telemetryLoaded {
                     await viewModel.requestTelemetry(for: session)
                 }
                 // Refresh neighbors only if already loaded
@@ -85,24 +94,29 @@ struct RepeaterStatusView: View {
     // MARK: - Subviews
 
     private func makeHeaderSection() -> some View {
-        HeaderSection(publicKey: session.publicKey, name: session.name)
+        NodeStatusHeaderSection(session: session)
+    }
+
+    private func makeOwnerInfoSection() -> some View {
+        OwnerInfoSection(viewModel: viewModel, session: session)
     }
 
     private func makeStatusSection() -> some View {
-        StatusSection(viewModel: viewModel, session: session)
+        StatusSection(viewModel: viewModel)
     }
 
     private func makeNeighborsSection() -> some View {
         NeighborsSection(
             viewModel: viewModel,
             session: session,
-            contacts: contacts
+            contacts: contacts,
+            discoveredNodes: discoveredNodes
         )
     }
 
     private func makeBatteryCurveSection() -> some View {
-        BatteryCurveDisclosureSection(
-            viewModel: viewModel,
+        NodeBatteryCurveDisclosureSection(
+            helper: viewModel.helper,
             session: session,
             connectionState: appState.connectionState,
             connectedDeviceID: appState.connectedDevice?.id
@@ -110,7 +124,9 @@ struct RepeaterStatusView: View {
     }
 
     private func makeTelemetrySection() -> some View {
-        TelemetrySection(viewModel: viewModel, session: session)
+        NodeTelemetryDisclosureSection(helper: viewModel.helper) {
+            await viewModel.requestTelemetry(for: session)
+        }
     }
 
     // MARK: - Actions
@@ -118,8 +134,12 @@ struct RepeaterStatusView: View {
     private func refresh() {
         Task {
             await viewModel.requestStatus(for: session)
+            // Refresh owner info only if already loaded
+            if viewModel.ownerInfoLoaded {
+                await viewModel.requestOwnerInfo(for: session)
+            }
             // Refresh telemetry only if already loaded
-            if viewModel.telemetryLoaded {
+            if viewModel.helper.telemetryLoaded {
                 await viewModel.requestTelemetry(for: session)
             }
             // Refresh neighbors only if already loaded
@@ -130,25 +150,40 @@ struct RepeaterStatusView: View {
     }
 }
 
-// MARK: - Header Section
+// MARK: - Owner Info Section
 
-private struct HeaderSection: View {
-    let publicKey: Data
-    let name: String
+private struct OwnerInfoSection: View {
+    @Bindable var viewModel: RepeaterStatusViewModel
+    let session: RemoteNodeSessionDTO
 
     var body: some View {
         Section {
-            HStack {
-                Spacer()
-                VStack(spacing: 8) {
-                    NodeAvatar(publicKey: publicKey, role: .repeater, size: 60)
-
-                    Text(name)
-                        .font(.headline)
+            DisclosureGroup(isExpanded: $viewModel.ownerInfoExpanded) {
+                if viewModel.isLoadingOwnerInfo {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                } else if let error = viewModel.ownerInfoError {
+                    Text(error)
+                        .foregroundStyle(.red)
+                } else if let info = viewModel.ownerInfo, !info.isEmpty {
+                    Text(info)
+                } else {
+                    Text(L10n.RemoteNodes.RemoteNodes.Status.noOwnerInfo)
+                        .foregroundStyle(.secondary)
                 }
-                Spacer()
+            } label: {
+                Text(L10n.RemoteNodes.RemoteNodes.Status.ownerInfo)
             }
-            .listRowBackground(Color.clear)
+            .onChange(of: viewModel.ownerInfoExpanded) { _, isExpanded in
+                if isExpanded && !viewModel.ownerInfoLoaded {
+                    Task {
+                        await viewModel.requestOwnerInfo(for: session)
+                    }
+                }
+            }
         }
     }
 }
@@ -157,34 +192,10 @@ private struct HeaderSection: View {
 
 private struct StatusSection: View {
     let viewModel: RepeaterStatusViewModel
-    let session: RemoteNodeSessionDTO
 
     var body: some View {
-        Section(L10n.RemoteNodes.RemoteNodes.Status.statusSection) {
-            if viewModel.isLoadingStatus && viewModel.status == nil {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-            } else if let errorMessage = viewModel.errorMessage, viewModel.status == nil {
-                Text(errorMessage)
-                    .foregroundStyle(.red)
-            } else {
-                StatusRows(viewModel: viewModel)
-
-                if let timestamp = viewModel.previousSnapshotTimestamp {
-                    Text(timestamp)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                NavigationLink {
-                    NodeStatusHistoryView(fetchSnapshots: viewModel.fetchHistory, ocvArray: viewModel.ocvValues)
-                } label: {
-                    Text(L10n.RemoteNodes.RemoteNodes.History.title)
-                }
-            }
+        NodeStatusSection(helper: viewModel.helper) {
+            StatusRows(viewModel: viewModel)
         }
     }
 }
@@ -195,38 +206,7 @@ private struct StatusRows: View {
     let viewModel: RepeaterStatusViewModel
 
     var body: some View {
-        MetricRow(
-            label: L10n.RemoteNodes.RemoteNodes.Status.battery,
-            value: viewModel.batteryDisplay,
-            delta: viewModel.batteryDeltaMV.map { Double($0) / 1000.0 },
-            higherIsBetter: true, unit: " V", fractionDigits: 2
-        )
-
-        LabeledContent(L10n.RemoteNodes.RemoteNodes.Status.uptime, value: viewModel.uptimeDisplay)
-
-        MetricRow(
-            label: L10n.RemoteNodes.RemoteNodes.Status.lastRssi,
-            value: viewModel.lastRSSIDisplay,
-            delta: viewModel.rssiDelta.map(Double.init),
-            higherIsBetter: true, unit: " dBm", fractionDigits: 0
-        )
-
-        MetricRow(
-            label: L10n.RemoteNodes.RemoteNodes.Status.lastSnr,
-            value: viewModel.lastSNRDisplay,
-            delta: viewModel.snrDelta,
-            higherIsBetter: true, unit: " dB", fractionDigits: 1
-        )
-
-        MetricRow(
-            label: L10n.RemoteNodes.RemoteNodes.Status.noiseFloor,
-            value: viewModel.noiseFloorDisplay,
-            delta: viewModel.noiseFloorDelta.map(Double.init),
-            higherIsBetter: false, unit: " dBm", fractionDigits: 0
-        )
-
-        LabeledContent(L10n.RemoteNodes.RemoteNodes.Status.packetsSent, value: viewModel.packetsSentDisplay)
-        LabeledContent(L10n.RemoteNodes.RemoteNodes.Status.packetsReceived, value: viewModel.packetsReceivedDisplay)
+        NodeCommonStatusRows(helper: viewModel.helper)
 
         if let receiveErrors = viewModel.receiveErrorsDisplay {
             LabeledContent(L10n.RemoteNodes.RemoteNodes.Status.receiveErrors, value: receiveErrors)
@@ -240,6 +220,7 @@ private struct NeighborsSection: View {
     @Bindable var viewModel: RepeaterStatusViewModel
     let session: RemoteNodeSessionDTO
     let contacts: [ContactDTO]
+    let discoveredNodes: [DiscoveredNodeDTO]
 
     var body: some View {
         Section {
@@ -256,31 +237,34 @@ private struct NeighborsSection: View {
                 } else {
                     ForEach(viewModel.neighbors, id: \.publicKeyPrefix) { neighbor in
                         let contact = contacts.first { $0.publicKeyPrefix.starts(with: neighbor.publicKeyPrefix) }
+                        let resolvedName = contact?.displayName
+                            ?? discoveredNodes.first(where: { $0.publicKey.prefix(6).starts(with: neighbor.publicKeyPrefix) })?.name
                         NavigationLink {
                             NeighborSNRChartView(
-                                name: contact?.displayName ?? L10n.RemoteNodes.RemoteNodes.Status.unknown,
+                                name: resolvedName ?? L10n.RemoteNodes.RemoteNodes.Status.unknown,
                                 neighborPrefix: neighbor.publicKeyPrefix,
-                                fetchSnapshots: viewModel.fetchHistory
+                                fetchSnapshots: viewModel.helper.fetchHistory
                             )
                         } label: {
                             NeighborRow(
                                 neighbor: neighbor,
                                 contact: contact,
-                                previousNeighbor: viewModel.previousSnapshot?.neighborSnapshots?.first {
+                                previousNeighbor: viewModel.helper.previousSnapshot?.neighborSnapshots?.first {
                                     $0.publicKeyPrefix == neighbor.publicKeyPrefix
                                 },
-                                hasPreviousSnapshot: viewModel.previousSnapshot?.neighborSnapshots != nil
+                                hasPreviousSnapshot: viewModel.helper.previousSnapshot?.neighborSnapshots != nil
                             )
                         }
                     }
 
-                    if let previousNeighbors = viewModel.previousSnapshot?.neighborSnapshots {
+                    if let previousNeighbors = viewModel.helper.previousSnapshot?.neighborSnapshots {
                         let currentPrefixes = Set(viewModel.neighbors.map(\.publicKeyPrefix))
                         let disappeared = previousNeighbors.filter { !currentPrefixes.contains($0.publicKeyPrefix) }
                         ForEach(disappeared, id: \.publicKeyPrefix) { old in
                             DisappearedNeighborRow(
                                 neighbor: old,
-                                contact: contacts.first { $0.publicKeyPrefix.starts(with: old.publicKeyPrefix) }
+                                contact: contacts.first { $0.publicKeyPrefix.starts(with: old.publicKeyPrefix) },
+                                discoveredName: discoveredNodes.first(where: { $0.publicKey.prefix(6).starts(with: old.publicKeyPrefix) })?.name
                             )
                         }
                     }
@@ -304,133 +288,6 @@ private struct NeighborsSection: View {
             }
         } footer: {
             Text(L10n.RemoteNodes.RemoteNodes.Status.neighborsFooter)
-        }
-    }
-}
-
-// MARK: - Battery Curve Disclosure Section
-
-private struct BatteryCurveDisclosureSection: View {
-    @Bindable var viewModel: RepeaterStatusViewModel
-    let session: RemoteNodeSessionDTO
-    let connectionState: ConnectionState
-    let connectedDeviceID: UUID?
-
-    var body: some View {
-        Section {
-            DisclosureGroup(isExpanded: $viewModel.isBatteryCurveExpanded) {
-                BatteryCurveSection(
-                    availablePresets: OCVPreset.repeaterPresets,
-                    headerText: "",
-                    footerText: "",
-                    selectedPreset: $viewModel.selectedOCVPreset,
-                    voltageValues: $viewModel.ocvValues,
-                    onSave: viewModel.saveOCVSettings,
-                    isDisabled: connectionState != .ready
-                )
-
-                if let error = viewModel.ocvError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            } label: {
-                Text(L10n.RemoteNodes.RemoteNodes.Status.batteryCurve)
-            }
-            .onChange(of: viewModel.isBatteryCurveExpanded) { _, isExpanded in
-                if isExpanded, let deviceID = connectedDeviceID {
-                    Task {
-                        await viewModel.loadOCVSettings(publicKey: session.publicKey, deviceID: deviceID)
-                    }
-                }
-            }
-        } footer: {
-            Text(L10n.RemoteNodes.RemoteNodes.Status.batteryCurveFooter)
-        }
-    }
-}
-
-// MARK: - Telemetry Section
-
-private struct TelemetrySection: View {
-    @Bindable var viewModel: RepeaterStatusViewModel
-    let session: RemoteNodeSessionDTO
-
-    var body: some View {
-        Section {
-            DisclosureGroup(isExpanded: $viewModel.telemetryExpanded) {
-                if viewModel.isLoadingTelemetry {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                } else if viewModel.telemetry != nil {
-                    if viewModel.cachedDataPoints.isEmpty {
-                        Text(L10n.RemoteNodes.RemoteNodes.Status.noSensorData)
-                            .foregroundStyle(.secondary)
-                    } else if viewModel.hasMultipleChannels {
-                        ForEach(viewModel.groupedDataPoints, id: \.channel) { group in
-                            Section {
-                                ForEach(group.dataPoints, id: \.self) { dataPoint in
-                                    TelemetryRow(dataPoint: dataPoint, ocvArray: viewModel.ocvValues)
-                                }
-                            } header: {
-                                Text(L10n.RemoteNodes.RemoteNodes.Status.channel(Int(group.channel)))
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                    } else {
-                        ForEach(viewModel.cachedDataPoints, id: \.self) { dataPoint in
-                            TelemetryRow(dataPoint: dataPoint, ocvArray: viewModel.ocvValues)
-                        }
-                    }
-
-                    NavigationLink {
-                        TelemetryHistoryView(fetchSnapshots: viewModel.fetchHistory, ocvArray: viewModel.ocvValues)
-                    } label: {
-                        Text(L10n.RemoteNodes.RemoteNodes.History.title)
-                    }
-                } else {
-                    Text(L10n.RemoteNodes.RemoteNodes.Status.noTelemetryData)
-                        .foregroundStyle(.secondary)
-                }
-            } label: {
-                Text(L10n.RemoteNodes.RemoteNodes.Status.telemetry)
-            }
-            .onChange(of: viewModel.telemetryExpanded) { _, isExpanded in
-                if isExpanded && !viewModel.telemetryLoaded {
-                    Task {
-                        await viewModel.requestTelemetry(for: session)
-                    }
-                }
-            }
-        } footer: {
-            Text(L10n.RemoteNodes.RemoteNodes.Status.telemetryFooter)
-        }
-    }
-}
-
-// MARK: - Metric Row
-
-private struct MetricRow: View {
-    let label: String
-    let value: String
-    let delta: Double?
-    let higherIsBetter: Bool
-    let unit: String
-    let fractionDigits: Int
-
-    var body: some View {
-        LabeledContent {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(value)
-                if let delta {
-                    StatusDeltaView(delta: delta, higherIsBetter: higherIsBetter, unit: unit, fractionDigits: fractionDigits)
-                }
-            }
-        } label: {
-            Text(label)
         }
     }
 }
@@ -571,6 +428,7 @@ private struct NeighborRow: View {
 private struct DisappearedNeighborRow: View {
     let neighbor: NeighborSnapshotEntry
     let contact: ContactDTO?
+    var discoveredName: String?
 
     var body: some View {
         HStack {
@@ -588,34 +446,8 @@ private struct DisappearedNeighborRow: View {
 
     private var displayName: String {
         contact?.displayName
+            ?? discoveredName
             ?? Data(neighbor.publicKeyPrefix.prefix(4)).hexString()
-    }
-}
-
-// MARK: - Telemetry Row
-
-private struct TelemetryRow: View {
-    let dataPoint: LPPDataPoint
-    let ocvArray: [Int]
-
-    var body: some View {
-        if dataPoint.type == .voltage, case .float(let voltage) = dataPoint.value {
-            // Calculate percentage using OCV array
-            let millivolts = Int(voltage * 1000)
-            let battery = BatteryInfo(level: millivolts)
-            let percentage = battery.percentage(using: ocvArray)
-
-            LabeledContent(dataPoint.typeName) {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(dataPoint.formattedValue)
-                    Text("\(percentage)%")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        } else {
-            LabeledContent(dataPoint.typeName, value: dataPoint.formattedValue)
-        }
     }
 }
 

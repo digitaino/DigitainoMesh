@@ -17,31 +17,37 @@ final class PathLineRenderer: MKPolylineRenderer {
     private func configureAppearance() {
         guard let pathOverlay = overlay as? PathLineOverlay else { return }
 
-        switch pathOverlay.signalQuality {
-        case .untraced:
+        // Gap segments (unlocated hops skipped) — dashed orange
+        if pathOverlay.isGap {
+            strokeColor = UIColor.systemOrange
+            lineWidth = 2
+            lineDashPattern = [4, 8]
+            return
+        }
+
+        guard let quality = pathOverlay.signalQuality else {
+            // Untraced — dashed gray
             strokeColor = UIColor.systemGray
             lineWidth = 2
             lineDashPattern = [8, 6]
+            return
+        }
 
-        case .good:
-            strokeColor = UIColor.systemGreen
-            lineWidth = 4  // Thicker for accessibility (color-blind users)
+        strokeColor = quality.uiColor
+
+        switch quality {
+        case .excellent, .good:
+            lineWidth = 4
             lineDashPattern = nil
-
-        case .medium:
-            strokeColor = UIColor.systemYellow
+        case .fair:
             lineWidth = 3
-            lineDashPattern = [12, 4]  // Different pattern for accessibility
-
-        case .weak:
-            strokeColor = UIColor.systemRed
+            lineDashPattern = [12, 4]
+        case .poor:
             lineWidth = 3
-            lineDashPattern = [4, 4]  // Different pattern for accessibility
-
-        case .gap:
-            strokeColor = UIColor.systemOrange
+            lineDashPattern = [4, 4]
+        case .unknown:
             lineWidth = 2
-            lineDashPattern = [4, 8]  // Wider gaps to suggest missing nodes
+            lineDashPattern = [8, 6]
         }
     }
 

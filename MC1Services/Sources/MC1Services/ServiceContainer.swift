@@ -106,6 +106,9 @@ public final class ServiceContainer {
     /// Service for repeater administration
     public let repeaterAdminService: RepeaterAdminService
 
+    /// Service for room server administration (telemetry, settings)
+    public let roomAdminService: RoomAdminService
+
     /// Service for room server operations
     public let roomServerService: RoomServerService
 
@@ -180,6 +183,10 @@ public final class ServiceContainer {
         )
         self.repeaterAdminService = RepeaterAdminService(
             session: session,
+            remoteNodeService: remoteNodeService,
+            dataStore: dataStore
+        )
+        self.roomAdminService = RoomAdminService(
             remoteNodeService: remoteNodeService,
             dataStore: dataStore
         )

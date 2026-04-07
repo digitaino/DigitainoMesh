@@ -85,7 +85,8 @@ extension PersistenceStore {
                 isActive: dto.isActive,
                 ocvPreset: dto.ocvPreset,
                 customOCVArrayString: dto.customOCVArrayString,
-                connectionMethods: dto.connectionMethods
+                connectionMethods: dto.connectionMethods,
+                knownRegions: dto.knownRegions
             )
             modelContext.insert(device)
         }
@@ -131,6 +132,44 @@ extension PersistenceStore {
             throw PersistenceStoreError.deviceNotFound
         }
         device.lastContactSync = timestamp
+        try modelContext.save()
+    }
+
+    /// Adds a known region to a device if not already present
+    public func addDeviceKnownRegion(deviceID: UUID, region: String) throws {
+        let targetDeviceID = deviceID
+        let devicePredicate = #Predicate<Device> { $0.id == targetDeviceID }
+        var deviceDescriptor = FetchDescriptor<Device>(predicate: devicePredicate)
+        deviceDescriptor.fetchLimit = 1
+
+        guard let device = try modelContext.fetch(deviceDescriptor).first else {
+            throw PersistenceStoreError.deviceNotFound
+        }
+
+        guard !device.knownRegions.contains(region) else { return }
+        device.knownRegions.append(region)
+        try modelContext.save()
+    }
+
+    /// Removes a known region from a device and clears regionScope on affected channels
+    public func removeDeviceKnownRegion(deviceID: UUID, region: String) throws {
+        let targetDeviceID = deviceID
+        let devicePredicate = #Predicate<Device> { $0.id == targetDeviceID }
+        var deviceDescriptor = FetchDescriptor<Device>(predicate: devicePredicate)
+        deviceDescriptor.fetchLimit = 1
+
+        guard let device = try modelContext.fetch(deviceDescriptor).first else {
+            throw PersistenceStoreError.deviceNotFound
+        }
+
+        device.knownRegions.removeAll { $0 == region }
+
+        let channelPredicate = #Predicate<Channel> { $0.deviceID == targetDeviceID }
+        let channels = try modelContext.fetch(FetchDescriptor<Channel>(predicate: channelPredicate))
+        for channel in channels where channel.regionScope == region {
+            channel.regionScope = nil
+        }
+
         try modelContext.save()
     }
 

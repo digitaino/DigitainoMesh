@@ -463,6 +463,16 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         Date(timeIntervalSince1970: TimeInterval(timestamp))
     }
 
+    /// Hop count decoded from pathLength (lower 6 bits)
+    public var hopCount: Int {
+        decodePathLen(pathLength)?.hopCount ?? Int(pathLength & 63)
+    }
+
+    /// Whether this message was received directly (0 hops) or via flood routing
+    public var isDirect: Bool {
+        pathLength == 0xFF || hopCount == 0
+    }
+
     /// Hash size per hop in bytes (1, 2, or 3), derived from pathLength upper 2 bits
     public var pathHashSize: Int {
         decodePathLen(pathLength)?.hashSize ?? 1

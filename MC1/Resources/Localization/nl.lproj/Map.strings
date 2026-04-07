@@ -102,11 +102,14 @@
 /* Location: MapView.swift ContactDetailSheet - Purpose: Button to view repeater telemetry */
 "map.detail.action.telemetry" = "Telemetrie";
 
+/* Location: MapView.swift - Purpose: Saved History button for offline telemetry */
+"map.detail.action.savedHistory" = "Saved History";
+
 /* Location: MapView.swift ContactDetailSheet - Purpose: Sheet title for telemetry authentication */
 "map.detail.action.telemetryAccessTitle" = "Telemetrietoegang";
 
-/* Location: MapView.swift ContactDetailSheet - Purpose: Button to access repeater admin settings */
-"map.detail.action.adminAccess" = "Beheerderstoegang";
+/* Location: MapView.swift ContactDetailSheet - Purpose: Button to manage repeater */
+"map.detail.action.management" = "Beheer";
 
 /* Location: MapView.swift ContactDetailSheet - Purpose: Button to join a room */
 "map.detail.action.joinRoom" = "Deelnemen aan kamer";

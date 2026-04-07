@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import SwiftData
 
@@ -115,6 +116,9 @@ public final class Device {
     /// Connection methods available for this device (BLE, WiFi, etc.)
     public var connectionMethods: [ConnectionMethod] = []
 
+    /// Region codes known to this device
+    public var knownRegions: [String] = []
+
     public init(
         id: UUID = UUID(),
         publicKey: Data,
@@ -153,7 +157,8 @@ public final class Device {
         isActive: Bool = false,
         ocvPreset: String? = nil,
         customOCVArrayString: String? = nil,
-        connectionMethods: [ConnectionMethod] = []
+        connectionMethods: [ConnectionMethod] = [],
+        knownRegions: [String] = []
     ) {
         self.id = id
         self.publicKey = publicKey
@@ -193,6 +198,7 @@ public final class Device {
         self.ocvPreset = ocvPreset
         self.customOCVArrayString = customOCVArrayString
         self.connectionMethods = connectionMethods
+        self.knownRegions = knownRegions
     }
 
     /// Applies all mutable fields from a DTO to this model instance.
@@ -234,6 +240,7 @@ public final class Device {
         ocvPreset = dto.ocvPreset
         customOCVArrayString = dto.customOCVArrayString
         connectionMethods = dto.connectionMethods
+        knownRegions = dto.knownRegions
     }
 }
 
@@ -269,6 +276,14 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable {
     /// Trace protocol uses power-of-2 encoding: `1 << pathHashMode`.
     public var traceHashSize: Int { 1 << Int(pathHashMode) }
 
+    public var hasLocation: Bool {
+        let hasNonZero = latitude != 0 || longitude != 0
+        guard hasNonZero else { return false }
+        return CLLocationCoordinate2DIsValid(
+            CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        )
+    }
+
     public var preRepeatFrequency: UInt32?
     public var preRepeatBandwidth: UInt32?
     public var preRepeatSpreadingFactor: UInt8?
@@ -287,6 +302,7 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable {
     public var ocvPreset: String?
     public var customOCVArrayString: String?
     public var connectionMethods: [ConnectionMethod]
+    public var knownRegions: [String]
 
     /// Computed auto-add mode based on manualAddContacts and autoAddConfig
     public var autoAddMode: AutoAddMode {
@@ -382,7 +398,8 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable {
         isActive: Bool,
         ocvPreset: String?,
         customOCVArrayString: String?,
-        connectionMethods: [ConnectionMethod] = []
+        connectionMethods: [ConnectionMethod] = [],
+        knownRegions: [String] = []
     ) {
         self.id = id
         self.publicKey = publicKey
@@ -422,6 +439,7 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable {
         self.ocvPreset = ocvPreset
         self.customOCVArrayString = customOCVArrayString
         self.connectionMethods = connectionMethods
+        self.knownRegions = knownRegions
     }
 
     public init(from device: Device) {
@@ -463,6 +481,7 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable {
         self.ocvPreset = device.ocvPreset
         self.customOCVArrayString = device.customOCVArrayString
         self.connectionMethods = device.connectionMethods
+        self.knownRegions = device.knownRegions
     }
 
     /// The 6-byte public key prefix used for identifying messages

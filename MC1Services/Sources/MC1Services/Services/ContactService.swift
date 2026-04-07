@@ -751,7 +751,7 @@ extension MeshContact {
 
 extension ContactFrame {
     /// Converts a ContactFrame to a MeshContact for session operations
-    func toMeshContact() -> MeshContact {
+    public func toMeshContact() -> MeshContact {
         MeshContact(
             id: publicKey.hexString(),
             publicKey: publicKey,

@@ -37,6 +37,15 @@ public enum PacketBuilder: Sendable {
 
     /// Size of a public key in bytes.
     static let publicKeySize = 32
+    static let rawDataMaxPathBytes = 64
+    static let rawDataMaxPayloadBytes = 184
+
+    private static func encodePublicKey(_ publicKey: Data) -> Data {
+        if publicKey.count >= publicKeySize {
+            return publicKey.prefix(publicKeySize)
+        }
+        return publicKey + Data(repeating: 0, count: publicKeySize - publicKey.count)
+    }
 
     // MARK: - Device Commands
 
@@ -780,6 +789,35 @@ public enum PacketBuilder: Sendable {
         return data
     }
 
+    /// Builds a command to send an anonymous request to a remote node.
+    ///
+    /// ### Binary Format
+    /// - Offset 0 (1 byte): Command code `0x39`
+    /// - Offset 1–32 (32 bytes): Destination public key
+    /// - Offset 33 (1 byte): Anonymous request type
+    /// - Offset 34 (1 byte): Encoded path length (bits 7-6 = hash_size-1, bits 5-0 = hop count)
+    /// - Offset 35+ (variable): Out-path bytes, reversed to form the return route
+    ///
+    /// - Parameters:
+    ///   - publicKey: The 32-byte public key of the destination node.
+    ///   - type: The anonymous request type.
+    ///   - pathLength: The encoded path length byte.
+    ///   - path: The raw out-path bytes for the destination. Reversed to form the return route.
+    /// - Returns: The command data to send to the companion radio.
+    public static func sendAnonReq(
+        to publicKey: Data,
+        type: AnonRequestType,
+        pathLength: UInt8,
+        path: Data
+    ) -> Data {
+        var data = Data([CommandCode.sendAnonReq.rawValue])
+        data.append(publicKey.prefix(publicKeySize))
+        data.append(type.rawValue)
+        data.append(pathLength)
+        data.append(Data(path.reversed()))
+        return data
+    }
+
     /// Builds a setPathHashMode command to configure the path hash size.
     ///
     /// - Parameter mode: Hash mode (0=1-byte, 1=2-byte, 2=3-byte hashes).
@@ -790,7 +828,7 @@ public enum PacketBuilder: Sendable {
     /// - Offset 1 (1 byte): Reserved `0x00`
     /// - Offset 2 (1 byte): Mode value (0, 1, or 2)
     public static func setPathHashMode(_ mode: UInt8) -> Data {
-        Data([CommandCode.setPathHashMode.rawValue, 0x00, mode])
+        Data([CommandCode.setPathHashMode.rawValue, 0x00, min(mode, 2)])
     }
 
     /// Builds a factoryReset command to wipe all settings and data from the device.
@@ -864,10 +902,10 @@ public enum PacketBuilder: Sendable {
     /// - Offset 2+N (M bytes): Payload
     public static func sendRawData(path: Data, payload: Data) -> Data {
         var data = Data([CommandCode.sendRawData.rawValue])
-        let clampedPath = path.prefix(255)
+        let clampedPath = path.prefix(rawDataMaxPathBytes)
         data.append(UInt8(clampedPath.count))
         data.append(clampedPath)
-        data.append(payload)
+        data.append(payload.prefix(rawDataMaxPayloadBytes))
         return data
     }
 
@@ -881,7 +919,7 @@ public enum PacketBuilder: Sendable {
     /// - Offset 1 (32 bytes): Full public key
     public static func hasConnection(publicKey: Data) -> Data {
         var data = Data([CommandCode.hasConnection.rawValue])
-        data.append(publicKey.prefix(publicKeySize))
+        data.append(encodePublicKey(publicKey))
         return data
     }
 
@@ -895,7 +933,7 @@ public enum PacketBuilder: Sendable {
     /// - Offset 1 (32 bytes): Full public key
     public static func getContactByKey(publicKey: Data) -> Data {
         var data = Data([CommandCode.getContactByKey.rawValue])
-        data.append(publicKey.prefix(publicKeySize))
+        data.append(encodePublicKey(publicKey))
         return data
     }
 
@@ -910,7 +948,7 @@ public enum PacketBuilder: Sendable {
     /// - Offset 2 (32 bytes): Full public key
     public static func getAdvertPath(publicKey: Data) -> Data {
         var data = Data([CommandCode.getAdvertPath.rawValue, 0x00])
-        data.append(publicKey.prefix(publicKeySize))
+        data.append(encodePublicKey(publicKey))
         return data
     }
 

@@ -11,8 +11,8 @@
 /* Location: NodeAuthenticationSheet.swift - Navigation title for room authentication */
 "remoteNodes.auth.joinRoom" = "Rejoindre le salon";
 
-/* Location: NodeAuthenticationSheet.swift - Navigation title for repeater admin access */
-"remoteNodes.auth.adminAccess" = "Accès administrateur";
+/* Location: NodeAuthenticationSheet.swift - Navigation title for repeater management */
+"remoteNodes.auth.management" = "Gestion";
 
 /* Location: NodeAuthenticationSheet.swift - Cancel button */
 "remoteNodes.auth.cancel" = "Annuler";
@@ -301,22 +301,90 @@
 /* Location: RepeaterSettingsViewModel.swift - Timeout error */
 "remoteNodes.settings.timeout" = "La commande a expiré";
 
-/* Location: RepeaterSettingsViewModel.swift - No service error */
-"remoteNodes.settings.noService" = "Service répéteur non disponible";
+/* Location: NodeSettingsHelper.swift - No service error */
+"remoteNodes.settings.noService" = "Service non disponible";
 
 /* Location: RepeaterSettingsViewModel.swift - Advert interval validation error */
 "remoteNodes.settings.advertIntervalValidation" = "Accepte 0 (désactivé) ou 60-240 min";
 
 /* Location: RepeaterSettingsViewModel.swift - Flood interval validation error */
-"remoteNodes.settings.floodIntervalValidation" = "Accepte 3-48 heures";
+"remoteNodes.settings.floodIntervalValidation" = "Accepte 0 (désactivé) ou 3–168 heures";
 
 /* Location: RepeaterSettingsViewModel.swift - Flood max hops validation error */
 "remoteNodes.settings.floodMaxValidation" = "Accepte 0-64 sauts";
+
+// MARK: - Repeater Settings: Regions
+
+/* Location: RepeaterSettingsView.swift - Regions section title */
+"remoteNodes.settings.regions" = "Regions";
+
+/* Location: RepeaterSettingsView.swift - Regions section footer */
+"remoteNodes.settings.regionsFooter" = "Save to Repeater to keep changes across restarts.";
+
+/* Location: RepeaterSettingsView.swift - Wildcard region display name */
+"remoteNodes.settings.regions.allTraffic" = "All Traffic";
+
+/* Location: RepeaterSettingsView.swift - Wildcard with asterisk display */
+"remoteNodes.settings.regions.allTrafficWildcard" = "* (All Traffic)";
+
+/* Location: RepeaterSettingsView.swift - Home region picker label */
+"remoteNodes.settings.regions.homeRegion" = "Home Region";
+
+/* Location: RepeaterSettingsView.swift - No home region set */
+"remoteNodes.settings.regions.noHome" = "None";
+
+/* Location: RepeaterSettingsView.swift - Toggle label for flood allow per region */
+"remoteNodes.settings.regions.allowFlood" = "Allow Flood Traffic";
+
+/* Location: RepeaterSettingsView.swift - Accessibility hint for flood toggle */
+"remoteNodes.settings.regions.floodToggleHint" = "When off, flood packets from this region are dropped";
+
+/* Location: RepeaterSettingsView.swift - Add region button */
+"remoteNodes.settings.regions.addRegion" = "Add Region";
+
+/* Location: RepeaterSettingsView.swift - Add region alert title */
+"remoteNodes.settings.regions.addRegionTitle" = "Add Region";
+
+/* Location: RepeaterSettingsView.swift - Region name placeholder */
+"remoteNodes.settings.regions.regionName" = "Region name";
+
+/* Location: RepeaterSettingsView.swift - Save regions to device button */
+"remoteNodes.settings.regions.saveToDevice" = "Save to Repeater";
+
+/* Location: RepeaterSettingsViewModel.swift - Region save success */
+"remoteNodes.settings.regions.saveSuccess" = "Regions saved to device";
+
+/* Location: RepeaterSettingsViewModel.swift - Region save failure */
+"remoteNodes.settings.regions.saveFailed" = "Failed to save regions";
+
+/* Location: RepeaterSettingsViewModel.swift - Region not found error */
+"remoteNodes.settings.regions.unknownRegion" = "Unknown region";
+
+/* Location: RepeaterSettingsViewModel.swift - Region has children error */
+"remoteNodes.settings.regions.notEmpty" = "Remove child regions first";
+
+/* Location: RepeaterSettingsViewModel.swift - Region add failure */
+"remoteNodes.settings.regions.addFailed" = "Failed to add region";
+
+/* Location: RepeaterSettingsViewModel.swift - Region remove failure */
+"remoteNodes.settings.regions.removeFailed" = "Failed to remove region";
+
+/* Location: RepeaterSettingsViewModel.swift - No regions on device */
+"remoteNodes.settings.regions.empty" = "No regions configured";
 
 // MARK: - Repeater Status
 
 /* Location: RepeaterStatusView.swift - Navigation title */
 "remoteNodes.status.title" = "Statut du répéteur";
+
+/* Location: RepeaterStatusView.swift - Guest mode badge in header */
+"remoteNodes.status.guestMode" = "Mode invité";
+
+/* Location: RepeaterStatusView.swift - Owner info section label */
+"remoteNodes.status.ownerInfo" = "Informations de contact";
+
+/* Location: RepeaterStatusView.swift - No owner info empty state */
+"remoteNodes.status.noOwnerInfo" = "Aucune information de contact";
 
 /* Location: RepeaterStatusView.swift - Status section header */
 "remoteNodes.status.statusSection" = "Statut";
@@ -416,6 +484,9 @@
 /* Location: RepeaterStatusView.swift - Battery curve section footer */
 "remoteNodes.status.batteryCurveFooter" = "Correspondance tension-pourcentage pour l'estimation du niveau de batterie.";
 
+/* Location: RepeaterStatusView.swift, RoomStatusView.swift - Refresh button accessibility label */
+"remoteNodes.status.refresh" = "Actualiser";
+
 // MARK: - History
 
 /* Location: RepeaterStatusViewModel.swift - Delta timestamp (minutes ago) */
@@ -472,6 +543,9 @@
 /* Location: NodeStatusHistoryView.swift - Packets received chart title */
 "remoteNodes.history.packetsReceived" = "Paquets reçus";
 
+/* Location: NodeStatusHistoryView.swift - Receive errors chart title */
+"remoteNodes.history.receiveErrors" = "Erreurs de paquets reçus";
+
 /* Location: NeighborHistoryView.swift - Active status */
 "remoteNodes.history.active" = "Actif";
 
@@ -501,6 +575,24 @@
 
 /* Location: NodeStatusHistoryView.swift - Footer about data retention */
 "remoteNodes.history.retentionNotice" = "Les données d'historique de plus d'un an sont automatiquement supprimées.";
+
+/* Location: TelemetryHistoryOverviewView.swift - Purpose: Radio section header */
+"remoteNodes.history.radioSection" = "Radio";
+
+/* Location: TelemetryHistoryOverviewView.swift - Purpose: Sensors section header */
+"remoteNodes.history.sensorsSection" = "Sensors";
+
+/* Location: TelemetryHistoryOverviewView.swift - Purpose: Neighbors section header */
+"remoteNodes.history.neighborsSection" = "Neighbors";
+
+/* Location: TelemetryHistoryOverviewView.swift - Purpose: Empty state when no snapshots exist */
+"remoteNodes.history.noSnapshotsMessage" = "Connect to this node at least once to see history.";
+
+/* Location: TelemetryHistoryOverviewView.swift - Purpose: Empty state when section data not captured */
+"remoteNodes.history.sectionNotCaptured" = "This data is captured when you view the %@ section during a live telemetry session.";
+
+/* Location: TelemetryHistoryOverviewView.swift - Purpose: Navigation title */
+"remoteNodes.history.overviewTitle" = "Telemetry History";
 
 // MARK: - Room Conversation
 
@@ -568,6 +660,69 @@
 
 /* Location: RoomMessageBubble.swift - Accessibility label for delivered message status */
 "remoteNodes.room.message.status.deliveredLabel" = "Message distribué";
+
+// MARK: - Room Status
+
+/* Location: RoomStatusView.swift - Navigation title */
+"remoteNodes.roomStatus.title" = "Room Status";
+
+/* Location: RoomStatusView.swift - Posts received label */
+"remoteNodes.roomStatus.postsReceived" = "Posts Received";
+
+/* Location: RoomStatusView.swift - Posts pushed label */
+"remoteNodes.roomStatus.postsPushed" = "Posts Pushed";
+
+// MARK: - Room Settings
+
+/* Location: RoomSettingsView.swift - Navigation title */
+"remoteNodes.roomSettings.title" = "Room Settings";
+
+/* Location: RoomSettingsView.swift - Room settings section header */
+"remoteNodes.roomSettings.roomSettingsSection" = "Room Settings";
+
+/* Location: RoomSettingsView.swift - Room settings section footer */
+"remoteNodes.roomSettings.roomSettingsFooter" = "Guest access, advertisement intervals, and flood hops.";
+
+/* Location: RoomSettingsView.swift - Guest password label */
+"remoteNodes.roomSettings.guestPassword" = "Guest Password";
+
+/* Location: RoomSettingsView.swift - Allow read-only toggle label */
+"remoteNodes.roomSettings.allowReadOnly" = "Allow Read-Only";
+
+/* Location: RoomSettingsView.swift - Allow read-only footer */
+"remoteNodes.roomSettings.allowReadOnlyFooter" = "Allow users without a password to connect in read-only mode.";
+
+/* Location: RoomSettingsView.swift - Apply room settings button */
+"remoteNodes.roomSettings.applyRoomSettings" = "Apply Room Settings";
+
+/* Location: RoomSettingsView.swift - Identity section footer */
+"remoteNodes.roomSettings.identityFooter" = "Room name and GPS coordinates for map display.";
+
+/* Location: RoomSettingsView.swift - Reboot confirmation title */
+"remoteNodes.roomSettings.rebootConfirmTitle" = "Reboot Room?";
+
+/* Location: RoomSettingsView.swift - Reboot confirmation message */
+"remoteNodes.roomSettings.rebootMessage" = "The room will restart and be temporarily unavailable.";
+
+/* Location: RoomSettingsView.swift - Radio restart warning */
+"remoteNodes.roomSettings.radioRestartWarning" = "Applying these changes will restart the room";
+
+/* Location: RoomSettingsView.swift - No service error */
+"remoteNodes.roomSettings.noService" = "Room service not available";
+
+/* Location: RoomSettingsView.swift - Not connected error */
+"remoteNodes.roomSettings.notConnected" = "Not connected to room";
+
+/* Location: RoomSettingsView.swift - Clock ahead error */
+"remoteNodes.roomSettings.clockAheadError" = "Room clock is ahead of phone time. If it's too far forward, reboot the room then sync time again.";
+
+// MARK: - Room Info Sheet (additions)
+
+/* Location: RoomInfoSheet.swift - Telemetry button */
+"remoteNodes.room.telemetry" = "Telemetry";
+
+/* Location: RoomInfoSheet.swift - Management button */
+"remoteNodes.room.management" = "Management";
 
 // MARK: - Shared
 

@@ -22,18 +22,42 @@ enum ChatConversationType: Sendable {
         switch self {
         case .dm(let contact):
             if contact.isFloodRouted {
-                L10n.Chats.Chats.ConnectionStatus.floodRouting
+                return L10n.Chats.Chats.ConnectionStatus.floodRouting
             } else {
-                L10n.Chats.Chats.ConnectionStatus.direct(contact.pathHopCount)
+                return L10n.Chats.Chats.ConnectionStatus.direct(contact.pathHopCount)
             }
         case .channel(let channel):
-            if channel.isPublicChannel {
-                L10n.Chats.Chats.Channel.typePublic
-            } else if channel.name.hasPrefix("#") {
-                L10n.Chats.Chats.ChannelInfo.ChannelType.hashtag
-            } else {
-                L10n.Chats.Chats.Channel.typePrivate
+            let base = channelTypeSubtitle(for: channel)
+            if let region = channel.regionScope {
+                return "\(base) \u{00B7} \(region)"
             }
+            return base
+        }
+    }
+
+    /// Accessibility label for the subtitle, providing a VoiceOver-friendly description
+    /// when a region scope is active (the middle dot separator may be read literally).
+    var navigationSubtitleAccessibilityLabel: String? {
+        switch self {
+        case .dm:
+            return nil
+        case .channel(let channel):
+            guard let region = channel.regionScope else { return nil }
+            return L10n.Chats.Chats.ChannelInfo.Region.scopedAccessibility(
+                channelTypeSubtitle(for: channel), region
+            )
+        }
+    }
+
+    // MARK: - Private Helpers
+
+    private func channelTypeSubtitle(for channel: ChannelDTO) -> String {
+        if channel.isPublicChannel {
+            L10n.Chats.Chats.Channel.typePublic
+        } else if channel.name.hasPrefix("#") {
+            L10n.Chats.Chats.ChannelInfo.ChannelType.hashtag
+        } else {
+            L10n.Chats.Chats.Channel.typePrivate
         }
     }
 
@@ -61,5 +85,11 @@ enum ChatConversationType: Sendable {
     func replacingContact(_ contact: ContactDTO) -> ChatConversationType {
         guard case .dm = self else { return self }
         return .dm(contact)
+    }
+
+    /// Returns a copy with the channel replaced (channel only). Returns self unchanged for DMs.
+    func replacingChannel(_ channel: ChannelDTO) -> ChatConversationType {
+        guard case .channel = self else { return self }
+        return .channel(channel)
     }
 }

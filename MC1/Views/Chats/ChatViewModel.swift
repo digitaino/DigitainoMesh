@@ -26,6 +26,12 @@ final class ChatViewModel {
         drafts.removeValue(forKey: key)
     }
 
+    /// Tracks whether the device's flood scope has been configured this session.
+    enum RegionScopeState: Equatable {
+        case unknown
+        case set(String?)
+    }
+
     // MARK: - Properties
 
     let logger = Logger(subsystem: "com.mc1", category: "ChatViewModel")
@@ -82,6 +88,8 @@ final class ChatViewModel {
     // Stored for lifecycle tracking; queue drains independently of conversation
     @ObservationIgnored var queueProcessorTask: Task<Void, Never>?
     @ObservationIgnored var channelQueueTask: Task<Void, Never>?
+    /// Tracks the last region scope sent to the device via setFloodScope.
+    @ObservationIgnored var lastSetRegionScope: RegionScopeState = .unknown
 
     /// Fallback date for conversations with no messages, used to sort them to the end.
     private static let noMessageSentinel = Date.distantPast
@@ -318,6 +326,7 @@ final class ChatViewModel {
         self.contactService = appState.services?.contactService
         self.syncCoordinator = appState.syncCoordinator
         self.linkPreviewCache = linkPreviewCache
+        self.lastSetRegionScope = .unknown
     }
 
     /// Configure with services from AppState (for conversation list views that don't show previews)
@@ -330,6 +339,7 @@ final class ChatViewModel {
         self.roomServerService = appState.services?.roomServerService
         self.contactService = appState.services?.contactService
         self.syncCoordinator = appState.syncCoordinator
+        self.lastSetRegionScope = .unknown
     }
 
     /// Configure with services (for testing)

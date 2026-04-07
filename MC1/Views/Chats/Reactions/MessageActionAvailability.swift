@@ -21,8 +21,7 @@ struct MessageActionAvailability {
         canShowRepeatDetails = message.isOutgoing && message.heardRepeats > 0
         canViewPath = !message.isOutgoing
             && message.pathNodes != nil
-            && message.pathLength != 0
-            && message.pathLength != 0xFF
+            && !message.isDirect
         canDelete = true
     }
 }

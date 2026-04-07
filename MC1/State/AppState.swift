@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 import SwiftData
 import UserNotifications
@@ -23,6 +24,17 @@ public final class AppState {
 
     /// App-wide location service for permission management
     public let locationService = LocationService()
+
+    /// Best available location for proximity-based disambiguation.
+    public var bestAvailableLocation: CLLocation? {
+        if let phoneLocation = locationService.currentLocation {
+            return phoneLocation
+        }
+        guard let device = connectedDevice, device.hasLocation else {
+            return nil
+        }
+        return CLLocation(latitude: device.latitude, longitude: device.longitude)
+    }
 
     // MARK: - Connection (via ConnectionManager)
 

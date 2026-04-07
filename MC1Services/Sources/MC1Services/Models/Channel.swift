@@ -65,6 +65,9 @@ public final class Channel {
     /// Whether this channel is marked as favorite
     public var isFavorite: Bool = false
 
+    /// Region code this channel is scoped to (nil = no region filter)
+    public var regionScope: String?
+
     public init(
         id: UUID = UUID(),
         deviceID: UUID,
@@ -76,7 +79,8 @@ public final class Channel {
         unreadCount: Int = 0,
         unreadMentionCount: Int = 0,
         notificationLevel: NotificationLevel = .all,
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        regionScope: String? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -89,6 +93,7 @@ public final class Channel {
         self.unreadMentionCount = unreadMentionCount
         self.notificationLevelRawValue = notificationLevel.rawValue
         self.isFavorite = isFavorite
+        self.regionScope = regionScope
     }
 
     /// Applies all mutable fields from a DTO to this model instance.
@@ -101,6 +106,7 @@ public final class Channel {
         unreadMentionCount = dto.unreadMentionCount
         notificationLevel = dto.notificationLevel
         isFavorite = dto.isFavorite
+        regionScope = dto.regionScope
     }
 
     /// Creates a Channel from a protocol ChannelInfo
@@ -160,6 +166,7 @@ public struct ChannelDTO: Sendable, Equatable, Identifiable, Hashable {
     public let unreadMentionCount: Int
     public let notificationLevel: NotificationLevel
     public let isFavorite: Bool
+    public let regionScope: String?
 
     /// Convenience property for checking if muted
     public var isMuted: Bool { notificationLevel == .muted }
@@ -176,6 +183,7 @@ public struct ChannelDTO: Sendable, Equatable, Identifiable, Hashable {
         self.unreadMentionCount = channel.unreadMentionCount
         self.notificationLevel = channel.notificationLevel
         self.isFavorite = channel.isFavorite
+        self.regionScope = channel.regionScope
     }
 
     /// Memberwise initializer for creating DTOs directly
@@ -190,7 +198,8 @@ public struct ChannelDTO: Sendable, Equatable, Identifiable, Hashable {
         unreadCount: Int,
         unreadMentionCount: Int = 0,
         notificationLevel: NotificationLevel = .all,
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        regionScope: String? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -203,6 +212,7 @@ public struct ChannelDTO: Sendable, Equatable, Identifiable, Hashable {
         self.unreadMentionCount = unreadMentionCount
         self.notificationLevel = notificationLevel
         self.isFavorite = isFavorite
+        self.regionScope = regionScope
     }
 
     /// Returns a copy with only `notificationLevel` changed.
@@ -211,7 +221,8 @@ public struct ChannelDTO: Sendable, Equatable, Identifiable, Hashable {
             id: id, deviceID: deviceID, index: index, name: name,
             secret: secret, isEnabled: isEnabled, lastMessageDate: lastMessageDate,
             unreadCount: unreadCount, unreadMentionCount: unreadMentionCount,
-            notificationLevel: notificationLevel, isFavorite: isFavorite
+            notificationLevel: notificationLevel, isFavorite: isFavorite,
+            regionScope: regionScope
         )
     }
 
@@ -221,7 +232,19 @@ public struct ChannelDTO: Sendable, Equatable, Identifiable, Hashable {
             id: id, deviceID: deviceID, index: index, name: name,
             secret: secret, isEnabled: isEnabled, lastMessageDate: lastMessageDate,
             unreadCount: unreadCount, unreadMentionCount: unreadMentionCount,
-            notificationLevel: notificationLevel, isFavorite: isFavorite
+            notificationLevel: notificationLevel, isFavorite: isFavorite,
+            regionScope: regionScope
+        )
+    }
+
+    /// Returns a copy with only `regionScope` changed.
+    public func with(regionScope: String?) -> ChannelDTO {
+        ChannelDTO(
+            id: id, deviceID: deviceID, index: index, name: name,
+            secret: secret, isEnabled: isEnabled, lastMessageDate: lastMessageDate,
+            unreadCount: unreadCount, unreadMentionCount: unreadMentionCount,
+            notificationLevel: notificationLevel, isFavorite: isFavorite,
+            regionScope: regionScope
         )
     }
 

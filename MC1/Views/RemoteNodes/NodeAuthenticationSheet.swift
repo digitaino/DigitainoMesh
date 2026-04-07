@@ -55,7 +55,7 @@ struct NodeAuthenticationSheet: View {
                 makeAuthenticationSection()
                 makeConnectButton()
             }
-            .navigationTitle(customTitle ?? (role == .roomServer ? L10n.RemoteNodes.RemoteNodes.Auth.joinRoom : L10n.RemoteNodes.RemoteNodes.Auth.adminAccess))
+            .navigationTitle(customTitle ?? (role == .roomServer ? L10n.RemoteNodes.RemoteNodes.Auth.joinRoom : L10n.RemoteNodes.RemoteNodes.Auth.management))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.RemoteNodes.RemoteNodes.Auth.cancel) {
@@ -302,6 +302,10 @@ private struct ConnectButton: View {
     let isAuthenticating: Bool
     let onAuthenticate: () -> Void
 
+    private var buttonLabel: String {
+        role == .roomServer ? L10n.RemoteNodes.RemoteNodes.Auth.joinRoom : L10n.RemoteNodes.RemoteNodes.Auth.connect
+    }
+
     var body: some View {
         Section {
             Button {
@@ -311,7 +315,7 @@ private struct ConnectButton: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                 } else {
-                    Text(role == .roomServer ? L10n.RemoteNodes.RemoteNodes.Auth.joinRoom : L10n.RemoteNodes.RemoteNodes.Auth.connect)
+                    Text(buttonLabel)
                         .frame(maxWidth: .infinity)
                 }
             }

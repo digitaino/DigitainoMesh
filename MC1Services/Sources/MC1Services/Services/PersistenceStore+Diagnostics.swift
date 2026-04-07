@@ -452,7 +452,10 @@ extension PersistenceStore {
         uptimeSeconds: UInt32?,
         rxAirtimeSeconds: UInt32?,
         packetsSent: UInt32?,
-        packetsReceived: UInt32?
+        packetsReceived: UInt32?,
+        receiveErrors: UInt32?,
+        postedCount: UInt16? = nil,
+        postPushCount: UInt16? = nil
     ) throws -> UUID {
         try saveNodeStatusSnapshot(
             timestamp: .now,
@@ -464,11 +467,15 @@ extension PersistenceStore {
             uptimeSeconds: uptimeSeconds,
             rxAirtimeSeconds: rxAirtimeSeconds,
             packetsSent: packetsSent,
-            packetsReceived: packetsReceived
+            packetsReceived: packetsReceived,
+            receiveErrors: receiveErrors,
+            postedCount: postedCount,
+            postPushCount: postPushCount
         )
     }
 
-    /// Overload that accepts an explicit timestamp, used by tests to avoid timing-dependent sleeps.
+    // Overload that accepts an explicit timestamp, used by tests to avoid timing-dependent sleeps.
+    // swiftlint:disable:next function_parameter_count
     public func saveNodeStatusSnapshot(
         timestamp: Date,
         nodePublicKey: Data,
@@ -479,7 +486,10 @@ extension PersistenceStore {
         uptimeSeconds: UInt32?,
         rxAirtimeSeconds: UInt32?,
         packetsSent: UInt32?,
-        packetsReceived: UInt32?
+        packetsReceived: UInt32?,
+        receiveErrors: UInt32?,
+        postedCount: UInt16? = nil,
+        postPushCount: UInt16? = nil
     ) throws -> UUID {
         let snapshot = NodeStatusSnapshot(
             timestamp: timestamp,
@@ -491,7 +501,10 @@ extension PersistenceStore {
             uptimeSeconds: uptimeSeconds,
             rxAirtimeSeconds: rxAirtimeSeconds,
             packetsSent: packetsSent,
-            packetsReceived: packetsReceived
+            packetsReceived: packetsReceived,
+            receiveErrors: receiveErrors,
+            postedCount: postedCount,
+            postPushCount: postPushCount
         )
         modelContext.insert(snapshot)
         try modelContext.save()

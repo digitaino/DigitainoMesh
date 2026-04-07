@@ -206,18 +206,22 @@ final class MessageRouteMapViewModel {
         for i in 0..<segmentCount {
             let isLastSegment = i == segmentCount - 1
             let nextPoint = points[i + 1]
-            let quality: PathLineOverlay.SignalQuality
+            let quality: SNRQuality?
             let segmentSNR: Double
+            let gap: Bool
 
             if nextPoint.hasGap {
-                quality = .gap
+                quality = nil
                 segmentSNR = 0
+                gap = true
             } else if isLastSegment, let snr {
-                quality = PathLineOverlay.SignalQuality(snr: snr)
+                quality = SNRQuality(snr: snr)
                 segmentSNR = snr
+                gap = false
             } else {
-                quality = .untraced
+                quality = nil
                 segmentSNR = 0
+                gap = false
             }
 
             let overlay = PathLineOverlay.line(
@@ -225,7 +229,8 @@ final class MessageRouteMapViewModel {
                 to: nextPoint.coordinate,
                 segmentIndex: i,
                 signalQuality: quality,
-                snr: segmentSNR
+                snr: segmentSNR,
+                isGap: gap
             )
             lineOverlays.append(overlay)
         }

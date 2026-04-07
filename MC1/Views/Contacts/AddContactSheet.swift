@@ -47,6 +47,13 @@ struct AddContactSheet: View {
                     isValid: isValidPublicKey
                 )
 
+                PasteURLSection { result in
+                    contactName = result.name
+                    publicKeyHex = result.publicKey.hex
+                    selectedType = result.contactType
+                    errorMessage = nil
+                }
+
                 if let errorMessage {
                     ErrorSection(message: errorMessage)
                 }
@@ -111,7 +118,7 @@ struct AddContactSheet: View {
         errorMessage = nil
 
         do {
-            let currentTimestamp = UInt32(Date().timeIntervalSince1970)
+            let currentTimestamp = UInt32(Date.now.timeIntervalSince1970)
 
             let contactFrame = ContactFrame(
                 publicKey: publicKeyData,
@@ -259,6 +266,36 @@ private struct ErrorSection: View {
             Text(message)
                 .foregroundStyle(.red)
                 .font(.caption)
+        }
+    }
+}
+
+// MARK: - Paste URL Section
+
+private struct PasteURLSection: View {
+    let onParsed: (MeshCoreURLParser.ContactResult) -> Void
+
+    @State private var showError = false
+
+    var body: some View {
+        Section {
+            Button(L10n.Contacts.Contacts.Add.pasteURL, systemImage: "doc.on.clipboard") {
+                guard let clipboard = UIPasteboard.general.string,
+                      let result = MeshCoreURLParser.parseContactURL(clipboard) else {
+                    showError = true
+                    return
+                }
+                showError = false
+                onParsed(result)
+            }
+
+            if showError {
+                Text(L10n.Contacts.Contacts.Add.Error.invalidURL)
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
+        } footer: {
+            Text(L10n.Contacts.Contacts.Add.pasteURLFooter)
         }
     }
 }

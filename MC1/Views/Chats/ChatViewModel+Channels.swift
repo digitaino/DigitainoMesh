@@ -20,6 +20,7 @@ extension ChatViewModel {
             expandedDuplicateGroups.removeAll()
             newMessagesDividerMessageID = nil
             dividerComputed = false
+            lastSetRegionScope = .unknown
         }
 
         currentChannel = channel
@@ -29,6 +30,19 @@ extension ChatViewModel {
         notificationService?.activeContactID = nil
         notificationService?.activeChannelIndex = channel.index
         notificationService?.activeChannelDeviceID = channel.deviceID
+
+        // Set flood scope on device when channel or region changes
+        if lastSetRegionScope == .unknown || lastSetRegionScope != .set(channel.regionScope) {
+            if let session = appState?.services?.session {
+                let scope: FloodScope = channel.regionScope.map { .region($0) } ?? .disabled
+                do {
+                    try await session.setFloodScope(scope)
+                    lastSetRegionScope = .set(channel.regionScope)
+                } catch {
+                    logger.error("Failed to set flood scope: \(error.localizedDescription)")
+                }
+            }
+        }
 
         logger.info("loadChannelMessages: setting isLoading=true, current messages.count=\(self.messages.count)")
         isLoading = true

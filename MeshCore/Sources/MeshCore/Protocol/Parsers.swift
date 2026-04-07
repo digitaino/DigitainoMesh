@@ -150,6 +150,7 @@ public enum Parsers {
         let type = ContactType(rawValue: data[offset]) ?? .chat; offset += 1
         let flags = ContactFlags(rawValue: data[offset]); offset += 1
         let pathLen = data[offset]; offset += 1
+        guard pathLen == 0xFF || decodePathLen(pathLen) != nil else { return nil }
         let actualPathLen = (pathLen == 0xFF) ? 0 : (decodePathLen(pathLen)?.byteLength ?? 0)
         // Read full 64-byte path field, but only use first actualPathLen bytes
         let pathBytes = Data(data[offset..<offset+64])
@@ -188,6 +189,15 @@ public enum Parsers {
         /// - Parameter data: Raw contact data.
         /// - Returns: A `.contact` event or `.parseFailure`.
         static func parse(_ data: Data) -> MeshEvent {
+            if data.count >= PacketSize.contact {
+                let pathLen = data[34]
+                if pathLen != 0xFF && decodePathLen(pathLen) == nil {
+                    return .parseFailure(
+                        data: data,
+                        reason: "Contact response uses reserved path length encoding: 0x\(String(format: "%02X", pathLen))"
+                    )
+                }
+            }
             guard let contact = parseContactData(data) else {
                 return .parseFailure(
                     data: data,
@@ -296,6 +306,13 @@ public enum Parsers {
             var model: String?
             var version: String?
 
+            if fwVer >= 3 && data.count < PacketSize.deviceInfoV3Full {
+                return .parseFailure(
+                    data: data,
+                    reason: "DeviceInfo v\(fwVer) response too short: \(data.count) < \(PacketSize.deviceInfoV3Full)"
+                )
+            }
+
             // v3+ format: fwBuild=12, model=40, version=20 bytes
             if fwVer >= 3 && data.count >= PacketSize.deviceInfoV3Full {
                 maxContacts = Int(data[offset]) * 2  /// Stored as count/2 in firmware.
@@ -320,14 +337,26 @@ public enum Parsers {
 
             // v9+: client_repeat byte after version string
             var clientRepeat = false
-            if fwVer >= 9 && data.count > offset {
+            if fwVer >= 9 {
+                guard data.count > offset else {
+                    return .parseFailure(
+                        data: data,
+                        reason: "DeviceInfo v\(fwVer) missing client_repeat byte"
+                    )
+                }
                 clientRepeat = data[offset] != 0
                 offset += 1
             }
 
             // v10+: path_hash_mode byte after client_repeat
             var pathHashMode: UInt8 = 0
-            if fwVer >= 10 && data.count > offset {
+            if fwVer >= 10 {
+                guard data.count > offset else {
+                    return .parseFailure(
+                        data: data,
+                        reason: "DeviceInfo v\(fwVer) missing pathHashMode byte"
+                    )
+                }
                 pathHashMode = data[offset]
             }
 
@@ -391,7 +420,13 @@ public enum Parsers {
             let timestamp = Date(timeIntervalSince1970: TimeInterval(data.readUInt32LE(at: offset))); offset += 4
 
             var signature: Data?
-            if txtType == 2 && data.count >= offset + 4 {
+            if txtType == 2 {
+                guard data.count >= offset + 4 else {
+                    return .parseFailure(
+                        data: data,
+                        reason: "ContactMessage signature truncated: \(data.count) < \(offset + 4)"
+                    )
+                }
                 signature = Data(data[offset..<offset+4]); offset += 4
             }
 
@@ -596,8 +631,9 @@ public enum Parsers {
         /// - Offset 47 (2 bytes): Full events counter
         /// - Offset 49 (2 bytes): Last SNR scaled by 4 (Int16 LE)
         /// - Offset 51 (4 bytes): Duplicate counters
-        /// - Offset 55 (4 bytes): Receive airtime
-        static func parse(_ data: Data) -> MeshEvent {
+        /// - Offset 55 (4 bytes): Repeater: Rx airtime (UInt32 LE); Room server: posted count (UInt16 LE) + post-push count (UInt16 LE)
+        /// - Offset 59 (4 bytes): Repeater only: Receive errors (UInt32 LE, optional)
+        static func parse(_ data: Data, layout: MeshCore.StatusResponse.Layout = .repeater) -> MeshEvent {
             guard data.count >= PacketSize.statusResponseMinimum else {
                 return .parseFailure(
                     data: data,
@@ -624,30 +660,65 @@ public enum Parsers {
             let lastSNR = Double(data.readInt16LE(at: offset)) / 4.0; offset += 2
             let directDups = Int(data.readUInt16LE(at: offset)); offset += 2
             let floodDups = Int(data.readUInt16LE(at: offset)); offset += 2
-            let rxAirtime = data.readUInt32LE(at: offset); offset += 4
-            let receiveErrors: UInt32 = data.count >= offset + 4 ? data.readUInt32LE(at: offset) : 0
+            switch layout {
+            case .repeater:
+                let rxAirtime = data.readUInt32LE(at: offset); offset += 4
+                let receiveErrors: UInt32 = data.count >= offset + 4 ? data.readUInt32LE(at: offset) : 0
 
-            return .statusResponse(MeshCore.StatusResponse(
-                publicKeyPrefix: pubkeyPrefix,
-                battery: battery,
-                txQueueLength: txQueueLen,
-                noiseFloor: noiseFloor,
-                lastRSSI: lastRSSI,
-                packetsReceived: packetsRecv,
-                packetsSent: packetsSent,
-                airtime: airtime,
-                uptime: uptime,
-                sentFlood: sentFlood,
-                sentDirect: sentDirect,
-                receivedFlood: recvFlood,
-                receivedDirect: recvDirect,
-                fullEvents: fullEvents,
-                lastSNR: lastSNR,
-                directDuplicates: directDups,
-                floodDuplicates: floodDups,
-                rxAirtime: rxAirtime,
-                receiveErrors: receiveErrors
-            ))
+                return .statusResponse(MeshCore.StatusResponse(
+                    layout: .repeater,
+                    publicKeyPrefix: pubkeyPrefix,
+                    battery: battery,
+                    txQueueLength: txQueueLen,
+                    noiseFloor: noiseFloor,
+                    lastRSSI: lastRSSI,
+                    packetsReceived: packetsRecv,
+                    packetsSent: packetsSent,
+                    airtime: airtime,
+                    uptime: uptime,
+                    sentFlood: sentFlood,
+                    sentDirect: sentDirect,
+                    receivedFlood: recvFlood,
+                    receivedDirect: recvDirect,
+                    fullEvents: fullEvents,
+                    lastSNR: lastSNR,
+                    directDuplicates: directDups,
+                    floodDuplicates: floodDups,
+                    rxAirtime: rxAirtime,
+                    receiveErrors: receiveErrors
+                ))
+
+            case .roomServer:
+                let postedCount: UInt16? = data.count >= offset + 4
+                    ? data.readUInt16LE(at: offset) : nil
+                let postPushCount: UInt16? = data.count >= offset + 4
+                    ? data.readUInt16LE(at: offset + 2) : nil
+
+                return .statusResponse(MeshCore.StatusResponse(
+                    layout: .roomServer,
+                    publicKeyPrefix: pubkeyPrefix,
+                    battery: battery,
+                    txQueueLength: txQueueLen,
+                    noiseFloor: noiseFloor,
+                    lastRSSI: lastRSSI,
+                    packetsReceived: packetsRecv,
+                    packetsSent: packetsSent,
+                    airtime: airtime,
+                    uptime: uptime,
+                    sentFlood: sentFlood,
+                    sentDirect: sentDirect,
+                    receivedFlood: recvFlood,
+                    receivedDirect: recvDirect,
+                    fullEvents: fullEvents,
+                    lastSNR: lastSNR,
+                    directDuplicates: directDups,
+                    floodDuplicates: floodDups,
+                    rxAirtime: 0,
+                    receiveErrors: 0,
+                    roomServerPostedCount: postedCount,
+                    roomServerPostPushCount: postPushCount
+                ))
+            }
         }
 
         /// Parses status data from a BINARY_RESPONSE (0x8C) payload.
@@ -677,7 +748,11 @@ public enum Parsers {
         ///   - data: Raw binary response payload (without the 4-byte tag).
         ///   - publicKeyPrefix: The 6-byte public key prefix from the pending request context.
         /// - Returns: A `StatusResponse` if parsing succeeds, `nil` otherwise.
-        static func parseFromBinaryResponse(_ data: Data, publicKeyPrefix: Data) -> MeshCore.StatusResponse? {
+        static func parseFromBinaryResponse(
+            _ data: Data,
+            publicKeyPrefix: Data,
+            layout: MeshCore.StatusResponse.Layout = .repeater
+        ) -> MeshCore.StatusResponse? {
             // Accept exactly 48 (no rxAirtime), 52 (with rxAirtime), or 56+ (with receiveErrors).
             // Reject malformed payloads with incomplete fields (49-51, 53-55).
             guard data.count == PacketSize.binaryResponseStatusBase ||
@@ -701,33 +776,68 @@ public enum Parsers {
             let lastSNR = Double(data.readInt16LE(at: offset)) / 4.0; offset += 2
             let directDups = Int(data.readUInt16LE(at: offset)); offset += 2
             let floodDups = Int(data.readUInt16LE(at: offset)); offset += 2
-            let rxAirtime: UInt32 = data.count >= PacketSize.binaryResponseStatusWithRxAirtime
-                ? data.readUInt32LE(at: offset) : 0
-            offset += 4
-            let receiveErrors: UInt32 = data.count >= PacketSize.binaryResponseStatusWithReceiveErrors
-                ? data.readUInt32LE(at: offset) : 0
+            switch layout {
+            case .repeater:
+                let rxAirtime: UInt32 = data.count >= PacketSize.binaryResponseStatusWithRxAirtime
+                    ? data.readUInt32LE(at: offset) : 0
+                offset += 4
+                let receiveErrors: UInt32 = data.count >= PacketSize.binaryResponseStatusWithReceiveErrors
+                    ? data.readUInt32LE(at: offset) : 0
 
-            return MeshCore.StatusResponse(
-                publicKeyPrefix: publicKeyPrefix,
-                battery: battery,
-                txQueueLength: txQueueLen,
-                noiseFloor: noiseFloor,
-                lastRSSI: lastRSSI,
-                packetsReceived: packetsRecv,
-                packetsSent: packetsSent,
-                airtime: airtime,
-                uptime: uptime,
-                sentFlood: sentFlood,
-                sentDirect: sentDirect,
-                receivedFlood: recvFlood,
-                receivedDirect: recvDirect,
-                fullEvents: fullEvents,
-                lastSNR: lastSNR,
-                directDuplicates: directDups,
-                floodDuplicates: floodDups,
-                rxAirtime: rxAirtime,
-                receiveErrors: receiveErrors
-            )
+                return MeshCore.StatusResponse(
+                    layout: .repeater,
+                    publicKeyPrefix: publicKeyPrefix,
+                    battery: battery,
+                    txQueueLength: txQueueLen,
+                    noiseFloor: noiseFloor,
+                    lastRSSI: lastRSSI,
+                    packetsReceived: packetsRecv,
+                    packetsSent: packetsSent,
+                    airtime: airtime,
+                    uptime: uptime,
+                    sentFlood: sentFlood,
+                    sentDirect: sentDirect,
+                    receivedFlood: recvFlood,
+                    receivedDirect: recvDirect,
+                    fullEvents: fullEvents,
+                    lastSNR: lastSNR,
+                    directDuplicates: directDups,
+                    floodDuplicates: floodDups,
+                    rxAirtime: rxAirtime,
+                    receiveErrors: receiveErrors
+                )
+
+            case .roomServer:
+                let postedCount: UInt16? = data.count >= PacketSize.binaryResponseStatusWithRxAirtime
+                    ? data.readUInt16LE(at: offset) : nil
+                let postPushCount: UInt16? = data.count >= PacketSize.binaryResponseStatusWithRxAirtime
+                    ? data.readUInt16LE(at: offset + 2) : nil
+
+                return MeshCore.StatusResponse(
+                    layout: .roomServer,
+                    publicKeyPrefix: publicKeyPrefix,
+                    battery: battery,
+                    txQueueLength: txQueueLen,
+                    noiseFloor: noiseFloor,
+                    lastRSSI: lastRSSI,
+                    packetsReceived: packetsRecv,
+                    packetsSent: packetsSent,
+                    airtime: airtime,
+                    uptime: uptime,
+                    sentFlood: sentFlood,
+                    sentDirect: sentDirect,
+                    receivedFlood: recvFlood,
+                    receivedDirect: recvDirect,
+                    fullEvents: fullEvents,
+                    lastSNR: lastSNR,
+                    directDuplicates: directDups,
+                    floodDuplicates: floodDups,
+                    rxAirtime: 0,
+                    receiveErrors: 0,
+                    roomServerPostedCount: postedCount,
+                    roomServerPostPushCount: postPushCount
+                )
+            }
         }
     }
 
@@ -1324,7 +1434,19 @@ public enum Parsers {
 
             let timestamp = data.readUInt32LE(at: 0)
             let pathLen = data[4]
-            let byteLen = decodePathLen(pathLen)?.byteLength ?? 0
+            guard let decoded = decodePathLen(pathLen) else {
+                return .parseFailure(
+                    data: data,
+                    reason: "AdvertPathResponse uses reserved path length encoding: 0x\(String(format: "%02X", pathLen))"
+                )
+            }
+            let byteLen = decoded.byteLength
+            guard data.count >= 5 + byteLen else {
+                return .parseFailure(
+                    data: data,
+                    reason: "AdvertPathResponse path truncated: \(data.count) < \(5 + byteLen)"
+                )
+            }
             let path = Data(data.dropFirst(5).prefix(byteLen))
 
             return .advertPathResponse(MeshCore.AdvertPathResponse(
@@ -1605,5 +1727,35 @@ enum NeighboursParser {
             totalCount: totalCount,
             neighbours: neighbours
         )
+    }
+}
+
+// MARK: - Regions Parser
+
+enum RegionsParser {
+    /// Parses a region query response from binary response data.
+    ///
+    /// The response data layout (after the binary response parser strips the frame header):
+    /// - Offset 0–3 (4 bytes): Repeater timestamp (UInt32 LE) — skipped
+    /// - Offset 4+ (variable): Comma-separated UTF-8 region names
+    ///
+    /// The sender timestamp (4 bytes) is already consumed as the tag by the binary response parser.
+    ///
+    /// - Parameter responseData: The `data` field from `.binaryResponse(tag:data:)`.
+    /// - Returns: An array of region name strings. Empty array if no regions are configured.
+    /// - Throws: ``MeshCoreError/parseError(_:)`` if the response is too short or not valid UTF-8.
+    static func parse(_ responseData: Data) throws -> [String] {
+        guard responseData.count >= 4 else {
+            throw MeshCoreError.parseError("Region response too short (\(responseData.count) bytes)")
+        }
+        let regionData = responseData.dropFirst(4)
+        guard let regionString = String(data: regionData, encoding: .utf8) else {
+            throw MeshCoreError.parseError("Invalid UTF-8 in region response")
+        }
+        let trimmed = regionString.trimmingCharacters(in: .controlCharacters)
+        if trimmed.isEmpty { return [] }
+        return trimmed.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0 != "*" }
     }
 }

@@ -6,12 +6,16 @@ import SwiftUI
 struct NavigationHeaderModifier: ViewModifier {
     let title: String
     let subtitle: String
+    let subtitleAccessibilityLabel: String?
 
     @State private var showHeader = false
 
     func body(content: Content) -> some View {
         #if os(iOS)
         if #available(iOS 26, *) {
+            // TODO: subtitleAccessibilityLabel is not applied here — .navigationSubtitle()
+            // renders in system chrome with no public API to override its accessibility label.
+            // VoiceOver may read separators (e.g. "·") literally. Verify with VoiceOver testing.
             content
                 .navigationTitle(title)
                 .navigationSubtitle(subtitle)
@@ -40,6 +44,7 @@ struct NavigationHeaderModifier: ViewModifier {
                             Text(subtitle)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .accessibilityLabel(subtitleAccessibilityLabel ?? subtitle)
                         }
                     }
                 }
@@ -56,7 +61,7 @@ struct NavigationHeaderModifier: ViewModifier {
 extension View {
     /// Applies an animated navigation header with title and subtitle.
     /// Uses native `.navigationSubtitle()` on iOS 26+, with animated fallback for earlier versions.
-    func navigationHeader(title: String, subtitle: String) -> some View {
-        modifier(NavigationHeaderModifier(title: title, subtitle: subtitle))
+    func navigationHeader(title: String, subtitle: String, subtitleAccessibilityLabel: String? = nil) -> some View {
+        modifier(NavigationHeaderModifier(title: title, subtitle: subtitle, subtitleAccessibilityLabel: subtitleAccessibilityLabel))
     }
 }

@@ -503,7 +503,7 @@ private struct ActionsExpandedContent: View {
                 repeats: repeats,
                 contacts: contacts,
                 discoveredNodes: discoveredNodes,
-                userLocation: messageLocation ?? appState.locationService.currentLocation
+                userLocation: messageLocation ?? appState.bestAvailableLocation
             )
 
             if let repeats, !repeats.isEmpty {
@@ -590,7 +590,7 @@ private struct ActionsExpandedContent: View {
                 message: message,
                 viewModel: pathViewModel,
                 receiverName: appState.connectedDevice?.nodeName ?? L10n.Chats.Chats.Path.Receiver.you,
-                userLocation: messageLocation ?? appState.locationService.currentLocation,
+                userLocation: messageLocation ?? appState.bestAvailableLocation,
                 onReplyWithRoute: onReplyWithRoute
             )
         }
@@ -782,19 +782,7 @@ private struct ActionsIncomingDetailsRows: View {
     }
 
     private func snrFormatted(_ snr: Double) -> String {
-        let quality: String
-        switch snr {
-        case 10...:
-            quality = L10n.Chats.Chats.Signal.excellent
-        case 5..<10:
-            quality = L10n.Chats.Chats.Signal.good
-        case 0..<5:
-            quality = L10n.Chats.Chats.Signal.fair
-        case -10..<0:
-            quality = L10n.Chats.Chats.Signal.poor
-        default:
-            quality = L10n.Chats.Chats.Signal.veryPoor
-        }
+        let quality = SNRQuality(snr: snr).localizedLabel
         return "\(snr.formatted(.number.precision(.fractionLength(1)))) dB (\(quality))"
     }
 

@@ -198,7 +198,8 @@ extension PersistenceStore {
                 unreadCount: dto.unreadCount,
                 unreadMentionCount: dto.unreadMentionCount,
                 notificationLevel: dto.notificationLevel,
-                isFavorite: dto.isFavorite
+                isFavorite: dto.isFavorite,
+                regionScope: dto.regionScope
             )
             modelContext.insert(channel)
         }
@@ -333,6 +334,21 @@ extension PersistenceStore {
         }
 
         channel.isFavorite = isFavorite
+        try modelContext.save()
+    }
+
+    /// Sets the region scope for a channel
+    public func setChannelRegionScope(_ channelID: UUID, regionScope: String?) throws {
+        let targetID = channelID
+        let predicate = #Predicate<Channel> { $0.id == targetID }
+        var descriptor = FetchDescriptor<Channel>(predicate: predicate)
+        descriptor.fetchLimit = 1
+
+        guard let channel = try modelContext.fetch(descriptor).first else {
+            throw PersistenceStoreError.channelNotFound
+        }
+
+        channel.regionScope = regionScope
         try modelContext.save()
     }
 }

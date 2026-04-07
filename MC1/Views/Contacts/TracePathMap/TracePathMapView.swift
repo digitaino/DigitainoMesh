@@ -45,13 +45,15 @@ struct TracePathMapView: View {
         .onAppear {
             mapViewModel.configure(
                 traceViewModel: traceViewModel,
-                userLocation: appState.locationService.currentLocation
+                userLocation: appState.bestAvailableLocation
             )
             mapViewModel.rebuildOverlays()
             mapViewModel.performInitialCentering()
         }
-        .onChange(of: appState.locationService.currentLocation) { _, newLocation in
-            mapViewModel.updateUserLocation(newLocation)
+        .onChange(of: appState.bestAvailableLocation) { old, new in
+            guard old?.coordinate.latitude != new?.coordinate.latitude
+               || old?.coordinate.longitude != new?.coordinate.longitude else { return }
+            mapViewModel.updateUserLocation(new)
         }
         .onChange(of: traceViewModel.availableNodes) { _, _ in
             if !mapViewModel.hasInitiallyCenteredOnRepeaters && !mapViewModel.repeatersWithLocation.isEmpty {
@@ -239,7 +241,7 @@ struct TracePathMapView: View {
                 Spacer()
                 MapControlsToolbar(
                     onLocationTap: {
-                        if let location = appState.locationService.currentLocation {
+                        if let location = appState.bestAvailableLocation {
                             mapViewModel.cameraRegion = MKCoordinateRegion(
                                 center: location.coordinate,
                                 span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
