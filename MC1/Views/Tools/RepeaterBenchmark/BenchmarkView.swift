@@ -276,22 +276,22 @@ private struct BenchmarkTargetRow: View {
                     if let tx = targetResult.txSNR {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.up.circle.fill")
-                                .foregroundStyle(TraceHop.signalColor(for: tx))
+                                .foregroundStyle(SNRQuality(snr: tx).color)
                             StatLabel(
                                 title: "TX",
                                 value: String(format: "%.1f dB", tx),
-                                color: TraceHop.signalColor(for: tx)
+                                color: SNRQuality(snr: tx).color
                             )
                         }
                     }
                     if let rx = targetResult.rxSNR {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.down.circle.fill")
-                                .foregroundStyle(TraceHop.signalColor(for: rx))
+                                .foregroundStyle(SNRQuality(snr: rx).color)
                             StatLabel(
                                 title: "RX",
                                 value: String(format: "%.1f dB", rx),
-                                color: TraceHop.signalColor(for: rx)
+                                color: SNRQuality(snr: rx).color
                             )
                         }
                     }
@@ -362,7 +362,7 @@ private struct BenchmarkTargetRow: View {
             if !hop.isStartNode && !hop.isEndNode {
                 Text(String(format: "%.1f", hop.snr))
                     .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(TraceHop.signalColor(for: hop.snr))
+                    .foregroundStyle(SNRQuality(snr: hop.snr).color)
             }
         }
     }

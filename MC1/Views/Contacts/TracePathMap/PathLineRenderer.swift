@@ -42,7 +42,7 @@ final class PathLineRenderer: MKPolylineRenderer {
         case .fair:
             lineWidth = 3
             lineDashPattern = [12, 4]
-        case .poor:
+        case .poor, .veryPoor:
             lineWidth = 3
             lineDashPattern = [4, 4]
         case .unknown:

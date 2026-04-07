@@ -8,7 +8,7 @@ extension SNRQuality {
         switch self {
         case .excellent, .good: .green
         case .fair: .yellow
-        case .poor: .red
+        case .poor, .veryPoor: .red
         case .unknown: .secondary
         }
     }
@@ -20,6 +20,7 @@ extension SNRQuality {
         case .good: .systemYellow
         case .fair: .systemOrange
         case .poor: .systemRed
+        case .veryPoor: UIColor(red: 0.600, green: 0.106, blue: 0.106, alpha: 1)
         case .unknown: .systemGray
         }
     }
@@ -31,6 +32,7 @@ extension SNRQuality {
         case .good: L10n.Chats.Chats.Signal.good
         case .fair: L10n.Chats.Chats.Signal.fair
         case .poor: L10n.Chats.Chats.Signal.poor
+        case .veryPoor: L10n.Chats.Chats.Signal.veryPoor
         case .unknown: L10n.Chats.Chats.Path.Hop.signalUnknown
         }
     }

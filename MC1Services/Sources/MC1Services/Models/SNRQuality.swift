@@ -5,7 +5,8 @@ public enum SNRQuality: Sendable, Equatable {
     case excellent  // SNR > +6 dB
     case good       // SNR > +0 dB
     case fair       // SNR > -6 dB
-    case poor       // SNR <= -6 dB
+    case poor       // SNR > -10 dB
+    case veryPoor   // SNR <= -10 dB
     case unknown    // nil SNR
 
     public init(snr: Double?) {
@@ -16,7 +17,8 @@ public enum SNRQuality: Sendable, Equatable {
         if snr > 6 { self = .excellent }
         else if snr > 0 { self = .good }
         else if snr > -6 { self = .fair }
-        else { self = .poor }
+        else if snr > -10 { self = .poor }
+        else { self = .veryPoor }
     }
 
     /// Bar level for SF Symbol `cellularbars` variableValue (0–1).
@@ -26,6 +28,7 @@ public enum SNRQuality: Sendable, Equatable {
         case .good: 0.75
         case .fair: 0.5
         case .poor: 0.25
+        case .veryPoor: 0.1
         case .unknown: 0
         }
     }
@@ -37,6 +40,7 @@ public enum SNRQuality: Sendable, Equatable {
         case .good: "Good"
         case .fair: "Fair"
         case .poor: "Weak"
+        case .veryPoor: "Very Poor"
         case .unknown: "Unknown"
         }
     }
