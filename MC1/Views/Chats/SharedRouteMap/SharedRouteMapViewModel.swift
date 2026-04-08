@@ -124,7 +124,7 @@ final class SharedRouteMapViewModel {
         hasLocatedHops = locatedPoints.count >= 1
 
         // Build line overlays between consecutive located points
-        for i in 0..<(locatedPoints.count - 1) {
+        for i in 0..<max(0, locatedPoints.count - 1) {
             let nextPoint = locatedPoints[i + 1]
             let quality: PathLineOverlay.SignalQuality = nextPoint.hasGap ? .gap : .untraced
 

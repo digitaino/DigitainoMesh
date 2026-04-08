@@ -1,4 +1,14 @@
-Beta Changes -- v0.10.1 (Build 19)
+Beta Changes -- v0.10.1 (Build 20)
+
+Path Map Crash Fix
+
+Fixed a crash when opening a shared route map or path map where no hops could be geo-located. The app would crash with "Range requires lowerBound <= upperBound" because the line overlay loop underflowed when the located points array was empty. Applied the same defensive fix to the heard repeats map.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 19)
 
 Human-Readable Reaction Wire Format
 

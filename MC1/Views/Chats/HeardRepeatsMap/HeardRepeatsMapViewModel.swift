@@ -296,7 +296,7 @@ final class HeardRepeatsMapViewModel {
             }
 
             // Draw outbound chain: consecutive hops
-            for i in 0..<(resolved.hops.count - 1) {
+            for i in 0..<max(0, resolved.hops.count - 1) {
                 let overlay = PathLineOverlay.line(
                     from: resolved.hops[i].coordinate,
                     to: resolved.hops[i + 1].coordinate,
