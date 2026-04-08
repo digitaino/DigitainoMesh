@@ -75,8 +75,7 @@ extension SyncCoordinator {
                 services: services,
                 channelIndex: nil,
                 senderTimestamp: timestamp,
-                defaultPathLength: message.pathLength,
-                contactName: contact?.displayName
+                defaultPathLength: message.pathLength
             )
 
             // Use content-based key for dedup (stable across retry attempts).
@@ -126,6 +125,12 @@ extension SyncCoordinator {
                 senderTimestamp: timestampCorrected ? timestamp : nil
             )
 
+            // Request background GPS patch for this message
+            let patchHandler = await self.locationPatchHandler
+            if let patchHandler {
+                Task { await patchHandler(messageDTO.id) }
+            }
+
             // Check for duplicate before saving
             do {
                 if try await services.dataStore.isDuplicateMessage(deduplicationKey: deduplicationKey) {
@@ -149,12 +154,6 @@ extension SyncCoordinator {
 
             do {
                 try await services.dataStore.saveMessage(messageDTO)
-
-                // Request background GPS patch for this message
-                let patchHandler = await self.locationPatchHandler
-                if let patchHandler {
-                    Task { await patchHandler(messageDTO.id) }
-                }
 
                 // Index DM message for reaction targeting
                 if let contact {
@@ -218,24 +217,6 @@ extension SyncCoordinator {
         await services.messagePollingService.setChannelMessageHandler { [weak self] message, channel in
             guard let self else { return }
 
-            // Log every channel message at info level to help diagnose delivery issues
-            self.logger.info("Channel message received: chIdx=\(message.channelIndex), channel='\(channel?.name ?? "nil")', rawPayload=\(message.rawPayload.count)B, text=\(message.text.prefix(60))")
-
-            // Notify debug observer (Weather Log tool)
-            await self.channelMessageDebugObserver?(channel?.name)
-
-            // Intercept MeshWX data channels — route to weather handler, don't store as chat.
-            // Matches #meshwx (primary protocol channel) and legacy *wx-broadcast channels.
-            if let channel, Self.isWeatherDataChannel(channel.name) {
-                self.logger.info("MeshWX channel message intercepted: '\(channel.name)', rawPayload=\(message.rawPayload.count) bytes, text=\(message.text.prefix(40))")
-                if let handler = await self.weatherMessageHandler {
-                    await handler(message)
-                } else {
-                    self.logger.warning("MeshWX handler not wired — dropping weather message")
-                }
-                return
-            }
-
             // Parse "NodeName: text" format for sender name
             let (senderNodeName, messageText) = Self.parseChannelMessage(message.text)
 
@@ -256,20 +237,37 @@ extension SyncCoordinator {
                 defaultPathLength: message.pathLength
             )
 
+            // Log every channel message at info level to help diagnose delivery issues
+            self.logger.info("Channel message received: chIdx=\(message.channelIndex), channel='\(channel?.name ?? "nil")', rawPayload=\(message.rawPayload.count)B, text=\(message.text.prefix(60))")
+
+            // Notify debug observer (Weather Log tool)
+            await self.channelMessageDebugObserver?(channel?.name)
+
+            // Intercept MeshWX data channels — route to weather handler, don't store as chat.
+            if let channel, Self.isWeatherDataChannel(channel.name) {
+                self.logger.info("MeshWX channel message intercepted: '\(channel.name)', rawPayload=\(message.rawPayload.count) bytes, text=\(message.text.prefix(40))")
+                if let handler = await self.weatherMessageHandler {
+                    await handler(message)
+                } else {
+                    self.logger.warning("MeshWX handler not wired — dropping weather message")
+                }
+                return
+            }
+
             // Use content-based key for dedup (stable across retry attempts).
             let deduplicationKey = Self.fallbackDeduplicationKey(
                 contactID: nil, channelIndex: message.channelIndex,
                 senderNodeName: senderNodeName, timestamp: timestamp, content: messageText
             )
 
+            // Capture the phone's current GPS so route maps show where the user was
+            let userLoc = await self.userLocationProvider?()
+
             // Check for self-mention before creating DTO
             // Filter out messages where user mentions themselves
             let hasSelfMention = !selfNodeName.isEmpty &&
                 senderNodeName != selfNodeName &&
                 MentionUtilities.containsSelfMention(in: messageText, selfName: selfNodeName)
-
-            // Capture the phone's current GPS so route maps show where the user was
-            let userLoc = await self.userLocationProvider?()
 
             let messageDTO = MessageDTO(
                 id: UUID(),
@@ -303,6 +301,12 @@ extension SyncCoordinator {
                 senderTimestamp: timestampCorrected ? timestamp : nil
             )
 
+            // Request background GPS patch for this message
+            let chPatchHandler = await self.locationPatchHandler
+            if let chPatchHandler {
+                Task { await chPatchHandler(messageDTO.id) }
+            }
+
             // Check for duplicate before saving
             do {
                 if try await services.dataStore.isDuplicateMessage(deduplicationKey: deduplicationKey) {
@@ -333,12 +337,6 @@ extension SyncCoordinator {
 
             do {
                 try await services.dataStore.saveMessage(messageDTO)
-
-                // Request background GPS patch for this message
-                let patchHandler = await self.locationPatchHandler
-                if let patchHandler {
-                    Task { await patchHandler(messageDTO.id) }
-                }
 
                 // Index message for reaction matching and process any pending reactions
                 // Use original timestamp for indexing so pending reactions can match
@@ -447,7 +445,11 @@ extension SyncCoordinator {
             guard let self else { return }
 
             if let contact {
-                await services.repeaterAdminService.invokeCLIHandler(message, fromContact: contact)
+                if contact.type == .room {
+                    await services.roomAdminService.invokeCLIHandler(message, fromContact: contact)
+                } else {
+                    await services.repeaterAdminService.invokeCLIHandler(message, fromContact: contact)
+                }
             } else {
                 self.logger.warning("Dropping CLI response: no contact found for sender")
             }
@@ -497,51 +499,38 @@ extension SyncCoordinator {
         services: ServiceContainer,
         channelIndex: UInt8?,
         senderTimestamp: UInt32,
-        defaultPathLength: UInt8,
-        contactName: String? = nil
+        defaultPathLength: UInt8
     ) async -> RxLogLookupResult {
         if let channelIndex {
             logger.debug("Looking up RxLogEntry for channel \(channelIndex) with senderTimestamp: \(senderTimestamp)")
         }
 
-        // Try up to 2 times for channel messages — the RxLogEntry may not have
-        // been persisted yet when the message handler fires (race condition
-        // between the RxLog event stream and the message polling pipeline).
-        let maxAttempts = channelIndex != nil ? 2 : 1
-
-        for attempt in 1...maxAttempts {
-            do {
-                if let rxEntry = try await services.dataStore.findRxLogEntry(
-                    channelIndex: channelIndex,
-                    senderTimestamp: senderTimestamp,
-                    withinSeconds: 10,
-                    contactName: contactName
-                ) {
-                    let pathLength = rxEntry.pathLength
-                    let pathNodes = rxEntry.pathNodes
-                    if channelIndex != nil {
-                        logger.info("Correlated channel message to RxLogEntry (attempt \(attempt)): pathLength=\(pathLength), pathNodes=\(pathNodes.count) bytes")
-                    } else {
-                        logger.debug("Correlated incoming direct message to RxLogEntry, pathLength: \(pathLength), pathNodes: \(pathNodes.count) bytes")
-                    }
-                    return RxLogLookupResult(pathNodes: pathNodes, pathLength: pathLength, packetHash: rxEntry.packetHash)
-                } else if attempt < maxAttempts {
-                    // Wait briefly for the RxLog entry to be persisted
-                    try await Task.sleep(for: .milliseconds(200))
-                } else {
-                    if channelIndex != nil {
-                        logger.warning("No RxLogEntry found for channel \(channelIndex!), senderTimestamp: \(senderTimestamp) after \(maxAttempts) attempts")
-                    } else {
-                        logger.debug("No RxLogEntry found for direct message from \(contactName ?? "unknown")")
-                    }
-                }
-            } catch {
+        do {
+            if let rxEntry = try await services.dataStore.findRxLogEntry(
+                channelIndex: channelIndex,
+                senderTimestamp: senderTimestamp,
+                withinSeconds: 10
+            ) {
+                let pathLength = rxEntry.pathLength
+                let pathNodes = rxEntry.pathNodes
                 if channelIndex != nil {
-                    logger.error("Failed to lookup RxLogEntry for channel message: \(error)")
+                    logger.info("Correlated channel message to RxLogEntry: pathLength=\(pathLength), pathNodes=\(pathNodes.count) bytes")
                 } else {
-                    logger.error("Failed to lookup RxLogEntry for direct message: \(error)")
+                    logger.debug("Correlated incoming direct message to RxLogEntry, pathLength: \(pathLength), pathNodes: \(pathNodes.count) bytes")
                 }
-                break
+                return RxLogLookupResult(pathNodes: pathNodes, pathLength: pathLength, packetHash: rxEntry.packetHash)
+            } else {
+                if channelIndex != nil {
+                    logger.warning("No RxLogEntry found for channel \(channelIndex!), senderTimestamp: \(senderTimestamp)")
+                } else {
+                    logger.debug("No RxLogEntry found for direct message, senderTimestamp: \(senderTimestamp)")
+                }
+            }
+        } catch {
+            if channelIndex != nil {
+                logger.error("Failed to lookup RxLogEntry for channel message: \(error)")
+            } else {
+                logger.error("Failed to lookup RxLogEntry for direct message: \(error)")
             }
         }
 
@@ -1115,37 +1104,6 @@ extension SyncCoordinator {
         return true
     }
 
-    /// Returns true if the channel name is a MeshWX binary data channel.
-    /// Matches `meshwx`, `*wx-broadcast`, `*meshwx-discover`, and `*-meshwx-v4` channels.
-    public nonisolated static func isWeatherDataChannel(_ name: String) -> Bool {
-        let lower = name.lowercased()
-        return lower == "meshwx"
-            || lower.hasSuffix("wx-broadcast")
-            || lower.hasSuffix("meshwx-discover")
-            || lower.hasSuffix("-meshwx-v4")
-    }
-
-    /// Returns true if the channel name is the MeshWX discovery channel.
-    public nonisolated static func isDiscoveryChannel(_ name: String) -> Bool {
-        name.lowercased().hasSuffix("meshwx-discover")
-    }
-
-    /// Returns true if the channel name is a MeshWX system channel that should be hidden
-    /// from the chat list. Includes both the binary broadcast channel and bot command channels.
-    /// - Parameters:
-    ///   - name: Channel name to check.
-    ///   - commandChannelName: The configured wx bot command channel name (e.g. "#digitaino-wx-bot").
-    public nonisolated static func isWeatherSystemChannel(_ name: String, commandChannelName: String) -> Bool {
-        guard !name.isEmpty else { return false }
-        let lower = name.lowercased()
-        // Discovery channel stays visible in the chat list so the user can confirm it was added
-        if isDiscoveryChannel(name) { return false }
-        return isWeatherDataChannel(name)
-            || lower == commandChannelName.lowercased()
-            || lower.hasSuffix("-wx-bot")
-            || lower == "wx-bot"
-    }
-
     nonisolated static func fallbackDeduplicationKey(
         contactID: UUID?,
         channelIndex: UInt8?,
@@ -1169,5 +1127,14 @@ extension SyncCoordinator {
             return (senderName, messageText)
         }
         return (nil, text)
+    }
+
+    public nonisolated static func isWeatherDataChannel(_ name: String) -> Bool {
+        let lowered = name.lowercased()
+        return lowered.hasSuffix("wx-broadcast") || lowered == "#meshwx" || lowered == "meshwx"
+    }
+
+    public nonisolated static func isWeatherRelatedChannel(_ name: String) -> Bool {
+        return isWeatherDataChannel(name)
     }
 }
