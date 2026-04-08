@@ -113,43 +113,31 @@ extension ConnectionManager: BLEReconnectionDelegate {
             return
         }
 
-        let newServices = ServiceContainer(
+        let newServices = try await buildServicesAndSaveDevice(
+            deviceID: deviceID,
             session: newSession,
-            modelContainer: modelContainer,
-            appStateProvider: appStateProvider
+            selfInfo: selfInfo,
+            capabilities: capabilities
         )
-        await newServices.wireServices()
-        await wireCleanChannelSyncCallback(on: newServices)
 
-        // Check after await
+        // Check after await — user may have disconnected or new reconnect cycle started
         guard connectionIntent.wantsConnection else {
             logger.info("User disconnected during service wiring")
             await newSession.stop()
+            services = nil
+            connectedDevice = nil
+            allowedRepeatFreqRanges = []
             connectionState = .disconnected
             return
         }
         guard reconnectionCoordinator.reconnectGeneration == expectedGeneration else {
             logger.info("[BLE] rebuildSession superseded by new reconnect cycle during service wiring")
             await newSession.stop()
+            services = nil
+            connectedDevice = nil
+            allowedRepeatFreqRanges = []
             return
         }
-
-        self.services = newServices
-
-        // Fetch existing device and auto-add config concurrently (independent operations)
-        async let existingDeviceResult = newServices.dataStore.fetchDevice(id: deviceID)
-        async let autoAddConfigResult = newSession.getAutoAddConfig()
-        let existingDevice = try? await existingDeviceResult
-        let autoAddConfig = (try? await autoAddConfigResult) ?? MeshCore.AutoAddConfig(bitmask: 0)
-
-        let repeatFreqRanges: [MeshCore.FrequencyRange] = capabilities.clientRepeat
-            ? (try? await newSession.getRepeatFreq()) ?? []
-            : []
-
-        let device = createDevice(deviceID: deviceID, selfInfo: selfInfo, capabilities: capabilities, autoAddConfig: autoAddConfig, existingDevice: existingDevice)
-        try await newServices.dataStore.saveDevice(DeviceDTO(from: device))
-        self.connectedDevice = DeviceDTO(from: device)
-        self.allowedRepeatFreqRanges = repeatFreqRanges
 
         // Notify observers BEFORE sync starts so they can wire callbacks
         await onConnectionReady?()

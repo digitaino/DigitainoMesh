@@ -201,36 +201,12 @@ extension ConnectionManager {
             throw ConnectionError.initializationFailed("No self info")
         }
 
-        let newServices = ServiceContainer(
-            session: session,
-            modelContainer: modelContainer,
-            appStateProvider: appStateProvider
-        )
-        await newServices.wireServices()
-        await wireCleanChannelSyncCallback(on: newServices)
-        self.services = newServices
-
-        // Fetch existing device and auto-add config concurrently (independent operations)
-        async let existingDeviceResult = newServices.dataStore.fetchDevice(id: deviceID)
-        async let autoAddConfigResult = session.getAutoAddConfig()
-        let existingDevice = try? await existingDeviceResult
-        let autoAddConfig = (try? await autoAddConfigResult) ?? MeshCore.AutoAddConfig(bitmask: 0)
-
-        let repeatFreqRanges: [MeshCore.FrequencyRange] = capabilities.clientRepeat
-            ? (try? await session.getRepeatFreq()) ?? []
-            : []
-
-        let device = createDevice(
+        let newServices = try await buildServicesAndSaveDevice(
             deviceID: deviceID,
+            session: session,
             selfInfo: selfInfo,
-            capabilities: capabilities,
-            autoAddConfig: autoAddConfig,
-            existingDevice: existingDevice
+            capabilities: capabilities
         )
-
-        try await newServices.dataStore.saveDevice(DeviceDTO(from: device))
-        self.connectedDevice = DeviceDTO(from: device)
-        self.allowedRepeatFreqRanges = repeatFreqRanges
 
         // Wire disconnection handler on new transport
         await transport.setDisconnectionHandler { [weak self] error in
@@ -331,42 +307,14 @@ extension ConnectionManager {
             // Derive device ID from public key (WiFi devices don't have Bluetooth UUIDs)
             let deviceID = DeviceIdentity.deriveUUID(from: meshCoreSelfInfo.publicKey)
 
-            // Create services
-            let newServices = ServiceContainer(
-                session: newSession,
-                modelContainer: modelContainer,
-                appStateProvider: appStateProvider
-            )
-            await newServices.wireServices()
-            await wireCleanChannelSyncCallback(on: newServices)
-            self.services = newServices
-
-            // Fetch existing device and auto-add config concurrently (independent operations)
-            async let existingDeviceResult = newServices.dataStore.fetchDevice(id: deviceID)
-            async let autoAddConfigResult = newSession.getAutoAddConfig()
-            let existingDevice = try? await existingDeviceResult
-            let autoAddConfig = (try? await autoAddConfigResult) ?? MeshCore.AutoAddConfig(bitmask: 0)
-
-            let repeatFreqRanges: [MeshCore.FrequencyRange] = deviceCapabilities.clientRepeat
-                ? (try? await newSession.getRepeatFreq()) ?? []
-                : []
-
-            // Create WiFi connection method
             let wifiMethod = ConnectionMethod.wifi(host: host, port: port, displayName: nil)
-
-            // Create and save device
-            let device = createDevice(
+            let newServices = try await buildServicesAndSaveDevice(
                 deviceID: deviceID,
+                session: newSession,
                 selfInfo: meshCoreSelfInfo,
                 capabilities: deviceCapabilities,
-                autoAddConfig: autoAddConfig,
-                existingDevice: existingDevice,
                 connectionMethods: [wifiMethod]
             )
-
-            try await newServices.dataStore.saveDevice(DeviceDTO(from: device))
-            self.connectedDevice = DeviceDTO(from: device)
-            self.allowedRepeatFreqRanges = repeatFreqRanges
 
             // Persist connection for potential future use
             persistConnection(deviceID: deviceID, deviceName: meshCoreSelfInfo.name)

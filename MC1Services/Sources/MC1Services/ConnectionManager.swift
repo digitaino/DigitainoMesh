@@ -874,6 +874,58 @@ public final class ConnectionManager {
         }
     }
 
+    // MARK: - Connection Ceremony
+
+    /// Wires a fresh ServiceContainer, fetches device configuration from the radio
+    /// and database, builds and persists the device record, and updates self.
+    ///
+    /// Each connection path (BLE, WiFi, reconnect, device switch) calls this after
+    /// its transport and session are established. Post-ceremony work (sync, promote,
+    /// cleanup) remains in each caller since it genuinely varies.
+    ///
+    /// - Returns: The wired `ServiceContainer` for the caller's sync phase.
+    func buildServicesAndSaveDevice(
+        deviceID: UUID,
+        session: MeshCoreSession,
+        selfInfo: SelfInfo,
+        capabilities: DeviceCapabilities,
+        connectionMethods: [ConnectionMethod] = []
+    ) async throws -> ServiceContainer {
+        let newServices = ServiceContainer(
+            session: session,
+            modelContainer: modelContainer,
+            appStateProvider: appStateProvider
+        )
+        await newServices.wireServices()
+        await wireCleanChannelSyncCallback(on: newServices)
+        self.services = newServices
+
+        async let existingDeviceResult = newServices.dataStore.fetchDevice(id: deviceID)
+        async let autoAddConfigResult = session.getAutoAddConfig()
+        let existingDevice = try? await existingDeviceResult
+        let autoAddConfig = (try? await autoAddConfigResult) ?? MeshCore.AutoAddConfig(bitmask: 0)
+
+        let repeatFreqRanges: [MeshCore.FrequencyRange] = capabilities.clientRepeat
+            ? (try? await session.getRepeatFreq()) ?? []
+            : []
+
+        let device = createDevice(
+            deviceID: deviceID,
+            selfInfo: selfInfo,
+            capabilities: capabilities,
+            autoAddConfig: autoAddConfig,
+            existingDevice: existingDevice,
+            connectionMethods: connectionMethods
+        )
+
+        let deviceDTO = DeviceDTO(from: device)
+        try await newServices.dataStore.saveDevice(deviceDTO)
+        self.connectedDevice = deviceDTO
+        self.allowedRepeatFreqRanges = repeatFreqRanges
+
+        return newServices
+    }
+
     // MARK: - Sync Throttling
 
     /// Builds a throttling config for the current device and transport.

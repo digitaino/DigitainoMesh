@@ -631,38 +631,12 @@ extension ConnectionManager {
         // Configure BLE write pacing based on device platform
         await configureBLEPacing(for: deviceCapabilities)
 
-        // Create and wire services
-        let newServices = ServiceContainer(
-            session: newSession,
-            modelContainer: modelContainer,
-            appStateProvider: appStateProvider
-        )
-        await newServices.wireServices()
-        await wireCleanChannelSyncCallback(on: newServices)
-        self.services = newServices
-
-        // Fetch existing device and auto-add config concurrently (independent operations)
-        async let existingDeviceResult = newServices.dataStore.fetchDevice(id: deviceID)
-        async let autoAddConfigResult = newSession.getAutoAddConfig()
-        let existingDevice = try? await existingDeviceResult
-        let autoAddConfig = (try? await autoAddConfigResult) ?? MeshCore.AutoAddConfig(bitmask: 0)
-
-        let repeatFreqRanges: [MeshCore.FrequencyRange] = deviceCapabilities.clientRepeat
-            ? (try? await newSession.getRepeatFreq()) ?? []
-            : []
-
-        // Create and save device
-        let device = createDevice(
+        let newServices = try await buildServicesAndSaveDevice(
             deviceID: deviceID,
+            session: newSession,
             selfInfo: meshCoreSelfInfo,
-            capabilities: deviceCapabilities,
-            autoAddConfig: autoAddConfig,
-            existingDevice: existingDevice
+            capabilities: deviceCapabilities
         )
-
-        try await newServices.dataStore.saveDevice(DeviceDTO(from: device))
-        self.connectedDevice = DeviceDTO(from: device)
-        self.allowedRepeatFreqRanges = repeatFreqRanges
 
         // Persist connection for auto-reconnect
         persistConnection(deviceID: deviceID, deviceName: meshCoreSelfInfo.name)
