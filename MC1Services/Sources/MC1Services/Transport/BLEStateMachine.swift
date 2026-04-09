@@ -1333,6 +1333,7 @@ extension BLEStateMachine {
         }
 
         if let error {
+            centralManager.cancelPeripheralConnection(expected)
             transition(to: .idle)
             continuation.resume(throwing: BLEError.connectionFailed(error.localizedDescription))
             return

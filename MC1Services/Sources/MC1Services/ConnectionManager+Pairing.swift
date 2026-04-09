@@ -92,17 +92,21 @@ extension ConnectionManager {
 
             } catch {
                 lastError = error
+                logger.warning("Connection attempt \(attempt) failed: \(error.localizedDescription)")
+
                 if isDeviceNotFoundError(error) {
                     await logDeviceNotFoundDiagnostics(deviceID: deviceID, context: "connectAfterPairing attempt \(attempt)")
                 }
-                logger.warning("Connection attempt \(attempt) failed: \(error.localizedDescription)")
 
-                // Clean up resources but keep state as .connecting
                 await cleanupResources()
                 await transport.disconnect()
 
+                if isAuthenticationError(error) {
+                    logger.info("Authentication/encryption error — skipping retries")
+                    break
+                }
+
                 if attempt < maxAttempts {
-                    // Backoff delay - state remains .connecting
                     let baseDelay = 0.3 * pow(2.0, Double(attempt - 1))
                     let jitter = Double.random(in: 0...0.1) * baseDelay
                     try await Task.sleep(for: .seconds(baseDelay + jitter))
