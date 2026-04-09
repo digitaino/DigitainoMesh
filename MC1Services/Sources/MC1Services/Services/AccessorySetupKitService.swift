@@ -393,7 +393,7 @@ public enum AccessorySetupKitError: LocalizedError {
         case .pickerDismissed:
             return "Device selection was cancelled."
         case .pickerRestricted:
-            return "Cannot show device picker. Please check that Bluetooth is enabled and the app has permission."
+            return "Cannot show device picker. Please check that Bluetooth is enabled, wait a moment, and try again."
         case .pickerAlreadyActive:
             return "Device picker is already showing."
         case .pairingFailed(let reason):
@@ -459,7 +459,7 @@ public enum AccessorySetupKitError: LocalizedError {
         case .pickerDismissed:
             return "Device selection was cancelled."
         case .pickerRestricted:
-            return "Cannot show device picker. Please check that Bluetooth is enabled and the app has permission."
+            return "Cannot show device picker. Please check that Bluetooth is enabled, wait a moment, and try again."
         case .pickerAlreadyActive:
             return "Device picker is already showing."
         case .pairingFailed(let reason):
