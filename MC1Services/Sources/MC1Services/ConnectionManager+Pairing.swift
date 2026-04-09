@@ -52,7 +52,8 @@ extension ConnectionManager {
     public func removeFailedPairing(deviceID: UUID) async {
         logger.info("Removing failed pairing for device: \(deviceID)")
 
-        // Remove from ASK
+        await transport.disconnect()
+
         if let accessory = accessorySetupKit.accessory(for: deviceID) {
             do {
                 try await accessorySetupKit.removeAccessory(accessory)
@@ -62,11 +63,9 @@ extension ConnectionManager {
             }
         }
 
-        // Clean up SwiftData (may not exist for fresh pairing)
         let dataStore = PersistenceStore(modelContainer: modelContainer)
         try? await dataStore.deleteDevice(id: deviceID)
 
-        // Clear persisted connection if needed
         if lastConnectedDeviceID == deviceID {
             clearPersistedConnection()
         }
@@ -157,11 +156,8 @@ extension ConnectionManager {
 
         logger.info("Forgetting device: \(deviceID)")
 
-        // Remove from paired accessories first (most important operation)
-        try await accessorySetupKit.removeAccessory(accessory)
-
-        // Disconnect
         await disconnect(reason: .forgetDevice)
+        try await accessorySetupKit.removeAccessory(accessory)
 
         // Delete from SwiftData (cascades to contacts, messages, channels, trace paths)
         let dataStore = PersistenceStore(modelContainer: modelContainer)
@@ -181,7 +177,8 @@ extension ConnectionManager {
     public func forgetDevice(id: UUID) async {
         logger.info("Forgetting device by ID: \(id)")
 
-        // Remove from paired accessories (most important — without this, re-pairing fails)
+        await disconnect(reason: .factoryReset)
+
         if let accessory = accessorySetupKit.accessory(for: id) {
             do {
                 try await accessorySetupKit.removeAccessory(accessory)
@@ -190,11 +187,6 @@ extension ConnectionManager {
             }
         }
 
-        // Always disconnect — even if BLE already dropped, this cancels any pending
-        // auto-reconnect, sets connectionIntent, and cleans up state.
-        await disconnect(reason: .factoryReset)
-
-        // Delete from SwiftData
         let dataStore = PersistenceStore(modelContainer: modelContainer)
         do {
             try await dataStore.deleteDevice(id: id)
