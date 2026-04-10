@@ -360,7 +360,8 @@ extension PersistenceStore {
             userLatitude: dto.userLatitude,
             userLongitude: dto.userLongitude,
             timestampCorrected: dto.timestampCorrected,
-            senderTimestamp: dto.senderTimestamp
+            senderTimestamp: dto.senderTimestamp,
+            routeTypeRawValue: dto.routeType.map { Int($0.rawValue) } ?? -1
         )
         modelContext.insert(message)
         try modelContext.save()

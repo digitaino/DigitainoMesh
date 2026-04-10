@@ -5,8 +5,12 @@ import MC1Services
 enum MessagePathFormatter {
     /// Formats the routing path for display
     /// - Parameter message: The message DTO containing path information
-    /// - Returns: Formatted path string (e.g., "Direct", "A3,7F,42", "2 hops", or "A3,7F…B2,C1")
+    /// - Returns: Formatted path string (e.g., "Direct", "Flood", "A3,7F,42", or "A3,7F…B2,C1")
     static func format(_ message: MessageDTO) -> String {
+        if message.isDirectRouted {
+            return L10n.Chats.Chats.Message.Path.direct
+        }
+
         // Destination marker: single 0xFF byte indicates direct message
         if let pathNodes = message.pathNodes,
            pathNodes.count == 1,
@@ -14,25 +18,19 @@ enum MessagePathFormatter {
             return L10n.Chats.Chats.Message.Path.direct
         }
 
-        // If we have actual path node hashes, show them regardless of pathLength.
-        // This handles DMs where pathLength may be 0 (fallback) but pathNodes
-        // were populated from RxLogEntry correlation.
         let nodes = message.pathNodesHex
-        if !nodes.isEmpty {
-            // Truncate if more than 6 nodes: show first 3 + ellipsis + last 3
-            if nodes.count > 6 {
-                let first = nodes.prefix(3).joined(separator: ",")
-                let last = nodes.suffix(3).joined(separator: ",")
-                return "\(first)…\(last)"
-            }
-            return nodes.joined(separator: ",")
+
+        if nodes.isEmpty {
+            return L10n.Chats.Chats.Message.Path.flood
         }
 
-        // No path nodes available — use pathLength to determine display
-        if message.pathLength == 0 || message.pathLength == 0xFF {
-            return L10n.Chats.Chats.Message.Path.direct
+        // Truncate if more than 6 nodes: show first 3 + ellipsis + last 3
+        if nodes.count > 6 {
+            let first = nodes.prefix(3).joined(separator: ",")
+            let last = nodes.suffix(3).joined(separator: ",")
+            return "\(first)…\(last)"
         }
 
-        return L10n.Chats.Chats.Message.Path.unavailable
+        return nodes.joined(separator: ",")
     }
 }

@@ -93,22 +93,6 @@ struct UnifiedMessageBubble: View {
                         MalwareWarningCard(url: url)
                     }
 
-                    // Shared route card (for incoming messages with "RX via ..." route info)
-                    if let sharedRoute = displayState.detectedSharedRoute {
-                        SharedRouteCard(
-                            sharedRoute: sharedRoute,
-                            onTap: { callbacks.onShowSharedRoute?() }
-                        )
-                    }
-
-                    // Hex path card (for messages with detected hex chains, when no shared route detected)
-                    if displayState.detectedSharedRoute == nil, let hexPath = displayState.detectedHexPath {
-                        HexPathCard(
-                            hexPath: hexPath,
-                            onTap: { callbacks.onShowHexPath?() }
-                        )
-                    }
-
                     // Link preview (if applicable, skip for image URLs shown in bubble)
                     if previewsEnabled && !(displayState.isImageURL && displayState.showInlineImages) {
                         BubbleLinkPreviewContent(
@@ -123,24 +107,6 @@ struct UnifiedMessageBubble: View {
                         BubbleStatusRow(
                             message: message,
                             onRetry: callbacks.onRetry
-                        )
-                    }
-
-                    // No-repeats retry suggestion
-                    if displayState.showNoRepeatsRetry && message.isOutgoing {
-                        NoRepeatsRetryCard(
-                            nextPowerLabel: displayState.nextPowerLabel,
-                            onResend: callbacks.onRetry,
-                            onResendAtNextPower: callbacks.onResendAtNextPower
-                        )
-                    }
-
-                    // Duplicate count badge (for collapsed groups or expanded group leader)
-                    if displayState.duplicateCount > 1 {
-                        DuplicateCountBadge(
-                            count: displayState.duplicateCount,
-                            isExpanded: displayState.isDuplicateGroupExpanded,
-                            onTap: { displayState.onToggleDuplicateGroup?() }
                         )
                     }
                 }
@@ -214,28 +180,19 @@ private struct BubbleContent: View {
         }
     }
 
-    private var isDirect: Bool {
-        message.pathLength == 0 || message.pathLength == 0xFF
-    }
-
-    private var isLargeEmoji: Bool {
-        message.text.isLargeEmoji
+    private var isFloodRouted: Bool {
+        message.isFloodRouted
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                if isLargeEmoji {
-                    Text(message.text.strippingInvisibleCharacters)
-                        .font(.system(size: 48))
-                } else {
-                    MessageText(message.text, baseColor: textColor, isOutgoing: message.isOutgoing, currentUserName: deviceName, precomputedText: displayState.formattedText)
-                }
+                MessageText(message.text, baseColor: textColor, isOutgoing: message.isOutgoing, currentUserName: deviceName, precomputedText: displayState.formattedText)
 
-                if !message.isOutgoing && (displayState.showIncomingHopCount && !isDirect || displayState.showIncomingPath) {
+                if !message.isOutgoing && (displayState.showIncomingHopCount && isFloodRouted || displayState.showIncomingPath) {
                     HStack(spacing: 4) {
-                        if displayState.showIncomingHopCount && !isDirect {
-                            BubbleHopCountFooter(pathLength: message.pathLength)
+                        if displayState.showIncomingHopCount && isFloodRouted {
+                            BubbleHopCountFooter(hopCount: message.hopCount)
                         }
                         if displayState.showIncomingPath {
                             BubblePathFooter(message: message)
@@ -253,21 +210,8 @@ private struct BubbleContent: View {
                 )
             }
         }
-        .background(isLargeEmoji ? .clear : bubbleColor)
+        .background(bubbleColor)
         .clipShape(.rect(cornerRadius: 16))
-        .overlay {
-            if displayState.isSearchMatch {
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.accentColor, lineWidth: 2)
-            }
-        }
-        .overlay {
-            if displayState.isHighlighted {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.accentColor.opacity(0.3))
-                    .allowsHitTesting(false)
-            }
-        }
     }
 }
 
@@ -481,46 +425,17 @@ private struct BubblePathFooter: View {
 }
 
 private struct BubbleHopCountFooter: View {
-    let pathLength: UInt8
+    let hopCount: Int
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "arrowshape.bounce.right")
-            Text("\(pathLength)")
+            Text("\(hopCount)")
         }
         .font(.caption2)  // Not monospaced - only hex paths need alignment
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(L10n.Chats.Chats.Message.HopCount.accessibilityLabel(Int(pathLength)))
-    }
-}
-
-// MARK: - No Repeats Retry Card
-
-private struct NoRepeatsRetryCard: View {
-    let nextPowerLabel: String?
-    let onResend: (() -> Void)?
-    let onResendAtNextPower: (() -> Void)?
-
-    var body: some View {
-        if let powerLabel = nextPowerLabel, let onResendAtNextPower {
-            retryButton(label: "Retry at \(powerLabel)", action: onResendAtNextPower)
-        } else if let onResend {
-            retryButton(label: "Resend", action: onResend)
-        }
-    }
-
-    private func retryButton(label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 3) {
-                Image(systemName: "arrow.clockwise")
-                Text(label)
-            }
-            .font(.caption2)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.blue)
-        .padding(.trailing, 4)
+        .accessibilityLabel(L10n.Chats.Chats.Message.HopCount.accessibilityLabel(hopCount))
     }
 }
 
@@ -667,49 +582,4 @@ private extension View {
         contactName: "Charlie",
         configuration: .directMessage
     )
-}
-
-#Preview("Emoji Only - Single") {
-    VStack(spacing: 12) {
-        let msg1 = Message(
-            deviceID: UUID(),
-            contactID: UUID(),
-            text: "\u{1F44D}",
-            directionRawValue: MessageDirection.incoming.rawValue,
-            statusRawValue: MessageStatus.delivered.rawValue
-        )
-        UnifiedMessageBubble(
-            message: MessageDTO(from: msg1),
-            contactName: "Alice",
-            configuration: .directMessage
-        )
-
-        let msg2 = Message(
-            deviceID: UUID(),
-            contactID: UUID(),
-            text: "\u{2764}\u{FE0F}\u{1F525}\u{1F60E}",
-            directionRawValue: MessageDirection.outgoing.rawValue,
-            statusRawValue: MessageStatus.sent.rawValue
-        )
-        UnifiedMessageBubble(
-            message: MessageDTO(from: msg2),
-            contactName: "Alice",
-            deviceName: "My Device",
-            configuration: .directMessage
-        )
-
-        let msg3 = Message(
-            deviceID: UUID(),
-            contactID: UUID(),
-            text: "Hello \u{1F44B}",
-            directionRawValue: MessageDirection.incoming.rawValue,
-            statusRawValue: MessageStatus.delivered.rawValue
-        )
-        UnifiedMessageBubble(
-            message: MessageDTO(from: msg3),
-            contactName: "Alice",
-            configuration: .directMessage
-        )
-    }
-    .padding()
 }

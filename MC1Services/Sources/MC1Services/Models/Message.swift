@@ -126,12 +126,6 @@ public final class Message {
     /// Whether the user has scrolled to see this mention (for tracking unread mentions)
     public var mentionSeen: Bool = false
 
-    /// Phone GPS latitude when this message was sent or received (nil for older messages)
-    public var userLatitude: Double?
-
-    /// Phone GPS longitude when this message was sent or received (nil for older messages)
-    public var userLongitude: Double?
-
     /// Whether the timestamp was corrected due to sender clock being invalid
     public var timestampCorrected: Bool = false
 
@@ -144,9 +138,8 @@ public final class Message {
     /// Format: "👍:3,❤️:2,😂:1" (emoji:count pairs, ordered by count desc)
     public var reactionSummary: String?
 
-    /// Radio TX power in dBm when this message was sent (outgoing only).
-    /// Nil for incoming messages or messages sent before this field was added.
-    public var txPowerDbm: Int8?
+    /// Route type from RxLog correlation (-1 = unknown/uncorrelated)
+    public var routeTypeRawValue: Int = -1
 
     /// Heard repeats for this message (cascade delete)
     @Relationship(deleteRule: .cascade, inverse: \MessageRepeat.message)
@@ -184,12 +177,10 @@ public final class Message {
         linkPreviewFetched: Bool = false,
         containsSelfMention: Bool = false,
         mentionSeen: Bool = false,
-        userLatitude: Double? = nil,
-        userLongitude: Double? = nil,
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
         reactionSummary: String? = nil,
-        txPowerDbm: Int8? = nil
+        routeTypeRawValue: Int = -1
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -222,12 +213,10 @@ public final class Message {
         self.linkPreviewFetched = linkPreviewFetched
         self.containsSelfMention = containsSelfMention
         self.mentionSeen = mentionSeen
-        self.userLatitude = userLatitude
-        self.userLongitude = userLongitude
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary
-        self.txPowerDbm = txPowerDbm
+        self.routeTypeRawValue = routeTypeRawValue
     }
 }
 
@@ -307,12 +296,10 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
     public var linkPreviewFetched: Bool
     public var containsSelfMention: Bool
     public var mentionSeen: Bool
-    public var userLatitude: Double?
-    public var userLongitude: Double?
     public var timestampCorrected: Bool
     public var senderTimestamp: UInt32?
     public var reactionSummary: String?
-    public var txPowerDbm: Int8?
+    public var routeType: RouteType?
 
     public init(from message: Message) {
         self.id = message.id
@@ -346,12 +333,11 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.linkPreviewFetched = message.linkPreviewFetched
         self.containsSelfMention = message.containsSelfMention
         self.mentionSeen = message.mentionSeen
-        self.userLatitude = message.userLatitude
-        self.userLongitude = message.userLongitude
         self.timestampCorrected = message.timestampCorrected
         self.senderTimestamp = message.senderTimestamp
         self.reactionSummary = message.reactionSummary
-        self.txPowerDbm = message.txPowerDbm
+        self.routeType = UInt8(exactly: message.routeTypeRawValue)
+            .flatMap(RouteType.init(rawValue:))
     }
 
     /// Memberwise initializer for creating DTOs directly
@@ -387,12 +373,10 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         linkPreviewFetched: Bool = false,
         containsSelfMention: Bool = false,
         mentionSeen: Bool = false,
-        userLatitude: Double? = nil,
-        userLongitude: Double? = nil,
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
         reactionSummary: String? = nil,
-        txPowerDbm: Int8? = nil
+        routeType: RouteType? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -425,12 +409,10 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.linkPreviewFetched = linkPreviewFetched
         self.containsSelfMention = containsSelfMention
         self.mentionSeen = mentionSeen
-        self.userLatitude = userLatitude
-        self.userLongitude = userLongitude
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary
-        self.txPowerDbm = txPowerDbm
+        self.routeType = routeType
     }
 
     public var isOutgoing: Bool {
@@ -471,6 +453,24 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
     /// Date derived from the sender's device clock (may differ from `date` if the sender's clock is skewed)
     public var senderDate: Date {
         Date(timeIntervalSince1970: TimeInterval(timestamp))
+    }
+
+    /// Hop count decoded from pathLength (lower 6 bits)
+    public var hopCount: Int {
+        decodePathLen(pathLength)?.hopCount ?? Int(pathLength & 63)
+    }
+
+    /// Whether this message was flood-routed (broadcast).
+    /// Priority: channelIndex (channels are always flood) → routeType from RxLog → pathLength inference.
+    public var isFloodRouted: Bool {
+        if channelIndex != nil { return true }
+        if let routeType { return routeType == .flood || routeType == .tcFlood }
+        return pathLength != 0xFF
+    }
+
+    /// Whether this message was direct-routed (pre-built path, hops consumed in transit).
+    public var isDirectRouted: Bool {
+        !isFloodRouted
     }
 
     /// Hash size per hop in bytes (1, 2, or 3), derived from pathLength upper 2 bits
