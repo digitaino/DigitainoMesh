@@ -1054,6 +1054,19 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
             .min()
     }
 
+    public func findRxLogEntryBySenderPrefix(
+        senderPrefixByte: UInt8,
+        receivedSince: Date
+    ) throws -> RxLogEntryDTO? {
+        mockRxLogEntries.first { entry in
+            entry.channelIndex == nil &&
+            entry.payloadType == .textMessage &&
+            entry.receivedAt >= receivedSince &&
+            entry.packetPayload.count >= 2 &&
+            entry.packetPayload[1] == senderPrefixByte
+        }
+    }
+
     // MARK: - Saved Trace Paths
 
     public var savedTracePaths: [UUID: SavedTracePathDTO] = [:]
