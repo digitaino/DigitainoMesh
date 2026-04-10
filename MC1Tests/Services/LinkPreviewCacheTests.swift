@@ -248,8 +248,6 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     // Message Operations
     func saveMessage(_ dto: MessageDTO) async throws {}
     func fetchMessage(id: UUID) async throws -> MessageDTO? { nil }
-    func fetchMessage(deduplicationKey: String) async throws -> MessageDTO? { nil }
-    func fetchMessageForSurveyPoint(packetHash: String) async throws -> MessageDTO? { nil }
     func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? { nil }
     func fetchMessages(contactID: UUID, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
     func fetchMessages(deviceID: UUID, channelIndex: UInt8, limit: Int, offset: Int) async throws -> [MessageDTO] { [] }
@@ -269,7 +267,6 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     func fetchContact(deviceID: UUID, publicKey: Data) async throws -> ContactDTO? { nil }
     func fetchContact(deviceID: UUID, publicKeyPrefix: Data) async throws -> ContactDTO? { nil }
     @discardableResult func saveContact(deviceID: UUID, from frame: ContactFrame) async throws -> UUID { UUID() }
-    @discardableResult func saveContactsBatch(deviceID: UUID, frames: [ContactFrame]) async throws -> [UUID] { frames.map { _ in UUID() } }
     func saveContact(_ dto: ContactDTO) async throws {}
     func deleteContact(id: UUID) async throws {}
     func updateContactLastMessage(contactID: UUID, date: Date?) async throws {}
@@ -292,6 +289,7 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     // Blocked Channel Senders
     func saveBlockedChannelSender(_ dto: BlockedChannelSenderDTO) async throws {}
     func deleteBlockedChannelSender(deviceID: UUID, name: String) async throws {}
+    func deleteChannelMessages(fromSender senderName: String, deviceID: UUID) async throws {}
     func fetchBlockedChannelSenders(deviceID: UUID) async throws -> [BlockedChannelSenderDTO] { [] }
 
     // Channel Operations
@@ -336,7 +334,8 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     func fetchContactPublicKeysByPrefix(deviceID: UUID) async throws -> [UInt8: [Data]] { [:] }
 
     // RxLogEntry Lookup
-    func findRxLogEntry(channelIndex: UInt8?, senderTimestamp: UInt32, withinSeconds: Double) async throws -> RxLogEntryDTO? { nil }
+    func findRxLogEntry(channelIndex: UInt8?, senderTimestamp: UInt32) async throws -> RxLogEntryDTO? { nil }
+    func findRxLogEntryBySenderPrefix(senderPrefixByte: UInt8, receivedSince: Date) async throws -> RxLogEntryDTO? { nil }
 
     // Room Message Operations
     func saveRoomMessage(_ dto: RoomMessageDTO) async throws {}
@@ -368,10 +367,6 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
     func fetchDMMessageCandidates(deviceID: UUID, contactID: UUID, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> [MessageDTO] { [] }
     func findDMMessageForReaction(deviceID: UUID, contactID: UUID, messageHash: String, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> MessageDTO? { nil }
 
-    // RxLog Diagnostics
-    func fetchRecentDMEntriesWithoutTimestamp(deviceID: UUID, since: Date) async throws -> [RxLogEntryDTO] { [] }
-    func fetchOldestRxLogDate(deviceID: UUID) async throws -> Date? { nil }
-
     // Notification Level
     func setChannelNotificationLevel(_ channelID: UUID, level: NotificationLevel) async throws {}
     func setSessionNotificationLevel(_ sessionID: UUID, level: NotificationLevel) async throws {}
@@ -383,17 +378,12 @@ private actor MockPreviewDataStore: PersistenceStoreProtocol {
 
     // Node Status Snapshots
     // swiftlint:disable:next line_length
-    func saveNodeStatusSnapshot(nodePublicKey: Data, batteryMillivolts: UInt16?, lastSNR: Double?, lastRSSI: Int16?, noiseFloor: Int16?, uptimeSeconds: UInt32?, rxAirtimeSeconds: UInt32?, packetsSent: UInt32?, packetsReceived: UInt32?) async throws -> UUID { UUID() }
+    func saveNodeStatusSnapshot(nodePublicKey: Data, batteryMillivolts: UInt16?, lastSNR: Double?, lastRSSI: Int16?, noiseFloor: Int16?, uptimeSeconds: UInt32?, rxAirtimeSeconds: UInt32?, packetsSent: UInt32?, packetsReceived: UInt32?, receiveErrors: UInt32?, postedCount: UInt16?, postPushCount: UInt16?) async throws -> UUID { UUID() }
     func fetchLatestNodeStatusSnapshot(nodePublicKey: Data) async throws -> NodeStatusSnapshotDTO? { nil }
     func fetchNodeStatusSnapshots(nodePublicKey: Data, since: Date?) async throws -> [NodeStatusSnapshotDTO] { [] }
     func fetchPreviousNodeStatusSnapshot(nodePublicKey: Data, before: Date) async throws -> NodeStatusSnapshotDTO? { nil }
     func updateSnapshotNeighbors(id: UUID, neighbors: [NeighborSnapshotEntry]) async throws {}
     func updateSnapshotTelemetry(id: UUID, telemetry: [TelemetrySnapshotEntry]) async throws {}
+    func saveTelemetryOnlySnapshot(nodePublicKey: Data, telemetryEntries: [TelemetrySnapshotEntry]) async throws -> UUID { UUID() }
     func deleteOldNodeStatusSnapshots(olderThan date: Date) async throws {}
-
-    // Message Search
-    func searchMessages(deviceID: UUID, searchText: String, limit: Int, offset: Int) async throws -> [MessageSearchResult] { [] }
-    func searchMessagesCount(deviceID: UUID, searchText: String) async throws -> Int { 0 }
-    func searchMessageIDs(contactID: UUID, searchText: String, limit: Int) async throws -> [UUID] { [] }
-    func searchMessageIDs(deviceID: UUID, channelIndex: UInt8, searchText: String, limit: Int) async throws -> [UUID] { [] }
 }
