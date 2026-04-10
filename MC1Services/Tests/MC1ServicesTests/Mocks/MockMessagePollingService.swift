@@ -15,7 +15,7 @@ public actor MockMessagePollingService: MessagePollingServiceProtocol {
 
     // MARK: - Recorded Invocations
 
-    public private(set) var pollAllMessagesInvocations: Int = 0
+    public private(set) var pollAllMessagesCallCount: Int = 0
     public private(set) var waitForPendingHandlersInvocations: Int = 0
 
     // MARK: - Initialization
@@ -25,7 +25,7 @@ public actor MockMessagePollingService: MessagePollingServiceProtocol {
     // MARK: - Protocol Methods
 
     public func pollAllMessages() async throws -> Int {
-        pollAllMessagesInvocations += 1
+        pollAllMessagesCallCount += 1
         switch stubbedPollAllMessagesResult {
         case .success(let count):
             return count
@@ -53,9 +53,6 @@ public actor MockMessagePollingService: MessagePollingServiceProtocol {
     /// Captured CLI message handler (set via setCLIMessageHandler)
     public private(set) var capturedCLIMessageHandler: (@Sendable (ContactMessage, ContactDTO?) async -> Void)?
 
-    /// Captured acknowledgement handler (set via setAcknowledgementHandler)
-    public private(set) var capturedAcknowledgementHandler: (@Sendable (Data) async -> Void)?
-
     // MARK: - Handler Setter Methods (matching MessagePollingService)
 
     public func setContactMessageHandler(_ handler: @escaping @Sendable (ContactMessage, ContactDTO?) async -> Void) {
@@ -74,20 +71,15 @@ public actor MockMessagePollingService: MessagePollingServiceProtocol {
         capturedCLIMessageHandler = handler
     }
 
-    public func setAcknowledgementHandler(_ handler: @escaping @Sendable (Data) async -> Void) {
-        capturedAcknowledgementHandler = handler
-    }
-
     // MARK: - Test Helpers
 
     /// Resets all recorded invocations and captured handlers
     public func reset() {
-        pollAllMessagesInvocations = 0
+        pollAllMessagesCallCount = 0
         waitForPendingHandlersInvocations = 0
         capturedContactMessageHandler = nil
         capturedChannelMessageHandler = nil
         capturedSignedMessageHandler = nil
         capturedCLIMessageHandler = nil
-        capturedAcknowledgementHandler = nil
     }
 }

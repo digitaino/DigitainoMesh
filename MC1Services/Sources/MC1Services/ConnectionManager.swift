@@ -591,7 +591,7 @@ public final class ConnectionManager {
         forceFullSync: Bool = false
     ) async -> Bool {
         let skipOrphanCleanup = isSurveyActiveProvider?() ?? false
-        let throttling = currentThrottlingConfig(for: deviceID, transportType: transportType)
+        let channelSyncConfig = currentChannelSyncConfig(for: deviceID, transportType: transportType)
         do {
             try await withTimeout(.seconds(120), operationName: "performInitialSync") {
                 try await services.syncCoordinator.onConnectionEstablished(
@@ -599,7 +599,8 @@ public final class ConnectionManager {
                     services: services,
                     forceFullSync: forceFullSync,
                     skipSurveyOrphanCleanup: skipOrphanCleanup,
-                    throttling: throttling
+                    channelSyncConfig: channelSyncConfig,
+                    platformName: "\(self.detectedPlatform)"
                 )
             }
             return true
@@ -649,7 +650,7 @@ public final class ConnectionManager {
                 resyncAttemptCount += 1
                 logger.info("Resync attempt \(resyncAttemptCount)/\(Self.maxResyncAttempts)")
 
-                let throttling = self.currentThrottlingConfig(for: deviceID, transportType: transportType)
+                let channelSyncConfig = self.currentChannelSyncConfig(for: deviceID, transportType: transportType)
                 let success: Bool
                 do {
                     success = try await withTimeout(.seconds(60), operationName: "performResync") {
@@ -657,7 +658,8 @@ public final class ConnectionManager {
                             deviceID: deviceID,
                             services: services,
                             forceFullSync: forceFullSync,
-                            throttling: throttling
+                            channelSyncConfig: channelSyncConfig,
+                            platformName: "\(self.detectedPlatform)"
                         )
                     }
                 } catch {
@@ -988,13 +990,13 @@ public final class ConnectionManager {
         return newServices
     }
 
-    // MARK: - Sync Throttling
+    // MARK: - Channel Sync Configuration
 
-    /// Builds a throttling config for the current device and transport.
-    /// WiFi connections are unthrottled; BLE connections use platform-specific values.
-    private func currentThrottlingConfig(for deviceID: UUID, transportType: TransportType) -> SyncThrottlingConfig {
+    /// Builds a channel sync config for the current device and transport.
+    /// WiFi connections skip channel-sync gating; BLE connections use platform-specific values.
+    private func currentChannelSyncConfig(for deviceID: UUID, transportType: TransportType) -> ChannelSyncConfig {
         guard transportType != .wifi else { return .none }
-        return detectedPlatform.syncThrottlingConfig(
+        return detectedPlatform.channelSyncConfig(
             lastCleanChannelSync: lastCleanChannelSync?.deviceID == deviceID
                 ? lastCleanChannelSync?.completedAt : nil
         )
