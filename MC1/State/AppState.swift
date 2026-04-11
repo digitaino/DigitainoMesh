@@ -525,6 +525,44 @@ public final class AppState {
         return contact
     }
 
+    // MARK: - Weather Bot DM Helpers
+
+    /// Sends a weather bot DM with automatic retry and flood routing fallback.
+    /// Returns `true` if delivery was confirmed via ACK, `false` if all attempts failed.
+    private func sendWeatherBotDM(text: String, to botContact: ContactDTO, services: ServiceContainer) async -> Bool {
+        do {
+            _ = try await services.messageService.sendMessageWithRetry(text: text, to: botContact)
+            return true
+        } catch {
+            logger.error("WeatherBot DM delivery failed: \(error)")
+            return false
+        }
+    }
+
+    /// Watches a pending weather request key. If still pending after `timeout` seconds,
+    /// calls `retryBlock` (which should re-send the DM and return whether delivery succeeded).
+    /// If still no response after a second `timeout`, gives up and clears the key.
+    private func watchPendingKey(
+        _ key: String,
+        timeout: TimeInterval = 45,
+        retryBlock: @escaping () async -> Bool
+    ) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(timeout))
+            guard let self, self.weatherCache.isPending(key) else { return }
+            self.logger.info("WeatherBot: '\(key)' still pending after \(Int(timeout))s — retrying")
+            let delivered = await retryBlock()
+            guard delivered else {
+                self.weatherCache.clearPending(key)
+                return
+            }
+            try? await Task.sleep(for: .seconds(timeout))
+            guard self.weatherCache.isPending(key) else { return }
+            self.logger.warning("WeatherBot: giving up on '\(key)' after \(Int(timeout * 2))s")
+            self.weatherCache.clearPending(key)
+        }
+    }
+
     ///
     /// - Returns: A `WeatherRefreshResult` describing the outcome.
     func sendWeatherRefreshRequest() async -> WeatherRefreshResult {
@@ -566,13 +604,13 @@ public final class AppState {
         let regionByte: UInt8 = (region.id & 0x0F) << 4 | 0x03
         let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
 
-        do {
-            _ = try await services.messageService.sendDirectMessage(text: mwxText, to: botContact)
+        let delivered = await sendWeatherBotDM(text: mwxText, to: botContact, services: services)
+        if delivered {
             weatherLastRefreshAt = Date()
             logger.info("WeatherRefresh: sent MWX DM to \(botContact.name) for region \(region.id) (\(region.name))")
             return .sent
-        } catch {
-            logger.error("WeatherRefresh: DM send failed: \(error)")
+        } else {
+            logger.error("WeatherRefresh: DM delivery failed for region \(region.id)")
             return .noDataChannel
         }
     }
@@ -592,13 +630,11 @@ public final class AppState {
         let regionByte: UInt8 = (regionID & 0x0F) << 4 | 0x03
         let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
 
-        do {
-            _ = try await services.messageService.sendDirectMessage(text: mwxText, to: botContact)
+        let delivered = await sendWeatherBotDM(text: mwxText, to: botContact, services: services)
+        if delivered {
             logger.info("WeatherRefresh: sent MWX DM to \(botContact.name) for explicit region \(regionID)")
-            return .sent
-        } catch {
-            return .noDataChannel
         }
+        return delivered ? .sent : .noDataChannel
     }
 
     /// Send a 0x02 LOC_PFM_POINT data request for a specific NWS forecast point.
@@ -622,16 +658,22 @@ public final class AppState {
         let hexString = payload.map { String(format: "%02x", $0) }.joined()
         let dmText = "WXQ" + hexString
 
-        do {
-            _ = try await services.messageService.sendDirectMessage(text: dmText, to: botContact)
+        let delivered = await sendWeatherBotDM(text: dmText, to: botContact, services: services)
+        if delivered {
             logger.info("▶︎ MESHWX_TX forecast pfmPoint=\(pfmPointIndex) bot=\(botContact.name) dm=\(dmText)")
             if let icao = originICAO {
                 weatherCache.setForecastOrigin(pfmPointIndex: pfmPointIndex, icao: icao)
             }
-            weatherCache.addPending("forecast:\(pfmPointIndex)")
+            let pendingKey = "forecast:\(pfmPointIndex)"
+            weatherCache.addPending(pendingKey)
+            watchPendingKey(pendingKey) { [weak self] in
+                guard let self, let services = self.services, self.connectionState == .ready else { return false }
+                guard let botContact = await self.resolveBotContact(services: services) else { return false }
+                return await self.sendWeatherBotDM(text: dmText, to: botContact, services: services)
+            }
             return .sent
-        } catch {
-            logger.error("WeatherDataRequest: DM send failed: \(error)")
+        } else {
+            logger.error("WeatherDataRequest: DM delivery failed for pfmPoint=\(pfmPointIndex)")
             return .noDataChannel
         }
     }
@@ -642,13 +684,11 @@ public final class AppState {
         guard let botContact = await resolveBotContact(services: services) else { return .botNotFound }
         let hexString = payload.map { String(format: "%02x", $0) }.joined()
         let dmText = "WXQ" + hexString
-        do {
-            _ = try await services.messageService.sendDirectMessage(text: dmText, to: botContact)
+        let delivered = await sendWeatherBotDM(text: dmText, to: botContact, services: services)
+        if delivered {
             logger.info("▶︎ MESHWX_TX data bot=\(botContact.name) dm=\(dmText)")
-            return .sent
-        } catch {
-            return .noDataChannel
         }
+        return delivered ? .sent : .noDataChannel
     }
 
     func sendOutlookRequest(pfmPointIndex: Int) async -> WeatherRefreshResult {
@@ -664,14 +704,34 @@ public final class AppState {
     }
 
     func sendTAFRequest(icao: String) async -> WeatherRefreshResult {
-        let result = await sendWXDataRequest(payload: MeshWXDecoder.buildTAFRequest(icao: icao))
-        if case .sent = result { weatherCache.addPending("taf:\(icao)") }
+        let payload = MeshWXDecoder.buildTAFRequest(icao: icao)
+        let result = await sendWXDataRequest(payload: payload)
+        if case .sent = result {
+            let pendingKey = "taf:\(icao)"
+            weatherCache.addPending(pendingKey)
+            watchPendingKey(pendingKey) { [weak self] in
+                guard let self, let services = self.services, self.connectionState == .ready else { return false }
+                guard let botContact = await self.resolveBotContact(services: services) else { return false }
+                let hex = payload.map { String(format: "%02x", $0) }.joined()
+                return await self.sendWeatherBotDM(text: "WXQ" + hex, to: botContact, services: services)
+            }
+        }
         return result
     }
 
     func sendMetarRequest(icao: String) async -> WeatherRefreshResult {
-        let result = await sendWXDataRequest(payload: MeshWXDecoder.buildMetarRequest(icao: icao))
-        if case .sent = result { weatherCache.addPending("metar:\(icao)") }
+        let payload = MeshWXDecoder.buildMetarRequest(icao: icao)
+        let result = await sendWXDataRequest(payload: payload)
+        if case .sent = result {
+            let pendingKey = "metar:\(icao)"
+            weatherCache.addPending(pendingKey)
+            watchPendingKey(pendingKey) { [weak self] in
+                guard let self, let services = self.services, self.connectionState == .ready else { return false }
+                guard let botContact = await self.resolveBotContact(services: services) else { return false }
+                let hex = payload.map { String(format: "%02x", $0) }.joined()
+                return await self.sendWeatherBotDM(text: "WXQ" + hex, to: botContact, services: services)
+            }
+        }
         return result
     }
 
