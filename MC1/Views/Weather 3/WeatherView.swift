@@ -34,6 +34,7 @@ private struct WeatherBody: View {
     @State private var isSendingSearch = false
     @State private var searchError: String?
     @State private var showingRadarPicker = false
+    @State private var showingInfo = false
 
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
 
@@ -68,6 +69,9 @@ private struct WeatherBody: View {
         .sheet(isPresented: $showingRadarPicker) {
             RadarRegionPickerView()
         }
+        .sheet(isPresented: $showingInfo) {
+            WXInfoSheet()
+        }
         .navigationTitle("Weather")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -79,6 +83,9 @@ private struct WeatherBody: View {
                 } label: {
                     Text(appState.wxAviationUsesF ? "°F" : "°C")
                         .font(.subheadline.weight(.semibold))
+                }
+                Button { showingInfo = true } label: {
+                    Image(systemName: "info.circle")
                 }
                 SignalBarsToolbarItem()
             }
@@ -1626,6 +1633,89 @@ private func receivedAgoLabel(_ date: Date) -> String {
     if interval < 3600  { return "\(Int(interval / 60))m ago" }
     if interval < 86400 { return "\(Int(interval / 3600))h ago" }
     return "\(Int(interval / 86400))d ago"
+}
+
+// MARK: - Info Sheet
+
+private struct WXInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    infoRow(icon: "satellite", title: "GOES Satellite Reception",
+                            body: "In production, the MeshWX bot uses a Software Defined Radio (SDR) to receive the GOES weather satellite signal directly. It decodes the broadcast as EMWIN (Emergency Managers Weather Information Network) files — the same data feed used by NWS offices — with no internet connection required anywhere in the chain.")
+                    infoRow(icon: "wave.3.right.circle", title: "Satellite to Mesh to You",
+                            body: "GOES continuously broadcasts NWS weather data to anyone with an SDR. The bot decodes it, formats it into compact binary messages, and rebroadcasts over LoRa. Your phone receives it passively on the mesh channel — completely off-grid.")
+                } header: {
+                    Label("No Internet Required", systemImage: "antenna.radiowaves.left.and.right")
+                }
+
+                Section {
+                    infoRow(icon: "arrow.up.message", title: "Explicit Requests",
+                            body: "Tapping a city or airport in the search results sends a single short DM to the bot. The bot responds once with the requested data. Nothing is requested automatically.")
+                    infoRow(icon: "dot.radiowaves.left.and.right", title: "Broadcast Reception",
+                            body: "The bot periodically broadcasts weather summaries on the channel for the regions it monitors. The app receives these passively — no transmission from your device is needed.")
+                    infoRow(icon: "memorychip", title: "Local Caching",
+                            body: "Once received, data is cached in memory for the session. Refreshing a product sends a new request; the app never polls the bot automatically.")
+                    infoRow(icon: "clock.arrow.2.circlepath", title: "Refresh Cooldown",
+                            body: "The bot enforces its own rate limit. Tapping Refresh on a product that was just received will be silently ignored by the bot, so no extra airtime is wasted.")
+                } header: {
+                    Label("Minimizing Airtime", systemImage: "waveform.path.ecg")
+                }
+
+                Section {
+                    infoRow(icon: "thermometer.medium", title: "Observations (METAR)",
+                            body: "Current conditions at an airport: temperature, dewpoint, wind, altimeter, clouds, visibility, and flight rules (VFR / MVFR / IFR / LIFR).")
+                    infoRow(icon: "sun.max", title: "7-Day Forecast",
+                            body: "NWS gridded forecast for the nearest forecast point: daily high/low, wind, precipitation chance, humidity, and a sky condition summary.")
+                    infoRow(icon: "airplane", title: "TAF",
+                            body: "Terminal Aerodrome Forecast — aviation weather valid for 24–30 hours at instrument-capable airports.")
+                    infoRow(icon: "cloud.rain", title: "Radar",
+                            body: "64×32 grid of radar intensity data for a regional NWS sector, showing current precipitation coverage.")
+                    infoRow(icon: "exclamationmark.triangle", title: "Warnings & Reports",
+                            body: "Active NWS warnings, nearby storm reports (tornado, hail, wind, flood), precipitation summaries, and hazard outlooks are all available on request via the context menu on any station card.")
+                } header: {
+                    Label("What You Can Receive", systemImage: "list.bullet.rectangle")
+                }
+
+                Section {
+                    infoRow(icon: "magnifyingglass", title: "Finding a Location",
+                            body: "Use the search bar to find a city or airport ICAO code. Tap a result to send a request to the bot. You must be connected to your radio and on the meshwx channel.")
+                    infoRow(icon: "wrench.and.screwdriver", title: "Bot Setup",
+                            body: "The app needs to know the bot's contact name to address DM requests. Set it in Tools → Weather Log. The bot contact will appear after it broadcasts its first message on the channel.")
+                } header: {
+                    Label("Getting Started", systemImage: "questionmark.circle")
+                }
+            }
+            .navigationTitle("How Weather Works")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func infoRow(icon: String, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundStyle(.tint)
+                .frame(width: 24)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(body)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
 }
 
 // MARK: - Preview
