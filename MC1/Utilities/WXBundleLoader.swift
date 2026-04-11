@@ -102,35 +102,83 @@ enum WXBundleLoader {
 
     /// Search US Census places by city name/state. Returns up to `limit` results.
     /// Each result resolves to the nearest pfm_point for the 0x02 request.
-    /// Supports 2-letter state abbreviations (e.g. "tx" → Texas).
-    /// Results sorted: city-name prefix matches first, then city-name contains, then state matches.
+    /// Supports:
+    ///   - State-only (e.g. "TX" or "Texas")
+    ///   - City + state with comma: "Austin, TX"
+    ///   - City + state with space: "Austin TX" (last word must be 2-letter abbrev)
+    ///   - City-only prefix/contains search
+    /// Results sorted: city-name prefix matches first, then contains, then state matches.
     static func searchPlaces(query: String, limit: Int = 40) -> [(place: Place, pfmPoint: PFMPoint)] {
         guard !query.isEmpty else { return [] }
         let q = query.lowercased().trimmingCharacters(in: .whitespaces)
 
-        // Expand abbreviation to full state name (e.g. "tx" → "texas")
-        let expandedState = stateAbbreviations[q]
+        // Detect "city, state" or "city state" compound queries
+        var cityQuery: String? = nil
+        var stateFilter: String? = nil
 
-        let matches = allPlaces
-            .filter { place in
-                let name = place.name.lowercased()
-                let state = place.state.lowercased()
-                if name.hasPrefix(q) || name.contains(q) { return true }
-                if let expanded = expandedState, state == expanded { return true }
-                return state.contains(q)
+        if q.contains(",") {
+            // Comma-separated: "Austin, TX" or "Austin, Texas"
+            let parts = q.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty {
+                cityQuery = parts[0]
+                let statePart = parts[1]
+                // places.json stores 2-letter state codes ("TX"), so normalize to abbreviation
+                if statePart.count == 2 && stateAbbreviations[statePart] != nil {
+                    stateFilter = statePart                           // already an abbreviation
+                } else if let abbr = stateAbbreviations.first(where: { $0.value == statePart })?.key {
+                    stateFilter = abbr                               // full name → reverse lookup
+                }
             }
-            .sorted { a, b in
-                let aq = a.name.lowercased()
-                let bq = b.name.lowercased()
-                // City prefix match ranks above city contains match
-                let aPrefix = aq.hasPrefix(q)
-                let bPrefix = bq.hasPrefix(q)
-                if aPrefix != bPrefix { return aPrefix }
-                // Within same tier, alphabetical by city name
-                if aq != bq { return aq < bq }
-                return a.state < b.state
+        } else if let lastSpaceIdx = q.lastIndex(of: " ") {
+            // Space-separated: "Austin TX" — last token must be 2-letter state abbrev
+            let lastToken = String(q[q.index(after: lastSpaceIdx)...])
+            if lastToken.count == 2, stateAbbreviations[lastToken] != nil {
+                cityQuery = String(q[..<lastSpaceIdx]).trimmingCharacters(in: .whitespaces)
+                stateFilter = lastToken                              // keep as 2-letter code
             }
-            .prefix(limit)
+        }
+
+        let matches: ArraySlice<Place>
+
+        if let city = cityQuery, let state = stateFilter {
+            // Two-part search: city name within a specific state (state is 2-letter lowercase abbreviation)
+            matches = allPlaces
+                .filter { place in
+                    place.state.lowercased() == state &&
+                    (place.name.lowercased().hasPrefix(city) || place.name.lowercased().contains(city))
+                }
+                .sorted { a, b in
+                    let aPrefix = a.name.lowercased().hasPrefix(city)
+                    let bPrefix = b.name.lowercased().hasPrefix(city)
+                    if aPrefix != bPrefix { return aPrefix }
+                    return a.name < b.name
+                }
+                .prefix(limit)
+        } else if q.count == 2 && stateAbbreviations[q] != nil {
+            // State-abbreviation-only search: "TX", "PR" → show only places in that state
+            matches = allPlaces
+                .filter { $0.state.lowercased() == q }
+                .sorted { $0.name < $1.name }
+                .prefix(limit)
+        } else {
+            // General single-term search: city name prefix/contains or partial state match
+            matches = allPlaces
+                .filter { place in
+                    let name = place.name.lowercased()
+                    let state = place.state.lowercased()
+                    return name.hasPrefix(q) || name.contains(q) || state.contains(q)
+                }
+                .sorted { a, b in
+                    let aq = a.name.lowercased()
+                    let bq = b.name.lowercased()
+                    let aPrefix = aq.hasPrefix(q)
+                    let bPrefix = bq.hasPrefix(q)
+                    if aPrefix != bPrefix { return aPrefix }
+                    if aq != bq { return aq < bq }
+                    return a.state < b.state
+                }
+                .prefix(limit)
+        }
 
         return matches.compactMap { place in
             guard let pfm = nearestPFMPoint(to: place.coordinate) else { return nil }
@@ -165,6 +213,14 @@ enum WXBundleLoader {
     /// Returns the PFMPoint nearest to a coordinate.
     static func nearestPFMPoint(to coordinate: CLLocationCoordinate2D) -> PFMPoint? {
         allPFMPoints.min { a, b in
+            haversine(a.latitude, a.longitude, coordinate.latitude, coordinate.longitude) <
+            haversine(b.latitude, b.longitude, coordinate.latitude, coordinate.longitude)
+        }
+    }
+
+    /// Returns the METAR station nearest to a coordinate.
+    static func nearestStation(to coordinate: CLLocationCoordinate2D) -> Station? {
+        allStations.min { a, b in
             haversine(a.latitude, a.longitude, coordinate.latitude, coordinate.longitude) <
             haversine(b.latitude, b.longitude, coordinate.latitude, coordinate.longitude)
         }

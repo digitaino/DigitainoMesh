@@ -1,4 +1,30 @@
-Beta Changes -- v0.10.1 (Build 20)
+Beta Changes -- v0.10.1 (Build 21)
+
+MeshWX Weather System
+
+New Weather tab showing live NWS weather data received over the mesh from a MeshWX bot node. Supports the full MeshWX v3 binary protocol (COBS-encoded channel messages) across all message types:
+
+- Observations (METAR) — current conditions at airport stations: temperature, dewpoint, wind speed/gust/direction, altimeter, cloud layers, visibility, present weather, and flight rules (VFR/MVFR/IFR/LIFR)
+- 7-Day Forecasts — NWS gridded forecasts for ~1,900 US forecast points with high/low temps, wind, precipitation chance, humidity, and period icons
+- TAF — Terminal Aerodrome Forecast for IFR-capable stations
+- Radar — 64x32 grid radar intensity loops from NWS regional sectors, showing precipitation intensity with timestamped frames
+- Active Warnings — NWS weather warnings with type, severity, and expiry time
+- Storm Reports — Local storm reports by type (tornado, hail, wind, flood)
+- Hazard Outlooks — Multi-day NWS hazard outlook text
+- Precipitation Reports — Nearby recent rain/snow observation summaries with station names and rain type labels
+- Warnings Near Location — Warnings within range of a forecast point
+
+Search by city name, city + state ("Austin TX", "Austin, TX"), state abbreviation ("TX", "PR"), or ICAO airport code to request data from the bot via DM. Broadcast forecasts arriving on the weather channel without a prior request are automatically linked to the nearest observed station by geographic proximity, so forecast data folds into the correct station card instead of appearing in a separate section.
+
+Station cards blend observations, forecast, and TAF for each airport into a single unified row with one context menu. Favorites can be starred and always appear at the top; non-favorite stations are sorted by most recently received data. A global degrees toggle (F/C) in the navigation bar applies across all temperature displays. Per-product refresh buttons let you re-request individual data types. Swipe a station card to clear all its data.
+
+Also fixed: METAR rebroadcasts no longer reset the received timestamp, so the age label correctly reflects when the data actually arrived rather than always showing "just now".
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 20)
 
 Path Map Crash Fix
 

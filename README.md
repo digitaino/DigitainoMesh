@@ -47,6 +47,7 @@ Features and fixes added in this fork on top of upstream:
 - **Web Map Declutter** — Repeater pins and stats on the community web map only show repeaters heard in the last 7 days. Prefix-aware repeater filtering handles mixed hash-size modes
 - **Human-Readable Reaction Wire Format** — Reactions (tapbacks) are sent as human-readable messages over the mesh (e.g. `👍 reacted to [Name]: "snippet" (hash)`), making them visible on non-iOS clients that display raw message text. Backwards compatible with the old format
 - **Reaction Heard Repeats & Send Again** — Long-press a reaction badge to see how many times your outgoing reaction was repeated through the mesh, with a "Send Again" button to re-broadcast reactions that may not have propagated well
+- **MeshWX Weather** — Live NWS weather data received over the mesh from a MeshWX bot node. Station cards blend observations (METAR), 7-day forecasts, and TAFs into a single unified view per airport. Also displays radar loops, active warnings, storm reports, hazard outlooks, and precipitation reports. Search by city, state, or ICAO code to request data via bot DM. Broadcast forecasts auto-link to the nearest observed station by proximity. Favorites, recency sorting, per-product refresh buttons, and a global °F/°C toggle
 
 ## Requirements
 

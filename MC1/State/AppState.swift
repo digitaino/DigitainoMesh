@@ -42,10 +42,20 @@ public final class AppState {
     /// When the last refresh request was sent (for client-side rate limiting).
     private var weatherLastRefreshAt: Date?
 
-    /// Cached weather bot contact, discovered from incoming #meshwx broadcasts.
-    /// The bot sends channel messages with "NodeName: <binary>" format;
-    /// the sender is identified and looked up in contacts for DM requests.
+    /// Cached weather bot contact, resolved by configured name for DM requests.
     private var weatherBotContact: ContactDTO?
+
+    /// User-configured name of the weather bot contact (e.g. "MeshWX").
+    /// Persisted in UserDefaults. Used to look up the bot in the contact list for DM requests.
+    var weatherBotName: String = UserDefaults.standard.string(forKey: "weatherBotName") ?? "" {
+        didSet { UserDefaults.standard.set(weatherBotName, forKey: "weatherBotName") }
+    }
+
+    /// When true, display METAR/TAF temperatures in °F instead of the default °C.
+    /// Persisted in UserDefaults. Defaults to false (Celsius) since METAR/TAF are aviation products.
+    var wxAviationUsesF: Bool = UserDefaults.standard.bool(forKey: "wxAviationUsesF") {
+        didSet { UserDefaults.standard.set(wxAviationUsesF, forKey: "wxAviationUsesF") }
+    }
 
     // MARK: - Connection (via ConnectionManager)
 
@@ -502,6 +512,19 @@ public final class AppState {
     /// The server responds on the channel (everyone benefits). Client-side rate-limited to
     /// once per 5 minutes. The request is COBS-encoded and sent directly via the session
     /// to avoid polluting the message store.
+    /// Resolves the weather bot contact: uses cache if valid, otherwise looks up by `weatherBotName`.
+    private func resolveBotContact(services: ServiceContainer) async -> ContactDTO? {
+        if let cached = weatherBotContact { return cached }
+        guard !weatherBotName.isEmpty, let deviceID = connectedDevice?.id else { return nil }
+        let contact = try? await services.dataStore.fetchContacts(deviceID: deviceID)
+            .first(where: { $0.name == weatherBotName })
+        if let contact {
+            weatherBotContact = contact
+            logger.info("MeshWX bot contact resolved by name: \(contact.name)")
+        }
+        return contact
+    }
+
     ///
     /// - Returns: A `WeatherRefreshResult` describing the outcome.
     func sendWeatherRefreshRequest() async -> WeatherRefreshResult {
@@ -514,59 +537,66 @@ public final class AppState {
             return .rateLimited
         }
 
-        // Determine the user's MeshWX region from current location
-        guard let location = locationService.currentLocation else {
-            return .noLocation
-        }
-        guard let region = MeshWXRegion.region(for: location.coordinate) else {
+        // Determine the target region.
+        // Prefer GPS fix → fall back to first cached region (handles GPS-not-ready-yet on launch).
+        let region: MeshWXRegion
+        if let location = locationService.currentLocation,
+           let gpsRegion = MeshWXRegion.region(for: location.coordinate) {
+            region = gpsRegion
+        } else if let firstCachedID = weatherCache.radarFrames.keys.sorted().first,
+                  let cachedRegion = MeshWXRegion.all[firstCachedID] {
+            region = cachedRegion
+            logger.info("WeatherRefresh: GPS not ready, falling back to cached region \(firstCachedID)")
+        } else {
             return .noLocation
         }
 
-        // Find the #meshwx data channel in the device's channel list
-        guard let channels = try? await services.dataStore.fetchChannels(deviceID: deviceID),
-              let wxChannel = channels.first(where: { SyncCoordinator.isWeatherDataChannel($0.name) }) else {
-            return .noDataChannel
+        guard let botContact = await resolveBotContact(services: services) else {
+            return .botNotFound
         }
 
-        // Build the 4-byte refresh request: [0x01, (region_id << 4 | request_type), ts_high, ts_low]
-        // request_type 0x3 = both radar and warnings.
-        // client_newest: timestamp of newest cached frame for this region (0 = no cache).
+        // Build "MWX" DM request: "MWX" + region_byte (hex) + client_newest (4 hex chars)
+        // region_byte = (region_id << 4) | request_type; 0x3 = both radar and warnings
         let newestTimestamp: UInt16
         if let frames = weatherCache.radarFrames[region.id], let latest = frames.last {
             newestTimestamp = latest.timestamp
         } else {
             newestTimestamp = 0
         }
-
-        let payload = Data([
-            0x01,
-            (region.id & 0x0F) << 4 | 0x03,
-            UInt8(newestTimestamp >> 8),
-            UInt8(newestTimestamp & 0xFF)
-        ])
-
-        // COBS-encode (eliminates null bytes so it survives MeshCore's C-string handling)
-        let encoded = MeshWXDecoder.cobsEncode(payload)
-
-        // Convert to Latin-1 string (COBS output has no null bytes; all bytes are valid Latin-1)
-        guard let text = String(data: encoded, encoding: .isoLatin1) else {
-            logger.error("WeatherRefresh: failed to encode refresh request as Latin-1")
-            return .noDataChannel
-        }
+        let regionByte: UInt8 = (region.id & 0x0F) << 4 | 0x03
+        let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
 
         do {
-            // Send directly via session to skip MessageService DB storage —
-            // this is a protocol control message, not a user chat message.
-            try await services.session.sendChannelMessage(
-                channel: wxChannel.index,
-                text: text,
-                timestamp: Date()
-            )
+            _ = try await services.messageService.sendDirectMessage(text: mwxText, to: botContact)
             weatherLastRefreshAt = Date()
-            logger.info("WeatherRefresh: sent 0x01 refresh for region \(region.id) (\(region.name)) on channel \(wxChannel.index)")
+            logger.info("WeatherRefresh: sent MWX DM to \(botContact.name) for region \(region.id) (\(region.name))")
             return .sent
         } catch {
-            logger.error("WeatherRefresh: session send failed: \(error)")
+            logger.error("WeatherRefresh: DM send failed: \(error)")
+            return .noDataChannel
+        }
+    }
+
+    /// Sends a 0x01 radar refresh request for a specific region ID (explicit, no GPS required).
+    /// Use this when the user manually picks a region. No client-side rate limit applied.
+    func sendRadarRequest(regionID: UInt8) async -> WeatherRefreshResult {
+        guard connectionState == .ready, let services else { return .notConnected }
+        guard let botContact = await resolveBotContact(services: services) else { return .botNotFound }
+
+        let newestTimestamp: UInt16
+        if let frames = weatherCache.radarFrames[regionID], let latest = frames.last {
+            newestTimestamp = latest.timestamp
+        } else {
+            newestTimestamp = 0
+        }
+        let regionByte: UInt8 = (regionID & 0x0F) << 4 | 0x03
+        let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
+
+        do {
+            _ = try await services.messageService.sendDirectMessage(text: mwxText, to: botContact)
+            logger.info("WeatherRefresh: sent MWX DM to \(botContact.name) for explicit region \(regionID)")
+            return .sent
+        } catch {
             return .noDataChannel
         }
     }
@@ -576,13 +606,15 @@ public final class AppState {
     /// The bot responds on #wx-broadcast (broadcast, not a DM reply).
     /// Bot contact is discovered automatically from incoming weather channel messages.
     /// - Parameter pfmPointIndex: Array index into pfm_points.json (0-based).
-    func sendWeatherDataRequest(pfmPointIndex: Int) async -> WeatherRefreshResult {
+    /// - Parameter originICAO: Optional ICAO of the station that triggered this forecast request.
+    ///   When set, the forecast will be grouped with that station in the weather view.
+    func sendWeatherDataRequest(pfmPointIndex: Int, originICAO: String? = nil) async -> WeatherRefreshResult {
         guard connectionState == .ready, let services else {
             return .notConnected
         }
 
-        guard let botContact = weatherBotContact else {
-            logger.warning("WeatherDataRequest: weather bot not yet discovered (no broadcasts received)")
+        guard let botContact = await resolveBotContact(services: services) else {
+            logger.warning("WeatherDataRequest: weather bot not configured (set bot name in Weather settings)")
             return .botNotFound
         }
 
@@ -592,7 +624,11 @@ public final class AppState {
 
         do {
             _ = try await services.messageService.sendDirectMessage(text: dmText, to: botContact)
-            logger.info("WeatherDataRequest: sent WXQ DM to \(botContact.name) for pfmPoint \(pfmPointIndex), payload=\(dmText)")
+            logger.info("▶︎ MESHWX_TX forecast pfmPoint=\(pfmPointIndex) bot=\(botContact.name) dm=\(dmText)")
+            if let icao = originICAO {
+                weatherCache.setForecastOrigin(pfmPointIndex: pfmPointIndex, icao: icao)
+            }
+            weatherCache.addPending("forecast:\(pfmPointIndex)")
             return .sent
         } catch {
             logger.error("WeatherDataRequest: DM send failed: \(error)")
@@ -600,51 +636,82 @@ public final class AppState {
         }
     }
 
+    /// Generic helper: sends a raw 0x02 data request payload as a WXQ DM to the weather bot.
+    private func sendWXDataRequest(payload: Data) async -> WeatherRefreshResult {
+        guard connectionState == .ready, let services else { return .notConnected }
+        guard let botContact = await resolveBotContact(services: services) else { return .botNotFound }
+        let hexString = payload.map { String(format: "%02x", $0) }.joined()
+        let dmText = "WXQ" + hexString
+        do {
+            _ = try await services.messageService.sendDirectMessage(text: dmText, to: botContact)
+            logger.info("▶︎ MESHWX_TX data bot=\(botContact.name) dm=\(dmText)")
+            return .sent
+        } catch {
+            return .noDataChannel
+        }
+    }
+
+    func sendOutlookRequest(pfmPointIndex: Int) async -> WeatherRefreshResult {
+        await sendWXDataRequest(payload: MeshWXDecoder.buildOutlookRequest(pfmPointIndex: pfmPointIndex))
+    }
+
+    func sendStormReportsRequest(pfmPointIndex: Int) async -> WeatherRefreshResult {
+        await sendWXDataRequest(payload: MeshWXDecoder.buildStormReportsRequest(pfmPointIndex: pfmPointIndex))
+    }
+
+    func sendRainObsRequest(pfmPointIndex: Int) async -> WeatherRefreshResult {
+        await sendWXDataRequest(payload: MeshWXDecoder.buildRainObsRequest(pfmPointIndex: pfmPointIndex))
+    }
+
+    func sendTAFRequest(icao: String) async -> WeatherRefreshResult {
+        let result = await sendWXDataRequest(payload: MeshWXDecoder.buildTAFRequest(icao: icao))
+        if case .sent = result { weatherCache.addPending("taf:\(icao)") }
+        return result
+    }
+
+    func sendMetarRequest(icao: String) async -> WeatherRefreshResult {
+        let result = await sendWXDataRequest(payload: MeshWXDecoder.buildMetarRequest(icao: icao))
+        if case .sent = result { weatherCache.addPending("metar:\(icao)") }
+        return result
+    }
+
+    func sendWarningsNearRequest(pfmPointIndex: Int) async -> WeatherRefreshResult {
+        await sendWXDataRequest(payload: MeshWXDecoder.buildWarningsNearRequest(pfmPointIndex: pfmPointIndex))
+    }
+
     private func wireWeatherHandler(services: ServiceContainer) async {
         await services.syncCoordinator.setWeatherMessageHandler { [weak self] message in
             guard let self else { return }
             let logger = Logger(subsystem: "com.mc1", category: "MeshWX")
 
-            // Channel messages are prefixed with "NodeName: " — strip it to get raw binary.
-            // Find the first ": " (0x3a 0x20) and take everything after it.
-            // The prefix before ": " is the bot's node name — used to discover the bot contact.
-            let fullData = message.rawPayload
+            // Channel messages are delivered as "NodeName: " + binary payload.
+            // Strip everything up to and including the first ": " (0x3a 0x20) sequence.
+            let raw = message.rawPayload
+            let separator: [UInt8] = [0x3a, 0x20]
             let data: Data
-            var senderName: String = ""
-            if let colonSpaceRange = fullData.firstRange(of: Data([0x3a, 0x20])) {
-                let nameBytes = fullData[fullData.startIndex..<colonSpaceRange.lowerBound]
-                senderName = String(data: Data(nameBytes), encoding: .utf8) ?? ""
-                // Re-create Data to rebase indices to 0 (slices keep original indices)
-                data = Data(fullData[colonSpaceRange.upperBound...])
-                logger.info("MeshWX sender=\(senderName), binary payload: \(data.count) bytes, hex=\(data.prefix(20).map { String(format: "%02x", $0) }.joined(separator: " "))")
+            var discoveredBotName: String? = nil
+            if let sepRange = raw.range(of: Data(separator)) {
+                let nameData = raw[raw.startIndex..<sepRange.lowerBound]
+                discoveredBotName = String(data: nameData, encoding: .utf8)
+                data = raw[sepRange.upperBound...]
             } else {
-                data = fullData
-                logger.info("MeshWX raw payload (no prefix found): \(data.count) bytes, hex=\(data.prefix(20).map { String(format: "%02x", $0) }.joined(separator: " "))")
+                data = raw
             }
-
-            // Cache the weather bot contact for DM requests if not yet discovered.
-            if !senderName.isEmpty {
-                let needsLookup = await MainActor.run {
-                    self.weatherBotContact == nil || self.weatherBotContact?.name != senderName
-                }
-                if needsLookup {
-                    let deviceID: UUID? = await MainActor.run { self.connectedDevice?.id }
-                    if let deviceID {
-                        let botContact = try? await services.dataStore.fetchContacts(deviceID: deviceID)
-                            .first { $0.name == senderName }
-                        await MainActor.run {
-                            if let botContact {
-                                self.weatherBotContact = botContact
-                                logger.info("MeshWX bot contact cached: \(botContact.name)")
-                            }
-                        }
-                    }
-                }
-            }
+            logger.info("MeshWX binary payload: \(data.count) bytes (raw \(raw.count)), hex=\(data.prefix(20).map { String(format: "%02x", $0) }.joined(separator: " "))")
 
             let decoded = MeshWXDecoder.decode(data)
 
+            // Skip known non-product bot broadcasts (e.g. 0x0d home location) —
+            // they aren't weather data and would just show as "Decode failed" noise.
+            if decoded == nil && MeshWXDecoder.isKnownNonProduct(data) { return }
+
             await MainActor.run {
+                // Auto-discover bot name from the "NodeName: " prefix if not already configured
+                if let name = discoveredBotName, !name.isEmpty, self.weatherBotName.isEmpty {
+                    logger.info("MeshWX: auto-discovered weather bot name: '\(name)'")
+                    self.weatherBotName = name
+                }
+
                 // Always log to the weather message log (visible in Tools > Weather)
                 self.weatherCache.logMessage(rawPayload: data, decoded: decoded)
 
@@ -657,7 +724,7 @@ public final class AppState {
                     case .radarGrid(let frame):
                         logger.info("MeshWX radar decoded: region \(frame.regionID), seq \(frame.frameSeq)")
                         self.weatherCache.ingestRadarFrame(frame)
-                        // Radar frames are not persisted (too large, auto-refreshed)
+                        self.weatherCache.persistPayload(data, type: .radar(frame.regionID))
                     case .forecast(let forecast):
                         let pfmIdx = forecast.pfmPointIndex.map { "\($0)" } ?? "unknown"
                         logger.info("MeshWX forecast decoded: pfmPoint=\(pfmIdx), \(forecast.periods.count) periods")
@@ -667,6 +734,21 @@ public final class AppState {
                         logger.info("MeshWX observation decoded: \(obs.displayName) \(obs.tempF)°F \(obs.skyName)")
                         self.weatherCache.ingestObservation(obs)
                         self.weatherCache.persistPayload(data, type: .observation)
+                    case .outlook(let outlook):
+                        logger.info("MeshWX outlook decoded: \(outlook.days.count) days")
+                        self.weatherCache.ingestOutlook(outlook)
+                    case .stormReports(let reports):
+                        logger.info("MeshWX storm reports decoded: \(reports.reports.count) reports")
+                        self.weatherCache.ingestStormReports(reports)
+                    case .rainObservations(let obs):
+                        logger.info("MeshWX rain observations decoded: \(obs.cities.count) cities")
+                        self.weatherCache.ingestRainObservations(obs)
+                    case .taf(let taf):
+                        logger.info("MeshWX TAF decoded: \(taf.icao) \(taf.tempF)°F")
+                        self.weatherCache.ingestTAF(taf)
+                    case .warningsNear(let warnings):
+                        logger.info("MeshWX warnings-near decoded: \(warnings.entries.count) entries")
+                        self.weatherCache.ingestWarningsNear(warnings)
                     }
                 } else {
                     let firstByte = data.first.map { String(format: "0x%02x", $0) } ?? "nil"

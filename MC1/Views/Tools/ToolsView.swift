@@ -126,6 +126,13 @@ struct ToolsView: View {
                             toolLabel(for: tool)
                         }
                     }
+                    Section {
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Label(L10n.Localizable.Tabs.settings, systemImage: "gear")
+                        }
+                    }
                 }
                 .navigationTitle(L10n.Tools.Tools.title)
                 .toolbar {
@@ -161,6 +168,13 @@ struct ToolsView: View {
                         selectTool(tool)
                     } label: {
                         toolLabel(for: tool)
+                    }
+                }
+                Section {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Label(L10n.Localizable.Tabs.settings, systemImage: "gear")
                     }
                 }
             }

@@ -13,7 +13,7 @@ struct WeatherView: View {
                 .searchable(
                     text: $searchQuery,
                     placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "City, state (TX), or ICAO code…"
+                    prompt: "City, state, or ICAO code…"
                 )
         }
         .liquidGlassToolbarBackground()
@@ -33,11 +33,20 @@ private struct WeatherBody: View {
     @State private var requestError: String?
     @State private var isSendingSearch = false
     @State private var searchError: String?
+    @State private var showingRadarPicker = false
+
+    @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
+
+    private var favoriteICAOs: Set<String> {
+        Set(favoriteICAOsRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+    }
 
     // MARK: - Search results
 
-    private var cityResults: [(place: WXBundleLoader.Place, pfmPoint: WXBundleLoader.PFMPoint)] {
-        WXBundleLoader.searchPlaces(query: searchQuery, limit: 25)
+    private var cityResults: [(place: WXBundleLoader.Place, station: WXBundleLoader.Station?)] {
+        WXBundleLoader.searchPlaces(query: searchQuery, limit: 25).map { r in
+            (r.place, WXBundleLoader.nearestStation(to: r.pfmPoint.coordinate))
+        }
     }
 
     private var stationResults: [WXBundleLoader.Station] {
@@ -56,15 +65,21 @@ private struct WeatherBody: View {
                 emptyState
             }
         }
+        .sheet(isPresented: $showingRadarPicker) {
+            RadarRegionPickerView()
+        }
         .navigationTitle("Weather")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 BLEStatusIndicatorView()
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                requestButton
-            }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    appState.wxAviationUsesF.toggle()
+                } label: {
+                    Text(appState.wxAviationUsesF ? "°F" : "°C")
+                        .font(.subheadline.weight(.semibold))
+                }
                 SignalBarsToolbarItem()
             }
         }
@@ -104,7 +119,7 @@ private struct WeatherBody: View {
                 if !cityResults.isEmpty {
                     Section("Cities") {
                         ForEach(cityResults, id: \.place.id) { result in
-                            cityRow(result.place, pfmPoint: result.pfmPoint)
+                            cityRow(result.place, station: result.station)
                         }
                     }
                 }
@@ -129,18 +144,24 @@ private struct WeatherBody: View {
         }
     }
 
-    private func cityRow(_ place: WXBundleLoader.Place, pfmPoint: WXBundleLoader.PFMPoint) -> some View {
+    private func cityRow(_ place: WXBundleLoader.Place, station: WXBundleLoader.Station?) -> some View {
         Button {
-            Task { await sendForecastRequest(name: place.displayName, pfmPointIndex: pfmPoint.id) }
+            Task { await sendObservationRequest(icao: station?.id) }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(place.displayName)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
-                    Text("NWS \(pfmPoint.wfo) · \(pfmPoint.zone)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let station {
+                        Text("\(station.id) — \(station.name)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No METAR station nearby")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -149,12 +170,12 @@ private struct WeatherBody: View {
             }
             .padding(.vertical, 2)
         }
-        .disabled(isSendingSearch || appState.connectionState != .ready)
+        .disabled(isSendingSearch || appState.connectionState != .ready || station == nil)
     }
 
     private func stationRow(_ station: WXBundleLoader.Station) -> some View {
         Button {
-            Task { await sendStationRequest(for: station) }
+            Task { await sendObservationRequest(icao: station.id) }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -183,46 +204,192 @@ private struct WeatherBody: View {
         .disabled(isSendingSearch || appState.connectionState != .ready)
     }
 
+    // MARK: - Station Groups
+
+    /// Observations keyed by ICAO code (extracted from locationIDBytes for station-type obs).
+    private var observationsByICAO: [String: MeshWXObservation] {
+        appState.weatherCache.observations.values.reduce(into: [:]) { dict, obs in
+            guard obs.locationType == 2,
+                  obs.locationIDBytes.count >= 4,
+                  let icao = String(bytes: obs.locationIDBytes.prefix(4), encoding: .ascii)?
+                      .trimmingCharacters(in: CharacterSet(charactersIn: "\0")),
+                  !icao.isEmpty else { return }
+            dict[icao] = obs
+        }
+    }
+
+    /// Extends explicit forecastOrigins with proximity links for unlinked auto-broadcast forecasts.
+    /// For each forecast not already linked to a station, finds the nearest observed station.
+    private var forecastToICAO: [Int: String] {
+        var result = appState.weatherCache.forecastOrigins
+        let obsByICAO = observationsByICAO
+        guard !obsByICAO.isEmpty else { return result }
+        let pfmPoints = WXBundleLoader.allPFMPoints
+        let observedStations = WXBundleLoader.allStations.filter { obsByICAO[$0.id] != nil }
+        guard !observedStations.isEmpty else { return result }
+        for pfmIdx in appState.weatherCache.forecasts.keys where result[pfmIdx] == nil {
+            guard pfmIdx < pfmPoints.count else { continue }
+            let coord = pfmPoints[pfmIdx].coordinate
+            if let nearest = observedStations.min(by: { a, b in
+                squaredDist(a.latitude, a.longitude, coord.latitude, coord.longitude) <
+                squaredDist(b.latitude, b.longitude, coord.latitude, coord.longitude)
+            }) {
+                result[pfmIdx] = nearest.id
+            }
+        }
+        return result
+    }
+
+    private func squaredDist(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
+        let dLat = lat2 - lat1; let dLon = lon2 - lon1
+        return dLat * dLat + dLon * dLon
+    }
+
+    private var stationGroups: [StationGroup] {
+        let obsByICAO = observationsByICAO
+        let fcastToICAO = forecastToICAO
+        var icaos: Set<String> = []
+        icaos.formUnion(obsByICAO.keys)
+        icaos.formUnion(appState.weatherCache.tafs.keys)
+        icaos.formUnion(fcastToICAO.values)
+        for key in appState.weatherCache.pendingKeys {
+            if key.hasPrefix("metar:") { icaos.insert(String(key.dropFirst(6))) }
+            else if key.hasPrefix("taf:") { icaos.insert(String(key.dropFirst(4))) }
+        }
+        let favs = favoriteICAOs
+        return icaos.map { icao in
+            let obs = obsByICAO[icao]
+            let taf = appState.weatherCache.tafs[icao]
+            let origin = fcastToICAO.first(where: { $0.value == icao })
+            let linked: (pfmIdx: Int, forecast: MeshWXForecast)? = origin.flatMap { entry in
+                appState.weatherCache.forecasts[entry.key].map { (entry.key, $0) }
+            }
+            let pendingForecast = origin.map {
+                appState.weatherCache.isPending("forecast:\($0.key)")
+            } ?? false
+            return StationGroup(
+                icao: icao,
+                obs: obs, taf: taf,
+                linkedForecast: linked,
+                pendingObs: appState.weatherCache.isPending("metar:\(icao)"),
+                pendingTAF: appState.weatherCache.isPending("taf:\(icao)"),
+                pendingForecast: pendingForecast
+            )
+        }
+        .sorted { a, b in
+            let aFav = favs.contains(a.icao)
+            let bFav = favs.contains(b.icao)
+            if aFav != bFav { return aFav }
+            return mostRecentReceivedDate(a) > mostRecentReceivedDate(b)
+        }
+    }
+
+    private func mostRecentReceivedDate(_ group: StationGroup) -> Date {
+        var date = Date.distantPast
+        if let obs = group.obs { date = max(date, obs.receivedAt) }
+        if let taf = group.taf { date = max(date, taf.receivedAt) }
+        if let (_, fc) = group.linkedForecast { date = max(date, fc.receivedAt) }
+        return date
+    }
+
+    /// Forecasts not linked to any station (explicit or proximity-based).
+    private var unlinkedForecasts: [(key: Int, forecast: MeshWXForecast)] {
+        let linked = forecastToICAO
+        return appState.weatherCache.forecasts
+            .filter { linked[$0.key] == nil }
+            .sorted { $0.key < $1.key }
+            .map { (key: $0.key, forecast: $0.value) }
+    }
+
     // MARK: - Weather Data List
 
     private var weatherList: some View {
         List {
-            if !appState.weatherCache.observations.isEmpty {
-                observationsSection
+            if !appState.weatherCache.warnings.isEmpty { warningsSection }
+            ForEach(stationGroups) { group in
+                stationSection(group)
             }
-            if !appState.weatherCache.warnings.isEmpty {
-                warningsSection
-            }
-            if !appState.weatherCache.forecasts.isEmpty {
-                forecastsSection
-            }
-            if !appState.weatherCache.radarFrames.isEmpty {
-                radarSection
-            }
+            if !unlinkedForecasts.isEmpty { unlinkedForecastsSection }
+            if !appState.weatherCache.outlooks.isEmpty { outlooksSection }
+            if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
+            if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
+            if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
+            if !appState.weatherCache.radarFrames.isEmpty { radarSection }
             statusSection
         }
     }
 
-    // MARK: - Observations Section
-
-    private var observationsSection: some View {
+    @ViewBuilder
+    private func stationSection(_ group: StationGroup) -> some View {
+        let stationName = WXBundleLoader.allStations.first(where: { $0.id == group.icao })?.name
         Section {
-            ForEach(sortedObservationKeys, id: \.self) { key in
-                if let obs = appState.weatherCache.observations[key] {
-                    ObservationRow(observation: obs)
+            StationCard(group: group)
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) { clearStation(group) }
+                        label: { Label("Clear", systemImage: "trash") }
                 }
-            }
         } header: {
-            HStack {
-                Image(systemName: "thermometer.medium")
-                    .foregroundStyle(.orange)
-                Text("Current Conditions (\(appState.weatherCache.observations.count))")
+            HStack(spacing: 4) {
+                if favoriteICAOs.contains(group.icao) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.yellow)
+                }
+                Text(group.icao)
+                    .font(.caption.weight(.semibold))
+                if let name = stationName {
+                    Text("— \(name)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
         }
     }
 
-    private var sortedObservationKeys: [String] {
-        appState.weatherCache.observations.keys.sorted()
+    private func clearStation(_ group: StationGroup) {
+        if let obs = group.obs { appState.weatherCache.removeObservation(key: obs.locationKey) }
+        if let (pfmIdx, _) = group.linkedForecast { appState.weatherCache.removeForecast(key: pfmIdx) }
+        if group.taf != nil { appState.weatherCache.removeTAF(icao: group.icao) }
+    }
+
+    // MARK: - Unlinked Forecasts Section
+
+    private var unlinkedForecastsSection: some View {
+        Section {
+            ForEach(unlinkedForecasts, id: \.key) { item in
+                ForecastRow(forecast: item.forecast)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            appState.weatherCache.removeForecast(key: item.key)
+                        } label: { Label("Delete", systemImage: "trash") }
+                    }
+                    .contextMenu {
+                        if let pfmIdx = item.forecast.pfmPointIndex {
+                            Section("Request More Data") {
+                                Button { Task { _ = await appState.sendOutlookRequest(pfmPointIndex: pfmIdx) } }
+                                    label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
+                                Button { Task { _ = await appState.sendStormReportsRequest(pfmPointIndex: pfmIdx) } }
+                                    label: { Label("Storm Reports", systemImage: "tornado") }
+                                Button { Task { _ = await appState.sendRainObsRequest(pfmPointIndex: pfmIdx) } }
+                                    label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
+                                Button { Task { _ = await appState.sendWarningsNearRequest(pfmPointIndex: pfmIdx) } }
+                                    label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+                            }
+                            Divider()
+                        }
+                        Button(role: .destructive) {
+                            appState.weatherCache.removeForecast(key: item.key)
+                        } label: { Label("Delete Forecast", systemImage: "trash") }
+                    }
+            }
+        } header: {
+            HStack {
+                Image(systemName: "sun.max.fill")
+                    .foregroundStyle(.orange)
+                Text("Forecasts (\(unlinkedForecasts.count))")
+            }
+        }
     }
 
     // MARK: - Warnings Section
@@ -248,26 +415,99 @@ private struct WeatherBody: View {
         }
     }
 
-    // MARK: - Forecasts Section
+    // MARK: - Outlooks Section
 
-    private var forecastsSection: some View {
+    private var outlooksSection: some View {
         Section {
-            ForEach(sortedForecastKeys, id: \.self) { key in
-                if let forecast = appState.weatherCache.forecasts[key] {
-                    ForecastRow(forecast: forecast)
+            ForEach(Array(appState.weatherCache.outlooks.keys).sorted(), id: \.self) { key in
+                if let outlook = appState.weatherCache.outlooks[key] {
+                    OutlookRow(outlook: outlook)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                appState.weatherCache.removeOutlook(key: key)
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
                 }
             }
         } header: {
             HStack {
-                Image(systemName: "sun.max.fill")
+                Image(systemName: "calendar.badge.exclamationmark")
                     .foregroundStyle(.orange)
-                Text("Forecasts (\(appState.weatherCache.forecasts.count))")
+                Text("Hazard Outlook (\(appState.weatherCache.outlooks.count))")
             }
         }
     }
 
-    private var sortedForecastKeys: [Int] {
-        appState.weatherCache.forecasts.keys.sorted()
+    // MARK: - Storm Reports Section
+
+    private var stormReportsSection: some View {
+        Section {
+            ForEach(Array(appState.weatherCache.stormReports.keys).sorted(), id: \.self) { key in
+                if let reports = appState.weatherCache.stormReports[key] {
+                    StormReportsRow(reports: reports)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                appState.weatherCache.removeStormReports(key: key)
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
+                }
+            }
+        } header: {
+            HStack {
+                Image(systemName: "tornado")
+                    .foregroundStyle(.red)
+                let total = appState.weatherCache.stormReports.values.reduce(0) { $0 + $1.reports.count }
+                Text("Storm Reports (\(total))")
+            }
+        }
+    }
+
+    // MARK: - Rain Observations Section
+
+    private var rainObsSection: some View {
+        Section {
+            ForEach(Array(appState.weatherCache.rainObservations.keys).sorted(), id: \.self) { key in
+                if let obs = appState.weatherCache.rainObservations[key] {
+                    RainObsRow(obs: obs)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                appState.weatherCache.removeRainObservations(key: key)
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
+                }
+            }
+        } header: {
+            HStack {
+                Image(systemName: "cloud.rain.fill")
+                    .foregroundStyle(.cyan)
+                let total = appState.weatherCache.rainObservations.values.reduce(0) { $0 + $1.cities.count }
+                Text("Precipitation Reports (\(total) cities)")
+            }
+        }
+    }
+
+    // MARK: - Warnings Near Section
+
+    private var warningsNearSection: some View {
+        Section {
+            ForEach(Array(appState.weatherCache.warningsNear.keys).sorted(), id: \.self) { key in
+                if let near = appState.weatherCache.warningsNear[key] {
+                    WarningsNearRow(warningsNear: near)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                appState.weatherCache.removeWarningsNear(key: key)
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
+                }
+            }
+        } header: {
+            HStack {
+                Image(systemName: "location.circle.fill")
+                    .foregroundStyle(.red)
+                let total = appState.weatherCache.warningsNear.values.reduce(0) { $0 + $1.entries.count }
+                Text("Warnings Near You (\(total))")
+            }
+        }
     }
 
     // MARK: - Radar Section
@@ -288,6 +528,14 @@ private struct WeatherBody: View {
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .foregroundStyle(.blue)
                 Text("Radar Coverage (\(appState.weatherCache.radarFrames.count) region\(appState.weatherCache.radarFrames.count == 1 ? "" : "s"))")
+                Spacer()
+                Button {
+                    showingRadarPicker = true
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -336,38 +584,27 @@ private struct WeatherBody: View {
                 Task { await requestUpdate() }
             }
             .buttonStyle(.bordered)
-        }
-    }
-
-    // MARK: - Toolbar
-
-    private var requestButton: some View {
-        Button {
-            Task { await requestUpdate() }
-        } label: {
-            if isRequesting {
-                ProgressView().scaleEffect(0.8)
-            } else {
-                Image(systemName: "arrow.clockwise")
+            Button("Request Radar Region") {
+                showingRadarPicker = true
             }
+            .buttonStyle(.bordered)
         }
-        .disabled(isRequesting || appState.connectionState != .ready)
     }
 
     // MARK: - Actions
 
-    private func sendForecastRequest(name: String, pfmPointIndex: Int) async {
-        guard !isSendingSearch else { return }
+    private func sendObservationRequest(icao: String?) async {
+        guard let icao, !isSendingSearch else { return }
         isSendingSearch = true
         defer { isSendingSearch = false }
         searchError = nil
 
-        let result = await appState.sendWeatherDataRequest(pfmPointIndex: pfmPointIndex)
+        let result = await appState.sendMetarRequest(icao: icao)
         switch result {
         case .sent:
             dismissSearch()
         case .botNotFound:
-            searchError = "Weather bot not yet discovered. Wait for a broadcast on #meshwx first."
+            searchError = "Weather bot not configured. Set the bot contact name in Tools → Weather Log."
         case .notConnected:
             searchError = "Not connected to a LoRa device."
         case .noDataChannel:
@@ -377,15 +614,6 @@ private struct WeatherBody: View {
         }
     }
 
-    private func sendStationRequest(for station: WXBundleLoader.Station) async {
-        let coord = CLLocationCoordinate2D(latitude: station.latitude, longitude: station.longitude)
-        guard let nearest = WXBundleLoader.nearestPFMPoint(to: coord) else {
-            searchError = "Could not resolve nearest forecast point."
-            return
-        }
-        await sendForecastRequest(name: "\(station.id) — \(station.name)", pfmPointIndex: nearest.id)
-    }
-
     private func requestUpdate() async {
         guard !isRequesting else { return }
         isRequesting = true
@@ -393,13 +621,32 @@ private struct WeatherBody: View {
 
         let result = await appState.sendWeatherRefreshRequest()
         switch result {
-        case .sent, .rateLimited, .notConnected, .botNotFound:
+        case .sent:
+            break
+        case .rateLimited, .notConnected, .botNotFound:
             break
         case .noDataChannel:
             requestError = "Join the #meshwx channel on your LoRa device to receive weather data."
         case .noLocation:
-            requestError = "Enable location access so the app can request weather for your region."
+            requestError = "Location not available yet. Move to a region with GPS signal, or wait a moment and try again."
         }
+    }
+
+}
+
+// MARK: - Pending Row
+
+private struct PendingRow: View {
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView().scaleEffect(0.75)
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -484,12 +731,13 @@ private struct RadarRegionRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if let frame = latestFrame {
-                        Text(timestampText(frame.timestamp))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         let activeCells = frame.grid.filter { $0 > 0 }.count
                         if activeCells > 0 {
-                            Text("\(activeCells)/256 cells")
+                            Text("\(activeCells) active cells")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text("No precipitation")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -500,16 +748,12 @@ private struct RadarRegionRow: View {
         .padding(.vertical, 2)
     }
 
-    private func timestampText(_ minutes: UInt16) -> String {
-        let hours = minutes / 60
-        let mins = minutes % 60
-        return String(format: "%02d:%02dZ", hours, mins)
-    }
 }
 
 // MARK: - Forecast Row
 
 private struct ForecastRow: View {
+    @Environment(\.appState) private var appState
     let forecast: MeshWXForecast
 
     private var locationName: String {
@@ -544,15 +788,20 @@ private struct ForecastRow: View {
                     }
                 }
                 Spacer()
-                Text(forecast.issuedHoursAgo == 0 ? "Just now" : "\(forecast.issuedHoursAgo)h ago")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("Issued \(forecast.issuedHoursAgo == 0 ? "< 1h ago" : "\(forecast.issuedHoursAgo)h ago")")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(receivedAgoLabel(forecast.receivedAt))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(Array(forecast.periods.prefix(7).enumerated()), id: \.offset) { _, period in
-                        ForecastPeriodCell(period: period, receivedAt: forecast.receivedAt)
+                        ForecastPeriodCell(period: period, receivedAt: forecast.receivedAt, showF: appState.wxAviationUsesF)
                     }
                 }
                 .padding(.vertical, 2)
@@ -567,6 +816,11 @@ private struct ForecastRow: View {
 private struct ForecastPeriodCell: View {
     let period: MeshWXForecast.Period
     let receivedAt: Date
+    let showF: Bool
+
+    private func displayTemp(_ f: Int) -> Int {
+        showF ? f : Int(round(Double(f - 32) * 5.0 / 9.0))
+    }
 
     private var dayLabel: String {
         let cal = Calendar.current
@@ -578,6 +832,15 @@ private struct ForecastPeriodCell: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE"
         return formatter.string(from: date)
+    }
+
+    private var conditionIconNames: [String] {
+        var icons: [String] = []
+        // Skip flag if the sky icon already represents the same condition
+        if period.hasThunderstorm && period.skyCode != 10 { icons.append("bolt.fill") }
+        if period.hasFrost                                { icons.append("snowflake") }
+        if period.hasFog && period.skyCode != 5           { icons.append("cloud.fog.fill") }
+        return icons
     }
 
     var body: some View {
@@ -593,12 +856,22 @@ private struct ForecastPeriodCell: View {
                 .foregroundStyle(period.skyColor)
                 .frame(height: 22)
 
-            if let high = period.highF {
-                Text("\(high)°")
+            // High / Low temperatures (respects global °F/°C toggle)
+            if let high = period.highF, let low = period.lowF {
+                VStack(spacing: 0) {
+                    Text("\(displayTemp(high))°")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("\(displayTemp(low))°")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            } else if let high = period.highF {
+                Text("\(displayTemp(high))°")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
             } else if let low = period.lowF {
-                Text("\(low)°")
+                Text("\(displayTemp(low))°")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             } else {
@@ -619,7 +892,7 @@ private struct ForecastPeriodCell: View {
                 Color.clear.frame(height: 14)
             }
 
-            if period.windSpeedMph > 0 {
+            if period.windDir != 8 && period.windSpeedMph > 0 {
                 HStack(spacing: 2) {
                     Image(systemName: "wind")
                         .font(.system(size: 7))
@@ -633,6 +906,7 @@ private struct ForecastPeriodCell: View {
             } else {
                 Color.clear.frame(height: 13)
             }
+
         }
         .frame(minWidth: 52)
         .padding(.horizontal, 4)
@@ -641,20 +915,236 @@ private struct ForecastPeriodCell: View {
     }
 }
 
+// MARK: - Station Group Model
+
+private struct StationGroup: Identifiable {
+    let icao: String
+    var id: String { icao }
+    var obs: MeshWXObservation?
+    var taf: MeshWXTAF?
+    var linkedForecast: (pfmIdx: Int, forecast: MeshWXForecast)?
+    var pendingObs: Bool
+    var pendingTAF: Bool
+    var pendingForecast: Bool
+}
+
+// MARK: - Station Card
+// Single unified list row for a station (obs + forecast + TAF) with one context menu.
+
+private struct StationCard: View {
+    @Environment(\.appState) private var appState
+    let group: StationGroup
+
+    @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
+
+    private var favoriteICAOs: Set<String> {
+        Set(favoriteICAOsRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+    }
+    private func toggleFavorite() {
+        var favs = favoriteICAOs
+        if favs.contains(group.icao) { favs.remove(group.icao) } else { favs.insert(group.icao) }
+        favoriteICAOsRaw = favs.sorted().joined(separator: ",")
+    }
+
+    private var showF: Bool { appState.wxAviationUsesF }
+
+    /// Nearest NWS PFM point index for the station's geographic location.
+    private var pfmIndex: Int? {
+        guard let station = WXBundleLoader.allStations.first(where: { $0.id == group.icao }) else { return nil }
+        return WXBundleLoader.nearestPFMPoint(
+            to: CLLocationCoordinate2D(latitude: station.latitude, longitude: station.longitude)
+        )?.id
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // --- Current Conditions ---
+            if group.pendingObs && group.obs == nil {
+                PendingRow(label: "Awaiting current conditions…")
+            }
+            if let obs = group.obs {
+                ObservationRow(observation: obs, onRefresh: group.pendingObs ? nil : {
+                    Task { _ = await appState.sendMetarRequest(icao: group.icao) }
+                })
+            }
+
+            // --- Forecast ---
+            let hasForecastContent = group.linkedForecast != nil || group.pendingForecast
+            if (group.obs != nil || group.pendingObs) && hasForecastContent {
+                Divider().padding(.vertical, 8)
+            }
+            if group.pendingForecast && group.linkedForecast == nil {
+                PendingRow(label: "Awaiting forecast…")
+            }
+            if let (pfmIdx, fc) = group.linkedForecast {
+                InlineForecastRow(forecast: fc, onRefresh: group.pendingForecast ? nil : {
+                    Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: group.icao) }
+                })
+            }
+
+            // --- TAF ---
+            let hasTAFContent = group.taf != nil || group.pendingTAF
+            if hasTAFContent {
+                Divider().padding(.vertical, 8)
+            }
+            if group.pendingTAF && group.taf == nil {
+                PendingRow(label: "Awaiting TAF…")
+            }
+            if let taf = group.taf {
+                TAFRow(taf: taf, onRefresh: group.pendingTAF ? nil : {
+                    Task { _ = await appState.sendTAFRequest(icao: group.icao) }
+                })
+            }
+        }
+        .padding(.vertical, 4)
+        .contextMenu { stationContextMenu }
+    }
+
+    @ViewBuilder
+    private var stationContextMenu: some View {
+        let pfmIdx = pfmIndex
+        let icao = group.icao
+        let hasObs = group.obs != nil
+        let hasForecast = group.linkedForecast != nil
+        let hasTAF = group.taf != nil
+
+        let isFavorite = favoriteICAOs.contains(group.icao)
+        Button { toggleFavorite() } label: {
+            Label(isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                  systemImage: isFavorite ? "star.slash" : "star")
+        }
+
+        Section("Request Data") {
+            if !hasObs && !group.pendingObs {
+                Button { Task { _ = await appState.sendMetarRequest(icao: icao) } }
+                    label: { Label("Current Conditions", systemImage: "thermometer.medium") }
+            }
+            if !hasTAF && !group.pendingTAF {
+                Button { Task { _ = await appState.sendTAFRequest(icao: icao) } }
+                    label: { Label("TAF (Aviation)", systemImage: "airplane") }
+            }
+            if let pfmIdx {
+                if !hasForecast && !group.pendingForecast {
+                    Button { Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: icao) } }
+                        label: { Label("Forecast", systemImage: "sun.max.fill") }
+                }
+                Button { Task { _ = await appState.sendOutlookRequest(pfmPointIndex: pfmIdx) } }
+                    label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
+                Button { Task { _ = await appState.sendStormReportsRequest(pfmPointIndex: pfmIdx) } }
+                    label: { Label("Storm Reports", systemImage: "tornado") }
+                Button { Task { _ = await appState.sendRainObsRequest(pfmPointIndex: pfmIdx) } }
+                    label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
+                Button { Task { _ = await appState.sendWarningsNearRequest(pfmPointIndex: pfmIdx) } }
+                    label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+            }
+        }
+
+        if hasObs || hasForecast || hasTAF {
+            Section("Delete") {
+                if hasObs {
+                    Button(role: .destructive) {
+                        appState.weatherCache.removeObservation(key: group.obs!.locationKey)
+                    } label: { Label("Delete Observations", systemImage: "trash") }
+                }
+                if hasForecast, let (pfmIdx, _) = group.linkedForecast {
+                    Button(role: .destructive) {
+                        appState.weatherCache.removeForecast(key: pfmIdx)
+                    } label: { Label("Delete Forecast", systemImage: "trash") }
+                }
+                if hasTAF {
+                    Button(role: .destructive) {
+                        appState.weatherCache.removeTAF(icao: icao)
+                    } label: { Label("Delete TAF", systemImage: "trash") }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Inline Forecast Row (used inside station sections — no location name header)
+
+private struct InlineForecastRow: View {
+    @Environment(\.appState) private var appState
+    let forecast: MeshWXForecast
+    var onRefresh: (() -> Void)? = nil
+
+    private var wfoLabel: String {
+        guard let idx = forecast.pfmPointIndex else { return "" }
+        let points = WXBundleLoader.allPFMPoints
+        guard idx < points.count else { return "" }
+        let p = points[idx]
+        return "\(p.wfo) · \(p.zone)"
+    }
+
+    private var canRefresh: Bool {
+        onRefresh != nil && Date().timeIntervalSince(forecast.receivedAt) > wxRefreshCooldown
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                if !wfoLabel.isEmpty {
+                    Text(wfoLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if canRefresh {
+                    Button { onRefresh?() } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text("Forecast · Issued \(forecast.issuedHoursAgo == 0 ? "< 1h ago" : "\(forecast.issuedHoursAgo)h ago")")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(forecast.periods.prefix(7).enumerated()), id: \.offset) { _, period in
+                        ForecastPeriodCell(period: period, receivedAt: forecast.receivedAt, showF: appState.wxAviationUsesF)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Observation Row
 
 private struct ObservationRow: View {
+    @Environment(\.appState) private var appState
     let observation: MeshWXObservation
+    var onRefresh: (() -> Void)? = nil
+
+    private var showF: Bool { appState.wxAviationUsesF }
+
+    private var canRefresh: Bool {
+        onRefresh != nil && Date().timeIntervalSince(observation.receivedAt) > wxRefreshCooldown
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Header: station name + timestamp
+            // Header: station name + optional refresh + received-ago
             HStack {
                 Text(observation.displayName)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(observation.timestampLabel)
-                    .font(.caption2.monospacedDigit())
+                if canRefresh {
+                    Button { onRefresh?() } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text(receivedAgoLabel(observation.receivedAt))
+                    .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
 
@@ -666,10 +1156,11 @@ private struct ObservationRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
-                        Text("\(observation.tempF)°F")
+                        Text(showF ? "\(observation.tempF)°F" : "\(observation.tempC)°C")
                             .font(.title3.weight(.semibold))
                         if observation.feelsLikeDelta != 0 {
-                            Text("Feels \(observation.feelsLikeF)°")
+                            let fl = showF ? "\(observation.feelsLikeF)°F" : "\(observation.feelsLikeC)°C"
+                            Text("Feels \(fl)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -681,9 +1172,9 @@ private struct ObservationRow: View {
 
                 Spacer()
 
-                // Wind column
+                // Wind column (knots — METAR standard)
                 VStack(alignment: .trailing, spacing: 2) {
-                    if observation.windSpeedMph == 0 && observation.windDir == 8 {
+                    if observation.windSpeedKts == 0 && observation.windDir == 8 {
                         Text("Calm")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -691,12 +1182,12 @@ private struct ObservationRow: View {
                         HStack(spacing: 3) {
                             Image(systemName: "wind")
                                 .font(.caption2)
-                            Text("\(observation.windSpeedMph) mph \(observation.windDirName)")
+                            Text("\(observation.windSpeedKts) kts \(observation.windDirName)")
                                 .font(.caption.weight(.medium))
                         }
                         .foregroundStyle(.secondary)
                         if observation.hasGust {
-                            Text("Gusts \(observation.windGustMph) mph")
+                            Text("Gusts \(observation.windGustKts) kts")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
                         }
@@ -706,7 +1197,7 @@ private struct ObservationRow: View {
 
             // Detail row: dewpoint · visibility · pressure · humidity
             HStack(spacing: 10) {
-                detailChip(label: "Dew", value: "\(observation.dewpointF)°")
+                detailChip(label: "Dew", value: showF ? "\(observation.dewpointF)°F" : "\(observation.dewpointC)°C")
                 detailChip(label: "Vis", value: "\(observation.visibilityMi) mi")
                 detailChip(label: "Pres", value: String(format: "%.2f\"", observation.pressureInHg))
                 detailChip(label: "RH", value: "\(observation.relativeHumidityPct)%")
@@ -725,6 +1216,416 @@ private struct ObservationRow: View {
                 .foregroundStyle(.secondary)
         }
     }
+}
+
+// MARK: - Outlook Row
+
+private struct OutlookRow: View {
+    let outlook: MeshWXOutlook
+
+    private func dayLabel(_ offset: UInt8) -> String {
+        let cal = Calendar.current
+        guard let date = cal.date(byAdding: .day, value: Int(offset) - 1, to: outlook.receivedAt) else {
+            return "Day \(offset)"
+        }
+        if cal.isDateInToday(date) { return "Today" }
+        if cal.isDateInTomorrow(date) { return "Tomorrow" }
+        let fmt = DateFormatter(); fmt.dateFormat = "EEE"; return fmt.string(from: date)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Hazard Outlook")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("Issued \(outlook.issuedLabel)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            ForEach(outlook.days, id: \.dayOffset) { day in
+                let activeHazards = day.hazards.filter { $0.riskLevel > 0 }
+                if !activeHazards.isEmpty {
+                    HStack(spacing: 8) {
+                        Text(dayLabel(day.dayOffset))
+                            .font(.caption.weight(.medium))
+                            .frame(width: 52, alignment: .leading)
+                        ForEach(activeHazards, id: \.hazardType) { hazard in
+                            HStack(spacing: 3) {
+                                Image(systemName: hazard.hazardSystemImage)
+                                    .font(.caption2)
+                                Text(hazard.riskName)
+                                    .font(.caption2.weight(.medium))
+                            }
+                            .foregroundStyle(hazard.riskColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(hazard.riskColor.opacity(0.12), in: Capsule())
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Storm Reports Row
+
+private struct StormReportsRow: View {
+    let reports: MeshWXStormReports
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(reports.reports.count) report\(reports.reports.count == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(Array(reports.reports.prefix(6).enumerated()), id: \.offset) { _, report in
+                HStack(spacing: 8) {
+                    Image(systemName: report.eventSystemImage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(width: 16)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(report.eventTypeName)
+                                .font(.caption.weight(.medium))
+                            if let mag = report.magnitudeLabel {
+                                Text(mag)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        let place = WXBundleLoader.allPlaces.indices.contains(report.placeID)
+                            ? WXBundleLoader.allPlaces[report.placeID].displayName
+                            : "Location \(report.placeID)"
+                        Text(place)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text(report.timeLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            if reports.reports.count > 6 {
+                Text("+\(reports.reports.count - 6) more")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Rain Observations Row
+
+private struct RainObsRow: View {
+    let obs: MeshWXRainObservations
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("\(obs.cities.count) location\(obs.cities.count == 1 ? "" : "s") reporting precipitation")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(receivedAgoLabel(obs.receivedAt))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(obs.cities.prefix(12).enumerated()), id: \.offset) { _, city in
+                        let places = WXBundleLoader.allPlaces
+                        let cityName = city.placeID < places.count
+                            ? places[city.placeID].name.capitalized
+                            : nil
+                        VStack(spacing: 2) {
+                            Image(systemName: city.rainSystemImage)
+                                .font(.caption)
+                                .foregroundStyle(city.rainColor)
+                            Text(city.rainTypeName)
+                                .font(.system(size: 8))
+                                .foregroundStyle(city.rainColor)
+                                .lineLimit(1)
+                            if let name = cityName {
+                                Text(name)
+                                    .font(.system(size: 9))
+                                    .lineLimit(1)
+                            }
+                            Text("\(city.tempF)°")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 56)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - TAF Row
+
+private struct TAFRow: View {
+    @Environment(\.appState) private var appState
+    let taf: MeshWXTAF
+    var onRefresh: (() -> Void)? = nil
+
+    private var showF: Bool { appState.wxAviationUsesF }
+
+    private var canRefresh: Bool {
+        onRefresh != nil && Date().timeIntervalSince(taf.receivedAt) > wxRefreshCooldown
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(taf.icao)
+                    .font(.subheadline.weight(.semibold).monospaced())
+                Text("TAF")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.blue.opacity(0.15), in: Capsule())
+                Spacer()
+                if canRefresh {
+                    Button { onRefresh?() } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text(receivedAgoLabel(taf.receivedAt))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            HStack(spacing: 12) {
+                Image(systemName: taf.skySystemImage)
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(showF ? "\(taf.tempF)°F" : "\(taf.tempC)°C")
+                            .font(.title3.weight(.semibold))
+                        if taf.feelsLikeDelta != 0 {
+                            let fl = showF ? "\(taf.feelsLikeF)°F" : "\(taf.feelsLikeC)°C"
+                            Text("Feels \(fl)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Text(taf.skyName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                // Wind column (knots — TAF/METAR standard)
+                VStack(alignment: .trailing, spacing: 2) {
+                    if taf.windSpeedKts == 0 {
+                        Text("Calm")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        HStack(spacing: 3) {
+                            Image(systemName: "wind").font(.caption2)
+                            Text("\(taf.windSpeedKts) kts \(taf.windDirName)")
+                                .font(.caption.weight(.medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        if taf.hasGust {
+                            Text("Gusts \(taf.windGustKts) kts")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                tafChip(label: "Dew", value: showF ? "\(taf.dewpointF)°F" : "\(taf.dewpointC)°C")
+                tafChip(label: "Vis", value: "\(taf.visibilityMi) mi")
+                tafChip(label: "Pres", value: String(format: "%.2f\"", taf.pressureInHg))
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func tafChip(label: String, value: String) -> some View {
+        VStack(spacing: 1) {
+            Text(label).font(.system(size: 8)).foregroundStyle(.tertiary)
+            Text(value).font(.system(size: 11).weight(.medium)).foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Warnings Near Row
+
+private struct WarningsNearRow: View {
+    let warningsNear: MeshWXWarningsNear
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(warningsNear.entries.enumerated()), id: \.offset) { _, entry in
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(entry.entryColor)
+                        .frame(width: 8, height: 8)
+
+                    Text(entry.displayTitle)
+                        .font(.subheadline.weight(.medium))
+
+                    Spacer()
+
+                    let remaining = entry.expiryDate.timeIntervalSinceNow
+                    if remaining > 0 {
+                        let hrs = Int(remaining / 3600)
+                        let mins = Int((remaining.truncatingRemainder(dividingBy: 3600)) / 60)
+                        Text(hrs > 0 ? "\(hrs)h \(mins)m" : "\(mins)m")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(remaining < 1800 ? .orange : .secondary)
+                    } else {
+                        Text("Expired")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Radar Region Picker
+
+/// Sheet listing all 10 MeshWX regions. Tap a row to request radar data for that region.
+private struct RadarRegionPickerView: View {
+    @Environment(\.appState) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var requesting: UInt8? = nil
+    @State private var sentRegions: Set<UInt8> = []
+    @State private var error: String?
+
+    private var sortedRegions: [MeshWXRegion] {
+        MeshWXRegion.all.values.sorted { $0.id < $1.id }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(sortedRegions, id: \.id) { region in
+                Button {
+                    Task { await request(region) }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(region.name)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                            if let frames = appState.weatherCache.radarFrames[region.id], !frames.isEmpty {
+                                Text("\(frames.count) frame\(frames.count == 1 ? "" : "s") cached · latest \(timestampLabel(frames.last?.timestamp))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("No data")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        Spacer()
+                        if requesting == region.id {
+                            ProgressView().scaleEffect(0.8)
+                        } else if sentRegions.contains(region.id) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else {
+                            Image(systemName: "arrow.down.circle")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .disabled(requesting != nil || appState.connectionState != .ready)
+            }
+            .navigationTitle("Request Radar Region")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.red.opacity(0.85), in: Capsule())
+                        .padding()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onTapGesture { self.error = nil }
+                }
+            }
+            .animation(.default, value: error)
+        }
+    }
+
+    private func request(_ region: MeshWXRegion) async {
+        guard requesting == nil else { return }
+        requesting = region.id
+        defer { requesting = nil }
+
+        let result = await appState.sendRadarRequest(regionID: region.id)
+        switch result {
+        case .sent:
+            sentRegions.insert(region.id)
+        case .notConnected:
+            error = "Not connected to a LoRa device."
+        case .noDataChannel:
+            error = "Join the #meshwx channel on your device first."
+        default:
+            error = "Request failed. Try again."
+        }
+    }
+
+    private func timestampLabel(_ minutes: UInt16?) -> String {
+        guard let minutes else { return "—" }
+        return String(format: "%02d:%02dZ", minutes / 60, minutes % 60)
+    }
+}
+
+// MARK: - Helpers
+
+/// Minimum age before a refresh button is shown for a received product.
+/// Set to 0 so the button is always visible; the server enforces its own rate limit.
+private let wxRefreshCooldown: TimeInterval = 0
+
+/// Returns a human-readable "X min ago" / "Xh ago" label for a received-at date.
+private func receivedAgoLabel(_ date: Date) -> String {
+    let interval = Date().timeIntervalSince(date)
+    if interval < 90    { return "just now" }
+    if interval < 3600  { return "\(Int(interval / 60))m ago" }
+    if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+    return "\(Int(interval / 86400))d ago"
 }
 
 // MARK: - Preview

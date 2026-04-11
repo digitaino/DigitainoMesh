@@ -129,10 +129,6 @@ struct MainTabView: View {
             Tab(L10n.Localizable.Tabs.tools, systemImage: "wrench.and.screwdriver", value: 4) {
                 ToolsView()
             }
-
-            Tab(L10n.Localizable.Tabs.settings, systemImage: "gear", value: 5) {
-                SettingsView()
-            }
         }
 
             SyncingPillView(

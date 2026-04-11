@@ -404,7 +404,7 @@ public struct ContactMessage: Sendable, Equatable {
     public let snr: Double?
 
     /// Initializes a new contact message.
-    /// 
+    ///
     /// - Parameters:
     ///   - senderPublicKeyPrefix: The sender's public key prefix.
     ///   - pathLength: The path length.

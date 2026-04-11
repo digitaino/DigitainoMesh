@@ -25,16 +25,21 @@ struct WeatherLogView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Weather Messages", systemImage: "cloud.bolt")
-        } description: {
-            VStack(spacing: 8) {
-                Text("Messages received on the #wx-broadcast channel will appear here.")
-                Text("Total channel messages seen: \(appState.weatherCache.totalChannelMessagesReceived)")
-                    .fontWeight(.medium)
-                if !appState.weatherCache.recentChannelNames.isEmpty {
-                    Text("Active channels: \(appState.weatherCache.recentChannelNames.joined(separator: ", "))")
-                        .font(.caption)
+        List {
+            botConfigSection
+            Section {
+                ContentUnavailableView {
+                    Label("No Weather Messages", systemImage: "cloud.bolt")
+                } description: {
+                    VStack(spacing: 8) {
+                        Text("Messages received on the #meshwx channel will appear here.")
+                        Text("Total channel messages seen: \(appState.weatherCache.totalChannelMessagesReceived)")
+                            .fontWeight(.medium)
+                        if !appState.weatherCache.recentChannelNames.isEmpty {
+                            Text("Active channels: \(appState.weatherCache.recentChannelNames.joined(separator: ", "))")
+                                .font(.caption)
+                        }
+                    }
                 }
             }
         }
@@ -44,9 +49,31 @@ struct WeatherLogView: View {
 
     private var messageList: some View {
         List {
+            botConfigSection
             diagnosticsSection
             statsSection
             messagesSection
+        }
+    }
+
+    // MARK: - Bot Config
+
+    private var botConfigSection: some View {
+        Section {
+            HStack {
+                Text("Bot Contact Name")
+                Spacer()
+                TextField("e.g. MeshWX", text: Binding(
+                    get: { appState.weatherBotName },
+                    set: { appState.weatherBotName = $0 }
+                ))
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Weather Bot")
+        } footer: {
+            Text("Auto-discovered the first time a weather broadcast is received. Override here if needed.")
         }
     }
 

@@ -62,6 +62,16 @@ final class WeatherCache {
             summary = "Forecast \(f.periods.count) periods"
         case .observation(let o):
             summary = "Obs \(o.displayName) \(o.tempF)°F \(o.skyName) wind \(o.windDirName) \(o.windSpeedMph)mph"
+        case .outlook(let o):
+            summary = "Outlook \(o.days.count) days"
+        case .stormReports(let s):
+            summary = "Storm reports \(s.reports.count) reports"
+        case .rainObservations(let r):
+            summary = "Rain obs \(r.cities.count) cities"
+        case .taf(let t):
+            summary = "TAF \(t.icao) \(t.tempF)°F \(t.skyName)"
+        case .warningsNear(let w):
+            summary = "Warnings near \(w.entries.count) entries"
         case nil:
             let first = rawPayload.first.map { String(format: "0x%02x", $0) } ?? "empty"
             summary = "Decode failed (first byte: \(first), \(rawPayload.count)B)"
@@ -96,10 +106,55 @@ final class WeatherCache {
     /// Most recent forecast per pfm_point index. Keyed by pfmPointIndex.
     private(set) var forecasts: [Int: MeshWXForecast] = [:]
 
+    /// Maps pfmPointIndex → ICAO of the station that triggered the forecast request.
+    /// Set when the user explicitly requests a forecast from an observation's context menu.
+    /// Used to group the forecast visually with its requesting station.
+    private(set) var forecastOrigins: [Int: String] = [:]
+
+    func setForecastOrigin(pfmPointIndex: Int, icao: String) {
+        forecastOrigins[pfmPointIndex] = icao
+    }
+
     // MARK: - Observations
 
     /// Latest observation per location key. Keyed by MeshWXObservation.locationKey.
     private(set) var observations: [String: MeshWXObservation] = [:]
+
+    // MARK: - Outlooks
+
+    /// Latest HWO outlook per location key. Keyed by MeshWXOutlook.locationKey.
+    private(set) var outlooks: [String: MeshWXOutlook] = [:]
+
+    // MARK: - Storm Reports
+
+    /// Latest LSR storm reports per location key.
+    private(set) var stormReports: [String: MeshWXStormReports] = [:]
+
+    // MARK: - Rain Observations
+
+    /// Latest rain observations per location key.
+    private(set) var rainObservations: [String: MeshWXRainObservations] = [:]
+
+    // MARK: - TAFs
+
+    /// Latest TAF per ICAO station.
+    private(set) var tafs: [String: MeshWXTAF] = [:]
+
+    // MARK: - Warnings Near
+
+    /// Latest warnings-near response per location key.
+    private(set) var warningsNear: [String: MeshWXWarningsNear] = [:]
+
+    // MARK: - Pending Requests
+
+    /// Keys of in-flight product requests (present = awaiting bot response).
+    /// Format: "metar:ICAO", "forecast:pfmIdx", "taf:ICAO".
+    /// Cleared automatically when data arrives; lets the UI show a spinner.
+    private(set) var pendingKeys: Set<String> = []
+
+    func addPending(_ key: String)       { pendingKeys.insert(key) }
+    func clearPending(_ key: String)     { pendingKeys.remove(key) }
+    func isPending(_ key: String) -> Bool { pendingKeys.contains(key) }
 
     /// Maximum radar frames to keep per region (ring buffer).
     private let maxFramesPerRegion = 12
@@ -136,13 +191,54 @@ final class WeatherCache {
     func ingestForecast(_ forecast: MeshWXForecast) {
         let key = forecast.pfmPointIndex ?? -1
         forecasts[key] = forecast
+        clearPending("forecast:\(key)")
         logger.debug("Forecast ingested: pfmPoint \(key), \(forecast.periods.count) periods")
     }
 
     /// Ingest a current-conditions observation, replacing any older one for the same location.
+    /// If the incoming obs has the same METAR issuance time as the cached one, the update is
+    /// skipped so that `receivedAt` reflects when the data was first received, not each rebroadcast.
     func ingestObservation(_ observation: MeshWXObservation) {
+        if let existing = observations[observation.locationKey],
+           existing.timestampMinutes == observation.timestampMinutes {
+            // Same METAR issuance rebroadcast — keep original receivedAt, just clear pending
+            clearPending("metar:\(observation.displayName)")
+            return
+        }
         observations[observation.locationKey] = observation
+        clearPending("metar:\(observation.displayName)")
         logger.debug("Observation ingested: \(observation.displayName) \(observation.tempF)°F")
+    }
+
+    /// Ingest an HWO outlook, replacing any older one for the same location.
+    func ingestOutlook(_ outlook: MeshWXOutlook) {
+        outlooks[outlook.locationKey] = outlook
+        logger.debug("Outlook ingested: \(outlook.days.count) days")
+    }
+
+    /// Ingest LSR storm reports, replacing any older ones for the same location.
+    func ingestStormReports(_ reports: MeshWXStormReports) {
+        stormReports[reports.locationKey] = reports
+        logger.debug("Storm reports ingested: \(reports.reports.count) reports")
+    }
+
+    /// Ingest rain observations, replacing any older ones for the same location.
+    func ingestRainObservations(_ obs: MeshWXRainObservations) {
+        rainObservations[obs.locationKey] = obs
+        logger.debug("Rain observations ingested: \(obs.cities.count) cities")
+    }
+
+    /// Ingest a TAF, replacing any older one for the same station.
+    func ingestTAF(_ taf: MeshWXTAF) {
+        tafs[taf.icao] = taf
+        clearPending("taf:\(taf.icao)")
+        logger.debug("TAF ingested: \(taf.icao) \(taf.tempF)°F")
+    }
+
+    /// Ingest a warnings-near response, replacing any older one for the same location.
+    func ingestWarningsNear(_ warnings: MeshWXWarningsNear) {
+        warningsNear[warnings.locationKey] = warnings
+        logger.debug("Warnings-near ingested: \(warnings.entries.count) entries")
     }
 
     /// Ingest a decoded radar frame, keeping a ring buffer per region.
@@ -178,12 +274,45 @@ final class WeatherCache {
         }
     }
 
+    /// Removes a single forecast by its pfm_point key and rewrites the persisted file without it.
+    /// Also clears the forecastOrigins entry so the station group is cleaned up.
+    func removeForecast(key: Int) {
+        forecasts.removeValue(forKey: key)
+        forecastOrigins.removeValue(forKey: key)
+        let fileURL = Self.cacheFileURL
+        Task.detached(priority: .utility) {
+            guard var saved = try? JSONDecoder().decode(PersistedWeatherData.self,
+                                                       from: Data(contentsOf: fileURL)) else { return }
+            // Decode each payload and drop those matching this key
+            saved.forecastPayloads = saved.forecastPayloads.filter { payload in
+                guard let msg = MeshWXDecoder.decode(payload),
+                      case .forecast(let f) = msg else { return false }
+                return f.pfmPointIndex != key
+            }
+            try? JSONEncoder().encode(saved).write(to: fileURL)
+        }
+    }
+
+    func removeObservation(key: String) { observations.removeValue(forKey: key) }
+    func removeTAF(icao: String)        { tafs.removeValue(forKey: icao) }
+    func removeOutlook(key: String)     { outlooks.removeValue(forKey: key) }
+    func removeStormReports(key: String){ stormReports.removeValue(forKey: key) }
+    func removeRainObservations(key: String) { rainObservations.removeValue(forKey: key) }
+    func removeWarningsNear(key: String){ warningsNear.removeValue(forKey: key) }
+
     /// Clears all cached data and the on-disk persistence file.
     func clearAll() {
         warnings.removeAll()
         radarFrames.removeAll()
         forecasts.removeAll()
+        forecastOrigins.removeAll()
         observations.removeAll()
+        outlooks.removeAll()
+        stormReports.removeAll()
+        rainObservations.removeAll()
+        tafs.removeAll()
+        warningsNear.removeAll()
+        pendingKeys.removeAll()
         Task.detached(priority: .utility) {
             try? FileManager.default.removeItem(at: Self.cacheFileURL)
         }
@@ -204,6 +333,8 @@ final class WeatherCache {
     /// True if there is any weather data to display.
     var hasData: Bool {
         !warnings.isEmpty || !radarFrames.isEmpty || !forecasts.isEmpty || !observations.isEmpty
+        || !outlooks.isEmpty || !stormReports.isEmpty || !rainObservations.isEmpty
+        || !tafs.isEmpty || !warningsNear.isEmpty || !pendingKeys.isEmpty
     }
 
     // MARK: - Persistence
@@ -216,6 +347,8 @@ final class WeatherCache {
         var forecastPayloads: [Data] = []
         var warningPayloads: [Data] = []
         var observationPayloads: [Data] = []
+        /// Latest radar payload per region ID (stored as String key for JSON compatibility).
+        var radarPayloads: [String: Data] = [:]
     }
 
     nonisolated private static let cacheFileURL: URL = {
@@ -246,11 +379,16 @@ final class WeatherCache {
                 ingestObservation(o); loaded += 1
             }
         }
+        for payload in saved.radarPayloads.values {
+            if let msg = MeshWXDecoder.decode(payload), case .radarGrid(let frame) = msg {
+                ingestRadarFrame(frame); loaded += 1
+            }
+        }
         logger.info("Loaded \(loaded) persisted weather items from disk")
     }
 
     /// Saves a raw wire payload so it survives app restart.
-    /// Call after ingesting a forecast, warning, or observation.
+    /// Call after ingesting a forecast, warning, observation, or radar frame.
     func persistPayload(_ payload: Data, type: PersistType) {
         let fileURL = Self.cacheFileURL
         Task.detached(priority: .utility) {
@@ -266,12 +404,15 @@ final class WeatherCache {
             case .observation:
                 saved.observationPayloads.append(payload)
                 if saved.observationPayloads.count > 40 { saved.observationPayloads.removeFirst() }
+            case .radar(let regionID):
+                // Only keep the single latest frame per region — enough to show a static snapshot on restart
+                saved.radarPayloads[String(regionID)] = payload
             }
             try? JSONEncoder().encode(saved).write(to: fileURL)
         }
     }
 
-    enum PersistType { case forecast, warning, observation }
+    enum PersistType { case forecast, warning, observation, radar(UInt8) }
 
     // MARK: - Debug
 

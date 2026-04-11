@@ -24,6 +24,11 @@ enum MeshWXMessage: Sendable {
     case warningPolygon(MeshWXWarning)
     case forecast(MeshWXForecast)
     case observation(MeshWXObservation)
+    case outlook(MeshWXOutlook)
+    case stormReports(MeshWXStormReports)
+    case rainObservations(MeshWXRainObservations)
+    case taf(MeshWXTAF)
+    case warningsNear(MeshWXWarningsNear)
 }
 
 // MARK: - Radar Frame
@@ -192,6 +197,8 @@ struct MeshWXForecast: Sendable {
 
         var hasPrecip: Bool { precipPct > 0 }
         var hasThunderstorm: Bool { conditionFlags & 0x01 != 0 }
+        var hasFrost: Bool { conditionFlags & 0x02 != 0 }
+        var hasFog: Bool { conditionFlags & 0x04 != 0 }
     }
 
     /// Location type from protocol.json (1=zone,2=station,3=place,4=latlon,5=wfo,6=pfm_point).
@@ -222,8 +229,8 @@ struct MeshWXObservation: Sendable {
     let dewpointF: Int8
     let windDir: UInt8       // 4-bit: 0=N,1=NE,2=E,3=SE,4=S,5=SW,6=W,7=NW,8=calm
     let skyCode: UInt8       // 4-bit: same palette as forecast periods
-    let windSpeedMph: UInt8
-    let windGustMph: UInt8   // 0 = no gust
+    let windSpeedKts: UInt8  // knots (as sent by bot)
+    let windGustKts: UInt8   // 0 = no gust
     let visibilityMi: UInt8
     let pressureRaw: UInt8   // (inHg − 29.00) × 100 — decode as 29.00 + raw/100
     let feelsLikeDelta: Int8 // signed offset from tempF
@@ -233,11 +240,18 @@ struct MeshWXObservation: Sendable {
 
     var pressureInHg: Double { 29.00 + Double(pressureRaw) / 100.0 }
     var feelsLikeF: Int { Int(tempF) + Int(feelsLikeDelta) }
-    var hasGust: Bool { windGustMph > 0 }
+    var hasGust: Bool { windGustKts > 0 }
+    /// Wind speed converted to mph (1 kt ≈ 1.151 mph).
+    var windSpeedMph: UInt8 { UInt8(min(255, Int(windSpeedKts) * 1151 / 1000)) }
+    var windGustMph: UInt8  { UInt8(min(255, Int(windGustKts)  * 1151 / 1000)) }
+    /// Temperature in Celsius (converted from stored Fahrenheit).
+    var tempC: Int { (Int(tempF) - 32) * 5 / 9 }
+    var dewpointC: Int { (Int(dewpointF) - 32) * 5 / 9 }
+    var feelsLikeC: Int { (feelsLikeF - 32) * 5 / 9 }
     var relativeHumidityPct: Int {
-        // Magnus approximation
-        let t = Double(tempF)
-        let td = Double(dewpointF)
+        // Magnus approximation (requires Celsius input)
+        let t  = Double(Int(tempF - 32)) * 5.0 / 9.0
+        let td = Double(Int(dewpointF - 32)) * 5.0 / 9.0
         let rh = 100.0 * exp((17.625 * td) / (243.04 + td)) / exp((17.625 * t) / (243.04 + t))
         return max(0, min(100, Int(rh.rounded())))
     }
@@ -298,6 +312,378 @@ struct MeshWXObservation: Sendable {
         let h = timestampMinutes / 60
         let m = timestampMinutes % 60
         return String(format: "%02d:%02dZ", h, m)
+    }
+}
+
+// MARK: - Outlook (0x32)
+
+/// A decoded 0x32 Hazardous Weather Outlook (HWO) response.
+/// Contains day-1 and days-2-7 hazard outlook from NWS.
+struct MeshWXOutlook: Sendable {
+
+    struct Day: Sendable {
+        struct Hazard: Sendable {
+            let hazardType: UInt8  // 0=thunderstorm,1=flood,2=winter,3=fire,4=heat,5=cold,6=wind,7=coastal,0xF=other
+            let riskLevel: UInt8   // 0=none,1=marginal,2=slight,3=enhanced,4=moderate,5=high,6=extreme
+        }
+        let dayOffset: UInt8       // 1=today, 2=tomorrow, …7
+        let hazards: [Hazard]
+
+        var hazardSummary: String {
+            hazards.compactMap { h in
+                h.riskLevel > 0 ? "\(h.riskName) \(h.hazardTypeName)" : nil
+            }.joined(separator: ", ")
+        }
+    }
+
+    let locationType: UInt8
+    let locationIDBytes: Data
+    let issuedTimeMinutes: UInt16
+    let days: [Day]
+    let receivedAt: Date
+
+    var locationKey: String {
+        let hex = locationIDBytes.map { String(format: "%02x", $0) }.joined()
+        return "\(locationType):\(hex)"
+    }
+
+    var issuedLabel: String {
+        let h = issuedTimeMinutes / 60
+        let m = issuedTimeMinutes % 60
+        return String(format: "%02d:%02dZ", h, m)
+    }
+}
+
+extension MeshWXOutlook.Day.Hazard {
+    var hazardTypeName: String {
+        switch hazardType {
+        case 0: return "Thunderstorm"
+        case 1: return "Flooding"
+        case 2: return "Winter Weather"
+        case 3: return "Fire Weather"
+        case 4: return "Excessive Heat"
+        case 5: return "Extreme Cold"
+        case 6: return "High Wind"
+        case 7: return "Coastal Hazard"
+        default: return "Hazard"
+        }
+    }
+
+    var hazardSystemImage: String {
+        switch hazardType {
+        case 0: return "cloud.bolt.fill"
+        case 1: return "cloud.rain.fill"
+        case 2: return "cloud.snow.fill"
+        case 3: return "flame.fill"
+        case 4: return "thermometer.sun.fill"
+        case 5: return "thermometer.snowflake"
+        case 6: return "wind"
+        case 7: return "water.waves"
+        default: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var riskName: String {
+        switch riskLevel {
+        case 0: return "None"
+        case 1: return "Marginal"
+        case 2: return "Slight"
+        case 3: return "Enhanced"
+        case 4: return "Moderate"
+        case 5: return "High"
+        case 6: return "Extreme"
+        default: return "Unknown"
+        }
+    }
+
+    var riskColor: Color {
+        switch riskLevel {
+        case 1: return .green
+        case 2: return .yellow
+        case 3: return .orange
+        case 4, 5: return .red
+        case 6: return .purple
+        default: return .gray
+        }
+    }
+}
+
+// MARK: - Storm Reports (0x33)
+
+/// A decoded 0x33 Local Storm Reports (LSR) response.
+struct MeshWXStormReports: Sendable {
+
+    struct Report: Sendable {
+        let eventType: UInt8    // 0=tornado,1=funnel cloud,2=waterspout,3=hail,4=wind,5=flood,6=rain,7=winter,8=ice,9=high wind,A=fog,B=wildfire,C=dust,D=other
+        let magnitude: UInt8    // event-specific: hail=0.25" units, wind=mph, others=0
+        let minutesAgo: UInt16
+        let placeID: Int        // index into places.json
+    }
+
+    let locationType: UInt8
+    let locationIDBytes: Data
+    let reports: [Report]
+    let receivedAt: Date
+
+    var locationKey: String {
+        let hex = locationIDBytes.map { String(format: "%02x", $0) }.joined()
+        return "\(locationType):\(hex)"
+    }
+}
+
+extension MeshWXStormReports.Report {
+    var eventTypeName: String {
+        switch eventType {
+        case 0: return "Tornado"
+        case 1: return "Funnel Cloud"
+        case 2: return "Waterspout"
+        case 3: return "Hail"
+        case 4: return "Damaging Wind"
+        case 5: return "Flash Flood"
+        case 6: return "Heavy Rain"
+        case 7: return "Winter Storm"
+        case 8: return "Ice Storm"
+        case 9: return "High Wind"
+        case 10: return "Dense Fog"
+        case 11: return "Wildfire"
+        case 12: return "Dust Storm"
+        default: return "Storm Report"
+        }
+    }
+
+    var eventSystemImage: String {
+        switch eventType {
+        case 0: return "tornado"
+        case 1, 2: return "tornado"
+        case 3: return "cloud.hail.fill"
+        case 4: return "wind.damage"
+        case 5: return "cloud.rain.fill"
+        case 6: return "cloud.heavyrain.fill"
+        case 7: return "cloud.snow.fill"
+        case 8: return "thermometer.snowflake"
+        case 9: return "wind"
+        case 10: return "cloud.fog.fill"
+        case 11: return "flame.fill"
+        case 12: return "sun.dust.fill"
+        default: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var magnitudeLabel: String? {
+        switch eventType {
+        case 3: // Hail: magnitude in 0.25" increments
+            guard magnitude > 0 else { return nil }
+            let inches = Double(magnitude) * 0.25
+            return String(format: "%.2f\" dia.", inches)
+        case 4, 9: // Wind: magnitude in mph
+            guard magnitude > 0 else { return nil }
+            return "\(magnitude) mph"
+        default:
+            return nil
+        }
+    }
+
+    var timeLabel: String {
+        if minutesAgo < 60 { return "\(minutesAgo)m ago" }
+        let h = minutesAgo / 60
+        let m = minutesAgo % 60
+        return m > 0 ? "\(h)h \(m)m ago" : "\(h)h ago"
+    }
+}
+
+// MARK: - Rain Observations (0x34)
+
+/// A decoded 0x34 rain observations response listing cities currently reporting precipitation.
+struct MeshWXRainObservations: Sendable {
+
+    struct City: Sendable {
+        let placeID: Int        // index into places.json
+        let rainType: UInt8     // 0=light rain,1=moderate rain,2=heavy rain,3=drizzle,4=shower,5=snow,6=sleet/freezing,7=other
+        let tempF: Int8
+    }
+
+    let locationType: UInt8
+    let locationIDBytes: Data
+    let timestampMinutes: UInt16
+    let cities: [City]
+    let receivedAt: Date
+
+    var locationKey: String {
+        let hex = locationIDBytes.map { String(format: "%02x", $0) }.joined()
+        return "\(locationType):\(hex)"
+    }
+
+    var timestampLabel: String {
+        let h = timestampMinutes / 60
+        let m = timestampMinutes % 60
+        return String(format: "%02d:%02dZ", h, m)
+    }
+}
+
+extension MeshWXRainObservations.City {
+    var rainTypeName: String {
+        switch rainType {
+        case 0: return "Light Rain"
+        case 1: return "Moderate Rain"
+        case 2: return "Heavy Rain"
+        case 3: return "Drizzle"
+        case 4: return "Rain Shower"
+        case 5: return "Snow"
+        case 6: return "Sleet/Freezing"
+        default: return "Precipitation"
+        }
+    }
+
+    var rainSystemImage: String {
+        switch rainType {
+        case 0: return "cloud.drizzle.fill"
+        case 1: return "cloud.rain.fill"
+        case 2: return "cloud.heavyrain.fill"
+        case 3: return "cloud.drizzle.fill"
+        case 4: return "cloud.rain.fill"
+        case 5: return "cloud.snow.fill"
+        case 6: return "cloud.sleet.fill"
+        default: return "drop.fill"
+        }
+    }
+
+    var rainColor: Color {
+        switch rainType {
+        case 2: return .blue
+        case 5: return Color(red: 0.5, green: 0.7, blue: 1.0)
+        case 6: return Color(red: 0.4, green: 0.8, blue: 1.0)
+        default: return .cyan
+        }
+    }
+}
+
+// MARK: - TAF (0x36)
+
+/// A decoded 0x36 Terminal Aerodrome Forecast (TAF) snapshot for an aviation station.
+/// 15-byte fixed format: [type(1)] [icao(4)] [time(2)] [obs_fields(8)]
+struct MeshWXTAF: Sendable {
+    let icao: String
+    let timestampMinutes: UInt16
+    let tempF: Int8          // stored in °F (converted from Celsius by decoder)
+    let dewpointF: Int8
+    let windDir: UInt8
+    let skyCode: UInt8
+    let windSpeedKts: UInt8  // knots (as sent by bot)
+    let windGustKts: UInt8   // 0 = no gust
+    let visibilityMi: UInt8
+    let pressureRaw: UInt8
+    let feelsLikeDelta: Int8 // Fahrenheit delta
+    let receivedAt: Date
+
+    var pressureInHg: Double { 29.00 + Double(pressureRaw) / 100.0 }
+    var feelsLikeF: Int { Int(tempF) + Int(feelsLikeDelta) }
+    var hasGust: Bool { windGustKts > 0 }
+    /// Wind speed converted to mph (1 kt ≈ 1.151 mph).
+    var windSpeedMph: UInt8 { UInt8(min(255, Int(windSpeedKts) * 1151 / 1000)) }
+    var windGustMph: UInt8  { UInt8(min(255, Int(windGustKts)  * 1151 / 1000)) }
+    /// Temperature in Celsius (converted from stored Fahrenheit).
+    var tempC: Int { (Int(tempF) - 32) * 5 / 9 }
+    var dewpointC: Int { (Int(dewpointF) - 32) * 5 / 9 }
+    var feelsLikeC: Int { (feelsLikeF - 32) * 5 / 9 }
+
+    var windDirName: String {
+        ["N","NE","E","SE","S","SW","W","NW","Calm"][min(Int(windDir), 8)]
+    }
+
+    var skyName: String {
+        switch skyCode {
+        case 0: return "Clear"
+        case 1: return "Few Clouds"
+        case 2: return "Partly Cloudy"
+        case 3: return "Mostly Cloudy"
+        case 4: return "Overcast"
+        case 5: return "Foggy"
+        case 8: return "Rain"
+        case 9: return "Snow"
+        case 10: return "Thunderstorm"
+        default: return "Mixed"
+        }
+    }
+
+    var skySystemImage: String {
+        switch skyCode {
+        case 0: return "sun.max.fill"
+        case 1, 2: return "cloud.sun.fill"
+        case 3, 4: return "cloud.fill"
+        case 5: return "cloud.fog.fill"
+        case 8, 11: return "cloud.rain.fill"
+        case 9: return "cloud.snow.fill"
+        case 10: return "cloud.bolt.rain.fill"
+        default: return "cloud.fill"
+        }
+    }
+
+    var timestampLabel: String {
+        let h = timestampMinutes / 60
+        let m = timestampMinutes % 60
+        return String(format: "%02d:%02dZ", h, m)
+    }
+}
+
+// MARK: - Warnings Near (0x37)
+
+/// A decoded 0x37 "warnings near" response listing all active warnings affecting a zone.
+struct MeshWXWarningsNear: Sendable {
+
+    struct Entry: Sendable {
+        let v2Type: UInt8          // high nibble: 1=tornado,2=severe tstorm,3=flash flood,4=flood,5=winter,6=wind,7=fire,8=marine,9=SPS
+        let severity: UInt8        // low nibble: 1=advisory,2=watch,3=warning,4=emergency
+        let expiryUnixMinutes: UInt32
+        let stateIdx: UInt8
+        let zoneNum: UInt16
+
+        var expiryDate: Date { Date(timeIntervalSince1970: TimeInterval(expiryUnixMinutes) * 60) }
+
+        var typeName: String {
+            switch v2Type {
+            case 1: return "Tornado"
+            case 2: return "Severe Thunderstorm"
+            case 3: return "Flash Flood"
+            case 4: return "Flood"
+            case 5: return "Winter Storm"
+            case 6: return "High Wind"
+            case 7: return "Fire Weather"
+            case 8: return "Marine"
+            case 9: return "Special Weather Statement"
+            default: return "Weather Alert"
+            }
+        }
+
+        var severityName: String {
+            switch severity {
+            case 1: return "Advisory"
+            case 2: return "Watch"
+            case 3: return "Warning"
+            case 4: return "Emergency"
+            default: return "Alert"
+            }
+        }
+
+        var displayTitle: String { "\(typeName) \(severityName)" }
+
+        var entryColor: Color {
+            switch severity {
+            case 4: return .red
+            case 3: return v2Type == 1 ? .red : (v2Type == 3 ? .green : .orange)
+            case 2: return .yellow
+            default: return .gray
+            }
+        }
+    }
+
+    let locationType: UInt8
+    let locationIDBytes: Data
+    let entries: [Entry]
+    let receivedAt: Date
+
+    var locationKey: String {
+        let hex = locationIDBytes.map { String(format: "%02x", $0) }.joined()
+        return "\(locationType):\(hex)"
     }
 }
 
@@ -392,6 +778,14 @@ enum MeshWXDecoder {
         return decodeRaw(data)
     }
 
+    /// Returns true if the payload is a known bot broadcast type that carries no weather product data.
+    /// Use this to suppress "decode failed" log noise for message types we intentionally ignore.
+    /// Currently: 0x0d = bot home/location broadcast.
+    static func isKnownNonProduct(_ data: Data) -> Bool {
+        let raw = cobsDecode(data) ?? data
+        return raw.first == 0x0d
+    }
+
     private static func decodeRaw(_ data: Data) -> MeshWXMessage? {
         guard let first = data.first else { return nil }
         switch first {
@@ -399,6 +793,11 @@ enum MeshWXDecoder {
         case 0x20: return decodeWarning(data).map { .warningPolygon($0) }
         case 0x30: return decodeObservation(data).map { .observation($0) }
         case 0x31: return decodeForecast(data).map { .forecast($0) }
+        case 0x32: return decodeOutlook(data).map { .outlook($0) }
+        case 0x33: return decodeStormReports(data).map { .stormReports($0) }
+        case 0x34: return decodeRainObservations(data).map { .rainObservations($0) }
+        case 0x36: return decodeTAF(data).map { .taf($0) }
+        case 0x37: return decodeWarningsNear(data).map { .warningsNear($0) }
         default:   return nil
         }
     }
@@ -720,20 +1119,21 @@ enum MeshWXDecoder {
         let idLen = locationIDLength(locationType)
         let obsStart = 2 + idLen  // first byte of observation data
 
-        guard data.count >= obsStart + 11 else { return nil }
+        guard data.count >= obsStart + 10 else { return nil }
 
         let locationIDBytes = Data(data[2..<(2 + idLen)])
-        let timestamp  = UInt16(data[obsStart]) | (UInt16(data[obsStart + 1]) << 8)
-        let tempF      = Int8(bitPattern: data[obsStart + 2])
-        let dewpointF  = Int8(bitPattern: data[obsStart + 3])
-        let windSky    = data[obsStart + 4]
-        let windDir    = (windSky >> 4) & 0x0F
-        let skyCode    = windSky & 0x0F
-        let windSpeed  = data[obsStart + 5]
-        let windGust   = data[obsStart + 6]
-        let visibility = data[obsStart + 7]
-        let pressure   = data[obsStart + 8]
-        let feelsLike  = Int8(bitPattern: data[obsStart + 9])
+        let timestamp   = UInt16(data[obsStart]) | (UInt16(data[obsStart + 1]) << 8)
+        // Observation data is sent in Fahrenheit by the bot — no conversion needed.
+        let tempF       = Int8(bitPattern: data[obsStart + 2])
+        let dewpointF   = Int8(bitPattern: data[obsStart + 3])
+        let windSky     = data[obsStart + 4]
+        let windDir     = (windSky >> 4) & 0x0F
+        let skyCode     = windSky & 0x0F
+        let windSpeedKts = data[obsStart + 5]  // knots
+        let windGustKts  = data[obsStart + 6]  // knots, 0 = no gust
+        let visibility  = data[obsStart + 7]
+        let pressure    = data[obsStart + 8]
+        let feelsLike   = Int8(bitPattern: data[obsStart + 9])  // Fahrenheit delta
 
         return MeshWXObservation(
             locationType: locationType,
@@ -743,13 +1143,223 @@ enum MeshWXDecoder {
             dewpointF: dewpointF,
             windDir: windDir,
             skyCode: skyCode,
-            windSpeedMph: windSpeed,
-            windGustMph: windGust,
+            windSpeedKts: windSpeedKts,
+            windGustKts: windGustKts,
             visibilityMi: visibility,
             pressureRaw: pressure,
             feelsLikeDelta: feelsLike,
             receivedAt: Date()
         )
+    }
+
+    // MARK: 0x32 Outlook Decoder
+    //
+    // Wire format:
+    //  [0]       0x32
+    //  [1]       location_type
+    //  [2..N]    location_id bytes
+    //  [N+1..2]  issued_time uint16 LE (minutes since midnight UTC)
+    //  [N+3]     day_count
+    //  Per day:
+    //    +0  day_offset (1–7)
+    //    +1  hazard_count
+    //    Per hazard (2 bytes): hazard_type uint8, risk_level uint8
+
+    static func decodeOutlook(_ data: Data) -> MeshWXOutlook? {
+        guard data.count >= 2, data[0] == 0x32 else { return nil }
+        let locType = data[1]
+        let idLen = locationIDLength(locType)
+        let headerEnd = 2 + idLen
+        guard data.count >= headerEnd + 3 else { return nil }
+
+        let locationIDBytes = Data(data[2..<(2 + idLen)])
+        let issued = UInt16(data[headerEnd]) | (UInt16(data[headerEnd + 1]) << 8)
+        let dayCount = Int(data[headerEnd + 2])
+
+        var days: [MeshWXOutlook.Day] = []
+        var off = headerEnd + 3
+        for _ in 0..<dayCount {
+            guard off + 1 < data.count else { break }
+            let dayOffset = data[off]
+            let hazardCount = Int(data[off + 1])
+            off += 2
+            var hazards: [MeshWXOutlook.Day.Hazard] = []
+            for _ in 0..<hazardCount {
+                guard off + 1 < data.count else { break }
+                hazards.append(MeshWXOutlook.Day.Hazard(hazardType: data[off], riskLevel: data[off + 1]))
+                off += 2
+            }
+            days.append(MeshWXOutlook.Day(dayOffset: dayOffset, hazards: hazards))
+        }
+
+        return MeshWXOutlook(locationType: locType, locationIDBytes: locationIDBytes,
+                             issuedTimeMinutes: issued, days: days, receivedAt: Date())
+    }
+
+    // MARK: 0x33 Storm Reports Decoder
+    //
+    // Wire format:
+    //  [0]       0x33
+    //  [1]       location_type
+    //  [2..N]    location_id bytes
+    //  [N+1]     report_count
+    //  Per report (7 bytes):
+    //    +0  event_type uint8
+    //    +1  magnitude uint8
+    //    +2..3  minutes_ago uint16 LE
+    //    +4..6  place_id uint24 LE
+
+    static func decodeStormReports(_ data: Data) -> MeshWXStormReports? {
+        guard data.count >= 2, data[0] == 0x33 else { return nil }
+        let locType = data[1]
+        let idLen = locationIDLength(locType)
+        let headerEnd = 2 + idLen
+        guard data.count >= headerEnd + 1 else { return nil }
+
+        let locationIDBytes = Data(data[2..<(2 + idLen)])
+        let reportCount = Int(data[headerEnd])
+        var reports: [MeshWXStormReports.Report] = []
+        var off = headerEnd + 1
+        for _ in 0..<reportCount {
+            guard off + 6 < data.count else { break }
+            let eventType  = data[off]
+            let magnitude  = data[off + 1]
+            let minutesAgo = UInt16(data[off + 2]) | (UInt16(data[off + 3]) << 8)
+            let placeID    = Int(data[off + 4]) | (Int(data[off + 5]) << 8) | (Int(data[off + 6]) << 16)
+            reports.append(MeshWXStormReports.Report(eventType: eventType, magnitude: magnitude,
+                                                     minutesAgo: minutesAgo, placeID: placeID))
+            off += 7
+        }
+
+        return MeshWXStormReports(locationType: locType, locationIDBytes: locationIDBytes,
+                                  reports: reports, receivedAt: Date())
+    }
+
+    // MARK: 0x34 Rain Observations Decoder
+    //
+    // Wire format:
+    //  [0]       0x34
+    //  [1]       location_type
+    //  [2..N]    location_id bytes
+    //  [N+1..2]  timestamp uint16 LE (minutes since midnight UTC)
+    //  [N+3]     city_count
+    //  Per city (5 bytes):
+    //    +0..2  place_id uint24 LE
+    //    +3     rain_type uint8
+    //    +4     temp_f int8
+
+    static func decodeRainObservations(_ data: Data) -> MeshWXRainObservations? {
+        guard data.count >= 2, data[0] == 0x34 else { return nil }
+        let locType = data[1]
+        let idLen = locationIDLength(locType)
+        let headerEnd = 2 + idLen
+        guard data.count >= headerEnd + 3 else { return nil }
+
+        let locationIDBytes = Data(data[2..<(2 + idLen)])
+        let timestamp  = UInt16(data[headerEnd]) | (UInt16(data[headerEnd + 1]) << 8)
+        let cityCount  = Int(data[headerEnd + 2])
+        var cities: [MeshWXRainObservations.City] = []
+        var off = headerEnd + 3
+        for _ in 0..<cityCount {
+            guard off + 4 < data.count else { break }
+            let placeID  = Int(data[off]) | (Int(data[off + 1]) << 8) | (Int(data[off + 2]) << 16)
+            let rainType = data[off + 3]
+            let tempF    = Int8(bitPattern: data[off + 4])
+            cities.append(MeshWXRainObservations.City(placeID: placeID, rainType: rainType, tempF: tempF))
+            off += 5
+        }
+
+        return MeshWXRainObservations(locationType: locType, locationIDBytes: locationIDBytes,
+                                      timestampMinutes: timestamp, cities: cities, receivedAt: Date())
+    }
+
+    // MARK: 0x36 TAF Decoder
+    //
+    // Wire format:
+    //  [0]     0x36
+    //  [1]     loc_type byte (0x02 = LOC_STATION) — skip for field decoding
+    //  [2..5]  station ICAO (4 ASCII bytes)
+    //  [5..6]  time uint16 LE (minutes since midnight UTC) — overlaps last ICAO byte
+    //  [7]     temp_c int8 (Celsius — converted to °F on decode)
+    //  [8]     dewpoint_c int8 (Celsius)
+    //  [9]     (wind_dir << 4) | sky_code
+    //  [10]    wind_speed_mph uint8
+    //  [11]    wind_gust_mph uint8 (0 = no gust)
+    //  [12]    visibility_mi uint8
+    //  [13]    pressure_raw uint8 — (inHg − 29.00) × 100
+    //  [14]    feels_like_delta int8 (Celsius delta)
+
+    static func decodeTAF(_ data: Data) -> MeshWXTAF? {
+        guard data.count >= 15, data[0] == 0x36 else { return nil }
+        // [1] is the loc_type byte; ICAO starts at [2]
+        let icao = String(bytes: data[2..<6], encoding: .ascii)?
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\0")) ?? "????"
+        let timestamp  = UInt16(data[5]) | (UInt16(data[6]) << 8)
+        let tempC      = Int8(bitPattern: data[7])
+        let dewC       = Int8(bitPattern: data[8])
+        let windSky    = data[9]
+        let windDir    = (windSky >> 4) & 0x0F
+        let skyCode    = windSky & 0x0F
+        let windSpeed  = data[10]
+        let windGust   = data[11]
+        let visibility = data[12]
+        let pressure   = data[13]
+        let feelsLikeC = Int8(bitPattern: data[14])
+
+        // Bot sends temperatures in Celsius; convert to Fahrenheit for display
+        let tempF      = Int8(max(-128, min(127, Int(tempC)     * 9 / 5 + 32)))
+        let dewF       = Int8(max(-128, min(127, Int(dewC)      * 9 / 5 + 32)))
+        let feelsLikeF = Int8(max(-128, min(127, Int(feelsLikeC) * 9 / 5)))
+
+        return MeshWXTAF(icao: icao, timestampMinutes: timestamp,
+                         tempF: tempF, dewpointF: dewF,
+                         windDir: windDir, skyCode: skyCode,
+                         windSpeedKts: windSpeed, windGustKts: windGust,
+                         visibilityMi: visibility, pressureRaw: pressure,
+                         feelsLikeDelta: feelsLikeF, receivedAt: Date())
+    }
+
+    // MARK: 0x37 Warnings Near Decoder
+    //
+    // Wire format:
+    //  [0]       0x37
+    //  [1]       location_type
+    //  [2..N]    location_id bytes
+    //  [N+1]     entry_count
+    //  Per entry (8 bytes):
+    //    +0  warning_type(high nibble) | severity(low nibble)
+    //    +1..4  expires_unix_min uint32 BE
+    //    +5  state_idx uint8
+    //    +6..7  zone_num uint16 BE
+
+    static func decodeWarningsNear(_ data: Data) -> MeshWXWarningsNear? {
+        guard data.count >= 2, data[0] == 0x37 else { return nil }
+        let locType = data[1]
+        let idLen = locationIDLength(locType)
+        let headerEnd = 2 + idLen
+        guard data.count >= headerEnd + 1 else { return nil }
+
+        let locationIDBytes = Data(data[2..<(2 + idLen)])
+        let entryCount = Int(data[headerEnd])
+        var entries: [MeshWXWarningsNear.Entry] = []
+        var off = headerEnd + 1
+        for _ in 0..<entryCount {
+            guard off + 7 < data.count else { break }
+            let typeSev  = data[off]
+            let v2Type   = (typeSev >> 4) & 0x0F
+            let severity = typeSev & 0x0F
+            let expiry   = UInt32(data[off + 1]) << 24 | UInt32(data[off + 2]) << 16
+                         | UInt32(data[off + 3]) << 8  | UInt32(data[off + 4])
+            let stateIdx = data[off + 5]
+            let zoneNum  = UInt16(data[off + 6]) << 8 | UInt16(data[off + 7])
+            entries.append(MeshWXWarningsNear.Entry(v2Type: v2Type, severity: severity,
+                                                    expiryUnixMinutes: expiry,
+                                                    stateIdx: stateIdx, zoneNum: zoneNum))
+            off += 8
+        }
+
+        return MeshWXWarningsNear(locationType: locType, locationIDBytes: locationIDBytes,
+                                  entries: entries, receivedAt: Date())
     }
 
     // MARK: 0x02 Request Builder
@@ -795,6 +1405,54 @@ enum MeshWXDecoder {
         let bytes = Array(icao.utf8.prefix(4))
         for (i, b) in bytes.enumerated() { data[5 + i] = b }
         return data
+    }
+
+    /// Builds a 0x02 data request for a pfm_point index with the given data_type nibble.
+    private static func buildPFMPointRequest(dataType: UInt8, pfmPointIndex: Int) -> Data {
+        var data = Data(count: 8)
+        data[0] = 0x02
+        data[1] = (dataType & 0x0F) << 4
+        data[2] = 0x00
+        data[3] = 0x00
+        data[4] = 0x06  // LOC_PFM_POINT
+        let idx = UInt32(pfmPointIndex)
+        data[5] = UInt8((idx >> 16) & 0xFF)
+        data[6] = UInt8((idx >> 8)  & 0xFF)
+        data[7] = UInt8(idx         & 0xFF)
+        return data
+    }
+
+    /// Builds a 0x02 DATA_OUTLOOK (data_type=2) request for a pfm_point.
+    static func buildOutlookRequest(pfmPointIndex: Int) -> Data {
+        buildPFMPointRequest(dataType: 0x2, pfmPointIndex: pfmPointIndex)
+    }
+
+    /// Builds a 0x02 DATA_STORM_REPORTS (data_type=3) request for a pfm_point.
+    static func buildStormReportsRequest(pfmPointIndex: Int) -> Data {
+        buildPFMPointRequest(dataType: 0x3, pfmPointIndex: pfmPointIndex)
+    }
+
+    /// Builds a 0x02 DATA_RAIN_OBS (data_type=4) request for a pfm_point.
+    static func buildRainObsRequest(pfmPointIndex: Int) -> Data {
+        buildPFMPointRequest(dataType: 0x4, pfmPointIndex: pfmPointIndex)
+    }
+
+    /// Builds a 0x02 DATA_TAF (data_type=6) request for a station ICAO code.
+    static func buildTAFRequest(icao: String) -> Data {
+        var data = Data(count: 9)
+        data[0] = 0x02
+        data[1] = 0x60  // data_type = 6 (TAF)
+        data[2] = 0x00
+        data[3] = 0x00
+        data[4] = 0x02  // LOC_STATION
+        let bytes = Array(icao.utf8.prefix(4))
+        for (i, b) in bytes.enumerated() { data[5 + i] = b }
+        return data
+    }
+
+    /// Builds a 0x02 DATA_WARNINGS_NEAR (data_type=7) request for a pfm_point.
+    static func buildWarningsNearRequest(pfmPointIndex: Int) -> Data {
+        buildPFMPointRequest(dataType: 0x7, pfmPointIndex: pfmPointIndex)
     }
 
     // MARK: Helpers

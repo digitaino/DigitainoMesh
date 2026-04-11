@@ -221,8 +221,8 @@ extension SyncCoordinator {
         await services.messagePollingService.setChannelMessageHandler { [weak self] message, channel in
             guard let self else { return }
 
-            // Debug: log every channel message to help diagnose delivery issues
-            self.logger.debug("Channel message received: chIdx=\(message.channelIndex), channel='\(channel?.name ?? "nil")', rawPayload=\(message.rawPayload.count)B, text=\(message.text.prefix(60))")
+            // Log every channel message at info level to help diagnose delivery issues
+            self.logger.info("Channel message received: chIdx=\(message.channelIndex), channel='\(channel?.name ?? "nil")', rawPayload=\(message.rawPayload.count)B, text=\(message.text.prefix(60))")
 
             // Notify debug observer (Weather Log tool)
             await self.channelMessageDebugObserver?(channel?.name)

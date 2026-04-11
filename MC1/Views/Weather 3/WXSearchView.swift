@@ -162,7 +162,7 @@ struct WXSearchView: View {
         case .noDataChannel:
             sentFeedback = .failure("Request failed. Check that you're on the #meshwx channel.")
         case .botNotFound:
-            sentFeedback = .failure("Weather bot not yet discovered. Wait for a weather broadcast on #meshwx, then try again.")
+            sentFeedback = .failure("Weather bot not configured. Set the bot contact name in Tools → Weather Log.")
         case .noLocation, .rateLimited:
             sentFeedback = .failure("Request could not be sent. Try again in a moment.")
         }
