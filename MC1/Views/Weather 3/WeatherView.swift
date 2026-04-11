@@ -1645,7 +1645,7 @@ private struct WXInfoSheet: View {
             List {
                 Section {
                     infoRow(icon: "satellite", title: "GOES Satellite Reception",
-                            body: "In production, the MeshWX bot uses a Software Defined Radio (SDR) to receive the GOES weather satellite signal directly. It decodes the broadcast as EMWIN (Emergency Managers Weather Information Network) files — the same data feed used by NWS offices — with no internet connection required anywhere in the chain.")
+                            body: "The MeshWX bot uses a Software Defined Radio (SDR) to receive the GOES weather satellite signal directly. It decodes the broadcast as EMWIN (Emergency Managers Weather Information Network) files — the same data feed used by NWS offices — with no internet connection required anywhere in the chain.")
                     infoRow(icon: "wave.3.right.circle", title: "Satellite to Mesh to You",
                             body: "GOES continuously broadcasts NWS weather data to anyone with an SDR. The bot decodes it, formats it into compact binary messages, and rebroadcasts over LoRa. Your phone receives it passively on the mesh channel — completely off-grid.")
                 } header: {
