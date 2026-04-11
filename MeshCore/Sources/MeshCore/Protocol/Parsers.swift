@@ -478,7 +478,8 @@ public enum Parsers {
                 textType: txtType,
                 senderTimestamp: timestamp,
                 text: text,
-                snr: snr
+                snr: snr,
+                rawPayload: textData
             ))
         }
     }

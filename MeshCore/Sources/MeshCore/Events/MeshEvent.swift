@@ -449,9 +449,11 @@ public struct ChannelMessage: Sendable, Equatable {
     public let text: String
     /// The signal-to-noise ratio of the received packet.
     public let snr: Double?
+    /// The raw binary payload before UTF-8 conversion, for binary protocol support (e.g., MeshWX).
+    public let rawPayload: Data
 
     /// Initializes a new channel message.
-    /// 
+    ///
     /// - Parameters:
     ///   - channelIndex: The channel index.
     ///   - pathLength: The path length.
@@ -459,13 +461,15 @@ public struct ChannelMessage: Sendable, Equatable {
     ///   - senderTimestamp: The sender's timestamp.
     ///   - text: The message text.
     ///   - snr: The signal-to-noise ratio.
+    ///   - rawPayload: The raw binary payload bytes.
     public init(
         channelIndex: UInt8,
         pathLength: UInt8,
         textType: UInt8,
         senderTimestamp: Date,
         text: String,
-        snr: Double?
+        snr: Double?,
+        rawPayload: Data = Data()
     ) {
         self.channelIndex = channelIndex
         self.pathLength = pathLength
@@ -473,6 +477,7 @@ public struct ChannelMessage: Sendable, Equatable {
         self.senderTimestamp = senderTimestamp
         self.text = text
         self.snr = snr
+        self.rawPayload = rawPayload
     }
 }
 

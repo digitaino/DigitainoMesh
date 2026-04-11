@@ -18,6 +18,11 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     let allRepeaterLocations: [SurveyUploadService.RepeaterLocation]
     let communityRepeaterFilter: String?
 
+    // Weather overlay data
+    let weatherWarnings: [MeshWXWarning]
+    let weatherRadarFrames: [MeshWXRadarFrame]
+    let showWeatherOverlay: Bool
+
     @Binding var selectedContact: ContactDTO?
     @Binding var cameraRegion: MKCoordinateRegion?
 
@@ -30,6 +35,8 @@ struct MKMapViewRepresentable: UIViewRepresentable {
     var onCommunityCellSelected: ((SurveyUploadService.CommunityCell?) -> Void)?
     /// Called when a repeater annotation is tapped — filters cells to that repeater
     var onRepeaterTapped: ((String) -> Void)?
+    /// Called when a weather warning polygon is tapped
+    var onWeatherWarningTapped: ((UUID) -> Void)?
     /// Called once with a closure that returns snapshot parameters from the actual MKMapView (bypasses async binding)
     var onSnapshotParamsGetter: ((@escaping () -> (camera: MKMapCamera, size: CGSize)?) -> Void)?
 
@@ -79,8 +86,10 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         coordinator.onRegionChanged = onRegionChanged
         coordinator.onCommunityCellSelected = onCommunityCellSelected
         coordinator.onRepeaterTapped = onRepeaterTapped
+        coordinator.onWeatherWarningTapped = onWeatherWarningTapped
         coordinator.showLabels = showLabels
         coordinator.showCommunityOverlay = showCommunityOverlay
+        coordinator.showWeatherOverlay = showWeatherOverlay
         coordinator.currentCommunityCells = communityCells
         coordinator.currentSelectedCommunityCell = selectedCommunityCell
 
@@ -132,6 +141,9 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         updateRepeaterPins(in: mapView, coordinator: coordinator)
         updateSelectionOverlay(in: mapView, coordinator: coordinator)
         updateCellToRepeaterPolylines(in: mapView, coordinator: coordinator)
+
+        // Update MeshWX weather overlays
+        updateWeatherOverlays(in: mapView, coordinator: coordinator)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -290,6 +302,83 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         }
     }
 
+    // MARK: - Weather Overlay Management
+
+    private func updateWeatherOverlays(in mapView: MKMapView, coordinator: Coordinator) {
+        // Remove all weather overlays when disabled
+        if !showWeatherOverlay {
+            if !coordinator.lastWeatherWarningIDs.isEmpty {
+                let existing = mapView.overlays.compactMap { $0 as? WeatherWarningOverlay }
+                if !existing.isEmpty { mapView.removeOverlays(existing) }
+                coordinator.lastWeatherWarningIDs = []
+                coordinator.weatherWarningOverlaysByID = [:]
+            }
+            if !coordinator.lastWeatherRadarRegions.isEmpty {
+                let existing = mapView.overlays.compactMap { $0 as? WeatherRadarOverlay }
+                if !existing.isEmpty { mapView.removeOverlays(existing) }
+                coordinator.lastWeatherRadarRegions = []
+                coordinator.weatherRadarOverlaysByRegion = [:]
+            }
+            return
+        }
+
+        // --- Warning polygons ---
+        let newWarningIDs = Set(weatherWarnings.map(\.id))
+        if newWarningIDs != coordinator.lastWeatherWarningIDs {
+            let idsToRemove = coordinator.lastWeatherWarningIDs.subtracting(newWarningIDs)
+            let idsToAdd = newWarningIDs.subtracting(coordinator.lastWeatherWarningIDs)
+
+            if !idsToRemove.isEmpty {
+                let toRemove = idsToRemove.compactMap { coordinator.weatherWarningOverlaysByID[$0] }
+                if !toRemove.isEmpty { mapView.removeOverlays(toRemove) }
+                for id in idsToRemove { coordinator.weatherWarningOverlaysByID.removeValue(forKey: id) }
+            }
+
+            if !idsToAdd.isEmpty {
+                let warningsByID = Dictionary(weatherWarnings.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+                let toAdd = idsToAdd.compactMap { id -> WeatherWarningOverlay? in
+                    guard let warning = warningsByID[id] else { return nil }
+                    guard let overlay = WeatherWarningOverlay.make(from: warning) else { return nil }
+                    coordinator.weatherWarningOverlaysByID[id] = overlay
+                    return overlay
+                }
+                if !toAdd.isEmpty { mapView.addOverlays(toAdd, level: .aboveRoads) }
+            }
+
+            coordinator.lastWeatherWarningIDs = newWarningIDs
+        }
+
+        // --- Radar grids ---
+        let newRadarRegions = Set(weatherRadarFrames.map(\.regionID))
+        if newRadarRegions != coordinator.lastWeatherRadarRegions {
+            // Remove old radar overlays
+            let existing = mapView.overlays.compactMap { $0 as? WeatherRadarOverlay }
+            if !existing.isEmpty { mapView.removeOverlays(existing) }
+            coordinator.weatherRadarOverlaysByRegion = [:]
+
+            // Add new ones
+            for frame in weatherRadarFrames {
+                if let overlay = WeatherRadarOverlay.make(from: frame) {
+                    coordinator.weatherRadarOverlaysByRegion[frame.regionID] = overlay
+                    mapView.addOverlay(overlay, level: .aboveRoads)
+                }
+            }
+
+            coordinator.lastWeatherRadarRegions = newRadarRegions
+        } else {
+            // Same regions but possibly new data — replace overlays in place
+            for frame in weatherRadarFrames {
+                if let oldOverlay = coordinator.weatherRadarOverlaysByRegion[frame.regionID] {
+                    if let newOverlay = WeatherRadarOverlay.make(from: frame) {
+                        mapView.removeOverlay(oldOverlay)
+                        coordinator.weatherRadarOverlaysByRegion[frame.regionID] = newOverlay
+                        mapView.addOverlay(newOverlay, level: .aboveRoads)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Annotation Management
 
     private func updateAnnotations(in mapView: MKMapView, coordinator: Coordinator) {
@@ -359,10 +448,12 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         var onRegionChanged: ((MKCoordinateRegion) -> Void)?
         var onCommunityCellSelected: ((SurveyUploadService.CommunityCell?) -> Void)?
         var onRepeaterTapped: ((String) -> Void)?
+        var onWeatherWarningTapped: ((UUID) -> Void)?
 
         // Configuration
         var showLabels: Bool = true
         var showCommunityOverlay: Bool = false
+        var showWeatherOverlay: Bool = false
 
         // Community cell data for tap hit testing
         var currentCommunityCells: [SurveyUploadService.CommunityCell] = []
@@ -393,6 +484,12 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         var overlaysByID: [String: CommunityHexOverlay] = [:]
         var lastRepeaterPinIDs: Set<String> = []
 
+        // Weather overlay tracking
+        var lastWeatherWarningIDs: Set<UUID> = []
+        var weatherWarningOverlaysByID: [UUID: WeatherWarningOverlay] = [:]
+        var lastWeatherRadarRegions: Set<UInt8> = []
+        var weatherRadarOverlaysByRegion: [UInt8: WeatherRadarOverlay] = [:]
+
         // Lazily created map view owned by coordinator
         lazy var mapView: MKMapView = {
             let map = MKMapView()
@@ -402,7 +499,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
         // MARK: - Community Cell Tap Handler
 
         @objc func handleMapTap(_ gesture: UITapGestureRecognizer) {
-            guard gesture.state == .ended, showCommunityOverlay else { return }
+            guard gesture.state == .ended, showCommunityOverlay || showWeatherOverlay else { return }
 
             let point = gesture.location(in: mapView)
             let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
@@ -427,6 +524,20 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                 if hitRect.contains(point) {
                     onRepeaterTapped?(repeaterPin.hexID)
                     return
+                }
+            }
+
+            // Check weather warning overlays
+            for overlay in mapView.overlays {
+                guard let warningOverlay = overlay as? WeatherWarningOverlay else { continue }
+                let renderer = mapView.renderer(for: warningOverlay)
+                if let polygonRenderer = renderer as? MKPolygonRenderer {
+                    let mapPoint = MKMapPoint(coordinate)
+                    let rendererPoint = polygonRenderer.point(for: mapPoint)
+                    if polygonRenderer.path?.contains(rendererPoint) == true {
+                        onWeatherWarningTapped?(warningOverlay.warningID)
+                        return
+                    }
                 }
             }
 
@@ -600,6 +711,23 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                 renderer.lineWidth = 2
                 renderer.lineDashPattern = [8, 4]
                 return renderer
+            }
+
+            // Weather warning polygon
+            if let warningOverlay = overlay as? WeatherWarningOverlay {
+                let renderer = MKPolygonRenderer(polygon: warningOverlay)
+                renderer.fillColor = warningOverlay.fillUIColor.withAlphaComponent(warningOverlay.fillOpacity)
+                renderer.strokeColor = warningOverlay.strokeUIColor
+                renderer.lineWidth = warningOverlay.strokeWidth
+                if warningOverlay.isWatch {
+                    renderer.lineDashPattern = [8, 4]
+                }
+                return renderer
+            }
+
+            // Weather radar grid
+            if let radarOverlay = overlay as? WeatherRadarOverlay {
+                return WeatherRadarRenderer(overlay: radarOverlay)
             }
 
             return MKOverlayRenderer(overlay: overlay)

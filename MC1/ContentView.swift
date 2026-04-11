@@ -122,11 +122,15 @@ struct MainTabView: View {
                 MapView()
             }
 
-            Tab(L10n.Localizable.Tabs.tools, systemImage: "wrench.and.screwdriver", value: 3) {
+            Tab("Weather", systemImage: "cloud.bolt.fill", value: 3) {
+                WeatherView()
+            }
+
+            Tab(L10n.Localizable.Tabs.tools, systemImage: "wrench.and.screwdriver", value: 4) {
                 ToolsView()
             }
 
-            Tab(L10n.Localizable.Tabs.settings, systemImage: "gear", value: 4) {
+            Tab(L10n.Localizable.Tabs.settings, systemImage: "gear", value: 5) {
                 SettingsView()
             }
         }
@@ -144,7 +148,7 @@ struct MainTabView: View {
             .allowsHitTesting(appState.statusPillState != .hidden)
 
             // Floating survey indicator (visible on all tabs except Tools)
-            if appState.isSurveyActive && navigation.selectedTab != 3 {
+            if appState.isSurveyActive && navigation.selectedTab != 4 {
                 SurveyIndicatorView(
                     status: appState.surveyLiveStatus,
                     onTap: {

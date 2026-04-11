@@ -221,6 +221,24 @@ extension SyncCoordinator {
         await services.messagePollingService.setChannelMessageHandler { [weak self] message, channel in
             guard let self else { return }
 
+            // Debug: log every channel message to help diagnose delivery issues
+            self.logger.debug("Channel message received: chIdx=\(message.channelIndex), channel='\(channel?.name ?? "nil")', rawPayload=\(message.rawPayload.count)B, text=\(message.text.prefix(60))")
+
+            // Notify debug observer (Weather Log tool)
+            await self.channelMessageDebugObserver?(channel?.name)
+
+            // Intercept MeshWX data channels — route to weather handler, don't store as chat.
+            // Matches #meshwx (primary protocol channel) and legacy *wx-broadcast channels.
+            if let channel, Self.isWeatherDataChannel(channel.name) {
+                self.logger.info("MeshWX channel message intercepted: '\(channel.name)', rawPayload=\(message.rawPayload.count) bytes, text=\(message.text.prefix(40))")
+                if let handler = await self.weatherMessageHandler {
+                    await handler(message)
+                } else {
+                    self.logger.warning("MeshWX handler not wired — dropping weather message")
+                }
+                return
+            }
+
             // Parse "NodeName: text" format for sender name
             let (senderNodeName, messageText) = Self.parseChannelMessage(message.text)
 
@@ -1098,6 +1116,13 @@ extension SyncCoordinator {
 
         logger.debug("MCO v1 channel reaction \(v1Reaction.emoji): no hash match found")
         return true
+    }
+
+    /// Returns true if the channel name is a MeshWX binary data channel.
+    /// Matches `meshwx` (the protocol-defined channel name) and legacy `*wx-broadcast` channels.
+    public nonisolated static func isWeatherDataChannel(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return lower == "meshwx" || lower.hasSuffix("wx-broadcast")
     }
 
     nonisolated static func fallbackDeduplicationKey(

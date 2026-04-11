@@ -1,5 +1,6 @@
 // SyncCoordinator.swift
 import Foundation
+import MeshCore
 
 // MARK: - Sync Types
 
@@ -149,6 +150,14 @@ public actor SyncCoordinator {
     /// The app layer uses this to request a fresh GPS fix and patch the message's coordinates.
     var locationPatchHandler: (@Sendable (UUID) async -> Void)?
 
+    /// Handler for binary MeshWX weather messages intercepted from the #wx-broadcast channel.
+    /// When set, channel messages on a channel whose name ends with "wx-broadcast" are routed
+    /// here instead of being stored as regular chat messages.
+    var weatherMessageHandler: (@Sendable (MeshCore.ChannelMessage) async -> Void)?
+
+    /// Debug observer called for every channel message (any channel), for delivery diagnostics.
+    var channelMessageDebugObserver: (@Sendable (_ channelName: String?) async -> Void)?
+
     // MARK: - Initialization
 
     public init() {}
@@ -206,6 +215,20 @@ public actor SyncCoordinator {
         _ handler: @escaping @Sendable (UUID) async -> Void
     ) {
         locationPatchHandler = handler
+    }
+
+    /// Sets handler for MeshWX weather channel messages.
+    public func setWeatherMessageHandler(
+        _ handler: @escaping @Sendable (MeshCore.ChannelMessage) async -> Void
+    ) {
+        weatherMessageHandler = handler
+    }
+
+    /// Sets debug observer for all channel messages (used by Weather Log tool).
+    public func setChannelMessageDebugObserver(
+        _ observer: @escaping @Sendable (_ channelName: String?) async -> Void
+    ) {
+        channelMessageDebugObserver = observer
     }
 
     /// Sets callbacks for message events (used by AppState for MessageEventBroadcaster)

@@ -53,6 +53,16 @@ final class MapViewModel {
         }
     }
 
+    /// Whether the MeshWX weather overlay is active
+    var showWeatherOverlay = false
+
+    /// Currently selected weather warning (for detail sheet)
+    var selectedWeatherWarning: MeshWXWarning?
+
+    /// Reference to the shared weather cache (set via configure)
+    @ObservationIgnored
+    private var weatherCache: WeatherCache?
+
     /// Whether the community signal overlay is active
     var showCommunityOverlay = false {
         didSet {
@@ -188,6 +198,26 @@ final class MapViewModel {
     /// Whether community data is loading
     var isLoadingCommunity = false
 
+    // MARK: - Weather Data
+
+    /// Current weather warnings from cache (only when overlay is active).
+    var weatherWarnings: [MeshWXWarning] {
+        guard showWeatherOverlay else { return [] }
+        return weatherCache?.warnings ?? []
+    }
+
+    /// Look up a warning by ID (for tap-to-detail).
+    func weatherWarning(for id: UUID) -> MeshWXWarning? {
+        weatherCache?.warnings.first { $0.id == id }
+    }
+
+    /// Latest radar frames per region from cache (only when overlay is active).
+    var weatherRadarFrames: [MeshWXRadarFrame] {
+        guard showWeatherOverlay else { return [] }
+        guard let cache = weatherCache else { return [] }
+        return cache.radarFrames.values.compactMap(\.last)
+    }
+
     // MARK: - Dependencies
 
     private var dataStore: PersistenceStore?
@@ -206,6 +236,7 @@ final class MapViewModel {
     func configure(appState: AppState) {
         self.dataStore = appState.offlineDataStore
         self.deviceID = appState.currentDeviceID
+        self.weatherCache = appState.weatherCache
     }
 
     /// Configure with services (for testing)

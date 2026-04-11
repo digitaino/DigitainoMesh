@@ -74,7 +74,7 @@ public final class NavigationCoordinator {
 
     func navigateToSurvey() {
         pendingSurveyNavigation = true
-        selectedTab = 3  // Tools tab
+        selectedTab = 4  // Tools tab
     }
 
 

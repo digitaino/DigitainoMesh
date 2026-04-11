@@ -51,6 +51,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddRepeaterPublicKey())
     app.migrations.add(AddRepeaterLastHeardColumn())
     app.migrations.add(AddSharedPaths())
+    app.migrations.add(ConsolidateDuplicateRepeaters())
     try app.autoMigrate().wait()
 
     // Register routes

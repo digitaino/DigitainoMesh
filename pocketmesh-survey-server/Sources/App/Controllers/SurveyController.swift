@@ -2187,7 +2187,21 @@ struct SurveyController {
                 }
             }
 
-            // Look for exact match on hexID first
+            // Helper: approximate distance in meters between two lat/lon points (Haversine)
+            func approxDistanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
+                let R = 6_371_000.0 // Earth radius in meters
+                let dLat = (lat2 - lat1) * .pi / 180
+                let dLon = (lon2 - lon1) * .pi / 180
+                let a = sin(dLat / 2) * sin(dLat / 2) +
+                         cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) *
+                         sin(dLon / 2) * sin(dLon / 2)
+                return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+            }
+
+            // 1km threshold for same-name proximity matching
+            let proximityThresholdMeters = 1000.0
+
+            // 1) Look for exact match on hexID first
             let exact = try await RepeaterLocation.query(on: db)
                 .filter(\.$hexID == normalized)
                 .first()
@@ -2200,12 +2214,27 @@ struct SurveyController {
                 continue
             }
 
-            // Check if an existing record matches via public key prefix
-            // (the existing hexID is a prefix of our full public key, or vice versa)
             let allRepeaters = try await RepeaterLocation.query(on: db).all()
 
+            // 2) Match by full public key (exact match on the stored public key)
+            //    Handles reflashed devices that got new hex IDs but we have the key on file.
+            if let fullKey = fullKeyUpper,
+               let pkMatch = allRepeaters.first(where: {
+                   $0.publicKey?.uppercased() == fullKey
+               }) {
+                logger.info("Repeater upsert: matched \(normalized) to existing \(pkMatch.hexID) by public key")
+                updateExisting(pkMatch)
+                pkMatch.hexID = normalized
+                pkMatch.publicKey = fullKey
+                try await pkMatch.save(on: db)
+                accepted += 1
+                updated += 1
+                continue
+            }
+
+            // 3) Check if an existing record matches via public key prefix
+            //    (the existing hexID is a prefix of our full public key)
             if let fullKey = fullKeyUpper {
-                // Find any existing record whose hexID is a prefix of our full key
                 if let match = allRepeaters.first(where: {
                     let eid = $0.hexID.uppercased()
                     return fullKey.hasPrefix(eid)
@@ -2219,9 +2248,8 @@ struct SurveyController {
                 }
             }
 
-            // Fallback: check if a shorter prefix exists — update metadata but keep
-            // the shorter hex ID. Changing it would break all existing cell_repeaters
-            // rows that reference the shorter prefix.
+            // 4) Fallback: check if a shorter prefix exists — update metadata but keep
+            //    the shorter hex ID to avoid breaking cell_repeaters rows.
             if let shorter = allRepeaters.first(where: {
                 let eid = $0.hexID.uppercased()
                 return normalized.hasPrefix(eid) && normalized.count > eid.count
@@ -2233,8 +2261,8 @@ struct SurveyController {
                 continue
             }
 
-            // Check if a longer version already exists — downgrade it to the
-            // shorter prefix so it stays compatible with all cell_repeaters rows.
+            // 5) Check if a longer version already exists — downgrade it to the
+            //    shorter prefix so it stays compatible with all cell_repeaters rows.
             if let longer = allRepeaters.first(where: {
                 let eid = $0.hexID.uppercased()
                 return eid.hasPrefix(normalized) && eid.count > normalized.count
@@ -2245,6 +2273,31 @@ struct SurveyController {
                 accepted += 1
                 updated += 1
                 continue
+            }
+
+            // 6) Name + proximity match: if an existing repeater has the same name
+            //    and is within 1km, treat it as the same physical repeater with a new key.
+            //    This handles reflashed devices that generate new public keys.
+            let nameNorm = info.name.trimmingCharacters(in: .whitespaces).lowercased()
+            if !nameNorm.isEmpty {
+                if let nameMatch = allRepeaters.first(where: {
+                    let existingName = $0.name.trimmingCharacters(in: .whitespaces).lowercased()
+                    guard existingName == nameNorm else { return false }
+                    let dist = approxDistanceMeters(
+                        lat1: info.latitude, lon1: info.longitude,
+                        lat2: $0.latitude, lon2: $0.longitude
+                    )
+                    return dist < proximityThresholdMeters
+                }) {
+                    logger.info("Repeater upsert: matched \(normalized) (\(info.name)) to existing \(nameMatch.hexID) by name+proximity")
+                    updateExisting(nameMatch)
+                    // Update the hex ID to the new one (new key identity)
+                    nameMatch.hexID = normalized
+                    try await nameMatch.save(on: db)
+                    accepted += 1
+                    updated += 1
+                    continue
+                }
             }
 
             let repeater = RepeaterLocation(

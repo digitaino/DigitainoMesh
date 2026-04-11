@@ -16,6 +16,7 @@ struct ToolsView: View {
         case signalSurvey
         case pathMapGenerator
         case cli
+        case weatherLog
 
         var title: String {
             switch self {
@@ -29,6 +30,7 @@ struct ToolsView: View {
             case .signalSurvey: "Signal Survey"
             case .pathMapGenerator: "Path Map"
             case .cli: L10n.Tools.Tools.cli
+            case .weatherLog: "Weather Log"
             }
         }
 
@@ -44,11 +46,12 @@ struct ToolsView: View {
             case .signalSurvey: "antenna.radiowaves.left.and.right"
             case .pathMapGenerator: "point.3.connected.trianglepath.dotted"
             case .cli: "terminal"
+            case .weatherLog: "cloud.bolt"
             }
         }
 
         var requiresRadio: Bool {
-            self != .lineOfSight && self != .trafficMap && self != .signalSurvey && self != .pathMapGenerator && self != .repeaterBenchmark
+            self != .lineOfSight && self != .trafficMap && self != .signalSurvey && self != .pathMapGenerator && self != .repeaterBenchmark && self != .weatherLog
         }
     }
 
@@ -227,6 +230,7 @@ struct ToolsView: View {
         case .signalSurvey: SignalSurveyView()
         case .pathMapGenerator: PathMapGeneratorView()
         case .cli: CLIToolView()
+        case .weatherLog: WeatherLogView()
         }
     }
 
@@ -243,6 +247,7 @@ struct ToolsView: View {
         case .signalSurvey: SignalSurveyView()
         case .pathMapGenerator: PathMapGeneratorView()
         case .cli: CLIToolView()
+        case .weatherLog: WeatherLogView()
         case .none: ContentUnavailableView(L10n.Tools.Tools.selectTool, systemImage: "wrench.and.screwdriver")
         }
     }

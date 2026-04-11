@@ -18,6 +18,8 @@ struct MapView: View {
     @State private var mapSnapshot: UIImage?
     /// Controls when snapshot is shown - delayed until after sheet presents to hide the transition
     @State private var isSnapshotActive = false
+    /// Whether the weather data inspector sheet is showing
+    @State private var showingWeatherInspector = false
     /// Closure to get snapshot parameters directly from MKMapView (camera + bounds, avoids async binding lag)
     @State private var getSnapshotParams: (() -> (camera: MKMapCamera, size: CGSize)?)?
 
@@ -48,6 +50,14 @@ struct MapView: View {
                         onMessage: { navigateToChat(with: contact) }
                     )
                     .presentationDetents([.large])
+                }
+                .sheet(item: $viewModel.selectedWeatherWarning) { warning in
+                    WeatherWarningDetailSheet(warning: warning)
+                        .presentationDetents([.medium])
+                }
+                .sheet(isPresented: $showingWeatherInspector) {
+                    WeatherDataInspector(weatherCache: appState.weatherCache)
+                        .presentationDetents([.large])
                 }
                 .liquidGlassToolbarBackground()
         }
@@ -136,6 +146,9 @@ struct MapView: View {
                     repeaterLocations: viewModel.repeaterLocations,
                     allRepeaterLocations: viewModel.allRepeaterLocations,
                     communityRepeaterFilter: viewModel.communityRepeaterFilter,
+                    weatherWarnings: viewModel.weatherWarnings,
+                    weatherRadarFrames: viewModel.weatherRadarFrames,
+                    showWeatherOverlay: viewModel.showWeatherOverlay,
                     selectedContact: $viewModel.selectedContact,
                     cameraRegion: $viewModel.cameraRegion,
                     onDetailTap: { contact in
@@ -159,6 +172,11 @@ struct MapView: View {
                             } else {
                                 viewModel.communityRepeaterFilter = hexID
                             }
+                        }
+                    },
+                    onWeatherWarningTapped: { warningID in
+                        if let warning = viewModel.weatherWarning(for: warningID) {
+                            viewModel.selectedWeatherWarning = warning
                         }
                     },
                     onSnapshotParamsGetter: { getter in
@@ -222,10 +240,49 @@ struct MapView: View {
             onLocationTap: { centerOnUserLocation() },
             showingLayersMenu: $viewModel.showingLayersMenu
         ) {
+            weatherOverlayButton
             communityOverlayButton
             labelsToggleButton
             centerAllButton
         }
+    }
+
+    private var weatherOverlayButton: some View {
+        HStack(spacing: 0) {
+            Button {
+                viewModel.showWeatherOverlay.toggle()
+                #if DEBUG
+                // Auto-inject test data on first enable if cache is empty
+                if viewModel.showWeatherOverlay && !appState.weatherCache.hasData {
+                    appState.weatherCache.injectTestData()
+                }
+                #endif
+            } label: {
+                Image(systemName: "cloud.bolt.fill")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(viewModel.showWeatherOverlay ? .blue : .primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(viewModel.showWeatherOverlay ? "Hide weather overlay" : "Show weather overlay")
+
+            if viewModel.showWeatherOverlay {
+                Button {
+                    showingWeatherInspector = true
+                } label: {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.blue)
+                        .frame(width: 32, height: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Weather data inspector")
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: viewModel.showWeatherOverlay)
     }
 
     private var communityOverlayButton: some View {
