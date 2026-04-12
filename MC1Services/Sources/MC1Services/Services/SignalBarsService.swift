@@ -47,11 +47,13 @@ public final class SignalBarsService {
         static let bestRepeaterMidInterval: TimeInterval = 120     // checks 10-20
         static let bestRepeaterLongInterval: TimeInterval = 300    // checks 20+
         static let otherRepeaterInterval: TimeInterval = 120
-        static let failRetryInterval1: TimeInterval = 60           // failCount == 1
-        static let failRetryInterval2: TimeInterval = 120          // failCount == 2 or 3
+        static let failRetryInterval1: TimeInterval = 20           // failCount == 1: quick retry
+        static let failRetryInterval2: TimeInterval = 45           // failCount == 2
+        static let failRetryInterval3: TimeInterval = 90           // failCount == 3
         static let maxFailCount: Int = 4                           // stop pinging at 4+
         static let staleThreshold: TimeInterval = 300              // 5 minutes
         static let reactiveTriggerDelay: Duration = .seconds(2)
+        static let reactiveFailedCooldown: TimeInterval = 30       // min gap before reactive re-ping of failed repeater
         static let discoverProbeInterval: Duration = .seconds(30)
         static let maxTrackedRepeaters: Int = 4
     }
@@ -302,11 +304,13 @@ public final class SignalBarsService {
         // At max failures, don't ping
         guard repeater.failCount < Constants.maxFailCount else { return nil }
 
-        // Failed repeaters use backoff intervals
+        // Failed repeaters: quick first retry, then progressive backoff
         if repeater.failCount > 0 {
-            return repeater.failCount == 1
-                ? Constants.failRetryInterval1
-                : Constants.failRetryInterval2
+            switch repeater.failCount {
+            case 1:  return Constants.failRetryInterval1
+            case 2:  return Constants.failRetryInterval2
+            default: return Constants.failRetryInterval3
+            }
         }
 
         // Best repeater uses adaptive intervals based on check count
@@ -549,11 +553,26 @@ public final class SignalBarsService {
 
         sortRepeaters()
 
-        // Reactive trigger: when we hear a repeater but have no TX measurement,
-        // schedule a ping after 2s to get bidirectional signal data
+        // Reactive trigger: when we hear a repeater with no/stale TX measurement,
+        // schedule a ping after 2s to get (or refresh) bidirectional signal data
         let idx2 = findRepeaterIndex(for: hexID)
-        if let idx2,
-           case .unknown = repeaters[idx2].txState,
+        let shouldReactivePing: Bool
+        if let idx2 {
+            switch repeaters[idx2].txState {
+            case .unknown:
+                shouldReactivePing = true
+            case .failed:
+                // Re-ping if enough time has passed — receiving a packet suggests link may be back
+                let lastPing = repeaters[idx2].lastPingTime ?? .distantPast
+                shouldReactivePing = Date().timeIntervalSince(lastPing) > Constants.reactiveFailedCooldown
+            default:
+                shouldReactivePing = false
+            }
+        } else {
+            shouldReactivePing = false
+        }
+        if let idx2 = idx2,
+           shouldReactivePing,
            repeaters[idx2].publicKey != nil,
            !reactivePingTargets.contains(repeaters[idx2].id) {
             let targetID = repeaters[idx2].id

@@ -1,30 +1,40 @@
-Beta Changes -- v0.10.1 (Build 22)
+Beta Changes -- v0.10.1 (Build 24)
 
-Weather Bot Reliability & Protocol Updates
+Weather UI Redesign (HIG)
 
-DM / Channel Request Mode Toggle
+All weather product rows have been redesigned to follow Apple Human Interface Guidelines. Observations and TAF now use a large 40pt sky icon, bold temperature, semantic SwiftUI fonts (callout/caption2), and a 2×2 detail grid (dewpoint, humidity, visibility, altimeter). Warning and "Warnings Near" rows replace the dot indicator with a vertical color stripe (Apple Calendar style). Forecast period cells use caption2 throughout and are slightly wider. Precipitation report cards use caption2 with wider frames. Storm Reports adds a proper section header. A TipKit tooltip is now anchored directly to the station card via .popoverTip instead of the search bar.
 
-A new "Bot Requests" section in Tools → Weather Log lets you switch between two delivery modes for weather requests. Direct Message mode (default) sends requests as DMs to the bot's pubkey with automatic retry, flood-routing fallback, and ACK tracking. Channel mode sends requests as plain channel messages — better over poor multi-hop links since no ACK is needed. When Channel is selected, a text field lets you set the command channel name (defaults to #digitaino-wx-bot). The bot responds on #wx-broadcast regardless of which mode you use.
+Signal Bars Aggressive Recovery
 
-Robust Weather Bot DMs
+The repeater TX signal bars service now retries faster when a repeater fails: first retry at 20 s, second at 45 s, third at 90 s (was a single 120 s interval). The service also reactively re-pings any .failed repeater when a packet is received from it (30 s cooldown), so recovery is triggered by live traffic instead of waiting for the timer.
 
-Weather bot DM requests now use retry and flood fallback. If the initial DM goes unacknowledged, the app automatically falls back to flood routing. Forecast, TAF, and METAR requests additionally watch for a response: if none arrives within 45 seconds the request is re-sent once, and if still no response after another 45 seconds the pending state is cleared.
+---
 
-MSG_NOT_AVAILABLE Support
+v0.10.1 (Build 23)
 
-The bot now sends a 0x03 message when it understands your request but has no data. The app decodes these responses and immediately stops the spinner for the corresponding product (forecast, METAR, or TAF). An inline "No forecast/conditions/TAF available" label appears in the station card instead of spinning indefinitely. A brief non-blocking toast slides up from the bottom of the Weather tab naming the product and reason (e.g. "KAUS conditions not available"), then auto-dismisses after 3 seconds.
+Weather Sections & Navigation
 
-Auto-Provision #wx-broadcast Channel
+The Weather tab now organizes station cards into three collapsible sections: Favorites (always populated, even without data), Your Requests (stations you explicitly requested), and Broadcasts (stations from bot auto-broadcasts). Section headers are full-row tap targets with a chevron indicator. After requesting a station, the view automatically scrolls to the new card and expands its section if collapsed.
 
-The app now automatically adds the #wx-broadcast hashtag channel to your companion device on first connect if it isn't already there. The channel is muted automatically so weather broadcast packets don't create unread badges or notification noise. Bot name is auto-discovered from the first incoming broadcast — no manual configuration required.
+Weather Icon Legend
 
-Tapback Hash Truncation Fix
+A new "Observation Abbreviations" section in the Weather info sheet explains all abbreviations (Dew, Vis, Pres, RH, kts) and sky condition icons. A "Section Guide" explains Favorites, Requests, Broadcasts, and Warnings sections.
 
-Fixed a bug where tapback (reaction) messages sent in response to long channel messages could be truncated mid-hash, making them unparseable by the receiving client. The reaction builder now budgets character space for the trailing hash first, then fits as much of the message snippet as possible within the 136-character channel limit. The hash is always preserved.
+---
 
-Long-Press Tooltip on Weather Cards
+v0.10.1 (Build 22)
 
-A one-time TipKit tooltip appears when weather data is first displayed, explaining that long-pressing any weather card opens a request menu for forecasts, TAFs, METARs, outlooks, storm reports, and more.
+Weather Bot Reliability
+
+DM requests now retry with flood-routing fallback if unacknowledged. Forecast, TAF, and METAR requests re-send once after 45 s with no response; if still no reply the pending state is cleared. A new toggle in Tools → Weather Log switches between DM mode (default, with retry/ACK) and Channel mode (plain message, better over poor links). The #wx-broadcast channel is auto-provisioned and muted on first connect. Bot name is auto-discovered from the first broadcast — no manual setup required. MSG_NOT_AVAILABLE (0x03) responses are decoded immediately, stopping spinners and showing an inline "unavailable" label. Fixed tapback messages being truncated mid-hash on long channel messages.
+
+---
+
+v0.10.1 (Build 21)
+
+MeshWX Weather System
+
+New Weather tab showing live NWS data over the mesh from a MeshWX bot. Supports the full MeshWX v3 binary protocol: Observations (METAR), 7-Day Forecasts, TAF, 64×32 Radar loops, Active Warnings, Storm Reports, Hazard Outlooks, Precipitation Reports, and Warnings Near Location. Search by city, state, or ICAO code to request data via DM. Broadcast forecasts are automatically linked to the nearest station by proximity. Station cards blend obs, forecast, and TAF into one unified row with a context menu. Favorites always appear at top. Per-product refresh buttons, global °F/°C toggle, swipe to clear.
 
 ---
 

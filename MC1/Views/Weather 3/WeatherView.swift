@@ -43,7 +43,6 @@ private struct WeatherBody: View {
     @State private var scrollToICAO: String?
 
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
-    @State private var wxLongPressTip = WXLongPressTip()
 
     private var favoriteICAOs: Set<String> {
         Set(favoriteICAOsRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
@@ -77,7 +76,15 @@ private struct WeatherBody: View {
             .onChange(of: scrollToICAO) { _, newICAO in
                 guard let newICAO else { return }
                 Task { @MainActor in
-                    // Allow search dismissal + list render to complete first
+                    // Ensure the section containing this ICAO is expanded before scrolling
+                    if showSectionHeaders {
+                        if favoriteICAOs.contains(newICAO) {
+                            showFavorites = true
+                        } else {
+                            showRequested = true
+                        }
+                    }
+                    // Allow search dismissal + section expansion + list render to complete
                     try? await Task.sleep(for: .milliseconds(350))
                     withAnimation(.easeInOut(duration: 0.4)) {
                         proxy.scrollTo(newICAO, anchor: .top)
@@ -380,10 +387,6 @@ private struct WeatherBody: View {
 
     private var weatherList: some View {
         List {
-            TipView(wxLongPressTip, arrowEdge: .top)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-
             if showSectionHeaders {
                 // Favorites
                 if !favoriteICAOs.isEmpty {
@@ -479,7 +482,7 @@ private struct WeatherBody: View {
             HStack(spacing: 4) {
                 if favoriteICAOs.contains(group.icao) {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 9))
+                        .font(.caption2)
                         .foregroundStyle(.yellow)
                 }
                 Text(group.icao)
@@ -818,27 +821,27 @@ private struct WarningRow: View {
     let warning: MeshWXWarning
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(warningColor)
-                    .frame(width: 10, height: 10)
-                Text(warning.displayTitle)
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                expiryBadge
-            }
+        HStack(alignment: .top, spacing: 12) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(warningColor)
+                .frame(width: 4)
+                .padding(.vertical, 2)
 
-            if !warning.headline.isEmpty {
-                Text(warning.headline)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(warning.displayTitle)
+                        .font(.callout.weight(.semibold))
+                    Spacer()
+                    expiryBadge
+                }
 
-            Text("\(warning.vertices.count) vertices")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                if !warning.headline.isEmpty {
+                    Text(warning.headline)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
         }
         .padding(.vertical, 2)
     }
@@ -1008,7 +1011,7 @@ private struct ForecastPeriodCell: View {
     var body: some View {
         VStack(spacing: 4) {
             Text(dayLabel)
-                .font(.system(size: 10))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
@@ -1025,7 +1028,7 @@ private struct ForecastPeriodCell: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
                     Text("\(displayTemp(low))°")
-                        .font(.system(size: 10))
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             } else if let high = period.highF {
@@ -1045,9 +1048,9 @@ private struct ForecastPeriodCell: View {
             if period.precipPct > 0 {
                 HStack(spacing: 2) {
                     Image(systemName: "drop.fill")
-                        .font(.system(size: 8))
+                        .font(.caption2)
                     Text("\(period.precipPct)%")
-                        .font(.system(size: 10))
+                        .font(.caption2)
                 }
                 .foregroundStyle(.cyan)
             } else {
@@ -1057,11 +1060,11 @@ private struct ForecastPeriodCell: View {
             if period.windDir != 8 && period.windSpeedMph > 0 {
                 HStack(spacing: 2) {
                     Image(systemName: "wind")
-                        .font(.system(size: 7))
+                        .font(.caption2)
                     Text("\(period.windSpeedMph)")
-                        .font(.system(size: 9).weight(.medium))
+                        .font(.caption2.weight(.medium))
                     Text(period.windDirName)
-                        .font(.system(size: 8))
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 .foregroundStyle(.secondary)
@@ -1070,7 +1073,7 @@ private struct ForecastPeriodCell: View {
             }
 
         }
-        .frame(minWidth: 52)
+        .frame(minWidth: 60)
         .padding(.horizontal, 4)
         .padding(.vertical, 6)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
@@ -1102,6 +1105,7 @@ private struct StationCard: View {
     @Environment(\.appState) private var appState
     let group: StationGroup
 
+    @State private var wxLongPressTip = WXLongPressTip()
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
 
     private var favoriteICAOs: Set<String> {
@@ -1183,6 +1187,7 @@ private struct StationCard: View {
         }
         .padding(.vertical, 4)
         .contextMenu { stationContextMenu }
+        .popoverTip(wxLongPressTip)
     }
 
     @ViewBuilder
@@ -1300,6 +1305,32 @@ private struct InlineForecastRow: View {
     }
 }
 
+// MARK: - Weather Detail Cell (shared by ObservationRow and TAFRow)
+
+private struct WeatherDetailCell: View {
+    let icon: String
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(width: 16, alignment: .center)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(value)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: - Observation Row
 
 private struct ObservationRow: View {
@@ -1314,8 +1345,8 @@ private struct ObservationRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Header: station name + optional refresh + received-ago
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
             HStack {
                 Text(observation.displayName)
                     .font(.subheadline.weight(.semibold))
@@ -1333,73 +1364,75 @@ private struct ObservationRow: View {
                     .foregroundStyle(.tertiary)
             }
 
-            // Sky icon + temp + feels-like
-            HStack(spacing: 12) {
+            // Conditions + wind
+            HStack(alignment: .top, spacing: 14) {
                 Image(systemName: observation.skySystemImage)
-                    .font(.title2)
+                    .font(.system(size: 40))
                     .foregroundStyle(.secondary)
+                    .frame(width: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(showF ? "\(observation.tempF)°F" : "\(observation.tempC)°C")
-                            .font(.title3.weight(.semibold))
-                        if observation.feelsLikeDelta != 0 {
-                            let fl = showF ? "\(observation.feelsLikeF)°F" : "\(observation.feelsLikeC)°C"
-                            Text("Feels \(fl)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(showF ? "\(observation.tempF)°F" : "\(observation.tempC)°C")
+                        .font(.title2.weight(.bold))
+                    if observation.feelsLikeDelta != 0 {
+                        let fl = showF ? "\(observation.feelsLikeF)°F" : "\(observation.feelsLikeC)°C"
+                        Text("Feels like \(fl)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     Text(observation.skyName)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                // Wind column (knots — METAR standard)
-                VStack(alignment: .trailing, spacing: 2) {
+                // Wind (knots — METAR standard)
+                VStack(alignment: .trailing, spacing: 3) {
                     if observation.windSpeedKts == 0 && observation.windDir == 8 {
-                        Text("Calm")
-                            .font(.caption)
+                        Label("Calm", systemImage: "wind")
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     } else {
-                        HStack(spacing: 3) {
-                            Image(systemName: "wind")
-                                .font(.caption2)
-                            Text("\(observation.windSpeedKts) kts \(observation.windDirName)")
-                                .font(.caption.weight(.medium))
+                        HStack(spacing: 4) {
+                            Image(systemName: "wind").font(.caption)
+                            Text("\(observation.windSpeedKts) kts")
+                                .font(.subheadline.weight(.medium))
                         }
                         .foregroundStyle(.secondary)
+                        Text(observation.windDirName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         if observation.hasGust {
-                            Text("Gusts \(observation.windGustKts) kts")
-                                .font(.caption2)
+                            Text("G \(observation.windGustKts) kts")
+                                .font(.caption.weight(.medium))
                                 .foregroundStyle(.orange)
                         }
                     }
                 }
             }
 
-            // Detail row: dewpoint · visibility · pressure · humidity
-            HStack(spacing: 10) {
-                detailChip(label: "Dew", value: showF ? "\(observation.dewpointF)°F" : "\(observation.dewpointC)°C")
-                detailChip(label: "Vis", value: "\(observation.visibilityMi) mi")
-                detailChip(label: "Pres", value: String(format: "%.2f\"", observation.pressureInHg))
-                detailChip(label: "RH", value: "\(observation.relativeHumidityPct)%")
+            // Detail grid — 2×2
+            Grid(horizontalSpacing: 0, verticalSpacing: 8) {
+                GridRow {
+                    WeatherDetailCell(icon: "thermometer.snowflake",
+                                      label: "Dewpoint",
+                                      value: showF ? "\(observation.dewpointF)°F" : "\(observation.dewpointC)°C")
+                    WeatherDetailCell(icon: "humidity.fill",
+                                      label: "Humidity",
+                                      value: "\(observation.relativeHumidityPct)%")
+                }
+                GridRow {
+                    WeatherDetailCell(icon: "eye.fill",
+                                      label: "Visibility",
+                                      value: "\(observation.visibilityMi) mi")
+                    WeatherDetailCell(icon: "gauge.with.needle",
+                                      label: "Altimeter",
+                                      value: String(format: "%.2f\"", observation.pressureInHg))
+                }
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func detailChip(label: String, value: String) -> some View {
-        VStack(spacing: 1) {
-            Text(label)
-                .font(.system(size: 8))
-                .foregroundStyle(.tertiary)
-            Text(value)
-                .font(.system(size: 11).weight(.medium))
-                .foregroundStyle(.secondary)
-        }
     }
 }
 
@@ -1462,19 +1495,24 @@ private struct StormReportsRow: View {
     let reports: MeshWXStormReports
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(reports.reports.count) report\(reports.reports.count == 1 ? "" : "s")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Storm Reports")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(reports.reports.count) report\(reports.reports.count == 1 ? "" : "s")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             ForEach(Array(reports.reports.prefix(6).enumerated()), id: \.offset) { _, report in
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     Image(systemName: report.eventSystemImage)
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.red)
-                        .frame(width: 16)
+                        .frame(width: 18, alignment: .center)
 
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(report.eventTypeName)
                                 .font(.caption.weight(.medium))
@@ -1540,19 +1578,19 @@ private struct RainObsRow: View {
                                 .font(.caption)
                                 .foregroundStyle(city.rainColor)
                             Text(city.rainTypeName)
-                                .font(.system(size: 8))
+                                .font(.caption2)
                                 .foregroundStyle(city.rainColor)
                                 .lineLimit(1)
                             if let name = cityName {
                                 Text(name)
-                                    .font(.system(size: 9))
+                                    .font(.caption2)
                                     .lineLimit(1)
                             }
                             Text("\(city.tempF)°")
-                                .font(.system(size: 9))
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
-                        .frame(width: 56)
+                        .frame(width: 64)
                     }
                 }
                 .padding(.vertical, 2)
@@ -1576,7 +1614,8 @@ private struct TAFRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
             HStack {
                 Text(taf.icao)
                     .font(.subheadline.weight(.semibold).monospaced())
@@ -1600,65 +1639,68 @@ private struct TAFRow: View {
                     .foregroundStyle(.tertiary)
             }
 
-            HStack(spacing: 12) {
+            // Conditions + wind
+            HStack(alignment: .top, spacing: 14) {
                 Image(systemName: taf.skySystemImage)
-                    .font(.title2)
+                    .font(.system(size: 40))
                     .foregroundStyle(.secondary)
+                    .frame(width: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(showF ? "\(taf.tempF)°F" : "\(taf.tempC)°C")
-                            .font(.title3.weight(.semibold))
-                        if taf.feelsLikeDelta != 0 {
-                            let fl = showF ? "\(taf.feelsLikeF)°F" : "\(taf.feelsLikeC)°C"
-                            Text("Feels \(fl)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(showF ? "\(taf.tempF)°F" : "\(taf.tempC)°C")
+                        .font(.title2.weight(.bold))
+                    if taf.feelsLikeDelta != 0 {
+                        let fl = showF ? "\(taf.feelsLikeF)°F" : "\(taf.feelsLikeC)°C"
+                        Text("Feels like \(fl)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     Text(taf.skyName)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                // Wind column (knots — TAF/METAR standard)
-                VStack(alignment: .trailing, spacing: 2) {
+                // Wind (knots — TAF/METAR standard)
+                VStack(alignment: .trailing, spacing: 3) {
                     if taf.windSpeedKts == 0 {
-                        Text("Calm")
-                            .font(.caption)
+                        Label("Calm", systemImage: "wind")
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     } else {
-                        HStack(spacing: 3) {
-                            Image(systemName: "wind").font(.caption2)
-                            Text("\(taf.windSpeedKts) kts \(taf.windDirName)")
-                                .font(.caption.weight(.medium))
+                        HStack(spacing: 4) {
+                            Image(systemName: "wind").font(.caption)
+                            Text("\(taf.windSpeedKts) kts")
+                                .font(.subheadline.weight(.medium))
                         }
                         .foregroundStyle(.secondary)
+                        Text(taf.windDirName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         if taf.hasGust {
-                            Text("Gusts \(taf.windGustKts) kts")
-                                .font(.caption2)
+                            Text("G \(taf.windGustKts) kts")
+                                .font(.caption.weight(.medium))
                                 .foregroundStyle(.orange)
                         }
                     }
                 }
             }
 
-            HStack(spacing: 10) {
-                tafChip(label: "Dew", value: showF ? "\(taf.dewpointF)°F" : "\(taf.dewpointC)°C")
-                tafChip(label: "Vis", value: "\(taf.visibilityMi) mi")
-                tafChip(label: "Pres", value: String(format: "%.2f\"", taf.pressureInHg))
+            // Detail row — 3 items
+            HStack(spacing: 0) {
+                WeatherDetailCell(icon: "thermometer.snowflake",
+                                  label: "Dewpoint",
+                                  value: showF ? "\(taf.dewpointF)°F" : "\(taf.dewpointC)°C")
+                WeatherDetailCell(icon: "eye.fill",
+                                  label: "Visibility",
+                                  value: "\(taf.visibilityMi) mi")
+                WeatherDetailCell(icon: "gauge.with.needle",
+                                  label: "Altimeter",
+                                  value: String(format: "%.2f\"", taf.pressureInHg))
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func tafChip(label: String, value: String) -> some View {
-        VStack(spacing: 1) {
-            Text(label).font(.system(size: 8)).foregroundStyle(.tertiary)
-            Text(value).font(.system(size: 11).weight(.medium)).foregroundStyle(.secondary)
-        }
     }
 }
 
@@ -1670,13 +1712,14 @@ private struct WarningsNearRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(warningsNear.entries.enumerated()), id: \.offset) { _, entry in
-                HStack(spacing: 8) {
-                    Circle()
+                HStack(alignment: .top, spacing: 12) {
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(entry.entryColor)
-                        .frame(width: 8, height: 8)
+                        .frame(width: 4)
+                        .padding(.vertical, 2)
 
                     Text(entry.displayTitle)
-                        .font(.subheadline.weight(.medium))
+                        .font(.callout.weight(.medium))
 
                     Spacer()
 
@@ -1865,6 +1908,53 @@ private struct WXInfoSheet: View {
                             body: "The app needs to know the bot's contact name to address DM requests. Set it in Tools → Weather Log. The bot contact will appear after it broadcasts its first message on the channel.")
                 } header: {
                     Label("Getting Started", systemImage: "questionmark.circle")
+                }
+
+                Section {
+                    infoRow(icon: "thermometer.medium", title: "Dew",
+                            body: "Dewpoint — the temperature at which the air becomes saturated and condensation forms. Closer to air temp = higher humidity.")
+                    infoRow(icon: "eye.fill", title: "Vis",
+                            body: "Surface visibility in statute miles.")
+                    infoRow(icon: "gauge.with.needle", title: "Pres",
+                            body: "Altimeter setting in inches of mercury (inHg). Standard sea-level pressure is 29.92\".")
+                    infoRow(icon: "humidity.fill", title: "RH",
+                            body: "Relative Humidity — how saturated the air is as a percentage of its maximum moisture capacity at the current temperature.")
+                    infoRow(icon: "wind", title: "kts",
+                            body: "Wind speed in knots (nautical miles per hour). 1 knot ≈ 1.15 mph.")
+                } header: {
+                    Label("Observation Abbreviations", systemImage: "character.magnify")
+                }
+
+                Section {
+                    infoRow(icon: "sun.max.fill", title: "Clear",
+                            body: "Sky clear or mostly clear. Sun icon shown in yellow.")
+                    infoRow(icon: "cloud.sun.fill", title: "Few / Partly Cloudy",
+                            body: "Some clouds but still significant sunshine.")
+                    infoRow(icon: "cloud.fill", title: "Mostly Cloudy / Overcast",
+                            body: "Predominantly cloudy sky.")
+                    infoRow(icon: "cloud.fog.fill", title: "Fog / Mist",
+                            body: "Low visibility due to fog or mist.")
+                    infoRow(icon: "cloud.rain.fill", title: "Rain / Drizzle",
+                            body: "Precipitation as rain or light drizzle.")
+                    infoRow(icon: "cloud.snow.fill", title: "Snow",
+                            body: "Precipitation as snow or mixed wintry precipitation.")
+                    infoRow(icon: "cloud.bolt.rain.fill", title: "Thunderstorm",
+                            body: "Active or forecast thunderstorm activity.")
+                } header: {
+                    Label("Sky Condition Icons", systemImage: "cloud.sun.fill")
+                }
+
+                Section {
+                    infoRow(icon: "star.fill", title: "Favorites",
+                            body: "Stations you've starred. Always shown even without data — long press any card to request an update anytime.")
+                    infoRow(icon: "arrow.up.message", title: "Your Requests",
+                            body: "Non-favorite stations where you explicitly requested data this session via search or the context menu.")
+                    infoRow(icon: "dot.radiowaves.left.and.right", title: "Broadcasts",
+                            body: "Data received from the bot's scheduled broadcasts or in response to another mesh user's request. No action from you was needed.")
+                    infoRow(icon: "exclamationmark.triangle.fill", title: "Active Warnings",
+                            body: "NWS weather warnings pushed by the bot. Severity is shown by circle color: green = advisory, yellow = watch, orange = warning, red = extreme.")
+                } header: {
+                    Label("Section Guide", systemImage: "list.bullet.rectangle")
                 }
             }
             .navigationTitle("How Weather Works")
