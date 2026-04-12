@@ -37,6 +37,10 @@ private struct WeatherBody: View {
     @State private var showingRadarPicker = false
     @State private var showingInfo = false
     @State private var noticeTask: Task<Void, Never>?
+    @State private var showFavorites = true
+    @State private var showRequested = true
+    @State private var showBroadcasts = true
+    @State private var scrollToICAO: String?
 
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
     @State private var wxLongPressTip = WXLongPressTip()
@@ -60,13 +64,26 @@ private struct WeatherBody: View {
     // MARK: - Body
 
     var body: some View {
-        Group {
-            if isSearching {
-                searchResultsList
-            } else if appState.weatherCache.hasData {
-                weatherList
-            } else {
-                emptyState
+        ScrollViewReader { proxy in
+            Group {
+                if isSearching {
+                    searchResultsList
+                } else if appState.weatherCache.hasData {
+                    weatherList
+                } else {
+                    emptyState
+                }
+            }
+            .onChange(of: scrollToICAO) { _, newICAO in
+                guard let newICAO else { return }
+                Task { @MainActor in
+                    // Allow search dismissal + list render to complete first
+                    try? await Task.sleep(for: .milliseconds(350))
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        proxy.scrollTo(newICAO, anchor: .top)
+                    }
+                    scrollToICAO = nil
+                }
             }
         }
         .sheet(isPresented: $showingRadarPicker) {
@@ -291,6 +308,8 @@ private struct WeatherBody: View {
             if key.hasPrefix("metar:") { icaos.insert(String(key.dropFirst(6))) }
             else if key.hasPrefix("taf:") { icaos.insert(String(key.dropFirst(4))) }
         }
+        // Always include favorites so their cards are present for on-demand requests
+        icaos.formUnion(favoriteICAOs)
         let favs = favoriteICAOs
         return icaos.map { icao in
             let obs = obsByICAO[icao]
@@ -302,6 +321,9 @@ private struct WeatherBody: View {
             let pendingForecast = origin.map {
                 appState.weatherCache.isPending("forecast:\($0.key)")
             } ?? false
+            let requested = appState.weatherCache.isRequested("metar:\(icao)")
+                         || appState.weatherCache.isRequested("taf:\(icao)")
+                         || (origin.map { appState.weatherCache.isRequested("forecast:\($0.key)") } ?? false)
             return StationGroup(
                 icao: icao,
                 obs: obs, taf: taf,
@@ -313,7 +335,8 @@ private struct WeatherBody: View {
                 tafUnavailable: appState.weatherCache.isUnavailable("taf:\(icao)"),
                 forecastUnavailable: origin.map {
                     appState.weatherCache.isUnavailable("forecast:\($0.key)")
-                } ?? false
+                } ?? false,
+                isRequested: requested
             )
         }
         .sorted { a, b in
@@ -332,6 +355,18 @@ private struct WeatherBody: View {
         return date
     }
 
+    private var favoriteGroups:  [StationGroup] { stationGroups.filter {  favoriteICAOs.contains($0.icao) } }
+    private var requestedGroups: [StationGroup] { stationGroups.filter { !favoriteICAOs.contains($0.icao) &&  $0.isRequested } }
+    private var broadcastGroups: [StationGroup] { stationGroups.filter { !favoriteICAOs.contains($0.icao) && !$0.isRequested } }
+
+    /// True when 2+ sections have content — triggers collapsible section separators.
+    private var showSectionHeaders: Bool {
+        var count = favoriteICAOs.isEmpty ? 0 : 1
+        count += requestedGroups.isEmpty ? 0 : 1
+        count += broadcastGroups.isEmpty ? 0 : 1
+        return count > 1
+    }
+
     /// Forecasts not linked to any station (explicit or proximity-based).
     private var unlinkedForecasts: [(key: Int, forecast: MeshWXForecast)] {
         let linked = forecastToICAO
@@ -348,17 +383,86 @@ private struct WeatherBody: View {
             TipView(wxLongPressTip, arrowEdge: .top)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
-            if !appState.weatherCache.warnings.isEmpty { warningsSection }
-            ForEach(stationGroups) { group in
-                stationSection(group)
+
+            if showSectionHeaders {
+                // Favorites
+                if !favoriteICAOs.isEmpty {
+                    groupSeparator(title: "Favorites", count: favoriteGroups.count,
+                                   icon: "star.fill", isExpanded: $showFavorites)
+                    if showFavorites {
+                        ForEach(favoriteGroups) { stationSection($0) }
+                    }
+                }
+
+                // Your Requests
+                if !requestedGroups.isEmpty {
+                    groupSeparator(title: "Your Requests", count: requestedGroups.count,
+                                   icon: "arrow.up.message", isExpanded: $showRequested)
+                    if showRequested {
+                        ForEach(requestedGroups) { stationSection($0) }
+                    }
+                }
+
+                // Broadcasts
+                let broadcastCount = broadcastGroups.count
+                    + (appState.weatherCache.warnings.isEmpty ? 0 : 1)
+                    + (unlinkedForecasts.isEmpty ? 0 : 1)
+                    + (appState.weatherCache.outlooks.isEmpty ? 0 : 1)
+                    + (appState.weatherCache.stormReports.isEmpty ? 0 : 1)
+                    + (appState.weatherCache.rainObservations.isEmpty ? 0 : 1)
+                    + (appState.weatherCache.warningsNear.isEmpty ? 0 : 1)
+                    + (appState.weatherCache.radarFrames.isEmpty ? 0 : 1)
+                if broadcastCount > 0 {
+                    groupSeparator(title: "Broadcasts", count: broadcastCount,
+                                   icon: "dot.radiowaves.left.and.right", isExpanded: $showBroadcasts)
+                    if showBroadcasts {
+                        if !appState.weatherCache.warnings.isEmpty { warningsSection }
+                        ForEach(broadcastGroups) { stationSection($0) }
+                        if !unlinkedForecasts.isEmpty { unlinkedForecastsSection }
+                        if !appState.weatherCache.outlooks.isEmpty { outlooksSection }
+                        if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
+                        if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
+                        if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
+                        if !appState.weatherCache.radarFrames.isEmpty { radarSection }
+                    }
+                }
+            } else {
+                // Single source — no separators needed
+                ForEach(favoriteGroups) { stationSection($0) }
+                if !appState.weatherCache.warnings.isEmpty { warningsSection }
+                ForEach(requestedGroups + broadcastGroups) { stationSection($0) }
+                if !unlinkedForecasts.isEmpty { unlinkedForecastsSection }
+                if !appState.weatherCache.outlooks.isEmpty { outlooksSection }
+                if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
+                if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
+                if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
+                if !appState.weatherCache.radarFrames.isEmpty { radarSection }
             }
-            if !unlinkedForecasts.isEmpty { unlinkedForecastsSection }
-            if !appState.weatherCache.outlooks.isEmpty { outlooksSection }
-            if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
-            if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
-            if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
-            if !appState.weatherCache.radarFrames.isEmpty { radarSection }
+
             statusSection
+        }
+    }
+
+    @ViewBuilder
+    private func groupSeparator(title: String, count: Int, icon: String, isExpanded: Binding<Bool>) -> some View {
+        Section {
+        } header: {
+            Button {
+                withAnimation { isExpanded.wrappedValue.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: icon).font(.caption2)
+                    Text(title).font(.caption.weight(.semibold)).textCase(nil)
+                    Text("(\(count))").font(.caption).textCase(nil)
+                    Spacer()
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -388,6 +492,7 @@ private struct WeatherBody: View {
                 }
             }
         }
+        .id(group.icao)
     }
 
     private func clearStation(_ group: StationGroup) {
@@ -646,6 +751,7 @@ private struct WeatherBody: View {
         switch result {
         case .sent:
             dismissSearch()
+            scrollToICAO = icao
         case .botNotFound:
             searchError = "Weather bot not configured. Set the bot contact name in Tools → Weather Log."
         case .notConnected:
@@ -985,6 +1091,8 @@ private struct StationGroup: Identifiable {
     var obsUnavailable: Bool
     var tafUnavailable: Bool
     var forecastUnavailable: Bool
+    /// True if the local user explicitly requested any product for this station.
+    var isRequested: Bool
 }
 
 // MARK: - Station Card
@@ -1015,8 +1123,20 @@ private struct StationCard: View {
         )?.id
     }
 
+    private var hasAnyContent: Bool {
+        group.obs != nil || group.taf != nil || group.linkedForecast != nil
+        || group.pendingObs || group.pendingTAF || group.pendingForecast
+        || group.obsUnavailable || group.tafUnavailable || group.forecastUnavailable
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if !hasAnyContent {
+                Label("No data yet — long press to request", systemImage: "arrow.down.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4)
+            }
             // --- Current Conditions ---
             if group.pendingObs && group.obs == nil {
                 PendingRow(label: "Awaiting current conditions…")

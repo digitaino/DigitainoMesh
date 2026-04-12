@@ -155,6 +155,10 @@ final class WeatherCache {
     /// Cleared automatically when data arrives; lets the UI show a spinner.
     private(set) var pendingKeys: Set<String> = []
 
+    /// Keys the local user has ever explicitly requested (never cleared on data arrival).
+    /// Used to separate "Your Requests" from "Broadcasts" in the Weather tab.
+    private(set) var requestedKeys: Set<String> = []
+
     /// Keys for which the bot replied NOT_AVAILABLE, mapped to the reason code.
     /// Cleared when a new request is sent or real data arrives for the same key.
     private(set) var unavailableKeys: [String: UInt8] = [:]
@@ -162,6 +166,7 @@ final class WeatherCache {
     func addPending(_ key: String) {
         unavailableKeys.removeValue(forKey: key)  // clear stale not-available state
         pendingKeys.insert(key)
+        requestedKeys.insert(key)
     }
     func clearPending(_ key: String) {
         pendingKeys.remove(key)
@@ -199,6 +204,7 @@ final class WeatherCache {
     }
     func isUnavailable(_ key: String) -> Bool { unavailableKeys[key] != nil }
     func unavailableReason(for key: String) -> UInt8? { unavailableKeys[key] }
+    func isRequested(_ key: String) -> Bool { requestedKeys.contains(key) }
 
     /// Maximum radar frames to keep per region (ring buffer).
     private let maxFramesPerRegion = 12
@@ -357,6 +363,7 @@ final class WeatherCache {
         tafs.removeAll()
         warningsNear.removeAll()
         pendingKeys.removeAll()
+        requestedKeys.removeAll()
         unavailableKeys.removeAll()
         notAvailableNotice = nil
         Task.detached(priority: .utility) {
