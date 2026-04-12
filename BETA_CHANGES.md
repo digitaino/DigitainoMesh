@@ -1,4 +1,36 @@
-Beta Changes -- v0.10.1 (Build 21)
+Beta Changes -- v0.10.1 (Build 22)
+
+Weather Bot Reliability & Protocol Updates
+
+DM / Channel Request Mode Toggle
+
+A new "Bot Requests" section in Tools → Weather Log lets you switch between two delivery modes for weather requests. Direct Message mode (default) sends requests as DMs to the bot's pubkey with automatic retry, flood-routing fallback, and ACK tracking. Channel mode sends requests as plain channel messages — better over poor multi-hop links since no ACK is needed. When Channel is selected, a text field lets you set the command channel name (defaults to #digitaino-wx-bot). The bot responds on #wx-broadcast regardless of which mode you use.
+
+Robust Weather Bot DMs
+
+Weather bot DM requests now use retry and flood fallback. If the initial DM goes unacknowledged, the app automatically falls back to flood routing. Forecast, TAF, and METAR requests additionally watch for a response: if none arrives within 45 seconds the request is re-sent once, and if still no response after another 45 seconds the pending state is cleared.
+
+MSG_NOT_AVAILABLE Support
+
+The bot now sends a 0x03 message when it understands your request but has no data. The app decodes these responses and immediately stops the spinner for the corresponding product (forecast, METAR, or TAF). An inline "No forecast/conditions/TAF available" label appears in the station card instead of spinning indefinitely. A brief non-blocking toast slides up from the bottom of the Weather tab naming the product and reason (e.g. "KAUS conditions not available"), then auto-dismisses after 3 seconds.
+
+Auto-Provision #wx-broadcast Channel
+
+The app now automatically adds the #wx-broadcast hashtag channel to your companion device on first connect if it isn't already there. The channel is muted automatically so weather broadcast packets don't create unread badges or notification noise. Bot name is auto-discovered from the first incoming broadcast — no manual configuration required.
+
+Tapback Hash Truncation Fix
+
+Fixed a bug where tapback (reaction) messages sent in response to long channel messages could be truncated mid-hash, making them unparseable by the receiving client. The reaction builder now budgets character space for the trailing hash first, then fits as much of the message snippet as possible within the 136-character channel limit. The hash is always preserved.
+
+Long-Press Tooltip on Weather Cards
+
+A one-time TipKit tooltip appears when weather data is first displayed, explaining that long-pressing any weather card opens a request menu for forecasts, TAFs, METARs, outlooks, storm reports, and more.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 21)
 
 MeshWX Weather System
 

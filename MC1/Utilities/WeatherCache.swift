@@ -72,6 +72,9 @@ final class WeatherCache {
             summary = "TAF \(t.icao) \(t.tempF)°F \(t.skyName)"
         case .warningsNear(let w):
             summary = "Warnings near \(w.entries.count) entries"
+        case .notAvailable(let na):
+            let key = na.pendingKey ?? "unknown"
+            summary = "NOT_AVAILABLE '\(key)': \(na.reasonDescription)"
         case nil:
             let first = rawPayload.first.map { String(format: "0x%02x", $0) } ?? "empty"
             summary = "Decode failed (first byte: \(first), \(rawPayload.count)B)"
@@ -152,9 +155,50 @@ final class WeatherCache {
     /// Cleared automatically when data arrives; lets the UI show a spinner.
     private(set) var pendingKeys: Set<String> = []
 
-    func addPending(_ key: String)       { pendingKeys.insert(key) }
-    func clearPending(_ key: String)     { pendingKeys.remove(key) }
+    /// Keys for which the bot replied NOT_AVAILABLE, mapped to the reason code.
+    /// Cleared when a new request is sent or real data arrives for the same key.
+    private(set) var unavailableKeys: [String: UInt8] = [:]
+
+    func addPending(_ key: String) {
+        unavailableKeys.removeValue(forKey: key)  // clear stale not-available state
+        pendingKeys.insert(key)
+    }
+    func clearPending(_ key: String) {
+        pendingKeys.remove(key)
+        unavailableKeys.removeValue(forKey: key)  // data arrived — clear unavailable too
+    }
     func isPending(_ key: String) -> Bool { pendingKeys.contains(key) }
+
+    /// Transient notice shown briefly in the UI when the bot replies NOT_AVAILABLE.
+    /// Nil = nothing to show. Auto-cleared by the view after display.
+    private(set) var notAvailableNotice: String? = nil
+
+    func clearNotAvailableNotice() { notAvailableNotice = nil }
+
+    /// Marks a key as NOT_AVAILABLE, clears its pending state, and sets the transient notice.
+    func markUnavailable(_ key: String, reason: UInt8) {
+        pendingKeys.remove(key)
+        unavailableKeys[key] = reason
+        let product: String
+        if key.hasPrefix("metar:") {
+            product = "\(key.dropFirst(6)) conditions"
+        } else if key.hasPrefix("taf:") {
+            product = "\(key.dropFirst(4)) TAF"
+        } else if key.hasPrefix("forecast:") {
+            product = "forecast"
+        } else {
+            product = key
+        }
+        let suffix: String
+        switch reason {
+        case 0x1: suffix = " — unknown location"
+        case 0x3: suffix = " — bot error"
+        default:  suffix = ""
+        }
+        notAvailableNotice = "\(product) not available\(suffix)"
+    }
+    func isUnavailable(_ key: String) -> Bool { unavailableKeys[key] != nil }
+    func unavailableReason(for key: String) -> UInt8? { unavailableKeys[key] }
 
     /// Maximum radar frames to keep per region (ring buffer).
     private let maxFramesPerRegion = 12
@@ -313,6 +357,8 @@ final class WeatherCache {
         tafs.removeAll()
         warningsNear.removeAll()
         pendingKeys.removeAll()
+        unavailableKeys.removeAll()
+        notAvailableNotice = nil
         Task.detached(priority: .utility) {
             try? FileManager.default.removeItem(at: Self.cacheFileURL)
         }
@@ -334,7 +380,7 @@ final class WeatherCache {
     var hasData: Bool {
         !warnings.isEmpty || !radarFrames.isEmpty || !forecasts.isEmpty || !observations.isEmpty
         || !outlooks.isEmpty || !stormReports.isEmpty || !rainObservations.isEmpty
-        || !tafs.isEmpty || !warningsNear.isEmpty || !pendingKeys.isEmpty
+        || !tafs.isEmpty || !warningsNear.isEmpty || !pendingKeys.isEmpty || !unavailableKeys.isEmpty
     }
 
     // MARK: - Persistence

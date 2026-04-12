@@ -38,18 +38,14 @@ struct MessageRouteMapSheet: View {
         }
         .task {
             guard let services = appState.services else { return }
-            // Ensure we have a location before loading so lines can connect to the user
-            if appState.locationService.currentLocation == nil,
-               appState.locationService.isAuthorized {
-                try? await appState.locationService.requestCurrentLocation(timeout: .seconds(5))
-            }
-            // Prefer the GPS stored on the message (where user was at send/receive time)
-            // over the phone's current location, so route maps show historical position.
+            // Use only the GPS stored on the message (where user was at send/receive time).
+            // Do NOT fall back to current GPS — current location may be far from where the
+            // message was sent, making it actively misleading on a historical route map.
             let userLocation: CLLocation? = if let lat = message.userLatitude,
                                                let lon = message.userLongitude {
                 CLLocation(latitude: lat, longitude: lon)
             } else {
-                appState.locationService.currentLocation
+                nil
             }
             await mapViewModel.loadRoute(
                 message: message,

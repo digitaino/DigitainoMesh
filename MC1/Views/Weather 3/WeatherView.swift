@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import TipKit
 
 // MARK: - WeatherView
 
@@ -35,8 +36,10 @@ private struct WeatherBody: View {
     @State private var searchError: String?
     @State private var showingRadarPicker = false
     @State private var showingInfo = false
+    @State private var noticeTask: Task<Void, Never>?
 
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
+    @State private var wxLongPressTip = WXLongPressTip()
 
     private var favoriteICAOs: Set<String> {
         Set(favoriteICAOsRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
@@ -97,6 +100,31 @@ private struct WeatherBody: View {
             Button("OK", role: .cancel) { requestError = nil }
         } message: {
             Text(requestError ?? "")
+        }
+        .overlay(alignment: .bottom) {
+            if let notice = appState.weatherCache.notAvailableNotice {
+                HStack(spacing: 8) {
+                    Image(systemName: "slash.circle")
+                        .foregroundStyle(.secondary)
+                    Text(notice)
+                        .font(.subheadline)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.bottom, 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.35), value: appState.weatherCache.notAvailableNotice)
+        .onChange(of: appState.weatherCache.notAvailableNotice) { _, newValue in
+            guard newValue != nil else { return }
+            noticeTask?.cancel()
+            noticeTask = Task {
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                appState.weatherCache.clearNotAvailableNotice()
+            }
         }
     }
 
@@ -280,7 +308,12 @@ private struct WeatherBody: View {
                 linkedForecast: linked,
                 pendingObs: appState.weatherCache.isPending("metar:\(icao)"),
                 pendingTAF: appState.weatherCache.isPending("taf:\(icao)"),
-                pendingForecast: pendingForecast
+                pendingForecast: pendingForecast,
+                obsUnavailable: appState.weatherCache.isUnavailable("metar:\(icao)"),
+                tafUnavailable: appState.weatherCache.isUnavailable("taf:\(icao)"),
+                forecastUnavailable: origin.map {
+                    appState.weatherCache.isUnavailable("forecast:\($0.key)")
+                } ?? false
             )
         }
         .sorted { a, b in
@@ -312,6 +345,9 @@ private struct WeatherBody: View {
 
     private var weatherList: some View {
         List {
+            TipView(wxLongPressTip, arrowEdge: .top)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             if !appState.weatherCache.warnings.isEmpty { warningsSection }
             ForEach(stationGroups) { group in
                 stationSection(group)
@@ -657,6 +693,19 @@ private struct PendingRow: View {
     }
 }
 
+// MARK: - Unavailable Row
+
+private struct UnavailableRow: View {
+    let label: String
+
+    var body: some View {
+        Label(label, systemImage: "slash.circle")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Warning Row
 
 private struct WarningRow: View {
@@ -933,6 +982,9 @@ private struct StationGroup: Identifiable {
     var pendingObs: Bool
     var pendingTAF: Bool
     var pendingForecast: Bool
+    var obsUnavailable: Bool
+    var tafUnavailable: Bool
+    var forecastUnavailable: Bool
 }
 
 // MARK: - Station Card
@@ -968,6 +1020,8 @@ private struct StationCard: View {
             // --- Current Conditions ---
             if group.pendingObs && group.obs == nil {
                 PendingRow(label: "Awaiting current conditions…")
+            } else if group.obsUnavailable && group.obs == nil {
+                UnavailableRow(label: "No conditions available")
             }
             if let obs = group.obs {
                 ObservationRow(observation: obs, onRefresh: group.pendingObs ? nil : {
@@ -976,12 +1030,14 @@ private struct StationCard: View {
             }
 
             // --- Forecast ---
-            let hasForecastContent = group.linkedForecast != nil || group.pendingForecast
-            if (group.obs != nil || group.pendingObs) && hasForecastContent {
+            let hasForecastContent = group.linkedForecast != nil || group.pendingForecast || group.forecastUnavailable
+            if (group.obs != nil || group.pendingObs || group.obsUnavailable) && hasForecastContent {
                 Divider().padding(.vertical, 8)
             }
             if group.pendingForecast && group.linkedForecast == nil {
                 PendingRow(label: "Awaiting forecast…")
+            } else if group.forecastUnavailable && group.linkedForecast == nil {
+                UnavailableRow(label: "No forecast available")
             }
             if let (pfmIdx, fc) = group.linkedForecast {
                 InlineForecastRow(forecast: fc, onRefresh: group.pendingForecast ? nil : {
@@ -990,12 +1046,14 @@ private struct StationCard: View {
             }
 
             // --- TAF ---
-            let hasTAFContent = group.taf != nil || group.pendingTAF
+            let hasTAFContent = group.taf != nil || group.pendingTAF || group.tafUnavailable
             if hasTAFContent {
                 Divider().padding(.vertical, 8)
             }
             if group.pendingTAF && group.taf == nil {
                 PendingRow(label: "Awaiting TAF…")
+            } else if group.tafUnavailable && group.taf == nil {
+                UnavailableRow(label: "No TAF available")
             }
             if let taf = group.taf {
                 TAFRow(taf: taf, onRefresh: group.pendingTAF ? nil : {

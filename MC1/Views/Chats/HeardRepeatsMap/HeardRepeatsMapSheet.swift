@@ -41,22 +41,15 @@ struct HeardRepeatsMapSheet: View {
             }
         }
         .task {
-            // Prefer the location recorded on the message at receive time so the "You"
-            // pin reflects where the user was when the packet arrived, not where the
-            // device is now.  Fall back to current GPS only if no message location.
-            var location = messageLocation
-            if location == nil {
-                if appState.locationService.currentLocation == nil,
-                   appState.locationService.isAuthorized {
-                    try? await appState.locationService.requestCurrentLocation(timeout: .seconds(5))
-                }
-                location = appState.locationService.currentLocation
-            }
+            // Use only the GPS location stored on the message at send/receive time.
+            // Do NOT fall back to current GPS — the user may have moved significantly
+            // since the message was sent, making current location actively misleading
+            // on a historical route map.
             viewModel.load(
                 repeats: repeats,
                 contacts: contacts,
                 discoveredNodes: discoveredNodes,
-                userLocation: location,
+                userLocation: messageLocation,
                 userName: appState.connectedDevice?.nodeName
                     ?? L10n.Chats.Chats.Path.Receiver.you
             )

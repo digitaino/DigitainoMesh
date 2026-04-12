@@ -57,6 +57,32 @@ public final class AppState {
         didSet { UserDefaults.standard.set(wxAviationUsesF, forKey: "wxAviationUsesF") }
     }
 
+    /// How weather requests are transmitted to the bot.
+    enum WXRequestMode: String, CaseIterable {
+        case dm = "dm"
+        case channel = "channel"
+
+        var displayName: String {
+            switch self {
+            case .dm: return "Direct Message"
+            case .channel: return "Channel"
+            }
+        }
+    }
+
+    /// Whether requests go out as DMs or channel messages. Persisted in UserDefaults.
+    var wxRequestMode: WXRequestMode = {
+        let raw = UserDefaults.standard.string(forKey: "wxRequestMode") ?? "dm"
+        return WXRequestMode(rawValue: raw) ?? .dm
+    }() {
+        didSet { UserDefaults.standard.set(wxRequestMode.rawValue, forKey: "wxRequestMode") }
+    }
+
+    /// Channel name used when `wxRequestMode == .channel`. Persisted in UserDefaults.
+    var wxCommandChannelName: String = UserDefaults.standard.string(forKey: "wxCommandChannelName") ?? "#digitaino-wx-bot" {
+        didSet { UserDefaults.standard.set(wxCommandChannelName, forKey: "wxCommandChannelName") }
+    }
+
     // MARK: - Connection (via ConnectionManager)
 
     /// The connection manager for device lifecycle
@@ -583,6 +609,42 @@ public final class AppState {
         }
     }
 
+    /// Sends a weather request on the configured command channel (channel mode).
+    /// Returns `true` if the message was sent without throwing.
+    private func sendWeatherBotChannelMessage(text: String, services: ServiceContainer) async -> Bool {
+        guard let deviceID = connectedDevice?.id else { return false }
+        do {
+            let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
+            guard let channel = channels.first(where: {
+                $0.name.lowercased() == wxCommandChannelName.lowercased()
+            }) else {
+                logger.warning("WeatherBot: command channel '\(self.wxCommandChannelName)' not found on device")
+                return false
+            }
+            _ = try await services.messageService.sendChannelMessage(
+                text: text,
+                channelIndex: channel.index,
+                deviceID: deviceID
+            )
+            logger.info("WeatherBot: sent '\(text)' on channel '\(channel.name)'")
+            return true
+        } catch {
+            logger.error("WeatherBot channel send failed: \(error)")
+            return false
+        }
+    }
+
+    /// Dispatches a weather request via DM or channel based on `wxRequestMode`.
+    private func sendWeatherBotRequest(text: String, services: ServiceContainer) async -> Bool {
+        switch wxRequestMode {
+        case .dm:
+            guard let botContact = await resolveBotContact(services: services) else { return false }
+            return await sendWeatherBotDM(text: text, to: botContact, services: services)
+        case .channel:
+            return await sendWeatherBotChannelMessage(text: text, services: services)
+        }
+    }
+
     /// Watches a pending weather request key. If still pending after `timeout` seconds,
     /// calls `retryBlock` (which should re-send the DM and return whether delivery succeeded).
     /// If still no response after a second `timeout`, gives up and clears the key.
@@ -633,11 +695,11 @@ public final class AppState {
             return .noLocation
         }
 
-        guard let botContact = await resolveBotContact(services: services) else {
+        if wxRequestMode == .dm, await resolveBotContact(services: services) == nil {
             return .botNotFound
         }
 
-        // Build "MWX" DM request: "MWX" + region_byte (hex) + client_newest (4 hex chars)
+        // Build "MWX" request: "MWX" + region_byte (hex) + client_newest (4 hex chars)
         // region_byte = (region_id << 4) | request_type; 0x3 = both radar and warnings
         let newestTimestamp: UInt16
         if let frames = weatherCache.radarFrames[region.id], let latest = frames.last {
@@ -648,13 +710,13 @@ public final class AppState {
         let regionByte: UInt8 = (region.id & 0x0F) << 4 | 0x03
         let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
 
-        let delivered = await sendWeatherBotDM(text: mwxText, to: botContact, services: services)
+        let delivered = await sendWeatherBotRequest(text: mwxText, services: services)
         if delivered {
             weatherLastRefreshAt = Date()
-            logger.info("WeatherRefresh: sent MWX DM to \(botContact.name) for region \(region.id) (\(region.name))")
+            logger.info("WeatherRefresh: sent MWX for region \(region.id) (\(region.name)) via \(self.wxRequestMode.rawValue)")
             return .sent
         } else {
-            logger.error("WeatherRefresh: DM delivery failed for region \(region.id)")
+            logger.error("WeatherRefresh: delivery failed for region \(region.id)")
             return .noDataChannel
         }
     }
@@ -663,7 +725,7 @@ public final class AppState {
     /// Use this when the user manually picks a region. No client-side rate limit applied.
     func sendRadarRequest(regionID: UInt8) async -> WeatherRefreshResult {
         guard connectionState == .ready, let services else { return .notConnected }
-        guard let botContact = await resolveBotContact(services: services) else { return .botNotFound }
+        if wxRequestMode == .dm, await resolveBotContact(services: services) == nil { return .botNotFound }
 
         let newestTimestamp: UInt16
         if let frames = weatherCache.radarFrames[regionID], let latest = frames.last {
@@ -674,9 +736,9 @@ public final class AppState {
         let regionByte: UInt8 = (regionID & 0x0F) << 4 | 0x03
         let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
 
-        let delivered = await sendWeatherBotDM(text: mwxText, to: botContact, services: services)
+        let delivered = await sendWeatherBotRequest(text: mwxText, services: services)
         if delivered {
-            logger.info("WeatherRefresh: sent MWX DM to \(botContact.name) for explicit region \(regionID)")
+            logger.info("WeatherRefresh: sent MWX for explicit region \(regionID) via \(self.wxRequestMode.rawValue)")
         }
         return delivered ? .sent : .noDataChannel
     }
@@ -693,8 +755,8 @@ public final class AppState {
             return .notConnected
         }
 
-        guard let botContact = await resolveBotContact(services: services) else {
-            logger.warning("WeatherDataRequest: weather bot not configured (set bot name in Weather settings)")
+        if wxRequestMode == .dm, await resolveBotContact(services: services) == nil {
+            logger.warning("WeatherDataRequest: bot not configured for DM mode")
             return .botNotFound
         }
 
@@ -702,9 +764,9 @@ public final class AppState {
         let hexString = payload.map { String(format: "%02x", $0) }.joined()
         let dmText = "WXQ" + hexString
 
-        let delivered = await sendWeatherBotDM(text: dmText, to: botContact, services: services)
+        let delivered = await sendWeatherBotRequest(text: dmText, services: services)
         if delivered {
-            logger.info("▶︎ MESHWX_TX forecast pfmPoint=\(pfmPointIndex) bot=\(botContact.name) dm=\(dmText)")
+            logger.info("▶︎ MESHWX_TX forecast pfmPoint=\(pfmPointIndex) via \(self.wxRequestMode.rawValue)")
             if let icao = originICAO {
                 weatherCache.setForecastOrigin(pfmPointIndex: pfmPointIndex, icao: icao)
             }
@@ -712,12 +774,11 @@ public final class AppState {
             weatherCache.addPending(pendingKey)
             watchPendingKey(pendingKey) { [weak self] in
                 guard let self, let services = self.services, self.connectionState == .ready else { return false }
-                guard let botContact = await self.resolveBotContact(services: services) else { return false }
-                return await self.sendWeatherBotDM(text: dmText, to: botContact, services: services)
+                return await self.sendWeatherBotRequest(text: dmText, services: services)
             }
             return .sent
         } else {
-            logger.error("WeatherDataRequest: DM delivery failed for pfmPoint=\(pfmPointIndex)")
+            logger.error("WeatherDataRequest: delivery failed for pfmPoint=\(pfmPointIndex)")
             return .noDataChannel
         }
     }
@@ -725,12 +786,12 @@ public final class AppState {
     /// Generic helper: sends a raw 0x02 data request payload as a WXQ DM to the weather bot.
     private func sendWXDataRequest(payload: Data) async -> WeatherRefreshResult {
         guard connectionState == .ready, let services else { return .notConnected }
-        guard let botContact = await resolveBotContact(services: services) else { return .botNotFound }
+        if wxRequestMode == .dm, await resolveBotContact(services: services) == nil { return .botNotFound }
         let hexString = payload.map { String(format: "%02x", $0) }.joined()
         let dmText = "WXQ" + hexString
-        let delivered = await sendWeatherBotDM(text: dmText, to: botContact, services: services)
+        let delivered = await sendWeatherBotRequest(text: dmText, services: services)
         if delivered {
-            logger.info("▶︎ MESHWX_TX data bot=\(botContact.name) dm=\(dmText)")
+            logger.info("▶︎ MESHWX_TX data via \(self.wxRequestMode.rawValue) payload=\(dmText)")
         }
         return delivered ? .sent : .noDataChannel
     }
@@ -755,9 +816,8 @@ public final class AppState {
             weatherCache.addPending(pendingKey)
             watchPendingKey(pendingKey) { [weak self] in
                 guard let self, let services = self.services, self.connectionState == .ready else { return false }
-                guard let botContact = await self.resolveBotContact(services: services) else { return false }
                 let hex = payload.map { String(format: "%02x", $0) }.joined()
-                return await self.sendWeatherBotDM(text: "WXQ" + hex, to: botContact, services: services)
+                return await self.sendWeatherBotRequest(text: "WXQ" + hex, services: services)
             }
         }
         return result
@@ -771,9 +831,8 @@ public final class AppState {
             weatherCache.addPending(pendingKey)
             watchPendingKey(pendingKey) { [weak self] in
                 guard let self, let services = self.services, self.connectionState == .ready else { return false }
-                guard let botContact = await self.resolveBotContact(services: services) else { return false }
                 let hex = payload.map { String(format: "%02x", $0) }.joined()
-                return await self.sendWeatherBotDM(text: "WXQ" + hex, to: botContact, services: services)
+                return await self.sendWeatherBotRequest(text: "WXQ" + hex, services: services)
             }
         }
         return result
@@ -853,6 +912,13 @@ public final class AppState {
                     case .warningsNear(let warnings):
                         logger.info("MeshWX warnings-near decoded: \(warnings.entries.count) entries")
                         self.weatherCache.ingestWarningsNear(warnings)
+                    case .notAvailable(let na):
+                        if let key = na.pendingKey {
+                            self.weatherCache.markUnavailable(key, reason: na.reason)
+                            logger.info("MeshWX NOT_AVAILABLE for '\(key)': \(na.reasonDescription)")
+                        } else {
+                            logger.info("MeshWX NOT_AVAILABLE dataType=\(na.dataType) reason=\(na.reasonDescription) (no tracked key)")
+                        }
                     }
                 } else {
                     let firstByte = data.first.map { String(format: "0x%02x", $0) } ?? "nil"

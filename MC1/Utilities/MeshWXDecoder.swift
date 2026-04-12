@@ -29,6 +29,7 @@ enum MeshWXMessage: Sendable {
     case rainObservations(MeshWXRainObservations)
     case taf(MeshWXTAF)
     case warningsNear(MeshWXWarningsNear)
+    case notAvailable(MeshWXNotAvailable)
 }
 
 // MARK: - Radar Frame
@@ -687,6 +688,50 @@ struct MeshWXWarningsNear: Sendable {
     }
 }
 
+// MARK: - Not Available (0x03)
+
+/// Decoded 0x03 MSG_NOT_AVAILABLE response from the weather bot.
+/// The bot sends this when it understands a request but cannot provide data.
+/// Use `pendingKey` to stop the matching UI spinner and show an empty state.
+struct MeshWXNotAvailable: Sendable {
+    let dataType: UInt8       // hi nibble of byte 1
+    let reason: UInt8         // lo nibble of byte 1
+    let locationType: UInt8
+    let locationIDBytes: Data
+
+    var reasonDescription: String {
+        switch reason {
+        case 0x0: return "No data available"
+        case 0x1: return "Unknown location"
+        case 0x2: return "Product unsupported"
+        case 0x3: return "Bot error"
+        default:  return "Unavailable"
+        }
+    }
+
+    /// Derives the pending-request key matching this response, if trackable.
+    var pendingKey: String? {
+        switch dataType {
+        case 0x1: // FORECAST — LOC_PFM_POINT
+            guard locationType == 0x06, locationIDBytes.count >= 3 else { return nil }
+            let idx = (Int(locationIDBytes[0]) << 16) | (Int(locationIDBytes[1]) << 8) | Int(locationIDBytes[2])
+            return "forecast:\(idx)"
+        case 0x5: // METAR — LOC_STATION
+            guard locationType == 0x02, locationIDBytes.count >= 4 else { return nil }
+            let icao = String(bytes: locationIDBytes.prefix(4), encoding: .ascii)?
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\0")) ?? ""
+            return icao.isEmpty ? nil : "metar:\(icao)"
+        case 0x6: // TAF — LOC_STATION
+            guard locationType == 0x02, locationIDBytes.count >= 4 else { return nil }
+            let icao = String(bytes: locationIDBytes.prefix(4), encoding: .ascii)?
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\0")) ?? ""
+            return icao.isEmpty ? nil : "taf:\(icao)"
+        default:
+            return nil
+        }
+    }
+}
+
 // MARK: - Decoder
 
 enum MeshWXDecoder {
@@ -789,6 +834,7 @@ enum MeshWXDecoder {
     private static func decodeRaw(_ data: Data) -> MeshWXMessage? {
         guard let first = data.first else { return nil }
         switch first {
+        case 0x03: return decodeNotAvailable(data).map { .notAvailable($0) }
         case 0x10: return decodeRadarGrid(data).map { .radarGrid($0) }
         case 0x20: return decodeWarning(data).map { .warningPolygon($0) }
         case 0x30: return decodeObservation(data).map { .observation($0) }
@@ -1360,6 +1406,23 @@ enum MeshWXDecoder {
 
         return MeshWXWarningsNear(locationType: locType, locationIDBytes: locationIDBytes,
                                   entries: entries, receivedAt: Date())
+    }
+
+    // MARK: 0x03 Not Available Decoder
+
+    /// Decodes a 0x03 MSG_NOT_AVAILABLE response.
+    private static func decodeNotAvailable(_ data: Data) -> MeshWXNotAvailable? {
+        guard data.count >= 3, data[0] == 0x03 else { return nil }
+        let dataType = (data[1] >> 4) & 0x0F
+        let reason   = data[1] & 0x0F
+        let locationType = data[2]
+        let idLen = locationIDLength(locationType)
+        guard data.count >= 3 + idLen else { return nil }
+        let locationIDBytes = Data(data[3..<(3 + idLen)])
+        return MeshWXNotAvailable(
+            dataType: dataType, reason: reason,
+            locationType: locationType, locationIDBytes: locationIDBytes
+        )
     }
 
     // MARK: 0x02 Request Builder
