@@ -49,8 +49,8 @@ public final class AccessorySetupKitService {
     /// Pending activation continuation
     private var activationContinuation: CheckedContinuation<Void, Error>?
 
-    /// Pending rename continuation
-    private var renameContinuation: CheckedContinuation<Void, Error>?
+    private var pickerPresentedAt: Date?
+    private var pickerOutcome = "cancelled"
 
     public init() {}
 
@@ -115,13 +115,18 @@ public final class AccessorySetupKitService {
             pairedAccessories = []
             pickerContinuation?.resume(throwing: AccessorySetupKitError.sessionInvalidated)
             pickerContinuation = nil
-            renameContinuation?.resume(throwing: AccessorySetupKitError.sessionInvalidated)
-            renameContinuation = nil
-
         case .accessoryAdded:
             if let accessory = event.accessory {
                 pairedAccessories = session?.accessories ?? []
+                pickerOutcome = "selected"
                 logger.info("Accessory added: \(accessory.displayName)")
+                logger.info(
+                    AccessorySetupKitLogFormatter.selectionMessage(
+                        accessoryName: accessory.displayName,
+                        bluetoothID: accessory.bluetoothIdentifier,
+                        elapsed: pickerElapsedTime
+                    )
+                )
 
                 if let bluetoothID = accessory.bluetoothIdentifier {
                     resumePickerContinuation(with: .success(bluetoothID))
@@ -142,18 +147,25 @@ public final class AccessorySetupKitService {
         case .accessoryChanged:
             pairedAccessories = session?.accessories ?? []
             logger.info("Accessory changed")
-            // Resume rename continuation if pending (rename triggers accessoryChanged)
-            if let continuation = renameContinuation {
-                renameContinuation = nil
-                continuation.resume()
-            }
+
+        case .accessoryDiscovered:
+            // Default ASK picker flow handles discovery UI itself.
+            break
 
         case .pickerDidPresent:
             logger.info("Picker presented")
 
         case .pickerDidDismiss:
-            logger.info("Picker dismissed")
-            // If we still have a pending continuation, user cancelled
+            logger.info(
+                AccessorySetupKitLogFormatter.dismissalMessage(
+                    outcome: pickerOutcome,
+                    pairedCount: pairedAccessories.count,
+                    elapsed: pickerElapsedTime,
+                    filteredDiscovery: AccessorySetupKitDiscoveryCriteria.usesFilteredDiscovery
+                )
+            )
+            pickerPresentedAt = nil
+            pickerOutcome = "cancelled"
             resumePickerContinuation(with: .failure(AccessorySetupKitError.pickerDismissed))
 
         case .pickerSetupBridging:
@@ -164,14 +176,15 @@ public final class AccessorySetupKitService {
 
         case .pickerSetupFailed:
             if let error = event.error {
+                pickerOutcome = "pairingFailed"
                 logger.error("Pairing failed: \(error.localizedDescription)")
 
-                // Clean up failed accessory so it can appear in picker again
                 if let accessory = event.accessory,
                    let bluetoothID = accessory.bluetoothIdentifier {
                     logger.info("Cleaning up failed pairing for \(accessory.displayName)")
 
-                    // Remove from ASK if it's in pairedAccessories
+                    delegate?.accessorySetupKitService(self, didFailPairingForAccessoryWithID: bluetoothID)
+
                     if pairedAccessories.contains(where: { $0.bluetoothIdentifier == bluetoothID }) {
                         Task {
                             do {
@@ -182,9 +195,6 @@ public final class AccessorySetupKitService {
                             }
                         }
                     }
-
-                    // Notify delegate to clean up SwiftData
-                    delegate?.accessorySetupKitService(self, didFailPairingForAccessoryWithID: bluetoothID)
                 }
 
                 resumePickerContinuation(with: .failure(AccessorySetupKitError.pairingFailed(error.localizedDescription)))
@@ -217,26 +227,19 @@ public final class AccessorySetupKitService {
             throw AccessorySetupKitError.pickerAlreadyActive
         }
 
-        // Configure picker display settings (iOS 26+ only)
         if #available(iOS 26.0, *) {
             if session.pickerDisplaySettings == nil {
                 session.pickerDisplaySettings = ASPickerDisplaySettings()
             }
         }
 
-        // Single display item filtered by service UUID only.
-        // Supported device names are declared in Info.plist (NSAccessorySetupBluetoothNames)
-        // for system-level authorization; the picker deduplicates by device.
         let productImage = createGenericProductImage()
-        let descriptor = ASDiscoveryDescriptor()
-        descriptor.bluetoothServiceUUID = CBUUID(string: BLEServiceUUID.nordicUART)
-        let displayItems = [
-            ASPickerDisplayItem(
-                name: "MeshCore Device",
-                productImage: productImage,
-                descriptor: descriptor
-            )
-        ]
+        let displayItems = makePickerDisplayItems(productImage: productImage)
+        pickerPresentedAt = Date()
+        pickerOutcome = "presented"
+        logger.info(
+            "[ASK] Presenting picker on iOS \(currentOSVersion), sessionActive: \(isSessionActive), pairedCount: \(pairedAccessories.count), displayItems: \(displayItems.count), filteredDiscovery: \(AccessorySetupKitDiscoveryCriteria.usesFilteredDiscovery), criteria: \(AccessorySetupKitLogFormatter.criteriaSummary(AccessorySetupKitDiscoveryCriteria.supportedBluetoothCriteria))"
+        )
 
         return try await withCheckedThrowingContinuation { continuation in
             self.pickerContinuation = continuation
@@ -250,16 +253,21 @@ public final class AccessorySetupKitService {
 
                         switch error.code {
                         case .pickerRestricted:
+                            self.pickerOutcome = "pickerRestricted"
                             self.resumePickerContinuation(with: .failure(AccessorySetupKitError.pickerRestricted))
                         case .pickerAlreadyActive:
+                            self.pickerOutcome = "pickerAlreadyActive"
                             self.resumePickerContinuation(with: .failure(AccessorySetupKitError.pickerAlreadyActive))
                         case .userCancelled:
+                            self.pickerOutcome = "cancelled"
                             // User explicitly cancelled (error code 700) - not an error condition
                             // Will be handled by pickerDidDismiss event
                             return
                         case .discoveryTimeout:
+                            self.pickerOutcome = "discoveryTimeout"
                             self.resumePickerContinuation(with: .failure(AccessorySetupKitError.discoveryTimeout))
                         case .connectionFailed:
+                            self.pickerOutcome = "connectionFailed"
                             self.resumePickerContinuation(with: .failure(AccessorySetupKitError.connectionFailed))
                         default:
                             self.logger.error("Unexpected picker error code: \(error.code.rawValue)")
@@ -294,27 +302,13 @@ public final class AccessorySetupKitService {
 
     /// Shows the system rename sheet for an accessory
     /// - Parameter accessory: The accessory to rename
-    /// Note: ASK's renameAccessory callback may not fire on success, only on error.
-    /// We handle success via the .accessoryChanged event instead.
     public func renameAccessory(_ accessory: ASAccessory) async throws {
         guard let session else {
             throw AccessorySetupKitError.sessionNotActive
         }
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            self.renameContinuation = continuation
-
-            session.renameAccessory(accessory) { [weak self] error in
-                guard let self else { return }
-                Task { @MainActor in
-                    // Only handle errors here - success is handled via .accessoryChanged event
-                    if let error {
-                        self.renameContinuation = nil
-                        continuation.resume(throwing: error)
-                    }
-                }
-            }
-        }
+        try await session.renameAccessory(accessory)
+        pairedAccessories = session.accessories
     }
 
     /// Find a paired accessory by its Bluetooth identifier
@@ -328,8 +322,6 @@ public final class AccessorySetupKitService {
         pickerContinuation = nil
         activationContinuation?.resume(throwing: AccessorySetupKitError.sessionInvalidated)
         activationContinuation = nil
-        renameContinuation?.resume(throwing: AccessorySetupKitError.sessionInvalidated)
-        renameContinuation = nil
         session?.invalidate()
         session = nil
         isSessionActive = false
@@ -337,6 +329,29 @@ public final class AccessorySetupKitService {
     }
 
     // MARK: - Private Helpers
+
+    private var currentOSVersion: String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+    }
+
+    private var pickerElapsedTime: TimeInterval? {
+        pickerPresentedAt.map { Date().timeIntervalSince($0) }
+    }
+
+    private func makePickerDisplayItems(productImage: UIImage) -> [ASPickerDisplayItem] {
+        AccessorySetupKitDiscoveryCriteria.supportedBluetoothCriteria.map { criterion in
+            let descriptor = ASDiscoveryDescriptor()
+            descriptor.bluetoothServiceUUID = CBUUID(string: criterion.bluetoothServiceUUID)
+            descriptor.bluetoothNameSubstring = criterion.bluetoothNameSubstring
+
+            return ASPickerDisplayItem(
+                name: "MeshCore Device",
+                productImage: productImage,
+                descriptor: descriptor
+            )
+        }
+    }
 
     /// Creates a generic product image for the ASK picker
     /// Per Apple docs: Container size should be 180x120 points with transparent background
@@ -373,7 +388,7 @@ public final class AccessorySetupKitService {
 
 // MARK: - Errors
 
-public enum AccessorySetupKitError: LocalizedError {
+public enum AccessorySetupKitError: LocalizedError, Sendable {
     case sessionNotActive
     case sessionInvalidated
     case pickerDismissed
@@ -439,7 +454,7 @@ public final class AccessorySetupKitService {
     public func invalidateSession() {}
 }
 
-public enum AccessorySetupKitError: LocalizedError {
+public enum AccessorySetupKitError: LocalizedError, Sendable {
     case sessionNotActive
     case sessionInvalidated
     case pickerDismissed
