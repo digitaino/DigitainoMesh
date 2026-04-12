@@ -365,6 +365,9 @@ public final class AppState {
 
         await wireWeatherHandler(services: services)
         weatherCache.loadPersistedData()
+        if let deviceID = connectedDevice?.id {
+            Task { await provisionWeatherChannelIfNeeded(services: services, deviceID: deviceID) }
+        }
         await wireChannelMessageDebugObserver(services: services)
         await wireDataChangeCallbacks(services: services)
         wireSettingsEventStream(services: services)
@@ -523,6 +526,47 @@ public final class AppState {
             logger.info("MeshWX bot contact resolved by name: \(contact.name)")
         }
         return contact
+    }
+
+    // MARK: - Weather Channel Auto-Provisioning
+
+    /// Ensures the `#meshwx` hashtag channel exists on the companion device.
+    /// Called silently on each connection. No-ops if the channel is already present
+    /// or if no free slot is available.
+    private func provisionWeatherChannelIfNeeded(services: ServiceContainer, deviceID: UUID) async {
+        guard let device = connectedDevice else { return }
+        do {
+            let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
+
+            // Already have a weather data channel — nothing to do.
+            if channels.contains(where: { SyncCoordinator.isWeatherDataChannel($0.name) }) { return }
+
+            // Find the first free slot (slot 0 is reserved for the public channel).
+            let maxChannels = device.maxChannels
+            let usedSlots = Set(channels.map(\.index))
+            guard let freeSlot = (1..<maxChannels).first(where: { !usedSlots.contains($0) }) else {
+                logger.warning("WeatherChannel: no free slot — skipping auto-provision")
+                return
+            }
+
+            // Add #meshwx as a hashtag channel (secret = sha256("#meshwx")[0:16]).
+            let channelName = "#meshwx"
+            try await services.channelService.setChannel(
+                deviceID: deviceID,
+                index: freeSlot,
+                name: channelName,
+                passphrase: channelName
+            )
+
+            // Mute it so broadcast weather packets don't create unread badges.
+            if let channel = try await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
+                try await services.dataStore.setChannelNotificationLevel(channel.id, level: .muted)
+            }
+
+            logger.info("WeatherChannel: auto-provisioned '\(channelName)' on slot \(freeSlot)")
+        } catch {
+            logger.error("WeatherChannel: auto-provision failed: \(error)")
+        }
     }
 
     // MARK: - Weather Bot DM Helpers

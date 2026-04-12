@@ -26,7 +26,6 @@ struct WeatherLogView: View {
 
     private var emptyState: some View {
         List {
-            botConfigSection
             Section {
                 ContentUnavailableView {
                     Label("No Weather Messages", systemImage: "cloud.bolt")
@@ -49,31 +48,9 @@ struct WeatherLogView: View {
 
     private var messageList: some View {
         List {
-            botConfigSection
             diagnosticsSection
             statsSection
             messagesSection
-        }
-    }
-
-    // MARK: - Bot Config
-
-    private var botConfigSection: some View {
-        Section {
-            HStack {
-                Text("Bot Contact Name")
-                Spacer()
-                TextField("e.g. MeshWX", text: Binding(
-                    get: { appState.weatherBotName },
-                    set: { appState.weatherBotName = $0 }
-                ))
-                .multilineTextAlignment(.trailing)
-                .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Weather Bot")
-        } footer: {
-            Text("Auto-discovered the first time a weather broadcast is received. Override here if needed.")
         }
     }
 

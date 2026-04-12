@@ -1119,10 +1119,10 @@ extension SyncCoordinator {
     }
 
     /// Returns true if the channel name is a MeshWX binary data channel.
-    /// Matches `meshwx` (the protocol-defined channel name) and legacy `*wx-broadcast` channels.
+    /// Matches `meshwx` and `#meshwx` (hashtag form), and legacy `*wx-broadcast` channels.
     public nonisolated static func isWeatherDataChannel(_ name: String) -> Bool {
         let lower = name.lowercased()
-        return lower == "meshwx" || lower.hasSuffix("wx-broadcast")
+        return lower == "meshwx" || lower == "#meshwx" || lower.hasSuffix("wx-broadcast")
     }
 
     nonisolated static func fallbackDeduplicationKey(
