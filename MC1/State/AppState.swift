@@ -549,8 +549,8 @@ public final class AppState {
                 return
             }
 
-            // Add #meshwx as a hashtag channel (secret = sha256("#meshwx")[0:16]).
-            let channelName = "#meshwx"
+            // Add #wx-broadcast as a hashtag channel (secret = sha256("#wx-broadcast")[0:16]).
+            let channelName = "#wx-broadcast"
             try await services.channelService.setChannel(
                 deviceID: deviceID,
                 index: freeSlot,
