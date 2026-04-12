@@ -153,7 +153,8 @@ struct WeatherDataInspector: View {
                 }
                 if let frame = latestFrame {
                     let nonZero = frame.grid.filter { $0 > 0 }.count
-                    Text("\(nonZero)/256 active cells")
+                    let total   = frame.gridSize * frame.gridSize
+                    Text("\(nonZero)/\(total) active cells")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -278,7 +279,7 @@ struct RadarRegionDetail: View {
                         LabeledContent("Timestamp", value: timestampText(frame.timestamp))
                         LabeledContent("Scale", value: "\(frame.scaleKm) km/cell")
                         LabeledContent("Frame Seq", value: "\(frame.frameSeq)")
-                        LabeledContent("Active Cells", value: "\(frame.grid.filter { $0 > 0 }.count) / 256")
+                        LabeledContent("Active Cells", value: "\(frame.grid.filter { $0 > 0 }.count) / \(frame.gridSize * frame.gridSize)")
                         LabeledContent("Max Level", value: "\(frame.grid.max() ?? 0)")
                     }
                     .font(.subheadline)
@@ -338,24 +339,23 @@ struct RadarRegionDetail: View {
 
 // MARK: - Radar Grid View (Full Size)
 
-/// Renders a 16x16 radar grid as a colored view.
+/// Renders a radar grid as a colored view. Supports 16×16, 32×32, and 64×64 grids.
 struct RadarGridView: View {
     let frame: MeshWXRadarFrame
 
     var body: some View {
         Canvas { context, size in
-            let cellWidth = size.width / 16
-            let cellHeight = size.height / 16
+            let gs = frame.gridSize
+            let cellWidth  = size.width  / CGFloat(gs)
+            let cellHeight = size.height / CGFloat(gs)
 
-            // Draw background
             context.fill(
                 Path(CGRect(origin: .zero, size: size)),
                 with: .color(.black.opacity(0.8))
             )
 
-            // Draw cells
-            for row in 0..<16 {
-                for col in 0..<16 {
+            for row in 0..<gs {
+                for col in 0..<gs {
                     let level = frame.cell(row: row, col: col)
                     guard level > 0 else { continue }
                     let color = MeshWXRadarFrame.reflectivityColor(for: level)
@@ -376,18 +376,20 @@ struct RadarGridView: View {
                 }
             }
 
-            // Draw grid lines
-            for i in 0...16 {
-                let x = CGFloat(i) * cellWidth
-                let y = CGFloat(i) * cellHeight
-                context.stroke(
-                    Path { path in path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: size.height)) },
-                    with: .color(.white.opacity(0.15)), lineWidth: 0.5
-                )
-                context.stroke(
-                    Path { path in path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y)) },
-                    with: .color(.white.opacity(0.15)), lineWidth: 0.5
-                )
+            // Grid lines (skip for 64×64 — too dense)
+            if gs <= 32 {
+                for i in 0...gs {
+                    let x = CGFloat(i) * cellWidth
+                    let y = CGFloat(i) * cellHeight
+                    context.stroke(
+                        Path { path in path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: size.height)) },
+                        with: .color(.white.opacity(0.15)), lineWidth: 0.5
+                    )
+                    context.stroke(
+                        Path { path in path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y)) },
+                        with: .color(.white.opacity(0.15)), lineWidth: 0.5
+                    )
+                }
             }
         }
     }
@@ -395,7 +397,7 @@ struct RadarGridView: View {
 
 // MARK: - Radar Grid Thumbnail
 
-/// Small thumbnail of a radar grid for list rows.
+/// Small thumbnail of a radar grid for list rows. Supports variable grid sizes.
 struct RadarGridThumbnail: View {
     let frame: MeshWXRadarFrame?
 
@@ -408,11 +410,12 @@ struct RadarGridThumbnail: View {
 
             guard let frame else { return }
 
-            let cellWidth = size.width / 16
-            let cellHeight = size.height / 16
+            let gs = frame.gridSize
+            let cellWidth  = size.width  / CGFloat(gs)
+            let cellHeight = size.height / CGFloat(gs)
 
-            for row in 0..<16 {
-                for col in 0..<16 {
+            for row in 0..<gs {
+                for col in 0..<gs {
                     let level = frame.cell(row: row, col: col)
                     guard level > 0 else { continue }
                     let color = MeshWXRadarFrame.reflectivityColor(for: level)

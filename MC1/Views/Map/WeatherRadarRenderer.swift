@@ -1,6 +1,6 @@
 import MapKit
 
-/// Custom MKOverlayRenderer that draws a 16x16 MeshWX radar reflectivity grid.
+/// Custom MKOverlayRenderer that draws a MeshWX radar reflectivity grid (16×16, 32×32, or 64×64).
 ///
 /// Creates a colored bitmap from the grid data using the NWS reflectivity palette
 /// and draws it with interpolation for smooth appearance.
@@ -16,12 +16,10 @@ final class WeatherRadarRenderer: MKOverlayRenderer {
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         let overlayRect = self.rect(for: radarOverlay.boundingMapRect)
 
-        // Only draw if we intersect the requested tile
         let drawRect = self.rect(for: mapRect)
         guard overlayRect.intersects(drawRect) else { return }
 
-        // Build 16x16 RGBA bitmap
-        let gridSize = 16
+        let gridSize = radarOverlay.gridSize
         var pixels = [UInt8](repeating: 0, count: gridSize * gridSize * 4)
 
         for row in 0..<gridSize {
@@ -29,14 +27,13 @@ final class WeatherRadarRenderer: MKOverlayRenderer {
                 let level = radarOverlay.grid[row * gridSize + col]
                 let color = MeshWXRadarFrame.reflectivityColor(for: level)
                 let offset = (row * gridSize + col) * 4
-                pixels[offset] = color.r
+                pixels[offset]     = color.r
                 pixels[offset + 1] = color.g
                 pixels[offset + 2] = color.b
                 pixels[offset + 3] = color.a
             }
         }
 
-        // Create CGImage from pixel data
         guard let dataProvider = CGDataProvider(data: Data(pixels) as CFData),
               let image = CGImage(
                   width: gridSize,
@@ -53,7 +50,6 @@ final class WeatherRadarRenderer: MKOverlayRenderer {
               )
         else { return }
 
-        // Draw with bilinear interpolation for smooth scaling
         context.saveGState()
         context.setAlpha(0.7)
         context.interpolationQuality = .high

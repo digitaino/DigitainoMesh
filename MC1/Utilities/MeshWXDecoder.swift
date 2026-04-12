@@ -41,12 +41,14 @@ struct MeshWXRadarFrame: Sendable, Equatable {
     let timestamp: UInt16
     /// Km per grid cell.
     let scaleKm: UInt8
-    /// 16x16 grid of 4-bit reflectivity levels (0x0–0xE). Row-major, 256 elements.
+    /// Grid dimension (16 for legacy 0x10, 32 or 64 for new 0x11). Grid is gridSize×gridSize.
+    let gridSize: Int
+    /// Row-major reflectivity levels (0x0–0xE). Count = gridSize × gridSize.
     let grid: [UInt8]
 
     func cell(row: Int, col: Int) -> UInt8 {
-        guard row >= 0, row < 16, col >= 0, col < 16 else { return 0 }
-        return grid[row * 16 + col]
+        guard row >= 0, row < gridSize, col >= 0, col < gridSize else { return 0 }
+        return grid[row * gridSize + col]
     }
     var isEmpty: Bool { grid.allSatisfy { $0 == 0 } }
 }
@@ -836,6 +838,7 @@ enum MeshWXDecoder {
         switch first {
         case 0x03: return decodeNotAvailable(data).map { .notAvailable($0) }
         case 0x10: return decodeRadarGrid(data).map { .radarGrid($0) }
+        case 0x11: return decode0x11RadarGrid(data).map { .radarGrid($0) }
         case 0x20: return decodeWarning(data).map { .warningPolygon($0) }
         case 0x30: return decodeObservation(data).map { .observation($0) }
         case 0x31: return decodeForecast(data).map { .forecast($0) }
@@ -848,7 +851,7 @@ enum MeshWXDecoder {
         }
     }
 
-    // MARK: 0x10 Radar Grid (unchanged)
+    // MARK: 0x10 Radar Grid (legacy 16×16 packed nibbles)
 
     static func decodeRadarGrid(_ data: Data) -> MeshWXRadarFrame? {
         guard data.count >= 133, data[0] == 0x10 else { return nil }
@@ -862,7 +865,132 @@ enum MeshWXDecoder {
             grid[i * 2 + 1] = data[5 + i] & 0x0F
         }
         return MeshWXRadarFrame(regionID: regionID, frameSeq: frameSeq,
-                                timestamp: timestamp, scaleKm: scaleKm, grid: grid)
+                                timestamp: timestamp, scaleKm: scaleKm,
+                                gridSize: 16, grid: grid)
+    }
+
+    // MARK: 0x11 Radar Grid (variable-size, sparse or RLE, multi-message)
+    //
+    // Wire format:
+    //  [0]     0x11
+    //  [1]     (region_id << 4) | chunk_seq   — chunk_seq=0 for single-message
+    //  [2]     grid_size (32 or 64)
+    //  [3–4]   timestamp uint16 BE (minutes since midnight UTC)
+    //  [5]     scale_km
+    //  [6]     (encoding << 4) | total_chunks — encoding: 0=sparse, 1=RLE
+    //                                         — total_chunks: 1 = single message
+    //  [7+]    payload
+    //
+    // Sparse entries (encoding=0): 2 bytes each
+    //   12-bit position | 4-bit value  → byte0=(pos>>4), byte1=((pos&0xF)<<4)|value
+    //
+    // RLE runs (encoding=1): 1 byte each
+    //   4-bit run-length-minus-1 | 4-bit value  → byte=(((len-1)&0xF)<<4)|value
+    //   run of 0 in high nibble = 1 cell; 15 = 16 cells
+
+    // Buffer for multi-message 0x11 reassembly (keyed by regionID).
+    nonisolated(unsafe) private static var radarChunkBuffer: [UInt8: RadarChunkAccumulator] = [:]
+
+    private struct RadarChunkAccumulator {
+        let gridSize: Int
+        let timestamp: UInt16
+        let scaleKm: UInt8
+        let encoding: UInt8
+        let totalChunks: Int
+        var chunks: [Int: Data]
+
+        var isComplete: Bool { chunks.count >= totalChunks }
+
+        var assembledPayload: Data? {
+            guard isComplete else { return nil }
+            var result = Data()
+            for seq in 0..<totalChunks {
+                guard let chunk = chunks[seq] else { return nil }
+                result.append(chunk)
+            }
+            return result
+        }
+    }
+
+    static func decode0x11RadarGrid(_ data: Data) -> MeshWXRadarFrame? {
+        guard data.count >= 7, data[0] == 0x11 else { return nil }
+
+        let regionID    = (data[1] >> 4) & 0x0F
+        let chunkSeq    = Int(data[1] & 0x0F)
+        let gridSize    = Int(data[2])
+        let timestamp   = UInt16(data[3]) << 8 | UInt16(data[4])
+        let scaleKm     = data[5]
+        let encoding    = (data[6] >> 4) & 0x0F
+        let totalChunks = max(1, Int(data[6] & 0x0F))
+
+        guard gridSize == 32 || gridSize == 64 else { return nil }
+
+        let payload = Data(data.dropFirst(7))
+
+        if totalChunks == 1 {
+            return decodeRadarPayload(regionID: regionID, frameSeq: UInt8(chunkSeq),
+                                      timestamp: timestamp, scaleKm: scaleKm,
+                                      gridSize: gridSize, encoding: encoding,
+                                      payload: payload)
+        }
+
+        // Multi-chunk: buffer and decode when all chunks have arrived.
+        var acc = radarChunkBuffer[regionID] ?? RadarChunkAccumulator(
+            gridSize: gridSize, timestamp: timestamp, scaleKm: scaleKm,
+            encoding: encoding, totalChunks: totalChunks, chunks: [:]
+        )
+        acc.chunks[chunkSeq] = payload
+        radarChunkBuffer[regionID] = acc
+
+        guard acc.isComplete, let assembled = acc.assembledPayload else { return nil }
+        radarChunkBuffer.removeValue(forKey: regionID)
+
+        return decodeRadarPayload(regionID: acc.gridSize == gridSize ? regionID : regionID,
+                                  frameSeq: 0,
+                                  timestamp: acc.timestamp, scaleKm: acc.scaleKm,
+                                  gridSize: acc.gridSize, encoding: acc.encoding,
+                                  payload: assembled)
+    }
+
+    private static func decodeRadarPayload(
+        regionID: UInt8, frameSeq: UInt8,
+        timestamp: UInt16, scaleKm: UInt8,
+        gridSize: Int, encoding: UInt8,
+        payload: Data
+    ) -> MeshWXRadarFrame? {
+        let totalCells = gridSize * gridSize
+        var grid = [UInt8](repeating: 0, count: totalCells)
+
+        switch encoding {
+        case 0: // Sparse: 2 bytes → 12-bit position + 4-bit value
+            var i = payload.startIndex
+            while payload.distance(from: i, to: payload.endIndex) >= 2 {
+                let b0  = payload[i]
+                let b1  = payload[payload.index(after: i)]
+                let pos = (Int(b0) << 4) | (Int(b1) >> 4)
+                let val = b1 & 0x0F
+                if pos < totalCells { grid[pos] = val }
+                i = payload.index(i, offsetBy: 2)
+            }
+
+        case 1: // RLE: 1 byte → (run_length - 1) in high nibble, value in low nibble
+            var cellIndex = 0
+            for byte in payload {
+                let run   = Int((byte >> 4) & 0x0F) + 1   // 0→1 cell, 15→16 cells
+                let value = byte & 0x0F
+                for _ in 0..<run {
+                    if cellIndex < totalCells { grid[cellIndex] = value }
+                    cellIndex += 1
+                }
+            }
+
+        default:
+            return nil
+        }
+
+        return MeshWXRadarFrame(regionID: regionID, frameSeq: frameSeq,
+                                timestamp: timestamp, scaleKm: scaleKm,
+                                gridSize: gridSize, grid: grid)
     }
 
     // MARK: 0x20 Warning Polygon
