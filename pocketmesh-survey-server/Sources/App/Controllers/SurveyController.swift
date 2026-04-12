@@ -1541,6 +1541,9 @@ struct SurveyController {
     }
 
     // MARK: - DELETE /api/v1/admin/repeater/:id
+    // Marks the repeater hidden=true (tombstone) so community uploads can never re-acquire it.
+    // Also removes all cell_repeater references so it drops off the map.
+    // Use /api/v1/admin/repeater/:id/purge to permanently remove the record.
 
     @Sendable
     func deleteRepeater(req: Request) async throws -> DeleteRepeaterResponse {
@@ -1555,7 +1558,7 @@ struct SurveyController {
 
         let hexID = repeater.hexID.uppercased()
 
-        // Delete all cell_repeater references for this repeater
+        // Remove all cell_repeater associations so it disappears from the map
         let cellRepeaters = try await CellRepeater.query(on: req.db).all()
         var removed = 0
         for cr in cellRepeaters {
@@ -1565,10 +1568,45 @@ struct SurveyController {
             }
         }
 
-        // Delete the repeater location
+        // Mark hidden=true (tombstone) — keeps the record as a permanent block
+        // so future community uploads for this repeater are silently rejected.
+        repeater.hidden = true
+        try await repeater.save(on: req.db)
+
+        req.logger.info("Tombstoned repeater \(hexID): \(removed) cell_repeater references removed, hidden=true")
+
+        return DeleteRepeaterResponse(hexID: hexID, cellRepeatersRemoved: removed)
+    }
+
+    // MARK: - DELETE /api/v1/admin/repeater/:id/purge
+    // Permanently removes the repeater record AND all cell_repeater associations.
+    // After a purge, community uploads can re-create the repeater.
+
+    @Sendable
+    func purgeRepeater(req: Request) async throws -> DeleteRepeaterResponse {
+        guard let idString = req.parameters.get("id"),
+              let id = Int(idString) else {
+            throw Abort(.badRequest, reason: "Missing or invalid repeater ID")
+        }
+
+        guard let repeater = try await RepeaterLocation.find(id, on: req.db) else {
+            throw Abort(.notFound, reason: "Repeater not found")
+        }
+
+        let hexID = repeater.hexID.uppercased()
+
+        let cellRepeaters = try await CellRepeater.query(on: req.db).all()
+        var removed = 0
+        for cr in cellRepeaters {
+            if cr.repeaterHexID.uppercased() == hexID {
+                try await cr.delete(on: req.db)
+                removed += 1
+            }
+        }
+
         try await repeater.delete(on: req.db)
 
-        req.logger.info("Deleted repeater \(hexID): \(removed) cell_repeater references removed")
+        req.logger.info("Purged repeater \(hexID): \(removed) cell_repeater references removed")
 
         return DeleteRepeaterResponse(hexID: hexID, cellRepeatersRemoved: removed)
     }
@@ -2207,6 +2245,12 @@ struct SurveyController {
                 .first()
 
             if let exact {
+                // If hidden, act as a tombstone — block re-acquisition silently
+                if exact.hidden == true {
+                    logger.info("Repeater upsert: blocked \(normalized) (hidden tombstone — exact match)")
+                    accepted += 1
+                    continue
+                }
                 updateExisting(exact)
                 try await exact.save(on: db)
                 accepted += 1
@@ -2222,6 +2266,11 @@ struct SurveyController {
                let pkMatch = allRepeaters.first(where: {
                    $0.publicKey?.uppercased() == fullKey
                }) {
+                if pkMatch.hidden == true {
+                    logger.info("Repeater upsert: blocked \(normalized) (hidden tombstone — public key match)")
+                    accepted += 1
+                    continue
+                }
                 logger.info("Repeater upsert: matched \(normalized) to existing \(pkMatch.hexID) by public key")
                 updateExisting(pkMatch)
                 pkMatch.hexID = normalized
@@ -2239,6 +2288,11 @@ struct SurveyController {
                     let eid = $0.hexID.uppercased()
                     return fullKey.hasPrefix(eid)
                 }) {
+                    if match.hidden == true {
+                        logger.info("Repeater upsert: blocked \(normalized) (hidden tombstone — key prefix match)")
+                        accepted += 1
+                        continue
+                    }
                     updateExisting(match)
                     match.publicKey = fullKey
                     try await match.save(on: db)
@@ -2254,6 +2308,11 @@ struct SurveyController {
                 let eid = $0.hexID.uppercased()
                 return normalized.hasPrefix(eid) && normalized.count > eid.count
             }) {
+                if shorter.hidden == true {
+                    logger.info("Repeater upsert: blocked \(normalized) (hidden tombstone — shorter prefix match)")
+                    accepted += 1
+                    continue
+                }
                 updateExisting(shorter)
                 try await shorter.save(on: db)
                 accepted += 1
@@ -2267,6 +2326,11 @@ struct SurveyController {
                 let eid = $0.hexID.uppercased()
                 return eid.hasPrefix(normalized) && eid.count > normalized.count
             }) {
+                if longer.hidden == true {
+                    logger.info("Repeater upsert: blocked \(normalized) (hidden tombstone — longer prefix match)")
+                    accepted += 1
+                    continue
+                }
                 longer.hexID = normalized
                 updateExisting(longer)
                 try await longer.save(on: db)
@@ -2289,6 +2353,11 @@ struct SurveyController {
                     )
                     return dist < proximityThresholdMeters
                 }) {
+                    if nameMatch.hidden == true {
+                        logger.info("Repeater upsert: blocked \(normalized) (hidden tombstone — name+proximity match for '\(info.name)')")
+                        accepted += 1
+                        continue
+                    }
                     logger.info("Repeater upsert: matched \(normalized) (\(info.name)) to existing \(nameMatch.hexID) by name+proximity")
                     updateExisting(nameMatch)
                     // Update the hex ID to the new one (new key identity)

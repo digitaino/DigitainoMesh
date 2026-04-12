@@ -118,7 +118,10 @@ func routes(_ app: Application) throws {
     admin.get("repeaters", use: surveyController.getAdminRepeaters)
     admin.put("repeater", ":id", "hidden", use: surveyController.toggleRepeaterHidden)
     admin.put("repeater", ":id", "notes", use: surveyController.updateRepeaterNotes)
+    // DELETE = tombstone (hidden=true, blocks re-acquisition from community uploads)
     admin.delete("repeater", ":id", use: surveyController.deleteRepeater)
+    // PURGE = permanent removal (allows community to re-create the record)
+    admin.delete("repeater", ":id", "purge", use: surveyController.purgeRepeater)
 
     // Admin cell management
     admin.get("cells", use: surveyController.getAdminCells)
