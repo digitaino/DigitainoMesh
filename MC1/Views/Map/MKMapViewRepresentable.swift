@@ -342,7 +342,8 @@ struct MKMapViewRepresentable: UIViewRepresentable {
                     coordinator.weatherWarningOverlaysByID[id] = overlay
                     return overlay
                 }
-                if !toAdd.isEmpty { mapView.addOverlays(toAdd, level: .aboveRoads) }
+                // .aboveLabels so warning polygons render above the radar layer (.aboveRoads)
+                if !toAdd.isEmpty { mapView.addOverlays(toAdd, level: .aboveLabels) }
             }
 
             coordinator.lastWeatherWarningIDs = newWarningIDs

@@ -72,8 +72,8 @@ public final class AppState {
 
     /// Whether requests go out as DMs or channel messages. Persisted in UserDefaults.
     var wxRequestMode: WXRequestMode = {
-        let raw = UserDefaults.standard.string(forKey: "wxRequestMode") ?? "dm"
-        return WXRequestMode(rawValue: raw) ?? .dm
+        let raw = UserDefaults.standard.string(forKey: "wxRequestMode") ?? "channel"
+        return WXRequestMode(rawValue: raw) ?? .channel
     }() {
         didSet { UserDefaults.standard.set(wxRequestMode.rawValue, forKey: "wxRequestMode") }
     }
@@ -856,7 +856,7 @@ public final class AppState {
             if let sepRange = raw.range(of: Data(separator)) {
                 let nameData = raw[raw.startIndex..<sepRange.lowerBound]
                 discoveredBotName = String(data: nameData, encoding: .utf8)
-                data = raw[sepRange.upperBound...]
+                data = Data(raw[sepRange.upperBound...])  // copy to ensure startIndex == 0
             } else {
                 data = raw
             }

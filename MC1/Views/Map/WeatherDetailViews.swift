@@ -6,6 +6,10 @@ import MapKit
 /// Detail sheet shown when tapping a weather warning polygon on the map.
 struct WeatherWarningDetailSheet: View {
     let warning: MeshWXWarning
+    /// Called when the user taps "Show on Map". Dismisses the sheet and centers the map.
+    var onShowOnMap: (() -> Void)? = nil
+
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -30,20 +34,26 @@ struct WeatherWarningDetailSheet: View {
                     LabeledContent("Type", value: warning.typeName)
                     LabeledContent("Severity", value: warning.severityName)
                     LabeledContent("Expires", value: expiryText)
-                    LabeledContent("Vertices", value: "\(warning.vertices.count)")
                 }
 
-                Section("Polygon Coordinates") {
-                    ForEach(Array(warning.vertices.enumerated()), id: \.offset) { index, vertex in
-                        LabeledContent("V\(index)") {
-                            Text(String(format: "%.4f, %.4f", vertex.latitude, vertex.longitude))
-                                .font(.caption.monospaced())
+                if onShowOnMap != nil {
+                    Section {
+                        Button {
+                            dismiss()
+                            onShowOnMap?()
+                        } label: {
+                            Label("Show on Map", systemImage: "map")
                         }
                     }
                 }
             }
             .navigationTitle(warning.typeName)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
     }
 

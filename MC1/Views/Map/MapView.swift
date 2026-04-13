@@ -42,7 +42,11 @@ struct MapView: View {
                     appState.locationService.requestLocation()
                     viewModel.configure(appState: appState)
                     await viewModel.loadContactsWithLocation()
-                    viewModel.centerOnAllContacts()
+                    // Only auto-center if no programmatic navigation (e.g. warning tap) has
+                    // already set the camera region while contacts were loading.
+                    if viewModel.cameraRegion == nil {
+                        viewModel.centerOnAllContacts()
+                    }
                 }
                 .sheet(item: $selectedContactForDetail, onDismiss: clearMapSnapshot) { contact in
                     ContactDetailSheet(
@@ -52,8 +56,19 @@ struct MapView: View {
                     .presentationDetents([.large])
                 }
                 .sheet(item: $viewModel.selectedWeatherWarning) { warning in
-                    WeatherWarningDetailSheet(warning: warning)
-                        .presentationDetents([.medium])
+                    WeatherWarningDetailSheet(warning: warning) {
+                        viewModel.centerOnWarning(warning)
+                    }
+                    .presentationDetents([.fraction(0.35), .large])
+                    .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.35)))
+                    .presentationDragIndicator(.visible)
+                }
+                .onChange(of: appState.navigation.pendingMapWarning) { _, pending in
+                    guard let warning = pending else { return }
+                    appState.navigation.pendingMapWarning = nil
+                    viewModel.showWeatherOverlay = true
+                    viewModel.centerOnWarning(warning)
+                    viewModel.selectedWeatherWarning = warning
                 }
                 .sheet(isPresented: $showingWeatherInspector) {
                     WeatherDataInspector(weatherCache: appState.weatherCache)

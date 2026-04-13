@@ -26,7 +26,6 @@ struct WeatherLogView: View {
 
     private var emptyState: some View {
         List {
-            requestModeSection
             Section {
                 ContentUnavailableView {
                     Label("No Weather Messages", systemImage: "cloud.bolt")
@@ -49,39 +48,9 @@ struct WeatherLogView: View {
 
     private var messageList: some View {
         List {
-            requestModeSection
             diagnosticsSection
             statsSection
             messagesSection
-        }
-    }
-
-    // MARK: - Request Mode
-
-    private var requestModeSection: some View {
-        let bound = Bindable(appState)
-        return Section {
-            Picker("Request Mode", selection: bound.wxRequestMode) {
-                Text("Direct Message").tag(AppState.WXRequestMode.dm)
-                Text("Channel").tag(AppState.WXRequestMode.channel)
-            }
-            if appState.wxRequestMode == .channel {
-                LabeledContent("Command Channel") {
-                    TextField("#channel-name", text: bound.wxCommandChannelName)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .multilineTextAlignment(.trailing)
-                }
-            }
-        } header: {
-            Text("Bot Requests")
-        } footer: {
-            switch appState.wxRequestMode {
-            case .dm:
-                Text("Requests are sent as DMs to the bot's pubkey with retry and ACK tracking. Set the bot's contact name in the Contacts list first.")
-            case .channel:
-                Text("Requests are sent as channel messages — better over poor multi-hop links since no ACK is required. The bot must be listening on this channel.")
-            }
         }
     }
 

@@ -821,16 +821,23 @@ enum MeshWXDecoder {
 
     static func decode(_ data: Data) -> MeshWXMessage? {
         guard !data.isEmpty else { return nil }
-        if let decoded = cobsDecode(data), let msg = decodeRaw(decoded) { return msg }
+        // If COBS decoding succeeds the data IS COBS-encoded — dispatch only on the
+        // decoded content.  Falling back to decodeRaw(data) would treat the COBS
+        // overhead byte as a message-type byte, potentially matching a case (e.g.
+        // 0x37 warnings_near) and crashing on the misaligned payload.
+        if let decoded = cobsDecode(data) { return decodeRaw(decoded) }
         return decodeRaw(data)
     }
 
-    /// Returns true if the payload is a known bot broadcast type that carries no weather product data.
+    /// Returns true if the payload is a known protocol type that carries no decodable product data.
     /// Use this to suppress "decode failed" log noise for message types we intentionally ignore.
-    /// Currently: 0x0d = bot home/location broadcast.
+    /// - 0x0d: bot home/location broadcast
+    /// - 0x21: warning_zones (not yet decoded on iOS)
+    /// - 0x40: text_chunk (multi-part text reassembly, not decoded on iOS)
     static func isKnownNonProduct(_ data: Data) -> Bool {
         let raw = cobsDecode(data) ?? data
-        return raw.first == 0x0d
+        guard let first = raw.first else { return false }
+        return first == 0x0d || first == 0x21 || first == 0x40
     }
 
     private static func decodeRaw(_ data: Data) -> MeshWXMessage? {
@@ -888,8 +895,10 @@ enum MeshWXDecoder {
     //   4-bit run-length-minus-1 | 4-bit value  → byte=(((len-1)&0xF)<<4)|value
     //   run of 0 in high nibble = 1 cell; 15 = 16 cells
 
-    // Buffer for multi-message 0x11 reassembly (keyed by regionID).
-    nonisolated(unsafe) private static var radarChunkBuffer: [UInt8: RadarChunkAccumulator] = [:]
+    // Buffer for multi-message 0x11 reassembly, keyed by (regionID << 16 | timestamp).
+    // Including timestamp in the key allows simultaneous in-flight broadcasts for the same
+    // region without collision (e.g. an old sequence still draining while a new one starts).
+    nonisolated(unsafe) private static var radarChunkBuffer: [UInt32: RadarChunkAccumulator] = [:]
 
     private struct RadarChunkAccumulator {
         let gridSize: Int
@@ -935,21 +944,34 @@ enum MeshWXDecoder {
         }
 
         // Multi-chunk: buffer and decode when all chunks have arrived.
-        var acc = radarChunkBuffer[regionID] ?? RadarChunkAccumulator(
+        // Key includes timestamp so different broadcasts for the same region don't collide.
+        let bufferKey = UInt32(regionID) << 16 | UInt32(timestamp)
+        var acc = radarChunkBuffer[bufferKey] ?? RadarChunkAccumulator(
             gridSize: gridSize, timestamp: timestamp, scaleKm: scaleKm,
             encoding: encoding, totalChunks: totalChunks, chunks: [:]
         )
         acc.chunks[chunkSeq] = payload
-        radarChunkBuffer[regionID] = acc
+        radarChunkBuffer[bufferKey] = acc
 
         guard acc.isComplete, let assembled = acc.assembledPayload else { return nil }
-        radarChunkBuffer.removeValue(forKey: regionID)
+        radarChunkBuffer.removeValue(forKey: bufferKey)
 
-        return decodeRadarPayload(regionID: acc.gridSize == gridSize ? regionID : regionID,
+        return decodeRadarPayload(regionID: regionID,
                                   frameSeq: 0,
                                   timestamp: acc.timestamp, scaleKm: acc.scaleKm,
                                   gridSize: acc.gridSize, encoding: acc.encoding,
                                   payload: assembled)
+    }
+
+    /// Returns chunk metadata for a 0x11 multi-chunk radar message without modifying the accumulator buffer.
+    /// Returns nil if the data is not a multi-chunk 0x11 message (i.e. single-chunk or not 0x11 at all).
+    static func radarChunkInfo(_ data: Data) -> (regionID: Int, chunkSeq: Int, totalChunks: Int)? {
+        guard let decoded = cobsDecode(data), decoded.count >= 7, decoded[0] == 0x11 else { return nil }
+        let totalChunks = max(1, Int(decoded[6] & 0x0F))
+        guard totalChunks > 1 else { return nil }
+        return (regionID: Int((decoded[1] >> 4) & 0x0F),
+                chunkSeq:  Int(decoded[1] & 0x0F),
+                totalChunks: totalChunks)
     }
 
     private static func decodeRadarPayload(
@@ -1804,21 +1826,63 @@ extension MeshWXRadarFrame {
 struct MeshWXRegion: Sendable {
     let id: UInt8; let name: String
     let north: Double; let south: Double; let west: Double; let east: Double
+    /// Default scale in km per grid cell for this region (from regions.json).
+    let scaleKm: Int
 
     var centerLatitude: Double  { (north + south) / 2.0 }
     var centerLongitude: Double { (west + east)  / 2.0 }
 
-    static let all: [UInt8: MeshWXRegion] = [
-        0x0: MeshWXRegion(id: 0x0, name: "Northeast",     north: 48,   south: 37, west: -82,  east: -67),
-        0x1: MeshWXRegion(id: 0x1, name: "Southeast",     north: 37,   south: 24, west: -92,  east: -75),
-        0x2: MeshWXRegion(id: 0x2, name: "Upper Midwest", north: 50,   south: 40, west: -98,  east: -82),
-        0x3: MeshWXRegion(id: 0x3, name: "Southern",      north: 37,   south: 25, west: -105, east: -88),
-        0x4: MeshWXRegion(id: 0x4, name: "Central",       north: 44,   south: 34, west: -105, east: -90),
-        0x5: MeshWXRegion(id: 0x5, name: "Mountain",      north: 49,   south: 31, west: -117, east: -102),
-        0x6: MeshWXRegion(id: 0x6, name: "Pacific",       north: 49,   south: 32, west: -125, east: -114),
-        0x7: MeshWXRegion(id: 0x7, name: "Alaska",        north: 72,   south: 51, west: -180, east: -130),
-        0x8: MeshWXRegion(id: 0x8, name: "Hawaii",        north: 23,   south: 18, west: -161, east: -154),
-        0x9: MeshWXRegion(id: 0x9, name: "Puerto Rico",   north: 19.5, south: 17, west: -68,  east: -65),
+    // MARK: - Bundle Loading
+
+    nonisolated(unsafe) private static var _all: [UInt8: MeshWXRegion]?
+
+    /// All known radar regions, loaded from regions.json (with hardcoded fallback).
+    static var all: [UInt8: MeshWXRegion] {
+        if let cached = _all { return cached }
+        _all = loadFromBundle() ?? hardcoded
+        return _all!
+    }
+
+    private static func loadFromBundle() -> [UInt8: MeshWXRegion]? {
+        guard let url = Bundle.main.url(forResource: "regions", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] else {
+            return nil
+        }
+        var result: [UInt8: MeshWXRegion] = [:]
+        for (key, dict) in root {
+            let idVal: UInt8
+            if (key.hasPrefix("0x") || key.hasPrefix("0X")),
+               let parsed = UInt8(key.dropFirst(2), radix: 16) {
+                idVal = parsed
+            } else if let parsed = UInt8(key) {
+                idVal = parsed
+            } else { continue }
+            guard let name  = dict["name"]  as? String,
+                  let north = (dict["north"] as? NSNumber)?.doubleValue,
+                  let south = (dict["south"] as? NSNumber)?.doubleValue,
+                  let west  = (dict["west"]  as? NSNumber)?.doubleValue,
+                  let east  = (dict["east"]  as? NSNumber)?.doubleValue else { continue }
+            let scaleKm = (dict["scale_km"] as? NSNumber)?.intValue ?? 55
+            result[idVal] = MeshWXRegion(id: idVal, name: name,
+                                         north: north, south: south, west: west, east: east,
+                                         scaleKm: scaleKm)
+        }
+        return result.isEmpty ? nil : result
+    }
+
+    /// Hardcoded fallback matching regions.json — used if the bundle file is unavailable.
+    private static let hardcoded: [UInt8: MeshWXRegion] = [
+        0x0: MeshWXRegion(id: 0x0, name: "Northeast",     north: 48,   south: 37, west: -82,  east: -67,  scaleKm: 55),
+        0x1: MeshWXRegion(id: 0x1, name: "Southeast",     north: 37,   south: 24, west: -92,  east: -75,  scaleKm: 55),
+        0x2: MeshWXRegion(id: 0x2, name: "Upper Midwest", north: 50,   south: 40, west: -98,  east: -82,  scaleKm: 55),
+        0x3: MeshWXRegion(id: 0x3, name: "Southern",      north: 37,   south: 25, west: -105, east: -88,  scaleKm: 55),
+        0x4: MeshWXRegion(id: 0x4, name: "Central",       north: 44,   south: 34, west: -105, east: -90,  scaleKm: 55),
+        0x5: MeshWXRegion(id: 0x5, name: "Mountain",      north: 49,   south: 31, west: -117, east: -102, scaleKm: 55),
+        0x6: MeshWXRegion(id: 0x6, name: "Pacific",       north: 49,   south: 32, west: -125, east: -114, scaleKm: 40),
+        0x7: MeshWXRegion(id: 0x7, name: "Alaska",        north: 72,   south: 51, west: -180, east: -130, scaleKm: 175),
+        0x8: MeshWXRegion(id: 0x8, name: "Hawaii",        north: 23,   south: 18, west: -161, east: -154, scaleKm: 28),
+        0x9: MeshWXRegion(id: 0x9, name: "Puerto Rico",   north: 19.5, south: 17, west: -68,  east: -65,  scaleKm: 12),
     ]
 
     static func region(for coordinate: CLLocationCoordinate2D) -> MeshWXRegion? {

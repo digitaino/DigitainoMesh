@@ -160,7 +160,7 @@ struct WXSearchView: View {
         case .notConnected:
             sentFeedback = .failure("Not connected to a LoRa device.")
         case .noDataChannel:
-            sentFeedback = .failure("Request failed. Check that you're on the #meshwx channel.")
+            sentFeedback = .failure("Request failed. Weather channel not available — check your device connection.")
         case .botNotFound:
             sentFeedback = .failure("Weather bot not configured. Set the bot contact name in Tools → Weather Log.")
         case .noLocation, .rateLimited:

@@ -50,6 +50,10 @@ final class WeatherCache {
 
     /// Records a raw payload and its decode result in the message log.
     func logMessage(rawPayload: Data, decoded: MeshWXMessage?) {
+        // Partial chunks of a multi-chunk radar message return nil while buffering — not a failure.
+        // Skip these; only the final assembled frame (non-nil) will appear in the log.
+        if decoded == nil, MeshWXDecoder.radarChunkInfo(rawPayload) != nil { return }
+
         let hex = rawPayload.prefix(64).map { String(format: "%02x", $0) }.joined(separator: " ")
         let summary: String
         switch decoded {
@@ -76,8 +80,10 @@ final class WeatherCache {
             let key = na.pendingKey ?? "unknown"
             summary = "NOT_AVAILABLE '\(key)': \(na.reasonDescription)"
         case nil:
-            let first = rawPayload.first.map { String(format: "0x%02x", $0) } ?? "empty"
-            summary = "Decode failed (first byte: \(first), \(rawPayload.count)B)"
+            // COBS-decode to get the actual message type byte (rawPayload is still COBS-encoded)
+            let decodedPayload = MeshWXDecoder.cobsDecode(rawPayload) ?? rawPayload
+            let first = decodedPayload.first.map { String(format: "0x%02x", $0) } ?? "empty"
+            summary = "Decode failed (type: \(first), \(rawPayload.count)B)"
         }
 
         let entry = LogEntry(

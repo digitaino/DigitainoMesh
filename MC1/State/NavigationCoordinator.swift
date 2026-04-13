@@ -77,6 +77,14 @@ public final class NavigationCoordinator {
         selectedTab = 4  // Tools tab
     }
 
+    /// Weather warning to zoom to on the Map tab (set by WeatherView warning rows).
+    var pendingMapWarning: MeshWXWarning?
+
+    func navigateToMapWarning(_ warning: MeshWXWarning) {
+        pendingMapWarning = warning
+        selectedTab = 2  // Map tab
+    }
+
 
 
     func clearPendingSurveyNavigation() {

@@ -1,66 +1,36 @@
-Beta Changes -- v0.10.1 (Build 24)
+Beta Changes -- v0.10.1 (Build 25)
 
-Weather UI Redesign (HIG)
+What's New Since Build 20
 
-All weather product rows have been redesigned to follow Apple Human Interface Guidelines. Observations and TAF now use a large 40pt sky icon, bold temperature, semantic SwiftUI fonts (callout/caption2), and a 2×2 detail grid (dewpoint, humidity, visibility, altimeter). Warning and "Warnings Near" rows replace the dot indicator with a vertical color stripe (Apple Calendar style). Forecast period cells use caption2 throughout and are slightly wider. Precipitation report cards use caption2 with wider frames. Storm Reports adds a proper section header. A TipKit tooltip is now anchored directly to the station card via .popoverTip instead of the search bar.
+MeshWX Weather System
+
+A new Weather tab delivers live NWS weather data over the mesh from a MeshWX bot node. The app automatically subscribes to the weather channel — no manual channel setup or bot configuration required. Data appears whenever a MeshWX bot is active on your mesh and broadcasts.
+
+Supported data types: Current Conditions (METAR), 7-Day Forecasts, TAF, Radar, Active Warnings, Storm Reports, Hazard Outlooks, Precipitation Reports, and Warnings Near Location. Search by city name, state abbreviation, or ICAO airport code to request specific data from the bot.
+
+Station cards combine observations, forecast, and TAF into a single unified row. Stations are organized into three collapsible sections: Favorites (starred stations, always visible), Your Requests (stations you requested), and Broadcasts (stations from bot auto-broadcasts). After requesting a station, the view scrolls to the new card and expands its section automatically.
+
+Favorites always appear at the top. A global °F/°C toggle applies across all temperature displays. Per-product refresh buttons let you re-request individual data types. Swipe a station card to clear its data.
+
+Weather Warnings
+
+Active warnings appear in their own section with a vertical color stripe (Apple Calendar style) indicating severity. Tapping a warning navigates to the Map tab and zooms directly to the warning polygon — the app also enables the weather overlay automatically so the polygon is visible.
+
+Radar Overlay
+
+Radar frames are rendered with bilinear interpolation (8× upscale) producing smooth gradients between grid cells instead of a blocky pixel grid. Opacity scales with precipitation intensity — light echoes are semi-transparent so the base map shows through, while heavy precipitation renders at higher opacity. Warning polygons draw above the radar layer so they remain visible when radar is active.
+
+Requests & Bot Setup
+
+By default, weather requests are sent on the shared channel — no bot contact name needed. Direct Message mode (with automatic retry and ACK) is available and configurable via the ⓘ button in the Weather tab. The bot is auto-discovered from the first broadcast.
+
+Weather Reliability & Crash Fixes
+
+Fixed several crashes in the binary weather decoder that could occur when receiving certain message types. Multi-chunk radar frames (large 64×64 grids sent in multiple packets) now reassemble correctly using a (region, timestamp) buffer key. Intermediate chunks are silently buffered and only the completed frame appears in the Weather Log — no false "Decode failed" entries for in-progress reassembly. MSG_NOT_AVAILABLE responses stop pending spinners immediately and show an inline "unavailable" label.
 
 Signal Bars Aggressive Recovery
 
-The repeater TX signal bars service now retries faster when a repeater fails: first retry at 20 s, second at 45 s, third at 90 s (was a single 120 s interval). The service also reactively re-pings any .failed repeater when a packet is received from it (30 s cooldown), so recovery is triggered by live traffic instead of waiting for the timer.
-
----
-
-v0.10.1 (Build 23)
-
-Weather Sections & Navigation
-
-The Weather tab now organizes station cards into three collapsible sections: Favorites (always populated, even without data), Your Requests (stations you explicitly requested), and Broadcasts (stations from bot auto-broadcasts). Section headers are full-row tap targets with a chevron indicator. After requesting a station, the view automatically scrolls to the new card and expands its section if collapsed.
-
-Weather Icon Legend
-
-A new "Observation Abbreviations" section in the Weather info sheet explains all abbreviations (Dew, Vis, Pres, RH, kts) and sky condition icons. A "Section Guide" explains Favorites, Requests, Broadcasts, and Warnings sections.
-
----
-
-v0.10.1 (Build 22)
-
-Weather Bot Reliability
-
-DM requests now retry with flood-routing fallback if unacknowledged. Forecast, TAF, and METAR requests re-send once after 45 s with no response; if still no reply the pending state is cleared. A new toggle in Tools → Weather Log switches between DM mode (default, with retry/ACK) and Channel mode (plain message, better over poor links). The #wx-broadcast channel is auto-provisioned and muted on first connect. Bot name is auto-discovered from the first broadcast — no manual setup required. MSG_NOT_AVAILABLE (0x03) responses are decoded immediately, stopping spinners and showing an inline "unavailable" label. Fixed tapback messages being truncated mid-hash on long channel messages.
-
----
-
-v0.10.1 (Build 21)
-
-MeshWX Weather System
-
-New Weather tab showing live NWS data over the mesh from a MeshWX bot. Supports the full MeshWX v3 binary protocol: Observations (METAR), 7-Day Forecasts, TAF, 64×32 Radar loops, Active Warnings, Storm Reports, Hazard Outlooks, Precipitation Reports, and Warnings Near Location. Search by city, state, or ICAO code to request data via DM. Broadcast forecasts are automatically linked to the nearest station by proximity. Station cards blend obs, forecast, and TAF into one unified row with a context menu. Favorites always appear at top. Per-product refresh buttons, global °F/°C toggle, swipe to clear.
-
----
-
-Previous Builds
-
-v0.10.1 (Build 21)
-
-MeshWX Weather System
-
-New Weather tab showing live NWS weather data received over the mesh from a MeshWX bot node. Supports the full MeshWX v3 binary protocol (COBS-encoded channel messages) across all message types:
-
-- Observations (METAR) — current conditions at airport stations: temperature, dewpoint, wind speed/gust/direction, altimeter, cloud layers, visibility, present weather, and flight rules (VFR/MVFR/IFR/LIFR)
-- 7-Day Forecasts — NWS gridded forecasts for ~1,900 US forecast points with high/low temps, wind, precipitation chance, humidity, and period icons
-- TAF — Terminal Aerodrome Forecast for IFR-capable stations
-- Radar — 64x32 grid radar intensity loops from NWS regional sectors, showing precipitation intensity with timestamped frames
-- Active Warnings — NWS weather warnings with type, severity, and expiry time
-- Storm Reports — Local storm reports by type (tornado, hail, wind, flood)
-- Hazard Outlooks — Multi-day NWS hazard outlook text
-- Precipitation Reports — Nearby recent rain/snow observation summaries with station names and rain type labels
-- Warnings Near Location — Warnings within range of a forecast point
-
-Search by city name, city + state ("Austin TX", "Austin, TX"), state abbreviation ("TX", "PR"), or ICAO airport code to request data from the bot via DM. Broadcast forecasts arriving on the weather channel without a prior request are automatically linked to the nearest observed station by geographic proximity, so forecast data folds into the correct station card instead of appearing in a separate section.
-
-Station cards blend observations, forecast, and TAF for each airport into a single unified row with one context menu. Favorites can be starred and always appear at the top; non-favorite stations are sorted by most recently received data. A global degrees toggle (F/C) in the navigation bar applies across all temperature displays. Per-product refresh buttons let you re-request individual data types. Swipe a station card to clear all its data.
-
-Also fixed: METAR rebroadcasts no longer reset the received timestamp, so the age label correctly reflects when the data actually arrived rather than always showing "just now".
+The repeater TX signal bars service retries faster when a repeater fails: first retry at 20 s, second at 45 s, third at 90 s (was a single 120 s interval). The service also reactively re-pings any failed repeater when a packet is received from it (30 s cooldown).
 
 ---
 

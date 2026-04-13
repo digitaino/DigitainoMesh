@@ -548,7 +548,18 @@ private struct WeatherBody: View {
     private var warningsSection: some View {
         Section {
             ForEach(sortedWarnings) { warning in
-                WarningRow(warning: warning)
+                Button {
+                    appState.navigation.navigateToMapWarning(warning)
+                } label: {
+                    HStack {
+                        WarningRow(warning: warning)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
             }
         } header: {
             HStack {
@@ -729,7 +740,7 @@ private struct WeatherBody: View {
         ContentUnavailableView {
             Label("No Weather Data", systemImage: "cloud.slash")
         } description: {
-            Text("Weather data is broadcast automatically when you join the **#meshwx** channel and a MeshWX bot is active on the mesh.\n\nSearch for a city or airport above to request a specific forecast.")
+            Text("The app subscribes to the weather channel automatically. Data appears when a **MeshWX bot** is active on the mesh and broadcasts.\n\nSearch for a city or airport above to request a specific forecast.")
         } actions: {
             Button("Request Update") {
                 Task { await requestUpdate() }
@@ -760,7 +771,7 @@ private struct WeatherBody: View {
         case .notConnected:
             searchError = "Not connected to a LoRa device."
         case .noDataChannel:
-            searchError = "Join the #meshwx channel on your device first."
+            searchError = "Weather channel not available. Check your device connection."
         case .noLocation, .rateLimited:
             searchError = "Could not send request. Try again in a moment."
         }
@@ -778,7 +789,7 @@ private struct WeatherBody: View {
         case .rateLimited, .notConnected, .botNotFound:
             break
         case .noDataChannel:
-            requestError = "Join the #meshwx channel on your LoRa device to receive weather data."
+            requestError = "Weather channel not available. Check your device connection."
         case .noLocation:
             requestError = "Location not available yet. Move to a region with GPS signal, or wait a moment and try again."
         }
@@ -1829,7 +1840,7 @@ private struct RadarRegionPickerView: View {
         case .notConnected:
             error = "Not connected to a LoRa device."
         case .noDataChannel:
-            error = "Join the #meshwx channel on your device first."
+            error = "Weather channel not available. Check your device connection."
         default:
             error = "Request failed. Try again."
         }
@@ -1859,11 +1870,37 @@ private func receivedAgoLabel(_ date: Date) -> String {
 // MARK: - Info Sheet
 
 private struct WXInfoSheet: View {
+    @Environment(\.appState) private var appState
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    let bound = Bindable(appState)
+                    Picker("Request Mode", selection: bound.wxRequestMode) {
+                        Text("Channel").tag(AppState.WXRequestMode.channel)
+                        Text("Direct Message").tag(AppState.WXRequestMode.dm)
+                    }
+                    if appState.wxRequestMode == .channel {
+                        LabeledContent("Command Channel") {
+                            TextField("#channel-name", text: bound.wxCommandChannelName)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                } header: {
+                    Text("Bot Requests")
+                } footer: {
+                    switch appState.wxRequestMode {
+                    case .channel:
+                        Text("Requests are sent as channel messages — better over poor multi-hop links since no ACK is required. The bot must be listening on this channel.")
+                    case .dm:
+                        Text("Requests are sent as DMs to the bot's pubkey with retry and ACK tracking. The bot's contact name must be configured in Contacts.")
+                    }
+                }
+
                 Section {
                     infoRow(icon: "satellite", title: "GOES Satellite Reception",
                             body: "The MeshWX bot uses a Software Defined Radio (SDR) to receive the GOES weather satellite signal directly. It decodes the broadcast as EMWIN (Emergency Managers Weather Information Network) files — the same data feed used by NWS offices — with no internet connection required anywhere in the chain.")
@@ -1905,7 +1942,7 @@ private struct WXInfoSheet: View {
                     infoRow(icon: "magnifyingglass", title: "Finding a Location",
                             body: "Use the search bar to find a city or airport ICAO code. Tap a result to send a request to the bot. You must be connected to your radio and on the meshwx channel.")
                     infoRow(icon: "wrench.and.screwdriver", title: "Bot Setup",
-                            body: "The app needs to know the bot's contact name to address DM requests. Set it in Tools → Weather Log. The bot contact will appear after it broadcasts its first message on the channel.")
+                            body: "Channel mode sends requests on a shared mesh channel — no bot contact name needed. DM mode addresses requests directly to the bot; configure the request mode using the ⓘ button.")
                 } header: {
                     Label("Getting Started", systemImage: "questionmark.circle")
                 }

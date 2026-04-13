@@ -281,6 +281,26 @@ final class MapViewModel {
         selectedContact = contact
     }
 
+    /// Center map on a weather warning polygon's bounding box.
+    func centerOnWarning(_ warning: MeshWXWarning) {
+        guard !warning.vertices.isEmpty else { return }
+        var minLat =  Double.greatestFiniteMagnitude
+        var maxLat = -Double.greatestFiniteMagnitude
+        var minLon =  Double.greatestFiniteMagnitude
+        var maxLon = -Double.greatestFiniteMagnitude
+        for v in warning.vertices {
+            minLat = min(minLat, v.latitude);  maxLat = max(maxLat, v.latitude)
+            minLon = min(minLon, v.longitude); maxLon = max(maxLon, v.longitude)
+        }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2,
+                                            longitude: (minLon + maxLon) / 2)
+        let latDelta = max(0.5, (maxLat - minLat) * 1.5)
+        let lonDelta = max(0.5, (maxLon - minLon) * 1.5)
+        cameraRegion = MKCoordinateRegion(center: center,
+                                          span: MKCoordinateSpan(latitudeDelta: latDelta,
+                                                                 longitudeDelta: lonDelta))
+    }
+
     /// Center map to show all filtered contacts
     func centerOnAllContacts() {
         let contacts = filteredContacts
