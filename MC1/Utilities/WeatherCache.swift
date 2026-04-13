@@ -330,6 +330,21 @@ final class WeatherCache {
         }
     }
 
+    /// Starts a loop that prunes expired warnings every 60 seconds.
+    /// Call once after the cache is loaded. Safe to call multiple times — subsequent calls are ignored.
+    func startExpiryTimer() {
+        guard expiryTimerTask == nil else { return }
+        expiryTimerTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { break }
+                pruneExpiredWarnings()
+            }
+        }
+    }
+
+    private var expiryTimerTask: Task<Void, Never>?
+
     /// Removes a single forecast by its pfm_point key and rewrites the persisted file without it.
     /// Also clears the forecastOrigins entry so the station group is cleaned up.
     func removeForecast(key: Int) {

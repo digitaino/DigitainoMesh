@@ -28,6 +28,10 @@ Weather Reliability & Crash Fixes
 
 Fixed several crashes in the binary weather decoder that could occur when receiving certain message types. Multi-chunk radar frames (large 64×64 grids sent in multiple packets) now reassemble correctly using a (region, timestamp) buffer key. Intermediate chunks are silently buffered and only the completed frame appears in the Weather Log — no false "Decode failed" entries for in-progress reassembly. MSG_NOT_AVAILABLE responses stop pending spinners immediately and show an inline "unavailable" label.
 
+Warning Expiry
+
+Active warnings now drop off automatically when they expire. A 60-second timer removes any warning whose NWS expiry time has passed, keeping the warnings list and map overlay current even when the bot is quiet.
+
 Signal Bars Aggressive Recovery
 
 The repeater TX signal bars service retries faster when a repeater fails: first retry at 20 s, second at 45 s, third at 90 s (was a single 120 s interval). The service also reactively re-pings any failed repeater when a packet is received from it (30 s cooldown).

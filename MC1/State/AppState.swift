@@ -391,6 +391,7 @@ public final class AppState {
 
         await wireWeatherHandler(services: services)
         weatherCache.loadPersistedData()
+        weatherCache.startExpiryTimer()
         if let deviceID = connectedDevice?.id {
             Task { await provisionWeatherChannelIfNeeded(services: services, deviceID: deviceID) }
         }
