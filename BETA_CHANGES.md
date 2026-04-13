@@ -1,35 +1,5 @@
 Beta Changes -- v0.10.1 (Build 26)
 
-What's New in Build 26
-
-Weather System Toggle
-
-A new "MeshWX Weather" toggle in Settings lets you enable or disable the entire weather system. When disabled, both weather channels (#wx-broadcast and #digitaino-wx-bot) are removed from the radio, the Weather tab is hidden, and Settings gets its own dedicated tab (Chats | Nodes | Map | Tools | Settings). When re-enabled, both channels are automatically re-provisioned (muted) and the Weather tab returns with Settings back inside Tools.
-
-Weather Channels Hidden from Chats
-
-Both weather system channels (#wx-broadcast and #digitaino-wx-bot) are now fully hidden from the Chats list. Binary weather data flowing over these channels is handled internally and never appears as a conversation.
-
-Active Warnings at the Top
-
-Active weather warnings are now displayed at the top of the Weather list, above Favorites and station sections. Warnings are collapsible — tap the header to expand or collapse. The header always shows the current warning count so you can see at a glance whether there are active alerts without expanding.
-
-Section Headers Always Visible
-
-The Favorites, Requests, and Broadcasts section headers are now always shown when their section has content, regardless of how many sections are populated. Previously, headers were hidden unless at least two sections had data.
-
-Larger, More Readable Section Headers
-
-Section header fonts have been bumped from caption to subheadline (semibold) for better legibility. All collapsible headers now meet Apple's 44pt minimum touch target for reliable tapping.
-
-Radar Persists Across App Restarts
-
-Fixed a bug where radar data was lost when the app was closed and reopened. Multi-chunk radar frames are now stored as fully assembled structures rather than raw wire bytes, so they reload correctly after a restart.
-
----
-
-v0.10.1 (Build 25)
-
 What's New Since Build 20
 
 MeshWX Weather System
@@ -38,33 +8,31 @@ A new Weather tab delivers live NWS weather data over the mesh from a MeshWX bot
 
 Supported data types: Current Conditions (METAR), 7-Day Forecasts, TAF, Radar, Active Warnings, Storm Reports, Hazard Outlooks, Precipitation Reports, and Warnings Near Location. Search by city name, state abbreviation, or ICAO airport code to request specific data from the bot.
 
-Station cards combine observations, forecast, and TAF into a single unified row. Stations are organized into three collapsible sections: Favorites (starred stations, always visible), Your Requests (stations you requested), and Broadcasts (stations from bot auto-broadcasts). After requesting a station, the view scrolls to the new card and expands its section automatically.
+Station cards combine observations, forecast, and TAF into a single unified row. Stations are organized into three collapsible sections: Favorites, Requests, and Broadcasts. After requesting a station, the view scrolls to the new card and expands its section automatically. A global °F/°C toggle applies across all temperature displays. Swipe a station card to clear its data.
 
-Favorites always appear at the top. A global °F/°C toggle applies across all temperature displays. Per-product refresh buttons let you re-request individual data types. Swipe a station card to clear its data.
+Active Warnings
 
-Weather Warnings
-
-Active warnings appear in their own section with a vertical color stripe (Apple Calendar style) indicating severity. Tapping a warning navigates to the Map tab and zooms directly to the warning polygon — the app also enables the weather overlay automatically so the polygon is visible.
+Active warnings appear at the top of the Weather list, above all station sections, with a vertical color stripe indicating severity. Warnings are collapsible — the header always shows the count so active alerts are visible at a glance. Tapping a warning navigates to the Map tab and zooms to the warning polygon, enabling the weather overlay automatically. Warnings drop off automatically when their NWS expiry time passes.
 
 Radar Overlay
 
-Radar frames are rendered with bilinear interpolation (8× upscale) producing smooth gradients between grid cells instead of a blocky pixel grid. Opacity scales with precipitation intensity — light echoes are semi-transparent so the base map shows through, while heavy precipitation renders at higher opacity. Warning polygons draw above the radar layer so they remain visible when radar is active.
+Radar frames are rendered with bilinear interpolation (8× upscale) producing smooth gradients between grid cells. Opacity scales with precipitation intensity — light echoes are semi-transparent, heavy precipitation renders at higher opacity. Warning polygons draw above the radar layer. Radar data now persists across app restarts.
 
 Requests & Bot Setup
 
-By default, weather requests are sent on the shared channel — no bot contact name needed. Direct Message mode (with automatic retry and ACK) is available and configurable via the ⓘ button in the Weather tab. The bot is auto-discovered from the first broadcast.
+Weather requests are sent on the shared channel by default — no bot contact name needed. Direct Message mode (with automatic retry and ACK) is available via the ⓘ button. The bot is auto-discovered from the first broadcast.
 
 Weather Reliability & Crash Fixes
 
-Fixed several crashes in the binary weather decoder that could occur when receiving certain message types. Multi-chunk radar frames (large 64×64 grids sent in multiple packets) now reassemble correctly using a (region, timestamp) buffer key. Intermediate chunks are silently buffered and only the completed frame appears in the Weather Log — no false "Decode failed" entries for in-progress reassembly. MSG_NOT_AVAILABLE responses stop pending spinners immediately and show an inline "unavailable" label.
+Fixed several crashes in the binary weather decoder. Multi-chunk radar frames now reassemble correctly using a (region, timestamp) buffer key — intermediate chunks are buffered silently and only the completed frame appears in the Weather Log. MSG_NOT_AVAILABLE responses stop pending spinners immediately.
 
-Warning Expiry
+Weather List UX
 
-Active warnings now drop off automatically when they expire. A 60-second timer removes any warning whose NWS expiry time has passed, keeping the warnings list and map overlay current even when the bot is quiet.
+Section headers (Favorites, Requests, Broadcasts) are always shown when their section has content. Headers use larger subheadline fonts and meet Apple's 44pt minimum touch target for reliable tapping.
 
 Signal Bars Aggressive Recovery
 
-The repeater TX signal bars service retries faster when a repeater fails: first retry at 20 s, second at 45 s, third at 90 s (was a single 120 s interval). The service also reactively re-pings any failed repeater when a packet is received from it (30 s cooldown).
+The repeater TX signal bars service retries faster when a repeater fails: first retry at 20 s, second at 45 s, third at 90 s. The service also reactively re-pings any failed repeater when a packet is received from it (30 s cooldown).
 
 ---
 
