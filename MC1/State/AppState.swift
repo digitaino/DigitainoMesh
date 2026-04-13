@@ -959,6 +959,18 @@ public final class AppState {
                     case .warningsNear(let warnings):
                         logger.info("MeshWX warnings-near decoded: \(warnings.entries.count) entries")
                         self.weatherCache.ingestWarningsNear(warnings)
+                    case .qpfGrid(let frame):
+                        logger.info("MeshWX QPF grid decoded: region \(frame.regionID)")
+                        self.weatherCache.ingestQPFFrame(frame)
+                    case .fireWeather(let fw):
+                        logger.info("MeshWX fire weather decoded: \(fw.periods.count) periods")
+                        self.weatherCache.ingestFireWeather(fw)
+                    case .dailyClimate(let dc):
+                        logger.info("MeshWX daily climate decoded: \(dc.cities.count) cities (\(dc.dayLabel))")
+                        self.weatherCache.ingestDailyClimate(dc)
+                    case .nowcast(let n):
+                        logger.info("MeshWX nowcast decoded: \(n.validHours)h, urgent=\(n.isUrgent)")
+                        self.weatherCache.ingestNowcast(n)
                     case .notAvailable(let na):
                         if let key = na.pendingKey {
                             self.weatherCache.markUnavailable(key, reason: na.reason)

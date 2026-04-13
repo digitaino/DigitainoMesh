@@ -76,6 +76,15 @@ final class WeatherCache {
             summary = "TAF \(t.icao) \(t.tempF)°F \(t.skyName)"
         case .warningsNear(let w):
             summary = "Warnings near \(w.entries.count) entries"
+        case .qpfGrid(let r):
+            summary = "QPF grid region \(r.regionID) \(r.gridSize)×\(r.gridSize)"
+        case .fireWeather(let fw):
+            summary = "Fire weather \(fw.periods.count) periods"
+        case .dailyClimate(let dc):
+            summary = "Daily climate \(dc.cities.count) cities (\(dc.dayLabel))"
+        case .nowcast(let n):
+            let urgency = n.isUrgent ? " ⚠️ urgent" : ""
+            summary = "Nowcast \(n.validHours)h\(urgency)"
         case .notAvailable(let na):
             let key = na.pendingKey ?? "unknown"
             summary = "NOT_AVAILABLE '\(key)': \(na.reasonDescription)"
@@ -153,6 +162,20 @@ final class WeatherCache {
 
     /// Latest warnings-near response per location key.
     private(set) var warningsNear: [String: MeshWXWarningsNear] = [:]
+
+    // MARK: - v4 New Products
+
+    /// Latest nowcast (short-term forecast) per location key.
+    private(set) var nowcasts: [String: MeshWXNowcast] = [:]
+
+    /// Latest fire weather forecast per location key.
+    private(set) var fireWeathers: [String: MeshWXFireWeather] = [:]
+
+    /// Latest daily climate report (regional hi/lo/precip). Replaced each broadcast.
+    private(set) var dailyClimate: MeshWXDailyClimate?
+
+    /// Latest QPF (quantitative precipitation forecast) frame per region.
+    private(set) var qpfFrames: [UInt8: MeshWXRadarFrame] = [:]
 
     // MARK: - Pending Requests
 
@@ -297,6 +320,30 @@ final class WeatherCache {
         logger.debug("Warnings-near ingested: \(warnings.entries.count) entries")
     }
 
+    /// Ingest a nowcast, replacing any older one for the same location.
+    func ingestNowcast(_ nowcast: MeshWXNowcast) {
+        nowcasts[nowcast.locationKey] = nowcast
+        logger.debug("Nowcast ingested: \(nowcast.validHours)h valid, urgent=\(nowcast.isUrgent)")
+    }
+
+    /// Ingest a fire weather forecast, replacing any older one for the same location.
+    func ingestFireWeather(_ fw: MeshWXFireWeather) {
+        fireWeathers[fw.locationKey] = fw
+        logger.debug("Fire weather ingested: \(fw.periods.count) periods")
+    }
+
+    /// Ingest a daily climate report. Always replaces the previous one.
+    func ingestDailyClimate(_ dc: MeshWXDailyClimate) {
+        dailyClimate = dc
+        logger.debug("Daily climate ingested: \(dc.cities.count) cities, \(dc.dayLabel)")
+    }
+
+    /// Ingest a QPF grid frame, keeping only the latest per region.
+    func ingestQPFFrame(_ frame: MeshWXRadarFrame) {
+        qpfFrames[frame.regionID] = frame
+        logger.debug("QPF frame ingested: region \(frame.regionID)")
+    }
+
     /// Ingest a decoded radar frame, keeping a ring buffer per region.
     func ingestRadarFrame(_ frame: MeshWXRadarFrame) {
         var frames = radarFrames[frame.regionID] ?? []
@@ -383,6 +430,10 @@ final class WeatherCache {
         rainObservations.removeAll()
         tafs.removeAll()
         warningsNear.removeAll()
+        nowcasts.removeAll()
+        fireWeathers.removeAll()
+        dailyClimate = nil
+        qpfFrames.removeAll()
         pendingKeys.removeAll()
         requestedKeys.removeAll()
         unavailableKeys.removeAll()
@@ -409,6 +460,7 @@ final class WeatherCache {
         !warnings.isEmpty || !radarFrames.isEmpty || !forecasts.isEmpty || !observations.isEmpty
         || !outlooks.isEmpty || !stormReports.isEmpty || !rainObservations.isEmpty
         || !tafs.isEmpty || !warningsNear.isEmpty || !pendingKeys.isEmpty || !unavailableKeys.isEmpty
+        || !nowcasts.isEmpty || !fireWeathers.isEmpty || dailyClimate != nil || !qpfFrames.isEmpty
     }
 
     // MARK: - Persistence

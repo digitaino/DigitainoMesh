@@ -30,6 +30,11 @@ enum MeshWXMessage: Sendable {
     case taf(MeshWXTAF)
     case warningsNear(MeshWXWarningsNear)
     case notAvailable(MeshWXNotAvailable)
+    // v4 new products
+    case qpfGrid(MeshWXRadarFrame)
+    case fireWeather(MeshWXFireWeather)
+    case dailyClimate(MeshWXDailyClimate)
+    case nowcast(MeshWXNowcast)
 }
 
 // MARK: - Radar Frame
@@ -734,6 +739,141 @@ struct MeshWXNotAvailable: Sendable {
     }
 }
 
+// MARK: - Fire Weather Forecast (0x38)
+
+/// A decoded 0x38 Fire Weather Forecast per zone. Carries per-period fire weather
+/// parameters (RH, transport wind, mixing height, Haines index, lightning risk).
+struct MeshWXFireWeather: Sendable {
+
+    struct Period: Sendable {
+        let periodID: UInt8           // same scheme as 0x31: 0=tonight, 1=today, 2=tomorrow…
+        let maxTempF: Int8
+        let minRHPct: UInt8           // minimum relative humidity 0-100%
+        let transportWindDir: UInt8   // 16-pt direction (0=N, increments of 22.5°)
+        let transportWindMph: UInt8   // nibble × 5 mph
+        let mixingHeight500ft: UInt8  // × 500 ft AGL
+        let hainesIndex: UInt8        // 2–6 (fire potential index)
+        let lightningRisk: UInt8      // 0=none, 1=dry, 2=wet
+        let cloudCover: UInt8         // 0=clear…5=obscured
+        let weatherType: UInt8        // v4 weather_type (5-bit, 0x00=none…0x19)
+        let intensity: UInt8          // 0=N/A, 1=light, 2=moderate, 3=heavy
+
+        var mixingHeightFt: Int { Int(mixingHeight500ft) * 500 }
+
+        static let dir16: [String] = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+                                      "S","SSW","SW","WSW","W","WNW","NW","NNW"]
+        var transportWindDirName: String { Self.dir16[min(Int(transportWindDir), 15)] }
+
+        var cloudName: String {
+            switch cloudCover {
+            case 0: return "Clear"; case 1: return "Few"; case 2: return "Scattered"
+            case 3: return "Broken"; case 4: return "Overcast"; case 5: return "Obscured"
+            default: return "Variable"
+            }
+        }
+
+        var hainesLabel: String { "Haines \(hainesIndex)" }
+        var lightningLabel: String {
+            switch lightningRisk {
+            case 1: return "Dry lightning risk"
+            case 2: return "Wet lightning risk"
+            default: return "No lightning risk"
+            }
+        }
+    }
+
+    let locationType: UInt8
+    let locationIDBytes: Data
+    let issuedHoursAgo: UInt8
+    let periods: [Period]
+    let receivedAt: Date
+
+    var locationKey: String {
+        let hex = locationIDBytes.map { String(format: "%02x", $0) }.joined()
+        return "\(locationType):\(hex)"
+    }
+}
+
+// MARK: - Daily Climate (0x3A)
+
+/// A decoded 0x3A Regional Temp/Precip report — yesterday's actual hi/lo/precip/snow
+/// batched across multiple cities.
+struct MeshWXDailyClimate: Sendable {
+
+    struct City: Sendable {
+        let placeID: Int       // uint24 index into places.json
+        let maxTempF: Int8?    // nil when byte == 127 (missing)
+        let minTempF: Int8?    // nil when byte == 127 (missing)
+        /// nil = missing (0xFE). Negative (-1.0) = trace (0xFF).
+        let precipInches: Double?
+        /// nil = missing (0xFE). Negative (-1.0) = trace (0xFF).
+        let snowInches: Double?
+
+        var precipLabel: String {
+            guard let p = precipInches else { return "M" }
+            return p < 0 ? "T" : String(format: "%.2f\"", p)
+        }
+        var snowLabel: String {
+            guard let s = snowInches else { return "M" }
+            return s < 0 ? "T" : String(format: "%.1f\"", s)
+        }
+        var hasPrecip: Bool { precipInches != nil && precipInches! != 0 }
+        var hasSnow: Bool { snowInches != nil && snowInches! != 0 }
+    }
+
+    let reportDayOffset: UInt8  // 0=today so far, 1=yesterday, 2=day before
+    let cities: [City]
+    let receivedAt: Date
+
+    var dayLabel: String {
+        switch reportDayOffset {
+        case 0: return "Today"
+        case 1: return "Yesterday"
+        case 2: return "2 Days Ago"
+        default: return "\(reportDayOffset) Days Ago"
+        }
+    }
+}
+
+// MARK: - Nowcast (0x3C)
+
+/// A decoded 0x3C Short Term Forecast (NOW) — 1-3 hour tactical outlook.
+struct MeshWXNowcast: Sendable {
+    let locationType: UInt8
+    let locationIDBytes: Data
+    let validHours: UInt8
+    let hasThunder: Bool
+    let hasFlooding: Bool
+    let hasWinter: Bool
+    let hasFire: Bool
+    let hasWind: Bool
+    let text: String
+    let receivedAt: Date
+
+    var locationKey: String {
+        let hex = locationIDBytes.map { String(format: "%02x", $0) }.joined()
+        return "\(locationType):\(hex)"
+    }
+
+    var urgencySystemImages: [String] {
+        var imgs: [String] = []
+        if hasThunder  { imgs.append("cloud.bolt.fill") }
+        if hasFlooding { imgs.append("cloud.rain.fill") }
+        if hasWinter   { imgs.append("cloud.snow.fill") }
+        if hasFire     { imgs.append("flame.fill") }
+        if hasWind     { imgs.append("wind") }
+        return imgs
+    }
+
+    var isUrgent: Bool { hasThunder || hasFlooding || hasWinter || hasFire || hasWind }
+
+    /// Short lead line (first 2 sentences) for compact display.
+    var leadText: String {
+        let sentences = text.components(separatedBy: ". ")
+        return sentences.prefix(2).joined(separator: ". ").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 // MARK: - Decoder
 
 enum MeshWXDecoder {
@@ -834,18 +974,23 @@ enum MeshWXDecoder {
     /// - 0x0d: bot home/location broadcast
     /// - 0x21: warning_zones (not yet decoded on iOS)
     /// - 0x40: text_chunk (multi-part text reassembly, not decoded on iOS)
+    /// - 0xF0: v4 discovery beacon (not yet handled on iOS)
     static func isKnownNonProduct(_ data: Data) -> Bool {
         let raw = cobsDecode(data) ?? data
         guard let first = raw.first else { return false }
-        return first == 0x0d || first == 0x21 || first == 0x40
+        return first == 0x0d || first == 0x21 || first == 0x40 || first == 0xF0
     }
 
     private static func decodeRaw(_ data: Data) -> MeshWXMessage? {
         guard let first = data.first else { return nil }
         switch first {
+        case 0x04: // v4 frame header — strip 6 bytes and decode the inner payload
+            guard data.count > 6 else { return nil }
+            return decodeRaw(Data(data[6...]))
         case 0x03: return decodeNotAvailable(data).map { .notAvailable($0) }
         case 0x10: return decodeRadarGrid(data).map { .radarGrid($0) }
         case 0x11: return decode0x11RadarGrid(data).map { .radarGrid($0) }
+        case 0x12: return decode0x12QPFGrid(data).map { .qpfGrid($0) }
         case 0x20: return decodeWarning(data).map { .warningPolygon($0) }
         case 0x30: return decodeObservation(data).map { .observation($0) }
         case 0x31: return decodeForecast(data).map { .forecast($0) }
@@ -854,6 +999,9 @@ enum MeshWXDecoder {
         case 0x34: return decodeRainObservations(data).map { .rainObservations($0) }
         case 0x36: return decodeTAF(data).map { .taf($0) }
         case 0x37: return decodeWarningsNear(data).map { .warningsNear($0) }
+        case 0x38: return decodeFireWeather(data).map { .fireWeather($0) }
+        case 0x3A: return decodeDailyClimate(data).map { .dailyClimate($0) }
+        case 0x3C: return decodeNowcast(data).map { .nowcast($0) }
         default:   return nil
         }
     }
@@ -1572,6 +1720,195 @@ enum MeshWXDecoder {
         return MeshWXNotAvailable(
             dataType: dataType, reason: reason,
             locationType: locationType, locationIDBytes: locationIDBytes
+        )
+    }
+
+    // MARK: 0x12 QPF Grid (same compression as 0x11, different header)
+    //
+    // Wire format:
+    //  [0]     0x12
+    //  [1]     grid_size (32 or 64)
+    //  [2]     encoding (0=sparse, 1=RLE)
+    //  [3]     region_id
+    //  [4]     valid_period: hi nibble = start in 6h blocks from 00Z, lo nibble = duration in 6h blocks
+    //  [5]     chunk_seq (hi nibble) | total_chunks (lo nibble)
+    //  [6+]    compressed grid data (sparse or RLE, identical to 0x11)
+    //
+    // 4-bit QPF levels: 0=none, 1=trace-0.10", 2=0.10-0.25", …, 0xE=10.00"+
+
+    nonisolated(unsafe) private static var qpfChunkBuffer: [UInt32: RadarChunkAccumulator] = [:]
+
+    static func decode0x12QPFGrid(_ data: Data) -> MeshWXRadarFrame? {
+        guard data.count >= 7, data[0] == 0x12 else { return nil }
+
+        let gridSize    = Int(data[1])
+        let encoding    = data[2]
+        let regionID    = data[3]
+        let validPeriod = data[4]
+        let chunkByte   = data[5]
+        let chunkSeq    = Int((chunkByte >> 4) & 0x0F)
+        let totalChunks = max(1, Int(chunkByte & 0x0F))
+
+        guard gridSize == 32 || gridSize == 64 else { return nil }
+
+        let payload = Data(data.dropFirst(6))
+
+        if totalChunks == 1 {
+            // Reuse radar payload decoder; store validPeriod in timestamp field for QPF frames
+            return decodeRadarPayload(regionID: regionID, frameSeq: UInt8(chunkSeq),
+                                      timestamp: UInt16(validPeriod), scaleKm: 0,
+                                      gridSize: gridSize, encoding: encoding, payload: payload)
+        }
+
+        let bufferKey = UInt32(0xFF00) | UInt32(regionID)
+        var acc = qpfChunkBuffer[bufferKey] ?? RadarChunkAccumulator(
+            gridSize: gridSize, timestamp: UInt16(validPeriod), scaleKm: 0,
+            encoding: encoding, totalChunks: totalChunks, chunks: [:]
+        )
+        acc.chunks[chunkSeq] = payload
+        qpfChunkBuffer[bufferKey] = acc
+
+        guard acc.isComplete, let assembled = acc.assembledPayload else { return nil }
+        qpfChunkBuffer.removeValue(forKey: bufferKey)
+
+        return decodeRadarPayload(regionID: regionID, frameSeq: 0,
+                                  timestamp: acc.timestamp, scaleKm: 0,
+                                  gridSize: acc.gridSize, encoding: acc.encoding,
+                                  payload: assembled)
+    }
+
+    // MARK: 0x38 Fire Weather Forecast Decoder
+    //
+    // Wire format:
+    //  [0]       0x38
+    //  [1]       location_type
+    //  [2..N]    location_id bytes
+    //  [N+1]     issued_hours_ago
+    //  [N+2]     period_count
+    //  Per period (8 bytes):
+    //    +0  period_id
+    //    +1  max_temp_f int8
+    //    +2  min_rh_pct uint8
+    //    +3  transport_wind: hi nibble = 16-pt dir, lo nibble = speed in 5mph
+    //    +4  mixing_height_500ft uint8
+    //    +5  hi nibble = lightning_risk (0=none,1=dry,2=wet), lo nibble = haines_index (2-6)
+    //    +6  cloud_cover (0=clear…5=obscured)
+    //    +7  weather_byte: bits 7-3=type, bits 2-1=intensity, bit 0=vicinity
+
+    static func decodeFireWeather(_ data: Data) -> MeshWXFireWeather? {
+        guard data.count >= 2, data[0] == 0x38 else { return nil }
+        let locType   = data[1]
+        let idLen     = locationIDLength(locType)
+        let headerEnd = 2 + idLen
+        guard data.count >= headerEnd + 2 else { return nil }
+
+        let locationIDBytes = Data(data[2..<(2 + idLen)])
+        let issuedHoursAgo  = data[headerEnd]
+        let periodCount     = Int(data[headerEnd + 1])
+
+        var periods: [MeshWXFireWeather.Period] = []
+        var off = headerEnd + 2
+        for _ in 0..<periodCount {
+            guard off + 7 < data.count else { break }
+            let transportByte = data[off + 3]
+            let hainesLightn  = data[off + 5]
+            let weatherByte   = data[off + 7]
+            periods.append(MeshWXFireWeather.Period(
+                periodID:          data[off],
+                maxTempF:          Int8(bitPattern: data[off + 1]),
+                minRHPct:          data[off + 2],
+                transportWindDir:  (transportByte >> 4) & 0x0F,
+                transportWindMph:  (transportByte & 0x0F) * 5,
+                mixingHeight500ft: data[off + 4],
+                hainesIndex:       hainesLightn & 0x0F,
+                lightningRisk:     (hainesLightn >> 4) & 0x0F,
+                cloudCover:        data[off + 6],
+                weatherType:       (weatherByte >> 3) & 0x1F,
+                intensity:         (weatherByte >> 1) & 0x03
+            ))
+            off += 8
+        }
+
+        return MeshWXFireWeather(locationType: locType, locationIDBytes: locationIDBytes,
+                                 issuedHoursAgo: issuedHoursAgo, periods: periods, receivedAt: Date())
+    }
+
+    // MARK: 0x3A Daily Climate Decoder
+    //
+    // Wire format:
+    //  [0]       0x3A
+    //  [1]       city_count
+    //  [2]       report_day_offset (0=today, 1=yesterday, 2=day before)
+    //  Per city (7 bytes):
+    //    +0..2  place_id uint24 LE
+    //    +3     max_temp_f int8 (127 = missing)
+    //    +4     min_temp_f int8 (127 = missing)
+    //    +5     precip_hundredths uint8 (0xFF=trace, 0xFE=missing)
+    //    +6     snow_tenths uint8 (0xFF=trace, 0xFE=missing)
+
+    static func decodeDailyClimate(_ data: Data) -> MeshWXDailyClimate? {
+        guard data.count >= 3, data[0] == 0x3A else { return nil }
+        let cityCount = Int(data[1])
+        let dayOffset = data[2]
+
+        var cities: [MeshWXDailyClimate.City] = []
+        var off = 3
+        for _ in 0..<cityCount {
+            guard off + 6 < data.count else { break }
+            let placeID   = Int(data[off]) | (Int(data[off + 1]) << 8) | (Int(data[off + 2]) << 16)
+            let maxRaw    = Int8(bitPattern: data[off + 3])
+            let minRaw    = Int8(bitPattern: data[off + 4])
+            let precipRaw = data[off + 5]
+            let snowRaw   = data[off + 6]
+
+            let maxF: Int8? = maxRaw == 127 ? nil : maxRaw
+            let minF: Int8? = minRaw == 127 ? nil : minRaw
+            // 0xFF = trace (-1.0), 0xFE = missing (nil), otherwise value/100 inches
+            let precip: Double? = precipRaw == 0xFE ? nil : (precipRaw == 0xFF ? -1.0 : Double(precipRaw) / 100.0)
+            let snow:   Double? = snowRaw   == 0xFE ? nil : (snowRaw   == 0xFF ? -1.0 : Double(snowRaw)   / 10.0)
+
+            cities.append(MeshWXDailyClimate.City(placeID: placeID, maxTempF: maxF, minTempF: minF,
+                                                  precipInches: precip, snowInches: snow))
+            off += 7
+        }
+
+        return MeshWXDailyClimate(reportDayOffset: dayOffset, cities: cities, receivedAt: Date())
+    }
+
+    // MARK: 0x3C Nowcast Decoder
+    //
+    // Wire format:
+    //  [0]       0x3C
+    //  [1]       location_type
+    //  [2..N]    location_id bytes
+    //  [N+1]     valid_hours (uint8, typically 1-3)
+    //  [N+2]     urgency_flags: bit0=thunder, bit1=flooding, bit2=winter, bit3=fire, bit4=wind
+    //  [N+3+]    text (UTF-8)
+
+    static func decodeNowcast(_ data: Data) -> MeshWXNowcast? {
+        guard data.count >= 2, data[0] == 0x3C else { return nil }
+        let locType   = data[1]
+        let idLen     = locationIDLength(locType)
+        let headerEnd = 2 + idLen
+        guard data.count >= headerEnd + 2 else { return nil }
+
+        let locationIDBytes = Data(data[2..<(2 + idLen)])
+        let validHours   = data[headerEnd]
+        let urgencyFlags = data[headerEnd + 1]
+        let textStart    = headerEnd + 2
+        let text = textStart < data.count
+            ? (String(data: data[textStart...], encoding: .utf8) ?? "") : ""
+
+        return MeshWXNowcast(
+            locationType: locType, locationIDBytes: locationIDBytes,
+            validHours: validHours,
+            hasThunder:  urgencyFlags & 0x01 != 0,
+            hasFlooding: urgencyFlags & 0x02 != 0,
+            hasWinter:   urgencyFlags & 0x04 != 0,
+            hasFire:     urgencyFlags & 0x08 != 0,
+            hasWind:     urgencyFlags & 0x10 != 0,
+            text: text,
+            receivedAt: Date()
         )
     }
 

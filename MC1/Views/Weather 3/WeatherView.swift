@@ -38,6 +38,7 @@ private struct WeatherBody: View {
     @State private var showingInfo = false
     @State private var noticeTask: Task<Void, Never>?
     @State private var showWarnings = true
+    @State private var showNowcasts = true
     @State private var showFavorites = true
     @State private var showRequested = true
     @State private var showBroadcasts = true
@@ -378,10 +379,14 @@ private struct WeatherBody: View {
 
     private var weatherList: some View {
         List {
-            // Active Warnings — always first, in a single section so there's no gap
-            // between the collapsible header and the warning rows.
+            // Active Warnings — always first
             if !appState.weatherCache.warnings.isEmpty {
                 warningsSection
+            }
+
+            // Nowcasts — urgent tactical forecasts, shown just below warnings
+            if !appState.weatherCache.nowcasts.isEmpty {
+                nowcastsSection
             }
 
             // Favorites — always shown when non-empty
@@ -402,7 +407,7 @@ private struct WeatherBody: View {
                 }
             }
 
-            // Broadcasts — warnings shown above, not counted here
+            // Broadcasts — warnings and nowcasts shown above, not counted here
             let broadcastCount = broadcastGroups.count
                 + (unlinkedForecasts.isEmpty ? 0 : 1)
                 + (appState.weatherCache.outlooks.isEmpty ? 0 : 1)
@@ -410,6 +415,8 @@ private struct WeatherBody: View {
                 + (appState.weatherCache.rainObservations.isEmpty ? 0 : 1)
                 + (appState.weatherCache.warningsNear.isEmpty ? 0 : 1)
                 + (appState.weatherCache.radarFrames.isEmpty ? 0 : 1)
+                + (appState.weatherCache.fireWeathers.isEmpty ? 0 : 1)
+                + (appState.weatherCache.dailyClimate == nil ? 0 : 1)
             if broadcastCount > 0 {
                 groupSeparator(title: "Broadcasts", count: broadcastCount,
                                icon: "dot.radiowaves.left.and.right", isExpanded: $showBroadcasts)
@@ -420,6 +427,8 @@ private struct WeatherBody: View {
                     if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
                     if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
                     if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
+                    if !appState.weatherCache.fireWeathers.isEmpty { fireWeatherSection }
+                    if appState.weatherCache.dailyClimate != nil { dailyClimateSection }
                     if !appState.weatherCache.radarFrames.isEmpty { radarSection }
                 }
             }
@@ -672,6 +681,64 @@ private struct WeatherBody: View {
                     .foregroundStyle(.red)
                 let total = appState.weatherCache.warningsNear.values.reduce(0) { $0 + $1.entries.count }
                 Text("Warnings Near You (\(total))")
+            }
+        }
+    }
+
+    // MARK: - Nowcast Section
+
+    private var nowcastsSection: some View {
+        Section {
+            if showNowcasts {
+                ForEach(Array(appState.weatherCache.nowcasts.values).sorted(by: { $0.receivedAt > $1.receivedAt }), id: \.locationKey) { nowcast in
+                    NowcastRow(nowcast: nowcast)
+                }
+            }
+        } header: {
+            Button {
+                withAnimation { showNowcasts.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.badge.exclamationmark.fill").font(.footnote).foregroundStyle(.orange)
+                    Text("Short-Term Forecast").font(.subheadline.weight(.semibold)).textCase(nil)
+                    Text("(\(appState.weatherCache.nowcasts.count))").font(.subheadline).foregroundStyle(.secondary).textCase(nil)
+                    Spacer()
+                    Image(systemName: showNowcasts ? "chevron.down" : "chevron.right").font(.footnote).foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Fire Weather Section
+
+    private var fireWeatherSection: some View {
+        Section {
+            ForEach(Array(appState.weatherCache.fireWeathers.values).sorted(by: { $0.receivedAt > $1.receivedAt }), id: \.locationKey) { fw in
+                FireWeatherRow(fireWeather: fw)
+            }
+        } header: {
+            HStack {
+                Image(systemName: "flame.fill").foregroundStyle(.orange)
+                Text("Fire Weather")
+            }
+        }
+    }
+
+    // MARK: - Daily Climate Section
+
+    private var dailyClimateSection: some View {
+        Section {
+            if let dc = appState.weatherCache.dailyClimate {
+                DailyClimateRow(climate: dc)
+            }
+        } header: {
+            HStack {
+                Image(systemName: "thermometer.medium").foregroundStyle(.secondary)
+                Text("Daily Climate")
             }
         }
     }
@@ -2025,6 +2092,153 @@ private struct WXInfoSheet: View {
         }
         .padding(.vertical, 4)
     }
+}
+
+// MARK: - NowcastRow
+
+private struct NowcastRow: View {
+    let nowcast: MeshWXNowcast
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Text("Next \(nowcast.validHours) hour\(nowcast.validHours == 1 ? "" : "s")")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                if !nowcast.urgencySystemImages.isEmpty {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        ForEach(nowcast.urgencySystemImages, id: \.self) { img in
+                            Image(systemName: img)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+            }
+            if !nowcast.text.isEmpty {
+                Text(nowcast.leadText)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - FireWeatherRow
+
+private struct FireWeatherRow: View {
+    let fireWeather: MeshWXFireWeather
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Fire Weather", systemImage: "flame.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
+                Spacer()
+                Text("\(fireWeather.issuedHoursAgo)h ago")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(fireWeather.periods.indices, id: \.self) { i in
+                let period = fireWeather.periods[i]
+                Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(periodLabel(period.periodID))
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                        Text("\(period.maxTempF)°F  RH ≥\(period.minRHPct)%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 12) {
+                        Label("\(period.transportWindDirName) \(period.transportWindMph) mph", systemImage: "wind")
+                            .font(.caption)
+                        Label("\(period.mixingHeightFt) ft", systemImage: "arrow.up.to.line")
+                            .font(.caption)
+                        Text(period.hainesLabel)
+                            .font(.caption)
+                            .foregroundStyle(period.hainesIndex >= 5 ? .red : (period.hainesIndex >= 4 ? .orange : .secondary))
+                    }
+                    if period.lightningRisk > 0 {
+                        Label(period.lightningLabel, systemImage: "bolt.fill")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func periodLabel(_ id: UInt8) -> String {
+        switch id {
+        case 0: return "Tonight"
+        case 1: return "Today"
+        default:
+            let day = (id / 2) + (id % 2 == 0 ? 0 : 0)
+            return id % 2 == 0 ? "Day \(id/2) Night" : "Day \((id+1)/2)"
+        }
+    }
+}
+
+// MARK: - DailyClimateRow
+
+private struct DailyClimateRow: View {
+    let climate: MeshWXDailyClimate
+    @Environment(\.appState) private var appState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(climate.dayLabel, systemImage: "calendar")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(climate.cities.count) station\(climate.cities.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(climate.cities.indices, id: \.self) { i in
+                let city = climate.cities[i]
+                Divider()
+                HStack {
+                    Text("Place \(city.placeID)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let hi = city.maxTempF, let lo = city.minTempF {
+                        let usF = appState.wxAviationUsesF
+                        Text(usF ? "\(hi)°/\(lo)°F" : "\(fToC(hi))°/\(fToC(lo))°C")
+                            .font(.caption.monospacedDigit())
+                    }
+                    if city.hasPrecip || city.hasSnow {
+                        HStack(spacing: 4) {
+                            if city.hasPrecip {
+                                Label(city.precipLabel, systemImage: "cloud.rain")
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                            }
+                            if city.hasSnow {
+                                Label(city.snowLabel, systemImage: "snowflake")
+                                    .font(.caption)
+                                    .foregroundStyle(.cyan)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func fToC(_ f: Int8) -> Int { (Int(f) - 32) * 5 / 9 }
 }
 
 // MARK: - Preview
