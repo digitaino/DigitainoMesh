@@ -1,12 +1,44 @@
-Beta Changes -- v0.10.1 (Build 26)
+Beta Changes -- v0.10.1 (Build 27)
 
-What's New Since Build 20
+What's New Since Build 26
+
+MeshWX v4 Protocol & Radar Fixes
+
+Fixed v4 multi-chunk radar frame detection — the byte offset for reading totalChunks was wrong after the timestamp field expanded from 2 to 4 bytes, causing multi-chunk radar fragments to appear as "Decode failed" in the Weather Log. These fragments now buffer silently until the full frame is assembled.
+
+Radar frames are deduplicated by (regionID, timestamp). If a higher-resolution 64×64 FEC composite arrives for the same scan time as an existing 32×32 base layer, it replaces the lower-resolution frame automatically. Timestamps are UInt32 big-endian Unix minutes representing the actual NEXRAD scan time, not when the bot sent it.
+
+Unified Station Cards
+
+Station cards now use a consistent layout across Favorites, Requests, and Broadcasts — bold ICAO header, station name, and ··· menu button are always inside the card. Previously, the "Your Requests" section used a different layout with the title outside as a section header.
+
+Timeout & Request UX
+
+Timed-out requests now show "request timed out" status instead of silently disappearing. The station card and its ··· menu persist after timeout so you can re-request without searching again. Pending forecast requests are now tracked in station groups so cards don't vanish while waiting for data.
+
+Disabled Products
+
+Hazard Outlook, Storm Reports, Precipitation Reports, and Warnings Near Location are temporarily disabled in request menus while being implemented. Current Conditions, Forecast, and TAF remain active.
+
+Discovery Channel
+
+The #meshwx-discover channel is now pinned to the bottom of the chat list so beacon traffic doesn't float above your conversations.
+
+Channel Requests
+
+Weather data requests now work on both the text command channel and the binary data channel, matching an update to the MeshWX bot that accepts WXQ commands on either channel.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 26)
 
 MeshWX Weather System
 
 A new Weather tab delivers live NWS weather data over the mesh from a MeshWX bot node. The app automatically subscribes to the weather channel — no manual channel setup or bot configuration required. Data appears whenever a MeshWX bot is active on your mesh and broadcasts.
 
-Supported data types: Current Conditions (METAR), 7-Day Forecasts, TAF, Radar, Active Warnings, Storm Reports, Hazard Outlooks, Precipitation Reports, and Warnings Near Location. Search by city name, state abbreviation, or ICAO airport code to request specific data from the bot.
+Supported data types: Current Conditions (METAR), 7-Day Forecasts, TAF, Radar, Active Warnings. Search by city name, state abbreviation, or ICAO airport code to request specific data from the bot.
 
 Station cards combine observations, forecast, and TAF into a single unified row. Stations are organized into three collapsible sections: Favorites, Requests, and Broadcasts. After requesting a station, the view scrolls to the new card and expands its section automatically. A global °F/°C toggle applies across all temperature displays. Swipe a station card to clear its data.
 

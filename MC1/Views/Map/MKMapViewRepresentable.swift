@@ -329,18 +329,36 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             let idsToAdd = newWarningIDs.subtracting(coordinator.lastWeatherWarningIDs)
 
             if !idsToRemove.isEmpty {
-                let toRemove = idsToRemove.compactMap { coordinator.weatherWarningOverlaysByID[$0] }
+                let toRemove = idsToRemove.flatMap { coordinator.weatherWarningOverlaysByID[$0] ?? [] }
                 if !toRemove.isEmpty { mapView.removeOverlays(toRemove) }
                 for id in idsToRemove { coordinator.weatherWarningOverlaysByID.removeValue(forKey: id) }
             }
 
             if !idsToAdd.isEmpty {
+                let zoneStore = ZoneGeometryStore.shared
                 let warningsByID = Dictionary(weatherWarnings.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
-                let toAdd = idsToAdd.compactMap { id -> WeatherWarningOverlay? in
-                    guard let warning = warningsByID[id] else { return nil }
-                    guard let overlay = WeatherWarningOverlay.make(from: warning) else { return nil }
-                    coordinator.weatherWarningOverlaysByID[id] = overlay
-                    return overlay
+                var toAdd: [WeatherWarningOverlay] = []
+                for id in idsToAdd {
+                    guard let warning = warningsByID[id] else { continue }
+                    if !warning.zones.isEmpty {
+                        // Zone-based warning: look up each zone's polygons from the geometry store
+                        var overlays: [WeatherWarningOverlay] = []
+                        for zone in warning.zones {
+                            if let code = ZoneGeometryStore.zoneCode(stateIdx: zone.stateIdx, zoneNum: zone.zoneNum) {
+                                for poly in zoneStore.polygons(for: code) {
+                                    overlays.append(WeatherWarningOverlay.make(from: poly, warning: warning))
+                                }
+                            }
+                        }
+                        if !overlays.isEmpty {
+                            coordinator.weatherWarningOverlaysByID[id] = overlays
+                            toAdd.append(contentsOf: overlays)
+                        }
+                    } else if let overlay = WeatherWarningOverlay.make(from: warning) {
+                        // Polygon-based warning
+                        coordinator.weatherWarningOverlaysByID[id] = [overlay]
+                        toAdd.append(overlay)
+                    }
                 }
                 // .aboveLabels so warning polygons render above the radar layer (.aboveRoads)
                 if !toAdd.isEmpty { mapView.addOverlays(toAdd, level: .aboveLabels) }
@@ -487,7 +505,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
 
         // Weather overlay tracking
         var lastWeatherWarningIDs: Set<UUID> = []
-        var weatherWarningOverlaysByID: [UUID: WeatherWarningOverlay] = [:]
+        var weatherWarningOverlaysByID: [UUID: [WeatherWarningOverlay]] = [:]
         var lastWeatherRadarRegions: Set<UInt8> = []
         var weatherRadarOverlaysByRegion: [UInt8: WeatherRadarOverlay] = [:]
 
@@ -718,9 +736,9 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             if let warningOverlay = overlay as? WeatherWarningOverlay {
                 let renderer = MKPolygonRenderer(polygon: warningOverlay)
                 renderer.fillColor = warningOverlay.fillUIColor.withAlphaComponent(warningOverlay.fillOpacity)
-                renderer.strokeColor = warningOverlay.strokeUIColor
+                renderer.strokeColor = warningOverlay.effectiveStrokeColor
                 renderer.lineWidth = warningOverlay.strokeWidth
-                if warningOverlay.isWatch {
+                if warningOverlay.isWatch || warningOverlay.isGreyed {
                     renderer.lineDashPattern = [8, 4]
                 }
                 return renderer

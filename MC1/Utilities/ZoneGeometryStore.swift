@@ -4,23 +4,32 @@ import MapKit
 /// can be rendered as map polygons.
 ///
 /// Zone codes follow the format: [STATE_2LETTER]Z[3-DIGIT-NUMBER] e.g. "TXZ192".
-/// The stateIdx in MeshWX protocol is an index into the sorted list of state/territory codes below.
+/// The stateIdx in MeshWX 0x21 protocol is an index into the state list defined by
+/// state_index.json (from Vendor/meshcore-weather submodule). Indices are protocol-fixed
+/// and must NOT be re-sorted — see state_index.json description for details.
 @MainActor
 final class ZoneGeometryStore {
 
     static let shared = ZoneGeometryStore()
 
-    // MARK: - State Index Table (74 entries, sorted alphabetically — matches MeshWX protocol)
+    // MARK: - State Index Table
 
-    static let stateCodes: [String] = [
-        "AK","AL","AM","AN","AR","AS","AZ","CA","CO","CT",
-        "DC","DE","FL","FM","GA","GM","GU","HI","IA","ID",
-        "IL","IN","KS","KY","LA","LC","LE","LH","LM","LO",
-        "LS","MA","MD","ME","MH","MI","MN","MO","MP","MS",
-        "MT","NC","ND","NE","NH","NJ","NM","NV","NY","OH",
-        "OK","OR","PA","PH","PK","PM","PR","PS","PW","PZ",
-        "RI","SC","SD","SL","TN","TX","UT","VA","VI","VT",
-        "WA","WI","WV","WY"
+    /// Loaded at init from bundled state_index.json. Falls back to the embedded default
+    /// which mirrors the submodule's state_index.json at the time this code was written.
+    /// To update: run `git submodule update --remote Vendor/meshcore-weather` then rebuild.
+    private(set) var stateCodes: [String]
+
+    /// Authoritative default — mirrors Vendor/meshcore-weather state_index.json.
+    /// Order is protocol-fixed (NOT alphabetical). TX=42, ND=33, MI=21.
+    private static let defaultStateCodes: [String] = [
+        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+        "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+        "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+        "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+        "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
+        "DC","PR","VI","GU","AS","MP","MH","FM","PW",
+        "AN","AM","GM","PK","PZ","PH","CI","CN","US","MX",
+        "PM","LE","LO","LH","LM","LS","LC","SL","PS"
     ]
 
     // MARK: - State
@@ -28,7 +37,18 @@ final class ZoneGeometryStore {
     private(set) var isLoaded = false
     private var polygonsByCode: [String: [MKPolygon]] = [:]
 
-    private init() {}
+    private init() {
+        // Try to load state index from bundled state_index.json (kept in sync with
+        // Vendor/meshcore-weather submodule). Falls back to defaultStateCodes.
+        if let url = Bundle.main.url(forResource: "state_index", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let parsed = try? JSONDecoder().decode(StateIndexFile.self, from: data),
+           !parsed.states.isEmpty {
+            stateCodes = parsed.states
+        } else {
+            stateCodes = Self.defaultStateCodes
+        }
+    }
 
     // MARK: - Loading
 
@@ -52,10 +72,12 @@ final class ZoneGeometryStore {
     }
 
     /// Converts stateIdx + zoneNum from the MeshWX protocol into a zone code string.
+    @MainActor
     static func zoneCode(stateIdx: UInt8, zoneNum: UInt16) -> String? {
+        let codes = shared.stateCodes
         let idx = Int(stateIdx)
-        guard idx < stateCodes.count else { return nil }
-        return "\(stateCodes[idx])Z\(String(format: "%03d", zoneNum))"
+        guard idx < codes.count else { return nil }
+        return "\(codes[idx])Z\(String(format: "%03d", zoneNum))"
     }
 
     // MARK: - GeoJSON Parsing (runs off main thread)
@@ -80,7 +102,7 @@ final class ZoneGeometryStore {
                   let code = props["code"] else { continue }
 
             var polys: [MKPolygon] = []
-            for shape in feature.shapes {
+            for shape in feature.geometry {
                 if let polygon = shape as? MKPolygon {
                     polys.append(polygon)
                 } else if let multi = shape as? MKMultiPolygon {
@@ -94,4 +116,10 @@ final class ZoneGeometryStore {
 
         return result
     }
+}
+
+// MARK: - Decodable helper
+
+private struct StateIndexFile: Decodable {
+    let states: [String]
 }

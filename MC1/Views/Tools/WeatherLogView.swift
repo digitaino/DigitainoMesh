@@ -31,7 +31,7 @@ struct WeatherLogView: View {
                     Label("No Weather Messages", systemImage: "cloud.bolt")
                 } description: {
                     VStack(spacing: 8) {
-                        Text("Messages received on the #meshwx channel will appear here.")
+                        Text("Messages received on the weather bot channel will appear here.")
                         Text("Total channel messages seen: \(appState.weatherCache.totalChannelMessagesReceived)")
                             .fontWeight(.medium)
                         if !appState.weatherCache.recentChannelNames.isEmpty {
@@ -40,6 +40,7 @@ struct WeatherLogView: View {
                         }
                     }
                 }
+                .listRowBackground(Color.clear)
             }
         }
     }
@@ -106,8 +107,8 @@ struct WeatherLogView: View {
     private func messageRow(_ entry: WeatherCache.LogEntry) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Image(systemName: entry.decoded != nil ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundStyle(entry.decoded != nil ? .green : .red)
+                Image(systemName: entry.decoded != nil ? "checkmark.circle.fill" : (entry.isFECComponent ? "arrow.triangle.merge" : "xmark.circle.fill"))
+                    .foregroundStyle(entry.decoded != nil ? .green : (entry.isFECComponent ? .secondary : .red))
                     .font(.caption)
 
                 Text(entry.summary)

@@ -22,10 +22,15 @@ final class WeatherCache {
         let hexDump: String
         let decoded: MeshWXMessage?
         let summary: String
+        /// True for FEC component units (parity, quadrants) — these are assembly pieces, not decode failures.
+        let isFECComponent: Bool
     }
 
     /// Rolling log of all raw messages received on the wx-broadcast channel.
     private(set) var messageLog: [LogEntry] = []
+
+    /// Timestamp of the most recently decoded weather data message. Persisted across restarts.
+    private(set) var lastWXDataAt: Date? = UserDefaults.standard.object(forKey: "lastWXDataAt") as? Date
 
     /// Maximum log entries to keep in memory.
     private let maxLogEntries = 200
@@ -50,18 +55,28 @@ final class WeatherCache {
 
     /// Records a raw payload and its decode result in the message log.
     func logMessage(rawPayload: Data, decoded: MeshWXMessage?) {
-        // Partial chunks of a multi-chunk radar message return nil while buffering — not a failure.
-        // Skip these; only the final assembled frame (non-nil) will appear in the log.
+        // Non-FEC multi-chunk radar: silent until final chunk arrives.
         if decoded == nil, MeshWXDecoder.radarChunkInfo(rawPayload) != nil { return }
+        // V4-wrapped multi-chunk radar: also silent until assembled.
+        if decoded == nil, MeshWXDecoder.isV4WrappedRadarChunk(rawPayload) { return }
+        // Truncated / malformed: nothing useful to show.
+        if decoded == nil, MeshWXDecoder.cobsDecode(rawPayload) == nil { return }
 
         let hex = rawPayload.prefix(64).map { String(format: "%02x", $0) }.joined(separator: " ")
         let summary: String
         switch decoded {
         case .warningPolygon(let w):
             let officeTag = w.office.isEmpty ? "" : " [\(w.office)]"
-            summary = "\(w.actionName) \(w.displayTitle)\(officeTag) — \(w.vertices.count) vertices, exp \(w.expiryMinutes)m"
+            if !w.zones.isEmpty {
+                // Show raw stateIdx values to diagnose zone mapping issues
+                let zoneSample = w.zones.prefix(4).map { "s\($0.stateIdx)z\($0.zoneNum)" }.joined(separator: ",")
+                let more = w.zones.count > 4 ? "+\(w.zones.count - 4)" : ""
+                summary = "\(w.actionName) \(w.displayTitle)\(officeTag) — \(w.zones.count) zones [\(zoneSample)\(more)] exp \(w.expiryMinutes)m"
+            } else {
+                summary = "\(w.actionName) \(w.displayTitle)\(officeTag) — \(w.vertices.count) vertices, exp \(w.expiryMinutes)m"
+            }
         case .radarGrid(let r):
-            summary = "Radar region \(r.regionID) seq \(r.frameSeq)"
+            summary = "Radar \(r.gridSize)×\(r.gridSize) region \(r.regionID) seq \(r.frameSeq)"
         case .forecast(let f):
             summary = "Forecast \(f.periods.count) periods"
         case .observation(let o):
@@ -88,24 +103,38 @@ final class WeatherCache {
         case .notAvailable(let na):
             let key = na.pendingKey ?? "unknown"
             summary = "NOT_AVAILABLE '\(key)': \(na.reasonDescription)"
+        case .beacon(let b):
+            summary = "Beacon: \(b.displayName) on #\(b.channelName) (\(b.capabilitySummary))"
+        case .textChunk(let tc):
+            summary = "Warning description: \(tc.text.count) chars"
         case nil:
-            // COBS-decode to get the actual message type byte (rawPayload is still COBS-encoded)
-            let decodedPayload = MeshWXDecoder.cobsDecode(rawPayload) ?? rawPayload
-            let first = decodedPayload.first.map { String(format: "0x%02x", $0) } ?? "empty"
-            summary = "Decode failed (type: \(first), \(rawPayload.count)B)"
+            if let fecLabel = MeshWXDecoder.fecUnitSummary(rawPayload) {
+                summary = fecLabel
+            } else {
+                let decodedPayload = MeshWXDecoder.cobsDecode(rawPayload) ?? rawPayload
+                let first = decodedPayload.first.map { String(format: "0x%02x", $0) } ?? "empty"
+                summary = "Decode failed (type: \(first), \(rawPayload.count)B)"
+            }
         }
 
+        let isFECComponent = decoded == nil && MeshWXDecoder.fecUnitSummary(rawPayload) != nil
         let entry = LogEntry(
             timestamp: Date(),
             rawSize: rawPayload.count,
             hexDump: hex,
             decoded: decoded,
-            summary: summary
+            summary: summary,
+            isFECComponent: isFECComponent
         )
 
         messageLog.append(entry)
         if messageLog.count > maxLogEntries {
             messageLog.removeFirst(messageLog.count - maxLogEntries)
+        }
+
+        if decoded != nil {
+            lastWXDataAt = Date()
+            UserDefaults.standard.set(lastWXDataAt, forKey: "lastWXDataAt")
         }
     }
 
@@ -177,6 +206,47 @@ final class WeatherCache {
     /// Latest QPF (quantitative precipitation forecast) frame per region.
     private(set) var qpfFrames: [UInt8: MeshWXRadarFrame] = [:]
 
+    // MARK: - Warning Descriptions
+
+    /// Full text descriptions for zone warnings. Keyed by descriptionKey ("stateIdx:zoneNum").
+    /// Populated when the user requests a description and the bot replies with 0x40.
+    private(set) var warningDescriptions: [String: String] = [:]
+
+    /// Zone key we're currently awaiting a description response for, e.g. "12:107".
+    /// Set when a request is sent; cleared when the response arrives or is overwritten.
+    private(set) var pendingDescriptionKey: String?
+
+    /// Mark a description request as in-flight for the given zone key.
+    func requestDescriptionPending(zoneKey: String) {
+        pendingDescriptionKey = zoneKey
+        addPending("desc:\(zoneKey)")
+    }
+
+    /// Ingest an incoming text chunk — stores the description under the most recently pending zone key.
+    func ingestTextChunk(_ chunk: MeshWXTextChunk) {
+        if let key = pendingDescriptionKey {
+            warningDescriptions[key] = chunk.text
+            clearPending("desc:\(key)")
+            pendingDescriptionKey = nil
+        }
+        logger.info("Text chunk ingested: \(chunk.text.count) chars")
+    }
+
+    // MARK: - Discovery Beacons
+
+    /// Bots discovered via #meshwx-discover, keyed by their data channel name.
+    /// Populated during an active scan; cleared when a new scan starts.
+    private(set) var discoveredBots: [String: MeshWXBeacon] = [:]
+
+    func ingestBeacon(_ beacon: MeshWXBeacon) {
+        discoveredBots[beacon.channelName] = beacon
+        logger.info("Beacon ingested: \(beacon.displayName) on #\(beacon.channelName)")
+    }
+
+    func clearDiscoveredBots() {
+        discoveredBots.removeAll()
+    }
+
     // MARK: - Pending Requests
 
     /// Keys of in-flight product requests (present = awaiting bot response).
@@ -227,6 +297,7 @@ final class WeatherCache {
         switch reason {
         case 0x1: suffix = " — unknown location"
         case 0x3: suffix = " — bot error"
+        case 0x4: suffix = " — request timed out"
         default:  suffix = ""
         }
         notAvailableNotice = "\(product) not available\(suffix)"
@@ -348,8 +419,15 @@ final class WeatherCache {
     func ingestRadarFrame(_ frame: MeshWXRadarFrame) {
         var frames = radarFrames[frame.regionID] ?? []
 
-        // Deduplicate by timestamp
-        if frames.contains(where: { $0.timestamp == frame.timestamp }) {
+        // Deduplicate by timestamp — but allow a higher-resolution frame to replace a lower one.
+        // The 64×64 FEC composite and the 32×32 base layer share the same timestamp; the composite
+        // must win so the weather view shows the full-resolution image.
+        if let idx = frames.firstIndex(where: { $0.timestamp == frame.timestamp }) {
+            if frame.gridSize > frames[idx].gridSize {
+                frames[idx] = frame
+                radarFrames[frame.regionID] = frames
+                logger.debug("Radar frame upgraded: region \(frame.regionID) \(frames[idx].gridSize)×\(frames[idx].gridSize) → \(frame.gridSize)×\(frame.gridSize)")
+            }
             return
         }
 
@@ -434,6 +512,9 @@ final class WeatherCache {
         fireWeathers.removeAll()
         dailyClimate = nil
         qpfFrames.removeAll()
+        discoveredBots.removeAll()
+        warningDescriptions.removeAll()
+        pendingDescriptionKey = nil
         pendingKeys.removeAll()
         requestedKeys.removeAll()
         unavailableKeys.removeAll()
@@ -561,6 +642,7 @@ final class WeatherCache {
             office: "OUN",          // Norman, OK WFO
             urgency: 1, certainty: 1,
             expiryUnixMinutes: now + 60,
+            onsetUnixMinutes: 0,
             vertices: [
                 CLLocationCoordinate2D(latitude: 35.50, longitude: -97.60),
                 CLLocationCoordinate2D(latitude: 35.55, longitude: -97.45),
@@ -568,6 +650,7 @@ final class WeatherCache {
                 CLLocationCoordinate2D(latitude: 35.35, longitude: -97.55),
                 CLLocationCoordinate2D(latitude: 35.50, longitude: -97.60),
             ],
+            zones: [],
             headline: "TORNADO WARNING: OKC Metro"
         )
         ingestWarning(tornadoWarning)
@@ -583,6 +666,7 @@ final class WeatherCache {
             office: "OUN",
             urgency: 2, certainty: 2,
             expiryUnixMinutes: now + 240,
+            onsetUnixMinutes: 0,
             vertices: [
                 CLLocationCoordinate2D(latitude: 36.00, longitude: -98.00),
                 CLLocationCoordinate2D(latitude: 36.00, longitude: -96.50),
@@ -590,6 +674,7 @@ final class WeatherCache {
                 CLLocationCoordinate2D(latitude: 34.50, longitude: -98.00),
                 CLLocationCoordinate2D(latitude: 36.00, longitude: -98.00),
             ],
+            zones: [],
             headline: "SVR TSTORM WATCH: Central OK"
         )
         ingestWarning(tstormWatch)
@@ -605,6 +690,7 @@ final class WeatherCache {
             office: "OUN",
             urgency: 1, certainty: 1,
             expiryUnixMinutes: now + 120,
+            onsetUnixMinutes: 0,
             vertices: [
                 CLLocationCoordinate2D(latitude: 35.20, longitude: -97.50),
                 CLLocationCoordinate2D(latitude: 35.25, longitude: -97.35),
@@ -612,6 +698,7 @@ final class WeatherCache {
                 CLLocationCoordinate2D(latitude: 35.10, longitude: -97.45),
                 CLLocationCoordinate2D(latitude: 35.20, longitude: -97.50),
             ],
+            zones: [],
             headline: "FLASH FLOOD WARNING: Norman OK"
         )
         ingestWarning(floodWarning)

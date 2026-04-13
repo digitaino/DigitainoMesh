@@ -41,9 +41,19 @@ struct MapView: View {
                     appState.locationService.requestPermissionIfNeeded()
                     appState.locationService.requestLocation()
                     viewModel.configure(appState: appState)
+                    ZoneGeometryStore.shared.loadIfNeeded()
                     await viewModel.loadContactsWithLocation()
-                    // Only auto-center if no programmatic navigation (e.g. warning tap) has
-                    // already set the camera region while contacts were loading.
+                    // Consume any pending warning navigation that was set before MapView appeared
+                    // (onChange only fires on changes, not on the value that was already set when
+                    // the view first loads — e.g. when the user has never visited the Map tab before).
+                    if let warning = appState.navigation.pendingMapWarning {
+                        appState.navigation.pendingMapWarning = nil
+                        viewModel.showWeatherOverlay = true
+                        viewModel.centerOnWarning(warning)
+                        viewModel.selectedWeatherWarning = warning
+                        return
+                    }
+                    // Only auto-center if no programmatic navigation has already set the camera region.
                     if viewModel.cameraRegion == nil {
                         viewModel.centerOnAllContacts()
                     }
@@ -142,7 +152,8 @@ struct MapView: View {
 
     @ViewBuilder
     private var mapContent: some View {
-        if viewModel.filteredContacts.isEmpty && !viewModel.isLoading && !viewModel.showCommunityOverlay {
+        if viewModel.filteredContacts.isEmpty && !viewModel.isLoading
+            && !viewModel.showCommunityOverlay && !viewModel.showWeatherOverlay {
             emptyState
         } else {
             // Keep MKMapView always in tree to prevent Metal deallocation crashes

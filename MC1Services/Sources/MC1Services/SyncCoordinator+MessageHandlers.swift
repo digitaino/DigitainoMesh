@@ -1119,11 +1119,18 @@ extension SyncCoordinator {
     }
 
     /// Returns true if the channel name is a MeshWX binary data channel.
-    /// Matches `meshwx` (the protocol-defined channel name) and `*wx-broadcast` channels
-    /// (including `#wx-broadcast` in hashtag form).
+    /// Matches `meshwx`, `*wx-broadcast`, `*meshwx-discover`, and `*-meshwx-v4` channels.
     public nonisolated static func isWeatherDataChannel(_ name: String) -> Bool {
         let lower = name.lowercased()
-        return lower == "meshwx" || lower.hasSuffix("wx-broadcast")
+        return lower == "meshwx"
+            || lower.hasSuffix("wx-broadcast")
+            || lower.hasSuffix("meshwx-discover")
+            || lower.hasSuffix("-meshwx-v4")
+    }
+
+    /// Returns true if the channel name is the MeshWX discovery channel.
+    public nonisolated static func isDiscoveryChannel(_ name: String) -> Bool {
+        name.lowercased().hasSuffix("meshwx-discover")
     }
 
     /// Returns true if the channel name is a MeshWX system channel that should be hidden
@@ -1134,6 +1141,8 @@ extension SyncCoordinator {
     public nonisolated static func isWeatherSystemChannel(_ name: String, commandChannelName: String) -> Bool {
         guard !name.isEmpty else { return false }
         let lower = name.lowercased()
+        // Discovery channel stays visible in the chat list so the user can confirm it was added
+        if isDiscoveryChannel(name) { return false }
         return isWeatherDataChannel(name)
             || lower == commandChannelName.lowercased()
             || lower.hasSuffix("-wx-bot")

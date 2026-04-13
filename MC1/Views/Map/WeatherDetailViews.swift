@@ -3,49 +3,29 @@ import MapKit
 
 // MARK: - Weather Warning Detail Sheet
 
-/// Detail sheet shown when tapping a weather warning polygon on the map.
+/// Detail sheet shown when tapping a weather warning from the Weather tab or map.
 struct WeatherWarningDetailSheet: View {
     let warning: MeshWXWarning
-    /// Called when the user taps "Show on Map". Dismisses the sheet and centers the map.
+    /// Called when the user taps "Open Full Map". Dismisses the sheet and centers the map.
     var onShowOnMap: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appState) private var appState
+
+    @State private var isRequestingDescription = false
+    @State private var descriptionError: String?
+    /// Polygon coordinate groups for the mini-map preview (one array per polygon shape).
+    @State private var polygonCoordGroups: [[CLLocationCoordinate2D]] = []
+    /// Bounding rect of all warning polygons, used to frame the mini-map.
+    @State private var polygonMapRect: MKMapRect = .world
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack {
-                        Circle()
-                            .fill(warningColor)
-                            .frame(width: 12, height: 12)
-                        Text(warning.displayTitle)
-                            .font(.headline)
-                    }
-
-                    if !warning.headline.isEmpty {
-                        Text(warning.headline)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Details") {
-                    LabeledContent("Type", value: warning.typeName)
-                    LabeledContent("Severity", value: warning.severityName)
-                    LabeledContent("Expires", value: expiryText)
-                }
-
-                if onShowOnMap != nil {
-                    Section {
-                        Button {
-                            dismiss()
-                            onShowOnMap?()
-                        } label: {
-                            Label("Show on Map", systemImage: "map")
-                        }
-                    }
-                }
+                headerSection
+                detailsSection
+                mapPreviewSection
+                descriptionSection
             }
             .navigationTitle(warning.typeName)
             .navigationBarTitleDisplayMode(.inline)
@@ -55,6 +35,251 @@ struct WeatherWarningDetailSheet: View {
                 }
             }
         }
+        .task { await loadPolygons() }
+    }
+
+    // MARK: - Sections
+
+    private var headerSection: some View {
+        Section {
+            HStack {
+                Circle()
+                    .fill(warningColor)
+                    .frame(width: 12, height: 12)
+                Text(warning.displayTitle)
+                    .font(.headline)
+            }
+
+            if let onset = warning.onsetDate, onset > Date() {
+                Label(onsetLabel(onset), systemImage: "clock")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+            }
+
+            if !warning.headline.isEmpty {
+                Text(warning.headline)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var detailsSection: some View {
+        Section("Details") {
+            LabeledContent("Type", value: warning.typeName)
+            LabeledContent("Severity", value: warning.severityName)
+            if let onset = warning.onsetDate, onset > Date() {
+                LabeledContent("Active from", value: formattedDate(onset))
+            }
+            LabeledContent("Expires", value: expiryText)
+            if !warning.zones.isEmpty {
+                LabeledContent("Zones", value: zoneSummary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mapPreviewSection: some View {
+        if !polygonCoordGroups.isEmpty {
+            Section {
+                // Mini-map showing warning area + radar overlay
+                WarningDetailMapView(
+                    polygonCoordGroups: polygonCoordGroups,
+                    mapRect: polygonMapRect,
+                    warningColor: UIColor(warningColor),
+                    fillOpacity: warning.isUpcoming ? 0.10 : 0.25,
+                    radarFrame: bestRadarFrame
+                )
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+
+                if let showOnMap = onShowOnMap {
+                    Button {
+                        dismiss()
+                        showOnMap()
+                    } label: {
+                        Label("Open Full Map", systemImage: "map")
+                    }
+                }
+            } header: {
+                Text("Affected Area")
+            }
+        } else if onShowOnMap != nil {
+            // Polygon data not yet loaded — show button only
+            Section {
+                Button {
+                    dismiss()
+                    onShowOnMap?()
+                } label: {
+                    Label("Open Full Map", systemImage: "map")
+                }
+            }
+        }
+    }
+
+    /// Finds the latest radar frame from the region that best covers the warning area.
+    private var bestRadarFrame: MeshWXRadarFrame? {
+        let center = polygonCoordGroups.flatMap { $0 }
+            .reduce(CLLocationCoordinate2D(latitude: 0, longitude: 0)) { acc, coord in
+                CLLocationCoordinate2D(latitude: acc.latitude + coord.latitude, longitude: acc.longitude + coord.longitude)
+            }
+        let count = Double(polygonCoordGroups.flatMap { $0 }.count)
+        guard count > 0 else { return nil }
+        let avgLat = center.latitude / count
+        let avgLon = center.longitude / count
+
+        // Find the region whose bounding box contains the warning center
+        var bestRegionID: UInt8?
+        for (id, region) in MeshWXRegion.all {
+            if avgLat >= region.south && avgLat <= region.north &&
+               avgLon >= region.west && avgLon <= region.east {
+                bestRegionID = id
+                break
+            }
+        }
+        guard let regionID = bestRegionID else { return nil }
+        return appState.weatherCache.radarFrames[regionID]?.last
+    }
+
+    @ViewBuilder
+    private var descriptionSection: some View {
+        let descKey = warning.descriptionKey
+        if let key = descKey {
+            let isPending = appState.weatherCache.isPending("desc:\(key)")
+            let description = appState.weatherCache.warningDescriptions[key]
+
+            if let description {
+                Section("Description") {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                }
+            } else if isPending {
+                Section("Description") {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Requesting…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Section {
+                    if let error = descriptionError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    Button {
+                        Task { await requestDescription() }
+                    } label: {
+                        Label("Request Description", systemImage: "text.document")
+                    }
+                    .disabled(isRequestingDescription || appState.connectionState != .ready)
+                }
+            }
+        }
+    }
+
+    // MARK: - Polygon Loading
+
+    private func loadPolygons() async {
+        var groups: [[CLLocationCoordinate2D]] = []
+
+        if !warning.zones.isEmpty {
+            // Zone warning: look up each zone polygon from the store
+            let store = ZoneGeometryStore.shared
+            if !store.isLoaded {
+                // Store not ready — trigger load and wait briefly
+                store.loadIfNeeded()
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            for zone in warning.zones {
+                if let code = ZoneGeometryStore.zoneCode(stateIdx: zone.stateIdx, zoneNum: zone.zoneNum) {
+                    for poly in store.polygons(for: code) {
+                        let coords = (0..<poly.pointCount).map { poly.points()[$0].coordinate }
+                        if !coords.isEmpty { groups.append(coords) }
+                    }
+                }
+            }
+        } else if warning.vertices.count >= 3 {
+            groups = [warning.vertices]
+        }
+
+        guard !groups.isEmpty else { return }
+        polygonCoordGroups = groups
+        polygonMapRect = boundingMapRect(for: groups)
+    }
+
+    /// Computes a padded MKMapRect that encompasses all polygon coordinate groups.
+    private func boundingMapRect(for coordGroups: [[CLLocationCoordinate2D]]) -> MKMapRect {
+        var rect = MKMapRect.null
+        for coords in coordGroups {
+            for coord in coords {
+                let point = MKMapPoint(coord)
+                rect = rect.union(MKMapRect(x: point.x, y: point.y, width: 0, height: 0))
+            }
+        }
+        // Pad 20% on each side
+        let padX = rect.size.width  * 0.2
+        let padY = rect.size.height * 0.2
+        return rect.insetBy(dx: -padX, dy: -padY)
+    }
+
+    // MARK: - Helpers
+
+    private var zoneSummary: String {
+        guard !warning.zones.isEmpty else { return "" }
+        var byState: [String: Int] = [:]
+        let codes = ZoneGeometryStore.shared.stateCodes
+        for zone in warning.zones {
+            let state = codes.indices.contains(Int(zone.stateIdx))
+                ? codes[Int(zone.stateIdx)]
+                : "??"
+            byState[state, default: 0] += 1
+        }
+        return byState.sorted { $0.key < $1.key }
+            .map { "\($0.key) ×\($0.value)" }
+            .joined(separator: ", ")
+    }
+
+    private func requestDescription() async {
+        isRequestingDescription = true
+        descriptionError = nil
+        let result = await appState.sendWarningDescriptionRequest(for: warning)
+        isRequestingDescription = false
+        switch result {
+        case .sent: break
+        case .notConnected:  descriptionError = "Not connected"
+        case .botNotFound:   descriptionError = "Set bot contact name in Tools → Weather Log"
+        case .noDataChannel: descriptionError = "No weather data channel"
+        default:             descriptionError = "Request failed"
+        }
+    }
+
+    private func onsetLabel(_ onset: Date) -> String {
+        let cal = Calendar.current
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        let timeStr = formatter.string(from: onset)
+        if cal.isDateInToday(onset) {
+            return "Starts today at \(timeStr)"
+        } else if cal.isDateInTomorrow(onset) {
+            return "Starts tomorrow at \(timeStr)"
+        } else {
+            formatter.dateStyle = .short
+            return "Starts \(formatter.string(from: onset))"
+        }
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     private var expiryText: String {
@@ -221,10 +446,12 @@ struct WeatherDataInspector: View {
 
     // MARK: - Helpers
 
-    private func timestampText(_ minutes: UInt16) -> String {
-        let hours = minutes / 60
-        let mins = minutes % 60
-        return String(format: "%02d:%02d UTC", hours, mins)
+    private func timestampText(_ unixMinutes: UInt32) -> String {
+        let date = Date(timeIntervalSince1970: Double(unixMinutes) * 60)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm 'UTC'"
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        return fmt.string(from: date)
     }
 
     private func expiryText(_ warning: MeshWXWarning) -> String {
@@ -314,10 +541,12 @@ struct RadarRegionDetail: View {
         return frames[selectedFrameIndex]
     }
 
-    private func timestampText(_ minutes: UInt16) -> String {
-        let hours = minutes / 60
-        let mins = minutes % 60
-        return String(format: "%02d:%02d UTC", hours, mins)
+    private func timestampText(_ unixMinutes: UInt32) -> String {
+        let date = Date(timeIntervalSince1970: Double(unixMinutes) * 60)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm 'UTC'"
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        return fmt.string(from: date)
     }
 
     private var reflectivityLegend: some View {
@@ -408,6 +637,80 @@ struct RadarGridView: View {
 // MARK: - Radar Grid Thumbnail
 
 /// Small thumbnail of a radar grid for list rows. Supports variable grid sizes.
+// MARK: - Warning Detail Map View
+
+/// UIViewRepresentable that shows warning polygons with optional radar overlay on an MKMapView.
+struct WarningDetailMapView: UIViewRepresentable {
+    let polygonCoordGroups: [[CLLocationCoordinate2D]]
+    let mapRect: MKMapRect
+    let warningColor: UIColor
+    let fillOpacity: Double
+    let radarFrame: MeshWXRadarFrame?
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.isScrollEnabled = true
+        mapView.isZoomEnabled = true
+        mapView.isRotateEnabled = false
+        mapView.isPitchEnabled = false
+        mapView.showsCompass = false
+        mapView.delegate = context.coordinator
+        mapView.setVisibleMapRect(mapRect, edgePadding: UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16), animated: false)
+
+        // Add radar overlay below warning polygons
+        if let frame = radarFrame, let overlay = WeatherRadarOverlay.make(from: frame) {
+            mapView.addOverlay(overlay, level: .aboveRoads)
+        }
+
+        // Add warning polygons on top
+        for coords in polygonCoordGroups {
+            var mutableCoords = coords
+            let polygon = MKPolygon(coordinates: &mutableCoords, count: mutableCoords.count)
+            mapView.addOverlay(polygon, level: .aboveLabels)
+        }
+
+        return mapView
+    }
+
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        context.coordinator.parent = self
+
+        // Update radar overlay if frame changed
+        mapView.overlays
+            .compactMap { $0 as? WeatherRadarOverlay }
+            .forEach { mapView.removeOverlay($0) }
+        if let frame = radarFrame, let overlay = WeatherRadarOverlay.make(from: frame) {
+            mapView.insertOverlay(overlay, at: 0, level: .aboveRoads)
+        }
+    }
+
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: WarningDetailMapView
+
+        init(parent: WarningDetailMapView) {
+            self.parent = parent
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let radarOverlay = overlay as? WeatherRadarOverlay {
+                return WeatherRadarRenderer(overlay: radarOverlay)
+            }
+            if let polygon = overlay as? MKPolygon {
+                let renderer = MKPolygonRenderer(polygon: polygon)
+                renderer.fillColor = parent.warningColor.withAlphaComponent(parent.fillOpacity)
+                renderer.strokeColor = parent.warningColor
+                renderer.lineWidth = 2
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+    }
+}
+
+// MARK: - Radar Grid Thumbnail
+
 struct RadarGridThumbnail: View {
     let frame: MeshWXRadarFrame?
 

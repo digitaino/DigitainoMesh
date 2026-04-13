@@ -49,6 +49,8 @@ private struct WeatherBody: View {
     @State private var selectedFavoriteICAO: String?
     @State private var selectedBroadcastICAO: String?
     @State private var selectedRadarRegion: UInt8?
+    @State private var favCardHeight: CGFloat = 200
+    @State private var broadcastCardHeight: CGFloat = 200
 
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
 
@@ -333,6 +335,15 @@ private struct WeatherBody: View {
         for key in appState.weatherCache.pendingKeys {
             if key.hasPrefix("metar:") { icaos.insert(String(key.dropFirst(6))) }
             else if key.hasPrefix("taf:") { icaos.insert(String(key.dropFirst(4))) }
+            else if key.hasPrefix("forecast:"), let pfmIdx = Int(key.dropFirst(9)),
+                    let icao = fcastToICAO[pfmIdx] { icaos.insert(icao) }
+        }
+        // Unavailable keys also keep stations visible (e.g. after timeout)
+        for key in appState.weatherCache.unavailableKeys.keys {
+            if key.hasPrefix("metar:") { icaos.insert(String(key.dropFirst(6))) }
+            else if key.hasPrefix("taf:") { icaos.insert(String(key.dropFirst(4))) }
+            else if key.hasPrefix("forecast:"), let pfmIdx = Int(key.dropFirst(9)),
+                    let icao = fcastToICAO[pfmIdx] { icaos.insert(icao) }
         }
         // Always include favorites so their cards are present for on-demand requests
         icaos.formUnion(favoriteICAOs)
@@ -604,21 +615,31 @@ private struct WeatherBody: View {
         selection: Binding<String?>,
         isExpanded: Binding<Bool>
     ) -> some View {
+        let isFavSection = (title == "Favorites")
+        let cardHeight = isFavSection ? favCardHeight : broadcastCardHeight
         Section {
             if isExpanded.wrappedValue {
                 TabView(selection: selection) {
                     ForEach(groups) { group in
                         StationPageCard(group: group, isFavorite: favoriteICAOs.contains(group.icao))
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 32)
+                            .padding(.bottom, 36)
                             .tag(Optional(group.icao))
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: groups.count > 1 ? .always : .never))
                 .indexViewStyle(.page(backgroundDisplayMode: .automatic))
-                .frame(minHeight: 340)
-                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                .listRowBackground(Color.clear)
+                .frame(height: cardHeight + 44) // card + page dots + padding
+                .onPreferenceChange(CardHeightKey.self) { newHeight in
+                    if newHeight > 0 {
+                        if isFavSection {
+                            favCardHeight = newHeight
+                        } else {
+                            broadcastCardHeight = newHeight
+                        }
+                    }
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                .listRowSeparator(.hidden)
                 .onAppear {
                     if selection.wrappedValue == nil {
                         selection.wrappedValue = groups.first?.icao
@@ -663,20 +684,19 @@ private struct WeatherBody: View {
                         NavigationLink {
                             RadarLoopView(regionID: regionID, frames: frames)
                         } label: {
-                            RadarMiniCard(regionID: regionID, frames: frames)
+                            RadarMiniCard(regionID: regionID)
                         }
                         .buttonStyle(.plain)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 32)
+                        .padding(.bottom, 36)
                         .tag(Optional(regionID))
                     }
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: regions.count > 1 ? .always : .never))
             .indexViewStyle(.page(backgroundDisplayMode: .automatic))
-            .frame(height: 300)
-            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-            .listRowBackground(Color.clear)
+            .frame(height: 310)
+            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+            .listRowSeparator(.hidden)
             .onAppear {
                 if selectedRadarRegion == nil {
                     selectedRadarRegion = regions.first
@@ -730,31 +750,12 @@ private struct WeatherBody: View {
 
     @ViewBuilder
     private func stationSection(_ group: StationGroup) -> some View {
-        let stationName = WXBundleLoader.allStations.first(where: { $0.id == group.icao })?.name
-        Section {
-            StationCard(group: group)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) { clearStation(group) }
-                        label: { Label("Clear", systemImage: "trash") }
-                }
-        } header: {
-            HStack(spacing: 4) {
-                if favoriteICAOs.contains(group.icao) {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.yellow)
-                }
-                Text(group.icao)
-                    .font(.caption.weight(.semibold))
-                if let name = stationName {
-                    Text("— \(name)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+        StationCard(group: group, isFavorite: favoriteICAOs.contains(group.icao))
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button(role: .destructive) { clearStation(group) }
+                    label: { Label("Clear", systemImage: "trash") }
             }
-        }
-        .id(group.icao)
+            .id(group.icao)
     }
 
     private func clearStation(_ group: StationGroup) {
@@ -785,14 +786,14 @@ private struct WeatherBody: View {
                     .contextMenu {
                         if let pfmIdx = item.forecast.pfmPointIndex {
                             Section("Request More Data") {
-                                Button { Task { _ = await appState.sendOutlookRequest(pfmPointIndex: pfmIdx) } }
-                                    label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
-                                Button { Task { _ = await appState.sendStormReportsRequest(pfmPointIndex: pfmIdx) } }
-                                    label: { Label("Storm Reports", systemImage: "tornado") }
-                                Button { Task { _ = await appState.sendRainObsRequest(pfmPointIndex: pfmIdx) } }
-                                    label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
-                                Button { Task { _ = await appState.sendWarningsNearRequest(pfmPointIndex: pfmIdx) } }
-                                    label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+                                Button { } label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
+                                    .disabled(true)
+                                Button { } label: { Label("Storm Reports", systemImage: "tornado") }
+                                    .disabled(true)
+                                Button { } label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
+                                    .disabled(true)
+                                Button { } label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+                                    .disabled(true)
                             }
                             Divider()
                         }
@@ -1273,22 +1274,69 @@ private struct WarningRow: View {
 // MARK: - Radar Mini Card (for pager)
 
 private struct RadarMiniCard: View {
+    @Environment(\.appState) private var appState
     let regionID: UInt8
-    let frames: [MeshWXRadarFrame]
 
+    @State private var currentIndex: Int = 0
+    @State private var isPlaying = true
+    @State private var loopTask: Task<Void, Never>?
+
+    private var frames: [MeshWXRadarFrame] {
+        appState.weatherCache.radarFrames[regionID] ?? []
+    }
     private var region: MeshWXRegion? { MeshWXRegion.all[regionID] }
-    private var latestFrame: MeshWXRadarFrame? { frames.last }
+    private var currentFrame: MeshWXRadarFrame? {
+        guard !frames.isEmpty else { return nil }
+        return frames[min(currentIndex, frames.count - 1)]
+    }
+
+    private var isHiRes: Bool {
+        currentFrame.map { $0.gridSize >= 64 } ?? false
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Live map with radar overlay — non-interactive preview
-            if let region {
-                RadarMapView(region: region, frame: latestFrame, isInteractive: false)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 180)
-                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
-                    .allowsHitTesting(false)
+            // Live map with radar overlay — auto-looping preview
+            ZStack(alignment: .topTrailing) {
+                if let region {
+                    RadarMapView(region: region, frame: currentFrame, isInteractive: false)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 180)
+                        .allowsHitTesting(false)
+                }
+
+                // Resolution badge + play/pause
+                HStack(spacing: 6) {
+                    // Hi-res / standard badge
+                    Text(isHiRes ? "HD" : "SD")
+                        .font(.caption2.weight(.bold).monospacedDigit())
+                        .foregroundStyle(isHiRes ? .cyan : .secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.ultraThinMaterial, in: Capsule())
+
+                    // Play/pause toggle
+                    if frames.count > 1 {
+                        Button {
+                            isPlaying.toggle()
+                            if isPlaying {
+                                startLoop()
+                            } else {
+                                loopTask?.cancel()
+                            }
+                        } label: {
+                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.primary)
+                                .frame(width: 24, height: 24)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(8)
             }
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
 
             // Footer bar
             HStack(spacing: 8) {
@@ -1296,23 +1344,55 @@ private struct RadarMiniCard: View {
                     .font(.subheadline.weight(.semibold))
                 Text("·")
                     .foregroundStyle(.tertiary)
-                Text("\(frames.count) frame\(frames.count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if frames.count > 1 {
+                    HStack(spacing: 3) {
+                        ForEach(0..<frames.count, id: \.self) { idx in
+                            Circle()
+                                .fill(idx == currentIndex ? Color.cyan : Color.secondary.opacity(0.3))
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                } else {
+                    Text("1 frame")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
-                Text("View Loop")
+                Text("Full Screen")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(.regularMaterial, in: UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.secondarySystemGroupedBackground), in: UnevenRoundedRectangle(bottomLeadingRadius: 20, bottomTrailingRadius: 20))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .onAppear { if isPlaying { startLoop() } }
+        .onDisappear { loopTask?.cancel() }
+    }
+
+    private func startLoop() {
+        loopTask?.cancel()
+        loopTask = Task {
+            try? await Task.sleep(for: .seconds(1))
+            while !Task.isCancelled {
+                let count = frames.count
+                guard count > 1 else {
+                    // Wait for more frames to arrive
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+                for idx in 0..<count {
+                    guard !Task.isCancelled else { return }
+                    currentIndex = idx
+                    let delay: Duration = idx == count - 1 ? .milliseconds(1500) : .milliseconds(800)
+                    try? await Task.sleep(for: delay)
+                }
+            }
+        }
     }
 }
 
@@ -1506,7 +1586,6 @@ private struct StationPageCard: View {
     let group: StationGroup
     let isFavorite: Bool
 
-    @State private var wxLongPressTip = WXLongPressTip()
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
 
     private var favoriteICAOs: Set<String> {
@@ -1539,15 +1618,15 @@ private struct StationPageCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // --- Card Header: Station identity ---
+            // --- Card Header ---
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if isFavorite {
                     Image(systemName: "star.fill")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.yellow)
                 }
                 Text(group.icao)
-                    .font(.headline.weight(.bold))
+                    .font(.title3.weight(.bold))
                 if let name = stationName {
                     Text(name)
                         .font(.subheadline)
@@ -1555,25 +1634,39 @@ private struct StationPageCard: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                Menu {
+                    stationContextMenu
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, 10)
 
             if !hasAnyContent {
-                Spacer()
                 HStack {
                     Spacer()
-                    VStack(spacing: 8) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.title2)
-                            .foregroundStyle(.tertiary)
-                        Text("No data yet\nLong press to request")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                            .multilineTextAlignment(.center)
+                    Menu {
+                        stationContextMenu
+                    } label: {
+                        VStack(spacing: 10) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.largeTitle)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.secondary)
+                            Text("Request Data")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .contentShape(Rectangle())
                     }
                     Spacer()
                 }
-                Spacer()
             } else {
                 // --- Current Conditions ---
                 if group.pendingObs && group.obs == nil {
@@ -1584,13 +1677,13 @@ private struct StationPageCard: View {
                 if let obs = group.obs {
                     ObservationRow(observation: obs, onRefresh: group.pendingObs ? nil : {
                         Task { _ = await appState.sendMetarRequest(icao: group.icao) }
-                    })
+                    }, showHeader: false)
                 }
 
                 // --- Forecast ---
                 let hasForecastContent = group.linkedForecast != nil || group.pendingForecast || group.forecastUnavailable
                 if (group.obs != nil || group.pendingObs || group.obsUnavailable) && hasForecastContent {
-                    Divider().padding(.vertical, 10)
+                    Divider().padding(.vertical, 8)
                 }
                 if group.pendingForecast && group.linkedForecast == nil {
                     PendingRow(label: "Awaiting forecast…")
@@ -1606,7 +1699,7 @@ private struct StationPageCard: View {
                 // --- TAF ---
                 let hasTAFContent = group.taf != nil || group.pendingTAF || group.tafUnavailable
                 if hasTAFContent {
-                    Divider().padding(.vertical, 10)
+                    Divider().padding(.vertical, 8)
                 }
                 if group.pendingTAF && group.taf == nil {
                     PendingRow(label: "Awaiting TAF…")
@@ -1620,10 +1713,15 @@ private struct StationPageCard: View {
                 }
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .contextMenu { stationContextMenu }
-        .popoverTip(wxLongPressTip)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+        .overlay(
+            GeometryReader { geo in
+                Color.clear.preference(key: CardHeightKey.self, value: geo.size.height)
+            }
+        )
     }
 
     @ViewBuilder
@@ -1641,27 +1739,24 @@ private struct StationPageCard: View {
         }
 
         Section("Request Data") {
-            if !hasObs && !group.pendingObs {
-                Button { Task { _ = await appState.sendMetarRequest(icao: icao) } }
-                    label: { Label("Current Conditions", systemImage: "thermometer.medium") }
-            }
-            if !hasTAF && !group.pendingTAF {
-                Button { Task { _ = await appState.sendTAFRequest(icao: icao) } }
-                    label: { Label("TAF (Aviation)", systemImage: "airplane") }
-            }
+            Button { Task { _ = await appState.sendMetarRequest(icao: icao) } }
+                label: { Label(hasObs ? "Refresh Conditions" : "Current Conditions", systemImage: "thermometer.medium") }
+                .disabled(group.pendingObs)
+            Button { Task { _ = await appState.sendTAFRequest(icao: icao) } }
+                label: { Label(hasTAF ? "Refresh TAF" : "TAF (Aviation)", systemImage: "airplane") }
+                .disabled(group.pendingTAF)
             if let pfmIdx {
-                if !hasForecast && !group.pendingForecast {
-                    Button { Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: icao) } }
-                        label: { Label("Forecast", systemImage: "sun.max.fill") }
-                }
-                Button { Task { _ = await appState.sendOutlookRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
-                Button { Task { _ = await appState.sendStormReportsRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Storm Reports", systemImage: "tornado") }
-                Button { Task { _ = await appState.sendRainObsRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
-                Button { Task { _ = await appState.sendWarningsNearRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+                Button { Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: icao) } }
+                    label: { Label(hasForecast ? "Refresh Forecast" : "Forecast", systemImage: "sun.max.fill") }
+                    .disabled(group.pendingForecast)
+                Button { } label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
+                    .disabled(true)
+                Button { } label: { Label("Storm Reports", systemImage: "tornado") }
+                    .disabled(true)
+                Button { } label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
+                    .disabled(true)
+                Button { } label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+                    .disabled(true)
             }
         }
 
@@ -1692,8 +1787,8 @@ private struct StationPageCard: View {
 private struct StationCard: View {
     @Environment(\.appState) private var appState
     let group: StationGroup
+    var isFavorite: Bool = false
 
-    @State private var wxLongPressTip = WXLongPressTip()
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
 
     private var favoriteICAOs: Set<String> {
@@ -1706,6 +1801,10 @@ private struct StationCard: View {
     }
 
     private var showF: Bool { appState.wxAviationUsesF }
+
+    private var stationName: String? {
+        WXBundleLoader.allStations.first(where: { $0.id == group.icao })?.name
+    }
 
     private var pfmIndex: Int? {
         guard let station = WXBundleLoader.allStations.first(where: { $0.id == group.icao }) else { return nil }
@@ -1722,56 +1821,99 @@ private struct StationCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // --- Card Header (matches StationPageCard) ---
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if isFavorite {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                }
+                Text(group.icao)
+                    .font(.title3.weight(.bold))
+                if let name = stationName {
+                    Text(name)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Menu {
+                    stationContextMenu
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+            }
+            .padding(.bottom, 10)
+
             if !hasAnyContent {
-                Label("No data yet — long press to request", systemImage: "arrow.down.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-                    .padding(.vertical, 4)
-            }
-            if group.pendingObs && group.obs == nil {
-                PendingRow(label: "Awaiting current conditions…")
-            } else if group.obsUnavailable && group.obs == nil {
-                UnavailableRow(label: "No conditions available")
-            }
-            if let obs = group.obs {
-                ObservationRow(observation: obs, onRefresh: group.pendingObs ? nil : {
-                    Task { _ = await appState.sendMetarRequest(icao: group.icao) }
-                })
-            }
+                HStack {
+                    Spacer()
+                    Menu {
+                        stationContextMenu
+                    } label: {
+                        VStack(spacing: 10) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.largeTitle)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.secondary)
+                            Text("Request Data")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .contentShape(Rectangle())
+                    }
+                    Spacer()
+                }
+            } else {
+                if group.pendingObs && group.obs == nil {
+                    PendingRow(label: "Awaiting current conditions…")
+                } else if group.obsUnavailable && group.obs == nil {
+                    UnavailableRow(label: "No conditions available")
+                }
+                if let obs = group.obs {
+                    ObservationRow(observation: obs, onRefresh: group.pendingObs ? nil : {
+                        Task { _ = await appState.sendMetarRequest(icao: group.icao) }
+                    }, showHeader: false)
+                }
 
-            let hasForecastContent = group.linkedForecast != nil || group.pendingForecast || group.forecastUnavailable
-            if (group.obs != nil || group.pendingObs || group.obsUnavailable) && hasForecastContent {
-                Divider().padding(.vertical, 8)
-            }
-            if group.pendingForecast && group.linkedForecast == nil {
-                PendingRow(label: "Awaiting forecast…")
-            } else if group.forecastUnavailable && group.linkedForecast == nil {
-                UnavailableRow(label: "No forecast available")
-            }
-            if let (pfmIdx, fc) = group.linkedForecast {
-                InlineForecastRow(forecast: fc, onRefresh: group.pendingForecast ? nil : {
-                    Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: group.icao) }
-                })
-            }
+                let hasForecastContent = group.linkedForecast != nil || group.pendingForecast || group.forecastUnavailable
+                if (group.obs != nil || group.pendingObs || group.obsUnavailable) && hasForecastContent {
+                    Divider().padding(.vertical, 8)
+                }
+                if group.pendingForecast && group.linkedForecast == nil {
+                    PendingRow(label: "Awaiting forecast…")
+                } else if group.forecastUnavailable && group.linkedForecast == nil {
+                    UnavailableRow(label: "No forecast available")
+                }
+                if let (pfmIdx, fc) = group.linkedForecast {
+                    InlineForecastRow(forecast: fc, onRefresh: group.pendingForecast ? nil : {
+                        Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: group.icao) }
+                    })
+                }
 
-            let hasTAFContent = group.taf != nil || group.pendingTAF || group.tafUnavailable
-            if hasTAFContent {
-                Divider().padding(.vertical, 8)
-            }
-            if group.pendingTAF && group.taf == nil {
-                PendingRow(label: "Awaiting TAF…")
-            } else if group.tafUnavailable && group.taf == nil {
-                UnavailableRow(label: "No TAF available")
-            }
-            if let taf = group.taf {
-                TAFRow(taf: taf, onRefresh: group.pendingTAF ? nil : {
-                    Task { _ = await appState.sendTAFRequest(icao: group.icao) }
-                })
+                let hasTAFContent = group.taf != nil || group.pendingTAF || group.tafUnavailable
+                if hasTAFContent {
+                    Divider().padding(.vertical, 8)
+                }
+                if group.pendingTAF && group.taf == nil {
+                    PendingRow(label: "Awaiting TAF…")
+                } else if group.tafUnavailable && group.taf == nil {
+                    UnavailableRow(label: "No TAF available")
+                }
+                if let taf = group.taf {
+                    TAFRow(taf: taf, onRefresh: group.pendingTAF ? nil : {
+                        Task { _ = await appState.sendTAFRequest(icao: group.icao) }
+                    })
+                }
             }
         }
         .padding(.vertical, 4)
-        .contextMenu { stationContextMenu }
-        .popoverTip(wxLongPressTip)
     }
 
     @ViewBuilder
@@ -1789,27 +1931,24 @@ private struct StationCard: View {
         }
 
         Section("Request Data") {
-            if !hasObs && !group.pendingObs {
-                Button { Task { _ = await appState.sendMetarRequest(icao: icao) } }
-                    label: { Label("Current Conditions", systemImage: "thermometer.medium") }
-            }
-            if !hasTAF && !group.pendingTAF {
-                Button { Task { _ = await appState.sendTAFRequest(icao: icao) } }
-                    label: { Label("TAF (Aviation)", systemImage: "airplane") }
-            }
+            Button { Task { _ = await appState.sendMetarRequest(icao: icao) } }
+                label: { Label(hasObs ? "Refresh Conditions" : "Current Conditions", systemImage: "thermometer.medium") }
+                .disabled(group.pendingObs)
+            Button { Task { _ = await appState.sendTAFRequest(icao: icao) } }
+                label: { Label(hasTAF ? "Refresh TAF" : "TAF (Aviation)", systemImage: "airplane") }
+                .disabled(group.pendingTAF)
             if let pfmIdx {
-                if !hasForecast && !group.pendingForecast {
-                    Button { Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: icao) } }
-                        label: { Label("Forecast", systemImage: "sun.max.fill") }
-                }
-                Button { Task { _ = await appState.sendOutlookRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
-                Button { Task { _ = await appState.sendStormReportsRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Storm Reports", systemImage: "tornado") }
-                Button { Task { _ = await appState.sendRainObsRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
-                Button { Task { _ = await appState.sendWarningsNearRequest(pfmPointIndex: pfmIdx) } }
-                    label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+                Button { Task { _ = await appState.sendWeatherDataRequest(pfmPointIndex: pfmIdx, originICAO: icao) } }
+                    label: { Label(hasForecast ? "Refresh Forecast" : "Forecast", systemImage: "sun.max.fill") }
+                    .disabled(group.pendingForecast)
+                Button { } label: { Label("Hazard Outlook", systemImage: "calendar.badge.exclamationmark") }
+                    .disabled(true)
+                Button { } label: { Label("Storm Reports", systemImage: "tornado") }
+                    .disabled(true)
+                Button { } label: { Label("Precipitation Reports", systemImage: "cloud.rain.fill") }
+                    .disabled(true)
+                Button { } label: { Label("Warnings Near Location", systemImage: "location.circle.fill") }
+                    .disabled(true)
             }
         }
 
@@ -1921,6 +2060,7 @@ private struct ObservationRow: View {
     @Environment(\.appState) private var appState
     let observation: MeshWXObservation
     var onRefresh: (() -> Void)? = nil
+    var showHeader: Bool = true
 
     private var showF: Bool { appState.wxAviationUsesF }
 
@@ -1932,8 +2072,10 @@ private struct ObservationRow: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header
             HStack {
-                Text(observation.displayName)
-                    .font(.subheadline.weight(.semibold))
+                if showHeader {
+                    Text(observation.displayName)
+                        .font(.subheadline.weight(.semibold))
+                }
                 Spacer()
                 if canRefresh {
                     Button { onRefresh?() } label: {
@@ -2419,9 +2561,23 @@ private struct RadarRegionPickerView: View {
         }
     }
 
-    private func timestampLabel(_ minutes: UInt16?) -> String {
-        guard let minutes else { return "—" }
-        return String(format: "%02d:%02dZ", minutes / 60, minutes % 60)
+    private func timestampLabel(_ unixMinutes: UInt32?) -> String {
+        guard let unixMinutes else { return "—" }
+        let date = Date(timeIntervalSince1970: Double(unixMinutes) * 60)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm'Z'"
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        return fmt.string(from: date)
+    }
+}
+
+// MARK: - Card Height Preference Key
+
+/// Preference key that propagates the maximum card height up to the TabView container.
+private struct CardHeightKey: PreferenceKey {
+    nonisolated(unsafe) static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

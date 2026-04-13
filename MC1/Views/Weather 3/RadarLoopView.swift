@@ -163,9 +163,11 @@ struct RadarLoopView: View {
 
     private var timestampLabel: String {
         guard let frame = currentFrame else { return "—" }
-        let h = frame.timestamp / 60
-        let m = frame.timestamp % 60
-        return String(format: "%02d:%02dZ", h, m)
+        let date = Date(timeIntervalSince1970: Double(frame.timestamp) * 60)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm'Z'"
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        return fmt.string(from: date)
     }
 
     private func scheduleAdvance() {

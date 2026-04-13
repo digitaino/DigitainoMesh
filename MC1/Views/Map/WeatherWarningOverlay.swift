@@ -18,7 +18,10 @@ final class WeatherWarningOverlay: MKPolygon {
     /// Display title combining type and severity.
     private(set) var displayTitle: String = ""
 
-    /// Creates a warning polygon overlay from a decoded MeshWX warning.
+    /// True if the warning has a future onset (not yet active). Upcoming overlays render greyed/dimmed.
+    private(set) var isUpcoming: Bool = false
+
+    /// Creates a warning polygon overlay from a decoded MeshWX warning (polygon-type warnings).
     static func make(from warning: MeshWXWarning) -> WeatherWarningOverlay? {
         guard warning.vertices.count >= 3 else { return nil }
 
@@ -29,11 +32,28 @@ final class WeatherWarningOverlay: MKPolygon {
         overlay.headline          = warning.headline
         overlay.warningID         = warning.id
         overlay.displayTitle      = warning.displayTitle
+        overlay.isUpcoming        = warning.isUpcoming
+        return overlay
+    }
+
+    /// Creates a warning polygon overlay from a zone geometry polygon + warning metadata (zone-type warnings).
+    static func make(from polygon: MKPolygon, warning: MeshWXWarning) -> WeatherWarningOverlay {
+        var coords = (0..<polygon.pointCount).map { polygon.points()[$0].coordinate }
+        let overlay = WeatherWarningOverlay(coordinates: &coords, count: coords.count)
+        overlay.phenomenaIndex    = warning.phenomenaIndex
+        overlay.vtecSignificance  = warning.vtecSignificance
+        overlay.headline          = warning.headline
+        overlay.warningID         = warning.id
+        overlay.displayTitle      = warning.displayTitle
+        overlay.isUpcoming        = warning.isUpcoming
         return overlay
     }
 
     /// Whether this is a watch (dashed border) vs warning (solid border).
     var isWatch: Bool { vtecSignificance == 0x1 }
+
+    /// Upcoming warnings render with grey fill and dashed border to distinguish from active.
+    var isGreyed: Bool { isUpcoming }
 
     // MARK: - Colors (NWS-aligned, keyed by VTEC significance + phenomena overrides)
 
@@ -69,11 +89,12 @@ final class WeatherWarningOverlay: MKPolygon {
         }
     }
 
-    /// Fill color (same hue as stroke).
-    var fillUIColor: UIColor { strokeUIColor }
+    /// Fill color — grey for upcoming, normal color for active.
+    var fillUIColor: UIColor { isGreyed ? .systemGray : strokeUIColor }
 
-    /// Fill opacity — Warning more opaque than Watch/Advisory.
+    /// Fill opacity — upcoming warnings are more transparent and grey.
     var fillOpacity: CGFloat {
+        if isGreyed { return 0.10 }
         switch vtecSignificance {
         case 0x0: return 0.25  // Warning
         case 0x1: return 0.15  // Watch
@@ -81,6 +102,9 @@ final class WeatherWarningOverlay: MKPolygon {
         default:  return 0.07
         }
     }
+
+    /// Stroke color — grey for upcoming, normal for active.
+    var effectiveStrokeColor: UIColor { isGreyed ? .systemGray : strokeUIColor }
 
     /// Stroke width — Warning gets heavier border.
     var strokeWidth: CGFloat { vtecSignificance == 0x0 ? 2.5 : 1.5 }

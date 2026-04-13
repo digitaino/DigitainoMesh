@@ -228,6 +228,9 @@ final class MapViewModel {
     private var lastCommunityRegion: MKCoordinateRegion?
     private static let logger = Logger(subsystem: "com.mc1", category: "MapViewModel")
 
+    @ObservationIgnored
+    private var locationService: LocationService?
+
     // MARK: - Initialization
 
     init() {}
@@ -237,6 +240,7 @@ final class MapViewModel {
         self.dataStore = appState.offlineDataStore
         self.deviceID = appState.currentDeviceID
         self.weatherCache = appState.weatherCache
+        self.locationService = appState.locationService
     }
 
     /// Configure with services (for testing)
@@ -282,8 +286,18 @@ final class MapViewModel {
     }
 
     /// Center map on a weather warning polygon's bounding box.
+    /// For zone warnings (no vertices), falls back to the user's current location.
     func centerOnWarning(_ warning: MeshWXWarning) {
-        guard !warning.vertices.isEmpty else { return }
+        if warning.vertices.isEmpty {
+            // Zone warning — no polygon. Fall back to user location with a regional view.
+            if let loc = locationService?.currentLocation {
+                cameraRegion = MKCoordinateRegion(
+                    center: loc.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 2.0, longitudeDelta: 2.0)
+                )
+            }
+            return
+        }
         var minLat =  Double.greatestFiniteMagnitude
         var maxLat = -Double.greatestFiniteMagnitude
         var minLon =  Double.greatestFiniteMagnitude

@@ -121,8 +121,14 @@ final class ChatViewModel {
     }
 
     /// Sorts conversations by last message date, most recent first.
+    /// Weather discovery channels are pinned to the bottom so they don't float up on new messages.
     private func sortedByLastMessage(_ items: [Conversation]) -> [Conversation] {
-        items.sorted { ($0.lastMessageDate ?? Self.noMessageSentinel) > ($1.lastMessageDate ?? Self.noMessageSentinel) }
+        items.sorted { a, b in
+            let aIsDiscovery = a.isWeatherDiscoveryChannel
+            let bIsDiscovery = b.isWeatherDiscoveryChannel
+            if aIsDiscovery != bIsDiscovery { return bIsDiscovery }
+            return (a.lastMessageDate ?? Self.noMessageSentinel) > (b.lastMessageDate ?? Self.noMessageSentinel)
+        }
     }
 
     /// Messages for the current conversation

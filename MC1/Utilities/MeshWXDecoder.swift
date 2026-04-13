@@ -35,6 +35,8 @@ enum MeshWXMessage: Sendable {
     case fireWeather(MeshWXFireWeather)
     case dailyClimate(MeshWXDailyClimate)
     case nowcast(MeshWXNowcast)
+    case beacon(MeshWXBeacon)
+    case textChunk(MeshWXTextChunk)
 }
 
 // MARK: - Radar Frame
@@ -42,8 +44,8 @@ enum MeshWXMessage: Sendable {
 struct MeshWXRadarFrame: Sendable, Equatable, Codable {
     let regionID: UInt8
     let frameSeq: UInt8
-    /// Minutes since midnight UTC.
-    let timestamp: UInt16
+    /// Unix minutes (minutes since 1970-01-01 00:00 UTC).
+    let timestamp: UInt32
     /// Km per grid cell.
     let scaleKm: UInt8
     /// Grid dimension (16 for legacy 0x10, 32 or 64 for new 0x11). Grid is gridSize×gridSize.
@@ -56,6 +58,61 @@ struct MeshWXRadarFrame: Sendable, Equatable, Codable {
         return grid[row * gridSize + col]
     }
     var isEmpty: Bool { grid.allSatisfy { $0 == 0 } }
+}
+
+// MARK: - Discovery Beacon
+
+/// A decoded v4 discovery beacon (0xF0), broadcast by weather bots on #meshwx-discover.
+/// Contains the bot's capabilities, coverage area, and the channel name to join for data.
+struct MeshWXBeacon: Sendable {
+    /// Bot identifier (uint24 BE).
+    let botID: UInt32
+    /// Protocol version reported by the bot (should be 4).
+    let protocolVersion: UInt8
+    /// Raw capability/status flags byte.
+    let flags: UInt8
+    /// Coverage centre latitude (degrees).
+    let coverageLat: Double
+    /// Coverage centre longitude (degrees).
+    let coverageLon: Double
+    /// Approximate coverage radius in km.
+    let coverageRadiusKm: UInt8
+    /// Number of active warnings the bot is currently broadcasting.
+    let activeWarningsCount: UInt8
+    /// The data channel name to join (e.g. "aus-meshwx-v4").
+    let channelName: String
+    /// When this beacon was received on-device.
+    let receivedAt: Date
+
+    // Flag bits
+    var isAcceptingRequests: Bool { flags & 0x01 != 0 }
+    var hasRadar:            Bool { flags & 0x02 != 0 }
+    var hasWarnings:         Bool { flags & 0x04 != 0 }
+    var hasForecasts:        Bool { flags & 0x08 != 0 }
+    var hasFireWeather:      Bool { flags & 0x10 != 0 }
+    var hasNowcast:          Bool { flags & 0x20 != 0 }
+    var hasQPF:              Bool { flags & 0x40 != 0 }
+
+    /// Human-readable name derived from the channel name (e.g. "aus-meshwx-v4" → "AUS Weather Bot").
+    var displayName: String {
+        let prefix = channelName
+            .replacingOccurrences(of: "-meshwx-v4", with: "")
+            .replacingOccurrences(of: "-meshwx", with: "")
+            .replacingOccurrences(of: "meshwx-", with: "")
+        return prefix.uppercased() + " Weather Bot"
+    }
+
+    /// Comma-separated list of available products.
+    var capabilitySummary: String {
+        var parts: [String] = []
+        if hasRadar        { parts.append("radar") }
+        if hasWarnings     { parts.append("warnings") }
+        if hasForecasts    { parts.append("forecasts") }
+        if hasFireWeather  { parts.append("fire weather") }
+        if hasNowcast      { parts.append("nowcast") }
+        if hasQPF          { parts.append("QPF") }
+        return parts.isEmpty ? "no products" : parts.joined(separator: ", ")
+    }
 }
 
 // MARK: - Warning
@@ -94,7 +151,22 @@ struct MeshWXWarning: Sendable, Identifiable, Equatable {
     /// Absolute expiry as Unix timestamp in minutes.
     let expiryUnixMinutes: UInt32
 
+    /// Absolute onset as Unix timestamp in minutes. Zero means immediately active (v2/MVP legacy).
+    let onsetUnixMinutes: UInt32
+
     let vertices: [CLLocationCoordinate2D]
+
+    // MARK: Zone
+
+    /// A single NWS zone code embedded in a 0x21 MSG_WARNING_ZONES message.
+    struct Zone: Sendable, Equatable {
+        let stateIdx: UInt8    // state index (matches NWS state table)
+        let zoneNum: UInt16    // zone number within state
+    }
+
+    /// Zone codes from 0x21 zone warnings. Empty for polygon-based (0x20) warnings.
+    let zones: [Zone]
+
     let headline: String
 
     // MARK: Computed
@@ -103,15 +175,38 @@ struct MeshWXWarning: Sendable, Identifiable, Equatable {
         Date(timeIntervalSince1970: TimeInterval(expiryUnixMinutes) * 60)
     }
 
+    /// The date/time when this warning becomes active. Nil if onset == 0 (already active).
+    var onsetDate: Date? {
+        guard onsetUnixMinutes > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(onsetUnixMinutes) * 60)
+    }
+
+    /// True if the warning has a future onset that hasn't been reached yet.
+    var isUpcoming: Bool {
+        guard let onset = onsetDate else { return false }
+        return onset > Date()
+    }
+
     /// Dedup key. Full VTEC: (phenomena, significance, office, etn).
-    /// MVP/v2 fallback: uses first vertex + expiry.
+    /// Zone warning fallback: uses first zone code + expiry.
+    /// MVP/v2 polygon fallback: uses first vertex + expiry.
     var dedupKey: String {
         if !office.isEmpty || etn != 0 {
             return "\(phenomenaIndex)-\(vtecSignificance)-\(office)-\(etn)"
         }
+        if let firstZone = zones.first {
+            return "\(phenomenaIndex)-\(vtecSignificance)-\(firstZone.stateIdx)-\(firstZone.zoneNum)-\(expiryUnixMinutes)"
+        }
         let lat = vertices.first.map { Int($0.latitude * 10000) } ?? 0
         let lng = vertices.first.map { Int($0.longitude * 10000) } ?? 0
         return "\(phenomenaIndex)-\(vtecSignificance)-\(lat)-\(lng)-\(expiryUnixMinutes)"
+    }
+
+    /// Key used to store/look up on-demand warning descriptions.
+    /// Based on the first zone code; nil for polygon-only warnings without zones.
+    var descriptionKey: String? {
+        guard let first = zones.first else { return nil }
+        return "\(first.stateIdx):\(first.zoneNum)"
     }
 
     // MARK: Compat Shims
@@ -695,6 +790,16 @@ struct MeshWXWarningsNear: Sendable {
     }
 }
 
+// MARK: - Text Chunk (0x40)
+
+/// A decoded 0x40 MSG_TEXT_CHUNK response from the weather bot.
+/// Contains the full text description of one or more warnings for a requested zone.
+/// Multiple warning descriptions within the same response are separated by "---".
+struct MeshWXTextChunk: Sendable {
+    let text: String
+    let receivedAt: Date
+}
+
 // MARK: - Not Available (0x03)
 
 /// Decoded 0x03 MSG_NOT_AVAILABLE response from the weather bot.
@@ -961,37 +1066,75 @@ enum MeshWXDecoder {
 
     static func decode(_ data: Data) -> MeshWXMessage? {
         guard !data.isEmpty else { return nil }
-        // If COBS decoding succeeds the data IS COBS-encoded — dispatch only on the
-        // decoded content.  Falling back to decodeRaw(data) would treat the COBS
-        // overhead byte as a message-type byte, potentially matching a case (e.g.
-        // 0x37 warnings_near) and crashing on the misaligned payload.
-        if let decoded = cobsDecode(data) { return decodeRaw(decoded) }
-        return decodeRaw(data)
+        // All bot messages are COBS-encoded via send_binary_channel().
+        // If COBS decode fails the message is truncated or malformed — return nil rather
+        // than falling back to decodeRaw which would misinterpret the COBS overhead byte
+        // as a message type (e.g. 0x03 → garbage NOT_AVAILABLE, 0x11 → misaligned radar).
+        guard let decoded = cobsDecode(data) else { return nil }
+        return decodeRaw(decoded)
+    }
+
+    /// Returns true if the payload is a v4-wrapped 0x11/0x12 radar chunk from a multi-chunk
+    /// sequence. These buffer silently while waiting for the other chunks — not decode failures.
+    static func isV4WrappedRadarChunk(_ data: Data) -> Bool {
+        guard let decoded = cobsDecode(data), decoded.count > 13, decoded[0] == 0x04 else { return false }
+        let msgType = decoded[1]
+        guard msgType == 0x11 || msgType == 0x12 else { return false }
+        // rawPayload starts at decoded[6]; v4 0x11 header: [0]reg/seq [1]gridSize [2-5]timestamp(uint32) [6]scaleKm [7]enc/totalChunks
+        // So (encoding<<4)|totalChunks is at rawPayload[7] = decoded[13]
+        let totalChunks = Int(decoded[13] & 0x0F)
+        return totalChunks > 1
     }
 
     /// Returns true if the payload is a known protocol type that carries no decodable product data.
     /// Use this to suppress "decode failed" log noise for message types we intentionally ignore.
     /// - 0x0d: bot home/location broadcast
-    /// - 0x21: warning_zones (not yet decoded on iOS)
-    /// - 0x40: text_chunk (multi-part text reassembly, not decoded on iOS)
-    /// - 0xF0: v4 discovery beacon (not yet handled on iOS)
     static func isKnownNonProduct(_ data: Data) -> Bool {
         let raw = cobsDecode(data) ?? data
         guard let first = raw.first else { return false }
-        return first == 0x0d || first == 0x21 || first == 0x40 || first == 0xF0
+        return first == 0x0d
+    }
+
+    /// Returns true if the COBS-encoded payload is a v4 FEC unit that is buffering silently.
+    /// Covers spatial quadrant units AND parity — neither produces a standalone decoded result.
+    static func isV4FECUnit(_ data: Data) -> Bool {
+        guard let decoded = cobsDecode(data), decoded.count > 6, decoded[0] == 0x04 else { return false }
+        let msgFlags = decoded[2]
+        let isFECUnit   = msgFlags & 0x01 != 0
+        let isBaseLayer = msgFlags & 0x04 != 0
+        // Base layer decodes immediately — not a buffering unit
+        return isFECUnit && !isBaseLayer
+    }
+
+    /// Returns a human-readable label for any v4 FEC packet (base layer, quadrant, or parity).
+    /// Returns nil if the payload is not a v4 FEC frame.
+    static func fecUnitSummary(_ data: Data) -> String? {
+        guard let decoded = cobsDecode(data), decoded.count > 5, decoded[0] == 0x04 else { return nil }
+        let msgFlags   = decoded[2]
+        let groupTotal = decoded[3]
+        let isFECUnit  = msgFlags & 0x01 != 0
+        guard isFECUnit else { return nil }
+        let isParity    = msgFlags & 0x02 != 0
+        let isBaseLayer = msgFlags & 0x04 != 0
+        let unitIndex   = (msgFlags >> 5) & 0x07
+        if isParity    { return "Radar FEC — parity unit buffering (\(groupTotal) total)" }
+        if isBaseLayer { return "FEC [base] 32×32 preview" }
+        let names: [UInt8: String] = [1: "NW", 2: "NE", 3: "SW", 4: "SE"]
+        let name = names[unitIndex] ?? "unit \(unitIndex)"
+        return "Radar FEC — \(name) quadrant buffering"
     }
 
     private static func decodeRaw(_ data: Data) -> MeshWXMessage? {
         guard let first = data.first else { return nil }
         switch first {
-        case 0x04: // v4 frame header — strip 6 bytes and decode the inner payload
-            guard data.count > 6 else { return nil }
-            return decodeRaw(Data(data[6...]))
+        case 0x04: // v4 frame header — parse header, handle FEC, decode inner payload
+            return decodeV4Frame(data)
         case 0x03: return decodeNotAvailable(data).map { .notAvailable($0) }
         case 0x10: return decodeRadarGrid(data).map { .radarGrid($0) }
         case 0x11: return decode0x11RadarGrid(data).map { .radarGrid($0) }
         case 0x12: return decode0x12QPFGrid(data).map { .qpfGrid($0) }
         case 0x20: return decodeWarning(data).map { .warningPolygon($0) }
+        case 0x21: return decodeWarningZones(data).map { .warningPolygon($0) }
         case 0x30: return decodeObservation(data).map { .observation($0) }
         case 0x31: return decodeForecast(data).map { .forecast($0) }
         case 0x32: return decodeOutlook(data).map { .outlook($0) }
@@ -1002,6 +1145,8 @@ enum MeshWXDecoder {
         case 0x38: return decodeFireWeather(data).map { .fireWeather($0) }
         case 0x3A: return decodeDailyClimate(data).map { .dailyClimate($0) }
         case 0x3C: return decodeNowcast(data).map { .nowcast($0) }
+        case 0x40: return decodeTextChunk(data).map { .textChunk($0) }
+        case 0xF0: return decodeBeacon(data).map { .beacon($0) }
         default:   return nil
         }
     }
@@ -1012,7 +1157,8 @@ enum MeshWXDecoder {
         guard data.count >= 133, data[0] == 0x10 else { return nil }
         let regionID  = (data[1] >> 4) & 0x0F
         let frameSeq  = data[1] & 0x0F
-        let timestamp = UInt16(data[2]) << 8 | UInt16(data[3])
+        // Legacy 0x10: 2-byte timestamp (minutes since midnight). Convert to UInt32 for compatibility.
+        let timestamp = UInt32(UInt16(data[2]) << 8 | UInt16(data[3]))
         let scaleKm   = data[4]
         var grid = [UInt8](repeating: 0, count: 256)
         for i in 0..<128 {
@@ -1026,15 +1172,15 @@ enum MeshWXDecoder {
 
     // MARK: 0x11 Radar Grid (variable-size, sparse or RLE, multi-message)
     //
-    // Wire format:
+    // Wire format (v4):
     //  [0]     0x11
     //  [1]     (region_id << 4) | chunk_seq   — chunk_seq=0 for single-message
     //  [2]     grid_size (32 or 64)
-    //  [3–4]   timestamp uint16 BE (minutes since midnight UTC)
-    //  [5]     scale_km
-    //  [6]     (encoding << 4) | total_chunks — encoding: 0=sparse, 1=RLE
+    //  [3–6]   timestamp uint32 BE (Unix minutes since epoch)
+    //  [7]     scale_km
+    //  [8]     (encoding << 4) | total_chunks — encoding: 0=sparse, 1=RLE
     //                                         — total_chunks: 1 = single message
-    //  [7+]    payload
+    //  [9+]    payload
     //
     // Sparse entries (encoding=0): 2 bytes each
     //   12-bit position | 4-bit value  → byte0=(pos>>4), byte1=((pos&0xF)<<4)|value
@@ -1043,14 +1189,14 @@ enum MeshWXDecoder {
     //   4-bit run-length-minus-1 | 4-bit value  → byte=(((len-1)&0xF)<<4)|value
     //   run of 0 in high nibble = 1 cell; 15 = 16 cells
 
-    // Buffer for multi-message 0x11 reassembly, keyed by (regionID << 16 | timestamp).
+    // Buffer for multi-message 0x11 reassembly, keyed by (regionID << 32 | timestamp).
     // Including timestamp in the key allows simultaneous in-flight broadcasts for the same
     // region without collision (e.g. an old sequence still draining while a new one starts).
-    nonisolated(unsafe) private static var radarChunkBuffer: [UInt32: RadarChunkAccumulator] = [:]
+    nonisolated(unsafe) private static var radarChunkBuffer: [UInt64: RadarChunkAccumulator] = [:]
 
     private struct RadarChunkAccumulator {
         let gridSize: Int
-        let timestamp: UInt16
+        let timestamp: UInt32
         let scaleKm: UInt8
         let encoding: UInt8
         let totalChunks: Int
@@ -1070,19 +1216,19 @@ enum MeshWXDecoder {
     }
 
     static func decode0x11RadarGrid(_ data: Data) -> MeshWXRadarFrame? {
-        guard data.count >= 7, data[0] == 0x11 else { return nil }
+        guard data.count >= 9, data[0] == 0x11 else { return nil }
 
         let regionID    = (data[1] >> 4) & 0x0F
         let chunkSeq    = Int(data[1] & 0x0F)
         let gridSize    = Int(data[2])
-        let timestamp   = UInt16(data[3]) << 8 | UInt16(data[4])
-        let scaleKm     = data[5]
-        let encoding    = (data[6] >> 4) & 0x0F
-        let totalChunks = max(1, Int(data[6] & 0x0F))
+        let timestamp   = UInt32(data[3]) << 24 | UInt32(data[4]) << 16 | UInt32(data[5]) << 8 | UInt32(data[6])
+        let scaleKm     = data[7]
+        let encoding    = (data[8] >> 4) & 0x0F
+        let totalChunks = max(1, Int(data[8] & 0x0F))
 
         guard gridSize == 32 || gridSize == 64 else { return nil }
 
-        let payload = Data(data.dropFirst(7))
+        let payload = Data(data.dropFirst(9))
 
         if totalChunks == 1 {
             return decodeRadarPayload(regionID: regionID, frameSeq: UInt8(chunkSeq),
@@ -1093,7 +1239,7 @@ enum MeshWXDecoder {
 
         // Multi-chunk: buffer and decode when all chunks have arrived.
         // Key includes timestamp so different broadcasts for the same region don't collide.
-        let bufferKey = UInt32(regionID) << 16 | UInt32(timestamp)
+        let bufferKey = UInt64(regionID) << 32 | UInt64(timestamp)
         var acc = radarChunkBuffer[bufferKey] ?? RadarChunkAccumulator(
             gridSize: gridSize, timestamp: timestamp, scaleKm: scaleKm,
             encoding: encoding, totalChunks: totalChunks, chunks: [:]
@@ -1114,8 +1260,8 @@ enum MeshWXDecoder {
     /// Returns chunk metadata for a 0x11 multi-chunk radar message without modifying the accumulator buffer.
     /// Returns nil if the data is not a multi-chunk 0x11 message (i.e. single-chunk or not 0x11 at all).
     static func radarChunkInfo(_ data: Data) -> (regionID: Int, chunkSeq: Int, totalChunks: Int)? {
-        guard let decoded = cobsDecode(data), decoded.count >= 7, decoded[0] == 0x11 else { return nil }
-        let totalChunks = max(1, Int(decoded[6] & 0x0F))
+        guard let decoded = cobsDecode(data), decoded.count >= 9, decoded[0] == 0x11 else { return nil }
+        let totalChunks = max(1, Int(decoded[8] & 0x0F))
         guard totalChunks > 1 else { return nil }
         return (regionID: Int((decoded[1] >> 4) & 0x0F),
                 chunkSeq:  Int(decoded[1] & 0x0F),
@@ -1124,7 +1270,7 @@ enum MeshWXDecoder {
 
     private static func decodeRadarPayload(
         regionID: UInt8, frameSeq: UInt8,
-        timestamp: UInt16, scaleKm: UInt8,
+        timestamp: UInt32, scaleKm: UInt8,
         gridSize: Int, encoding: UInt8,
         payload: Data
     ) -> MeshWXRadarFrame? {
@@ -1178,6 +1324,62 @@ enum MeshWXDecoder {
         return decodeWarningV2(data)
     }
 
+    // MARK: 0x21 Warning Zones (v4 broadcast)
+    // Format (as passed from decodeV4Frame — first byte is 0x21):
+    //   [0]    0x21 (MSG_WARNING_ZONES)
+    //   [1]    type_sev: high nibble = v2Type, low nibble = severity (same table as MVP/v2)
+    //   [2-5]  expires_unix_min: uint32 big-endian (Unix time in minutes)
+    //   [6-9]  onset_unix_min: uint32 big-endian (0 = already active)
+    //   [10]   zone_count (max 30)
+    //   [11+]  zone_count × 3 bytes: state_index (1B) + zone_number uint16 BE
+    //   after  headline: UTF-8 text
+    static func decodeWarningZones(_ data: Data) -> MeshWXWarning? {
+        guard data.count >= 12, data[0] == 0x21 else { return nil }
+        let typeSev    = data[1]
+        let v2Type     = (typeSev >> 4) & 0x0F
+        let v2Sev      = typeSev & 0x0F
+        let expiresMin = UInt32(data[2]) << 24 | UInt32(data[3]) << 16 | UInt32(data[4]) << 8 | UInt32(data[5])
+        let onsetMin   = UInt32(data[6]) << 24 | UInt32(data[7]) << 16 | UInt32(data[8]) << 8 | UInt32(data[9])
+        let zoneCount  = Int(data[10])
+        let headlineOffset = 11 + zoneCount * 3
+        guard data.count >= headlineOffset else { return nil }
+        // Drop already-expired warnings
+        guard Date(timeIntervalSince1970: TimeInterval(expiresMin) * 60) > Date() else { return nil }
+
+        var zones: [MeshWXWarning.Zone] = []
+        for i in 0..<zoneCount {
+            let base = 11 + i * 3
+            guard base + 2 < headlineOffset else { break }
+            let stateIdx = data[base]
+            let zoneNum  = UInt16(data[base + 1]) << 8 | UInt16(data[base + 2])
+            zones.append(MeshWXWarning.Zone(stateIdx: stateIdx, zoneNum: zoneNum))
+        }
+
+        let headlineRaw = data[headlineOffset...]
+        let headline    = String(data: headlineRaw, encoding: .utf8)?
+            .trimmingCharacters(in: .init(charactersIn: "\0 ")) ?? ""
+
+        let phenomenaIndex   = v2TypeToPhenom[v2Type] ?? 0x00
+        let vtecSignificance = v2SevToSignificance[v2Sev] ?? 0x02
+
+        return MeshWXWarning(
+            id: UUID(),
+            phenomenaIndex: phenomenaIndex,
+            vtecSignificance: vtecSignificance,
+            capSeverity: v2Sev,
+            action: 0,
+            etn: 0,
+            office: "",
+            urgency: 0,
+            certainty: 0,
+            expiryUnixMinutes: expiresMin,
+            onsetUnixMinutes: onsetMin,
+            vertices: [],
+            zones: zones,
+            headline: headline
+        )
+    }
+
     private static func isFullVTECFormat(_ data: Data) -> Bool {
         guard data.count >= 21 else { return false }
         return data[6] >= 0x41 && data[6] <= 0x5A &&
@@ -1200,27 +1402,30 @@ enum MeshWXDecoder {
     //  [0]     0x20
     //  [1]     warning_type << 4 | severity  (old nibble codes from protocol.json)
     //  [2–5]   expires_unix_min uint32 BE     (absolute — the key v3 change from v2)
-    //  [6]     vertex_count uint8
-    //  [7–9]   first lat int24 BE (degrees × 10000)
-    //  [10–12] first lng int24 BE (degrees × 10000)
-    //  [13+]   remaining vertices: int16 BE dlat (× 0.001°), int16 BE dlon (× 0.001°)
+    //  [6–9]   onset_unix_min uint32 BE       (0 = immediately active)
+    //  [10]    vertex_count uint8
+    //  [11–13] first lat int24 BE (degrees × 10000)
+    //  [14–16] first lng int24 BE (degrees × 10000)
+    //  [17+]   remaining vertices: int16 BE dlat (× 0.001°), int16 BE dlon (× 0.001°)
     //  then    headline UTF-8
 
     private static func decodeWarningMVP(_ data: Data) -> MeshWXWarning? {
-        guard data.count >= 13 else { return nil }
+        guard data.count >= 17 else { return nil }
 
         let v2Type      = (data[1] >> 4) & 0x0F
         let v2Sev       = data[1] & 0x0F
         let expiry      = UInt32(data[2]) << 24 | UInt32(data[3]) << 16
                         | UInt32(data[4]) << 8  | UInt32(data[5])
-        let vertexCount = Int(data[6])
+        let onset       = UInt32(data[6]) << 24 | UInt32(data[7]) << 16
+                        | UInt32(data[8]) << 8  | UInt32(data[9])
+        let vertexCount = Int(data[10])
         guard vertexCount >= 1 else { return nil }
 
-        let lat0 = Double(readInt24(data, offset: 7)) / 10000.0
-        let lng0 = Double(readInt24(data, offset: 10)) / 10000.0
+        let lat0 = Double(readInt24(data, offset: 11)) / 10000.0
+        let lng0 = Double(readInt24(data, offset: 14)) / 10000.0
         var vertices = [CLLocationCoordinate2D(latitude: lat0, longitude: lng0)]
 
-        let deltaStart = 13
+        let deltaStart = 17
         let available  = min(vertexCount - 1, (data.count - deltaStart) / 4)
         for i in 0..<available {
             let off  = deltaStart + i * 4
@@ -1238,6 +1443,7 @@ enum MeshWXDecoder {
 
         return makeWarning(v2Type: v2Type, v2Sev: v2Sev,
                            expiryUnixMinutes: expiry,
+                           onsetUnixMinutes: onset,
                            vertices: vertices, headline: headline)
     }
 
@@ -1347,12 +1553,15 @@ enum MeshWXDecoder {
             vtecSignificance: vtecSig, capSeverity: capSev,
             action: action, etn: etn, office: office,
             urgency: urgency, certainty: certainty,
-            expiryUnixMinutes: expiry, vertices: vertices, headline: headline
+            expiryUnixMinutes: expiry,
+            onsetUnixMinutes: 0,
+            vertices: vertices, zones: [], headline: headline
         )
     }
 
     private static func makeWarning(v2Type: UInt8, v2Sev: UInt8,
                                     expiryUnixMinutes: UInt32,
+                                    onsetUnixMinutes: UInt32 = 0,
                                     vertices: [CLLocationCoordinate2D],
                                     headline: String) -> MeshWXWarning {
         let phenom  = v2TypeToPhenom[v2Type] ?? 0x00
@@ -1364,7 +1573,8 @@ enum MeshWXDecoder {
             action: 0, etn: 0, office: "",
             urgency: 0, certainty: 0,
             expiryUnixMinutes: expiryUnixMinutes,
-            vertices: vertices, headline: headline
+            onsetUnixMinutes: onsetUnixMinutes,
+            vertices: vertices, zones: [], headline: headline
         )
     }
 
@@ -1723,58 +1933,219 @@ enum MeshWXDecoder {
         )
     }
 
-    // MARK: 0x12 QPF Grid (same compression as 0x11, different header)
+    // MARK: 0x12 QPF Grid
     //
-    // Wire format:
-    //  [0]     0x12
-    //  [1]     grid_size (32 or 64)
-    //  [2]     encoding (0=sparse, 1=RLE)
-    //  [3]     region_id
-    //  [4]     valid_period: hi nibble = start in 6h blocks from 00Z, lo nibble = duration in 6h blocks
-    //  [5]     chunk_seq (hi nibble) | total_chunks (lo nibble)
-    //  [6+]    compressed grid data (sparse or RLE, identical to 0x11)
-    //
-    // 4-bit QPF levels: 0=none, 1=trace-0.10", 2=0.10-0.25", …, 0xE=10.00"+
-
-    nonisolated(unsafe) private static var qpfChunkBuffer: [UInt32: RadarChunkAccumulator] = [:]
+    // Per v4 client guide: "Same wire format as 0x11 (compressed radar), but byte 0 is 0x12."
+    // Substitute the type byte and reuse the 0x11 decoder + multi-chunk buffer.
 
     static func decode0x12QPFGrid(_ data: Data) -> MeshWXRadarFrame? {
         guard data.count >= 7, data[0] == 0x12 else { return nil }
+        var v11 = data
+        v11[v11.startIndex] = 0x11
+        return decode0x11RadarGrid(v11)
+    }
 
-        let gridSize    = Int(data[1])
-        let encoding    = data[2]
-        let regionID    = data[3]
-        let validPeriod = data[4]
-        let chunkByte   = data[5]
-        let chunkSeq    = Int((chunkByte >> 4) & 0x0F)
-        let totalChunks = max(1, Int(chunkByte & 0x0F))
+    // MARK: v4 Frame Handling + FEC Group Assembly
+    //
+    // v4 frame header (6 bytes before payload):
+    //   [0]  0x04
+    //   [1]  msg_type     — inner message type (e.g. 0x11 for radar)
+    //   [2]  msg_flags    — bit0=is_fec_unit, bit1=is_parity, bit2=is_base_layer,
+    //                       bits3-4=group_id, bits5-7=unit_index
+    //   [3]  group_total  — total data units in group (not counting parity)
+    //   [4]  seq_hi       — uint16 BE monotonic sequence number (reserved for future use)
+    //   [5]  seq_lo
+    //   [6+] payload      — same as v3 payload WITHOUT the msg_type byte
+    //
+    // To reconstruct a v3-compatible message: [msg_type] + payload(bytes 6+)
+    //
+    // FEC groups (radar only):
+    //   unit_index 0 = base layer 32×32 (display immediately)
+    //   unit_index 1 = NW quadrant 32×32
+    //   unit_index 2 = NE quadrant 32×32
+    //   unit_index 3 = SW quadrant 32×32
+    //   unit_index 4 = SE quadrant 32×32
+    //   parity unit   = XOR of units 1-4 only (base layer excluded from parity)
+    //
+    // Parity payload: [unit_count=4][uint16 BE len_1][uint16 BE len_2][uint16 BE len_3][uint16 BE len_4][xor_data]
+    // Recovery: missing_quadrant = xor_data XOR (all received quadrants, zero-padded to xor_data length)
 
-        guard gridSize == 32 || gridSize == 64 else { return nil }
+    private struct FECGroup {
+        let msgType: UInt8
+        let groupTotal: UInt8
+        /// Keyed by unit_index. Stores raw payload (bytes 6+ of v4 frame, no type prefix).
+        var units: [UInt8: Data]
+        /// Raw parity payload (bytes 6+ of the parity v4 frame).
+        var parityPayload: Data?
 
-        let payload = Data(data.dropFirst(6))
+        /// True when all 4 spatial quadrants (indices 1-4) have been buffered.
+        var quadrantsComplete: Bool {
+            units[1] != nil && units[2] != nil && units[3] != nil && units[4] != nil
+        }
+        /// True when exactly one quadrant is missing and XOR parity is available.
+        var canRecover: Bool {
+            guard parityPayload != nil else { return false }
+            var missing = 0
+            for idx: UInt8 in 1...4 { if units[idx] == nil { missing += 1 } }
+            return missing == 1
+        }
+    }
 
-        if totalChunks == 1 {
-            // Reuse radar payload decoder; store validPeriod in timestamp field for QPF frames
-            return decodeRadarPayload(regionID: regionID, frameSeq: UInt8(chunkSeq),
-                                      timestamp: UInt16(validPeriod), scaleKm: 0,
-                                      gridSize: gridSize, encoding: encoding, payload: payload)
+    nonisolated(unsafe) private static var fecGroups: [UInt16: FECGroup] = [:]
+
+    private static func decodeV4Frame(_ data: Data) -> MeshWXMessage? {
+        guard data.count > 6 else { return nil }
+        let msgType    = data[1]
+        let msgFlags   = data[2]
+        let groupTotal = data[3]
+
+        let isFECUnit   = msgFlags & 0x01 != 0
+        let isParity    = msgFlags & 0x02 != 0
+        let isBaseLayer = msgFlags & 0x04 != 0
+        let groupID     = (msgFlags >> 3) & 0x03
+        let unitIndex   = (msgFlags >> 5) & 0x07
+
+        let rawPayload = Data(data[6...])
+
+        if !isFECUnit {
+            // Non-FEC: reconstruct v3 message and decode normally
+            var v3 = Data([msgType])
+            v3.append(rawPayload)
+            return decodeRaw(v3)
         }
 
-        let bufferKey = UInt32(0xFF00) | UInt32(regionID)
-        var acc = qpfChunkBuffer[bufferKey] ?? RadarChunkAccumulator(
-            gridSize: gridSize, timestamp: UInt16(validPeriod), scaleKm: 0,
-            encoding: encoding, totalChunks: totalChunks, chunks: [:]
-        )
-        acc.chunks[chunkSeq] = payload
-        qpfChunkBuffer[bufferKey] = acc
+        // FEC: buffer this unit
+        let groupKey = UInt16(msgType) << 8 | UInt16(groupID)
+        var group = fecGroups[groupKey] ?? FECGroup(msgType: msgType, groupTotal: groupTotal, units: [:], parityPayload: nil)
 
-        guard acc.isComplete, let assembled = acc.assembledPayload else { return nil }
-        qpfChunkBuffer.removeValue(forKey: bufferKey)
+        if isParity {
+            group.parityPayload = rawPayload
+        } else {
+            group.units[unitIndex] = rawPayload
+        }
+        fecGroups[groupKey] = group
 
-        return decodeRadarPayload(regionID: regionID, frameSeq: 0,
-                                  timestamp: acc.timestamp, scaleKm: 0,
-                                  gridSize: acc.gridSize, encoding: acc.encoding,
-                                  payload: assembled)
+        // Try to complete or recover the group
+        let completedGroup: FECGroup?
+        if group.quadrantsComplete {
+            fecGroups.removeValue(forKey: groupKey)
+            completedGroup = group
+        } else if group.canRecover, let recovered = recoverFECGroup(group) {
+            fecGroups.removeValue(forKey: groupKey)
+            completedGroup = recovered
+        } else {
+            completedGroup = nil
+        }
+
+        if let completed = completedGroup, let composite = compositeRadarFECGroup(completed) {
+            return composite
+        }
+
+        // Return base layer immediately for quick display while waiting for quadrants
+        if isBaseLayer {
+            var v3 = Data([msgType])
+            v3.append(rawPayload)
+            return decodeRaw(v3)
+        }
+
+        return nil
+    }
+
+    /// Composites quadrant units 1-4 from a FEC group into a single 64×64 radar frame.
+    private static func compositeRadarFECGroup(_ group: FECGroup) -> MeshWXMessage? {
+        guard group.msgType == 0x11 || group.msgType == 0x12 else { return nil }
+        guard let nwRaw = group.units[1], let neRaw = group.units[2],
+              let swRaw = group.units[3], let seRaw = group.units[4] else { return nil }
+
+        // Decode a FEC quadrant payload directly, bypassing multi-chunk reassembly.
+        // Each FEC unit contains complete quadrant data even if the 0x11 sub-header
+        // says totalChunks > 1 — that field reflects the non-FEC broadcast chunking
+        // and must be ignored here.
+        func decodeFECQuadrant(_ raw: Data) -> MeshWXRadarFrame? {
+            guard raw.count >= 8 else { return nil }
+            let regionID  = (raw[0] >> 4) & 0x0F
+            let chunkSeq  = raw[0] & 0x0F
+            let gridSize  = Int(raw[1])
+            let timestamp = UInt32(raw[2]) << 24 | UInt32(raw[3]) << 16 | UInt32(raw[4]) << 8 | UInt32(raw[5])
+            let scaleKm   = raw[6]
+            let encoding  = (raw[7] >> 4) & 0x0F
+            // Intentionally ignore totalChunks (raw[7] & 0x0F)
+            guard gridSize == 32 else { return nil }
+            return decodeRadarPayload(regionID: regionID, frameSeq: chunkSeq,
+                                      timestamp: timestamp, scaleKm: scaleKm,
+                                      gridSize: gridSize, encoding: encoding,
+                                      payload: Data(raw[8...]))
+        }
+
+        guard let nwFrame = decodeFECQuadrant(nwRaw),
+              let neFrame = decodeFECQuadrant(neRaw),
+              let swFrame = decodeFECQuadrant(swRaw),
+              let seFrame = decodeFECQuadrant(seRaw),
+              nwFrame.gridSize == 32 else { return nil }
+
+        var grid64 = [UInt8](repeating: 0, count: 64 * 64)
+
+        func copyQuadrant(_ frame: MeshWXRadarFrame, rowOff: Int, colOff: Int) {
+            for r in 0..<32 {
+                for c in 0..<32 {
+                    grid64[(rowOff + r) * 64 + (colOff + c)] = frame.cell(row: r, col: c)
+                }
+            }
+        }
+        copyQuadrant(nwFrame, rowOff: 0,  colOff: 0)
+        copyQuadrant(neFrame, rowOff: 0,  colOff: 32)
+        copyQuadrant(swFrame, rowOff: 32, colOff: 0)
+        copyQuadrant(seFrame, rowOff: 32, colOff: 32)
+
+        let composite = MeshWXRadarFrame(regionID: nwFrame.regionID, frameSeq: nwFrame.frameSeq,
+                                         timestamp: nwFrame.timestamp, scaleKm: nwFrame.scaleKm,
+                                         gridSize: 64, grid: grid64)
+        return group.msgType == 0x12 ? .qpfGrid(composite) : .radarGrid(composite)
+    }
+
+    /// XOR-recovers the single missing quadrant (units 1-4) in a FEC group.
+    /// Parity covers units 1-4 only; lengths[i] = payload length of unit (i+1).
+    private static func recoverFECGroup(_ group: FECGroup) -> FECGroup? {
+        guard let parityData = group.parityPayload, parityData.count >= 1 else { return nil }
+        let unitCount = Int(parityData[0])
+        guard unitCount > 0, parityData.count >= 1 + unitCount * 2 else { return nil }
+
+        var lengths = [Int]()
+        for i in 0..<unitCount {
+            lengths.append(Int(parityData[1 + i * 2]) << 8 | Int(parityData[2 + i * 2]))
+        }
+
+        let xorStart = 1 + unitCount * 2
+        guard xorStart <= parityData.count else { return nil }
+        let xorData = Data(parityData[xorStart...])
+
+        // Find the missing quadrant (index 1-4)
+        var missingIndex: UInt8? = nil
+        for idx: UInt8 in 1...4 {
+            if group.units[idx] == nil { missingIndex = idx; break }
+        }
+        guard let missing = missingIndex else { return nil }
+
+        // lengths[] is 0-indexed for units 1-4: lengths[0]=unit1, lengths[1]=unit2, …
+        let parityIdx = Int(missing) - 1
+        guard parityIdx < lengths.count else { return nil }
+        let targetLen = lengths[parityIdx]
+
+        // Seed with XOR data (zero-padded to targetLen if needed)
+        var recovered = Array(xorData.prefix(targetLen))
+        while recovered.count < targetLen { recovered.append(0) }
+
+        // XOR with all received quadrant payloads
+        for idx: UInt8 in 1...4 {
+            guard idx != missing, let raw = group.units[idx] else { continue }
+            for i in 0..<recovered.count {
+                recovered[i] ^= i < raw.count ? raw[i] : 0
+            }
+        }
+
+        var updated = group
+        updated.units[missing] = Data(recovered)
+        return updated
     }
 
     // MARK: 0x38 Fire Weather Forecast Decoder
@@ -1912,6 +2283,54 @@ enum MeshWXDecoder {
         )
     }
 
+    // MARK: 0x40 Text Chunk
+
+    /// Decodes a 0x40 MSG_TEXT_CHUNK response containing a warning description.
+    /// Single-chunk format: [0]=0x40, [1...]=UTF-8 text.
+    static func decodeTextChunk(_ data: Data) -> MeshWXTextChunk? {
+        guard data.count >= 2, data[0] == 0x40 else { return nil }
+        guard let text = String(data: data[1...], encoding: .utf8), !text.isEmpty else { return nil }
+        return MeshWXTextChunk(text: text, receivedAt: Date())
+    }
+
+    // MARK: 0xF0 Discovery Beacon
+
+    /// Wire format:
+    ///  [0]     0xF0
+    ///  [1]     protocol_version (4)
+    ///  [2–4]   bot_id uint24 BE
+    ///  [5]     beacon_flags
+    ///  [6–7]   coverage_lat int16 BE × 100
+    ///  [8–9]   coverage_lon int16 BE × 100
+    ///  [10]    coverage_radius_km
+    ///  [11]    active_warnings_count
+    ///  [12]    channel_name_len
+    ///  [13+]   channel_name UTF-8
+    static func decodeBeacon(_ data: Data) -> MeshWXBeacon? {
+        guard data.count >= 13, data[0] == 0xF0 else { return nil }
+        let protVer  = data[1]
+        let botID    = UInt32(data[2]) << 16 | UInt32(data[3]) << 8 | UInt32(data[4])
+        let flags    = data[5]
+        let lat      = Double(Int16(bitPattern: UInt16(data[6]) << 8 | UInt16(data[7]))) / 100.0
+        let lon      = Double(Int16(bitPattern: UInt16(data[8]) << 8 | UInt16(data[9]))) / 100.0
+        let radius   = data[10]
+        let warnCnt  = data[11]
+        let nameLen  = Int(data[12])
+        guard data.count >= 13 + nameLen, nameLen > 0 else { return nil }
+        guard let channelName = String(data: data[13..<(13 + nameLen)], encoding: .utf8),
+              !channelName.isEmpty else { return nil }
+
+        return MeshWXBeacon(
+            botID: botID, protocolVersion: protVer,
+            flags: flags,
+            coverageLat: lat, coverageLon: lon,
+            coverageRadiusKm: radius,
+            activeWarningsCount: warnCnt,
+            channelName: channelName,
+            receivedAt: Date()
+        )
+    }
+
     // MARK: 0x02 Request Builder
 
     /// Builds an 8-byte 0x02 FORECAST data request for a PFM point index.
@@ -2003,6 +2422,28 @@ enum MeshWXDecoder {
     /// Builds a 0x02 DATA_WARNINGS_NEAR (data_type=7) request for a pfm_point.
     static func buildWarningsNearRequest(pfmPointIndex: Int) -> Data {
         buildPFMPointRequest(dataType: 0x7, pfmPointIndex: pfmPointIndex)
+    }
+
+    /// Builds a 0x02 DATA_WARNING_DESC (data_type=8) request for a specific NWS zone.
+    ///
+    /// Wire format:
+    ///  [0]   0x02
+    ///  [1]   0x80 (data_type = 8 << 4)
+    ///  [2–3] 0x0000 (client_newest)
+    ///  [4]   0x01 (LOC_ZONE)
+    ///  [5]   state_idx (uint8)
+    ///  [6–7] zone_num uint16 BE
+    static func buildWarningDescriptionRequest(stateIdx: UInt8, zoneNum: UInt16) -> Data {
+        var data = Data(count: 8)
+        data[0] = 0x02
+        data[1] = 0x80   // data_type = 8
+        data[2] = 0x00
+        data[3] = 0x00
+        data[4] = 0x01   // LOC_ZONE
+        data[5] = stateIdx
+        data[6] = UInt8((zoneNum >> 8) & 0xFF)
+        data[7] = UInt8(zoneNum & 0xFF)
+        return data
     }
 
     // MARK: Helpers

@@ -89,6 +89,27 @@ public final class AppState {
         didSet { UserDefaults.standard.set(wxCommandChannelName, forKey: "wxCommandChannelName") }
     }
 
+    /// State of a manual bot-discovery scan.
+    enum WXDiscoveryState: Equatable {
+        case idle
+        case scanning(secondsRemaining: Int)
+        case done
+    }
+
+    /// Current state of the manual bot-discovery scan (updated on @MainActor).
+    @MainActor var discoveryState: WXDiscoveryState = .idle
+
+    /// Channel names (without `#`) of bot data channels the user has joined.
+    /// Persisted in UserDefaults so the UI can show "Joined" across restarts.
+    @MainActor private(set) var joinedWXBotChannels: Set<String> = {
+        let stored = UserDefaults.standard.stringArray(forKey: "joinedWXBotChannels") ?? []
+        return Set(stored)
+    }()
+
+    @MainActor private func saveJoinedWXBotChannels() {
+        UserDefaults.standard.set(Array(joinedWXBotChannels), forKey: "joinedWXBotChannels")
+    }
+
     // MARK: - Connection (via ConnectionManager)
 
     /// The connection manager for device lifecycle
@@ -563,9 +584,10 @@ public final class AppState {
 
     // MARK: - Weather Channel Auto-Provisioning
 
-    /// Ensures both weather channels exist on the companion device:
+    /// Ensures weather channels exist on the companion device:
     /// - `#wx-broadcast` — the binary data/broadcast channel (muted)
     /// - `wxCommandChannelName` (e.g. `#digitaino-wx-bot`) — the request command channel (muted)
+    /// - Any previously joined bot data channels (e.g. `#aus-meshwx-v4`) — re-provisioned if missing
     /// Called silently on each connection and when weather is re-enabled.
     /// No-ops for any channel already present; skips if no free slot is available.
     private func provisionWeatherChannelIfNeeded(services: ServiceContainer, deviceID: UUID) async {
@@ -576,10 +598,26 @@ public final class AppState {
             let maxChannels = device.maxChannels
             var usedSlots = Set(channels.map(\.index))
 
-            let channelsToProvision: [(name: String, mute: Bool)] = [
-                ("#wx-broadcast", true),
-                (wxCommandChannelName, true)
+            // --- v4 migration: remove legacy #wx-broadcast and command channels ---
+            for channel in channels {
+                let lower = channel.name.lowercased()
+                let isLegacyBroadcast = lower == "#wx-broadcast" || lower == "wx-broadcast"
+                let isLegacyCommand = lower.hasSuffix("-wx-bot") || lower == "wx-bot"
+                if isLegacyBroadcast || isLegacyCommand {
+                    try await services.channelService.clearChannel(deviceID: deviceID, index: channel.index)
+                    usedSlots.remove(channel.index)
+                    logger.info("WeatherChannel: migrated away legacy '\(channel.name)' from slot \(channel.index)")
+                }
+            }
+
+            // Channels to provision: #meshwx-discover + any joined bot data channels
+            var channelsToProvision: [(name: String, mute: Bool)] = [
+                ("#meshwx-discover", true)
             ]
+            for botChannel in joinedWXBotChannels {
+                let name = botChannel.hasPrefix("#") ? botChannel : "#\(botChannel)"
+                channelsToProvision.append((name, true))
+            }
 
             for (channelName, shouldMute) in channelsToProvision {
                 // Skip if already present (check by name)
@@ -610,16 +648,132 @@ public final class AppState {
         }
     }
 
-    /// Removes all weather system channels (broadcast + command) from the companion device.
+    /// Pings the #meshwx-discover channel, collects bot beacons for 10 seconds, then sets state to `.done`.
+    /// Provisions the discovery channel if it isn't on the device yet.
+    @MainActor
+    func scanForWeatherBots() async {
+        guard let services = services, let deviceID = connectedDevice?.id else { return }
+
+        // Provision #meshwx-discover if missing
+        do {
+            let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
+            let discoverName = "#meshwx-discover"
+            let existing = channels.first(where: { SyncCoordinator.isDiscoveryChannel($0.name) })
+            if let wrong = existing, wrong.name != discoverName {
+                // Old slot has wrong name (e.g. "meshwx-discover" without #) — reuse the slot with correct name
+                try await services.channelService.setChannel(
+                    deviceID: deviceID, index: wrong.index,
+                    name: discoverName, passphrase: discoverName
+                )
+                logger.info("WeatherDiscovery: corrected channel name to '\(discoverName)' on slot \(wrong.index)")
+            } else if existing == nil {
+                let maxChannels = connectedDevice?.maxChannels ?? 8
+                let usedSlots = Set(channels.map(\.index))
+                if let freeSlot = (1..<maxChannels).first(where: { !usedSlots.contains($0) }) {
+                    try await services.channelService.setChannel(
+                        deviceID: deviceID, index: freeSlot,
+                        name: discoverName, passphrase: discoverName
+                    )
+                    if let ch = try? await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
+                        try? await services.dataStore.setChannelNotificationLevel(ch.id, level: .muted)
+                    }
+                    logger.info("WeatherDiscovery: provisioned \(discoverName) on slot \(freeSlot)")
+                }
+            }
+        } catch {
+            logger.error("WeatherDiscovery: channel provision failed: \(error)")
+        }
+
+        // Clear previous results and start scan
+        weatherCache.clearDiscoveredBots()
+        discoveryState = .scanning(secondsRemaining: 10)
+
+        // Send a ping on the discovery channel so bots respond
+        do {
+            let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
+            if let discoverChannel = channels.first(where: { SyncCoordinator.isDiscoveryChannel($0.name) }) {
+                _ = try await services.messageService.sendChannelMessage(
+                    text: "PING", channelIndex: discoverChannel.index, deviceID: deviceID
+                )
+                logger.info("WeatherDiscovery: ping sent on #\(discoverChannel.name)")
+            }
+        } catch {
+            logger.error("WeatherDiscovery: ping failed: \(error)")
+        }
+
+        // 10-second countdown
+        for remaining in stride(from: 9, through: 0, by: -1) {
+            try? await Task.sleep(for: .seconds(1))
+            guard case .scanning = discoveryState else { return }  // cancelled externally
+            discoveryState = remaining > 0 ? .scanning(secondsRemaining: remaining) : .done
+        }
+    }
+
+    /// Provisions the bot's data channel on the device and marks it as joined.
+    /// The channel name from the beacon (e.g. `aus-meshwx-v4`) gets a `#` prefix when added.
+    @MainActor
+    func joinWXBotDataChannel(_ beacon: MeshWXBeacon) async {
+        guard let services = services, let deviceID = connectedDevice?.id else { return }
+        let channelName = "#\(beacon.channelName)"
+        do {
+            let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
+            if !channels.contains(where: { $0.name.lowercased() == channelName.lowercased() }) {
+                let maxChannels = connectedDevice?.maxChannels ?? 8
+                let usedSlots = Set(channels.map(\.index))
+                guard let freeSlot = (1..<maxChannels).first(where: { !usedSlots.contains($0) }) else {
+                    logger.warning("WXBotJoin: no free slot for '\(channelName)'")
+                    return
+                }
+                try await services.channelService.setChannel(
+                    deviceID: deviceID, index: freeSlot,
+                    name: channelName, passphrase: channelName
+                )
+                if let ch = try? await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
+                    try? await services.dataStore.setChannelNotificationLevel(ch.id, level: .muted)
+                }
+                logger.info("WXBotJoin: provisioned '\(channelName)' on slot \(freeSlot)")
+            }
+            joinedWXBotChannels.insert(beacon.channelName)
+            saveJoinedWXBotChannels()
+        } catch {
+            logger.error("WXBotJoin: failed to join '\(channelName)': \(error)")
+        }
+    }
+
+    /// Removes a bot data channel from the device and marks it as no longer joined.
+    /// - Parameter channelName: The channel name without `#` prefix (e.g. `aus-meshwx-v4`).
+    @MainActor
+    func leaveWXBotDataChannel(_ channelName: String) async {
+        joinedWXBotChannels.remove(channelName)
+        saveJoinedWXBotChannels()
+        guard let services = services, let deviceID = connectedDevice?.id else { return }
+        let fullName = "#\(channelName)"
+        do {
+            let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
+            if let channel = channels.first(where: { $0.name.lowercased() == fullName.lowercased() }) {
+                try await services.channelService.clearChannel(deviceID: deviceID, index: channel.index)
+                logger.info("WXBotLeave: removed '\(fullName)' from slot \(channel.index)")
+            }
+        } catch {
+            logger.error("WXBotLeave: failed to remove '\(fullName)': \(error)")
+        }
+    }
+
+    /// Removes all weather system channels (discover, bot data, legacy broadcast/command) from the companion device.
     /// Called when the user disables the weather system.
     @MainActor
     func removeWeatherChannels() async {
         guard let services = services, let deviceID = connectedDevice?.id else { return }
         do {
             let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
-            for channel in channels where SyncCoordinator.isWeatherSystemChannel(channel.name, commandChannelName: wxCommandChannelName) {
-                try await services.channelService.clearChannel(deviceID: deviceID, index: channel.index)
-                logger.info("WeatherChannel: removed '\(channel.name)' from slot \(channel.index)")
+            for channel in channels {
+                let isWeatherChannel = SyncCoordinator.isWeatherSystemChannel(channel.name, commandChannelName: wxCommandChannelName)
+                    || SyncCoordinator.isDiscoveryChannel(channel.name)
+                    || SyncCoordinator.isWeatherDataChannel(channel.name)
+                if isWeatherChannel {
+                    try await services.channelService.clearChannel(deviceID: deviceID, index: channel.index)
+                    logger.info("WeatherChannel: removed '\(channel.name)' from slot \(channel.index)")
+                }
             }
         } catch {
             logger.error("WeatherChannel: failed to remove channels: \(error)")
@@ -656,16 +810,20 @@ public final class AppState {
         }
     }
 
-    /// Sends a weather request on the configured command channel (channel mode).
+    /// Sends a weather request on the first joined bot data channel (channel mode).
     /// Returns `true` if the message was sent without throwing.
     private func sendWeatherBotChannelMessage(text: String, services: ServiceContainer) async -> Bool {
         guard let deviceID = connectedDevice?.id else { return false }
         do {
             let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
-            guard let channel = channels.first(where: {
-                $0.name.lowercased() == wxCommandChannelName.lowercased()
+            // Find the first joined bot data channel on the device (e.g. #aus-meshwx-v4)
+            guard let channel = channels.first(where: { ch in
+                joinedWXBotChannels.contains(where: { bot in
+                    let fullName = bot.hasPrefix("#") ? bot : "#\(bot)"
+                    return ch.name.lowercased() == fullName.lowercased()
+                })
             }) else {
-                logger.warning("WeatherBot: command channel '\(self.wxCommandChannelName)' not found on device")
+                logger.warning("WeatherBot: no joined bot data channel found on device")
                 return false
             }
             _ = try await services.messageService.sendChannelMessage(
@@ -706,13 +864,14 @@ public final class AppState {
             self.logger.info("WeatherBot: '\(key)' still pending after \(Int(timeout))s — retrying")
             let delivered = await retryBlock()
             guard delivered else {
-                self.weatherCache.clearPending(key)
+                self.logger.warning("WeatherBot: retry delivery failed for '\(key)' — marking unavailable")
+                self.weatherCache.markUnavailable(key, reason: 0x04)
                 return
             }
             try? await Task.sleep(for: .seconds(timeout))
             guard self.weatherCache.isPending(key) else { return }
-            self.logger.warning("WeatherBot: giving up on '\(key)' after \(Int(timeout * 2))s")
-            self.weatherCache.clearPending(key)
+            self.logger.warning("WeatherBot: giving up on '\(key)' after \(Int(timeout * 2))s — marking unavailable")
+            self.weatherCache.markUnavailable(key, reason: 0x04)
         }
     }
 
@@ -746,16 +905,16 @@ public final class AppState {
             return .botNotFound
         }
 
-        // Build "MWX" request: "MWX" + region_byte (hex) + client_newest (4 hex chars)
+        // Build "MWX" request: "MWX" + region_byte (hex) + client_newest (8 hex chars, UInt32 Unix minutes)
         // region_byte = (region_id << 4) | request_type; 0x3 = both radar and warnings
-        let newestTimestamp: UInt16
+        let newestTimestamp: UInt32
         if let frames = weatherCache.radarFrames[region.id], let latest = frames.last {
             newestTimestamp = latest.timestamp
         } else {
             newestTimestamp = 0
         }
         let regionByte: UInt8 = (region.id & 0x0F) << 4 | 0x03
-        let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
+        let mwxText = String(format: "MWX%02X%08X", regionByte, newestTimestamp)
 
         let delivered = await sendWeatherBotRequest(text: mwxText, services: services)
         if delivered {
@@ -774,14 +933,14 @@ public final class AppState {
         guard connectionState == .ready, let services else { return .notConnected }
         if wxRequestMode == .dm, await resolveBotContact(services: services) == nil { return .botNotFound }
 
-        let newestTimestamp: UInt16
+        let newestTimestamp: UInt32
         if let frames = weatherCache.radarFrames[regionID], let latest = frames.last {
             newestTimestamp = latest.timestamp
         } else {
             newestTimestamp = 0
         }
         let regionByte: UInt8 = (regionID & 0x0F) << 4 | 0x03
-        let mwxText = String(format: "MWX%02X%04X", regionByte, newestTimestamp)
+        let mwxText = String(format: "MWX%02X%08X", regionByte, newestTimestamp)
 
         let delivered = await sendWeatherBotRequest(text: mwxText, services: services)
         if delivered {
@@ -889,6 +1048,19 @@ public final class AppState {
         await sendWXDataRequest(payload: MeshWXDecoder.buildWarningsNearRequest(pfmPointIndex: pfmPointIndex))
     }
 
+    /// Requests the full text description for a zone-based warning from the bot.
+    /// The bot responds with a 0x40 text chunk; the result is stored in `weatherCache.warningDescriptions`.
+    func sendWarningDescriptionRequest(for warning: MeshWXWarning) async -> WeatherRefreshResult {
+        guard let key = warning.descriptionKey,
+              let first = warning.zones.first else { return .notConnected }
+        let payload = MeshWXDecoder.buildWarningDescriptionRequest(stateIdx: first.stateIdx, zoneNum: first.zoneNum)
+        let result = await sendWXDataRequest(payload: payload)
+        if case .sent = result {
+            weatherCache.requestDescriptionPending(zoneKey: key)
+        }
+        return result
+    }
+
     private func wireWeatherHandler(services: ServiceContainer) async {
         await services.syncCoordinator.setWeatherMessageHandler { [weak self] message in
             guard let self else { return }
@@ -978,7 +1150,21 @@ public final class AppState {
                         } else {
                             logger.info("MeshWX NOT_AVAILABLE dataType=\(na.dataType) reason=\(na.reasonDescription) (no tracked key)")
                         }
+                    case .beacon(let beacon):
+                        logger.info("MeshWX beacon: \(beacon.displayName) on #\(beacon.channelName) (\(beacon.capabilitySummary))")
+                        self.weatherCache.ingestBeacon(beacon)
+                    case .textChunk(let chunk):
+                        logger.info("MeshWX text chunk: \(chunk.text.count) chars")
+                        self.weatherCache.ingestTextChunk(chunk)
                     }
+                } else if MeshWXDecoder.radarChunkInfo(data) != nil {
+                    // Non-v4 multi-chunk radar fragment — buffering, not an error
+                } else if MeshWXDecoder.isV4FECUnit(data) {
+                    // v4 FEC spatial unit — buffering until the full group arrives, not an error
+                } else if MeshWXDecoder.isV4WrappedRadarChunk(data) {
+                    // v4-wrapped multi-chunk radar fragment — buffering, not an error
+                } else if MeshWXDecoder.cobsDecode(data) == nil {
+                    // COBS decode failed — message was likely truncated by mesh MTU, not an app bug
                 } else {
                     let firstByte = data.first.map { String(format: "0x%02x", $0) } ?? "nil"
                     logger.warning("MeshWX decode failed for \(data.count)-byte payload (first byte: \(firstByte))")

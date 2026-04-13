@@ -77,4 +77,12 @@ enum Conversation: Identifiable, Hashable {
         }
     }
 
+    /// True if this is the #meshwx-discover channel, which should be pinned to the bottom of the list.
+    var isWeatherDiscoveryChannel: Bool {
+        if case .channel(let ch) = self {
+            return SyncCoordinator.isDiscoveryChannel(ch.name)
+        }
+        return false
+    }
+
 }
