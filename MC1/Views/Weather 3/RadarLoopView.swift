@@ -29,7 +29,7 @@ struct RadarLoopView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             if let region {
-                RadarLoopMapView(region: region, frame: currentFrame)
+                RadarMapView(region: region, frame: currentFrame)
                     .ignoresSafeArea()
             } else {
                 Color(.systemBackground).ignoresSafeArea()
@@ -51,12 +51,21 @@ struct RadarLoopView: View {
 
     private var playbackPanel: some View {
         VStack(spacing: 12) {
-            // Timestamp + frame counter
+            // Timestamp + frame counter + resolution badge
             HStack {
                 Label(timestampLabel, systemImage: "clock")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.primary)
                 Spacer()
+                if let frame = currentFrame {
+                    Text("\(frame.gridSize)×\(frame.gridSize)")
+                        .font(.caption2.monospacedDigit())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(frame.gridSize >= 64 ? Color.cyan.opacity(0.2) : Color.secondary.opacity(0.15),
+                                    in: Capsule())
+                        .foregroundStyle(frame.gridSize >= 64 ? .cyan : .secondary)
+                }
                 Text("\(currentIndex + 1) of \(frames.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -177,12 +186,13 @@ struct RadarLoopView: View {
     }
 }
 
-// MARK: - RadarLoopMapView
+// MARK: - RadarMapView
 
 /// Lightweight UIViewRepresentable showing a single radar frame on a MapKit map.
-private struct RadarLoopMapView: UIViewRepresentable {
+struct RadarMapView: UIViewRepresentable {
     let region: MeshWXRegion
     let frame: MeshWXRadarFrame?
+    var isInteractive: Bool = true
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -191,15 +201,16 @@ private struct RadarLoopMapView: UIViewRepresentable {
         mapView.mapType = .standard
         mapView.isRotateEnabled = false
         mapView.isPitchEnabled = false
-        mapView.showsCompass = true
+        mapView.showsCompass = isInteractive
+        mapView.isScrollEnabled = isInteractive
+        mapView.isZoomEnabled = isInteractive
         mapView.delegate = context.coordinator
 
         // Zoom to region bounding box with padding
-        mapView.setVisibleMapRect(
-            regionMapRect,
-            edgePadding: UIEdgeInsets(top: 40, left: 20, bottom: 20, right: 20),
-            animated: false
-        )
+        let padding: UIEdgeInsets = isInteractive
+            ? UIEdgeInsets(top: 40, left: 20, bottom: 20, right: 20)
+            : UIEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
+        mapView.setVisibleMapRect(regionMapRect, edgePadding: padding, animated: false)
         return mapView
     }
 

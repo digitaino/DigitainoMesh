@@ -1,0 +1,3 @@
+[submodule "Vendor/meshcore-weather"]
+	path = Vendor/meshcore-weather
+	url = https://github.com/pesqair/meshcore-weather
