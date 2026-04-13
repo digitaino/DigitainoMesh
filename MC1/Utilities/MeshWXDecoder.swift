@@ -34,7 +34,7 @@ enum MeshWXMessage: Sendable {
 
 // MARK: - Radar Frame
 
-struct MeshWXRadarFrame: Sendable, Equatable {
+struct MeshWXRadarFrame: Sendable, Equatable, Codable {
     let regionID: UInt8
     let frameSeq: UInt8
     /// Minutes since midnight UTC.

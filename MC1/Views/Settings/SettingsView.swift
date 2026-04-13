@@ -89,6 +89,13 @@ private struct SettingsListContent: View {
                     }
                 }
 
+                Toggle(isOn: Binding(
+                    get: { appState.isWeatherEnabled },
+                    set: { newValue in Task { await appState.setWeatherEnabled(newValue) } }
+                )) {
+                    TintedLabel("MeshWX Weather", systemImage: "cloud.bolt.fill")
+                }
+
                 TipView(repeaterSharingTip, arrowEdge: .bottom)
 
                 NavigationLink {

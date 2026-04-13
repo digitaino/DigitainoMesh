@@ -421,8 +421,10 @@ final class WeatherCache {
         var forecastPayloads: [Data] = []
         var warningPayloads: [Data] = []
         var observationPayloads: [Data] = []
-        /// Latest radar payload per region ID (stored as String key for JSON compatibility).
-        var radarPayloads: [String: Data] = [:]
+        /// Latest assembled radar frame per region ID (String key for JSON compatibility).
+        /// Stored as the decoded struct so multi-chunk frames survive restart correctly.
+        /// Legacy key `radarPayloads` (raw Data) is silently ignored by the decoder.
+        var radarFrames: [String: MeshWXRadarFrame] = [:]
     }
 
     nonisolated private static let cacheFileURL: URL = {
@@ -453,10 +455,8 @@ final class WeatherCache {
                 ingestObservation(o); loaded += 1
             }
         }
-        for payload in saved.radarPayloads.values {
-            if let msg = MeshWXDecoder.decode(payload), case .radarGrid(let frame) = msg {
-                ingestRadarFrame(frame); loaded += 1
-            }
+        for frame in saved.radarFrames.values {
+            ingestRadarFrame(frame); loaded += 1
         }
         logger.info("Loaded \(loaded) persisted weather items from disk")
     }
@@ -478,15 +478,15 @@ final class WeatherCache {
             case .observation:
                 saved.observationPayloads.append(payload)
                 if saved.observationPayloads.count > 40 { saved.observationPayloads.removeFirst() }
-            case .radar(let regionID):
+            case .radar(let frame):
                 // Only keep the single latest frame per region — enough to show a static snapshot on restart
-                saved.radarPayloads[String(regionID)] = payload
+                saved.radarFrames[String(frame.regionID)] = frame
             }
             try? JSONEncoder().encode(saved).write(to: fileURL)
         }
     }
 
-    enum PersistType { case forecast, warning, observation, radar(UInt8) }
+    enum PersistType { case forecast, warning, observation, radar(MeshWXRadarFrame) }
 
     // MARK: - Debug
 

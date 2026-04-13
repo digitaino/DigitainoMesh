@@ -106,8 +106,10 @@ final class ChatViewModel {
         let contactConversations = conversations
             .filter { $0.type != .repeater && !$0.isBlocked }
             .map { Conversation.direct($0) }
+        let wxCommandChannel = appState?.wxCommandChannelName ?? ""
         let channelConversations = channels
             .filter { !$0.name.isEmpty || $0.hasSecret }
+            .filter { !SyncCoordinator.isWeatherSystemChannel($0.name, commandChannelName: wxCommandChannel) }
             .map { Conversation.channel($0) }
         let roomConversations = roomSessions.map { Conversation.room($0) }
         let all = contactConversations + channelConversations + roomConversations

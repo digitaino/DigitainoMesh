@@ -1126,6 +1126,20 @@ extension SyncCoordinator {
         return lower == "meshwx" || lower.hasSuffix("wx-broadcast")
     }
 
+    /// Returns true if the channel name is a MeshWX system channel that should be hidden
+    /// from the chat list. Includes both the binary broadcast channel and bot command channels.
+    /// - Parameters:
+    ///   - name: Channel name to check.
+    ///   - commandChannelName: The configured wx bot command channel name (e.g. "#digitaino-wx-bot").
+    public nonisolated static func isWeatherSystemChannel(_ name: String, commandChannelName: String) -> Bool {
+        guard !name.isEmpty else { return false }
+        let lower = name.lowercased()
+        return isWeatherDataChannel(name)
+            || lower == commandChannelName.lowercased()
+            || lower.hasSuffix("-wx-bot")
+            || lower == "wx-bot"
+    }
+
     nonisolated static func fallbackDeduplicationKey(
         contactID: UUID?,
         channelIndex: UInt8?,

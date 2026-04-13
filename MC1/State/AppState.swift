@@ -57,6 +57,12 @@ public final class AppState {
         didSet { UserDefaults.standard.set(wxAviationUsesF, forKey: "wxAviationUsesF") }
     }
 
+    /// When true, the MeshWX weather system is active: the Weather tab is shown, channels are
+    /// auto-provisioned, and incoming weather data is processed. Defaults to true.
+    var isWeatherEnabled: Bool = (UserDefaults.standard.object(forKey: "isWeatherEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(isWeatherEnabled, forKey: "isWeatherEnabled") }
+    }
+
     /// How weather requests are transmitted to the bot.
     enum WXRequestMode: String, CaseIterable {
         case dm = "dm"
@@ -557,42 +563,82 @@ public final class AppState {
 
     // MARK: - Weather Channel Auto-Provisioning
 
-    /// Ensures the `#meshwx` hashtag channel exists on the companion device.
-    /// Called silently on each connection. No-ops if the channel is already present
-    /// or if no free slot is available.
+    /// Ensures both weather channels exist on the companion device:
+    /// - `#wx-broadcast` — the binary data/broadcast channel (muted)
+    /// - `wxCommandChannelName` (e.g. `#digitaino-wx-bot`) — the request command channel (muted)
+    /// Called silently on each connection and when weather is re-enabled.
+    /// No-ops for any channel already present; skips if no free slot is available.
     private func provisionWeatherChannelIfNeeded(services: ServiceContainer, deviceID: UUID) async {
+        guard isWeatherEnabled else { return }
         guard let device = connectedDevice else { return }
         do {
             let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
-
-            // Already have a weather data channel — nothing to do.
-            if channels.contains(where: { SyncCoordinator.isWeatherDataChannel($0.name) }) { return }
-
-            // Find the first free slot (slot 0 is reserved for the public channel).
             let maxChannels = device.maxChannels
-            let usedSlots = Set(channels.map(\.index))
-            guard let freeSlot = (1..<maxChannels).first(where: { !usedSlots.contains($0) }) else {
-                logger.warning("WeatherChannel: no free slot — skipping auto-provision")
-                return
+            var usedSlots = Set(channels.map(\.index))
+
+            let channelsToProvision: [(name: String, mute: Bool)] = [
+                ("#wx-broadcast", true),
+                (wxCommandChannelName, true)
+            ]
+
+            for (channelName, shouldMute) in channelsToProvision {
+                // Skip if already present (check by name)
+                if channels.contains(where: { $0.name.lowercased() == channelName.lowercased() }) { continue }
+
+                guard let freeSlot = (1..<maxChannels).first(where: { !usedSlots.contains($0) }) else {
+                    logger.warning("WeatherChannel: no free slot for '\(channelName)' — skipping")
+                    continue
+                }
+                usedSlots.insert(freeSlot)
+
+                try await services.channelService.setChannel(
+                    deviceID: deviceID,
+                    index: freeSlot,
+                    name: channelName,
+                    passphrase: channelName
+                )
+
+                if shouldMute,
+                   let channel = try await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
+                    try await services.dataStore.setChannelNotificationLevel(channel.id, level: .muted)
+                }
+
+                logger.info("WeatherChannel: auto-provisioned '\(channelName)' on slot \(freeSlot)")
             }
-
-            // Add #wx-broadcast as a hashtag channel (secret = sha256("#wx-broadcast")[0:16]).
-            let channelName = "#wx-broadcast"
-            try await services.channelService.setChannel(
-                deviceID: deviceID,
-                index: freeSlot,
-                name: channelName,
-                passphrase: channelName
-            )
-
-            // Mute it so broadcast weather packets don't create unread badges.
-            if let channel = try await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
-                try await services.dataStore.setChannelNotificationLevel(channel.id, level: .muted)
-            }
-
-            logger.info("WeatherChannel: auto-provisioned '\(channelName)' on slot \(freeSlot)")
         } catch {
             logger.error("WeatherChannel: auto-provision failed: \(error)")
+        }
+    }
+
+    /// Removes all weather system channels (broadcast + command) from the companion device.
+    /// Called when the user disables the weather system.
+    @MainActor
+    func removeWeatherChannels() async {
+        guard let services = services, let deviceID = connectedDevice?.id else { return }
+        do {
+            let channels = try await services.dataStore.fetchChannels(deviceID: deviceID)
+            for channel in channels where SyncCoordinator.isWeatherSystemChannel(channel.name, commandChannelName: wxCommandChannelName) {
+                try await services.channelService.clearChannel(deviceID: deviceID, index: channel.index)
+                logger.info("WeatherChannel: removed '\(channel.name)' from slot \(channel.index)")
+            }
+        } catch {
+            logger.error("WeatherChannel: failed to remove channels: \(error)")
+        }
+    }
+
+    /// Enables or disables the weather system, provisioning or removing channels as needed.
+    @MainActor
+    func setWeatherEnabled(_ enabled: Bool) async {
+        isWeatherEnabled = enabled
+        if enabled {
+            guard let services = services, let deviceID = connectedDevice?.id else { return }
+            await provisionWeatherChannelIfNeeded(services: services, deviceID: deviceID)
+        } else {
+            // Redirect off the weather tab before hiding it
+            if navigation.selectedTab == 3 {
+                navigation.selectedTab = 0
+            }
+            await removeWeatherChannels()
         }
     }
 
@@ -888,7 +934,7 @@ public final class AppState {
                     case .radarGrid(let frame):
                         logger.info("MeshWX radar decoded: region \(frame.regionID), seq \(frame.frameSeq)")
                         self.weatherCache.ingestRadarFrame(frame)
-                        self.weatherCache.persistPayload(data, type: .radar(frame.regionID))
+                        self.weatherCache.persistPayload(data, type: .radar(frame))
                     case .forecast(let forecast):
                         let pfmIdx = forecast.pfmPointIndex.map { "\($0)" } ?? "unknown"
                         logger.info("MeshWX forecast decoded: pfmPoint=\(pfmIdx), \(forecast.periods.count) periods")

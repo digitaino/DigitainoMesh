@@ -1,4 +1,34 @@
-Beta Changes -- v0.10.1 (Build 25)
+Beta Changes -- v0.10.1 (Build 26)
+
+What's New in Build 26
+
+Weather System Toggle
+
+A new "MeshWX Weather" toggle in Settings lets you enable or disable the entire weather system. When disabled, both weather channels (#wx-broadcast and #digitaino-wx-bot) are removed from the radio, the Weather tab is hidden, and Settings gets its own dedicated tab (Chats | Nodes | Map | Tools | Settings). When re-enabled, both channels are automatically re-provisioned (muted) and the Weather tab returns with Settings back inside Tools.
+
+Weather Channels Hidden from Chats
+
+Both weather system channels (#wx-broadcast and #digitaino-wx-bot) are now fully hidden from the Chats list. Binary weather data flowing over these channels is handled internally and never appears as a conversation.
+
+Active Warnings at the Top
+
+Active weather warnings are now displayed at the top of the Weather list, above Favorites and station sections. Warnings are collapsible — tap the header to expand or collapse. The header always shows the current warning count so you can see at a glance whether there are active alerts without expanding.
+
+Section Headers Always Visible
+
+The Favorites, Requests, and Broadcasts section headers are now always shown when their section has content, regardless of how many sections are populated. Previously, headers were hidden unless at least two sections had data.
+
+Larger, More Readable Section Headers
+
+Section header fonts have been bumped from caption to subheadline (semibold) for better legibility. All collapsible headers now meet Apple's 44pt minimum touch target for reliable tapping.
+
+Radar Persists Across App Restarts
+
+Fixed a bug where radar data was lost when the app was closed and reopened. Multi-chunk radar frames are now stored as fully assembled structures rather than raw wire bytes, so they reload correctly after a restart.
+
+---
+
+v0.10.1 (Build 25)
 
 What's New Since Build 20
 

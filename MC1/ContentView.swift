@@ -122,12 +122,20 @@ struct MainTabView: View {
                 MapView()
             }
 
-            Tab("Weather", systemImage: "cloud.bolt.fill", value: 3) {
-                WeatherView()
+            if appState.isWeatherEnabled {
+                Tab("Weather", systemImage: "cloud.bolt.fill", value: 3) {
+                    WeatherView()
+                }
             }
 
             Tab(L10n.Localizable.Tabs.tools, systemImage: "wrench.and.screwdriver", value: 4) {
                 ToolsView()
+            }
+
+            if !appState.isWeatherEnabled {
+                Tab(L10n.Localizable.Tabs.settings, systemImage: "gear", value: 5) {
+                    SettingsView()
+                }
             }
         }
 

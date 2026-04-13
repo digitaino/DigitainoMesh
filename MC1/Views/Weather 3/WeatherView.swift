@@ -37,6 +37,7 @@ private struct WeatherBody: View {
     @State private var showingRadarPicker = false
     @State private var showingInfo = false
     @State private var noticeTask: Task<Void, Never>?
+    @State private var showWarnings = true
     @State private var showFavorites = true
     @State private var showRequested = true
     @State private var showBroadcasts = true
@@ -77,12 +78,10 @@ private struct WeatherBody: View {
                 guard let newICAO else { return }
                 Task { @MainActor in
                     // Ensure the section containing this ICAO is expanded before scrolling
-                    if showSectionHeaders {
-                        if favoriteICAOs.contains(newICAO) {
-                            showFavorites = true
-                        } else {
-                            showRequested = true
-                        }
+                    if favoriteICAOs.contains(newICAO) {
+                        showFavorites = true
+                    } else {
+                        showRequested = true
                     }
                     // Allow search dismissal + section expansion + list render to complete
                     try? await Task.sleep(for: .milliseconds(350))
@@ -366,14 +365,6 @@ private struct WeatherBody: View {
     private var requestedGroups: [StationGroup] { stationGroups.filter { !favoriteICAOs.contains($0.icao) &&  $0.isRequested } }
     private var broadcastGroups: [StationGroup] { stationGroups.filter { !favoriteICAOs.contains($0.icao) && !$0.isRequested } }
 
-    /// True when 2+ sections have content — triggers collapsible section separators.
-    private var showSectionHeaders: Bool {
-        var count = favoriteICAOs.isEmpty ? 0 : 1
-        count += requestedGroups.isEmpty ? 0 : 1
-        count += broadcastGroups.isEmpty ? 0 : 1
-        return count > 1
-    }
-
     /// Forecasts not linked to any station (explicit or proximity-based).
     private var unlinkedForecasts: [(key: Int, forecast: MeshWXForecast)] {
         let linked = forecastToICAO
@@ -387,63 +378,55 @@ private struct WeatherBody: View {
 
     private var weatherList: some View {
         List {
-            if showSectionHeaders {
-                // Favorites
-                if !favoriteICAOs.isEmpty {
-                    groupSeparator(title: "Favorites", count: favoriteGroups.count,
-                                   icon: "star.fill", isExpanded: $showFavorites)
-                    if showFavorites {
-                        ForEach(favoriteGroups) { stationSection($0) }
-                    }
-                }
+            // Active Warnings — always first, in a single section so there's no gap
+            // between the collapsible header and the warning rows.
+            if !appState.weatherCache.warnings.isEmpty {
+                warningsSection
+            }
 
-                // Your Requests
-                if !requestedGroups.isEmpty {
-                    groupSeparator(title: "Your Requests", count: requestedGroups.count,
-                                   icon: "arrow.up.message", isExpanded: $showRequested)
-                    if showRequested {
-                        ForEach(requestedGroups) { stationSection($0) }
-                    }
+            // Favorites — always shown when non-empty
+            if !favoriteICAOs.isEmpty {
+                groupSeparator(title: "Favorites", count: favoriteGroups.count,
+                               icon: "star.fill", isExpanded: $showFavorites)
+                if showFavorites {
+                    ForEach(favoriteGroups) { stationSection($0) }
                 }
+            }
 
-                // Broadcasts
-                let broadcastCount = broadcastGroups.count
-                    + (appState.weatherCache.warnings.isEmpty ? 0 : 1)
-                    + (unlinkedForecasts.isEmpty ? 0 : 1)
-                    + (appState.weatherCache.outlooks.isEmpty ? 0 : 1)
-                    + (appState.weatherCache.stormReports.isEmpty ? 0 : 1)
-                    + (appState.weatherCache.rainObservations.isEmpty ? 0 : 1)
-                    + (appState.weatherCache.warningsNear.isEmpty ? 0 : 1)
-                    + (appState.weatherCache.radarFrames.isEmpty ? 0 : 1)
-                if broadcastCount > 0 {
-                    groupSeparator(title: "Broadcasts", count: broadcastCount,
-                                   icon: "dot.radiowaves.left.and.right", isExpanded: $showBroadcasts)
-                    if showBroadcasts {
-                        if !appState.weatherCache.warnings.isEmpty { warningsSection }
-                        ForEach(broadcastGroups) { stationSection($0) }
-                        if !unlinkedForecasts.isEmpty { unlinkedForecastsSection }
-                        if !appState.weatherCache.outlooks.isEmpty { outlooksSection }
-                        if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
-                        if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
-                        if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
-                        if !appState.weatherCache.radarFrames.isEmpty { radarSection }
-                    }
+            // Your Requests — always shown when non-empty
+            if !requestedGroups.isEmpty {
+                groupSeparator(title: "Your Requests", count: requestedGroups.count,
+                               icon: "arrow.up.message", isExpanded: $showRequested)
+                if showRequested {
+                    ForEach(requestedGroups) { stationSection($0) }
                 }
-            } else {
-                // Single source — no separators needed
-                ForEach(favoriteGroups) { stationSection($0) }
-                if !appState.weatherCache.warnings.isEmpty { warningsSection }
-                ForEach(requestedGroups + broadcastGroups) { stationSection($0) }
-                if !unlinkedForecasts.isEmpty { unlinkedForecastsSection }
-                if !appState.weatherCache.outlooks.isEmpty { outlooksSection }
-                if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
-                if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
-                if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
-                if !appState.weatherCache.radarFrames.isEmpty { radarSection }
+            }
+
+            // Broadcasts — warnings shown above, not counted here
+            let broadcastCount = broadcastGroups.count
+                + (unlinkedForecasts.isEmpty ? 0 : 1)
+                + (appState.weatherCache.outlooks.isEmpty ? 0 : 1)
+                + (appState.weatherCache.stormReports.isEmpty ? 0 : 1)
+                + (appState.weatherCache.rainObservations.isEmpty ? 0 : 1)
+                + (appState.weatherCache.warningsNear.isEmpty ? 0 : 1)
+                + (appState.weatherCache.radarFrames.isEmpty ? 0 : 1)
+            if broadcastCount > 0 {
+                groupSeparator(title: "Broadcasts", count: broadcastCount,
+                               icon: "dot.radiowaves.left.and.right", isExpanded: $showBroadcasts)
+                if showBroadcasts {
+                    ForEach(broadcastGroups) { stationSection($0) }
+                    if !unlinkedForecasts.isEmpty { unlinkedForecastsSection }
+                    if !appState.weatherCache.outlooks.isEmpty { outlooksSection }
+                    if !appState.weatherCache.stormReports.isEmpty { stormReportsSection }
+                    if !appState.weatherCache.rainObservations.isEmpty { rainObsSection }
+                    if !appState.weatherCache.warningsNear.isEmpty { warningsNearSection }
+                    if !appState.weatherCache.radarFrames.isEmpty { radarSection }
+                }
             }
 
             statusSection
         }
+        .listSectionSpacing(.compact)
     }
 
     @ViewBuilder
@@ -453,16 +436,16 @@ private struct WeatherBody: View {
             Button {
                 withAnimation { isExpanded.wrappedValue.toggle() }
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: icon).font(.caption2)
-                    Text(title).font(.caption.weight(.semibold)).textCase(nil)
-                    Text("(\(count))").font(.caption).textCase(nil)
+                HStack(spacing: 8) {
+                    Image(systemName: icon).font(.footnote)
+                    Text(title).font(.subheadline.weight(.semibold)).textCase(nil)
+                    Text("(\(count))").font(.subheadline).foregroundStyle(.secondary).textCase(nil)
                     Spacer()
                     Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
+                        .font(.footnote)
                 }
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -547,26 +530,47 @@ private struct WeatherBody: View {
 
     private var warningsSection: some View {
         Section {
-            ForEach(sortedWarnings) { warning in
-                Button {
-                    appState.navigation.navigateToMapWarning(warning)
-                } label: {
-                    HStack {
-                        WarningRow(warning: warning)
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+            if showWarnings {
+                ForEach(sortedWarnings) { warning in
+                    Button {
+                        appState.navigation.navigateToMapWarning(warning)
+                    } label: {
+                        HStack {
+                            WarningRow(warning: warning)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         } header: {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.yellow)
-                Text("Active Warnings (\(appState.weatherCache.warnings.count))")
+            Button {
+                withAnimation { showWarnings.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.yellow)
+                    Text("Active Warnings")
+                        .font(.subheadline.weight(.semibold))
+                        .textCase(nil)
+                    Text("(\(appState.weatherCache.warnings.count))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                    Spacer()
+                    Image(systemName: showWarnings ? "chevron.down" : "chevron.right")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
     }
 
