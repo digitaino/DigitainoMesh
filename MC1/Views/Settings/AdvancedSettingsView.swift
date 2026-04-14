@@ -16,6 +16,9 @@ struct AdvancedSettingsView: View {
             // Manual Radio Configuration
             AdvancedRadioSection()
 
+            // Adaptive Power Control (1W mode)
+            AdaptivePowerSection()
+
             // Path Hash Mode (firmware v10+)
             if appState.connectedDevice?.supportsPathHashMode == true {
                 PathHashModeSection()

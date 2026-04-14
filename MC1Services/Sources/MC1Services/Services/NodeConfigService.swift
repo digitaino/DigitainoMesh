@@ -245,8 +245,8 @@ public actor NodeConfigService {
 
         try checkCancellation()
         progress("Setting TX power")
-        try await settingsService.setTxPower(radio.txPower)
-        logger.info("Set TX power: \(radio.txPower)")
+        let info = try await settingsService.setTxPowerVerified(radio.txPower)
+        logger.info("Set TX power: \(radio.txPower)dBm (verified: \(info.txPower)dBm)")
     }
 
     /// Imports channels using merge semantics: matches existing channels by name (hashtag)

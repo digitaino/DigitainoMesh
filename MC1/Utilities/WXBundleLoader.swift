@@ -218,6 +218,19 @@ enum WXBundleLoader {
         }
     }
 
+    /// Returns the index of the PFMPoint nearest to a lat/lon.
+    static func nearestPFMPointIndex(latitude: Double, longitude: Double) -> Int? {
+        let points = allPFMPoints
+        guard !points.isEmpty else { return nil }
+        var bestIdx = 0
+        var bestDist = haversine(points[0].latitude, points[0].longitude, latitude, longitude)
+        for i in 1..<points.count {
+            let d = haversine(points[i].latitude, points[i].longitude, latitude, longitude)
+            if d < bestDist { bestDist = d; bestIdx = i }
+        }
+        return bestIdx
+    }
+
     /// Returns the METAR station nearest to a coordinate.
     static func nearestStation(to coordinate: CLLocationCoordinate2D) -> Station? {
         allStations.min { a, b in

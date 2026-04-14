@@ -124,12 +124,12 @@ struct ChatConversationView: View {
                 composingText: $chatViewModel.composingText,
                 isFocused: $isInputFocused,
                 nodeNameByteCount: appState.connectedDevice?.nodeName.utf8.count ?? 0,
-                onSend: { text in
+                onSend: { text, powerOverride in
                     switch conversationType {
                     case .dm:
-                        await chatViewModel.sendMessage(text: text)
+                        await chatViewModel.sendMessage(text: text, powerOverrideDbm: powerOverride)
                     case .channel:
-                        await chatViewModel.sendChannelMessage(text: text)
+                        await chatViewModel.sendChannelMessage(text: text, powerOverrideDbm: powerOverride)
                     }
                 },
                 onWillSend: { scrollToBottomRequest += 1 }
@@ -474,6 +474,9 @@ struct ChatConversationView: View {
             case .heardRepeatRecorded(let messageID, let count):
                 if chatViewModel.messages.contains(where: { $0.id == messageID }) {
                     chatViewModel.updateHeardRepeats(for: messageID, count: count)
+                    if count > 0 {
+                        Task { await appState.adaptivePowerService.onRepeatsHeard() }
+                    }
                 }
             case .reactionReceived(let messageID, let summary):
                 if chatViewModel.messages.contains(where: { $0.id == messageID }) {

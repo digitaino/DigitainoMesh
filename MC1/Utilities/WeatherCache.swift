@@ -55,12 +55,6 @@ final class WeatherCache {
 
     /// Records a raw payload and its decode result in the message log.
     func logMessage(rawPayload: Data, decoded: MeshWXMessage?) {
-        // Non-FEC multi-chunk radar: silent until final chunk arrives.
-        if decoded == nil, MeshWXDecoder.radarChunkInfo(rawPayload) != nil { return }
-        // V4-wrapped multi-chunk radar: also silent until assembled.
-        if decoded == nil, MeshWXDecoder.isV4WrappedRadarChunk(rawPayload) { return }
-        // Truncated / malformed: nothing useful to show.
-        if decoded == nil, MeshWXDecoder.cobsDecode(rawPayload) == nil { return }
 
         let hex = rawPayload.prefix(64).map { String(format: "%02x", $0) }.joined(separator: " ")
         let summary: String
@@ -88,7 +82,7 @@ final class WeatherCache {
         case .rainObservations(let r):
             summary = "Rain obs \(r.cities.count) cities"
         case .taf(let t):
-            summary = "TAF \(t.icao) \(t.tempF)°F \(t.skyName)"
+            summary = "TAF \(t.icao) \(t.skyName) \(t.validPeriodLabel)"
         case .warningsNear(let w):
             summary = "Warnings near \(w.entries.count) entries"
         case .qpfGrid(let r):
@@ -110,6 +104,16 @@ final class WeatherCache {
         case nil:
             if let fecLabel = MeshWXDecoder.fecUnitSummary(rawPayload) {
                 summary = fecLabel
+            } else if let chunkInfo = MeshWXDecoder.radarChunkInfo(rawPayload) {
+                summary = "Radar chunk \(chunkInfo.chunkSeq)/\(chunkInfo.totalChunks) region \(chunkInfo.regionID) (buffering)"
+            } else if MeshWXDecoder.isV4WrappedRadarChunk(rawPayload) {
+                let decodedPayload = MeshWXDecoder.cobsDecode(rawPayload) ?? rawPayload
+                let regionID = decodedPayload.count > 6 ? Int((decodedPayload[6] >> 4) & 0x0F) : -1
+                let chunkSeq = decodedPayload.count > 6 ? Int(decodedPayload[6] & 0x0F) : -1
+                let totalChunks = decodedPayload.count > 13 ? Int(decodedPayload[13] & 0x0F) : -1
+                summary = "v4 Radar chunk \(chunkSeq)/\(totalChunks) region \(regionID) (buffering)"
+            } else if MeshWXDecoder.cobsDecode(rawPayload) == nil {
+                summary = "COBS decode failed (\(rawPayload.count)B)"
             } else {
                 let decodedPayload = MeshWXDecoder.cobsDecode(rawPayload) ?? rawPayload
                 let first = decodedPayload.first.map { String(format: "0x%02x", $0) } ?? "empty"
@@ -150,16 +154,17 @@ final class WeatherCache {
 
     // MARK: - Forecasts
 
-    /// Most recent forecast per pfm_point index. Keyed by pfmPointIndex.
-    private(set) var forecasts: [Int: MeshWXForecast] = [:]
+    /// Most recent forecast per storage key. Keyed by `MeshWXForecast.storageKey`
+    /// (e.g. "641" for pfm point, "place:28334" for city place).
+    private(set) var forecasts: [String: MeshWXForecast] = [:]
 
-    /// Maps pfmPointIndex → ICAO of the station that triggered the forecast request.
+    /// Maps forecast storageKey → ICAO of the station that triggered the forecast request.
     /// Set when the user explicitly requests a forecast from an observation's context menu.
     /// Used to group the forecast visually with its requesting station.
-    private(set) var forecastOrigins: [Int: String] = [:]
+    private(set) var forecastOrigins: [String: String] = [:]
 
-    func setForecastOrigin(pfmPointIndex: Int, icao: String) {
-        forecastOrigins[pfmPointIndex] = icao
+    func setForecastOrigin(forecastKey: String, icao: String) {
+        forecastOrigins[forecastKey] = icao
     }
 
     // MARK: - Observations
@@ -337,12 +342,11 @@ final class WeatherCache {
     }
 
     /// Ingest a decoded forecast, replacing any older forecast for the same pfm_point.
-    /// Non-pfm_point forecasts (no stable index) are stored under key -1.
     func ingestForecast(_ forecast: MeshWXForecast) {
-        let key = forecast.pfmPointIndex ?? -1
+        let key = forecast.storageKey
         forecasts[key] = forecast
         clearPending("forecast:\(key)")
-        logger.debug("Forecast ingested: pfmPoint \(key), \(forecast.periods.count) periods")
+        logger.debug("Forecast ingested: \(key), \(forecast.periods.count) periods")
     }
 
     /// Ingest a current-conditions observation, replacing any older one for the same location.
@@ -351,13 +355,44 @@ final class WeatherCache {
     func ingestObservation(_ observation: MeshWXObservation) {
         if let existing = observations[observation.locationKey],
            existing.timestampMinutes == observation.timestampMinutes {
-            // Same METAR issuance rebroadcast — keep original receivedAt, just clear pending
-            clearPending("metar:\(observation.displayName)")
+            // Same issuance rebroadcast — keep original receivedAt, just clear pending
+            clearObservationPending(observation)
             return
         }
         observations[observation.locationKey] = observation
-        clearPending("metar:\(observation.displayName)")
+        clearObservationPending(observation)
         logger.debug("Observation ingested: \(observation.displayName) \(observation.tempF)°F")
+    }
+
+    /// Clears pending keys for an ingested observation.
+    /// Station-type (METAR) clears "metar:KAUS".
+    /// Zone-type (RWR) clears "wx:zone:TXZ192".
+    /// Place-type clears "wx:place:<idx>" (city observation via LOC_PLACE).
+    /// PFM-point-type clears "wx:zone:<zone>" via the bundled PFM point table.
+    private func clearObservationPending(_ observation: MeshWXObservation) {
+        switch observation.locationType {
+        case 1: // LOC_ZONE
+            if let zoneCode = observation.zoneCode {
+                clearPending("wx:zone:\(zoneCode)")
+            }
+        case 2: // LOC_STATION
+            clearPending("metar:\(observation.displayName)")
+        case 3: // LOC_PLACE — city observation with place index from places.json
+            if let placeIdx = observation.placeIndex {
+                clearPending("wx:place:\(placeIdx)")
+            }
+        case 6: // LOC_PFM_POINT — bot echoed back our request location
+            if let pfmIdx = observation.pfmPointIndex {
+                let pfmPoints = WXBundleLoader.allPFMPoints
+                if pfmIdx < pfmPoints.count {
+                    let zone = pfmPoints[pfmIdx].zone
+                    if !zone.isEmpty { clearPending("wx:zone:\(zone)") }
+                }
+                clearPending("wx:pfm:\(pfmIdx)")
+            }
+        default:
+            break
+        }
     }
 
     /// Ingest an HWO outlook, replacing any older one for the same location.
@@ -382,7 +417,7 @@ final class WeatherCache {
     func ingestTAF(_ taf: MeshWXTAF) {
         tafs[taf.icao] = taf
         clearPending("taf:\(taf.icao)")
-        logger.debug("TAF ingested: \(taf.icao) \(taf.tempF)°F")
+        logger.debug("TAF ingested: \(taf.icao) \(taf.skyName) \(taf.validPeriodLabel)")
     }
 
     /// Ingest a warnings-near response, replacing any older one for the same location.
@@ -423,10 +458,12 @@ final class WeatherCache {
         // The 64×64 FEC composite and the 32×32 base layer share the same timestamp; the composite
         // must win so the weather view shows the full-resolution image.
         if let idx = frames.firstIndex(where: { $0.timestamp == frame.timestamp }) {
-            if frame.gridSize > frames[idx].gridSize {
+            if frame.gridSize >= frames[idx].gridSize {
                 frames[idx] = frame
                 radarFrames[frame.regionID] = frames
-                logger.debug("Radar frame upgraded: region \(frame.regionID) \(frames[idx].gridSize)×\(frames[idx].gridSize) → \(frame.gridSize)×\(frame.gridSize)")
+                if frame.gridSize > frames[idx].gridSize {
+                    logger.debug("Radar frame upgraded: region \(frame.regionID) \(frames[idx].gridSize)×\(frames[idx].gridSize) → \(frame.gridSize)×\(frame.gridSize)")
+                }
             }
             return
         }
@@ -472,7 +509,7 @@ final class WeatherCache {
 
     /// Removes a single forecast by its pfm_point key and rewrites the persisted file without it.
     /// Also clears the forecastOrigins entry so the station group is cleaned up.
-    func removeForecast(key: Int) {
+    func removeForecast(key: String) {
         forecasts.removeValue(forKey: key)
         forecastOrigins.removeValue(forKey: key)
         let fileURL = Self.cacheFileURL
@@ -483,7 +520,7 @@ final class WeatherCache {
             saved.forecastPayloads = saved.forecastPayloads.filter { payload in
                 guard let msg = MeshWXDecoder.decode(payload),
                       case .forecast(let f) = msg else { return false }
-                return f.pfmPointIndex != key
+                return f.storageKey != key
             }
             try? JSONEncoder().encode(saved).write(to: fileURL)
         }

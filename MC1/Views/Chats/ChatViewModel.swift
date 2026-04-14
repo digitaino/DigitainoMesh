@@ -421,6 +421,36 @@ final class ChatViewModel {
         // For DMs: direction match is sufficient (only two parties)
         return true
     }
+
+    // MARK: - TX Power for Queued Messages
+
+    /// Apply the correct TX power before sending a queued message.
+    /// If the message has a one-shot override, applies that dBm directly.
+    /// Otherwise, applies the adaptive power service's current level.
+    /// Returns the dBm value that was applied (for recording on the message).
+    @discardableResult
+    func applyPowerForMessage(overrideDbm: Int8?) async -> Int8? {
+        guard let power = appState?.adaptivePowerService,
+              power.isEnabled,
+              let handler = power.setTxPowerHandler else { return nil }
+
+        let dbm: Int8
+        if let override = overrideDbm {
+            dbm = override
+            logger.info("Applying one-shot TX power: \(dbm)dBm")
+        } else {
+            dbm = power.currentRadioDbm
+        }
+
+        do {
+            try await handler(dbm)
+            logger.info("Verified TX power: \(dbm)dBm")
+            return dbm
+        } catch {
+            logger.warning("TX power verification failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
 }
 
 // MARK: - Environment Key

@@ -722,6 +722,7 @@ private struct ActionsExpandedContent: View {
 }
 
 private struct ActionsOutgoingDetailsRows: View {
+    @Environment(\.appState) private var appState
     let message: MessageDTO
 
     var body: some View {
@@ -737,6 +738,14 @@ private struct ActionsOutgoingDetailsRows: View {
                 ? L10n.Chats.Chats.Message.Repeat.singular
                 : L10n.Chats.Chats.Message.Repeat.plural
             ActionInfoRow(text: L10n.Chats.Chats.Message.Info.heardRepeats(message.heardRepeats, word))
+        }
+
+        if let dbm = message.txPowerDbm {
+            let paGain = appState.adaptivePowerService.paGainDb
+            let eirpDbm = Double(dbm) + paGain
+            let mw = pow(10.0, eirpDbm / 10.0)
+            let mwLabel = mw >= 1000 ? String(format: "%.1fW", mw / 1000) : "\(Int(round(mw)))mW"
+            ActionInfoRow(text: "TX Power: \(dbm)dBm radio · \(mwLabel) EIRP")
         }
     }
 }

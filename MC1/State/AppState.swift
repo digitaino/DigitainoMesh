@@ -228,6 +228,14 @@ public final class AppState {
     /// Service tracking live repeater signal quality for the toolbar indicator.
     let signalBarsService = SignalBarsService()
 
+    // MARK: - Adaptive Power
+
+    /// Service managing adaptive TX power control with optional PA gain offset.
+    let adaptivePowerService = AdaptivePowerService()
+
+    /// Whether the adaptive power detail sheet is presented.
+    var showAdaptivePowerSheet = false
+
     // MARK: - CLI Tool
 
     /// Persistent CLI tool view model (survives tab switches, reset on device disconnect)
@@ -332,6 +340,7 @@ public final class AppState {
             batteryMonitor.stop()
             batteryMonitor.clearThresholds()
             signalBarsService.stop()
+            adaptivePowerService.setEnabled(false)
             await liveActivityManager.handleConnectionLost()
             return
         }
@@ -470,6 +479,20 @@ public final class AppState {
                 _ = try await services.binaryProtocolService.sendNodeDiscoverRequest(
                     filter: 0x04, prefixOnly: true
                 )
+            }
+
+            // Configure adaptive power service
+            let prefs = DevicePreferenceStore()
+            adaptivePowerService.configure(
+                paGainDb: prefs.paGainDb(deviceID: device.id),
+                radioMaxDbm: device.maxTxPower,
+                baseStepIndex: prefs.adaptivePowerBaseStep(deviceID: device.id),
+                enabled: prefs.isAdaptivePowerEnabled(deviceID: device.id)
+            )
+            let settingsService = services.settingsService
+            adaptivePowerService.setTxPowerHandler = { dbm in
+                let info = try await settingsService.setTxPowerVerified(dbm)
+                _ = info // verified — device confirmed the power change
             }
         }
 
@@ -957,26 +980,30 @@ public final class AppState {
     /// - Parameter originICAO: Optional ICAO of the station that triggered this forecast request.
     ///   When set, the forecast will be grouped with that station in the weather view.
     func sendWeatherDataRequest(pfmPointIndex: Int, originICAO: String? = nil) async -> WeatherRefreshResult {
-        guard connectionState == .ready, let services else {
-            return .notConnected
-        }
+        let payload = MeshWXDecoder.buildForecastRequest(pfmPointIndex: pfmPointIndex)
+        let forecastKey = "\(pfmPointIndex)"
+        return await sendForecastPayload(payload, forecastKey: forecastKey, originICAO: originICAO)
+    }
 
+    func sendForecastRequest(placeIndex: Int) async -> WeatherRefreshResult {
+        let payload = MeshWXDecoder.buildForecastRequest(placeIndex: placeIndex)
+        let forecastKey = "place:\(placeIndex)"
+        return await sendForecastPayload(payload, forecastKey: forecastKey, originICAO: nil)
+    }
+
+    private func sendForecastPayload(_ payload: Data, forecastKey: String, originICAO: String?) async -> WeatherRefreshResult {
+        guard connectionState == .ready, let services else { return .notConnected }
         if wxRequestMode == .dm, await resolveBotContact(services: services) == nil {
-            logger.warning("WeatherDataRequest: bot not configured for DM mode")
             return .botNotFound
         }
-
-        let payload = MeshWXDecoder.buildForecastRequest(pfmPointIndex: pfmPointIndex)
-        let hexString = payload.map { String(format: "%02x", $0) }.joined()
-        let dmText = "WXQ" + hexString
-
+        let dmText = "WXQ" + payload.map { String(format: "%02x", $0) }.joined()
         let delivered = await sendWeatherBotRequest(text: dmText, services: services)
         if delivered {
-            logger.info("▶︎ MESHWX_TX forecast pfmPoint=\(pfmPointIndex) via \(self.wxRequestMode.rawValue)")
+            logger.info("▶︎ MESHWX_TX forecast key=\(forecastKey) via \(self.wxRequestMode.rawValue)")
             if let icao = originICAO {
-                weatherCache.setForecastOrigin(pfmPointIndex: pfmPointIndex, icao: icao)
+                weatherCache.setForecastOrigin(forecastKey: forecastKey, icao: icao)
             }
-            let pendingKey = "forecast:\(pfmPointIndex)"
+            let pendingKey = "forecast:\(forecastKey)"
             weatherCache.addPending(pendingKey)
             watchPendingKey(pendingKey) { [weak self] in
                 guard let self, let services = self.services, self.connectionState == .ready else { return false }
@@ -984,7 +1011,6 @@ public final class AppState {
             }
             return .sent
         } else {
-            logger.error("WeatherDataRequest: delivery failed for pfmPoint=\(pfmPointIndex)")
             return .noDataChannel
         }
     }
@@ -1040,6 +1066,25 @@ public final class AppState {
                 let hex = payload.map { String(format: "%02x", $0) }.joined()
                 return await self.sendWeatherBotRequest(text: "WXQ" + hex, services: services)
             }
+        }
+        return result
+    }
+
+    /// Sends a DATA_WX observation request for a city (place).
+    /// The bot resolves the place's coordinates to the nearest zone and returns
+    /// weather data with LOC_PLACE echoed back for proper city name display.
+    func sendObservationRequest(placeIndex: Int, zoneCode: String?) async -> WeatherRefreshResult {
+        let payload = MeshWXDecoder.buildObservationRequest(placeIndex: placeIndex)
+        let result = await sendWXDataRequest(payload: payload)
+        if case .sent = result {
+            let pendingKey = "wx:place:\(placeIndex)"
+            weatherCache.addPending(pendingKey)
+            watchPendingKey(pendingKey) { [weak self] in
+                guard let self, let services = self.services, self.connectionState == .ready else { return false }
+                let hex = payload.map { String(format: "%02x", $0) }.joined()
+                return await self.sendWeatherBotRequest(text: "WXQ" + hex, services: services)
+            }
+            logger.info("▶︎ MESHWX_TX observation place=\(placeIndex) via \(self.wxRequestMode.rawValue)")
         }
         return result
     }
@@ -1126,7 +1171,7 @@ public final class AppState {
                         logger.info("MeshWX rain observations decoded: \(obs.cities.count) cities")
                         self.weatherCache.ingestRainObservations(obs)
                     case .taf(let taf):
-                        logger.info("MeshWX TAF decoded: \(taf.icao) \(taf.tempF)°F")
+                        logger.info("MeshWX TAF decoded: \(taf.icao) \(taf.skyName) \(taf.validPeriodLabel)")
                         self.weatherCache.ingestTAF(taf)
                     case .warningsNear(let warnings):
                         logger.info("MeshWX warnings-near decoded: \(warnings.entries.count) entries")

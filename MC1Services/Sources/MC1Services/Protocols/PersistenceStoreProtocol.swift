@@ -107,6 +107,9 @@ public protocol PersistenceStoreProtocol: Actor {
     /// Update heard repeats count
     func updateMessageHeardRepeats(id: UUID, heardRepeats: Int) async throws
 
+    /// Update TX power level used when sending
+    func updateMessageTxPower(id: UUID, txPowerDbm: Int8) async throws
+
     /// Update link preview data for a message
     func updateMessageLinkPreview(
         id: UUID,

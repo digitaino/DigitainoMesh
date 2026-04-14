@@ -394,6 +394,13 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         }
     }
 
+    public func updateMessageTxPower(id: UUID, txPowerDbm: Int8) async throws {
+        if var message = messages[id] {
+            message.txPowerDbm = txPowerDbm
+            messages[id] = message
+        }
+    }
+
     public func updateMessageLinkPreview(
         id: UUID,
         url: String?,

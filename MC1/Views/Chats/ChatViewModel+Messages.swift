@@ -468,7 +468,7 @@ extension ChatViewModel {
 
     /// Send a message to the current contact
     /// This is non-blocking - message is created and shown immediately, sent in background
-    func sendMessage(text: String) async {
+    func sendMessage(text: String, powerOverrideDbm: Int8? = nil) async {
         guard let contact = currentContact,
               let messageService,
               !text.isEmpty else {
@@ -482,8 +482,8 @@ extension ChatViewModel {
             let message = try await messageService.createPendingMessage(text: text, to: contact)
             appendMessageIfNew(message)
 
-            // Queue for sending
-            sendQueue.append(QueuedMessage(messageID: message.id, contactID: contact.id))
+            // Queue for sending with optional power override
+            sendQueue.append(QueuedMessage(messageID: message.id, contactID: contact.id, overrideRadioDbm: powerOverrideDbm))
 
             // Start processor if not already running
             if !isProcessingQueue {
@@ -765,7 +765,8 @@ extension ChatViewModel {
 
     // MARK: - Message Actions
 
-    /// Retry sending a failed message with flood routing enabled
+    /// Retry sending a failed message with flood routing enabled.
+    /// If adaptive power is enabled, escalates TX power before retry.
     func retryMessage(_ message: MessageDTO) async {
         logger.info("retryMessage called for message: \(message.id)")
 
@@ -780,6 +781,12 @@ extension ChatViewModel {
         }
 
         logger.info("retryMessage: starting retry for contact \(contact.displayName)")
+
+        // Escalate power if adaptive power is enabled (no repeats heard → bump up)
+        if let powerService = appState?.adaptivePowerService, powerService.isEnabled {
+            powerService.onNoRepeatsHeard()
+            await powerService.escalate()
+        }
 
         errorMessage = nil
 
@@ -806,7 +813,14 @@ extension ChatViewModel {
 
     /// Resend a channel message in place, or copy text for direct messages.
     /// Used for "Send Again" context menu action.
+    /// If adaptive power is enabled, escalates TX power before resend.
     func sendAgain(_ message: MessageDTO) async {
+        // Escalate power if adaptive power is enabled (user tapped send again → bump up)
+        if let powerService = appState?.adaptivePowerService, powerService.isEnabled {
+            powerService.onNoRepeatsHeard()
+            await powerService.escalate()
+        }
+
         if message.channelIndex != nil {
             // Channel messages: resend in place (increments send count)
             guard let messageService else { return }
@@ -1104,6 +1118,14 @@ extension ChatViewModel {
             while !sendQueue.isEmpty {
                 let queued = sendQueue.removeFirst()
 
+                // Apply power for THIS message — override or adaptive
+                let appliedDbm = await applyPowerForMessage(overrideDbm: queued.overrideRadioDbm)
+
+                // Record TX power on the message
+                if let dbm = appliedDbm {
+                    try? await dataStore.updateMessageTxPower(id: queued.messageID, txPowerDbm: dbm)
+                }
+
                 // Fetch the target contact by ID - it may differ from currentContact
                 guard let contact = try? await dataStore.fetchContact(id: queued.contactID) else {
                     // Contact was deleted, skip this message
@@ -1120,6 +1142,14 @@ extension ChatViewModel {
                     )
                 } catch {
                     errorMessage = error.localizedDescription
+                }
+
+                // Restore adaptive power after a one-shot override.
+                // Wait for the RF transmission to complete before restoring —
+                // the send command returns after BLE queuing, not after RF TX.
+                if queued.overrideRadioDbm != nil {
+                    try? await Task.sleep(for: .seconds(3))
+                    await applyPowerForMessage(overrideDbm: nil)
                 }
             }
 

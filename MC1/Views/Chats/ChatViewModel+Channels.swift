@@ -139,7 +139,7 @@ extension ChatViewModel {
     // MARK: - Channel Actions
 
     /// Send a channel message optimistically — shows immediately, sends in background.
-    func sendChannelMessage(text: String) async {
+    func sendChannelMessage(text: String, powerOverrideDbm: Int8? = nil) async {
         guard let channel = currentChannel,
               let messageService,
               !text.isEmpty else {
@@ -156,7 +156,7 @@ extension ChatViewModel {
             )
             appendMessageIfNew(message)
 
-            channelSendQueue.append(QueuedChannelMessage(messageID: message.id))
+            channelSendQueue.append(QueuedChannelMessage(messageID: message.id, overrideRadioDbm: powerOverrideDbm))
 
             if !isProcessingChannelQueue {
                 channelQueueTask?.cancel()
@@ -180,6 +180,14 @@ extension ChatViewModel {
             while !channelSendQueue.isEmpty {
                 let queued = channelSendQueue.removeFirst()
 
+                // Apply power for THIS message — override or adaptive
+                let appliedDbm = await applyPowerForMessage(overrideDbm: queued.overrideRadioDbm)
+
+                // Record TX power on the message
+                if let dbm = appliedDbm, let dataStore {
+                    try? await dataStore.updateMessageTxPower(id: queued.messageID, txPowerDbm: dbm)
+                }
+
                 do {
                     try await messageService.sendPendingChannelMessage(messageID: queued.messageID)
 
@@ -202,6 +210,14 @@ extension ChatViewModel {
                 } catch {
                     errorMessage = error.localizedDescription
                 }
+
+                // Restore adaptive power after a one-shot override.
+                // Wait for the RF transmission to complete before restoring —
+                // the send command returns after BLE queuing, not after RF TX.
+                if queued.overrideRadioDbm != nil {
+                    try? await Task.sleep(for: .seconds(3))
+                    await applyPowerForMessage(overrideDbm: nil)
+                }
             }
 
             // Reload after queue drains — syncs statuses and conversation list
@@ -213,6 +229,7 @@ extension ChatViewModel {
     }
 
     /// Retry sending a failed channel message in place.
+    /// If adaptive power is enabled, escalates TX power before retry.
     func retryChannelMessage(_ message: MessageDTO) async {
         guard let messageService,
               let channel = currentChannel,
@@ -221,6 +238,12 @@ extension ChatViewModel {
 
         isRetryingChannelMessage = true
         defer { isRetryingChannelMessage = false }
+
+        // Escalate power if adaptive power is enabled
+        if let powerService = appState?.adaptivePowerService, powerService.isEnabled {
+            powerService.onNoRepeatsHeard()
+            await powerService.escalate()
+        }
 
         try? await dataStore?.updateMessageStatus(id: message.id, status: .pending)
         await loadChannelMessages(for: channel)

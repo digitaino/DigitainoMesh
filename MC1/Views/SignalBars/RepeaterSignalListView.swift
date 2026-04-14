@@ -35,6 +35,13 @@ struct RepeaterSignalPopover: View {
             .padding(.top, 10)
             .padding(.bottom, 6)
 
+            // Adaptive power quick-picker
+            if appState.adaptivePowerService.isEnabled {
+                adaptivePowerRow
+                Divider()
+                    .padding(.horizontal, 8)
+            }
+
             if service.repeaters.isEmpty {
                 Text("Scanning for repeaters...")
                     .font(.caption)
@@ -87,6 +94,53 @@ struct RepeaterSignalPopover: View {
         }
         .frame(width: 250)
         .padding(.bottom, 8)
+    }
+
+    // MARK: - Adaptive Power Row
+
+    private var adaptivePowerRow: some View {
+        let power = appState.adaptivePowerService
+        return HStack(spacing: 6) {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(powerColor)
+
+            Text("TX Power")
+                .font(.system(.caption2, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            if power.isElevated || power.isUserOverride {
+                Button {
+                    Task { await power.resetToBase() }
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+            }
+
+            Picker("", selection: Binding(
+                get: { power.currentStepIndex },
+                set: { newIndex in
+                    Task { await power.setUserOverride(stepIndex: newIndex) }
+                }
+            )) {
+                ForEach(power.availableSteps) { step in
+                    Text(step.label).tag(step.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(powerColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private var powerColor: Color {
+        let power = appState.adaptivePowerService
+        return power.isAtMax ? .red : power.isElevated ? .orange : .green
     }
 
     // MARK: - Path Hash Size Picker

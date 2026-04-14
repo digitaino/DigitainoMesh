@@ -22,18 +22,33 @@ struct SignalBarsToolbarItem: View {
            isEnabled,
            showDuringSurvey || !appState.isSurveyActive {
             Button { showingDetail = true } label: {
-                HStack(spacing: 4) {
-                    // RX: ▼ tucked above shortest bar
-                    signalGroup(
-                        arrowName: "arrow.down",
-                        arrowColor: best.rxQuality.color,
-                        arrowFlash: rxFlash,
-                        barsValue: best.rxQuality.barLevel,
-                        barsColor: best.rxQuality.color
-                    )
+                HStack(spacing: 3) {
+                    // RX: ▼ tucked above shortest bar, SNR label below
+                    VStack(spacing: 0) {
+                        signalGroup(
+                            arrowName: "arrow.down",
+                            arrowColor: best.rxQuality.color,
+                            arrowFlash: rxFlash,
+                            barsValue: best.rxQuality.barLevel,
+                            barsColor: best.rxQuality.color
+                        )
+                        if let snr = best.rxSnr {
+                            Text("\(Int(snr))dB")
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(best.rxQuality.color)
+                        }
+                    }
 
-                    // TX: ▲ tucked above shortest bar (or status indicator)
-                    txGroup(for: best)
+                    // TX: ▲ tucked above shortest bar, power label below
+                    VStack(spacing: 0) {
+                        txGroup(for: best)
+                        if appState.adaptivePowerService.isEnabled {
+                            let power = appState.adaptivePowerService
+                            Text(power.currentStep.label)
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(power.isAtMax ? .red : power.isElevated ? .orange : .green)
+                        }
+                    }
 
                     // Hex ID
                     Text(best.id)

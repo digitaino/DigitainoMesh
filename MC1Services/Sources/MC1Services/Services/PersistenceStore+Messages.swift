@@ -492,6 +492,21 @@ extension PersistenceStore {
         }
     }
 
+    /// Updates the TX power level used when sending a message
+    public func updateMessageTxPower(id: UUID, txPowerDbm: Int8) throws {
+        let targetID = id
+        let predicate = #Predicate<Message> { message in
+            message.id == targetID
+        }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
+
+        if let message = try modelContext.fetch(descriptor).first {
+            message.txPowerDbm = txPowerDbm
+            try modelContext.save()
+        }
+    }
+
     /// Updates the user GPS coordinates on an existing message.
     /// Used by the post-send location patch to replace stale cached coordinates
     /// with a fresh GPS fix.

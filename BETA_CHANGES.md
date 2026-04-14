@@ -1,4 +1,37 @@
-Beta Changes -- v0.10.1 (Build 27)
+Beta Changes -- v0.10.1 (Build 29)
+
+MeshWX Weather System
+
+The Weather tab delivers live NWS weather data over the mesh from a MeshWX bot node. No internet connection needed on your phone — the bot ingests weather data and broadcasts it over LoRa. Currently the bot pulls from the NWS web API for testing, but the production design replaces this with a direct GOES East EMWIN satellite downlink — no internet required anywhere in the chain, fully off-grid from satellite to radio to your phone.
+
+The app auto-discovers the weather channel when a MeshWX bot is active on your mesh. Broadcasts arrive automatically: current conditions, 7-day forecasts, TAF aviation forecasts, NEXRAD radar, and active NWS warnings. You can also search by city name, state, or airport code to request specific data on demand — city searches cover ~32,000 US Census places, not just airports.
+
+Weather cards use a horizontal swipe pager organized into three collapsible sections: Favorites, Your Requests, and Broadcasts. Each card combines the observation, forecast, and aviation data for a location into a single view. Add any station or city to favorites from the ··· menu. Cards without a forecast show a "Get Forecast" button to request one. After searching, the view scrolls to the new card automatically. Active warnings appear at the top with severity indicators — tap one to see details or view the polygon on the map overlaying the radar layer.
+
+Wire Efficiency
+
+LoRa bandwidth is extremely limited, so the protocol is designed to send as little data as possible over the air. All weather data is binary-encoded — a full observation fits in ~20 bytes, a 7-day forecast in ~55 bytes, and warning polygons use delta-encoded vertex compression. No JSON, no text, no headers — every byte counts.
+
+The app ships with bundled reference data: ~32,000 US places, 1,873 NWS forecast points, METAR station metadata, state/zone indices, and radar region definitions. When the bot sends a 3-byte place index or a zone code, the client resolves it locally to a full city name, coordinates, and WFO office — none of that needs to travel over the mesh. Radar frames use sparse encoding (only non-zero cells) with RLE compression, and multi-chunk reassembly with FEC parity so a single lost chunk can be recovered without retransmission.
+
+On-demand requests are a single short message (typically 6-8 bytes) sent on the shared channel. The bot responds with just the requested product — no handshake, no session, no overhead.
+
+Adaptive TX Power (Opt-In)
+
+Adaptive power is OFF by default — enable it manually in Settings > Adaptive Power. Once on, it automatically manages your radio's transmit power based on link quality. It starts at a lower base power to conserve battery and reduce RF congestion. When messages aren't being repeated, power escalates step by step. Once messages get through, it ramps back down.
+
+Designed primarily for higher-power boards with external amplifiers (like the WisMesh Pocket with its 1W PA), but you can also enable it on standard boards if you want automatic power management. In Settings, select your amplifier so the system accounts for the external gain. For boards without an amplifier, select "None" and it adjusts the radio's built-in power directly. A TX power indicator appears in the toolbar when enabled.
+
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 28)
+
+Seed location on init, suppress v4 radar log noise.
+
+v0.10.1 (Build 27)
 
 What's New Since Build 26
 

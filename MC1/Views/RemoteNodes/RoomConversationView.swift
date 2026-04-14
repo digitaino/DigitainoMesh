@@ -159,7 +159,7 @@ struct RoomConversationView: View {
             placeholder: L10n.RemoteNodes.RemoteNodes.Room.publicMessage,
             maxBytes: ProtocolLimits.maxDirectMessageLength,
             isEncrypted: false
-        ) { text in
+        ) { text, _ in
             scrollToBottomRequest += 1
             Task { await viewModel.sendMessage(text: text) }
         }

@@ -144,6 +144,10 @@ public final class Message {
     /// Format: "👍:3,❤️:2,😂:1" (emoji:count pairs, ordered by count desc)
     public var reactionSummary: String?
 
+    /// Radio TX power in dBm when this message was sent (outgoing only).
+    /// Nil for incoming messages or messages sent before this field was added.
+    public var txPowerDbm: Int8?
+
     /// Heard repeats for this message (cascade delete)
     @Relationship(deleteRule: .cascade, inverse: \MessageRepeat.message)
     public var repeats: [MessageRepeat]?
@@ -184,7 +188,8 @@ public final class Message {
         userLongitude: Double? = nil,
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
-        reactionSummary: String? = nil
+        reactionSummary: String? = nil,
+        txPowerDbm: Int8? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -222,6 +227,7 @@ public final class Message {
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary
+        self.txPowerDbm = txPowerDbm
     }
 }
 
@@ -306,6 +312,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
     public var timestampCorrected: Bool
     public var senderTimestamp: UInt32?
     public var reactionSummary: String?
+    public var txPowerDbm: Int8?
 
     public init(from message: Message) {
         self.id = message.id
@@ -344,6 +351,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.timestampCorrected = message.timestampCorrected
         self.senderTimestamp = message.senderTimestamp
         self.reactionSummary = message.reactionSummary
+        self.txPowerDbm = message.txPowerDbm
     }
 
     /// Memberwise initializer for creating DTOs directly
@@ -383,7 +391,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         userLongitude: Double? = nil,
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
-        reactionSummary: String? = nil
+        reactionSummary: String? = nil,
+        txPowerDbm: Int8? = nil
     ) {
         self.id = id
         self.deviceID = deviceID
@@ -421,6 +430,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary
+        self.txPowerDbm = txPowerDbm
     }
 
     public var isOutgoing: Bool {

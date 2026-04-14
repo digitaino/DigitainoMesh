@@ -194,7 +194,12 @@ public actor AdvertisementService {
             // Passive signal tracking: any packet relayed through a repeater tells us
             // about RX signal quality from the last-hop repeater.
             if let snr = logData.snr {
-                let hashSize = logData.pathNodes.count / max(Int(logData.pathLength & 0x0F), 1)
+                let hashSize: Int
+                if let decoded = decodePathLen(logData.pathLength) {
+                    hashSize = decoded.hashSize
+                } else {
+                    hashSize = 1
+                }
                 let lastHopBytes: [UInt8]
                 if hashSize > 0 && hashSize <= logData.pathNodes.count {
                     lastHopBytes = Array(logData.pathNodes.suffix(hashSize))

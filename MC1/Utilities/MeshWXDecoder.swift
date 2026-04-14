@@ -318,6 +318,32 @@ struct MeshWXForecast: Sendable {
         guard locationType == 6, locationIDBytes.count >= 3 else { return nil }
         return Int(locationIDBytes[0]) << 16 | Int(locationIDBytes[1]) << 8 | Int(locationIDBytes[2])
     }
+
+    /// For place (locationType==3), the 3-byte uint24 BE index into places.json.
+    var placeIndex: Int? {
+        guard locationType == 3, locationIDBytes.count >= 3 else { return nil }
+        return Int(locationIDBytes[0]) << 16 | Int(locationIDBytes[1]) << 8 | Int(locationIDBytes[2])
+    }
+
+    /// Display name from either PFM point or place lookup.
+    var displayName: String {
+        if let idx = pfmPointIndex {
+            let points = WXBundleLoader.allPFMPoints
+            if idx < points.count { return points[idx].name }
+        }
+        if let idx = placeIndex {
+            let places = WXBundleLoader.allPlaces
+            if idx < places.count { return places[idx].displayName }
+        }
+        return "Forecast"
+    }
+
+    /// Stable key for storage: either "place:<idx>" or pfm point index.
+    var storageKey: String {
+        if let idx = placeIndex { return "place:\(idx)" }
+        if let idx = pfmPointIndex { return "\(idx)" }
+        return locationIDBytes.map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 // MARK: - Observation (0x30)
@@ -400,14 +426,60 @@ struct MeshWXObservation: Sendable {
     /// Human-readable station or zone name derived from location bytes.
     var displayName: String {
         switch locationType {
+        case 1: // ZONE — 1 byte state_idx + 2 byte uint16 BE zone_num
+            guard let code = zoneCode else { return locationKey }
+            if let pfm = WXBundleLoader.allPFMPoints.first(where: { $0.zone == code }) {
+                return pfm.name
+            }
+            return code
         case 2: // STATION — 4 ASCII bytes (ICAO)
             guard locationIDBytes.count >= 4 else { return locationKey }
             let icao = String(bytes: locationIDBytes.prefix(4), encoding: .ascii)?
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
             return icao ?? locationKey
+        case 3: // PLACE — 3 byte uint24 BE index into places.json
+            guard let idx = placeIndex else { return locationKey }
+            let places = WXBundleLoader.allPlaces
+            guard idx < places.count else { return locationKey }
+            return places[idx].displayName
+        case 6: // PFM_POINT — 3 byte uint24 BE index
+            guard let idx = pfmPointIndex else { return locationKey }
+            let points = WXBundleLoader.allPFMPoints
+            guard idx < points.count else { return locationKey }
+            return points[idx].name
         default:
             return locationKey
         }
+    }
+
+    /// Decoded zone code (e.g. "TXZ192") for zone-type observations (locationType==1).
+    var zoneCode: String? {
+        guard locationType == 1, locationIDBytes.count >= 3 else { return nil }
+        let stateIdx = Int(locationIDBytes[0])
+        let zoneNum = UInt16(locationIDBytes[1]) << 8 | UInt16(locationIDBytes[2])
+        guard stateIdx < MeshWXDecoder.stateCodes.count else { return nil }
+        return "\(MeshWXDecoder.stateCodes[stateIdx])Z\(String(format: "%03d", zoneNum))"
+    }
+
+    /// True if this observation came from a METAR station (locationType==2).
+    var isStation: Bool { locationType == 2 }
+
+    /// True if this observation came from an RWR zone-based report (locationType==1).
+    var isZone: Bool { locationType == 1 }
+
+    /// True if this observation is a city place lookup (locationType==3).
+    var isPlace: Bool { locationType == 3 }
+
+    /// Place index for LOC_PLACE (locationType==3) observations.
+    var placeIndex: Int? {
+        guard locationType == 3, locationIDBytes.count >= 3 else { return nil }
+        return (Int(locationIDBytes[0]) << 16) | (Int(locationIDBytes[1]) << 8) | Int(locationIDBytes[2])
+    }
+
+    /// PFM point index for LOC_PFM_POINT (locationType==6) observations.
+    var pfmPointIndex: Int? {
+        guard locationType == 6, locationIDBytes.count >= 3 else { return nil }
+        return (Int(locationIDBytes[0]) << 16) | (Int(locationIDBytes[1]) << 8) | Int(locationIDBytes[2])
     }
 
     /// "HH:MMZ"
@@ -662,48 +734,77 @@ extension MeshWXRainObservations.City {
 
 // MARK: - TAF (0x36)
 
-/// A decoded 0x36 Terminal Aerodrome Forecast (TAF) snapshot for an aviation station.
-/// 15-byte fixed format: [type(1)] [icao(4)] [time(2)] [obs_fields(8)]
+/// A decoded 0x36 Terminal Aerodrome Forecast (TAF) for an aviation station.
+/// 15-byte fixed format matching the bot's `pack_taf()`:
+///   [0] 0x36  [1] LOC_STATION  [2-5] ICAO  [6] issued_hours_ago
+///   [7] valid_from_hour  [8] valid_to_hour
+///   [9] (wind_dir_nibble<<4)|wind_speed_5kt  [10] wind_gust_kt
+///   [11] visibility_qsm  [12] ceiling_100ft  [13] sky_code  [14] weather_flags
 struct MeshWXTAF: Sendable {
     let icao: String
-    let timestampMinutes: UInt16
-    let tempF: Int8          // stored in °F (converted from Celsius by decoder)
-    let dewpointF: Int8
-    let windDir: UInt8
+    let issuedHoursAgo: UInt8
+    let validFromHour: UInt8   // 0-23 UTC
+    let validToHour: UInt8     // 0-23 UTC
+    let windDirNibble: UInt8   // 0-15 (16-point compass, ×22.5°)
+    let windSpeed5kt: UInt8    // units of 5 kt (0-15 → 0-75 kt)
+    let windGustKt: UInt8      // 0 = no gust
+    let visibilityQSM: UInt8   // quarter statute miles (4 = 1 SM, 64 = unlimited/P6SM)
+    let ceiling100ft: UInt8    // 0 = no ceiling
     let skyCode: UInt8
-    let windSpeedKts: UInt8  // knots (as sent by bot)
-    let windGustKts: UInt8   // 0 = no gust
-    let visibilityMi: UInt8
-    let pressureRaw: UInt8
-    let feelsLikeDelta: Int8 // Fahrenheit delta
+    let weatherFlags: UInt8
     let receivedAt: Date
 
-    var pressureInHg: Double { 29.00 + Double(pressureRaw) / 100.0 }
-    var feelsLikeF: Int { Int(tempF) + Int(feelsLikeDelta) }
-    var hasGust: Bool { windGustKts > 0 }
-    /// Wind speed converted to mph (1 kt ≈ 1.151 mph).
-    var windSpeedMph: UInt8 { UInt8(min(255, Int(windSpeedKts) * 1151 / 1000)) }
-    var windGustMph: UInt8  { UInt8(min(255, Int(windGustKts)  * 1151 / 1000)) }
-    /// Temperature in Celsius (converted from stored Fahrenheit).
-    var tempC: Int { (Int(tempF) - 32) * 5 / 9 }
-    var dewpointC: Int { (Int(dewpointF) - 32) * 5 / 9 }
-    var feelsLikeC: Int { (feelsLikeF - 32) * 5 / 9 }
+    // MARK: Computed
+
+    var windSpeedKts: Int { Int(windSpeed5kt) * 5 }
+    var hasGust: Bool { windGustKt > 0 }
+
+    var visibilitySM: String {
+        if visibilityQSM >= 64 { return "P6" }
+        let whole = Int(visibilityQSM) / 4
+        let frac = Int(visibilityQSM) % 4
+        if frac == 0 { return "\(whole)" }
+        let fracs = ["", "1/4", "1/2", "3/4"]
+        return whole > 0 ? "\(whole) \(fracs[frac])" : fracs[frac]
+    }
+
+    var ceilingFt: Int { Int(ceiling100ft) * 100 }
+    var hasCeiling: Bool { ceiling100ft > 0 }
+
+    var ceilingLabel: String {
+        if !hasCeiling { return "Unlimited" }
+        let ft = ceilingFt
+        return ft >= 1000 ? String(format: "%.1fk ft", Double(ft) / 1000.0) : "\(ft) ft"
+    }
+
+    var windDirDegrees: Int { Int(windDirNibble) * 225 / 10 }
 
     var windDirName: String {
-        ["N","NE","E","SE","S","SW","W","NW","Calm"][min(Int(windDir), 8)]
+        let names = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+                     "S","SSW","SW","WSW","W","WNW","NW","NNW"]
+        return names[Int(windDirNibble) % 16]
+    }
+
+    var flightCategory: String {
+        let visSM = Double(visibilityQSM) / 4.0
+        let cig = ceilingFt
+        if visSM < 1 || (hasCeiling && cig < 500) { return "LIFR" }
+        if visSM < 3 || (hasCeiling && cig < 1000) { return "IFR" }
+        if visSM <= 5 || (hasCeiling && cig <= 3000) { return "MVFR" }
+        return "VFR"
     }
 
     var skyName: String {
         switch skyCode {
         case 0: return "Clear"
         case 1: return "Few Clouds"
-        case 2: return "Partly Cloudy"
-        case 3: return "Mostly Cloudy"
+        case 2: return "Scattered"
+        case 3: return "Broken"
         case 4: return "Overcast"
-        case 5: return "Foggy"
+        case 5: return "Fog"
         case 8: return "Rain"
         case 9: return "Snow"
-        case 10: return "Thunderstorm"
+        case 0xA: return "Thunderstorm"
         default: return "Mixed"
         }
     }
@@ -714,17 +815,30 @@ struct MeshWXTAF: Sendable {
         case 1, 2: return "cloud.sun.fill"
         case 3, 4: return "cloud.fill"
         case 5: return "cloud.fog.fill"
-        case 8, 11: return "cloud.rain.fill"
+        case 8: return "cloud.rain.fill"
         case 9: return "cloud.snow.fill"
-        case 10: return "cloud.bolt.rain.fill"
+        case 0xA: return "cloud.bolt.rain.fill"
         default: return "cloud.fill"
         }
     }
 
-    var timestampLabel: String {
-        let h = timestampMinutes / 60
-        let m = timestampMinutes % 60
-        return String(format: "%02d:%02dZ", h, m)
+    /// Decode weather flags into human-readable phenomena strings.
+    var weatherPhenomena: [String] {
+        var out: [String] = []
+        if weatherFlags & 0x04 != 0 { out.append("TS") }
+        if weatherFlags & 0x01 != 0 {
+            let prefix = weatherFlags & 0x40 != 0 ? "+" : weatherFlags & 0x80 != 0 ? "-" : ""
+            out.append("\(prefix)RA")
+        }
+        if weatherFlags & 0x02 != 0 { out.append("SN") }
+        if weatherFlags & 0x08 != 0 { out.append("FZ") }
+        if weatherFlags & 0x10 != 0 { out.append("BR/FG") }
+        if weatherFlags & 0x20 != 0 { out.append("SH") }
+        return out
+    }
+
+    var validPeriodLabel: String {
+        String(format: "%02d00Z–%02d00Z", validFromHour, validToHour)
     }
 }
 
@@ -824,10 +938,37 @@ struct MeshWXNotAvailable: Sendable {
     /// Derives the pending-request key matching this response, if trackable.
     var pendingKey: String? {
         switch dataType {
-        case 0x1: // FORECAST — LOC_PFM_POINT
-            guard locationType == 0x06, locationIDBytes.count >= 3 else { return nil }
+        case 0x0: // DATA_WX — could be LOC_PLACE, LOC_PFM_POINT, or LOC_ZONE
+            if locationType == 0x03, locationIDBytes.count >= 3 {
+                // LOC_PLACE — echo place index to match pending key
+                let idx = (Int(locationIDBytes[0]) << 16) | (Int(locationIDBytes[1]) << 8) | Int(locationIDBytes[2])
+                return "wx:place:\(idx)"
+            }
+            if locationType == 0x06, locationIDBytes.count >= 3 {
+                // LOC_PFM_POINT — derive zone code to match pending key
+                let idx = (Int(locationIDBytes[0]) << 16) | (Int(locationIDBytes[1]) << 8) | Int(locationIDBytes[2])
+                if idx < WXBundleLoader.allPFMPoints.count {
+                    let zone = WXBundleLoader.allPFMPoints[idx].zone
+                    if !zone.isEmpty { return "wx:zone:\(zone)" }
+                }
+                return "wx:pfm:\(idx)"
+            }
+            if locationType == 0x01, locationIDBytes.count >= 3 {
+                // LOC_ZONE — decode zone code
+                let stateIdx = Int(locationIDBytes[0])
+                let zoneNum = UInt16(locationIDBytes[1]) << 8 | UInt16(locationIDBytes[2])
+                if stateIdx < MeshWXDecoder.stateCodes.count {
+                    let code = "\(MeshWXDecoder.stateCodes[stateIdx])Z\(String(format: "%03d", zoneNum))"
+                    return "wx:zone:\(code)"
+                }
+            }
+            return nil
+        case 0x1: // FORECAST — LOC_PFM_POINT or LOC_PLACE
+            guard locationIDBytes.count >= 3 else { return nil }
             let idx = (Int(locationIDBytes[0]) << 16) | (Int(locationIDBytes[1]) << 8) | Int(locationIDBytes[2])
-            return "forecast:\(idx)"
+            if locationType == 0x03 { return "forecast:place:\(idx)" }
+            if locationType == 0x06 { return "forecast:\(idx)" }
+            return nil
         case 0x5: // METAR — LOC_STATION
             guard locationType == 0x02, locationIDBytes.count >= 4 else { return nil }
             let icao = String(bytes: locationIDBytes.prefix(4), encoding: .ascii)?
@@ -983,6 +1124,19 @@ struct MeshWXNowcast: Sendable {
 
 enum MeshWXDecoder {
 
+    /// Protocol-fixed state/territory codes matching state_index.json.
+    /// Used to decode LOC_ZONE location bytes into zone code strings.
+    static let stateCodes: [String] = [
+        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+        "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+        "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+        "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+        "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
+        "DC","PR","VI","GU","AS","MP","MH","FM","PW",
+        "AN","AM","GM","PK","PZ","PH","CI","CN","US","MX",
+        "PM","LE","LO","LH","LM","LS","LC","SL","PS"
+    ]
+
     // MARK: VTEC Phenomena Table (65 entries, indices 0x00–0x40)
     static let vtecPhenomena: [(code: String, name: String)] = [
         ("AF", "Ashfall"),                     // 0x00
@@ -1067,9 +1221,6 @@ enum MeshWXDecoder {
     static func decode(_ data: Data) -> MeshWXMessage? {
         guard !data.isEmpty else { return nil }
         // All bot messages are COBS-encoded via send_binary_channel().
-        // If COBS decode fails the message is truncated or malformed — return nil rather
-        // than falling back to decodeRaw which would misinterpret the COBS overhead byte
-        // as a message type (e.g. 0x03 → garbage NOT_AVAILABLE, 0x11 → misaligned radar).
         guard let decoded = cobsDecode(data) else { return nil }
         return decodeRaw(decoded)
     }
@@ -1200,7 +1351,7 @@ enum MeshWXDecoder {
         let scaleKm: UInt8
         let encoding: UInt8
         let totalChunks: Int
-        var chunks: [Int: Data]
+        var chunks: [Int: (payload: Data, encoding: UInt8)]
 
         var isComplete: Bool { chunks.count >= totalChunks }
 
@@ -1209,10 +1360,11 @@ enum MeshWXDecoder {
             var result = Data()
             for seq in 0..<totalChunks {
                 guard let chunk = chunks[seq] else { return nil }
-                result.append(chunk)
+                result.append(chunk.payload)
             }
             return result
         }
+
     }
 
     static func decode0x11RadarGrid(_ data: Data) -> MeshWXRadarFrame? {
@@ -1244,17 +1396,66 @@ enum MeshWXDecoder {
             gridSize: gridSize, timestamp: timestamp, scaleKm: scaleKm,
             encoding: encoding, totalChunks: totalChunks, chunks: [:]
         )
-        acc.chunks[chunkSeq] = payload
+        acc.chunks[chunkSeq] = (payload: payload, encoding: encoding)
         radarChunkBuffer[bufferKey] = acc
 
-        guard acc.isComplete, let assembled = acc.assembledPayload else { return nil }
-        radarChunkBuffer.removeValue(forKey: bufferKey)
+        if acc.isComplete, let assembled = acc.assembledPayload {
+            radarChunkBuffer.removeValue(forKey: bufferKey)
+            return decodeRadarPayload(regionID: regionID,
+                                      frameSeq: 0,
+                                      timestamp: acc.timestamp, scaleKm: acc.scaleKm,
+                                      gridSize: acc.gridSize, encoding: acc.encoding,
+                                      payload: assembled)
+        }
 
-        return decodeRadarPayload(regionID: regionID,
-                                  frameSeq: 0,
-                                  timestamp: acc.timestamp, scaleKm: acc.scaleKm,
-                                  gridSize: acc.gridSize, encoding: acc.encoding,
-                                  payload: assembled)
+        // Not complete yet — try partial decode from whatever chunks we have.
+        // Sparse encoding (0) is independently decodable per chunk since each
+        // 2-byte pair encodes an absolute grid position. RLE (1) can only be
+        // decoded from chunk 0 onwards. The WeatherCache dedup (>=) ensures a
+        // later complete frame replaces any partial frame with the same timestamp.
+        return partialRadarDecode(acc: acc, regionID: regionID)
+    }
+
+    /// Decode a partial radar grid from whatever chunks are available.
+    private static func partialRadarDecode(acc: RadarChunkAccumulator, regionID: UInt8) -> MeshWXRadarFrame? {
+        let totalCells = acc.gridSize * acc.gridSize
+        var grid = [UInt8](repeating: 0, count: totalCells)
+        var didDecode = false
+
+        for (_, chunk) in acc.chunks {
+            if chunk.encoding == 0 {
+                // Sparse: 2 bytes → 12-bit absolute position + 4-bit value
+                var i = chunk.payload.startIndex
+                while chunk.payload.distance(from: i, to: chunk.payload.endIndex) >= 2 {
+                    let b0 = chunk.payload[i]
+                    let b1 = chunk.payload[chunk.payload.index(after: i)]
+                    let pos = (Int(b0) << 4) | (Int(b1) >> 4)
+                    let val = b1 & 0x0F
+                    if pos < totalCells { grid[pos] = val }
+                    i = chunk.payload.index(i, offsetBy: 2)
+                }
+                didDecode = true
+            }
+        }
+
+        // RLE from chunk 0 if present
+        if let chunk0 = acc.chunks[0], chunk0.encoding == 1 {
+            var cellIndex = 0
+            for byte in chunk0.payload {
+                let run   = Int((byte >> 4) & 0x0F) + 1
+                let value = byte & 0x0F
+                for _ in 0..<run {
+                    if cellIndex < totalCells { grid[cellIndex] = value }
+                    cellIndex += 1
+                }
+            }
+            didDecode = true
+        }
+
+        guard didDecode else { return nil }
+        return MeshWXRadarFrame(regionID: regionID, frameSeq: 0,
+                                timestamp: acc.timestamp, scaleKm: acc.scaleKm,
+                                gridSize: acc.gridSize, grid: grid)
     }
 
     /// Returns chunk metadata for a 0x11 multi-chunk radar message without modifying the accumulator buffer.
@@ -1829,48 +2030,42 @@ enum MeshWXDecoder {
 
     // MARK: 0x36 TAF Decoder
     //
-    // Wire format:
-    //  [0]     0x36
-    //  [1]     loc_type byte (0x02 = LOC_STATION) — skip for field decoding
-    //  [2..5]  station ICAO (4 ASCII bytes)
-    //  [5..6]  time uint16 LE (minutes since midnight UTC) — overlaps last ICAO byte
-    //  [7]     temp_c int8 (Celsius — converted to °F on decode)
-    //  [8]     dewpoint_c int8 (Celsius)
-    //  [9]     (wind_dir << 4) | sky_code
-    //  [10]    wind_speed_mph uint8
-    //  [11]    wind_gust_mph uint8 (0 = no gust)
-    //  [12]    visibility_mi uint8
-    //  [13]    pressure_raw uint8 — (inHg − 29.00) × 100
-    //  [14]    feels_like_delta int8 (Celsius delta)
+    // Wire format (matches bot pack_taf):
+    //  [0]     0x36 (MSG_TAF)
+    //  [1]     0x02 (LOC_STATION)
+    //  [2-5]   station ICAO (4 ASCII bytes)
+    //  [6]     issued_hours_ago (uint8)
+    //  [7]     valid_from_hour (uint8, 0-23 UTC)
+    //  [8]     valid_to_hour (uint8, 0-23 UTC)
+    //  [9]     (wind_dir_nibble << 4) | wind_speed_5kt
+    //  [10]    wind_gust_kt (uint8, 0 = no gust)
+    //  [11]    visibility_qsm (uint8, quarter statute miles; 64 = P6SM)
+    //  [12]    ceiling_100ft (uint8, 0 = no ceiling)
+    //  [13]    sky_code (uint8, low nibble)
+    //  [14]    weather_flags (uint8 bitfield)
 
     static func decodeTAF(_ data: Data) -> MeshWXTAF? {
         guard data.count >= 15, data[0] == 0x36 else { return nil }
-        // [1] is the loc_type byte; ICAO starts at [2]
         let icao = String(bytes: data[2..<6], encoding: .ascii)?
             .trimmingCharacters(in: CharacterSet(charactersIn: "\0")) ?? "????"
-        let timestamp  = UInt16(data[5]) | (UInt16(data[6]) << 8)
-        let tempC      = Int8(bitPattern: data[7])
-        let dewC       = Int8(bitPattern: data[8])
-        let windSky    = data[9]
-        let windDir    = (windSky >> 4) & 0x0F
-        let skyCode    = windSky & 0x0F
-        let windSpeed  = data[10]
-        let windGust   = data[11]
-        let visibility = data[12]
-        let pressure   = data[13]
-        let feelsLikeC = Int8(bitPattern: data[14])
+        let issuedHoursAgo = data[6]
+        let validFrom      = data[7]
+        let validTo        = data[8]
+        let dirSpd         = data[9]
+        let windDirNibble  = (dirSpd >> 4) & 0x0F
+        let windSpeed5kt   = dirSpd & 0x0F
+        let windGust       = data[10]
+        let visibilityQSM  = data[11]
+        let ceiling100ft   = data[12]
+        let skyCode        = data[13] & 0x0F
+        let weatherFlags   = data[14]
 
-        // Bot sends temperatures in Celsius; convert to Fahrenheit for display
-        let tempF      = Int8(max(-128, min(127, Int(tempC)     * 9 / 5 + 32)))
-        let dewF       = Int8(max(-128, min(127, Int(dewC)      * 9 / 5 + 32)))
-        let feelsLikeF = Int8(max(-128, min(127, Int(feelsLikeC) * 9 / 5)))
-
-        return MeshWXTAF(icao: icao, timestampMinutes: timestamp,
-                         tempF: tempF, dewpointF: dewF,
-                         windDir: windDir, skyCode: skyCode,
-                         windSpeedKts: windSpeed, windGustKts: windGust,
-                         visibilityMi: visibility, pressureRaw: pressure,
-                         feelsLikeDelta: feelsLikeF, receivedAt: Date())
+        return MeshWXTAF(icao: icao, issuedHoursAgo: issuedHoursAgo,
+                         validFromHour: validFrom, validToHour: validTo,
+                         windDirNibble: windDirNibble, windSpeed5kt: windSpeed5kt,
+                         windGustKt: windGust, visibilityQSM: visibilityQSM,
+                         ceiling100ft: ceiling100ft, skyCode: skyCode,
+                         weatherFlags: weatherFlags, receivedAt: Date())
     }
 
     // MARK: 0x37 Warnings Near Decoder
@@ -1973,6 +2168,7 @@ enum MeshWXDecoder {
     private struct FECGroup {
         let msgType: UInt8
         let groupTotal: UInt8
+        let createdAt: Date
         /// Keyed by unit_index. Stores raw payload (bytes 6+ of v4 frame, no type prefix).
         var units: [UInt8: Data]
         /// Raw parity payload (bytes 6+ of the parity v4 frame).
@@ -1989,6 +2185,7 @@ enum MeshWXDecoder {
             for idx: UInt8 in 1...4 { if units[idx] == nil { missing += 1 } }
             return missing == 1
         }
+        var isStale: Bool { Date().timeIntervalSince(createdAt) > 120 }
     }
 
     nonisolated(unsafe) private static var fecGroups: [UInt16: FECGroup] = [:]
@@ -2008,7 +2205,6 @@ enum MeshWXDecoder {
         let rawPayload = Data(data[6...])
 
         if !isFECUnit {
-            // Non-FEC: reconstruct v3 message and decode normally
             var v3 = Data([msgType])
             v3.append(rawPayload)
             return decodeRaw(v3)
@@ -2016,7 +2212,17 @@ enum MeshWXDecoder {
 
         // FEC: buffer this unit
         let groupKey = UInt16(msgType) << 8 | UInt16(groupID)
-        var group = fecGroups[groupKey] ?? FECGroup(msgType: msgType, groupTotal: groupTotal, units: [:], parityPayload: nil)
+        let existing = fecGroups[groupKey]
+
+        // Base layer always arrives first — reset the group to avoid
+        // mixing stale quadrants from a previous broadcast cycle.
+        // Also evict groups older than 2 minutes as a safety net.
+        var group: FECGroup
+        if isBaseLayer || existing == nil || existing!.isStale {
+            group = FECGroup(msgType: msgType, groupTotal: groupTotal, createdAt: Date(), units: [:], parityPayload: nil)
+        } else {
+            group = existing!
+        }
 
         if isParity {
             group.parityPayload = rawPayload
@@ -2024,6 +2230,9 @@ enum MeshWXDecoder {
             group.units[unitIndex] = rawPayload
         }
         fecGroups[groupKey] = group
+
+        // Evict any other stale groups while we're here
+        fecGroups = fecGroups.filter { !$0.value.isStale || $0.key == groupKey }
 
         // Try to complete or recover the group
         let completedGroup: FECGroup?
@@ -2350,6 +2559,44 @@ enum MeshWXDecoder {
         data[3] = 0x00   // client_newest high byte
         data[4] = 0x06   // LOC_PFM_POINT
         let idx = UInt32(pfmPointIndex)
+        data[5] = UInt8((idx >> 16) & 0xFF)
+        data[6] = UInt8((idx >> 8)  & 0xFF)
+        data[7] = UInt8(idx         & 0xFF)
+        return data
+    }
+
+    static func buildForecastRequest(placeIndex: Int) -> Data {
+        var data = Data(count: 8)
+        data[0] = 0x02
+        data[1] = 0x10   // data_type = 1 (FORECAST) << 4 | flags = 0
+        data[2] = 0x00
+        data[3] = 0x00
+        data[4] = 0x03   // LOC_PLACE
+        let idx = UInt32(placeIndex)
+        data[5] = UInt8((idx >> 16) & 0xFF)
+        data[6] = UInt8((idx >> 8)  & 0xFF)
+        data[7] = UInt8(idx         & 0xFF)
+        return data
+    }
+
+    /// Builds a 0x02 DATA_WX observation request for a place (city).
+    /// The bot resolves the place's coordinates to the nearest zone and
+    /// returns weather data with LOC_PLACE echoed back.
+    ///
+    /// Wire format:
+    ///  [0]   0x02
+    ///  [1]   0x00 (data_type = 0 DATA_WX << 4)
+    ///  [2–3] client_newest uint16 LE (0 = no cache)
+    ///  [4]   location_type = 0x03 (LOC_PLACE)
+    ///  [5–7] place index uint24 BE
+    static func buildObservationRequest(placeIndex: Int) -> Data {
+        var data = Data(count: 8)
+        data[0] = 0x02
+        data[1] = 0x00   // data_type = 0 (DATA_WX) << 4 | flags = 0
+        data[2] = 0x00
+        data[3] = 0x00
+        data[4] = 0x03   // LOC_PLACE
+        let idx = UInt32(placeIndex)
         data[5] = UInt8((idx >> 16) & 0xFF)
         data[6] = UInt8((idx >> 8)  & 0xFF)
         data[7] = UInt8(idx         & 0xFF)

@@ -7,7 +7,7 @@ struct ChatConversationInputBar: View {
     @Binding var composingText: String
     @FocusState.Binding var isFocused: Bool
     let nodeNameByteCount: Int
-    let onSend: (String) async -> Void
+    let onSend: (String, Int8?) async -> Void
     let onWillSend: () -> Void
 
     var body: some View {
@@ -19,9 +19,9 @@ struct ChatConversationInputBar: View {
                 placeholder: L10n.Chats.Chats.Input.Placeholder.directMessage,
                 maxBytes: ProtocolLimits.maxDirectMessageLength,
                 isEncrypted: true
-            ) { text in
+            ) { text, powerOverride in
                 onWillSend()
-                Task { await onSend(text) }
+                Task { await onSend(text, powerOverride) }
             }
 
         case .channel(let channel):
@@ -36,9 +36,9 @@ struct ChatConversationInputBar: View {
                     : L10n.Chats.Chats.Channel.typePrivate,
                 maxBytes: maxBytes,
                 isEncrypted: channel.isEncryptedChannel
-            ) { text in
+            ) { text, powerOverride in
                 onWillSend()
-                Task { await onSend(text) }
+                Task { await onSend(text, powerOverride) }
             }
         }
     }
