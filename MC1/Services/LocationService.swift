@@ -86,6 +86,8 @@ public final class LocationService: NSObject, CLLocationManagerDelegate {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        // Seed from the system's cached location so callers don't see nil on cold launch.
+        currentLocation = locationManager.location
     }
 
     // MARK: - Public Methods
