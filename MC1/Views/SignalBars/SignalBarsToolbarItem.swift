@@ -40,9 +40,21 @@ struct SignalBarsToolbarItem: View {
                             }
                         }
 
-                        // TX: ▲ tucked above shortest bar, power label below
+                        // TX: ▲ tucked above shortest bar, TX SNR below
                         VStack(spacing: 0) {
                             txGroup(for: best)
+                            if case .measured(let quality) = best.txState, let txSnr = best.txSnr {
+                                Text("\(Int(txSnr))dB")
+                                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(quality.color)
+                            }
+                        }
+
+                        // Hex ID + adaptive power label
+                        VStack(spacing: 1) {
+                            Text(best.id)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
                             if appState.adaptivePowerService.isEnabled {
                                 let power = appState.adaptivePowerService
                                 Text(power.currentStep.label)
@@ -50,11 +62,6 @@ struct SignalBarsToolbarItem: View {
                                     .foregroundStyle(power.isAtMax ? .red : power.isElevated ? .orange : .green)
                             }
                         }
-
-                        // Hex ID
-                        Text(best.id)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
                     }
                 } else {
                     // No repeaters yet — show scanning state with TX power if enabled

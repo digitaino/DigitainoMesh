@@ -1,4 +1,8 @@
-Beta Changes -- v0.10.1 (Build 31)
+Beta Changes -- v0.10.1 (Build 32)
+
+Signal Bars TX SNR & Power Layout
+
+The signal bars toolbar now shows TX SNR below the TX bars, matching the RX SNR display. When adaptive power is enabled, the current power level (e.g. "100mW") is shown below the repeater hex ID instead of below the TX bars, keeping the signal columns symmetrical.
 
 Network-Friendly Survey Probes
 
