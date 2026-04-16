@@ -1,4 +1,40 @@
-Beta Changes -- v0.10.1 (Build 29)
+Beta Changes -- v0.10.1 (Build 31)
+
+Network-Friendly Survey Probes
+
+Redesigned how signal survey probing works to dramatically reduce mesh network flooding.
+
+Every probe now automatically sends a discover request (zero-hop, never floods) and a trace (hop-by-hop, naturally limited). These are lightweight and provide TX SNR and mesh depth data without any network-wide broadcast. Previously, discover and trace were gated behind Deep Scan mode — now they're always-on.
+
+Channel flood messages — the only probe type that broadcasts across the entire mesh — are now gated by a per-cell limit ("Flood Messages per Cell" in survey settings). Set it to 1-3 to control how many flood messages are sent per ~100m hex cell, or Off to rely entirely on discover + trace. When multiple floods are allowed per cell, they're spaced evenly across the estimated cell transit time using GPS speed, so they test the link at different positions within the cell rather than all firing at once. The manual Probe button always sends a flood message regardless of the limit.
+
+Aggressive probe frequency presets (Driving ~15m, Dense ~25m) are now restricted to debug builds only and hidden in TestFlight/App Store releases. Normal (~50m) and Sparse (~100m) remain available to all users.
+
+TX SNR from Trace Responses
+
+Fixed trace response processing so the first hop's SNR — which represents how well the nearest repeater heard your transmission — is always saved as TX SNR. Previously this was only captured for multi-hop traces, missing the most common single-hop case.
+
+Adaptive TX Power Improvements
+
+Refined the adaptive power state machine with improved escalation logic and toolbar indicator updates.
+
+Signal Bars & Repeater List
+
+Updated repeater signal list and toolbar indicator with improved layout and display logic.
+
+No Repeats Retry Card
+
+When a sent message gets no heard repeats after 5 seconds, a retry card appears on the bubble offering to resend at the next power step (when adaptive power is enabled). Repeats arriving clear the card automatically. Retry uses resendChannelMessage for a fresh timestamp so repeaters treat it as a new broadcast. TX power verification now retries up to 3 times before falling back.
+
+MeshWX Desktop App
+
+Electron wrapper for the MeshWX weather web app with native macOS packaging, code signing, and auto-update support.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 29)
 
 MeshWX Weather System
 

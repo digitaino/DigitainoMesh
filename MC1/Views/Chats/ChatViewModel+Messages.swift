@@ -769,6 +769,7 @@ extension ChatViewModel {
     /// If adaptive power is enabled, escalates TX power before retry.
     func retryMessage(_ message: MessageDTO) async {
         logger.info("retryMessage called for message: \(message.id)")
+        clearNoRepeatsRetry()
 
         guard let messageService else {
             logger.warning("retryMessage: messageService is nil")
@@ -1120,6 +1121,10 @@ extension ChatViewModel {
 
                 // Apply power for THIS message — override or adaptive
                 let appliedDbm = await applyPowerForMessage(overrideDbm: queued.overrideRadioDbm)
+
+                if appliedDbm == nil, appState?.adaptivePowerService.isEnabled == true {
+                    errorMessage = "TX power could not be verified — sending at current radio level"
+                }
 
                 // Record TX power on the message
                 if let dbm = appliedDbm {

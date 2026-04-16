@@ -60,6 +60,16 @@ struct ChatConversationMessagesContent: View {
         newMessagesDividerMessageID != nil && !isDividerVisible && !hasDismissedDividerFAB
     }
 
+    /// Label for the next power step (e.g. "500mW"), or `nil` if adaptive power is off or already at max.
+    private var nextPowerLabel: String? {
+        guard let power = viewModel.appState?.adaptivePowerService,
+              power.isEnabled, !power.isAtMax else { return nil }
+        let available = power.availableSteps
+        guard let idx = available.firstIndex(where: { $0.id == power.currentStepIndex }),
+              idx + 1 < available.count else { return nil }
+        return available[idx + 1].label
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -123,6 +133,7 @@ struct ChatConversationMessagesContent: View {
             },
             isLoadingOlderMessages: viewModel.isLoadingOlder,
             highlightedItemID: highlightedMessageID,
+            noRepeatsRetryItemID: viewModel.noRepeatsRetryMessageID,
             canSwipeToReply: onReply != nil ? { item in !item.isOutgoing } : nil,
             onSwipeToReply: onReply != nil ? { item in
                 if let message = viewModel.message(for: item) {
@@ -236,6 +247,8 @@ struct ChatConversationMessagesContent: View {
                     detectedHexPath: item.detectedHexPath,
                     isSearchMatch: item.isSearchMatch,
                     isHighlighted: item.id == highlightedMessageID,
+                    showNoRepeatsRetry: viewModel.noRepeatsRetryMessageID == item.messageID,
+                    nextPowerLabel: nextPowerLabel,
                     duplicateCount: item.duplicateCount,
                     isDuplicateGroupExpanded: item.duplicateCount > 1 && viewModel.expandedDuplicateGroups.contains(item.duplicateGroupIDs.first ?? item.messageID),
                     onToggleDuplicateGroup: item.duplicateCount > 1 ? {
@@ -244,6 +257,7 @@ struct ChatConversationMessagesContent: View {
                 ),
                 callbacks: MessageBubbleCallbacks(
                     onRetry: { onRetryMessage(message) },
+                    onResendAtNextPower: { onRetryMessage(message) },
                     onReaction: onReaction(for: message),
                     onLongPress: { selectedMessageForActions = message },
                     onReply: !message.isOutgoing ? { onReply?(message) } : nil,

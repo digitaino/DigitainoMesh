@@ -475,7 +475,7 @@ struct ChatConversationView: View {
                 if chatViewModel.messages.contains(where: { $0.id == messageID }) {
                     chatViewModel.updateHeardRepeats(for: messageID, count: count)
                     if count > 0 {
-                        Task { await appState.adaptivePowerService.onRepeatsHeard() }
+                        appState.adaptivePowerService.onRepeatsHeard()
                     }
                 }
             case .reactionReceived(let messageID, let summary):

@@ -60,10 +60,37 @@ struct AdaptivePowerSection: View {
                         Circle()
                             .fill(statusColor)
                             .frame(width: 8, height: 8)
-                        Text("Radio TX: \(powerService.currentRadioDbm) dBm")
+                        Text("Target TX: \(powerService.currentRadioDbm) dBm")
                             .font(.system(.subheadline, design: .monospaced))
                         if paGainDb > 0 {
                             Text("+ \(Int(paGainDb)) dB amp = \(Int(powerService.currentStep.eirpDbm)) dBm EIRP")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Device-confirmed power feedback
+                    HStack(spacing: 6) {
+                        if powerService.lastApplyFailed {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                            Text("Radio did not confirm power change")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        } else if let confirmed = powerService.confirmedRadioDbm {
+                            Image(systemName: confirmed == powerService.currentRadioDbm
+                                  ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(confirmed == powerService.currentRadioDbm ? .green : .orange)
+                            Text("Radio confirms: \(confirmed) dBm")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(confirmed == powerService.currentRadioDbm ? Color.secondary : Color.orange)
+                        } else {
+                            Image(systemName: "questionmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("Not yet confirmed by radio")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

@@ -18,7 +18,7 @@ struct SignalSurveyView: View {
     @State private var probePulseScale: CGFloat = 1.0
     @AppStorage("surveyProbeEnabled") private var probeEnabledPref = false
     @AppStorage("surveyProbeFrequency") private var probeFrequencyPref: String = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
-    @AppStorage("surveyDeepScan") private var deepScanPref = false
+    @AppStorage("surveyFloodMessagesPerCell") private var floodMessagesPerCellPref: Int = 1
     @AppStorage("surveyLiveUpload") private var liveUploadPref = false
     @AppStorage("surveyDebugMode") private var debugModeEnabled = false
     @AppStorage("surveyIncludeDisplayName") private var includeDisplayName = true
@@ -204,11 +204,16 @@ struct SignalSurveyView: View {
             if viewModel.liveUploadEnabled != liveUploadPref {
                 viewModel.liveUploadEnabled = liveUploadPref
             }
-            if viewModel.deepScanEnabled != deepScanPref {
-                viewModel.deepScanEnabled = deepScanPref
+            if viewModel.floodMessagesPerCell != floodMessagesPerCellPref {
+                viewModel.floodMessagesPerCell = floodMessagesPerCellPref
             }
-            if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref) {
+            if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref),
+               SignalSurveyViewModel.ProbeFrequency.available.contains(freq) {
                 viewModel.probeFrequency = freq
+            } else {
+                // Clamp debug-only presets to Normal in release builds
+                probeFrequencyPref = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
+                viewModel.probeFrequency = .normal
             }
         }
         .onChange(of: probeEnabledPref) { _, newValue in
@@ -217,12 +222,16 @@ struct SignalSurveyView: View {
         .onChange(of: liveUploadPref) { _, newValue in
             viewModel.liveUploadEnabled = newValue
         }
-        .onChange(of: deepScanPref) { _, newValue in
-            viewModel.deepScanEnabled = newValue
+        .onChange(of: floodMessagesPerCellPref) { _, newValue in
+            viewModel.floodMessagesPerCell = newValue
         }
         .onChange(of: probeFrequencyPref) { _, newValue in
-            if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: newValue) {
+            if let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: newValue),
+               SignalSurveyViewModel.ProbeFrequency.available.contains(freq) {
                 viewModel.probeFrequency = freq
+            } else {
+                probeFrequencyPref = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
+                viewModel.probeFrequency = .normal
             }
         }
         .onChange(of: viewModel.isActive) { _, isActive in
@@ -1465,7 +1474,7 @@ struct SignalSurveyView: View {
                             Text("Probe Frequency")
                             Spacer()
                             Menu {
-                                ForEach(SignalSurveyViewModel.ProbeFrequency.allCases) { freq in
+                                ForEach(SignalSurveyViewModel.ProbeFrequency.available) { freq in
                                     Button {
                                         probeFrequencyPref = freq.rawValue
                                     } label: {
@@ -1486,23 +1495,36 @@ struct SignalSurveyView: View {
                             }
                         }
 
-                        Toggle("Deep Scan", isOn: $deepScanPref)
-
-                        if deepScanPref {
-                            HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.yellow)
-                                    .font(.caption)
-                                Text("Deep scan sends additional discover + trace probes. This uses more airtime and works best at walking speed or slower.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        // TX Power picker (only when adaptive power is enabled)
+                        if appState.adaptivePowerService.isEnabled {
+                            let power = appState.adaptivePowerService
+                            Picker("TX Power", selection: Binding(
+                                get: { power.currentStepIndex },
+                                set: { newIndex in
+                                    Task { await power.setUserOverride(stepIndex: newIndex) }
+                                }
+                            )) {
+                                ForEach(power.availableSteps) { step in
+                                    Text(step.label).tag(step.id)
+                                }
                             }
+                        }
+
+                        Picker("Flood Messages per Cell", selection: $floodMessagesPerCellPref) {
+                            Text("Off").tag(0)
+                            Text("1").tag(1)
+                            Text("2").tag(2)
+                            Text("3").tag(3)
                         }
                     }
                 } footer: {
                     if probeEnabledPref {
                         let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref) ?? .normal
-                        Text("Probes every ~\(Int(freq.distanceMeters))m of movement (min \(Int(freq.minInterval))s cooldown). Also probes on hex cell boundary crossings and when stationary for \(Int(freq.maxInterval))s. Tap the Probe button on the map at any time to send one manually.")
+                        if floodMessagesPerCellPref > 0 {
+                            Text("Probes every ~\(Int(freq.distanceMeters))m with discover + trace (no flood). Up to \(floodMessagesPerCellPref) channel message\(floodMessagesPerCellPref == 1 ? "" : "s") per cell floods the network for 2-way proof. Tap the Probe button to manually send a flood message anytime.")
+                        } else {
+                            Text("Probes every ~\(Int(freq.distanceMeters))m with discover + trace only (no flood messages). Tap the Probe button to manually send a flood message when needed.")
+                        }
                     } else {
                         Text("When disabled, the survey only records passively overheard traffic. Enable probing to actively test coverage and detect dead zones.")
                     }
@@ -1803,7 +1825,7 @@ struct SignalSurveyView: View {
 
                 // Frequency
                 Menu {
-                    ForEach(SignalSurveyViewModel.ProbeFrequency.allCases) { freq in
+                    ForEach(SignalSurveyViewModel.ProbeFrequency.available) { freq in
                         Button {
                             probeFrequencyPref = freq.rawValue
                         } label: {

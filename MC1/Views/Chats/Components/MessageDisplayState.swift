@@ -26,6 +26,10 @@ struct MessageDisplayState {
     var isSearchMatch: Bool = false
     var isHighlighted: Bool = false
 
+    // No-repeats retry suggestion
+    var showNoRepeatsRetry: Bool = false
+    var nextPowerLabel: String?
+
     // Duplicate message collapsing
     var duplicateCount: Int = 1
     var isDuplicateGroupExpanded: Bool = false

@@ -492,7 +492,7 @@ public final class AppState {
             let settingsService = services.settingsService
             adaptivePowerService.setTxPowerHandler = { dbm in
                 let info = try await settingsService.setTxPowerVerified(dbm)
-                _ = info // verified — device confirmed the power change
+                return info.txPower
             }
         }
 

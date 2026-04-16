@@ -100,39 +100,53 @@ struct RepeaterSignalPopover: View {
 
     private var adaptivePowerRow: some View {
         let power = appState.adaptivePowerService
+
         return HStack(spacing: 6) {
             Image(systemName: "bolt.fill")
                 .font(.system(size: 10))
                 .foregroundStyle(powerColor)
 
-            Text("TX Power")
+            Text("TX")
                 .font(.system(.caption2, weight: .medium))
                 .foregroundStyle(.secondary)
 
             Spacer()
 
-            if power.isElevated || power.isUserOverride {
-                Button {
-                    Task { await power.resetToBase() }
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 11))
-                }
-                .buttonStyle(.plain)
-            }
-
-            Picker("", selection: Binding(
-                get: { power.currentStepIndex },
-                set: { newIndex in
-                    Task { await power.setUserOverride(stepIndex: newIndex) }
-                }
-            )) {
+            Menu {
                 ForEach(power.availableSteps) { step in
-                    Text(step.label).tag(step.id)
+                    Button {
+                        Task { await power.setUserOverride(stepIndex: step.id) }
+                    } label: {
+                        HStack {
+                            Text(step.label)
+                            if step.id == power.currentStepIndex {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
                 }
+
+                if power.isElevated || power.isUserOverride {
+                    Divider()
+                    Button {
+                        Task { await power.resetToBase() }
+                    } label: {
+                        Label("Reset to Base", systemImage: "arrow.counterclockwise")
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(power.currentStep.label)
+                        .font(.system(.caption, design: .monospaced, weight: .semibold))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.fill.tertiary, in: Capsule())
             }
-            .pickerStyle(.menu)
-            .tint(powerColor)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)

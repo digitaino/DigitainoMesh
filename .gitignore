@@ -97,3 +97,6 @@ __pycache__
 
 # Secrets (API keys, credentials)
 Secrets.xcconfig
+
+# MeshMap server (separate repo: digitaino/meshmap)
+pocketmesh-survey-server/

@@ -34,7 +34,7 @@ struct SurveyDebugOverlay: View {
                 debugSection("PROBE") {
                     debugRow("Count", "\(info.probeCount)")
                     debugRow("Enabled", info.probeEnabled ? "YES" : "no")
-                    debugRow("Deep scan", info.deepScanEnabled ? "YES" : "no")
+                    debugRow("Flood/cell", "\(info.floodMessagesPerCell)")
                     debugRow("Freq", info.probeFrequency.rawValue)
                     debugRow("Since last", formatSeconds(info.timeSinceLastProbe))
                     if let nextMax = info.nextProbeMaxIn {

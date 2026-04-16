@@ -5,9 +5,15 @@
  */
 
 import WebSerialConnection from '../vendor/meshcore/connection/web_serial_connection.js';
+import WebBleConnection from '../vendor/meshcore/connection/web_ble_connection.js';
 import Constants from '../vendor/meshcore/constants.js';
+import BufferReader from '../vendor/meshcore/buffer_reader.js';
 import * as Decoder from './decoder.js';
 import { renderRadarThumbnail, renderRadarSmooth, regionLabel, formatRadarTime } from './radar.js';
+
+// V3 response codes not yet in the vendor JS library
+const V3_CONTACT_MSG_RECV = 0x10;
+const V3_CHANNEL_MSG_RECV = 0x11;
 
 // ============================================================================
 // App State
@@ -33,6 +39,14 @@ const state = {
     tafs: new Map(),
     warnings: new Map(),      // keyed by dedupKey
     radar: new Map(),         // keyed by regionID
+    outlooks: new Map(),      // keyed by locationKey
+    stormReports: new Map(),  // keyed by locationKey
+    rainObs: new Map(),       // keyed by locationKey
+    warningsNear: new Map(),  // keyed by locationKey
+    fireWeather: new Map(),   // keyed by locationKey
+    dailyClimate: [],         // array of reports
+    nowcasts: new Map(),      // keyed by locationKey
+    textChunks: [],           // array of text chunks
     notAvailable: [],
 
     // Message log
@@ -60,20 +74,30 @@ const $$ = (sel) => document.querySelectorAll(sel);
 // Connection
 // ============================================================================
 
-async function connect() {
+async function connect(transport = 'serial') {
     if (state.connecting || state.connected) return;
     state.connecting = true;
     updateConnectionUI();
-    addLog('Requesting serial port...', 'info');
+
+    const isBle = transport === 'ble';
+    addLog(isBle ? 'Requesting Bluetooth device...' : 'Requesting serial port...', 'info');
 
     try {
-        const connection = await WebSerialConnection.open();
+        const connection = isBle
+            ? await WebBleConnection.open()
+            : await WebSerialConnection.open();
         if (!connection) {
             state.connecting = false;
             updateConnectionUI();
             return;
         }
         state.connection = connection;
+
+        // Patch V3 protocol support — the vendor JS library doesn't handle
+        // response codes 0x10 (contactMessageReceivedV3) and 0x11
+        // (channelMessageReceivedV3). We intercept raw frames and emit
+        // the events that syncNextMessage listens for.
+        patchV3Support(connection);
 
         // Event handlers
         connection.on('connected', onConnected);
@@ -95,6 +119,76 @@ async function disconnect() {
     onDisconnected();
 }
 
+/**
+ * Patch V3 protocol support onto a connection.
+ * The vendor JS library only handles V1 response codes for channel/contact
+ * messages (0x07/0x08). Newer firmware sends V3 codes (0x10/0x11) which add
+ * a 3-byte prefix (SNR + 2 reserved bytes) before the same V1 payload.
+ * We intercept the original onFrameReceived to parse V3 frames and emit
+ * the events that syncNextMessage listens for.
+ */
+function patchV3Support(connection) {
+    const origOnFrame = connection.onFrameReceived.bind(connection);
+    connection.onFrameReceived = function(frame) {
+        if (frame.length < 1) return origOnFrame(frame);
+        const code = frame[0];
+
+        if (code === V3_CHANNEL_MSG_RECV && frame.length >= 11) {
+            // V3 channel message: [0x11][snr_i8][rsv][rsv][chIdx][pathLen][txtType][ts_u32LE][payload...]
+            const br = new BufferReader(frame);
+            br.readByte(); // skip code 0x11
+            const snr = br.readByte(); // snr (Int8 / 4)
+            br.readByte(); // reserved
+            br.readByte(); // reserved
+            const channelIdx = br.readByte();
+            const pathLen = br.readByte();
+            const txtType = br.readByte();
+            const senderTimestamp = br.readBytes(4);
+            const ts = senderTimestamp[0] | (senderTimestamp[1] << 8) | (senderTimestamp[2] << 16) | (senderTimestamp[3] << 24);
+            const rawBytes = br.readRemainingBytes();
+            const text = new TextDecoder().decode(rawBytes);
+
+            // Emit as ChannelMsgRecv (code 8) so syncNextMessage resolves
+            connection.emit(Constants.ResponseCodes.ChannelMsgRecv, {
+                channelIdx,
+                pathLen,
+                txtType,
+                senderTimestamp: ts >>> 0,
+                text,
+                data: new Uint8Array(rawBytes),
+            });
+            return;
+        }
+
+        if (code === V3_CONTACT_MSG_RECV && frame.length >= 14) {
+            // V3 contact message: [0x10][snr_i8][rsv][rsv][pubKey6][pathLen][txtType][ts_u32LE][text...]
+            const br = new BufferReader(frame);
+            br.readByte(); // skip code 0x10
+            br.readByte(); // snr
+            br.readByte(); // reserved
+            br.readByte(); // reserved
+            const pubKeyPrefix = br.readBytes(6);
+            const pathLen = br.readByte();
+            const txtType = br.readByte();
+            const senderTimestamp = br.readBytes(4);
+            const ts = senderTimestamp[0] | (senderTimestamp[1] << 8) | (senderTimestamp[2] << 16) | (senderTimestamp[3] << 24);
+            const text = br.readString();
+
+            connection.emit(Constants.ResponseCodes.ContactMsgRecv, {
+                pubKeyPrefix,
+                pathLen,
+                txtType,
+                senderTimestamp: ts >>> 0,
+                text,
+            });
+            return;
+        }
+
+        // Fall through to original handler for all other codes
+        origOnFrame(frame);
+    };
+}
+
 async function onConnected() {
     addLog('Connected to radio', 'success');
     state.connecting = false;
@@ -107,6 +201,9 @@ async function onConnected() {
         state.selfInfo = selfInfo;
         addLog(`Node: ${selfInfo.name}`, 'info');
         updateConnectionUI();
+
+        // Load location data for name resolution
+        loadSearchData();
 
         // Scan channels to find the MeshWX data channel
         await scanChannels();
@@ -282,22 +379,35 @@ async function joinBotChannel(channelName) {
 
 let syncing = false;
 
+function withTimeout(promise, ms) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+    ]);
+}
+
 async function onMsgWaiting() {
     if (syncing) return;
     syncing = true;
     try {
         while (true) {
-            const msg = await state.connection.syncNextMessage();
+            const msg = await withTimeout(state.connection.syncNextMessage(), 8000);
             if (!msg) break;
 
             if (msg.channelData) {
+                addLog(`[data] ch=${msg.channelData.channelIdx} ${msg.channelData.data?.length || 0}B`, 'info');
                 processChannelData(msg.channelData);
             } else if (msg.channelMessage) {
+                addLog(`[msg] ch=${msg.channelMessage.channelIdx} "${(msg.channelMessage.text || '').slice(0, 40)}"`, 'info');
                 processChannelTextMsg(msg.channelMessage);
+            } else if (msg.contactMessage) {
+                addLog(`[dm] from ${msg.contactMessage.senderName || 'unknown'}`, 'info');
             }
         }
     } catch (err) {
-        addLog(`Sync error: ${err}`, 'error');
+        if (err.message !== 'timeout') {
+            addLog(`Sync error: ${err}`, 'error');
+        }
     }
     syncing = false;
 }
@@ -450,6 +560,54 @@ function handleDecodedMessage(msg) {
             addLog(`Not Available: ${msg.dataTypeName} — ${msg.reasonName}`, 'error');
             break;
 
+        case 'outlook':
+            const olKey = locationKey(msg);
+            state.outlooks.set(olKey, msg);
+            addLog(`Outlook: ${olKey} (${msg.days.length} days)`, 'success');
+            break;
+
+        case 'stormReports':
+            const srKey = locationKey(msg);
+            state.stormReports.set(srKey, msg);
+            addLog(`Storm Reports: ${srKey} (${msg.reports.length} reports)`, 'success');
+            break;
+
+        case 'rainObservations':
+            const roKey = locationKey(msg);
+            state.rainObs.set(roKey, msg);
+            addLog(`Rain Obs: ${roKey} (${msg.cities.length} cities)`, 'success');
+            break;
+
+        case 'warningsNear':
+            const wnKey = locationKey(msg);
+            state.warningsNear.set(wnKey, msg);
+            addLog(`Warnings Near: ${wnKey} (${msg.entries.length} entries)`, 'success');
+            break;
+
+        case 'fireWeather':
+            const fwKey = locationKey(msg);
+            state.fireWeather.set(fwKey, msg);
+            addLog(`Fire Weather: ${fwKey} (${msg.periods.length} periods)`, 'success');
+            break;
+
+        case 'dailyClimate':
+            state.dailyClimate.push(msg);
+            if (state.dailyClimate.length > 20) state.dailyClimate.shift();
+            addLog(`Daily Climate: ${msg.dayLabel} (${msg.cities.length} cities)`, 'success');
+            break;
+
+        case 'nowcast':
+            const ncKey = locationKey(msg);
+            state.nowcasts.set(ncKey, msg);
+            addLog(`Nowcast: ${ncKey} (${msg.validHours}h)${msg.isUrgent ? ' URGENT' : ''}`, 'success');
+            break;
+
+        case 'textChunk':
+            state.textChunks.push(msg);
+            if (state.textChunks.length > 50) state.textChunks.shift();
+            addLog(`Text Chunk: ${msg.text.substring(0, 60)}...`, 'info');
+            break;
+
         case 'beacon':
             if (msg.channelName) {
                 state.discoveredBots.set(msg.channelName, msg);
@@ -471,6 +629,42 @@ function locationKey(msg) {
         return `zone:${msg.locationID.stateIdx}-${msg.locationID.zoneNum}`;
     }
     return `loc:${msg.locationType}`;
+}
+
+/** Map a forecast periodID to a human-readable name. */
+function forecastPeriodName(id) {
+    if (id === 0) return 'Tonight';
+    if (id === 1) return 'Today';
+    const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    // Calculate the day of week by offsetting from today
+    const today = new Date().getDay();
+    const dayOffset = Math.ceil(id / 2);
+    const dow = DAYS[(today + dayOffset) % 7];
+    return id % 2 === 0 ? `${dow} Night` : dow;
+}
+
+/** Resolve a location key (e.g. "pfm:103", "KJFK") to a human-readable name. */
+function locationName(key) {
+    if (!key) return 'Unknown';
+
+    // Station ICAO code (e.g. "KJFK")
+    if (/^[A-Z0-9]{3,4}$/.test(key)) {
+        const s = stations?.[key];
+        return s ? `${s.name}, ${s.state}` : key;
+    }
+
+    // PFM point index (e.g. "pfm:103")
+    const pfmMatch = key.match(/^pfm:(\d+)$/);
+    if (pfmMatch) {
+        const idx = parseInt(pfmMatch[1], 10);
+        const p = pfmPoints?.[idx];
+        return p ? p[0] : key; // p[0] = name
+    }
+
+    // Zone (e.g. "zone:5-23")
+    if (key.startsWith('zone:')) return key;
+
+    return key;
 }
 
 function warningDedupKey(w) {
@@ -495,14 +689,16 @@ function warningDedupKey(w) {
 function updateConnectionUI() {
     const statusDot = $('.status-dot');
     const statusText = $('.status-text');
-    const connectBtn = $('#connect-btn');
+    const connectBtnUsb = $('#connect-btn-usb');
+    const connectBtnBle = $('#connect-btn-ble');
     const disconnectBtn = $('#disconnect-btn');
     const nodeName = $('#node-name');
 
     if (state.connected) {
         statusDot.className = 'status-dot connected';
         statusText.textContent = 'Connected';
-        connectBtn.style.display = 'none';
+        if (connectBtnUsb) connectBtnUsb.style.display = 'none';
+        if (connectBtnBle) connectBtnBle.style.display = 'none';
         disconnectBtn.style.display = 'inline-block';
         nodeName.textContent = state.selfInfo ? state.selfInfo.name : '';
         // Show dashboard, hide connect screen
@@ -511,13 +707,14 @@ function updateConnectionUI() {
     } else if (state.connecting) {
         statusDot.className = 'status-dot connecting';
         statusText.textContent = 'Connecting...';
-        connectBtn.disabled = true;
+        if (connectBtnUsb) connectBtnUsb.disabled = true;
+        if (connectBtnBle) connectBtnBle.disabled = true;
         disconnectBtn.style.display = 'none';
     } else {
         statusDot.className = 'status-dot';
         statusText.textContent = 'Disconnected';
-        connectBtn.style.display = 'inline-block';
-        connectBtn.disabled = false;
+        if (connectBtnUsb) { connectBtnUsb.style.display = 'inline-block'; connectBtnUsb.disabled = !navigator.serial; }
+        if (connectBtnBle) { connectBtnBle.style.display = 'inline-block'; connectBtnBle.disabled = !navigator.bluetooth; }
         disconnectBtn.style.display = 'none';
         nodeName.textContent = '';
         $('#connect-screen').style.display = 'flex';
@@ -563,6 +760,9 @@ function updateSetupUI() {
             if (bot.hasRadar) html += ' &middot; Radar';
             if (bot.hasForecasts) html += ' &middot; Forecasts';
             if (bot.hasWarnings) html += ' &middot; Warnings';
+            if (bot.hasFireWeather) html += ' &middot; Fire Wx';
+            if (bot.hasNowcast) html += ' &middot; Nowcast';
+            if (bot.hasQPF) html += ' &middot; QPF';
             html += `</div></div>`;
             if (isJoined) {
                 html += `<span class="badge badge-green">Joined</span>`;
@@ -592,6 +792,12 @@ function renderDashboard() {
     renderForecasts();
     renderWarnings();
     renderRadarSection();
+    renderOutlooks();
+    renderStormReports();
+    renderRainObs();
+    renderFireWeather();
+    renderDailyClimate();
+    renderNowcasts();
     renderLog();
     updateMapWarnings();
     updateMapRadar();
@@ -611,7 +817,7 @@ function renderObservations() {
         html += `
         <div class="card">
             <div class="card-header">
-                <h3>${key}</h3>
+                <h3>${locationName(key)}</h3>
                 <span class="badge badge-green">${timeAgo(obs.receivedAt)}</span>
             </div>
             <div class="obs-grid">
@@ -662,32 +868,26 @@ function renderForecasts() {
         return;
     }
 
-    const PERIOD_NAMES = [
-        "","Today","Tonight","Mon","Mon Night","Tue","Tue Night",
-        "Wed","Wed Night","Thu","Thu Night","Fri","Fri Night",
-        "Sat","Sat Night","Sun","Sun Night",
-    ];
-
     let html = '';
     for (const [key, fcst] of state.forecasts) {
         html += `
         <div class="card">
             <div class="card-header">
-                <h3>${key}</h3>
+                <h3>${locationName(key)}</h3>
                 <span class="badge badge-blue">${fcst.issuedHoursAgo}h ago</span>
             </div>
             <div class="forecast-strip">`;
 
         for (const p of fcst.periods) {
-            const name = PERIOD_NAMES[p.periodID] || `P${p.periodID}`;
+            const name = forecastPeriodName(p.periodID);
             const isNight = p.periodID % 2 === 0;
             const temp = p.highF !== null ? p.highF : p.lowF;
-            const tempLabel = p.highF !== null ? 'H' : 'L';
             html += `
                 <div class="forecast-period" style="${isNight ? 'opacity:0.7' : ''}">
                     <div class="day">${name}</div>
                     <div class="temp">${temp !== null ? temp + '°' : '--'}</div>
-                    <div class="precip">${p.precipPct > 0 ? p.precipPct + '%' : ''}</div>
+                    ${p.precipPct > 0 ? `<div class="precip">${p.precipPct}%</div>` : ''}
+                    <div style="font-size:0.7rem; color:var(--text-muted)">${Decoder.skyConditionName(p.skyCode)}</div>
                 </div>`;
         }
 
@@ -764,6 +964,181 @@ function renderRadarSection() {
             if (canvas) renderRadarThumbnail(canvas, frame);
         }
     });
+}
+
+function renderOutlooks() {
+    const container = $('#outlooks-content');
+    if (!container) return;
+    if (state.outlooks.size === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">--</div>No outlook data</div>';
+        return;
+    }
+
+    let html = '';
+    for (const [key, ol] of state.outlooks) {
+        html += `<div class="card"><div class="card-header"><h3>Outlook: ${locationName(key)}</h3>
+            <span class="badge badge-blue">${timeAgo(ol.receivedAt)}</span></div>`;
+        for (const day of ol.days) {
+            const hazardList = day.hazards.filter(h => h.riskLevel > 0)
+                .map(h => `<span class="badge ${h.riskLevel >= 4 ? 'badge-red' : h.riskLevel >= 3 ? 'badge-orange' : 'badge-blue'}">${Decoder.riskLevelName(h.riskLevel)} ${Decoder.hazardTypeName(h.hazardType)}</span>`)
+                .join(' ');
+            const dayName = day.dayOffset === 1 ? 'Today' : day.dayOffset === 2 ? 'Tomorrow' : `Day ${day.dayOffset}`;
+            html += `<div style="padding:4px 0; border-top:1px solid var(--border)">
+                <span style="font-weight:600; margin-right:8px">${dayName}</span>${hazardList || '<span style="color:var(--text-muted)">No hazards</span>'}
+            </div>`;
+        }
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function renderStormReports() {
+    const container = $('#storm-reports-content');
+    if (!container) return;
+    if (state.stormReports.size === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">--</div>No storm reports</div>';
+        return;
+    }
+
+    let html = '';
+    for (const [key, sr] of state.stormReports) {
+        html += `<div class="card"><div class="card-header"><h3>Storm Reports: ${locationName(key)}</h3>
+            <span class="badge badge-orange">${sr.reports.length} reports</span></div>`;
+        for (const r of sr.reports) {
+            const mag = Decoder.magnitudeLabel(r.eventType, r.magnitude);
+            const timeLabel = r.minutesAgo < 60 ? `${r.minutesAgo}m ago` : `${Math.floor(r.minutesAgo / 60)}h ago`;
+            html += `<div style="padding:4px 0; border-top:1px solid var(--border); display:flex; justify-content:space-between">
+                <span><strong>${Decoder.eventTypeName(r.eventType)}</strong>${mag ? ` — ${mag}` : ''}</span>
+                <span style="color:var(--text-muted); font-size:0.8rem">${timeLabel}</span>
+            </div>`;
+        }
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function renderRainObs() {
+    const container = $('#rain-obs-content');
+    if (!container) return;
+    if (state.rainObs.size === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">--</div>No rain observations</div>';
+        return;
+    }
+
+    let html = '';
+    for (const [key, ro] of state.rainObs) {
+        const h = Math.floor(ro.timestampMinutes / 60);
+        const m = ro.timestampMinutes % 60;
+        const ts = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}Z`;
+        html += `<div class="card"><div class="card-header"><h3>Rain: ${locationName(key)}</h3>
+            <span class="badge badge-blue">${ts}</span></div>
+            <div class="obs-grid">`;
+        for (const c of ro.cities) {
+            html += `<div class="obs-item">
+                <span class="label">Place ${c.placeID}</span>
+                <span class="value" style="font-size:0.9rem">${Decoder.rainTypeName(c.rainType)} ${c.tempF}°F</span>
+            </div>`;
+        }
+        html += '</div></div>';
+    }
+    container.innerHTML = html;
+}
+
+function renderFireWeather() {
+    const container = $('#fire-weather-content');
+    if (!container) return;
+    if (state.fireWeather.size === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">--</div>No fire weather data</div>';
+        return;
+    }
+
+    const PERIOD_NAMES = [
+        "","Today","Tonight","Mon","Mon Night","Tue","Tue Night",
+        "Wed","Wed Night","Thu","Thu Night","Fri","Fri Night",
+        "Sat","Sat Night","Sun","Sun Night",
+    ];
+
+    let html = '';
+    for (const [key, fw] of state.fireWeather) {
+        html += `<div class="card"><div class="card-header"><h3>Fire Weather: ${locationName(key)}</h3>
+            <span class="badge badge-orange">${fw.issuedHoursAgo}h ago</span></div>`;
+        for (const p of fw.periods) {
+            const name = PERIOD_NAMES[p.periodID] || `P${p.periodID}`;
+            html += `<div style="padding:6px 0; border-top:1px solid var(--border)">
+                <div style="font-weight:600">${name}</div>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:0.85rem; color:var(--text-secondary)">
+                    <span>Max: ${p.maxTempF}°F</span>
+                    <span>Min RH: ${p.minRHPct}%</span>
+                    <span>Wind: ${Decoder.fwWindDirName(p.transportWindDir)} ${p.transportWindMph}mph</span>
+                    <span>Mixing: ${p.mixingHeightFt}ft</span>
+                    <span>Haines: ${p.hainesIndex}</span>
+                    <span>${Decoder.fwLightningName(p.lightningRisk)}</span>
+                    <span>${Decoder.fwCloudName(p.cloudCover)}</span>
+                </div>
+            </div>`;
+        }
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function renderDailyClimate() {
+    const container = $('#daily-climate-content');
+    if (!container) return;
+    if (state.dailyClimate.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">--</div>No climate data</div>';
+        return;
+    }
+
+    let html = '';
+    for (const dc of state.dailyClimate.slice(-5)) {
+        html += `<div class="card"><div class="card-header"><h3>${dc.dayLabel}</h3>
+            <span class="badge badge-green">${dc.cities.length} cities</span></div>
+            <div style="overflow-x:auto"><table style="width:100%; font-size:0.85rem; border-collapse:collapse">
+            <tr style="color:var(--text-muted)"><th style="text-align:left">City</th><th>Hi</th><th>Lo</th><th>Precip</th><th>Snow</th></tr>`;
+        for (const c of dc.cities) {
+            const precip = c.precipInches === null ? 'M' : (c.precipInches < 0 ? 'T' : c.precipInches.toFixed(2) + '"');
+            const snow = c.snowInches === null ? 'M' : (c.snowInches < 0 ? 'T' : c.snowInches.toFixed(1) + '"');
+            html += `<tr style="border-top:1px solid var(--border)">
+                <td>Place ${c.placeID}</td>
+                <td style="text-align:center">${c.maxTempF !== null ? c.maxTempF + '°' : 'M'}</td>
+                <td style="text-align:center">${c.minTempF !== null ? c.minTempF + '°' : 'M'}</td>
+                <td style="text-align:center">${precip}</td>
+                <td style="text-align:center">${snow}</td>
+            </tr>`;
+        }
+        html += '</table></div></div>';
+    }
+    container.innerHTML = html;
+}
+
+function renderNowcasts() {
+    const container = $('#nowcasts-content');
+    if (!container) return;
+    if (state.nowcasts.size === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">--</div>No nowcast data</div>';
+        return;
+    }
+
+    let html = '';
+    for (const [key, nc] of state.nowcasts) {
+        const urgencyBadges = [];
+        if (nc.hasThunder) urgencyBadges.push('<span class="badge badge-red">Thunder</span>');
+        if (nc.hasFlooding) urgencyBadges.push('<span class="badge badge-blue">Flooding</span>');
+        if (nc.hasWinter) urgencyBadges.push('<span class="badge badge-blue">Winter</span>');
+        if (nc.hasFire) urgencyBadges.push('<span class="badge badge-orange">Fire</span>');
+        if (nc.hasWind) urgencyBadges.push('<span class="badge badge-orange">Wind</span>');
+
+        html += `<div class="card${nc.isUrgent ? ' warning-card' : ''}">
+            <div class="card-header">
+                <h3>Nowcast: ${locationName(key)}</h3>
+                <span class="badge badge-green">${nc.validHours}h outlook</span>
+            </div>
+            ${urgencyBadges.length > 0 ? `<div style="margin-bottom:6px">${urgencyBadges.join(' ')}</div>` : ''}
+            <div style="font-size:0.9rem">${nc.text}</div>
+        </div>`;
+    }
+    container.innerHTML = html;
 }
 
 function renderLog() {
@@ -1113,6 +1488,7 @@ function renderSearchResults(results) {
         }
         if (r.type === 'pfm') {
             html += `<button class="btn-primary btn-sm req-btn" data-type="forecast" data-id="${r.id}">Forecast</button>`;
+            html += `<button class="btn-secondary btn-sm req-btn" data-type="outlook" data-id="${r.id}">Outlook</button>`;
         }
         // Find nearest station for PFM points to offer METAR
         if (r.type === 'pfm') {
@@ -1163,6 +1539,15 @@ async function sendDataRequest(type, id) {
         case 'taf':
             payload = Decoder.buildTAFRequest(id);
             break;
+        case 'outlook':
+            payload = Decoder.buildOutlookRequest(parseInt(id));
+            break;
+        case 'stormReports':
+            payload = Decoder.buildStormReportsRequest(parseInt(id));
+            break;
+        case 'rainObs':
+            payload = Decoder.buildRainObsRequest(parseInt(id));
+            break;
         default:
             return;
     }
@@ -1209,9 +1594,11 @@ async function onSearchInput() {
 
 export function init() {
     // Button handlers
-    $('#connect-btn')?.addEventListener('click', connect);
+    $('#connect-btn-usb')?.addEventListener('click', () => connect('serial'));
+    $('#connect-btn-ble')?.addEventListener('click', () => connect('ble'));
     $('#disconnect-btn')?.addEventListener('click', disconnect);
-    $('#connect-btn-hero')?.addEventListener('click', connect);
+    $('#connect-btn-hero-usb')?.addEventListener('click', () => connect('serial'));
+    $('#connect-btn-hero-ble')?.addEventListener('click', () => connect('ble'));
 
     // Tab handlers
     $$('.tab').forEach(tab => {
@@ -1229,14 +1616,19 @@ export function init() {
         if (e.key === 'Enter') onSearchInput();
     });
 
-    // Check Web Serial support
-    if (!navigator.serial) {
-        addLog('Web Serial API not supported. Use Chrome or Edge.', 'error');
-        const heroBtn = $('#connect-btn-hero');
-        if (heroBtn) {
-            heroBtn.disabled = true;
-            heroBtn.textContent = 'Web Serial Not Supported';
-        }
+    // Check transport support and disable unavailable buttons
+    const hasSerial = !!navigator.serial;
+    const hasBle = !!navigator.bluetooth;
+    if (!hasSerial) {
+        $('#connect-btn-hero-usb')?.setAttribute('disabled', '');
+        $('#connect-btn-usb')?.setAttribute('disabled', '');
+    }
+    if (!hasBle) {
+        $('#connect-btn-hero-ble')?.setAttribute('disabled', '');
+        $('#connect-btn-ble')?.setAttribute('disabled', '');
+    }
+    if (!hasSerial && !hasBle) {
+        addLog('Neither Web Serial nor Web Bluetooth is supported. Use Chrome or Edge.', 'error');
     }
 
     updateConnectionUI();

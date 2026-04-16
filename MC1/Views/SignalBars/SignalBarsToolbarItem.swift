@@ -18,30 +18,51 @@ struct SignalBarsToolbarItem: View {
     var body: some View {
         let service = appState.signalBarsService
         if appState.connectionState == .ready || appState.connectionState == .connected,
-           let best = service.bestRepeater,
            isEnabled,
            showDuringSurvey || !appState.isSurveyActive {
             Button { showingDetail = true } label: {
-                HStack(spacing: 3) {
-                    // RX: ▼ tucked above shortest bar, SNR label below
-                    VStack(spacing: 0) {
-                        signalGroup(
-                            arrowName: "arrow.down",
-                            arrowColor: best.rxQuality.color,
-                            arrowFlash: rxFlash,
-                            barsValue: best.rxQuality.barLevel,
-                            barsColor: best.rxQuality.color
-                        )
-                        if let snr = best.rxSnr {
-                            Text("\(Int(snr))dB")
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                                .foregroundStyle(best.rxQuality.color)
+                if let best = service.bestRepeater {
+                    // Repeater found — show full signal bars
+                    HStack(spacing: 3) {
+                        // RX: ▼ tucked above shortest bar, SNR label below
+                        VStack(spacing: 0) {
+                            signalGroup(
+                                arrowName: "arrow.down",
+                                arrowColor: best.rxQuality.color,
+                                arrowFlash: rxFlash,
+                                barsValue: best.rxQuality.barLevel,
+                                barsColor: best.rxQuality.color
+                            )
+                            if let snr = best.rxSnr {
+                                Text("\(Int(snr))dB")
+                                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(best.rxQuality.color)
+                            }
                         }
-                    }
 
-                    // TX: ▲ tucked above shortest bar, power label below
-                    VStack(spacing: 0) {
-                        txGroup(for: best)
+                        // TX: ▲ tucked above shortest bar, power label below
+                        VStack(spacing: 0) {
+                            txGroup(for: best)
+                            if appState.adaptivePowerService.isEnabled {
+                                let power = appState.adaptivePowerService
+                                Text(power.currentStep.label)
+                                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(power.isAtMax ? .red : power.isElevated ? .orange : .green)
+                            }
+                        }
+
+                        // Hex ID
+                        Text(best.id)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    // No repeaters yet — show scanning state with TX power if enabled
+                    HStack(spacing: 3) {
+                        Image(systemName: "cellularbars", variableValue: 0)
+                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14))
+
                         if appState.adaptivePowerService.isEnabled {
                             let power = appState.adaptivePowerService
                             Text(power.currentStep.label)
@@ -49,14 +70,9 @@ struct SignalBarsToolbarItem: View {
                                 .foregroundStyle(power.isAtMax ? .red : power.isElevated ? .orange : .green)
                         }
                     }
-
-                    // Hex ID
-                    Text(best.id)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
                 }
             }
-            .accessibilityLabel("Signal: \(best.rxQuality.qualityLabel) from \(best.name ?? best.id)")
+            .accessibilityLabel(service.bestRepeater.map { "Signal: \($0.rxQuality.qualityLabel) from \($0.name ?? $0.id)" } ?? "No repeaters found")
             .popover(isPresented: $showingDetail) {
                 RepeaterSignalPopover()
                     .presentationCompactAdaptation(.popover)

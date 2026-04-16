@@ -38,13 +38,14 @@ public final class AdaptivePowerService {
 
     /// All available power steps, ordered low to high.
     public static let allSteps: [PowerStep] = [
-        PowerStep(id: 0, targetMilliwatts: 20,   eirpDbm: 13.0, label: "20mW"),
-        PowerStep(id: 1, targetMilliwatts: 100,  eirpDbm: 20.0, label: "100mW"),
-        PowerStep(id: 2, targetMilliwatts: 158,  eirpDbm: 22.0, label: "158mW"),
-        PowerStep(id: 3, targetMilliwatts: 200,  eirpDbm: 23.0, label: "200mW"),
-        PowerStep(id: 4, targetMilliwatts: 500,  eirpDbm: 27.0, label: "500mW"),
-        PowerStep(id: 5, targetMilliwatts: 700,  eirpDbm: 28.5, label: "700mW"),
-        PowerStep(id: 6, targetMilliwatts: 1000, eirpDbm: 30.0, label: "1W"),
+        PowerStep(id: 0, targetMilliwatts: 10,   eirpDbm: 10.0, label: "10mW"),
+        PowerStep(id: 1, targetMilliwatts: 20,   eirpDbm: 13.0, label: "20mW"),
+        PowerStep(id: 2, targetMilliwatts: 100,  eirpDbm: 20.0, label: "100mW"),
+        PowerStep(id: 3, targetMilliwatts: 158,  eirpDbm: 22.0, label: "158mW"),
+        PowerStep(id: 4, targetMilliwatts: 200,  eirpDbm: 23.0, label: "200mW"),
+        PowerStep(id: 5, targetMilliwatts: 500,  eirpDbm: 27.0, label: "500mW"),
+        PowerStep(id: 6, targetMilliwatts: 700,  eirpDbm: 28.5, label: "700mW"),
+        PowerStep(id: 7, targetMilliwatts: 1000, eirpDbm: 30.0, label: "1W"),
     ]
 
     // MARK: - Configuration
@@ -58,10 +59,10 @@ public final class AdaptivePowerService {
     // MARK: - State
 
     /// The user's preferred base power step index.
-    public private(set) var baseStepIndex: Int = 2 // default: 158mW
+    public private(set) var baseStepIndex: Int = 3 // default: 158mW
 
     /// The current active power step index.
-    public private(set) var currentStepIndex: Int = 2
+    public private(set) var currentStepIndex: Int = 3
 
     /// Whether the current level is a user override (long-press selection).
     public private(set) var isUserOverride: Bool = false
@@ -72,18 +73,24 @@ public final class AdaptivePowerService {
     /// Whether adaptive power mode is enabled.
     public private(set) var isEnabled: Bool = false
 
+    /// The last device-confirmed TX power in dBm, or `nil` if not yet confirmed.
+    public private(set) var confirmedRadioDbm: Int8?
+
+    /// Whether the last power-set attempt failed verification.
+    public private(set) var lastApplyFailed: Bool = false
 
     // MARK: - Callbacks
 
     /// Called when power needs to change on the radio. Wired from AppState.
-    public var setTxPowerHandler: ((Int8) async throws -> Void)?
+    /// Returns the device-confirmed TX power in dBm.
+    public var setTxPowerHandler: ((Int8) async throws -> Int8)?
 
     // MARK: - Private
 
     private let logger = Logger(subsystem: "com.mc1", category: "AdaptivePower")
 
-    private static let rampDownThreshold = 2 // successes before stepping down
-    private static let fullResetThreshold = 3 // successes at base before clearing counter
+    private static let maxRetries = 3
+    private static let retryDelay: Duration = .milliseconds(300)
 
     // MARK: - Init
 
@@ -105,6 +112,8 @@ public final class AdaptivePowerService {
         self.currentStepIndex = self.baseStepIndex
         self.consecutiveSuccesses = 0
         self.isUserOverride = false
+        self.confirmedRadioDbm = nil
+        self.lastApplyFailed = false
 
         logger.info("Configured: paGain=\(paGainDb)dB, radioMax=\(radioMaxDbm)dBm, base=\(self.baseStepIndex), enabled=\(enabled)")
     }
@@ -131,6 +140,8 @@ public final class AdaptivePowerService {
             currentStepIndex = baseStepIndex
             consecutiveSuccesses = 0
             isUserOverride = false
+            confirmedRadioDbm = nil
+            lastApplyFailed = false
         }
         logger.info("Adaptive power \(enabled ? "enabled" : "disabled")")
     }
@@ -157,6 +168,12 @@ public final class AdaptivePowerService {
         currentStepIndex > baseStepIndex
     }
 
+    /// Whether the device-confirmed power matches the intended power.
+    public var isPowerConfirmed: Bool {
+        guard let confirmed = confirmedRadioDbm else { return false }
+        return confirmed == currentRadioDbm && !lastApplyFailed
+    }
+
     /// Whether we're at max available power.
     public var isAtMax: Bool {
         guard let maxAvailable = availableSteps.last else { return true }
@@ -175,22 +192,37 @@ public final class AdaptivePowerService {
 
     // MARK: - Power Control Actions
 
-    /// Apply the current power level to the radio.
+    /// Apply the current power level to the radio, retrying up to 3 times on failure.
     /// Call this before sending a message.
-    /// - Returns: `true` if the power was verified on the device, `false` if it failed.
+    /// - Returns: `true` if the power was verified on the device, `false` if all retries failed.
     @discardableResult
     public func applyCurrentPower() async -> Bool {
         guard isEnabled, let handler = setTxPowerHandler else { return true }
 
         let dbm = currentRadioDbm
-        do {
-            try await handler(dbm)
-            logger.info("Verified TX power: \(dbm)dBm (\(self.currentStep.label))")
-            return true
-        } catch {
-            logger.error("TX power verification FAILED for \(dbm)dBm: \(error.localizedDescription)")
-            return false
+
+        for attempt in 1...Self.maxRetries {
+            do {
+                let confirmed = try await handler(dbm)
+                confirmedRadioDbm = confirmed
+                lastApplyFailed = false
+                if attempt > 1 {
+                    logger.info("TX power verified on attempt \(attempt): \(dbm)dBm → device confirmed \(confirmed)dBm")
+                } else {
+                    logger.info("Verified TX power: \(dbm)dBm → device confirmed \(confirmed)dBm (\(self.currentStep.label))")
+                }
+                return true
+            } catch {
+                logger.warning("TX power attempt \(attempt)/\(Self.maxRetries) failed for \(dbm)dBm: \(error.localizedDescription)")
+                if attempt < Self.maxRetries {
+                    try? await Task.sleep(for: Self.retryDelay)
+                }
+            }
         }
+
+        lastApplyFailed = true
+        logger.error("TX power verification FAILED after \(Self.maxRetries) attempts for \(dbm)dBm")
+        return false
     }
 
     /// Escalate power one step up. Called on resend when no repeats were heard.
@@ -236,35 +268,16 @@ public final class AdaptivePowerService {
     }
 
     /// Notify that repeats were heard for the last sent message.
-    public func onRepeatsHeard() async {
+    /// Power is NOT automatically ramped down — staying at the level that works
+    /// avoids oscillation. Power only resets on new conversation, disconnect, or manual change.
+    public func onRepeatsHeard() {
         guard isEnabled else { return }
-
-        if isUserOverride {
-            logger.debug("Repeats heard at user-override level \(self.currentStep.label), not ramping")
-            return
-        }
-
         consecutiveSuccesses += 1
 
-        if currentStepIndex > baseStepIndex {
-            if consecutiveSuccesses >= Self.rampDownThreshold {
-                let available = availableSteps
-                if let currentAvailableIdx = available.firstIndex(where: { $0.id == currentStepIndex }),
-                   currentAvailableIdx > 0 {
-                    let lowerStep = available[currentAvailableIdx - 1]
-                    currentStepIndex = max(baseStepIndex, lowerStep.id)
-                    consecutiveSuccesses = 0
-                    logger.info("Ramped down to step \(self.currentStepIndex): \(self.currentStep.label)")
-                    await applyCurrentPower()
-                }
-            } else {
-                logger.debug("Repeats heard at elevated \(self.currentStep.label), successes: \(self.consecutiveSuccesses)/\(Self.rampDownThreshold)")
-            }
+        if isElevated {
+            logger.debug("Repeats heard at elevated \(self.currentStep.label), staying (success #\(self.consecutiveSuccesses))")
         } else {
-            if consecutiveSuccesses >= Self.fullResetThreshold {
-                consecutiveSuccesses = 0
-                logger.debug("Stable at base power, counter reset")
-            }
+            logger.debug("Repeats heard at base \(self.currentStep.label)")
         }
     }
 

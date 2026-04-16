@@ -69,9 +69,9 @@ struct DevicePreferenceStore {
         userDefaults.set(gain, forKey: Self.paGainDbKey(deviceID: deviceID))
     }
 
-    /// Base power step index (0-6, see AdaptivePowerService.allSteps).
+    /// Base power step index (0-7, see AdaptivePowerService.allSteps).
     func adaptivePowerBaseStep(deviceID: UUID) -> Int {
-        userDefaults.object(forKey: Self.adaptivePowerBaseStepKey(deviceID: deviceID)) as? Int ?? 2
+        userDefaults.object(forKey: Self.adaptivePowerBaseStepKey(deviceID: deviceID)) as? Int ?? 3
     }
 
     func setAdaptivePowerBaseStep(_ step: Int, deviceID: UUID) {

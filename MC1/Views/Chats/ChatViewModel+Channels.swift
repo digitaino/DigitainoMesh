@@ -183,6 +183,10 @@ extension ChatViewModel {
                 // Apply power for THIS message — override or adaptive
                 let appliedDbm = await applyPowerForMessage(overrideDbm: queued.overrideRadioDbm)
 
+                if appliedDbm == nil, appState?.adaptivePowerService.isEnabled == true {
+                    errorMessage = "TX power could not be verified — sending at current radio level"
+                }
+
                 // Record TX power on the message
                 if let dbm = appliedDbm, let dataStore {
                     try? await dataStore.updateMessageTxPower(id: queued.messageID, txPowerDbm: dbm)
@@ -204,6 +208,7 @@ extension ChatViewModel {
                             timestamp: message.timestamp
                         )
                     }
+                    scheduleNoRepeatsRetry(for: queued.messageID)
                 } catch is CancellationError {
                     channelSendQueue.insert(queued, at: 0)
                     return
@@ -231,6 +236,7 @@ extension ChatViewModel {
     /// Retry sending a failed channel message in place.
     /// If adaptive power is enabled, escalates TX power before retry.
     func retryChannelMessage(_ message: MessageDTO) async {
+        clearNoRepeatsRetry()
         guard let messageService,
               let channel = currentChannel,
               message.channelIndex != nil,
@@ -249,7 +255,11 @@ extension ChatViewModel {
         await loadChannelMessages(for: channel)
 
         do {
-            try await messageService.sendPendingChannelMessage(messageID: message.id)
+            // Use resendChannelMessage which gives a new timestamp so the mesh
+            // treats it as a fresh broadcast (repeaters deduplicate the old one).
+            try await messageService.resendChannelMessage(messageID: message.id)
+            try? await dataStore?.updateMessageStatus(id: message.id, status: .sent)
+            scheduleNoRepeatsRetry(for: message.id)
         } catch is CancellationError {
             // Fall through to reload so UI reflects current state
         } catch {
@@ -266,6 +276,9 @@ extension ChatViewModel {
     /// Update heard repeat count for a message in place without a full reload.
     func updateHeardRepeats(for messageID: UUID, count: Int) {
         updateMessage(id: messageID) { $0.heardRepeats = count }
+        if count > 0 && noRepeatsRetryMessageID == messageID {
+            clearNoRepeatsRetry()
+        }
     }
 
     // MARK: - Channel Sender Tracking

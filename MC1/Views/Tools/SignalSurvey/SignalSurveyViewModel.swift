@@ -21,6 +21,7 @@ final class SignalSurveyViewModel {
     }
 
     /// Bundled probe frequency presets that pair a distance trigger with a minimum cooldown.
+    /// Driving and Dense are aggressive and can flood the network — only available in DEBUG builds.
     enum ProbeFrequency: String, CaseIterable, Identifiable {
         case driving = "Driving"
         case dense = "Dense"
@@ -28,6 +29,23 @@ final class SignalSurveyViewModel {
         case sparse = "Sparse"
 
         var id: String { rawValue }
+
+        /// Whether this preset is only available in debug builds to prevent network flooding.
+        var isDebugOnly: Bool {
+            switch self {
+            case .driving, .dense: true
+            case .normal, .sparse: false
+            }
+        }
+
+        /// Presets available for the current build configuration.
+        static var available: [ProbeFrequency] {
+            #if DEBUG
+            allCases
+            #else
+            allCases.filter { !$0.isDebugOnly }
+            #endif
+        }
 
         /// Distance threshold in meters before triggering a probe.
         var distanceMeters: Double {
@@ -64,7 +82,7 @@ final class SignalSurveyViewModel {
             switch self {
             case .driving: "Every ~15m — driving, fast travel"
             case .dense: "Every ~25m — walking, slow cycling"
-            case .normal: "Every ~50m — e-bike, jogging"
+            case .normal: "Every ~50m — walking, cycling, e-bike"
             case .sparse: "Every ~100m — driving, fast cycling"
             }
         }
@@ -304,7 +322,7 @@ final class SignalSurveyViewModel {
         let timeSinceLastProbe: TimeInterval?
         let probeFrequency: ProbeFrequency
         let probeEnabled: Bool
-        let deepScanEnabled: Bool
+        let floodMessagesPerCell: Int
         let nextProbeMaxIn: TimeInterval?
 
         let totalPoints: Int
@@ -737,9 +755,18 @@ final class SignalSurveyViewModel {
     /// Active probe frequency preset controlling distance trigger and cooldown intervals.
     var probeFrequency: ProbeFrequency = .normal
 
-    /// When true, probes also send discover + trace in addition to the channel message.
-    /// This provides extra mesh depth data but uses more airtime and works best at slower speeds.
-    var deepScanEnabled: Bool = false
+    /// Maximum number of channel flood messages to send per hex cell.
+    /// 0 = disabled (no channel messages), 1-3 = limit per cell.
+    /// Channel messages are the only probe type that floods the entire network,
+    /// so this caps network impact while discover + trace run freely.
+    var floodMessagesPerCell: Int = 1
+
+    /// Per-cell count of channel flood messages sent, keyed by hex coordinate key.
+    private(set) var floodMessagesSentPerCell: [String: Int] = [:]
+
+    /// Timestamp of the first flood message in each cell, used to space subsequent floods
+    /// evenly across the estimated cell transit time.
+    private var firstFloodTimePerCell: [String: Date] = [:]
 
     private var binaryProtocolService: BinaryProtocolService?
     private var messageServiceRef: MessageService?
@@ -850,7 +877,7 @@ final class SignalSurveyViewModel {
             timeSinceLastProbe: timeSinceProbe,
             probeFrequency: probeFrequency,
             probeEnabled: probeEnabled,
-            deepScanEnabled: deepScanEnabled,
+            floodMessagesPerCell: floodMessagesPerCell,
             nextProbeMaxIn: nextProbeMax,
             totalPoints: livePointCount,
             passivePoints: passivePts,
@@ -1020,6 +1047,8 @@ final class SignalSurveyViewModel {
             probeCount = 0
             probeSendLocations = []
             probesSentPerCell = [:]
+            floodMessagesSentPerCell = [:]
+            firstFloodTimePerCell = [:]
             gridBuckets = [:]
             liveStatus = SurveyLiveStatus()
             selectedSessionID = session.id
@@ -1141,6 +1170,8 @@ final class SignalSurveyViewModel {
             lastProbeLocation = nil
             probeSendLocations = []
             probesSentPerCell = [:]
+            floodMessagesSentPerCell = [:]
+            firstFloodTimePerCell = [:]
             liveStatus = SurveyLiveStatus()
 
             if let dataStore, let deviceID {
@@ -1481,6 +1512,8 @@ final class SignalSurveyViewModel {
             livePointCount = allPoints.count
             // Clear single-session probe data so dead zones don't bleed into combined view
             probesSentPerCell = [:]
+            floodMessagesSentPerCell = [:]
+            firstFloodTimePerCell = [:]
             applyFilter()
             centerOnData()
         } catch {
@@ -1498,6 +1531,8 @@ final class SignalSurveyViewModel {
         gridBuckets = [:]
         livePointCount = 0
         probesSentPerCell = [:]
+        floodMessagesSentPerCell = [:]
+        firstFloodTimePerCell = [:]
         selectedCell = nil
         selectedCommunityCell = nil
     }
@@ -2158,7 +2193,8 @@ final class SignalSurveyViewModel {
         return false
     }
 
-    /// Manually sends a single flood trace probe using the current GPS location.
+    /// Manually sends a probe using the current GPS location.
+    /// Always sends a channel flood message regardless of per-cell limit.
     func sendManualProbe() async {
         guard isActive else {
             probeErrorMessage = "Start a survey first"
@@ -2183,20 +2219,20 @@ final class SignalSurveyViewModel {
         probeVisualPulse += 1
         probeErrorMessage = nil
 
-        await sendProbe(location: location)
+        await sendProbe(location: location, forceFlood: true)
         isManualProbing = false
     }
 
     /// Sends a probe cycle and updates tracking state.
     ///
-    /// **Active mode**: Sends a channel message. A 0-hop heard repeat of this message is
-    /// the ground truth for bidirectional connectivity — it proves the repeater heard us
-    /// directly and we heard it back. No TX signal data is collected in this mode.
+    /// Every probe sends a **discover request** (zero-hop only, no flood) and a **trace**
+    /// (hop-by-hop forwarding, naturally limited). These are lightweight and provide TX SNR
+    /// and mesh depth data without flooding the network.
     ///
-    /// **Deep Scan mode** (`deepScanEnabled`): Also sends a discover request and a flood
-    /// trace. Discover responses provide TX SNR (how well repeaters hear us). Traces map
-    /// multi-hop paths and mesh depth. Uses more airtime; best at slower speeds.
-    private func sendProbe(location: CLLocation) async {
+    /// **Channel flood messages** are the only probe type that floods the entire mesh.
+    /// They're gated by `floodMessagesPerCell` — once a cell's quota is reached, no more
+    /// flood messages are sent there. The manual probe button bypasses this limit.
+    private func sendProbe(location: CLLocation, forceFlood: Bool = false) async {
         guard let bps = binaryProtocolService else {
             logger.warning("Probe skipped: binaryProtocolService is nil")
             return
@@ -2219,8 +2255,60 @@ final class SignalSurveyViewModel {
             time: Date()
         ))
 
-        // Channel message: the primary probe. Generates heard repeats for 2-way proof.
-        if let ms = messageServiceRef, let deviceID, let channel = selectedProbeChannel {
+        // Discover request: zero-hop only, never floods the network.
+        // Provides TX SNR (how well repeaters hear us) via snrIn in responses.
+        do {
+            let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
+            logger.debug("Probe #\(self.probeCount) discover sent (tag: \(tag))")
+        } catch {
+            logger.warning("Probe #\(self.probeCount) discover failed: \(error.localizedDescription)")
+        }
+
+        // Brief delay to separate transmissions
+        try? await Task.sleep(for: .seconds(0.3))
+        guard !Task.isCancelled else { return }
+
+        // Trace: hop-by-hop forwarding with natural path_len limit (not a full flood).
+        // Maps multi-hop paths and mesh depth beyond direct reach.
+        do {
+            _ = try await bps.sendTrace(flags: pathHashMode)
+            logger.debug("Probe #\(self.probeCount) trace sent")
+        } catch {
+            logger.warning("Probe #\(self.probeCount) trace failed: \(error.localizedDescription)")
+        }
+
+        // Channel flood message: the only probe type that floods the entire network.
+        // Gated by per-cell limit and velocity-based spacing to minimize network impact.
+        // A 0-hop heard repeat proves direct 2-way connectivity.
+        let cellKey = hexCoord.key
+        let cellFloodCount = floodMessagesSentPerCell[cellKey, default: 0]
+        let shouldFlood: Bool = {
+            if forceFlood { return true }
+            guard floodMessagesPerCell > 0, cellFloodCount < floodMessagesPerCell else { return false }
+            // First flood in this cell: always send immediately
+            if cellFloodCount == 0 { return true }
+            // Subsequent floods: space evenly across estimated cell transit time.
+            // Cell diameter ~100m. Use GPS speed to estimate transit time,
+            // then divide by total floods to get the interval between each.
+            guard let firstFloodTime = firstFloodTimePerCell[cellKey] else { return true }
+            let speed = max(location.speed, 0.5) // floor at 0.5 m/s to avoid infinite wait
+            let cellDiameter: Double = 100.0 // ~100m flat-to-flat
+            let transitTime = cellDiameter / speed
+            let interval = transitTime / Double(floodMessagesPerCell)
+            let elapsed = Date().timeIntervalSince(firstFloodTime)
+            let nextFloodAt = interval * Double(cellFloodCount) // time offset for the Nth flood
+            return elapsed >= nextFloodAt
+        }()
+
+        if shouldFlood, let ms = messageServiceRef, let deviceID, let channel = selectedProbeChannel {
+            try? await Task.sleep(for: .seconds(0.3))
+            guard !Task.isCancelled else { return }
+
+            if firstFloodTimePerCell[cellKey] == nil {
+                firstFloodTimePerCell[cellKey] = Date()
+            }
+            floodMessagesSentPerCell[cellKey, default: 0] += 1
+
             do {
                 let probeText = "~\(probeCount)"
                 _ = try await ms.sendChannelMessage(
@@ -2228,39 +2316,11 @@ final class SignalSurveyViewModel {
                     channelIndex: channel.index,
                     deviceID: deviceID
                 )
-                logger.debug("Probe #\(self.probeCount) channel msg sent on ch\(channel.index)")
+                logger.debug("Probe #\(self.probeCount) channel msg sent on ch\(channel.index) (cell flood \(cellFloodCount + 1)/\(self.floodMessagesPerCell))")
             } catch {
                 logger.warning("Probe #\(self.probeCount) channel msg failed: \(error.localizedDescription)")
             }
         }
-
-        // Deep scan: discover request + flood trace for TX signal quality and mesh depth.
-        // Discover responses include snrIn (TX SNR — how well repeaters hear us).
-        // Traces map multi-hop paths and mesh depth beyond direct reach.
-        // Both use extra airtime, so they're gated behind the Deep Scan toggle.
-        if deepScanEnabled {
-            // Brief delay to separate transmissions
-            try? await Task.sleep(for: .seconds(0.3))
-            guard !Task.isCancelled else { return }
-
-            do {
-                let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
-                logger.debug("Probe #\(self.probeCount) discover sent (tag: \(tag))")
-            } catch {
-                logger.warning("Probe #\(self.probeCount) discover failed: \(error.localizedDescription)")
-            }
-
-            try? await Task.sleep(for: .seconds(0.3))
-            guard !Task.isCancelled else { return }
-
-            do {
-                _ = try await bps.sendTrace(flags: pathHashMode)
-                logger.debug("Probe #\(self.probeCount) trace sent")
-            } catch {
-                logger.warning("Probe #\(self.probeCount) trace failed: \(error.localizedDescription)")
-            }
-        }
-
     }
 
     /// Rebuilds dead zone cells from probe history. Called periodically or on grid rebuild.

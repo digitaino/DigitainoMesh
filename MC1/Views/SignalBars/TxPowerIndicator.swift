@@ -18,6 +18,11 @@ struct TxPowerIndicator: View {
                         .font(.system(size: 10, weight: .semibold))
                     Text(service.currentStep.label)
                         .font(.system(.caption2, design: .monospaced))
+                    if service.lastApplyFailed {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                    }
                 }
                 .foregroundStyle(powerColor(for: service))
                 .padding(.horizontal, 6)
@@ -27,7 +32,7 @@ struct TxPowerIndicator: View {
                         .fill(powerColor(for: service).opacity(0.15))
                 )
             }
-            .accessibilityLabel("TX Power: \(service.currentStep.label)")
+            .accessibilityLabel("TX Power: \(service.currentStep.label)\(service.lastApplyFailed ? ", verification failed" : "")")
             .accessibilityHint(service.isElevated ? "Elevated from base \(service.baseStep.label)" : "At base power")
         }
     }

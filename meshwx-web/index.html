@@ -22,7 +22,8 @@
                 <span style="margin-left:8px; color:var(--text-muted); font-size:0.8rem">
                     <span id="msg-count">0</span> msgs
                 </span>
-                <button id="connect-btn" class="btn-primary btn-sm" style="margin-left:8px">Connect</button>
+                <button id="connect-btn-usb" class="btn-primary btn-sm" style="margin-left:8px">USB</button>
+                <button id="connect-btn-ble" class="btn-primary btn-sm" style="margin-left:4px">BLE</button>
                 <button id="disconnect-btn" class="btn-danger btn-sm" style="display:none; margin-left:8px">Disconnect</button>
             </div>
         </header>
@@ -30,12 +31,17 @@
         <!-- Connect Screen (shown when not connected) -->
         <div id="connect-screen" class="connect-screen">
             <h2>Mesh Weather Client</h2>
-            <p>Connect your MeshCore companion radio via USB to receive live weather data broadcasts over the mesh network.</p>
-            <button id="connect-btn-hero" class="btn-primary" style="padding:12px 32px; font-size:1rem">
-                Connect Radio
-            </button>
+            <p>Connect your MeshCore companion radio via USB or Bluetooth to receive live weather data broadcasts over the mesh network.</p>
+            <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap">
+                <button id="connect-btn-hero-usb" class="btn-primary" style="padding:12px 32px; font-size:1rem">
+                    USB Serial
+                </button>
+                <button id="connect-btn-hero-ble" class="btn-primary" style="padding:12px 32px; font-size:1rem">
+                    Bluetooth
+                </button>
+            </div>
             <p style="font-size:0.8rem; color:var(--text-muted)">
-                Requires Chrome or Edge with Web Serial API support.
+                Requires Chrome or Edge with Web Serial or Web Bluetooth support.
             </p>
         </div>
 
@@ -94,6 +100,48 @@
                     <div class="section-title">Active Warnings</div>
                     <div id="warnings-content">
                         <div class="empty-state"><div class="icon">--</div>No active warnings</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Nowcast (Short-Term Outlook)</div>
+                    <div id="nowcasts-content">
+                        <div class="empty-state"><div class="icon">--</div>No nowcast data</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Hazardous Weather Outlook</div>
+                    <div id="outlooks-content">
+                        <div class="empty-state"><div class="icon">--</div>No outlook data</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Fire Weather Forecast</div>
+                    <div id="fire-weather-content">
+                        <div class="empty-state"><div class="icon">--</div>No fire weather data</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Storm Reports</div>
+                    <div id="storm-reports-content">
+                        <div class="empty-state"><div class="icon">--</div>No storm reports</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Rain Observations</div>
+                    <div id="rain-obs-content">
+                        <div class="empty-state"><div class="icon">--</div>No rain observations</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Daily Climate</div>
+                    <div id="daily-climate-content">
+                        <div class="empty-state"><div class="icon">--</div>No climate data</div>
                     </div>
                 </div>
             </div>

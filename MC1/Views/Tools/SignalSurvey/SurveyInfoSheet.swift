@@ -81,24 +81,20 @@ struct SurveyInfoSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            bulletPoint("Each probe sends a message on your selected private channel")
-            bulletPoint("A 0-hop heard repeat proves direct 2-way connectivity")
-            bulletPoint("No extra transmissions beyond the channel message")
-
-            Text("Deep Scan (Optional)")
+            Text("Every Probe Sends")
                 .font(.caption.weight(.semibold))
                 .padding(.top, 2)
 
-            Text("Enable Deep Scan for additional mesh analysis. Each probe adds:")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             VStack(alignment: .leading, spacing: 8) {
-                probeStep(number: 1, text: "Discover request — asks repeaters to identify themselves. Their responses include TX signal data (how well they hear you), the only way to measure outbound signal quality.")
-                probeStep(number: 2, text: "Flood trace — maps multi-hop paths and mesh depth beyond direct reach. Identifies the best mesh gateway repeater.")
+                probeStep(number: 1, text: "Discover request — asks nearby repeaters to identify themselves. Zero-hop only, never floods the network. Responses include TX signal data (how well they hear you).")
+                probeStep(number: 2, text: "Trace — maps multi-hop paths and mesh depth. Propagates hop-by-hop with a natural limit, not a full flood.")
             }
 
-            Text("Deep Scan uses more airtime and works best at slower speeds. The cell detail card adapts automatically — showing TX signal columns and mesh gateway analysis when Deep Scan data is available.")
+            Text("Channel Flood Messages (Optional)")
+                .font(.caption.weight(.semibold))
+                .padding(.top, 2)
+
+            Text("Channel messages are the only probe type that floods the entire mesh network. Use \"Flood Messages per Cell\" to limit how many are sent per hex cell (1-3), or set to Off to rely on discover + trace only. When multiple floods are allowed, they're spaced evenly across your estimated cell transit time using GPS speed — so they test the link at different positions within the cell. A 0-hop heard repeat of your channel message proves direct 2-way connectivity. Tap the Probe button to manually send a flood message anytime.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -122,10 +118,12 @@ struct SurveyInfoSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Frequency Presets")
                     .font(.caption.weight(.semibold))
-                frequencyRow(name: "Driving", description: "~15m trigger — best for high-speed travel")
-                frequencyRow(name: "Dense", description: "~25m trigger — walking in urban areas")
-                frequencyRow(name: "Normal", description: "~50m trigger — general walking pace")
-                frequencyRow(name: "Sparse", description: "~100m trigger — hiking or slow exploration")
+                #if DEBUG
+                frequencyRow(name: "Driving", description: "~15m trigger — best for high-speed travel (debug only)")
+                frequencyRow(name: "Dense", description: "~25m trigger — walking in urban areas (debug only)")
+                #endif
+                frequencyRow(name: "Normal", description: "~50m trigger — walking, cycling, e-bike")
+                frequencyRow(name: "Sparse", description: "~100m trigger — driving, fast cycling")
             }
 
             Text("You can also send a manual probe at any time by tapping the wave icon in the toolbar.")
@@ -159,7 +157,7 @@ struct SurveyInfoSheet: View {
 
             bulletPoint("View individual packets with timestamps and signal data")
             bulletPoint("Probe success rate shows what percentage of probes got a response")
-            bulletPoint("With Deep Scan, a Mesh Gateway section shows which repeater has the best connection to the broader mesh — measured by reachable nodes, hop depth, and path SNR")
+            bulletPoint("A Mesh Gateway section shows which repeater has the best connection to the broader mesh — measured by reachable nodes, hop depth, and path SNR (from trace data)")
         }
     }
 
@@ -182,11 +180,11 @@ struct SurveyInfoSheet: View {
                 signalExplainer(
                     direction: "TX Signal",
                     arrow: "arrow.up",
-                    description: "How well the repeater hears you. Requires Deep Scan — only discover responses carry TX signal data. Heard repeats prove 2-way connectivity but don't include TX quality."
+                    description: "How well the repeater hears you. Only discover responses carry TX signal data (always sent with each probe). Heard repeats prove 2-way connectivity but don't include TX quality."
                 )
             }
 
-            Text("Heard repeats are the most important signal — they confirm a repeater received your message and relayed it. Without Deep Scan, only the RX column is shown. With Deep Scan enabled, the TX column appears when discover response data is available.")
+            Text("Heard repeats are the most important signal — they confirm a repeater received your message and relayed it. The TX column appears when discover response data is available (sent with every probe).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -273,15 +271,14 @@ struct SurveyInfoSheet: View {
             iconColor: .yellow,
             title: "Tips"
         ) {
-            bulletPoint("Select a private channel and enable probing to confirm 2-way connectivity")
-            bulletPoint("Use Deep Scan at slower speeds for detailed mesh depth data")
-            bulletPoint("Use Driving mode when traveling at speed for denser coverage")
+            bulletPoint("Every probe sends discover + trace automatically (lightweight, no flood)")
+            bulletPoint("Set Flood Messages per Cell to 1-2 for network-friendly 2-way proof")
+            bulletPoint("Use the manual Probe button to send a flood message on demand")
             bulletPoint("Enable Live Upload to share data to the community map in real time")
             bulletPoint("Tap a repeater chip in the cell detail card to see per-repeater stats")
             bulletPoint("Dead zones show where probes were sent but got no response")
             bulletPoint("Passive data is still valuable — it maps where repeater signals reach")
             bulletPoint("Survey the same area multiple times for more reliable data")
-            bulletPoint("TX signal and mesh gateway data require Deep Scan mode")
         }
     }
 

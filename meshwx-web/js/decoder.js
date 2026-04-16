@@ -170,7 +170,15 @@ function decodeRaw(data) {
         case 0x21: return decodeWarningZones(data);
         case 0x30: return decodeObservation(data);
         case 0x31: return decodeForecast(data);
+        case 0x32: return decodeOutlook(data);
+        case 0x33: return decodeStormReports(data);
+        case 0x34: return decodeRainObservations(data);
         case 0x36: return decodeTAF(data);
+        case 0x37: return decodeWarningsNear(data);
+        case 0x38: return decodeFireWeather(data);
+        case 0x3A: return decodeDailyClimate(data);
+        case 0x3C: return decodeNowcast(data);
+        case 0x40: return decodeTextChunk(data);
         case 0xF0: return decodeBeacon(data);
         default:   return null;
     }
@@ -768,6 +776,9 @@ function decodeBeacon(data) {
         hasRadar: (flags & 0x02) !== 0,
         hasWarnings: (flags & 0x04) !== 0,
         hasForecasts: (flags & 0x08) !== 0,
+        hasFireWeather: (flags & 0x10) !== 0,
+        hasNowcast: (flags & 0x20) !== 0,
+        hasQPF: (flags & 0x40) !== 0,
         receivedAt: Date.now(),
     };
 }
@@ -1013,4 +1024,416 @@ export function buildTAFRequest(icao) {
     const bytes = new TextEncoder().encode(icao.substring(0, 4));
     for (let i = 0; i < bytes.length; i++) data[5 + i] = bytes[i];
     return data;
+}
+
+/**
+ * Build a 0x02 outlook request for a PFM point index.
+ */
+export function buildOutlookRequest(pfmPointIndex) {
+    const data = new Uint8Array(8);
+    data[0] = 0x02;
+    data[1] = 0x20; // data_type=2 (OUTLOOK)
+    data[4] = 0x06; // LOC_PFM_POINT
+    data[5] = (pfmPointIndex >> 16) & 0xFF;
+    data[6] = (pfmPointIndex >> 8) & 0xFF;
+    data[7] = pfmPointIndex & 0xFF;
+    return data;
+}
+
+/**
+ * Build a 0x02 storm reports request for a PFM point index.
+ */
+export function buildStormReportsRequest(pfmPointIndex) {
+    const data = new Uint8Array(8);
+    data[0] = 0x02;
+    data[1] = 0x30; // data_type=3 (STORM_REPORTS)
+    data[4] = 0x06; // LOC_PFM_POINT
+    data[5] = (pfmPointIndex >> 16) & 0xFF;
+    data[6] = (pfmPointIndex >> 8) & 0xFF;
+    data[7] = pfmPointIndex & 0xFF;
+    return data;
+}
+
+/**
+ * Build a 0x02 rain observations request for a PFM point index.
+ */
+export function buildRainObsRequest(pfmPointIndex) {
+    const data = new Uint8Array(8);
+    data[0] = 0x02;
+    data[1] = 0x40; // data_type=4 (PRECIPITATION)
+    data[4] = 0x06; // LOC_PFM_POINT
+    data[5] = (pfmPointIndex >> 16) & 0xFF;
+    data[6] = (pfmPointIndex >> 8) & 0xFF;
+    data[7] = pfmPointIndex & 0xFF;
+    return data;
+}
+
+/**
+ * Build a 0x02 warnings near request for a zone.
+ */
+export function buildWarningsNearRequest(stateIdx, zoneNum) {
+    const data = new Uint8Array(8);
+    data[0] = 0x02;
+    data[1] = 0x70; // data_type=7 (WARNINGS_NEAR)
+    data[4] = 0x01; // LOC_ZONE
+    data[5] = stateIdx;
+    data[6] = (zoneNum >> 8) & 0xFF;
+    data[7] = zoneNum & 0xFF;
+    return data;
+}
+
+// ============================================================================
+// 0x32 Outlook (Hazardous Weather Outlook)
+// ============================================================================
+
+const HAZARD_TYPE_NAMES = [
+    "Thunderstorm", "Flooding", "Winter Weather", "Fire Weather",
+    "Excessive Heat", "Extreme Cold", "High Wind", "Coastal Hazard",
+];
+
+const RISK_LEVEL_NAMES = [
+    "None", "Marginal", "Slight", "Enhanced", "Moderate", "High", "Extreme",
+];
+
+export function hazardTypeName(code) {
+    return HAZARD_TYPE_NAMES[code] || "Hazard";
+}
+
+export function riskLevelName(code) {
+    return RISK_LEVEL_NAMES[code] || "Unknown";
+}
+
+function decodeOutlook(data) {
+    if (data.length < 2 || data[0] !== 0x32) return null;
+    const locType = data[1];
+    const idLen = locationIDLength(locType);
+    const headerEnd = 2 + idLen;
+    if (data.length < headerEnd + 3) return null;
+
+    const locationID = parseLocationID(locType, data, 2, idLen);
+    const issuedTimeMinutes = readUint16LE(data, headerEnd);
+    const dayCount = data[headerEnd + 2];
+
+    const days = [];
+    let off = headerEnd + 3;
+    for (let d = 0; d < dayCount; d++) {
+        if (off + 1 >= data.length) break;
+        const dayOffset = data[off];
+        const hazardCount = data[off + 1];
+        off += 2;
+        const hazards = [];
+        for (let h = 0; h < hazardCount; h++) {
+            if (off + 1 >= data.length) break;
+            hazards.push({ hazardType: data[off], riskLevel: data[off + 1] });
+            off += 2;
+        }
+        days.push({ dayOffset, hazards });
+    }
+
+    return {
+        type: "outlook",
+        locationType: locType,
+        locationID,
+        issuedTimeMinutes,
+        days,
+        receivedAt: Date.now(),
+    };
+}
+
+// ============================================================================
+// 0x33 Storm Reports (LSR)
+// ============================================================================
+
+const EVENT_TYPE_NAMES = [
+    "Tornado", "Funnel Cloud", "Waterspout", "Hail", "Damaging Wind",
+    "Flash Flood", "Heavy Rain", "Winter Storm", "Ice Storm", "High Wind",
+    "Dense Fog", "Wildfire", "Dust Storm",
+];
+
+export function eventTypeName(code) {
+    return EVENT_TYPE_NAMES[code] || "Storm Report";
+}
+
+export function magnitudeLabel(eventType, magnitude) {
+    if (magnitude === 0) return null;
+    if (eventType === 3) return (magnitude * 0.25).toFixed(2) + '" dia.';
+    if (eventType === 4 || eventType === 9) return magnitude + " mph";
+    return null;
+}
+
+function decodeStormReports(data) {
+    if (data.length < 2 || data[0] !== 0x33) return null;
+    const locType = data[1];
+    const idLen = locationIDLength(locType);
+    const headerEnd = 2 + idLen;
+    if (data.length < headerEnd + 1) return null;
+
+    const locationID = parseLocationID(locType, data, 2, idLen);
+    const reportCount = data[headerEnd];
+    const reports = [];
+    let off = headerEnd + 1;
+    for (let i = 0; i < reportCount; i++) {
+        if (off + 6 >= data.length) break;
+        const eventType = data[off];
+        const magnitude = data[off + 1];
+        const minutesAgo = readUint16LE(data, off + 2);
+        const placeID = data[off + 4] | (data[off + 5] << 8) | (data[off + 6] << 16);
+        reports.push({ eventType, magnitude, minutesAgo, placeID });
+        off += 7;
+    }
+
+    return {
+        type: "stormReports",
+        locationType: locType,
+        locationID,
+        reports,
+        receivedAt: Date.now(),
+    };
+}
+
+// ============================================================================
+// 0x34 Rain Observations
+// ============================================================================
+
+const RAIN_TYPE_NAMES = [
+    "Light Rain", "Moderate Rain", "Heavy Rain", "Drizzle",
+    "Rain Shower", "Snow", "Sleet/Freezing",
+];
+
+export function rainTypeName(code) {
+    return RAIN_TYPE_NAMES[code] || "Precipitation";
+}
+
+function decodeRainObservations(data) {
+    if (data.length < 2 || data[0] !== 0x34) return null;
+    const locType = data[1];
+    const idLen = locationIDLength(locType);
+    const headerEnd = 2 + idLen;
+    if (data.length < headerEnd + 3) return null;
+
+    const locationID = parseLocationID(locType, data, 2, idLen);
+    const timestampMinutes = readUint16LE(data, headerEnd);
+    const cityCount = data[headerEnd + 2];
+    const cities = [];
+    let off = headerEnd + 3;
+    for (let i = 0; i < cityCount; i++) {
+        if (off + 4 >= data.length) break;
+        const placeID = data[off] | (data[off + 1] << 8) | (data[off + 2] << 16);
+        const rainType = data[off + 3];
+        const tempF = readInt8(data, off + 4);
+        cities.push({ placeID, rainType, tempF });
+        off += 5;
+    }
+
+    return {
+        type: "rainObservations",
+        locationType: locType,
+        locationID,
+        timestampMinutes,
+        cities,
+        receivedAt: Date.now(),
+    };
+}
+
+// ============================================================================
+// 0x37 Warnings Near
+// ============================================================================
+
+const WARN_NEAR_TYPE_NAMES = {
+    1: "Tornado", 2: "Severe Thunderstorm", 3: "Flash Flood", 4: "Flood",
+    5: "Winter Storm", 6: "High Wind", 7: "Fire Weather", 8: "Marine",
+    9: "Special Weather Statement",
+};
+
+const WARN_NEAR_SEV_NAMES = {
+    1: "Advisory", 2: "Watch", 3: "Warning", 4: "Emergency",
+};
+
+export function warningsNearTypeName(code) {
+    return WARN_NEAR_TYPE_NAMES[code] || "Weather Alert";
+}
+
+export function warningsNearSevName(code) {
+    return WARN_NEAR_SEV_NAMES[code] || "Alert";
+}
+
+function decodeWarningsNear(data) {
+    if (data.length < 2 || data[0] !== 0x37) return null;
+    const locType = data[1];
+    const idLen = locationIDLength(locType);
+    const headerEnd = 2 + idLen;
+    if (data.length < headerEnd + 1) return null;
+
+    const locationID = parseLocationID(locType, data, 2, idLen);
+    const entryCount = data[headerEnd];
+    const entries = [];
+    let off = headerEnd + 1;
+    for (let i = 0; i < entryCount; i++) {
+        if (off + 7 >= data.length) break;
+        const typeSev = data[off];
+        const v2Type = (typeSev >> 4) & 0x0F;
+        const severity = typeSev & 0x0F;
+        const expiryUnixMinutes = readUint32BE(data, off + 1);
+        const stateIdx = data[off + 5];
+        const zoneNum = readUint16BE(data, off + 6);
+        entries.push({ v2Type, severity, expiryUnixMinutes, stateIdx, zoneNum });
+        off += 8;
+    }
+
+    return {
+        type: "warningsNear",
+        locationType: locType,
+        locationID,
+        entries,
+        receivedAt: Date.now(),
+    };
+}
+
+// ============================================================================
+// 0x38 Fire Weather Forecast (FWF)
+// ============================================================================
+
+const FW_DIR16 = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+                  "S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const FW_CLOUD_NAMES = ["Clear","Few","Scattered","Broken","Overcast","Obscured"];
+const FW_LIGHTNING = ["None","Dry lightning","Wet lightning"];
+
+export function fwWindDirName(code) { return FW_DIR16[code & 0x0F] || "VAR"; }
+export function fwCloudName(code) { return FW_CLOUD_NAMES[code] || "Variable"; }
+export function fwLightningName(code) { return FW_LIGHTNING[code] || "None"; }
+
+function decodeFireWeather(data) {
+    if (data.length < 2 || data[0] !== 0x38) return null;
+    const locType = data[1];
+    const idLen = locationIDLength(locType);
+    const headerEnd = 2 + idLen;
+    if (data.length < headerEnd + 2) return null;
+
+    const locationID = parseLocationID(locType, data, 2, idLen);
+    const issuedHoursAgo = data[headerEnd];
+    const periodCount = data[headerEnd + 1];
+
+    const periods = [];
+    let off = headerEnd + 2;
+    for (let i = 0; i < periodCount; i++) {
+        if (off + 7 >= data.length) break;
+        const transportByte = data[off + 3];
+        const hainesLightn = data[off + 5];
+        const weatherByte = data[off + 7];
+        periods.push({
+            periodID: data[off],
+            maxTempF: readInt8(data, off + 1),
+            minRHPct: data[off + 2],
+            transportWindDir: (transportByte >> 4) & 0x0F,
+            transportWindMph: (transportByte & 0x0F) * 5,
+            mixingHeight500ft: data[off + 4],
+            mixingHeightFt: data[off + 4] * 500,
+            hainesIndex: hainesLightn & 0x0F,
+            lightningRisk: (hainesLightn >> 4) & 0x0F,
+            cloudCover: data[off + 6],
+            weatherType: (weatherByte >> 3) & 0x1F,
+            intensity: (weatherByte >> 1) & 0x03,
+        });
+        off += 8;
+    }
+
+    return {
+        type: "fireWeather",
+        locationType: locType,
+        locationID,
+        issuedHoursAgo,
+        periods,
+        receivedAt: Date.now(),
+    };
+}
+
+// ============================================================================
+// 0x3A Daily Climate (RTP)
+// ============================================================================
+
+function decodeDailyClimate(data) {
+    if (data.length < 3 || data[0] !== 0x3A) return null;
+    const cityCount = data[1];
+    const reportDayOffset = data[2];
+
+    const cities = [];
+    let off = 3;
+    for (let i = 0; i < cityCount; i++) {
+        if (off + 6 >= data.length) break;
+        const placeID = data[off] | (data[off + 1] << 8) | (data[off + 2] << 16);
+        const maxRaw = readInt8(data, off + 3);
+        const minRaw = readInt8(data, off + 4);
+        const precipRaw = data[off + 5];
+        const snowRaw = data[off + 6];
+
+        const maxTempF = maxRaw === 127 ? null : maxRaw;
+        const minTempF = minRaw === 127 ? null : minRaw;
+        const precipInches = precipRaw === 0xFE ? null : (precipRaw === 0xFF ? -1.0 : precipRaw / 100.0);
+        const snowInches = snowRaw === 0xFE ? null : (snowRaw === 0xFF ? -1.0 : snowRaw / 10.0);
+
+        cities.push({ placeID, maxTempF, minTempF, precipInches, snowInches });
+        off += 7;
+    }
+
+    const DAY_LABELS = ["Today", "Yesterday", "2 Days Ago"];
+
+    return {
+        type: "dailyClimate",
+        reportDayOffset,
+        dayLabel: DAY_LABELS[reportDayOffset] || `${reportDayOffset} Days Ago`,
+        cities,
+        receivedAt: Date.now(),
+    };
+}
+
+// ============================================================================
+// 0x3C Nowcast (Short Term Forecast)
+// ============================================================================
+
+function decodeNowcast(data) {
+    if (data.length < 2 || data[0] !== 0x3C) return null;
+    const locType = data[1];
+    const idLen = locationIDLength(locType);
+    const headerEnd = 2 + idLen;
+    if (data.length < headerEnd + 2) return null;
+
+    const locationID = parseLocationID(locType, data, 2, idLen);
+    const validHours = data[headerEnd];
+    const urgencyFlags = data[headerEnd + 1];
+    const textStart = headerEnd + 2;
+    const text = utf8Decode(data, textStart, data.length);
+
+    const hasThunder = (urgencyFlags & 0x01) !== 0;
+    const hasFlooding = (urgencyFlags & 0x02) !== 0;
+    const hasWinter = (urgencyFlags & 0x04) !== 0;
+    const hasFire = (urgencyFlags & 0x08) !== 0;
+    const hasWind = (urgencyFlags & 0x10) !== 0;
+    const isUrgent = hasThunder || hasFlooding || hasWinter || hasFire || hasWind;
+
+    // Lead text: first 2 sentences
+    const sentences = text.split('. ');
+    const leadText = sentences.slice(0, 2).join('. ').trim();
+
+    return {
+        type: "nowcast",
+        locationType: locType,
+        locationID,
+        validHours,
+        hasThunder, hasFlooding, hasWinter, hasFire, hasWind,
+        isUrgent,
+        text,
+        leadText,
+        receivedAt: Date.now(),
+    };
+}
+
+// ============================================================================
+// 0x40 Text Chunk
+// ============================================================================
+
+function decodeTextChunk(data) {
+    if (data.length < 2 || data[0] !== 0x40) return null;
+    const text = utf8Decode(data, 1, data.length);
+    if (!text) return null;
+    return { type: "textChunk", text, receivedAt: Date.now() };
 }

@@ -219,6 +219,12 @@ final class ChatViewModel {
     /// Cached URL detection results to avoid re-running NSDataDetector on rebuilds
     var cachedURLs: [UUID: URL?] = [:]
 
+    /// Message ID eligible for the "no repeats heard" retry card, or `nil` if none.
+    var noRepeatsRetryMessageID: UUID?
+
+    /// Task that schedules the no-repeats retry card appearance after a delay.
+    @ObservationIgnored var noRepeatsRetryTask: Task<Void, Never>?
+
     /// Set of message IDs whose duplicate groups are currently expanded.
     /// Keyed by the first message ID in each group.
     var expandedDuplicateGroups: Set<UUID> = []
@@ -422,6 +428,34 @@ final class ChatViewModel {
         return true
     }
 
+    // MARK: - No Repeats Retry Card
+
+    /// Schedule the "no repeats heard" retry card for a sent message.
+    /// Shows after a delay if no repeats have been recorded by then.
+    func scheduleNoRepeatsRetry(for messageID: UUID) {
+        noRepeatsRetryTask?.cancel()
+        noRepeatsRetryTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            // Only show if the message has no repeats and is done sending
+            // (sent/delivered — not pending, sending, retrying, or failed)
+            if let msg = messages.first(where: { $0.id == messageID }),
+               msg.heardRepeats == 0,
+               msg.isOutgoing,
+               msg.status == .sent || msg.status == .delivered {
+                logger.info("No repeats after timeout for message \(messageID), showing retry card")
+                noRepeatsRetryMessageID = messageID
+            }
+        }
+    }
+
+    /// Clear the retry card (e.g., when repeats arrive or message is resent).
+    func clearNoRepeatsRetry() {
+        noRepeatsRetryTask?.cancel()
+        noRepeatsRetryTask = nil
+        noRepeatsRetryMessageID = nil
+    }
+
     // MARK: - TX Power for Queued Messages
 
     /// Apply the correct TX power before sending a queued message.
@@ -442,14 +476,25 @@ final class ChatViewModel {
             dbm = power.currentRadioDbm
         }
 
-        do {
-            try await handler(dbm)
-            logger.info("Verified TX power: \(dbm)dBm")
-            return dbm
-        } catch {
-            logger.warning("TX power verification failed: \(error.localizedDescription)")
-            return nil
+        let maxRetries = 3
+        for attempt in 1...maxRetries {
+            do {
+                let confirmed = try await handler(dbm)
+                if attempt > 1 {
+                    logger.info("TX power verified on attempt \(attempt): \(dbm)dBm → device confirmed \(confirmed)dBm")
+                } else {
+                    logger.info("Verified TX power: \(dbm)dBm → device confirmed \(confirmed)dBm")
+                }
+                return confirmed
+            } catch {
+                logger.warning("TX power attempt \(attempt)/\(maxRetries) failed: \(error.localizedDescription)")
+                if attempt < maxRetries {
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+            }
         }
+        logger.error("TX power verification failed after \(maxRetries) attempts for \(dbm)dBm")
+        return nil
     }
 }
 

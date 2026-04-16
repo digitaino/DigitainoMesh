@@ -1047,6 +1047,7 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
     var onNearTop: (() -> Void)?
     var isLoadingOlderMessages: Bool = false
     var highlightedItemID: Item.ID?
+    var noRepeatsRetryItemID: Item.ID?
     var canSwipeToReply: ((Item) -> Bool)?
     var onSwipeToReply: ((Item) -> Void)?
     var datesByItemID: [Item.ID: Date] = [:]
@@ -1157,6 +1158,18 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
             }
         }
 
+        // Reload cell when no-repeats retry card appears or disappears.
+        let prevRetry = context.coordinator.lastNoRepeatsRetryItemID
+        if noRepeatsRetryItemID != prevRetry {
+            context.coordinator.lastNoRepeatsRetryItemID = noRepeatsRetryItemID
+            var idsToReload: [Item.ID] = []
+            if let prev = prevRetry { idsToReload.append(prev) }
+            if let current = noRepeatsRetryItemID { idsToReload.append(current) }
+            if !idsToReload.isEmpty {
+                controller.reloadItems(idsToReload)
+            }
+        }
+
         // Perform the scroll after items and highlights are updated
         if shouldForceScroll {
             controller.scrollToBottom(animated: true)
@@ -1181,6 +1194,7 @@ struct ChatTableView<Item: Identifiable & Hashable & Sendable, Content: View>: U
         var lastMentionRequest: Int = 0
         var lastDividerScrollRequest: Int = 0
         var lastHighlightedItemID: Item.ID?
+        var lastNoRepeatsRetryItemID: Item.ID?
         var setIsAtBottom: ((Bool) -> Void)?
         var setUnreadCount: ((Int) -> Void)?
         var setIsDividerVisible: ((Bool) -> Void)?

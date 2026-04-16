@@ -126,6 +126,15 @@ struct UnifiedMessageBubble: View {
                         )
                     }
 
+                    // No-repeats retry suggestion
+                    if displayState.showNoRepeatsRetry && message.isOutgoing {
+                        NoRepeatsRetryCard(
+                            nextPowerLabel: displayState.nextPowerLabel,
+                            onResend: callbacks.onRetry,
+                            onResendAtNextPower: callbacks.onResendAtNextPower
+                        )
+                    }
+
                     // Duplicate count badge (for collapsed groups or expanded group leader)
                     if displayState.duplicateCount > 1 {
                         DuplicateCountBadge(
@@ -483,6 +492,35 @@ private struct BubbleHopCountFooter: View {
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.Chats.Chats.Message.HopCount.accessibilityLabel(Int(pathLength)))
+    }
+}
+
+// MARK: - No Repeats Retry Card
+
+private struct NoRepeatsRetryCard: View {
+    let nextPowerLabel: String?
+    let onResend: (() -> Void)?
+    let onResendAtNextPower: (() -> Void)?
+
+    var body: some View {
+        if let powerLabel = nextPowerLabel, let onResendAtNextPower {
+            retryButton(label: "Retry at \(powerLabel)", action: onResendAtNextPower)
+        } else if let onResend {
+            retryButton(label: "Resend", action: onResend)
+        }
+    }
+
+    private func retryButton(label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.clockwise")
+                Text(label)
+            }
+            .font(.caption2)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.blue)
+        .padding(.trailing, 4)
     }
 }
 
