@@ -299,12 +299,6 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
         }
     }
 
-    public func updateMessageByAckCode(_ ackCode: UInt32, status: MessageStatus, roundTripTime: UInt32?) async throws {
-        if let message = messages.values.first(where: { $0.ackCode == ackCode }) {
-            try await updateMessageAck(id: message.id, ackCode: ackCode, status: status, roundTripTime: roundTripTime)
-        }
-    }
-
     public func updateMessageRetryStatus(id: UUID, status: MessageStatus, retryAttempt: Int, maxRetryAttempts: Int) async throws {
         if let error = stubbedUpdateMessageStatusError {
             throw error

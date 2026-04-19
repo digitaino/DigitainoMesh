@@ -7,12 +7,12 @@ import Foundation
 
 private func createTestContact(
     id: UUID = UUID(),
-    deviceID: UUID,
+    radioID: UUID,
     name: String = "TestContact"
 ) -> ContactDTO {
     ContactDTO(
         id: id,
-        deviceID: deviceID,
+        radioID: radioID,
         publicKey: Data((0..<ProtocolLimits.publicKeySize).map { _ in UInt8.random(in: 0...255) }),
         name: name,
         typeRawValue: ContactType.chat.rawValue,
@@ -34,13 +34,13 @@ private func createTestContact(
 
 private func createTestChannel(
     id: UUID = UUID(),
-    deviceID: UUID,
+    radioID: UUID,
     index: UInt8 = 0,
     name: String = "TestChannel"
 ) -> ChannelDTO {
     ChannelDTO(
         id: id,
-        deviceID: deviceID,
+        radioID: radioID,
         index: index,
         name: name,
         secret: Data(),
@@ -55,7 +55,7 @@ private func createTestChannel(
 
 private func createTestMessage(
     contactID: UUID,
-    deviceID: UUID,
+    radioID: UUID,
     timestamp: UInt32,
     createdAt: Date = Date(),
     direction: MessageDirection = .incoming,
@@ -63,7 +63,7 @@ private func createTestMessage(
 ) -> MessageDTO {
     MessageDTO(
         id: UUID(),
-        deviceID: deviceID,
+        radioID: radioID,
         contactID: contactID,
         channelIndex: nil,
         text: text,
@@ -87,7 +87,7 @@ private func createTestMessage(
 }
 
 private func createChannelMessage(
-    deviceID: UUID,
+    radioID: UUID,
     channelIndex: UInt8,
     timestamp: UInt32,
     senderName: String = "Sender",
@@ -95,7 +95,7 @@ private func createChannelMessage(
 ) -> MessageDTO {
     MessageDTO(
         id: UUID(),
-        deviceID: deviceID,
+        radioID: radioID,
         contactID: nil,
         channelIndex: channelIndex,
         text: text,
@@ -142,18 +142,6 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
         messages[id]
     }
 
-    func fetchMessage(deduplicationKey: String) async throws -> MessageDTO? {
-        messages.values.first { $0.deduplicationKey == deduplicationKey }
-    }
-
-    func fetchMessageForSurveyPoint(packetHash: String) async throws -> MessageDTO? {
-        messages.values.first { $0.deduplicationKey == packetHash }
-    }
-
-    func fetchMessage(ackCode: UInt32) async throws -> MessageDTO? {
-        messages.values.first { $0.ackCode == ackCode }
-    }
-
     func fetchLastMessages(contactIDs: [UUID], limit: Int) throws -> [UUID: [MessageDTO]] {
         var result: [UUID: [MessageDTO]] = [:]
         for contactID in contactIDs {
@@ -164,10 +152,10 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
         return result
     }
 
-    func fetchLastChannelMessages(channels: [(deviceID: UUID, channelIndex: UInt8, id: UUID)], limit: Int) throws -> [UUID: [MessageDTO]] {
+    func fetchLastChannelMessages(channels: [(radioID: UUID, channelIndex: UInt8, id: UUID)], limit: Int) throws -> [UUID: [MessageDTO]] {
         var result: [UUID: [MessageDTO]] = [:]
         for channel in channels {
-            let filtered = messages.values.filter { $0.deviceID == channel.deviceID && $0.channelIndex == channel.channelIndex }
+            let filtered = messages.values.filter { $0.radioID == channel.radioID && $0.channelIndex == channel.channelIndex }
                 .sorted { $0.timestamp < $1.timestamp }
             result[channel.id] = Array(filtered.prefix(limit))
         }
@@ -184,19 +172,18 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
         return Array(filtered.dropFirst(offset).prefix(limit).reversed())
     }
 
-    func fetchMessages(deviceID: UUID, channelIndex: UInt8, limit: Int, offset: Int) async throws -> [MessageDTO] {
+    func fetchMessages(radioID: UUID, channelIndex: UInt8, limit: Int, offset: Int) async throws -> [MessageDTO] {
         if let error = stubbedFetchError {
             throw error
         }
         // Match production: sort descending (newest first), apply offset/limit, then reverse to ascending
-        let filtered = messages.values.filter { $0.deviceID == deviceID && $0.channelIndex == channelIndex }
+        let filtered = messages.values.filter { $0.radioID == radioID && $0.channelIndex == channelIndex }
             .sorted { $0.timestamp > $1.timestamp }
         return Array(filtered.dropFirst(offset).prefix(limit).reversed())
     }
 
     func updateMessageStatus(id: UUID, status: MessageStatus) async throws {}
     func updateMessageAck(id: UUID, ackCode: UInt32, status: MessageStatus, roundTripTime: UInt32?) async throws {}
-    func updateMessageByAckCode(_ ackCode: UInt32, status: MessageStatus, roundTripTime: UInt32?) async throws {}
     func updateMessageRetryStatus(
         id: UUID,
         status: MessageStatus,
@@ -216,29 +203,28 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
 
     // MARK: - Contact Operations
 
-    func fetchContacts(deviceID: UUID) async throws -> [ContactDTO] {
-        contacts.values.filter { $0.deviceID == deviceID }
+    func fetchContacts(radioID: UUID) async throws -> [ContactDTO] {
+        contacts.values.filter { $0.radioID == radioID }
     }
 
-    func fetchConversations(deviceID: UUID) async throws -> [ContactDTO] {
-        contacts.values.filter { $0.deviceID == deviceID && $0.lastMessageDate != nil }
+    func fetchConversations(radioID: UUID) async throws -> [ContactDTO] {
+        contacts.values.filter { $0.radioID == radioID && $0.lastMessageDate != nil }
     }
 
     func fetchContact(id: UUID) async throws -> ContactDTO? {
         contacts[id]
     }
 
-    func fetchContact(deviceID: UUID, publicKey: Data) async throws -> ContactDTO? {
-        contacts.values.first { $0.deviceID == deviceID && $0.publicKey == publicKey }
+    func fetchContact(radioID: UUID, publicKey: Data) async throws -> ContactDTO? {
+        contacts.values.first { $0.radioID == radioID && $0.publicKey == publicKey }
     }
 
-    func fetchContact(deviceID: UUID, publicKeyPrefix: Data) async throws -> ContactDTO? {
-        contacts.values.first { $0.deviceID == deviceID && $0.publicKey.prefix(6) == publicKeyPrefix }
+    func fetchContact(radioID: UUID, publicKeyPrefix: Data) async throws -> ContactDTO? {
+        contacts.values.first { $0.radioID == radioID && $0.publicKey.prefix(6) == publicKeyPrefix }
     }
 
-    func fetchContactPublicKeysByPrefix(deviceID: UUID) async throws -> [UInt8: [Data]] { [:] }
-    @discardableResult func saveContact(deviceID: UUID, from frame: ContactFrame) async throws -> UUID { UUID() }
-    @discardableResult func saveContactsBatch(deviceID: UUID, frames: [ContactFrame]) async throws -> [UUID] { frames.map { _ in UUID() } }
+    func fetchContactPublicKeysByPrefix(radioID: UUID) async throws -> [UInt8: [Data]] { [:] }
+    @discardableResult func saveContact(radioID: UUID, from frame: ContactFrame) async throws -> UUID { UUID() }
     func saveContact(_ dto: ContactDTO) async throws { contacts[dto.id] = dto }
     func deleteContact(id: UUID) async throws { contacts.removeValue(forKey: id) }
     func updateContactLastMessage(contactID: UUID, date: Date?) async throws {}
@@ -255,33 +241,34 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
     func decrementChannelUnreadMentionCount(channelID: UUID) async throws {}
     func clearChannelUnreadMentionCount(channelID: UUID) async throws {}
     func fetchUnseenMentionIDs(contactID: UUID) async throws -> [UUID] { [] }
-    func fetchUnseenChannelMentionIDs(deviceID: UUID, channelIndex: UInt8) async throws -> [UUID] { [] }
+    func fetchUnseenChannelMentionIDs(radioID: UUID, channelIndex: UInt8) async throws -> [UUID] { [] }
     func deleteMessagesForContact(contactID: UUID) async throws {}
-    func fetchBlockedContacts(deviceID: UUID) async throws -> [ContactDTO] {
-        blockedContacts.filter { $0.deviceID == deviceID }
+    func fetchBlockedContacts(radioID: UUID) async throws -> [ContactDTO] {
+        blockedContacts.filter { $0.radioID == radioID }
     }
 
     // MARK: - Blocked Channel Senders
 
     func saveBlockedChannelSender(_ dto: BlockedChannelSenderDTO) async throws {}
-    func deleteBlockedChannelSender(deviceID: UUID, name: String) async throws {}
-    func fetchBlockedChannelSenders(deviceID: UUID) async throws -> [BlockedChannelSenderDTO] { [] }
+    func deleteBlockedChannelSender(radioID: UUID, name: String) async throws {}
+    func deleteChannelMessages(fromSender senderName: String, radioID: UUID) async throws {}
+    func fetchBlockedChannelSenders(radioID: UUID) async throws -> [BlockedChannelSenderDTO] { [] }
 
     // MARK: - Channel Operations
 
-    func fetchChannels(deviceID: UUID) async throws -> [ChannelDTO] {
-        channels.values.filter { $0.deviceID == deviceID }.sorted { $0.index < $1.index }
+    func fetchChannels(radioID: UUID) async throws -> [ChannelDTO] {
+        channels.values.filter { $0.radioID == radioID }.sorted { $0.index < $1.index }
     }
 
-    func fetchChannel(deviceID: UUID, index: UInt8) async throws -> ChannelDTO? {
-        channels.values.first { $0.deviceID == deviceID && $0.index == index }
+    func fetchChannel(radioID: UUID, index: UInt8) async throws -> ChannelDTO? {
+        channels.values.first { $0.radioID == radioID && $0.index == index }
     }
 
     func fetchChannel(id: UUID) async throws -> ChannelDTO? {
         channels[id]
     }
 
-    @discardableResult func saveChannel(deviceID: UUID, from info: ChannelInfo) async throws -> UUID { UUID() }
+    @discardableResult func saveChannel(radioID: UUID, from info: ChannelInfo) async throws -> UUID { UUID() }
     func saveChannel(_ dto: ChannelDTO) async throws { channels[dto.id] = dto }
     func deleteChannel(id: UUID) async throws { channels.removeValue(forKey: id) }
     func updateChannelLastMessage(channelID: UUID, date: Date?) async throws {}
@@ -290,10 +277,10 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
 
     // MARK: - Saved Trace Paths
 
-    func fetchSavedTracePaths(deviceID: UUID) async throws -> [SavedTracePathDTO] { [] }
+    func fetchSavedTracePaths(radioID: UUID) async throws -> [SavedTracePathDTO] { [] }
     func fetchSavedTracePath(id: UUID) async throws -> SavedTracePathDTO? { nil }
     func createSavedTracePath(
-        deviceID: UUID,
+        radioID: UUID,
         name: String,
         pathBytes: Data,
         hashSize: Int,
@@ -301,7 +288,7 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
     ) async throws -> SavedTracePathDTO {
         SavedTracePathDTO(
             id: UUID(),
-            deviceID: deviceID,
+            radioID: radioID,
             name: name,
             pathBytes: pathBytes,
             hashSize: hashSize,
@@ -316,7 +303,7 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
     // MARK: - Heard Repeats
 
     func findSentChannelMessage(
-        deviceID: UUID,
+        radioID: UUID,
         channelIndex: UInt8,
         timestamp: UInt32,
         text: String,
@@ -346,34 +333,28 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
 
     func findRxLogEntry(
         channelIndex: UInt8?,
-        senderTimestamp: UInt32,
-        withinSeconds: Double
+        senderTimestamp: UInt32
     ) async throws -> RxLogEntryDTO? { nil }
     func findRxLogEntryBySenderPrefix(senderPrefixByte: UInt8, receivedSince: Date) async throws -> RxLogEntryDTO? { nil }
 
     // MARK: - Discovered Nodes
 
-    func upsertDiscoveredNode(deviceID: UUID, from frame: ContactFrame) async throws -> (node: DiscoveredNodeDTO, isNew: Bool) {
+    func upsertDiscoveredNode(radioID: UUID, from frame: ContactFrame) async throws -> (node: DiscoveredNodeDTO, isNew: Bool) {
         fatalError("Not implemented")
     }
-    func fetchDiscoveredNodes(deviceID: UUID) async throws -> [DiscoveredNodeDTO] { [] }
+    func fetchDiscoveredNodes(radioID: UUID) async throws -> [DiscoveredNodeDTO] { [] }
     func deleteDiscoveredNode(id: UUID) async throws {}
-    func clearDiscoveredNodes(deviceID: UUID) async throws {}
-    func fetchContactPublicKeys(deviceID: UUID) async throws -> Set<Data> { Set() }
+    func clearDiscoveredNodes(radioID: UUID) async throws {}
+    func fetchContactPublicKeys(radioID: UUID) async throws -> Set<Data> { Set() }
     func fetchReactions(for messageID: UUID, limit: Int) async throws -> [ReactionDTO] { [] }
     func saveReaction(_ dto: ReactionDTO) async throws {}
     func reactionExists(messageID: UUID, senderName: String, emoji: String) async throws -> Bool { false }
     func updateMessageReactionSummary(messageID: UUID, summary: String?) async throws {}
     func deleteReactionsForMessage(messageID: UUID) async throws {}
-    func findChannelMessageForReaction(deviceID: UUID, channelIndex: UInt8, parsedReaction: ParsedReaction, localNodeName: String?, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> MessageDTO? { nil }
-    func fetchChannelMessageCandidates(deviceID: UUID, channelIndex: UInt8, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> [MessageDTO] { [] }
-    func fetchDMMessageCandidates(deviceID: UUID, contactID: UUID, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> [MessageDTO] { [] }
-    func findDMMessageForReaction(deviceID: UUID, contactID: UUID, messageHash: String, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> MessageDTO? { nil }
-
-    // MARK: - RxLog Diagnostics
-
-    func fetchRecentDMEntriesWithoutTimestamp(deviceID: UUID, since: Date) async throws -> [RxLogEntryDTO] { [] }
-    func fetchOldestRxLogDate(deviceID: UUID) async throws -> Date? { nil }
+    func findChannelMessageForReaction(radioID: UUID, channelIndex: UInt8, parsedReaction: ParsedReaction, localNodeName: String?, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> MessageDTO? { nil }
+    func fetchChannelMessageCandidates(radioID: UUID, channelIndex: UInt8, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> [MessageDTO] { [] }
+    func fetchDMMessageCandidates(radioID: UUID, contactID: UUID, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> [MessageDTO] { [] }
+    func findDMMessageForReaction(radioID: UUID, contactID: UUID, messageHash: String, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> MessageDTO? { nil }
 
     // MARK: - Notification Level
 
@@ -384,7 +365,7 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
 
     // MARK: - Channel Message Deletion
 
-    func deleteMessagesForChannel(deviceID: UUID, channelIndex: UInt8) async throws {}
+    func deleteMessagesForChannel(radioID: UUID, channelIndex: UInt8) async throws {}
 
     // MARK: - Room Messages
 
@@ -400,20 +381,14 @@ actor PaginationTestDataStore: PersistenceStoreProtocol {
     // MARK: - Node Status Snapshots
 
     // swiftlint:disable:next line_length
-    func saveNodeStatusSnapshot(nodePublicKey: Data, batteryMillivolts: UInt16?, lastSNR: Double?, lastRSSI: Int16?, noiseFloor: Int16?, uptimeSeconds: UInt32?, rxAirtimeSeconds: UInt32?, packetsSent: UInt32?, packetsReceived: UInt32?) async throws -> UUID { UUID() }
+    func saveNodeStatusSnapshot(nodePublicKey: Data, batteryMillivolts: UInt16?, lastSNR: Double?, lastRSSI: Int16?, noiseFloor: Int16?, uptimeSeconds: UInt32?, rxAirtimeSeconds: UInt32?, packetsSent: UInt32?, packetsReceived: UInt32?, receiveErrors: UInt32?, postedCount: UInt16?, postPushCount: UInt16?) async throws -> UUID { UUID() }
     func fetchLatestNodeStatusSnapshot(nodePublicKey: Data) async throws -> NodeStatusSnapshotDTO? { nil }
     func fetchNodeStatusSnapshots(nodePublicKey: Data, since: Date?) async throws -> [NodeStatusSnapshotDTO] { [] }
     func fetchPreviousNodeStatusSnapshot(nodePublicKey: Data, before: Date) async throws -> NodeStatusSnapshotDTO? { nil }
     func updateSnapshotNeighbors(id: UUID, neighbors: [NeighborSnapshotEntry]) async throws {}
     func updateSnapshotTelemetry(id: UUID, telemetry: [TelemetrySnapshotEntry]) async throws {}
+    func saveTelemetryOnlySnapshot(nodePublicKey: Data, telemetryEntries: [TelemetrySnapshotEntry]) async throws -> UUID { UUID() }
     func deleteOldNodeStatusSnapshots(olderThan date: Date) async throws {}
-
-    // MARK: - Message Search
-
-    func searchMessages(deviceID: UUID, searchText: String, limit: Int, offset: Int) async throws -> [MessageSearchResult] { [] }
-    func searchMessagesCount(deviceID: UUID, searchText: String) async throws -> Int { 0 }
-    func searchMessageIDs(contactID: UUID, searchText: String, limit: Int) async throws -> [UUID] { [] }
-    func searchMessageIDs(deviceID: UUID, channelIndex: UInt8, searchText: String, limit: Int) async throws -> [UUID] { [] }
 }
 
 // MARK: - Mock Link Preview Cache
@@ -452,9 +427,9 @@ struct ChatViewModelPaginationTests {
         let linkPreviewCache = MockLinkPreviewCacheForPagination()
         let viewModel = ChatViewModel()
 
-        let deviceID = UUID()
+        let radioID = UUID()
         let contactID = UUID()
-        let contact = createTestContact(id: contactID, deviceID: deviceID)
+        let contact = createTestContact(id: contactID, radioID: radioID)
 
         try await dataStore.saveContact(contact)
 
@@ -462,7 +437,7 @@ struct ChatViewModelPaginationTests {
         for index in 0..<10 {
             let message = createTestMessage(
                 contactID: contactID,
-                deviceID: deviceID,
+                radioID: radioID,
                 timestamp: UInt32(1000 + index)
             )
             try await dataStore.saveMessage(message)
@@ -487,9 +462,9 @@ struct ChatViewModelPaginationTests {
     @Test("loadOlderMessages prepends messages to array")
     func loadOlderMessagesPrepends() async throws {
         let dataStore = PaginationTestDataStore()
-        let deviceID = UUID()
+        let radioID = UUID()
         let contactID = UUID()
-        let contact = createTestContact(id: contactID, deviceID: deviceID)
+        let contact = createTestContact(id: contactID, radioID: radioID)
 
         try await dataStore.saveContact(contact)
 
@@ -497,7 +472,7 @@ struct ChatViewModelPaginationTests {
         for index in 0..<60 {
             let message = createTestMessage(
                 contactID: contactID,
-                deviceID: deviceID,
+                radioID: radioID,
                 timestamp: UInt32(1000 + index),
                 text: "Message \(index)"
             )
@@ -545,9 +520,9 @@ struct ChatViewModelPaginationTests {
     @Test("loadOlderMessages returns early without dataStore")
     func loadOlderMessagesWithoutDataStoreDoesNothing() async {
         let viewModel = ChatViewModel()
-        let deviceID = UUID()
+        let radioID = UUID()
         let contactID = UUID()
-        let contact = createTestContact(id: contactID, deviceID: deviceID)
+        let contact = createTestContact(id: contactID, radioID: radioID)
 
         viewModel.currentContact = contact
         viewModel.messages = []
@@ -563,16 +538,16 @@ struct ChatViewModelPaginationTests {
     @Test("Pagination state resets when loading messages for new contact")
     func paginationStateResetsOnConversationSwitch() async {
         let viewModel = ChatViewModel()
-        let deviceID = UUID()
+        let radioID = UUID()
 
         // Create two contacts
-        let contactA = createTestContact(id: UUID(), deviceID: deviceID, name: "Alice")
-        let contactB = createTestContact(id: UUID(), deviceID: deviceID, name: "Bob")
+        let contactA = createTestContact(id: UUID(), radioID: radioID, name: "Alice")
+        let contactB = createTestContact(id: UUID(), radioID: radioID, name: "Bob")
 
         // Start with contact A
         viewModel.currentContact = contactA
         viewModel.messages = [
-            createTestMessage(contactID: contactA.id, deviceID: deviceID, timestamp: 1000)
+            createTestMessage(contactID: contactA.id, radioID: radioID, timestamp: 1000)
         ]
 
         // isLoadingOlder should be false
@@ -610,16 +585,16 @@ struct ChatViewModelChannelPaginationTests {
     @Test("Channel message pagination works similar to direct messages")
     func channelPaginationWorks() async throws {
         let dataStore = PaginationTestDataStore()
-        let deviceID = UUID()
+        let radioID = UUID()
         let channelIndex: UInt8 = 0
-        let channel = createTestChannel(deviceID: deviceID, index: channelIndex)
+        let channel = createTestChannel(radioID: radioID, index: channelIndex)
 
         try await dataStore.saveChannel(channel)
 
         // Add 30 channel messages
         for index in 0..<30 {
             let message = createChannelMessage(
-                deviceID: deviceID,
+                radioID: radioID,
                 channelIndex: channelIndex,
                 timestamp: UInt32(1000 + index),
                 senderName: "User\(index % 3)"
@@ -629,7 +604,7 @@ struct ChatViewModelChannelPaginationTests {
 
         // Fetch first page
         let messages = try await dataStore.fetchMessages(
-            deviceID: deviceID,
+            radioID: radioID,
             channelIndex: channelIndex,
             limit: 50,
             offset: 0
@@ -642,9 +617,9 @@ struct ChatViewModelChannelPaginationTests {
     @Test("loadOlderMessages handles channel messages")
     func loadOlderMessagesHandlesChannels() async {
         let viewModel = ChatViewModel()
-        let deviceID = UUID()
+        let radioID = UUID()
         let channelIndex: UInt8 = 1
-        let channel = createTestChannel(deviceID: deviceID, index: channelIndex, name: "General")
+        let channel = createTestChannel(radioID: radioID, index: channelIndex, name: "General")
 
         viewModel.currentChannel = channel
         viewModel.currentContact = nil
@@ -661,14 +636,14 @@ struct ChatViewModelChannelPaginationTests {
         // If we fetch 50 messages and 10 are blocked, hasMoreMessages should still be true
         // because the unfiltered count (50) equals pageSize
         let dataStore = PaginationTestDataStore()
-        let deviceID = UUID()
+        let radioID = UUID()
         let channelIndex: UInt8 = 0
 
         // Add exactly 50 messages (pageSize), some from blocked sender
         for index in 0..<50 {
             let senderName = index < 10 ? "BlockedUser" : "User\(index)"
             let message = createChannelMessage(
-                deviceID: deviceID,
+                radioID: radioID,
                 channelIndex: channelIndex,
                 timestamp: UInt32(1000 + index),
                 senderName: senderName
@@ -678,7 +653,7 @@ struct ChatViewModelChannelPaginationTests {
 
         // Fetch all messages
         let messages = try await dataStore.fetchMessages(
-            deviceID: deviceID,
+            radioID: radioID,
             channelIndex: channelIndex,
             limit: 50,
             offset: 0
@@ -706,13 +681,13 @@ struct ChatViewModelDisplayItemsPaginationTests {
         let viewModel = ChatViewModel()
 
         // Start with some messages
-        let deviceID = UUID()
+        let radioID = UUID()
         let contactID = UUID()
 
         let messages = (0..<5).map { index in
             createTestMessage(
                 contactID: contactID,
-                deviceID: deviceID,
+                radioID: radioID,
                 timestamp: UInt32(1000 + index)
             )
         }
@@ -726,7 +701,7 @@ struct ChatViewModelDisplayItemsPaginationTests {
         let olderMessages = (0..<3).map { index in
             createTestMessage(
                 contactID: contactID,
-                deviceID: deviceID,
+                radioID: radioID,
                 timestamp: UInt32(900 + index)
             )
         }
@@ -740,11 +715,11 @@ struct ChatViewModelDisplayItemsPaginationTests {
     @Test("Message lookup by ID works after pagination")
     func messageLookupWorksAfterPagination() async {
         let viewModel = ChatViewModel()
-        let deviceID = UUID()
+        let radioID = UUID()
         let contactID = UUID()
 
-        let message1 = createTestMessage(contactID: contactID, deviceID: deviceID, timestamp: 1000)
-        let message2 = createTestMessage(contactID: contactID, deviceID: deviceID, timestamp: 1001)
+        let message1 = createTestMessage(contactID: contactID, radioID: radioID, timestamp: 1000)
+        let message2 = createTestMessage(contactID: contactID, radioID: radioID, timestamp: 1001)
 
         viewModel.messages = [message1, message2]
         await viewModel.buildDisplayItems()
@@ -771,14 +746,14 @@ struct CrossBoundaryReorderingTests {
         // Each page is reordered independently, but the cross-boundary cluster
         // (msg3 on page 2, msg1+msg2 on page 1) is NOT reordered until merge.
 
-        let deviceID = UUID()
+        let radioID = UUID()
         let contactID = UUID()
         let base = Date(timeIntervalSince1970: 1_000_000)
 
         // Page 2 (older, loaded second via loadOlderMessages): msg3 arrived first
         let msg3 = createTestMessage(
             contactID: contactID,
-            deviceID: deviceID,
+            radioID: radioID,
             timestamp: 102,
             createdAt: base.addingTimeInterval(0),  // received first
             text: "msg3"
@@ -787,14 +762,14 @@ struct CrossBoundaryReorderingTests {
         // Page 1 (newer, loaded first): msg1 and msg2 arrived later
         let msg1 = createTestMessage(
             contactID: contactID,
-            deviceID: deviceID,
+            radioID: radioID,
             timestamp: 100,
             createdAt: base.addingTimeInterval(2),  // received second
             text: "msg1"
         )
         let msg2 = createTestMessage(
             contactID: contactID,
-            deviceID: deviceID,
+            radioID: radioID,
             timestamp: 101,
             createdAt: base.addingTimeInterval(3),  // received third
             text: "msg2"
@@ -821,14 +796,14 @@ struct CrossBoundaryReorderingTests {
 
     @Test("Reordering does not merge clusters beyond the 5-second window")
     func reorderingRespectsWindowAtBoundary() {
-        let deviceID = UUID()
+        let radioID = UUID()
         let contactID = UUID()
         let base = Date(timeIntervalSince1970: 1_000_000)
 
         // Page 2 message: received well before the page 1 messages (>5s gap)
         let oldMsg = createTestMessage(
             contactID: contactID,
-            deviceID: deviceID,
+            radioID: radioID,
             timestamp: 100,
             createdAt: base.addingTimeInterval(0),
             text: "old"
@@ -837,14 +812,14 @@ struct CrossBoundaryReorderingTests {
         // Page 1 messages: received 10 seconds later
         let newMsg1 = createTestMessage(
             contactID: contactID,
-            deviceID: deviceID,
+            radioID: radioID,
             timestamp: 99,  // earlier sender timestamp but later receive
             createdAt: base.addingTimeInterval(10),
             text: "new1"
         )
         let newMsg2 = createTestMessage(
             contactID: contactID,
-            deviceID: deviceID,
+            radioID: radioID,
             timestamp: 102,
             createdAt: base.addingTimeInterval(11),
             text: "new2"

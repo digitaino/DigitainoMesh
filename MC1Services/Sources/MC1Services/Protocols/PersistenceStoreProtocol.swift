@@ -95,9 +95,6 @@ public protocol PersistenceStoreProtocol: Actor {
     /// Update message ACK info
     func updateMessageAck(id: UUID, ackCode: UInt32, status: MessageStatus, roundTripTime: UInt32?) async throws
 
-    /// Update message status by ACK code
-    func updateMessageByAckCode(_ ackCode: UInt32, status: MessageStatus, roundTripTime: UInt32?) async throws
-
     /// Update message retry status
     func updateMessageRetryStatus(id: UUID, status: MessageStatus, retryAttempt: Int, maxRetryAttempts: Int) async throws
 
