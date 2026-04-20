@@ -7,6 +7,7 @@ struct MessageActionAvailability {
     let canCopy: Bool
     let canSendAgain: Bool
     let canBlockSender: Bool
+    let canSendDM: Bool
     let canShowRepeatDetails: Bool
     let canViewPath: Bool
     let canDelete: Bool
@@ -15,7 +16,9 @@ struct MessageActionAvailability {
         canReply = !message.isOutgoing
         canCopy = true
         canSendAgain = message.isOutgoing
-        canBlockSender = message.isChannelMessage && !message.isOutgoing && message.senderNodeName != nil
+        let hasChannelSender = message.isChannelMessage && !message.isOutgoing && message.senderNodeName != nil
+        canBlockSender = hasChannelSender
+        canSendDM = hasChannelSender
         canShowRepeatDetails = message.isOutgoing && message.heardRepeats > 0
         canViewPath = !message.isOutgoing
             && message.isFloodRouted

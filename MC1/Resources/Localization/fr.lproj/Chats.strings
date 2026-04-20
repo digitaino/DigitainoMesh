@@ -608,6 +608,9 @@
 /* Location: MessageActionsSheet.swift - Purpose: Block sender action */
 "chats.message.action.blockSender" = "Bloquer l'expéditeur";
 
+/* Location: MessageActionsSheet.swift - Purpose: Action to start a DM with the channel sender */
+"chats.message.action.sendDM" = "Envoyer un DM";
+
 /* Location: UnifiedMessageBubble.swift - Status row retry button */
 "chats.message.status.retry" = "Réessayer";
 
@@ -911,15 +914,33 @@
 /* Location: BlockSenderSheet.swift - Purpose: Destructive block button */
 "chats.blockSender.blockAnyway" = "Bloquer";
 
-/* Location: BlockSenderSheet.swift - Purpose: Accessibility value when contact is selected */
-"chats.blockSender.accessibility.selected" = "Sélectionné";
+// MARK: - Contact Match Row
 
-/* Location: BlockSenderSheet.swift - Purpose: Accessibility value when contact is not selected */
-"chats.blockSender.accessibility.notSelected" = "Non sélectionné";
+/* Location: ContactMatchRow.swift - Purpose: Accessibility value when contact is selected */
+"chats.contactMatch.accessibility.selected" = "Sélectionné";
 
-/* Location: BlockSenderSheet.swift - Purpose: Public key label */
-"chats.blockSender.key" = "Clé : %@";
+/* Location: ContactMatchRow.swift - Purpose: Accessibility value when contact is not selected */
+"chats.contactMatch.accessibility.notSelected" = "Non sélectionné";
 
+/* Location: ContactMatchRow.swift - Purpose: Public key label */
+"chats.contactMatch.key" = "Clé : %@";
+
+// MARK: - Send DM Sheet
+
+/* Location: SendDMSheet.swift - Purpose: Sheet title with sender name */
+"chats.sendDM.title" = "Envoyer un DM à \"%@\"";
+
+/* Location: SendDMSheet.swift - Purpose: Name-based matching limitation warning */
+"chats.sendDM.limitation" = "Les messages de canal n'incluent pas l'identité de l'expéditeur. Cette correspondance se fait uniquement par nom — le contact pourrait être quelqu'un d'autre avec le même nom.";
+
+/* Location: SendDMSheet.swift - Purpose: Section header listing matching contacts */
+"chats.sendDM.matchingContacts" = "Sélectionnez un contact à qui envoyer un message :";
+
+/* Location: SendDMSheet.swift - Purpose: Empty-state message when no contact matches */
+"chats.sendDM.noMatches" = "Aucun contact nommé \"%@\" n'a été trouvé.";
+
+/* Location: SendDMSheet.swift - Purpose: Cancel button */
+"chats.sendDM.cancel" = "Annuler";
 
 // MARK: - Message Actions & Notification Level
 

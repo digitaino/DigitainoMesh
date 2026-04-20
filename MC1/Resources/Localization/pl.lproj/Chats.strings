@@ -603,6 +603,9 @@
 /* Location: MessageActionsSheet.swift - Purpose: Block sender action */
 "chats.message.action.blockSender" = "Zablokuj nadawcę";
 
+/* Location: MessageActionsSheet.swift - Purpose: Action to start a DM with the channel sender */
+"chats.message.action.sendDM" = "Wyślij DM";
+
 /* Location: UnifiedMessageBubble.swift - Status row retry button */
 "chats.message.status.retry" = "Ponów";
 
@@ -903,14 +906,33 @@
 /* Location: BlockSenderSheet.swift - Purpose: Destructive block button */
 "chats.blockSender.blockAnyway" = "Zablokuj";
 
-/* Location: BlockSenderSheet.swift - Purpose: Accessibility value when contact is selected */
-"chats.blockSender.accessibility.selected" = "Zaznaczono";
+// MARK: - Contact Match Row
 
-/* Location: BlockSenderSheet.swift - Purpose: Accessibility value when contact is not selected */
-"chats.blockSender.accessibility.notSelected" = "Nie zaznaczono";
+/* Location: ContactMatchRow.swift - Purpose: Accessibility value when contact is selected */
+"chats.contactMatch.accessibility.selected" = "Zaznaczono";
 
-/* Location: BlockSenderSheet.swift - Purpose: Public key label */
-"chats.blockSender.key" = "Klucz: %@";
+/* Location: ContactMatchRow.swift - Purpose: Accessibility value when contact is not selected */
+"chats.contactMatch.accessibility.notSelected" = "Nie zaznaczono";
+
+/* Location: ContactMatchRow.swift - Purpose: Public key label */
+"chats.contactMatch.key" = "Klucz: %@";
+
+// MARK: - Send DM Sheet
+
+/* Location: SendDMSheet.swift - Purpose: Sheet title with sender name */
+"chats.sendDM.title" = "Wyślij DM do \"%@\"";
+
+/* Location: SendDMSheet.swift - Purpose: Name-based matching limitation warning */
+"chats.sendDM.limitation" = "Wiadomości w kanałach nie zawierają tożsamości nadawcy. To dopasowanie działa tylko na podstawie nazwy — kontakt może być inną osobą o tym samym imieniu.";
+
+/* Location: SendDMSheet.swift - Purpose: Section header listing matching contacts */
+"chats.sendDM.matchingContacts" = "Wybierz kontakt, do którego chcesz wysłać wiadomość:";
+
+/* Location: SendDMSheet.swift - Purpose: Empty-state message when no contact matches */
+"chats.sendDM.noMatches" = "Nie znaleziono kontaktu o nazwie \"%@\".";
+
+/* Location: SendDMSheet.swift - Purpose: Cancel button */
+"chats.sendDM.cancel" = "Anuluj";
 
 // MARK: - Message Actions
 

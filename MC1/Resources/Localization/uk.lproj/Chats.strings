@@ -602,6 +602,9 @@
 /* Location: MessageActionsSheet.swift - Purpose: Block sender action */
 "chats.message.action.blockSender" = "Заблокувати відправника";
 
+/* Location: MessageActionsSheet.swift - Purpose: Action to start a DM with the channel sender */
+"chats.message.action.sendDM" = "Надіслати ОП";
+
 /* Location: UnifiedMessageBubble.swift - Status row retry button */
 "chats.message.status.retry" = "Повторити";
 
@@ -902,14 +905,33 @@
 /* Location: BlockSenderSheet.swift - Purpose: Destructive block button */
 "chats.blockSender.blockAnyway" = "Заблокувати";
 
-/* Location: BlockSenderSheet.swift - Purpose: Accessibility value when contact is selected */
-"chats.blockSender.accessibility.selected" = "Вибрано";
+// MARK: - Contact Match Row
 
-/* Location: BlockSenderSheet.swift - Purpose: Accessibility value when contact is not selected */
-"chats.blockSender.accessibility.notSelected" = "Не вибрано";
+/* Location: ContactMatchRow.swift - Purpose: Accessibility value when contact is selected */
+"chats.contactMatch.accessibility.selected" = "Вибрано";
 
-/* Location: BlockSenderSheet.swift - Purpose: Public key label */
-"chats.blockSender.key" = "Ключ: %@";
+/* Location: ContactMatchRow.swift - Purpose: Accessibility value when contact is not selected */
+"chats.contactMatch.accessibility.notSelected" = "Не вибрано";
+
+/* Location: ContactMatchRow.swift - Purpose: Public key label */
+"chats.contactMatch.key" = "Ключ: %@";
+
+// MARK: - Send DM Sheet
+
+/* Location: SendDMSheet.swift - Purpose: Sheet title with sender name */
+"chats.sendDM.title" = "Надіслати ОП \"%@\"";
+
+/* Location: SendDMSheet.swift - Purpose: Name-based matching limitation warning */
+"chats.sendDM.limitation" = "Повідомлення в каналах не містять ідентифікатора відправника. Це співпадіння працює лише за іменем — контакт може бути іншою особою з таким самим ім'ям.";
+
+/* Location: SendDMSheet.swift - Purpose: Section header listing matching contacts */
+"chats.sendDM.matchingContacts" = "Виберіть контакт, якому надіслати повідомлення:";
+
+/* Location: SendDMSheet.swift - Purpose: Empty-state message when no contact matches */
+"chats.sendDM.noMatches" = "Контакт з ім'ям \"%@\" не знайдено.";
+
+/* Location: SendDMSheet.swift - Purpose: Cancel button */
+"chats.sendDM.cancel" = "Скасувати";
 
 // MARK: - Message Actions Sheet
 

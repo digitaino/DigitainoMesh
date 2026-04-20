@@ -112,6 +112,29 @@ struct MessageActionAvailabilityTests {
         #expect(message.isDirectRouted == true)
     }
 
+    // MARK: - canSendDM
+
+    @Test("channel incoming message with sender name returns true")
+    func canSendDM_channelIncomingWithSender() {
+        let message = makeMessage(channelIndex: 0, direction: .incoming)
+        let availability = MessageActionAvailability(message: message)
+        #expect(availability.canSendDM == true)
+    }
+
+    @Test("channel outgoing message returns false")
+    func canSendDM_channelOutgoing() {
+        let message = makeMessage(channelIndex: 0, direction: .outgoing)
+        let availability = MessageActionAvailability(message: message)
+        #expect(availability.canSendDM == false)
+    }
+
+    @Test("DM incoming message returns false")
+    func canSendDM_dmIncoming() {
+        let message = makeMessage(channelIndex: nil, direction: .incoming)
+        let availability = MessageActionAvailability(message: message)
+        #expect(availability.canSendDM == false)
+    }
+
     // MARK: - Helper
 
     private func makeMessage(

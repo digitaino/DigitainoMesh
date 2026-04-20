@@ -7,6 +7,7 @@ enum MessageAction: Equatable {
     case reply
     case copy
     case sendAgain
+    case sendDM
     case blockSender
     case delete
 }
@@ -236,6 +237,14 @@ private struct ActionsButtonsSection: View {
             icon: "doc.on.doc",
             action: { onSelectAction(.copy) }
         )
+
+        if availability.canSendDM {
+            ActionButton(
+                title: L10n.Chats.Chats.Message.Action.sendDM,
+                icon: "bubble.left.and.bubble.right",
+                action: { onSelectAction(.sendDM) }
+            )
+        }
 
         if availability.canSendAgain {
             ActionButton(
