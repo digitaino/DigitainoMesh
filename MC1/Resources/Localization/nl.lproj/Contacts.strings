@@ -557,32 +557,110 @@
 /* Location: PathEditingSheet.swift - Purpose: Current path section header */
 "contacts.pathEdit.currentPath" = "Huidig pad";
 
-/* Location: PathEditingSheet.swift - Purpose: Empty path footer */
-"contacts.pathEdit.emptyFooter" = "Geen pad ingesteld (direct of flood-routing)";
-
-/* Location: PathEditingSheet.swift - Purpose: Path instructions footer */
-"contacts.pathEdit.instructionsFooter" = "Sleep om te ordenen. Tik om te verwijderen.";
-
-/* Location: PathEditingSheet.swift - Purpose: Add repeater section header */
-"contacts.pathEdit.addRepeater" = "Repeater toevoegen";
-
 /* Location: PathEditingSheet.swift - Purpose: No repeaters empty title */
 "contacts.pathEdit.noRepeaters.title" = "Geen repeaters beschikbaar";
 
 /* Location: PathEditingSheet.swift - Purpose: No repeaters empty description */
 "contacts.pathEdit.noRepeaters.description" = "Repeaters verschijnen hier zodra ze worden ontdekt in je mesh-netwerk.";
 
-/* Location: PathEditingSheet.swift - Purpose: Add repeater footer */
-"contacts.pathEdit.addFooter" = "Tik op een repeater om deze aan het pad toe te voegen.";
-
-/* Location: PathEditingSheet.swift - Purpose: Add to path accessibility label */
-"contacts.pathEdit.addToPath" = "Voeg %@ toe aan pad";
-
 /* Location: PathEditingSheet.swift - Purpose: Hop accessibility with name */
 "contacts.pathEdit.hopWithName" = "Sprong %d van %d: %@";
 
 /* Location: PathEditingSheet.swift - Purpose: Hop accessibility with hex */
 "contacts.pathEdit.hopWithHex" = "Sprong %d van %d: repeater %@";
+
+/* Location: PathEditingSheet.swift - Purpose: Add Hop CTA (primary button when path has >=1 hop) */
+"contacts.pathEdit.addHop" = "Hop toevoegen";
+
+/* Location: PathEditingSheet.swift - Purpose: Use-direct-routing empty-state button */
+"contacts.pathEdit.useDirectRouting" = "Direct routing gebruiken";
+
+/* Location: PathEditingSheet.swift - Purpose: Use-flood-routing empty-state button */
+"contacts.pathEdit.useFloodRouting" = "Flood-routing gebruiken";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert title */
+"contacts.pathEdit.directRouting.confirm.title" = "Opslaan als direct-routing?";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert message, %@ is contact name */
+"contacts.pathEdit.directRouting.confirm.message" = "Berichten naar %@ worden rechtstreeks verzonden zonder tussenkomst van een repeater. Gebruik dit alleen als %@ een buurtknooppunt is.";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation confirm label */
+"contacts.pathEdit.directRouting.confirm.confirm" = "Opslaan als direct";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert title */
+"contacts.pathEdit.floodRouting.confirm.title" = "Flood-routing gebruiken?";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert message, %@ is contact name */
+"contacts.pathEdit.floodRouting.confirm.message" = "Berichten naar %@ worden naar alle nabijgelegen knooppunten gestuurd totdat een pad wordt gevonden. Gebruik dit wanneer er geen repeater-route bekend is.";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation confirm label */
+"contacts.pathEdit.floodRouting.confirm.confirm" = "Flood-routing gebruiken";
+
+/* Location: AddHopPickerView.swift - Purpose: Position banner when appending, %d is target hop number */
+"contacts.pathEdit.positionAppend" = "Toevoegen als hop %d";
+
+/* Location: AddHopPickerView.swift - Purpose: Search field placeholder */
+"contacts.pathEdit.searchPrompt" = "Zoek op naam of hex";
+
+/* Location: PathEditingSheet.swift - Purpose: Section footer hint */
+"contacts.pathEdit.reorderHint" = "Slepen om te ordenen · Vegen om te verwijderen";
+
+/* Location: PathEditingSheet.swift - Purpose: Empty-state title */
+"contacts.pathEdit.empty.title" = "Nog geen hops";
+
+/* Location: PathEditingSheet.swift - Purpose: Empty-state description, %@ is contact name */
+"contacts.pathEdit.empty.description" = "Voeg repeaters toe om te bepalen hoe berichten %@ bereiken, of gebruik flood-routing als er geen pad bekend is.";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: All filter */
+"contacts.pathEdit.filter.all" = "Alles";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Favorites filter */
+"contacts.pathEdit.filter.favorites" = "Favorieten";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Recent filter */
+"contacts.pathEdit.filter.recent" = "Recent";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Discovered filter */
+"contacts.pathEdit.filter.discovered" = "Ontdekt";
+
+/* Location: AddHopPickerView.swift - Purpose: Recent section header */
+"contacts.pathEdit.sections.recent" = "Recent";
+
+/* Location: AddHopPickerView.swift - Purpose: Favorites section header */
+"contacts.pathEdit.sections.favorites" = "Favorieten";
+
+/* Location: AddHopPickerView.swift - Purpose: Contacts section header */
+"contacts.pathEdit.sections.contacts" = "Contacten";
+
+/* Location: AddHopPickerView.swift - Purpose: Discovered section header */
+"contacts.pathEdit.sections.discovered" = "Ontdekt";
+
+/* Location: AddHopPickerView.swift - Purpose: Rooms section header */
+"contacts.pathEdit.sections.rooms" = "Ruimtes";
+
+/* Location: AddHopPickerView.swift - Purpose: No-match search description */
+"contacts.pathEdit.search.noMatches.description" = "Probeer een naam of hex-prefix zoals 'a3'.";
+
+/* Location: AddHopPickerView.swift - Purpose: No-match description when a filter other than All is selected and a matching room exists */
+"contacts.pathEdit.search.noMatches.descriptionWithRoomsHint" = "Probeer een naam of hex-prefix zoals 'a3'. Ruimtes verschijnen alleen onder het filter Alles.";
+
+/* Location: AddHopPickerView.swift - Purpose: Picker row accessibility label, %1$@ is name, %2$d is target hop number */
+"contacts.pathEdit.addToPathAsHop" = "%1$@ toevoegen aan pad als hop %2$d";
+
+/* Location: PathEditingSheet.swift - Purpose: VoiceOver hint for a hop row describing swipe + drag actions */
+"contacts.pathEdit.hopHint" = "Veeg om te verwijderen. Sleep om te herschikken.";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: VoiceOver label for the section filter picker */
+"contacts.pathEdit.filterPickerLabel" = "Hops filteren";
+
+/* Location: PathEditingSheet.swift + AddHopPickerView.swift - Purpose: Max-hops reached title */
+"contacts.pathEdit.maxHops.reached" = "Maximum aantal hops bereikt";
+
+/* Location: AddHopPickerView.swift - Purpose: Max-hops reached description, %d is the cap */
+"contacts.pathEdit.maxHops.description" = "Dit pad heeft het maximum van %d hops voor de huidige hash-modus bereikt. Verwijder een hop om er een toe te voegen.";
+
+/* Location: PathEditingSheet.swift - Purpose: Add Hop CTA footer explaining the hop cap, %d is the cap */
+"contacts.pathEdit.maxHops.footer" = "Maximum van %d hops bereikt. Verwijder een hop om er een toe te voegen.";
 
 // MARK: - Path Discovery Results
 
@@ -822,7 +900,7 @@
 /* Location: TracePathListView.swift - Purpose: Toggle to include room servers in the list */
 "contacts.trace.list.includeRooms" = "Kamers opnemen";
 
-/* Location: TracePathListView.swift, PathEditingSheet.swift - Purpose: Toggle to include discovered repeaters */
+/* Location: TracePathListView.swift - Purpose: Toggle to include discovered repeaters */
 "contacts.trace.list.includeDiscovered" = "Ontdekte opnemen";
 
 /* Location: TracePathListView.swift - Purpose: No favorite repeaters empty title */
@@ -1045,6 +1123,10 @@
 
 /* Location: PathManagementViewModel.swift - Purpose: Set path error prefix */
 "contacts.pathManagement.error.setFailed" = "Pad instellen mislukt: %@";
+
+"contacts.pathManagement.error.hopResizeRequired" = "Hashmodus gewijzigd — verwijder en voeg hops opnieuw toe om op te slaan.";
+
+"contacts.pathManagement.error.tooManyHops" = "Te veel hops. De huidige hashmodus ondersteunt maximaal %d.";
 
 // MARK: - Code Input Result
 

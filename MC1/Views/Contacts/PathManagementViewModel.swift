@@ -4,6 +4,30 @@ import os.log
 
 private let logger = Logger(subsystem: "com.mc1", category: "PathManagement")
 
+/// Drives `navigationDestination(item:)` on the edit sheet. Only `.append` is
+/// reachable today; the enum is kept (rather than using `Bool` or `Void`) so
+/// the navigation binding has a concrete `Hashable` item type and so future
+/// positional-insert flows can extend it without restructuring the binding.
+enum AddHopIntent: Hashable {
+    case append
+}
+
+/// Sections the Add-Hop picker can narrow to. `.all` shows every section.
+enum AddHopFilter: String, CaseIterable, Identifiable {
+    case all, favorites, recent, discovered
+
+    var id: String { rawValue }
+
+    var localizedLabel: String {
+        switch self {
+        case .all:        L10n.Contacts.Contacts.PathEdit.Filter.all
+        case .favorites:  L10n.Contacts.Contacts.PathEdit.Filter.favorites
+        case .recent:     L10n.Contacts.Contacts.PathEdit.Filter.recent
+        case .discovered: L10n.Contacts.Contacts.PathEdit.Filter.discovered
+        }
+    }
+}
+
 /// Represents a single hop in the routing path with stable identity for SwiftUI
 struct PathHop: Identifiable, Equatable {
     let id = UUID()
@@ -66,11 +90,28 @@ final class PathManagementViewModel {
     var discoveryResult: PathDiscoveryResult?
     var showDiscoveryResult = false
     var errorMessage: String?
-    var showError = false
 
     // Path editing state
     var showingPathEditor = false
+    /// Drives navigationDestination(item:) pushing the Add Hop picker.
+    var insertionIntent: AddHopIntent?
     var editablePath: [PathHop] = []  // Current path being edited (stable identifiers)
+
+    /// LRU of recently inserted public keys, most-recent first, capped at 8.
+    /// Radio-scoped: cleared and reloaded when `loadContacts(deviceID:)` fires.
+    var recentPublicKeys: [Data] = []
+
+    /// Captured radio scope for persistence. Set by `loadRecentKeys(for:)`.
+    private var currentDeviceID: UUID?
+
+    private static let recentKeysLimit = 8
+
+    /// Firmware `outPath` budget: 64 bytes. `encodePathLen` also clamps the
+    /// hop-count field to 6 bits (0…63). The effective cap is whichever is
+    /// smaller.
+    private static let pathByteBudget = 64
+    private static let pathHopFieldCap = 63
+
     var availableRepeaters: [ContactDTO] = []  // Known repeaters to add
     var availableRooms: [ContactDTO] = []  // Known rooms (may act as repeaters)
     var allContacts: [ContactDTO] = []  // All contacts for name resolution
@@ -86,11 +127,6 @@ final class PathManagementViewModel {
         discoveredNodes.filter { $0.nodeType == .repeater }
     }
 
-    /// Repeaters available to add (allows duplicates for paths like A → B → A)
-    var filteredAvailableRepeaters: [ContactDTO] {
-        availableRepeaters
-    }
-
     // Discovery cancellation
     private var discoveryTask: Task<Void, Never>?
 
@@ -103,10 +139,31 @@ final class PathManagementViewModel {
     // MARK: - Dependencies
 
     private var appState: AppState?
+    private let defaults: UserDefaults
 
-    /// Current hash size from device configuration (1, 2, or 3 bytes per hop)
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// Current hash size from device configuration (1, 2, or 3 bytes per hop).
+    /// Clamped to `1...3` so a firmware `pathHashMode` of 3 (reserved) never trips
+    /// `encodePathLen`'s `1...3` precondition on save.
     var hashSize: Int {
-        appState?.connectedDevice?.hashSize ?? 1
+        let raw = appState?.connectedDevice?.hashSize ?? 1
+        return min(max(raw, 1), 3)
+    }
+
+    /// Maximum number of hops the path can hold under the current `hashSize`.
+    /// Bounded by both the 6-bit hop-count field (0…63) and the 64-byte path
+    /// payload. Past this cap, firmware silently truncates.
+    var maxHopCount: Int {
+        min(Self.pathHopFieldCap, Self.pathByteBudget / hashSize)
+    }
+
+    /// True when `editablePath.count` has hit `maxHopCount`. Callers (the
+    /// Add Hop CTA + picker) disable insert affordances when this is true.
+    var isPathFull: Bool {
+        editablePath.count >= maxHopCount
     }
 
     // MARK: - Callbacks
@@ -140,16 +197,41 @@ final class PathManagementViewModel {
         return nil  // Ambiguous (multiple matches) or unknown
     }
 
-    /// Create a PathHop from hash bytes, resolving the name if possible
-    func createPathHop(from hashBytes: Data) -> PathHop {
-        PathHop(hashBytes: hashBytes, resolvedName: resolveHashToName(hashBytes))
+    /// Resolve path hash bytes to a node's full 32-byte public key if exactly one
+    /// match exists. Populating this on hops loaded from storage lets
+    /// `saveEditedPath` re-encode the path at the device's current `hashSize`
+    /// even if the stored path used a smaller size.
+    func resolveHashToPublicKey(_ hashBytes: Data) -> Data? {
+        let matches = allContacts.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes }
+        if matches.count == 1 {
+            return matches[0].publicKey
+        }
+        if matches.isEmpty {
+            let discoveredMatches = discoveredNodes.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes }
+            if discoveredMatches.count == 1 {
+                return discoveredMatches[0].publicKey
+            }
+        }
+        return nil
     }
 
-    /// Load all contacts for name resolution and filter repeaters for adding
-    /// Skips fetch if contacts are already loaded for the same device
+    /// Create a PathHop from hash bytes, resolving the name and full public key
+    /// when exactly one contact or discovered node matches the prefix.
+    func createPathHop(from hashBytes: Data) -> PathHop {
+        PathHop(
+            hashBytes: hashBytes,
+            publicKey: resolveHashToPublicKey(hashBytes),
+            resolvedName: resolveHashToName(hashBytes)
+        )
+    }
+
+    /// Load all contacts for name resolution and filter repeaters for adding.
+    /// Skips fetch if contacts are already loaded for the same device.
     func loadContacts(deviceID: UUID, forceReload: Bool = false) async {
         guard let appState,
               let dataStore = appState.services?.dataStore else { return }
+
+        loadRecentKeys(for: deviceID)
 
         // Skip if already loaded
         if !forceReload && !allContacts.isEmpty {
@@ -171,8 +253,11 @@ final class PathManagementViewModel {
         }
     }
 
-    /// Initialize editable path from contact's current path with name resolution
+    /// Initialize editable path from contact's current path with name resolution.
+    /// Resets `insertionIntent` so a stale value from a prior sheet presentation
+    /// can't auto-push the Add Hop picker on open.
     func initializeEditablePath(from contact: ContactDTO) {
+        insertionIntent = nil
         let byteLength = contact.pathByteLength
         let hashSize = contact.pathHashSize
         let pathData = contact.outPath.prefix(byteLength)
@@ -183,11 +268,57 @@ final class PathManagementViewModel {
         }
     }
 
-    /// Add a node to the path using its public key prefix
-    func addNode(_ node: some RepeaterResolvable) {
+    /// Append a node to the path. No-op when `isPathFull`. Records the pubkey
+    /// in recents. The picker stays on screen so users can add several hops in
+    /// a row; `insertionIntent` is cleared only when the user taps back
+    /// (SwiftUI writes `nil` through the navigation binding).
+    func insert(_ node: some RepeaterResolvable, at intent: AddHopIntent) {
+        guard !isPathFull else { return }
         let hashBytes = Data(node.publicKey.prefix(hashSize))
-        let hop = PathHop(hashBytes: hashBytes, publicKey: node.publicKey, resolvedName: node.resolvableName)
-        editablePath.append(hop)
+        let hop = PathHop(
+            hashBytes: hashBytes,
+            publicKey: node.publicKey,
+            resolvedName: node.resolvableName
+        )
+        switch intent {
+        case .append:
+            editablePath.append(hop)
+        }
+        recordRecent(pubkey: node.publicKey)
+    }
+
+    // MARK: - Recents persistence
+
+    static func recentKeysDefaultsKey(for deviceID: UUID) -> String {
+        "pathEdit.recentPublicKeys.\(deviceID.uuidString)"
+    }
+
+    /// Internal — tests invoke this directly via `@testable import MC1` to seed
+    /// a specific radio scope without building a full `AppState`.
+    func loadRecentKeys(for deviceID: UUID) {
+        currentDeviceID = deviceID
+        let key = Self.recentKeysDefaultsKey(for: deviceID)
+        let hexList = defaults.stringArray(forKey: key) ?? []
+        recentPublicKeys = hexList.compactMap(Data.init(hexString:))
+    }
+
+    private func saveRecentKeys() {
+        guard let deviceID = currentDeviceID else { return }
+        // `Data.hex` is lowercase (%02x); `Data.init(hexString:)` uppercases
+        // internally on read, so round-trips regardless of case. Lowercase is the
+        // storage convention.
+        let hexList = recentPublicKeys.map(\.hex)
+        defaults.set(hexList, forKey: Self.recentKeysDefaultsKey(for: deviceID))
+    }
+
+    /// LRU: move to front if present, else prepend; trim to limit; persist.
+    private func recordRecent(pubkey: Data) {
+        recentPublicKeys.removeAll { $0 == pubkey }
+        recentPublicKeys.insert(pubkey, at: 0)
+        if recentPublicKeys.count > Self.recentKeysLimit {
+            recentPublicKeys = Array(recentPublicKeys.prefix(Self.recentKeysLimit))
+        }
+        saveRecentKeys()
     }
 
     /// Remove a repeater from the path at index
@@ -201,34 +332,137 @@ final class PathManagementViewModel {
         editablePath.move(fromOffsets: source, toOffset: destination)
     }
 
-    /// Save the edited path to the contact
+    /// Reason a candidate edit cannot be saved, or `nil` if encoding is safe.
+    /// Pure so tests can drive every branch without an `AppState`.
+    ///
+    /// - Precondition: `targetHashSize` is 1, 2, or 3. Matches `encodePathLen`'s
+    ///   contract so bypassing the production call site (which clamps via
+    ///   `hashSize`) still trips a clear assertion rather than a deep crash.
+    nonisolated static func saveRejection(
+        for hops: [PathHop],
+        targetHashSize: Int,
+        maxHopCount: Int
+    ) -> String? {
+        precondition(1...3 ~= targetHashSize, "targetHashSize must be 1, 2, or 3")
+        // `Data.prefix(n)` returns `min(count, n)` bytes — no padding. A hop
+        // whose stored `hashBytes` are narrower than `targetHashSize` and has no
+        // full `publicKey` to widen from would serialise short, and firmware
+        // would mis-parse the path against the declared `pathLength`.
+        let hopNeedsResize = hops.contains { hop in
+            hop.publicKey == nil && hop.hashBytes.count < targetHashSize
+        }
+        if hopNeedsResize {
+            return L10n.Contacts.Contacts.PathManagement.Error.hopResizeRequired
+        }
+        if hops.count > maxHopCount {
+            return L10n.Contacts.Contacts.PathManagement.Error.tooManyHops(maxHopCount)
+        }
+        return nil
+    }
+
+    /// Encode the path payload at the device's current hash size. Prefers the
+    /// full 32-byte public key when available; falls back to stored
+    /// `hashBytes`. Callers must have called `saveRejection` first to ensure
+    /// the fallback never truncates below `targetHashSize`.
+    ///
+    /// - Precondition: `targetHashSize` is 1, 2, or 3.
+    nonisolated static func encodeEditablePath(
+        _ hops: [PathHop],
+        targetHashSize: Int
+    ) -> (path: Data, length: UInt8) {
+        precondition(1...3 ~= targetHashSize, "targetHashSize must be 1, 2, or 3")
+        let pathData = Data(hops.flatMap { hop -> Data in
+            if let publicKey = hop.publicKey {
+                return publicKey.prefix(targetHashSize)
+            }
+            return hop.hashBytes.prefix(targetHashSize)
+        })
+        let pathLength = encodePathLen(hashSize: targetHashSize, hopCount: hops.count)
+        return (pathData, pathLength)
+    }
+
+    /// Save the edited path to the contact. Hops may have been loaded from a
+    /// stored path with a smaller `hashSize` than the device currently reports
+    /// (user changed `pathHashMode`). `saveRejection` catches the cases where
+    /// we can't safely re-encode; otherwise `encodeEditablePath` re-encodes
+    /// every hop at the current `hashSize`.
     func saveEditedPath(for contact: ContactDTO) async {
         guard let appState,
               let contactService = appState.services?.contactService else { return }
 
-        isSettingPath = true
         errorMessage = nil
+        let targetHashSize = hashSize
+
+        if let rejection = Self.saveRejection(
+            for: editablePath,
+            targetHashSize: targetHashSize,
+            maxHopCount: maxHopCount
+        ) {
+            errorMessage = rejection
+            return
+        }
+
+        isSettingPath = true
 
         do {
-            let pathData = Data(editablePath.flatMap { $0.hashBytes })
-            let hashSize = editablePath.first?.hashBytes.count ?? 1 // empty path encodes as direct (outPathLength == 0)
-            let pathLength = encodePathLen(hashSize: hashSize, hopCount: editablePath.count)
+            let encoded = Self.encodeEditablePath(editablePath, targetHashSize: targetHashSize)
             try await contactService.setPath(
                 deviceID: contact.deviceID,
                 publicKey: contact.publicKey,
-                path: pathData,
-                pathLength: pathLength
+                path: encoded.path,
+                pathLength: encoded.length
             )
             onContactNeedsRefresh?()
         } catch {
             errorMessage = L10n.Contacts.Contacts.PathManagement.Error.saveFailed(error.localizedDescription)
-            showError = true
         }
 
         isSettingPath = false
     }
 
     // MARK: - Path Operations
+
+    /// True when `query` is non-empty and every character is a hex digit.
+    /// All-digit names like "1234" therefore match both name and pubkey branches
+    /// — acceptable since both surfaces produce the same row.
+    nonisolated static func isHexQuery(_ query: String) -> Bool {
+        !query.isEmpty && query.allSatisfy(\.isHexDigit)
+    }
+
+    /// Match a picker node against a query string.
+    /// - Empty query → true.
+    /// - All-hex query → case-and-diacritic-insensitive name substring OR
+    ///   full-pubkey-hex prefix (ASCII, case-insensitive).
+    /// - Otherwise → case-and-diacritic-insensitive name substring.
+    ///
+    /// Uses `range(of:options:)` with `[.caseInsensitive, .diacriticInsensitive]`
+    /// so Turkish İ/ı and NFC/NFD Cyrillic fold correctly regardless of the
+    /// runtime locale (en_US fails to fold İ via `localizedCaseInsensitiveContains`
+    /// because İ lowercases to "i" + combining dot).
+    nonisolated static func matches(_ node: PickerNode, query: String) -> Bool {
+        guard !query.isEmpty else { return true }
+        let nameHit = node.displayName.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        if isHexQuery(query) {
+            return nameHit || node.publicKeyHex.lowercased().hasPrefix(query.lowercased())
+        }
+        return nameHit
+    }
+
+    /// Batched variant of `matches(_:query:)` that hoists `isHexQuery` and
+    /// `query.lowercased()` above the filter loop so they run once per call
+    /// instead of once per node. Use this in render-path filter chains.
+    nonisolated static func filtered(_ nodes: [PickerNode], by query: String) -> [PickerNode] {
+        guard !query.isEmpty else { return nodes }
+        let hex = isHexQuery(query)
+        let loweredQuery = hex ? query.lowercased() : ""
+        return nodes.filter { node in
+            let nameHit = node.displayName.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            if hex {
+                return nameHit || node.publicKeyHex.lowercased().hasPrefix(loweredQuery)
+            }
+            return nameHit
+        }
+    }
 
     nonisolated static func sanitizedDiscoveryTimeoutSeconds(suggestedTimeoutMs: UInt32) -> Double {
         let candidateSeconds = (Double(suggestedTimeoutMs) / 1000.0) * DiscoveryTimeout.multiplier
@@ -278,18 +512,18 @@ final class PathManagementViewModel {
                 self.discoverySecondsRemaining = Int(timeoutSeconds)
                 self.startCountdownTask()
 
-                // Wait for push notification with firmware-suggested timeout
-                // The AdvertisementService handler will call handleDiscoveryResponse()
-                // which cancels this task early if a response arrives
+                // Wait for push notification with firmware-suggested timeout.
+                // AdvertisementService handler calls handleDiscoveryResponse()
+                // which cancels this task early if a response arrives; sleep throws.
                 try await Task.sleep(for: .seconds(timeoutSeconds))
 
-                if !Task.isCancelled {
-                    // Timeout - remote node did not respond
-                    // Tier 2: Fall back to cached advertisement path
-                    await fallbackToCachedPath(for: contact)
-                }
+                // Tier 2: Fall back to cached advertisement path
+                await fallbackToCachedPath(for: contact)
             } catch is CancellationError {
-                // User cancelled or response received - no feedback needed
+                // Whoever cancelled us (user cancel, push-response handler, or a
+                // fresh discoverPath re-entry) already resolved state. Bail so
+                // this task's tail doesn't clobber the newer run's state.
+                return
             } catch {
                 discoveryResult = .failed(error.localizedDescription)
                 showDiscoveryResult = true
@@ -307,8 +541,13 @@ final class PathManagementViewModel {
         showDiscoveryResult = true
     }
 
-    /// Start the countdown task that updates remaining seconds every 5 seconds
+    /// Start the countdown task that updates remaining seconds every 5 seconds.
+    /// Cancels any prior countdown first so a `discoverPath` re-entry can't
+    /// leave an orphan task writing `discoverySecondsRemaining` alongside the
+    /// new one — the outer `discoveryTask` cancel doesn't propagate to this
+    /// sibling.
     private func startCountdownTask() {
+        countdownTask?.cancel()
         countdownTask = Task {
             while !Task.isCancelled, let timeout = discoveryTimeoutSeconds, let startTime = discoveryStartTime {
                 do {
@@ -316,7 +555,10 @@ final class PathManagementViewModel {
                 } catch {
                     break
                 }
-
+                // Re-check after sleep: cancellation can fire between iterations
+                // without sleep throwing. Without this, a stale task could write
+                // a stale remaining value over a fresh discovery's state.
+                guard !Task.isCancelled else { break }
                 let elapsed = Date.now.timeIntervalSince(startTime)
                 let remaining = max(0, Int(timeout - elapsed))
                 discoverySecondsRemaining = remaining
@@ -373,7 +615,6 @@ final class PathManagementViewModel {
             onContactNeedsRefresh?()
         } catch {
             errorMessage = L10n.Contacts.Contacts.PathManagement.Error.resetFailed(error.localizedDescription)
-            showError = true
         }
 
         isSettingPath = false
@@ -397,7 +638,6 @@ final class PathManagementViewModel {
             onContactNeedsRefresh?()
         } catch {
             errorMessage = L10n.Contacts.Contacts.PathManagement.Error.setFailed(error.localizedDescription)
-            showError = true
         }
 
         isSettingPath = false

@@ -1375,13 +1375,11 @@ public enum L10n {
         }
       }
       public enum PathEdit {
-        /// Location: PathEditingSheet.swift - Purpose: Add repeater footer
-        public static let addFooter = L10n.tr("Contacts", "contacts.pathEdit.addFooter", fallback: "Tap a repeater to add it to the path.")
-        /// Location: PathEditingSheet.swift - Purpose: Add repeater section header
-        public static let addRepeater = L10n.tr("Contacts", "contacts.pathEdit.addRepeater", fallback: "Add Repeater")
-        /// Location: PathEditingSheet.swift - Purpose: Add to path accessibility label
-        public static func addToPath(_ p1: Any) -> String {
-          return L10n.tr("Contacts", "contacts.pathEdit.addToPath", String(describing: p1), fallback: "Add %@ to path")
+        /// Location: PathEditingSheet.swift - Purpose: Add Hop CTA (primary button when path has >=1 hop)
+        public static let addHop = L10n.tr("Contacts", "contacts.pathEdit.addHop", fallback: "Add Hop")
+        /// Location: AddHopPickerView.swift - Purpose: Picker row accessibility label, %1$@ is name, %2$d is target hop number
+        public static func addToPathAsHop(_ p1: Any, _ p2: Int) -> String {
+          return L10n.tr("Contacts", "contacts.pathEdit.addToPathAsHop", String(describing: p1), p2, fallback: "Add %1$@ to path as hop %2$d")
         }
         /// Location: PathEditingSheet.swift - Purpose: Current path section header
         public static let currentPath = L10n.tr("Contacts", "contacts.pathEdit.currentPath", fallback: "Current Path")
@@ -1389,8 +1387,10 @@ public enum L10n {
         public static func description(_ p1: Any) -> String {
           return L10n.tr("Contacts", "contacts.pathEdit.description", String(describing: p1), fallback: "Customize the route messages take to reach %@.")
         }
-        /// Location: PathEditingSheet.swift - Purpose: Empty path footer
-        public static let emptyFooter = L10n.tr("Contacts", "contacts.pathEdit.emptyFooter", fallback: "No path set (direct or flood routing)")
+        /// Location: AddHopSegmentPicker.swift - Purpose: VoiceOver label for the section filter picker
+        public static let filterPickerLabel = L10n.tr("Contacts", "contacts.pathEdit.filterPickerLabel", fallback: "Filter hops")
+        /// Location: PathEditingSheet.swift - Purpose: VoiceOver hint for a hop row describing swipe + drag actions
+        public static let hopHint = L10n.tr("Contacts", "contacts.pathEdit.hopHint", fallback: "Swipe to delete. Drag to reorder.")
         /// Location: PathEditingSheet.swift - Purpose: Hop accessibility with hex
         public static func hopWithHex(_ p1: Int, _ p2: Int, _ p3: Any) -> String {
           return L10n.tr("Contacts", "contacts.pathEdit.hopWithHex", p1, p2, String(describing: p3), fallback: "Hop %d of %d: repeater %@")
@@ -1399,19 +1399,105 @@ public enum L10n {
         public static func hopWithName(_ p1: Int, _ p2: Int, _ p3: Any) -> String {
           return L10n.tr("Contacts", "contacts.pathEdit.hopWithName", p1, p2, String(describing: p3), fallback: "Hop %d of %d: %@")
         }
-        /// Location: PathEditingSheet.swift - Purpose: Path instructions footer
-        public static let instructionsFooter = L10n.tr("Contacts", "contacts.pathEdit.instructionsFooter", fallback: "Drag to reorder. Tap to remove.")
+        /// Location: AddHopPickerView.swift - Purpose: Position banner when appending, %d is target hop number
+        public static func positionAppend(_ p1: Int) -> String {
+          return L10n.tr("Contacts", "contacts.pathEdit.positionAppend", p1, fallback: "Adding as hop %d")
+        }
+        /// Location: PathEditingSheet.swift - Purpose: Section footer hint
+        public static let reorderHint = L10n.tr("Contacts", "contacts.pathEdit.reorderHint", fallback: "Drag to reorder · Swipe left to remove")
+        /// Location: AddHopPickerView.swift - Purpose: Search field placeholder
+        public static let searchPrompt = L10n.tr("Contacts", "contacts.pathEdit.searchPrompt", fallback: "Search by name or hex")
         /// Location: PathEditingSheet.swift - Purpose: Navigation title
         public static let title = L10n.tr("Contacts", "contacts.pathEdit.title", fallback: "Edit Path")
+        /// Location: PathEditingSheet.swift - Purpose: Use-direct-routing empty-state button
+        public static let useDirectRouting = L10n.tr("Contacts", "contacts.pathEdit.useDirectRouting", fallback: "Use Direct Routing")
+        /// Location: PathEditingSheet.swift - Purpose: Use-flood-routing empty-state button
+        public static let useFloodRouting = L10n.tr("Contacts", "contacts.pathEdit.useFloodRouting", fallback: "Use Flood Routing")
+        public enum DirectRouting {
+          public enum Confirm {
+            /// Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation confirm label
+            public static let confirm = L10n.tr("Contacts", "contacts.pathEdit.directRouting.confirm.confirm", fallback: "Save as Direct")
+            /// Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert message, %@ is contact name
+            public static func message(_ p1: Any, _ p2: Any) -> String {
+              return L10n.tr("Contacts", "contacts.pathEdit.directRouting.confirm.message", String(describing: p1), String(describing: p2), fallback: "Messages to %@ will be sent directly without relaying through any repeater. Use this only if %@ is a 1-hop neighbor.")
+            }
+            /// Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert title
+            public static let title = L10n.tr("Contacts", "contacts.pathEdit.directRouting.confirm.title", fallback: "Save as direct routing?")
+          }
+        }
+        public enum Empty {
+          /// Location: PathEditingSheet.swift - Purpose: Empty-state description, %@ is contact name
+          public static func description(_ p1: Any) -> String {
+            return L10n.tr("Contacts", "contacts.pathEdit.empty.description", String(describing: p1), fallback: "Add repeaters to control how messages reach %@, or use flood routing if no path is known.")
+          }
+          /// Location: PathEditingSheet.swift - Purpose: Empty-state title
+          public static let title = L10n.tr("Contacts", "contacts.pathEdit.empty.title", fallback: "No hops yet")
+        }
+        public enum Filter {
+          /// Location: AddHopSegmentPicker.swift - Purpose: All filter
+          public static let all = L10n.tr("Contacts", "contacts.pathEdit.filter.all", fallback: "All")
+          /// Location: AddHopSegmentPicker.swift - Purpose: Discovered filter
+          public static let discovered = L10n.tr("Contacts", "contacts.pathEdit.filter.discovered", fallback: "Discovered")
+          /// Location: AddHopSegmentPicker.swift - Purpose: Favorites filter
+          public static let favorites = L10n.tr("Contacts", "contacts.pathEdit.filter.favorites", fallback: "Favorites")
+          /// Location: AddHopSegmentPicker.swift - Purpose: Recent filter
+          public static let recent = L10n.tr("Contacts", "contacts.pathEdit.filter.recent", fallback: "Recent")
+        }
+        public enum FloodRouting {
+          public enum Confirm {
+            /// Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation confirm label
+            public static let confirm = L10n.tr("Contacts", "contacts.pathEdit.floodRouting.confirm.confirm", fallback: "Use Flood Routing")
+            /// Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert message, %@ is contact name
+            public static func message(_ p1: Any) -> String {
+              return L10n.tr("Contacts", "contacts.pathEdit.floodRouting.confirm.message", String(describing: p1), fallback: "Messages to %@ will be sent to every nearby node until a path is found. Use this when no repeater route is known.")
+            }
+            /// Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert title
+            public static let title = L10n.tr("Contacts", "contacts.pathEdit.floodRouting.confirm.title", fallback: "Use flood routing?")
+          }
+        }
+        public enum MaxHops {
+          /// Location: AddHopPickerView.swift - Purpose: Max-hops reached description, %d is the cap
+          public static func description(_ p1: Int) -> String {
+            return L10n.tr("Contacts", "contacts.pathEdit.maxHops.description", p1, fallback: "This path has reached the maximum of %d hops for the current hash mode. Remove a hop to add another.")
+          }
+          /// Location: PathEditingSheet.swift - Purpose: Add Hop CTA footer explaining the hop cap, %d is the cap
+          public static func footer(_ p1: Int) -> String {
+            return L10n.tr("Contacts", "contacts.pathEdit.maxHops.footer", p1, fallback: "Maximum %d hops reached. Remove a hop to add another.")
+          }
+          /// Location: PathEditingSheet.swift + AddHopPickerView.swift - Purpose: Max-hops reached title
+          public static let reached = L10n.tr("Contacts", "contacts.pathEdit.maxHops.reached", fallback: "Max hops reached")
+        }
         public enum NoRepeaters {
           /// Location: PathEditingSheet.swift - Purpose: No repeaters empty description
           public static let description = L10n.tr("Contacts", "contacts.pathEdit.noRepeaters.description", fallback: "Repeaters appear here once they're discovered in your mesh network.")
           /// Location: PathEditingSheet.swift - Purpose: No repeaters empty title
           public static let title = L10n.tr("Contacts", "contacts.pathEdit.noRepeaters.title", fallback: "No Repeaters Available")
         }
+        public enum Search {
+          public enum NoMatches {
+            /// Location: AddHopPickerView.swift - Purpose: No-match search description
+            public static let description = L10n.tr("Contacts", "contacts.pathEdit.search.noMatches.description", fallback: "Try a name or hex prefix like 'a3'.")
+            /// Location: AddHopPickerView.swift - Purpose: No-match description when a filter other than All is selected and a matching room exists
+            public static let descriptionWithRoomsHint = L10n.tr("Contacts", "contacts.pathEdit.search.noMatches.descriptionWithRoomsHint", fallback: "Try a name or hex prefix like 'a3'. Rooms only appear under the All filter.")
+          }
+        }
+        public enum Sections {
+          /// Location: AddHopPickerView.swift - Purpose: Contacts section header
+          public static let contacts = L10n.tr("Contacts", "contacts.pathEdit.sections.contacts", fallback: "Contacts")
+          /// Location: AddHopPickerView.swift - Purpose: Discovered section header
+          public static let discovered = L10n.tr("Contacts", "contacts.pathEdit.sections.discovered", fallback: "Discovered")
+          /// Location: AddHopPickerView.swift - Purpose: Favorites section header
+          public static let favorites = L10n.tr("Contacts", "contacts.pathEdit.sections.favorites", fallback: "Favorites")
+          /// Location: AddHopPickerView.swift - Purpose: Recent section header
+          public static let recent = L10n.tr("Contacts", "contacts.pathEdit.sections.recent", fallback: "Recent")
+          /// Location: AddHopPickerView.swift - Purpose: Rooms section header
+          public static let rooms = L10n.tr("Contacts", "contacts.pathEdit.sections.rooms", fallback: "Rooms")
+        }
       }
       public enum PathManagement {
         public enum Error {
+          /// Location: PathManagementViewModel.swift - Purpose: Shown when a stored path's hop can't be resized to the device's current hash mode
+          public static let hopResizeRequired = L10n.tr("Contacts", "contacts.pathManagement.error.hopResizeRequired", fallback: "Hash mode changed — remove and re-add hops to save.")
           /// Location: PathManagementViewModel.swift - Purpose: Reset path error prefix
           public static func resetFailed(_ p1: Any) -> String {
             return L10n.tr("Contacts", "contacts.pathManagement.error.resetFailed", String(describing: p1), fallback: "Reset path failed: %@")
@@ -1423,6 +1509,10 @@ public enum L10n {
           /// Location: PathManagementViewModel.swift - Purpose: Set path error prefix
           public static func setFailed(_ p1: Any) -> String {
             return L10n.tr("Contacts", "contacts.pathManagement.error.setFailed", String(describing: p1), fallback: "Set path failed: %@")
+          }
+          /// Location: PathManagementViewModel.swift - Purpose: Shown when the existing path has more hops than the current hash mode supports
+          public static func tooManyHops(_ p1: Int) -> String {
+            return L10n.tr("Contacts", "contacts.pathManagement.error.tooManyHops", p1, fallback: "Too many hops. Current hash mode supports at most %d.")
           }
         }
       }
@@ -1766,7 +1856,7 @@ public enum L10n {
           public static func hopLabel(_ p1: Int, _ p2: Any) -> String {
             return L10n.tr("Contacts", "contacts.trace.list.hopLabel", p1, String(describing: p2), fallback: "Hop %d: %@")
           }
-          /// Location: TracePathListView.swift, PathEditingSheet.swift - Purpose: Toggle to include discovered repeaters
+          /// Location: TracePathListView.swift - Purpose: Toggle to include discovered repeaters
           public static let includeDiscovered = L10n.tr("Contacts", "contacts.trace.list.includeDiscovered", fallback: "Include Discovered")
           /// Location: TracePathListView.swift - Purpose: Toggle to include room servers in the list
           public static let includeRooms = L10n.tr("Contacts", "contacts.trace.list.includeRooms", fallback: "Include Rooms")

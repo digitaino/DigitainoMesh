@@ -574,32 +574,110 @@
 /* Location: PathEditingSheet.swift - Purpose: Current path section header */
 "contacts.pathEdit.currentPath" = "Текущий путь";
 
-/* Location: PathEditingSheet.swift - Purpose: Empty path footer */
-"contacts.pathEdit.emptyFooter" = "Путь не задан (прямое соединение или рассылка)";
-
-/* Location: PathEditingSheet.swift - Purpose: Path instructions footer */
-"contacts.pathEdit.instructionsFooter" = "Перетащи для изменения порядка. Нажми для удаления.";
-
-/* Location: PathEditingSheet.swift - Purpose: Add repeater section header */
-"contacts.pathEdit.addRepeater" = "Добавить ретранслятор";
-
 /* Location: PathEditingSheet.swift - Purpose: No repeaters empty title */
 "contacts.pathEdit.noRepeaters.title" = "Нет доступных ретрансляторов";
 
 /* Location: PathEditingSheet.swift - Purpose: No repeaters empty description */
 "contacts.pathEdit.noRepeaters.description" = "Ретрансляторы появятся здесь после обнаружения в сети mesh.";
 
-/* Location: PathEditingSheet.swift - Purpose: Add repeater footer */
-"contacts.pathEdit.addFooter" = "Нажми на ретранслятор, чтобы добавить его в путь.";
-
-/* Location: PathEditingSheet.swift - Purpose: Add to path accessibility label */
-"contacts.pathEdit.addToPath" = "Добавить %@ в путь";
-
 /* Location: PathEditingSheet.swift - Purpose: Hop accessibility with name */
 "contacts.pathEdit.hopWithName" = "Переход %d из %d: %@";
 
 /* Location: PathEditingSheet.swift - Purpose: Hop accessibility with hex */
 "contacts.pathEdit.hopWithHex" = "Переход %d из %d: ретранслятор %@";
+
+/* Location: PathEditingSheet.swift - Purpose: Add Hop CTA (primary button when path has >=1 hop) */
+"contacts.pathEdit.addHop" = "Добавить узел";
+
+/* Location: PathEditingSheet.swift - Purpose: Use-direct-routing empty-state button */
+"contacts.pathEdit.useDirectRouting" = "Использовать прямую";
+
+/* Location: PathEditingSheet.swift - Purpose: Use-flood-routing empty-state button */
+"contacts.pathEdit.useFloodRouting" = "Использовать flood";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert title */
+"contacts.pathEdit.directRouting.confirm.title" = "Сохранить как прямую маршрутизацию?";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert message, %@ is contact name */
+"contacts.pathEdit.directRouting.confirm.message" = "Сообщения для %@ будут отправляться напрямую без ретрансляции через какой-либо ретранслятор. Используйте только если %@ является соседом в 1 прыжок.";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation confirm label */
+"contacts.pathEdit.directRouting.confirm.confirm" = "Сохранить как прямую";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert title */
+"contacts.pathEdit.floodRouting.confirm.title" = "Использовать flood-маршрутизацию?";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert message, %@ is contact name */
+"contacts.pathEdit.floodRouting.confirm.message" = "Сообщения для %@ будут отправляться всем ближайшим узлам до нахождения пути. Используйте когда маршрут ретранслятора неизвестен.";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation confirm label */
+"contacts.pathEdit.floodRouting.confirm.confirm" = "Использовать flood";
+
+/* Location: AddHopPickerView.swift - Purpose: Position banner when appending, %d is target hop number */
+"contacts.pathEdit.positionAppend" = "Добавление как узел %d";
+
+/* Location: AddHopPickerView.swift - Purpose: Search field placeholder */
+"contacts.pathEdit.searchPrompt" = "Поиск по имени или hex";
+
+/* Location: PathEditingSheet.swift - Purpose: Section footer hint */
+"contacts.pathEdit.reorderHint" = "Перетащите для сортировки · Смахните для удаления";
+
+/* Location: PathEditingSheet.swift - Purpose: Empty-state title */
+"contacts.pathEdit.empty.title" = "Пока нет узлов";
+
+/* Location: PathEditingSheet.swift - Purpose: Empty-state description, %@ is contact name */
+"contacts.pathEdit.empty.description" = "Добавьте ретрансляторы для управления маршрутом сообщений к %@, или используйте flood-маршрутизацию если маршрут неизвестен.";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: All filter */
+"contacts.pathEdit.filter.all" = "Все";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Favorites filter */
+"contacts.pathEdit.filter.favorites" = "Избранные";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Recent filter */
+"contacts.pathEdit.filter.recent" = "Недавние";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Discovered filter */
+"contacts.pathEdit.filter.discovered" = "Новые";
+
+/* Location: AddHopPickerView.swift - Purpose: Recent section header */
+"contacts.pathEdit.sections.recent" = "Недавние";
+
+/* Location: AddHopPickerView.swift - Purpose: Favorites section header */
+"contacts.pathEdit.sections.favorites" = "Избранные";
+
+/* Location: AddHopPickerView.swift - Purpose: Contacts section header */
+"contacts.pathEdit.sections.contacts" = "Контакты";
+
+/* Location: AddHopPickerView.swift - Purpose: Discovered section header */
+"contacts.pathEdit.sections.discovered" = "Обнаруженные";
+
+/* Location: AddHopPickerView.swift - Purpose: Rooms section header */
+"contacts.pathEdit.sections.rooms" = "Комнаты";
+
+/* Location: AddHopPickerView.swift - Purpose: No-match search description */
+"contacts.pathEdit.search.noMatches.description" = "Попробуйте имя или hex-префикс, например 'a3'.";
+
+/* Location: AddHopPickerView.swift - Purpose: No-match description when a filter other than All is selected and a matching room exists */
+"contacts.pathEdit.search.noMatches.descriptionWithRoomsHint" = "Попробуйте имя или hex-префикс, например 'a3'. Комнаты отображаются только в фильтре Все.";
+
+/* Location: AddHopPickerView.swift - Purpose: Picker row accessibility label, %1$@ is name, %2$d is target hop number */
+"contacts.pathEdit.addToPathAsHop" = "Добавить %1$@ в путь как узел %2$d";
+
+/* Location: PathEditingSheet.swift - Purpose: VoiceOver hint for a hop row describing swipe + drag actions */
+"contacts.pathEdit.hopHint" = "Смахните для удаления. Перетащите для изменения порядка.";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: VoiceOver label for the section filter picker */
+"contacts.pathEdit.filterPickerLabel" = "Фильтр узлов";
+
+/* Location: PathEditingSheet.swift + AddHopPickerView.swift - Purpose: Max-hops reached title */
+"contacts.pathEdit.maxHops.reached" = "Достигнут максимум узлов";
+
+/* Location: AddHopPickerView.swift - Purpose: Max-hops reached description, %d is the cap */
+"contacts.pathEdit.maxHops.description" = "Этот маршрут достиг максимума в %d узлов для текущего режима хеширования. Удалите узел, чтобы добавить новый.";
+
+/* Location: PathEditingSheet.swift - Purpose: Add Hop CTA footer explaining the hop cap, %d is the cap */
+"contacts.pathEdit.maxHops.footer" = "Достигнут максимум в %d узлов. Удалите узел, чтобы добавить новый.";
 
 // MARK: - Path Discovery Results
 
@@ -839,7 +917,7 @@
 /* Location: TracePathListView.swift - Purpose: Toggle to include room servers in the list */
 "contacts.trace.list.includeRooms" = "Включить комнаты";
 
-/* Location: TracePathListView.swift, PathEditingSheet.swift - Purpose: Toggle to include discovered repeaters */
+/* Location: TracePathListView.swift - Purpose: Toggle to include discovered repeaters */
 "contacts.trace.list.includeDiscovered" = "Включить обнаруженные";
 
 /* Location: TracePathListView.swift - Purpose: No favorite repeaters empty title */
@@ -1032,6 +1110,10 @@
 
 /* Location: PathManagementViewModel.swift - Purpose: Set path error prefix */
 "contacts.pathManagement.error.setFailed" = "Ошибка установки пути: %@";
+
+"contacts.pathManagement.error.hopResizeRequired" = "Режим хеширования изменён — удалите и добавьте узлы заново, чтобы сохранить.";
+
+"contacts.pathManagement.error.tooManyHops" = "Слишком много узлов. Текущий режим хеширования поддерживает не более %d.";
 
 // MARK: - Code Input Result
 

@@ -557,32 +557,110 @@
 /* Location: PathEditingSheet.swift - Purpose: Current path section header */
 "contacts.pathEdit.currentPath" = "Ruta actual";
 
-/* Location: PathEditingSheet.swift - Purpose: Empty path footer */
-"contacts.pathEdit.emptyFooter" = "Sin ruta establecida (enrutamiento directo o por inundación)";
-
-/* Location: PathEditingSheet.swift - Purpose: Path instructions footer */
-"contacts.pathEdit.instructionsFooter" = "Arrastra para reordenar. Toca para eliminar.";
-
-/* Location: PathEditingSheet.swift - Purpose: Add repeater section header */
-"contacts.pathEdit.addRepeater" = "Añadir repetidor";
-
 /* Location: PathEditingSheet.swift - Purpose: No repeaters empty title */
 "contacts.pathEdit.noRepeaters.title" = "Sin repetidores disponibles";
 
 /* Location: PathEditingSheet.swift - Purpose: No repeaters empty description */
 "contacts.pathEdit.noRepeaters.description" = "Los repetidores aparecen aquí una vez que se descubren en tu red mesh.";
 
-/* Location: PathEditingSheet.swift - Purpose: Add repeater footer */
-"contacts.pathEdit.addFooter" = "Toca un repetidor para añadirlo a la ruta.";
-
-/* Location: PathEditingSheet.swift - Purpose: Add to path accessibility label */
-"contacts.pathEdit.addToPath" = "Añadir %@ a la ruta";
-
 /* Location: PathEditingSheet.swift - Purpose: Hop accessibility with name */
 "contacts.pathEdit.hopWithName" = "Salto %d de %d: %@";
 
 /* Location: PathEditingSheet.swift - Purpose: Hop accessibility with hex */
 "contacts.pathEdit.hopWithHex" = "Salto %d de %d: repetidor %@";
+
+/* Location: PathEditingSheet.swift - Purpose: Add Hop CTA (primary button when path has >=1 hop) */
+"contacts.pathEdit.addHop" = "Añadir salto";
+
+/* Location: PathEditingSheet.swift - Purpose: Use-direct-routing empty-state button */
+"contacts.pathEdit.useDirectRouting" = "Usar enrutado directo";
+
+/* Location: PathEditingSheet.swift - Purpose: Use-flood-routing empty-state button */
+"contacts.pathEdit.useFloodRouting" = "Usar enrutado flood";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert title */
+"contacts.pathEdit.directRouting.confirm.title" = "¿Guardar como enrutado directo?";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation alert message, %@ is contact name */
+"contacts.pathEdit.directRouting.confirm.message" = "Los mensajes a %@ se enviarán directamente sin pasar por ningún repetidor. Usa esto solo si %@ es un vecino a 1 salto.";
+
+/* Location: PathEditingSheet.swift - Purpose: Direct-routing confirmation confirm label */
+"contacts.pathEdit.directRouting.confirm.confirm" = "Guardar como directo";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert title */
+"contacts.pathEdit.floodRouting.confirm.title" = "¿Usar enrutado flood?";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation alert message, %@ is contact name */
+"contacts.pathEdit.floodRouting.confirm.message" = "Los mensajes a %@ se enviarán a todos los nodos cercanos hasta encontrar una ruta. Úsalo cuando no se conozca ninguna ruta de repetidor.";
+
+/* Location: PathEditingSheet.swift - Purpose: Flood-routing confirmation confirm label */
+"contacts.pathEdit.floodRouting.confirm.confirm" = "Usar enrutado flood";
+
+/* Location: AddHopPickerView.swift - Purpose: Position banner when appending, %d is target hop number */
+"contacts.pathEdit.positionAppend" = "Añadiendo como salto %d";
+
+/* Location: AddHopPickerView.swift - Purpose: Search field placeholder */
+"contacts.pathEdit.searchPrompt" = "Buscar por nombre o hex";
+
+/* Location: PathEditingSheet.swift - Purpose: Section footer hint */
+"contacts.pathEdit.reorderHint" = "Arrastra para reordenar · Desliza para eliminar";
+
+/* Location: PathEditingSheet.swift - Purpose: Empty-state title */
+"contacts.pathEdit.empty.title" = "Aún no hay saltos";
+
+/* Location: PathEditingSheet.swift - Purpose: Empty-state description, %@ is contact name */
+"contacts.pathEdit.empty.description" = "Añade repetidores para controlar cómo llegan los mensajes a %@, o usa enrutado flood si no conoces la ruta.";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: All filter */
+"contacts.pathEdit.filter.all" = "Todos";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Favorites filter */
+"contacts.pathEdit.filter.favorites" = "Favoritos";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Recent filter */
+"contacts.pathEdit.filter.recent" = "Recientes";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: Discovered filter */
+"contacts.pathEdit.filter.discovered" = "Nuevos";
+
+/* Location: AddHopPickerView.swift - Purpose: Recent section header */
+"contacts.pathEdit.sections.recent" = "Recientes";
+
+/* Location: AddHopPickerView.swift - Purpose: Favorites section header */
+"contacts.pathEdit.sections.favorites" = "Favoritos";
+
+/* Location: AddHopPickerView.swift - Purpose: Contacts section header */
+"contacts.pathEdit.sections.contacts" = "Contactos";
+
+/* Location: AddHopPickerView.swift - Purpose: Discovered section header */
+"contacts.pathEdit.sections.discovered" = "Descubiertos";
+
+/* Location: AddHopPickerView.swift - Purpose: Rooms section header */
+"contacts.pathEdit.sections.rooms" = "Salas";
+
+/* Location: AddHopPickerView.swift - Purpose: No-match search description */
+"contacts.pathEdit.search.noMatches.description" = "Prueba un nombre o prefijo hex como 'a3'.";
+
+/* Location: AddHopPickerView.swift - Purpose: No-match description when a filter other than All is selected and a matching room exists */
+"contacts.pathEdit.search.noMatches.descriptionWithRoomsHint" = "Prueba un nombre o prefijo hex como 'a3'. Las salas solo aparecen con el filtro Todos.";
+
+/* Location: AddHopPickerView.swift - Purpose: Picker row accessibility label, %1$@ is name, %2$d is target hop number */
+"contacts.pathEdit.addToPathAsHop" = "Añadir %1$@ a la ruta como salto %2$d";
+
+/* Location: PathEditingSheet.swift - Purpose: VoiceOver hint for a hop row describing swipe + drag actions */
+"contacts.pathEdit.hopHint" = "Desliza para eliminar. Arrastra para reordenar.";
+
+/* Location: AddHopSegmentPicker.swift - Purpose: VoiceOver label for the section filter picker */
+"contacts.pathEdit.filterPickerLabel" = "Filtrar saltos";
+
+/* Location: PathEditingSheet.swift + AddHopPickerView.swift - Purpose: Max-hops reached title */
+"contacts.pathEdit.maxHops.reached" = "Máximo de saltos alcanzado";
+
+/* Location: AddHopPickerView.swift - Purpose: Max-hops reached description, %d is the cap */
+"contacts.pathEdit.maxHops.description" = "Esta ruta ha alcanzado el máximo de %d saltos para el modo de hash actual. Elimina un salto para añadir otro.";
+
+/* Location: PathEditingSheet.swift - Purpose: Add Hop CTA footer explaining the hop cap, %d is the cap */
+"contacts.pathEdit.maxHops.footer" = "Máximo de %d saltos alcanzado. Elimina un salto para añadir otro.";
 
 // MARK: - Path Discovery Results
 
@@ -852,7 +930,7 @@
 /* Location: TracePathListView.swift - Purpose: Toggle to include room servers in the list */
 "contacts.trace.list.includeRooms" = "Incluir salas";
 
-/* Location: TracePathListView.swift, PathEditingSheet.swift - Purpose: Toggle to include discovered repeaters */
+/* Location: TracePathListView.swift - Purpose: Toggle to include discovered repeaters */
 "contacts.trace.list.includeDiscovered" = "Incluir descubiertos";
 
 /* Location: TracePathListView.swift - Purpose: No favorite repeaters empty title */
@@ -1045,6 +1123,10 @@
 
 /* Location: PathManagementViewModel.swift - Purpose: Set path error prefix */
 "contacts.pathManagement.error.setFailed" = "Error al establecer ruta: %@";
+
+"contacts.pathManagement.error.hopResizeRequired" = "Modo hash cambiado: elimina y vuelve a agregar los saltos para guardar.";
+
+"contacts.pathManagement.error.tooManyHops" = "Demasiados saltos. El modo hash actual admite un máximo de %d.";
 
 // MARK: - Code Input Result
 
