@@ -305,6 +305,7 @@ public final class ServiceContainer {
         }
         await rxLogService.startEventMonitoring(deviceID: deviceID)
         await messageService.startEventMonitoring()
+        await messageService.startAckExpiryChecking()
         await remoteNodeService.startEventMonitoring()
 
         // Always start message event monitoring so handlers are ready for polled messages
@@ -336,6 +337,12 @@ public final class ServiceContainer {
         await advertisementService.stopEventMonitoring()
         await rxLogService.stopEventMonitoring()
         await messageService.stopEventMonitoring()
+        do {
+            try await messageService.stopAndFailAllPending()
+        } catch {
+            let logger = Logger(subsystem: "com.mc1.services", category: "ServiceContainer")
+            logger.error("stopAndFailAllPending failed during disconnect: \(error.localizedDescription, privacy: .public)")
+        }
         await messagePollingService.stopMessageEventMonitoring()
         await surveyService.stopEventMonitoring()
         // RemoteNodeService event monitoring is per-session, handled internally
