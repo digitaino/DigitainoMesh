@@ -238,7 +238,7 @@ public actor MessagePollingService {
 
         eventMonitorTask = Task { [weak self] in
             guard let self else { return }
-            let events = await session.events()
+            let events = await session.events(filter: EventFilter.anyContactMessage.or(.anyChannelMessage))
 
             for await event in events {
                 guard !Task.isCancelled else { break }

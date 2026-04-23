@@ -66,6 +66,22 @@ public struct EventFilter: Sendable {
 
     // MARK: - Message Filters
 
+    /// Matches any contact message receipt regardless of sender prefix.
+    public static var anyContactMessage: EventFilter {
+        EventFilter { event in
+            if case .contactMessageReceived = event { return true }
+            return false
+        }
+    }
+
+    /// Matches any channel message receipt.
+    public static var anyChannelMessage: EventFilter {
+        EventFilter { event in
+            if case .channelMessageReceived = event { return true }
+            return false
+        }
+    }
+
     /// Creates a filter for contact messages from a specific sender.
     ///
     /// - Parameter publicKeyPrefix: The sender's public key prefix to match.
@@ -123,6 +139,22 @@ public struct EventFilter: Sendable {
     }
 
     // MARK: - Network Event Filters
+
+    /// Matches any rxLogData event.
+    public static var rxLogData: EventFilter {
+        EventFilter { event in
+            if case .rxLogData = event { return true }
+            return false
+        }
+    }
+
+    /// Matches any advertisement regardless of sender prefix.
+    public static var anyAdvertisement: EventFilter {
+        EventFilter { event in
+            if case .advertisement = event { return true }
+            return false
+        }
+    }
 
     /// Creates a filter for advertisement events from a specific node.
     ///
@@ -199,6 +231,24 @@ public struct EventFilter: Sendable {
     public static var messagesWaiting: EventFilter {
         EventFilter { event in
             if case .messagesWaiting = event { return true }
+            return false
+        }
+    }
+
+    // MARK: - Login Filters
+
+    /// Matches any successful login response.
+    public static var anyLoginSuccess: EventFilter {
+        EventFilter { event in
+            if case .loginSuccess = event { return true }
+            return false
+        }
+    }
+
+    /// Matches any failed login response.
+    public static var anyLoginFailed: EventFilter {
+        EventFilter { event in
+            if case .loginFailed = event { return true }
             return false
         }
     }

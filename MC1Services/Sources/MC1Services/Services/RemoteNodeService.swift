@@ -126,6 +126,13 @@ public enum RemoteOperationTimeoutPolicy {
     }
 }
 
+// MARK: - CLI Response Text Type
+
+/// Wire value `0x01` — firmware `TXT_TYPE_CLI_DATA`.
+/// `ContactMessage.textType` is a raw byte on the MeshCore side, so we keep
+/// the constant as a `UInt8` rather than routing through a Swift enum.
+private let cliResponseTextType: UInt8 = 0x01
+
 // MARK: - Remote Node Service
 
 /// Shared service for remote node operations.
@@ -216,7 +223,17 @@ public actor RemoteNodeService {
 
         eventMonitorTask = Task { [weak self] in
             guard let self else { return }
-            let events = await session.events()
+            let filter = EventFilter { event in
+                switch event {
+                case .loginSuccess, .loginFailed:
+                    return true
+                case .contactMessageReceived(let info) where info.textType == cliResponseTextType:
+                    return true
+                default:
+                    return false
+                }
+            }
+            let events = await session.events(filter: filter)
 
             for await event in events {
                 guard !Task.isCancelled else { break }

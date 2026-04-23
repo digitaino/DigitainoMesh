@@ -148,7 +148,18 @@ public actor AdvertisementService {
 
         eventMonitorTask = Task { [weak self] in
             guard let self else { return }
-            let events = await session.events()
+            let filter = EventFilter { event in
+                switch event {
+                case .advertisement, .newContact, .pathUpdate, .pathResponse,
+                     .traceData, .contactDeleted, .contactsFull:
+                    return true
+                case .rxLogData(let log) where log.payloadType == .trace:
+                    return true
+                default:
+                    return false
+                }
+            }
+            let events = await session.events(filter: filter)
 
             for await event in events {
                 guard !Task.isCancelled else { break }
