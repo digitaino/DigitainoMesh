@@ -27,7 +27,7 @@ extension ConnectionManager {
         let stateMachine = MockBLEStateMachine()
         let mockTransport = transport ?? MockMeshTransport()
         let mockASK = accessorySetupKit ?? MockAccessorySetupKitService()
-        let resolvedDefaults = defaults ?? .standard
+        let resolvedDefaults = defaults ?? UserDefaults(suiteName: "test.\(UUID().uuidString)")!
         let manager = ConnectionManager(
             modelContainer: container,
             defaults: resolvedDefaults,
