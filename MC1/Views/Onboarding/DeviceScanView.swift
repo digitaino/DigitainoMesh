@@ -255,7 +255,7 @@ struct DeviceScanView: View {
             defer { appState.connectionUI.isBusy = false }
 
             do {
-                try await appState.connectionManager.connect(to: deviceID)
+                try await appState.connectionManager.connect(to: deviceID, forceReconnect: true)
                 await appState.wireServicesIfConnected()
                 pairingSuccessTrigger.toggle()
                 appState.onboarding.onboardingPath.append(.radioPreset)

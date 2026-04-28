@@ -52,7 +52,7 @@ extension ConnectionManager {
         }
 
         do {
-            try await connect(to: deviceID, forceFullSync: true)
+            try await connect(to: deviceID, forceFullSync: true, forceReconnect: true)
         } catch BLEError.deviceConnectedToOtherApp {
             throw PairingError.deviceConnectedToOtherApp(deviceID: deviceID)
         } catch is CancellationError {

@@ -1479,7 +1479,7 @@ public final class AppState {
         defer { connectionUI.isBusy = false }
 
         do {
-            try await connectionManager.connect(to: deviceID)
+            try await connectionManager.connect(to: deviceID, forceReconnect: true)
             await wireServicesIfConnected()
         } catch BLEError.deviceConnectedToOtherApp {
             connectionUI.otherAppWarningDeviceID = deviceID
