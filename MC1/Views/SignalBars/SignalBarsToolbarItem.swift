@@ -9,8 +9,10 @@ struct SignalBarsToolbarItem: View {
     @State private var showingDetail = false
     @State private var rxFlash = false
     @State private var txFlash = false
+    @State private var watchFlash = false
     @State private var lastRxTick: UInt = 0
     @State private var lastTxTick: UInt = 0
+    @State private var lastWatchTick: UInt = 0
 
     /// When true, always shows even if a survey is active (used in survey view's own toolbar).
     var showDuringSurvey = false
@@ -62,6 +64,8 @@ struct SignalBarsToolbarItem: View {
                                     .foregroundStyle(power.isAtMax ? .red : power.isElevated ? .orange : .green)
                             }
                         }
+
+                        watchBadge
                     }
                 } else {
                     // No repeaters yet — show scanning state with TX power if enabled
@@ -76,6 +80,8 @@ struct SignalBarsToolbarItem: View {
                                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                                 .foregroundStyle(power.isAtMax ? .red : power.isElevated ? .orange : .green)
                         }
+
+                        watchBadge
                     }
                 }
             }
@@ -94,6 +100,27 @@ struct SignalBarsToolbarItem: View {
                 lastTxTick = newValue
                 triggerFlash($txFlash)
             }
+            .onChange(of: appState.watchedRepeaterFlashTick) { _, newValue in
+                guard newValue != lastWatchTick else { return }
+                lastWatchTick = newValue
+                watchFlash = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    watchFlash = false
+                }
+            }
+        }
+    }
+
+    // MARK: - Watch Badge
+
+    @ViewBuilder
+    private var watchBadge: some View {
+        if appState.watchedRepeaterHexID != nil {
+            Image(systemName: "binoculars.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.accentColor)
+                .scaleEffect(watchFlash ? 1.4 : 1.0)
+                .animation(.easeOut(duration: 0.3), value: watchFlash)
         }
     }
 

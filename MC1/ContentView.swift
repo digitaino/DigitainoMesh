@@ -165,6 +165,7 @@ struct MainTabView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .animation(.spring(duration: 0.3), value: appState.isSurveyActive)
             }
+
         }
         .onChange(of: appState.statusPillState, initial: true) { _, new in
             if new != .hidden {

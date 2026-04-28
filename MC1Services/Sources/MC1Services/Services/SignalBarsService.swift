@@ -106,6 +106,16 @@ public final class SignalBarsService {
     /// Timeout for pings in milliseconds (updated from device responses).
     private var suggestedTimeoutMs: Int = 5000
 
+    // MARK: - Watched Repeater
+
+    /// Hex ID of a repeater the user is actively watching for range testing.
+    /// When set, `onWatchedRepeaterHeard` fires each time a packet arrives from this repeater.
+    public var watchedRepeaterHexID: String?
+
+    /// Callback fired on the main actor when a packet from the watched repeater is received.
+    /// Parameters: hexID, rxSnr, rxQuality, txSnr (if available).
+    public var onWatchedRepeaterHeard: ((String, Double, SNRQuality, Double?) -> Void)?
+
     // MARK: - Lifecycle
 
     public init() {}
@@ -147,6 +157,7 @@ public final class SignalBarsService {
         isRefreshing = false
         deviceID = nil
         sendDiscoverHandler = nil
+        onWatchedRepeaterHeard = nil
 
         logger.info("SignalBarsService stopped")
     }
@@ -552,6 +563,12 @@ public final class SignalBarsService {
         }
 
         sortRepeaters()
+
+        // Notify watched repeater listener
+        if let watched = watchedRepeaterHexID,
+           (hexID.hasPrefix(watched) || watched.hasPrefix(hexID)) {
+            onWatchedRepeaterHeard?(hexID, rxSnr, rxQuality, txSnr)
+        }
 
         // Reactive trigger: when we hear a repeater with no/stale TX measurement,
         // schedule a ping after 2s to get (or refresh) bidirectional signal data

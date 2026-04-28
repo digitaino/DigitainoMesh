@@ -323,6 +323,7 @@ final class SignalSurveyViewModel {
         let probeFrequency: ProbeFrequency
         let probeEnabled: Bool
         let floodMessagesPerCell: Int
+        let floodCooldownRemaining: TimeInterval?
         let nextProbeMaxIn: TimeInterval?
 
         let totalPoints: Int
@@ -430,11 +431,19 @@ final class SignalSurveyViewModel {
         }
     }
 
+    /// Hex ID of a repeater being watched app-wide for range testing.
+    /// When set, `selectedRelayFilter` is preserved across cell changes and auto-applied to new cells.
+    var watchedRepeaterHexID: String?
+
     /// The currently selected hex cell (tapped by user or auto-tracked).
     var selectedCell: GridCell? {
         didSet {
             if selectedCell?.coordKey != oldValue?.coordKey {
+                if let watched = watchedRepeaterHexID {
+                    selectedRelayFilter = watched
+                } else {
                     selectedRelayFilter = nil
+                }
             }
             // Restore camera when dismissing cell card
             if selectedCell == nil, let saved = savedCameraPosition {
@@ -768,6 +777,15 @@ final class SignalSurveyViewModel {
     /// evenly across the estimated cell transit time.
     private var firstFloodTimePerCell: [String: Date] = [:]
 
+    /// Timestamp of the last flood message sent (any cell). Enforces a global minimum
+    /// cooldown between floods so high-speed cell transitions don't rapid-fire messages.
+    private var lastFloodTime: Date = .distantPast
+
+    /// Minimum seconds between flood messages. At highway speed (~36 m/s / 80 mph)
+    /// you cross a 100m cell in ~2.8s, so 8s ensures floods don't fire every cell.
+    /// At walking speed (~1.5 m/s) you spend ~67s per cell, so this never triggers.
+    private static let minimumFloodInterval: TimeInterval = 8.0
+
     private var binaryProtocolService: BinaryProtocolService?
     private var messageServiceRef: MessageService?
     private var channelServiceRef: ChannelService?
@@ -878,6 +896,10 @@ final class SignalSurveyViewModel {
             probeFrequency: probeFrequency,
             probeEnabled: probeEnabled,
             floodMessagesPerCell: floodMessagesPerCell,
+            floodCooldownRemaining: {
+                let remaining = Self.minimumFloodInterval - Date().timeIntervalSince(lastFloodTime)
+                return remaining > 0 ? remaining : nil
+            }(),
             nextProbeMaxIn: nextProbeMax,
             totalPoints: livePointCount,
             passivePoints: passivePts,
@@ -2285,7 +2307,11 @@ final class SignalSurveyViewModel {
         let shouldFlood: Bool = {
             if forceFlood { return true }
             guard floodMessagesPerCell > 0, cellFloodCount < floodMessagesPerCell else { return false }
-            // First flood in this cell: always send immediately
+            // Global cooldown: prevent rapid-fire floods at high speed (e.g. highway driving
+            // crosses a 100m cell in ~2.8s at 80 mph). This ensures at least 8s between floods.
+            let sinceLastFlood = Date().timeIntervalSince(lastFloodTime)
+            guard sinceLastFlood >= Self.minimumFloodInterval else { return false }
+            // First flood in this cell: send (cooldown already passed above)
             if cellFloodCount == 0 { return true }
             // Subsequent floods: space evenly across estimated cell transit time.
             // Cell diameter ~100m. Use GPS speed to estimate transit time,
@@ -2304,9 +2330,11 @@ final class SignalSurveyViewModel {
             try? await Task.sleep(for: .seconds(0.3))
             guard !Task.isCancelled else { return }
 
+            let now = Date()
             if firstFloodTimePerCell[cellKey] == nil {
-                firstFloodTimePerCell[cellKey] = Date()
+                firstFloodTimePerCell[cellKey] = now
             }
+            lastFloodTime = now
             floodMessagesSentPerCell[cellKey, default: 0] += 1
 
             do {

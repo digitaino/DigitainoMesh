@@ -196,6 +196,9 @@ struct SignalSurveyView: View {
             }
         }
         .onAppear {
+            // Sync watched repeater from app-wide state
+            viewModel.watchedRepeaterHexID = appState.watchedRepeaterHexID
+
             // Only set values that actually changed to avoid triggering didSet side effects
             // (e.g. restarting the probe loop when navigating back to an active survey).
             if viewModel.probeEnabled != probeEnabledPref {
@@ -233,6 +236,9 @@ struct SignalSurveyView: View {
                 probeFrequencyPref = SignalSurveyViewModel.ProbeFrequency.normal.rawValue
                 viewModel.probeFrequency = .normal
             }
+        }
+        .onChange(of: appState.watchedRepeaterHexID) { _, newValue in
+            viewModel.watchedRepeaterHexID = newValue
         }
         .onChange(of: viewModel.isActive) { _, isActive in
             UIApplication.shared.isIdleTimerDisabled = isActive
@@ -941,6 +947,7 @@ struct SignalSurveyView: View {
                 HStack(spacing: 6) {
                     ForEach(hexIDs, id: \.self) { hexID in
                         let isFiltered = viewModel.selectedRelayFilter == hexID
+                        let isWatched = appState.watchedRepeaterHexID == hexID
                         Button {
                             if viewModel.selectedRelayFilter == hexID {
                                 viewModel.selectedRelayFilter = nil
@@ -948,21 +955,44 @@ struct SignalSurveyView: View {
                                 viewModel.selectedRelayFilter = hexID
                             }
                         } label: {
-                            Text(hexID)
-                                .font(.system(.caption, design: .monospaced))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
-                                .background(isFiltered ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12))
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule().strokeBorder(
-                                        isFiltered ? Color.accentColor : Color.clear,
-                                        lineWidth: 1
-                                    )
+                            HStack(spacing: 4) {
+                                if isWatched {
+                                    Image(systemName: "binoculars.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                                Text(hexID)
+                                    .font(.system(.caption, design: .monospaced))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(isFiltered ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().strokeBorder(
+                                    isFiltered ? Color.accentColor : Color.clear,
+                                    lineWidth: 1
                                 )
-                                .contentShape(Capsule())
+                            )
+                            .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            if isWatched {
+                                Button(role: .destructive) {
+                                    appState.clearWatchedRepeater()
+                                } label: {
+                                    Label("Stop Watching", systemImage: "binoculars.fill")
+                                }
+                            } else {
+                                Button {
+                                    let name = viewModel.resolveRepeater(hexID: hexID)?.displayName
+                                    appState.watchRepeater(hexID: hexID, name: name)
+                                } label: {
+                                    Label("Watch Repeater", systemImage: "binoculars")
+                                }
+                            }
+                        }
                     }
                 }
             }

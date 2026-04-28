@@ -1,3 +1,4 @@
+import AVFoundation
 import MC1Services
 import SwiftUI
 
@@ -6,6 +7,7 @@ import SwiftUI
 struct RepeaterSignalPopover: View {
     @Environment(\.appState) private var appState
     @State private var isApplyingHashMode = false
+    @State private var showingWatchPicker = false
 
     var body: some View {
         let service = appState.signalBarsService
@@ -43,7 +45,7 @@ struct RepeaterSignalPopover: View {
             }
 
             if service.repeaters.isEmpty {
-                Text("Scanning for repeaters...")
+                Text("Scanning for repeaters…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
@@ -74,7 +76,24 @@ struct RepeaterSignalPopover: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(service.repeaters) { repeater in
-                            RepeaterCompactRow(repeater: repeater)
+                            let isWatched = appState.watchedRepeaterHexID == repeater.id
+                                || (appState.watchedRepeaterHexID.map { repeater.id.hasPrefix($0) || $0.hasPrefix(repeater.id) } ?? false)
+                            RepeaterCompactRow(repeater: repeater, isWatched: isWatched)
+                                .contextMenu {
+                                    if isWatched {
+                                        Button(role: .destructive) {
+                                            appState.clearWatchedRepeater()
+                                        } label: {
+                                            Label("Stop Watching", systemImage: "binoculars.fill")
+                                        }
+                                    } else {
+                                        Button {
+                                            appState.watchRepeater(hexID: repeater.id, name: repeater.name)
+                                        } label: {
+                                            Label("Watch Repeater", systemImage: "binoculars")
+                                        }
+                                    }
+                                }
                             if repeater.id != service.repeaters.last?.id {
                                 Divider()
                                     .padding(.horizontal, 8)
@@ -85,6 +104,11 @@ struct RepeaterSignalPopover: View {
                 .frame(maxHeight: 260)
             }
 
+            // Watched repeater section (grouped below signal table)
+            Divider()
+                .padding(.horizontal, 8)
+            watchedRepeaterSection
+
             // Path hash size quick-picker
             if appState.connectedDevice != nil {
                 Divider()
@@ -94,6 +118,115 @@ struct RepeaterSignalPopover: View {
         }
         .frame(width: 250)
         .padding(.bottom, 8)
+        .sheet(isPresented: $showingWatchPicker) {
+            WatchRepeaterPicker()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    // MARK: - Watched Repeater Section
+
+    @State private var watchFlash = false
+    @State private var previousFlashTick: UInt = 0
+
+    private var watchedRepeaterSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let hexID = appState.watchedRepeaterHexID {
+                // Active watch — name, signal, packet count, stop button
+                HStack(spacing: 6) {
+                    Image(systemName: "binoculars.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.accentColor)
+
+                    Text(appState.watchedRepeaterName ?? hexID)
+                        .font(.system(.caption, design: .monospaced, weight: .semibold))
+                        .lineLimit(1)
+
+                    if let rxQ = appState.watchedRepeaterRxQuality {
+                        Image(systemName: "cellularbars", variableValue: rxQ.barLevel)
+                            .foregroundStyle(rxQ.color)
+                            .font(.system(size: 12))
+                    }
+
+                    Spacer()
+
+                    if appState.watchedRepeaterPacketCount > 0 {
+                        Text("\(appState.watchedRepeaterPacketCount)")
+                            .font(.system(.caption2, design: .rounded, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                    }
+
+                    Button(role: .destructive) {
+                        appState.clearWatchedRepeater()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.accentColor.opacity(watchFlash ? 0.15 : 0))
+                        .animation(.easeOut(duration: 0.6), value: watchFlash)
+                )
+                .onChange(of: appState.watchedRepeaterFlashTick) { _, newTick in
+                    guard newTick != previousFlashTick else { return }
+                    previousFlashTick = newTick
+                    watchFlash = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        watchFlash = false
+                    }
+                }
+
+                // Sound + change controls
+                HStack(spacing: 6) {
+                    Button {
+                        appState.watchedRepeaterSoundEnabled.toggle()
+                    } label: {
+                        Image(systemName: appState.watchedRepeaterSoundEnabled
+                              ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(appState.watchedRepeaterSoundEnabled ? Color.accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    if appState.watchedRepeaterSoundEnabled {
+                        WatchSoundPicker()
+                    }
+
+                    Spacer()
+
+                    Button {
+                        showingWatchPicker = true
+                    } label: {
+                        Text("Change…")
+                            .font(.system(.caption2, weight: .medium))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+            } else {
+                // No active watch — just a button
+                Button {
+                    showingWatchPicker = true
+                } label: {
+                    Label("Watch Repeater…", systemImage: "binoculars")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+        }
     }
 
     // MARK: - Adaptive Power Row
@@ -210,10 +343,159 @@ struct RepeaterSignalPopover: View {
     }
 }
 
+// MARK: - Watch Sound Picker
+
+/// Inline picker for the watched repeater alert sound.
+private struct WatchSoundPicker: View {
+    @Environment(\.appState) private var appState
+
+    var body: some View {
+        Menu {
+            ForEach(WatchTone.allCases) { tone in
+                Button {
+                    appState.watchedRepeaterToneID = tone.rawValue
+                    tone.playPreview()
+                } label: {
+                    HStack {
+                        Text(tone.displayName)
+                        if appState.watchedRepeaterToneID == tone.rawValue {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(WatchTone.current(from: appState.watchedRepeaterToneID).displayName)
+                    .font(.system(.caption2, weight: .medium))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.fill.tertiary, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Watch Repeater Picker
+
+/// Sheet for selecting a repeater to watch — unified search filters by name and hex ID.
+private struct WatchRepeaterPicker: View {
+    @Environment(\.appState) private var appState
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+    @State private var repeaterContacts: [ContactDTO] = []
+
+    private var filteredContacts: [ContactDTO] {
+        guard !searchText.isEmpty else { return repeaterContacts }
+        let query = searchText.lowercased()
+        return repeaterContacts.filter {
+            $0.displayName.lowercased().contains(query)
+            || $0.publicKeyHex.lowercased().contains(query)
+            || $0.name.lowercased().contains(query)
+        }
+    }
+
+    private var isValidHexID: Bool {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed.allSatisfy { $0.isHexDigit }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Direct hex entry — shown when the search text is valid hex
+                if isValidHexID {
+                    Section {
+                        Button {
+                            let hexID = searchText.trimmingCharacters(in: .whitespaces).uppercased()
+                            appState.watchRepeater(hexID: hexID, name: nil)
+                            dismiss()
+                        } label: {
+                            Label {
+                                Text("Watch \"\(searchText.trimmingCharacters(in: .whitespaces).uppercased())\"")
+                                    .font(.system(.body, design: .monospaced))
+                            } icon: {
+                                Image(systemName: "binoculars")
+                            }
+                        }
+                    } header: {
+                        Text("By Hex ID")
+                    }
+                }
+
+                // Known repeater contacts
+                if !filteredContacts.isEmpty {
+                    Section {
+                        ForEach(filteredContacts, id: \.id) { contact in
+                            Button {
+                                let hexID = contact.publicKey.prefix(2).map {
+                                    String(format: "%02X", $0)
+                                }.joined()
+                                appState.watchRepeater(hexID: hexID, name: contact.displayName)
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(contact.displayName)
+                                            .font(.system(.body, weight: .medium))
+                                        Text(contact.publicKeyHex.prefix(8) + "…")
+                                            .font(.system(.caption, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "binoculars")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } header: {
+                        Text("Known Repeaters")
+                    }
+                } else if !searchText.isEmpty && !isValidHexID {
+                    Section {
+                        Text("No matches")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .searchable(text: $searchText, prompt: "Name or hex ID")
+            .navigationTitle("Watch Repeater")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                if appState.watchedRepeaterHexID != nil {
+                    ToolbarItem(placement: .destructiveAction) {
+                        Button("Stop", role: .destructive) {
+                            appState.clearWatchedRepeater()
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .task {
+                guard let deviceID = appState.currentDeviceID,
+                      let dataStore = appState.offlineDataStore else { return }
+                let contacts = (try? await dataStore.fetchContacts(deviceID: deviceID)) ?? []
+                repeaterContacts = contacts.filter { $0.type == .repeater }
+                    .sorted { $0.name < $1.name }
+            }
+        }
+    }
+}
+
 // MARK: - Compact Row
 
 private struct RepeaterCompactRow: View {
     let repeater: SignalBarsService.RepeaterSignal
+    var isWatched: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -223,12 +505,14 @@ private struct RepeaterCompactRow: View {
                     Text(name)
                         .font(.system(.caption, weight: .medium))
                         .lineLimit(1)
-                    Text(repeater.id)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
                 } else {
                     Text(repeater.id)
                         .font(.system(.caption, design: .monospaced, weight: .medium))
+                }
+                if repeater.name != nil {
+                    Text(repeater.id)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(width: 52, alignment: .leading)
@@ -316,3 +600,52 @@ private struct RepeaterCompactRow: View {
         }
     }
 }
+
+// MARK: - Watch Tone
+
+/// Available alert tones for the watched repeater ping notification.
+enum WatchTone: String, CaseIterable, Identifiable {
+    case note = "sms-received3"
+    case chime = "sms-received1"
+    case bell = "sms-received5"
+    case tweet = "tweet_sent"
+    case tink = "Tink"
+    case tock = "Tock"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .note: "Note"
+        case .chime: "Chime"
+        case .bell: "Bell"
+        case .tweet: "Tweet"
+        case .tink: "Tink"
+        case .tock: "Tock"
+        }
+    }
+
+    var filePath: String {
+        "/System/Library/Audio/UISounds/\(rawValue).caf"
+    }
+
+    static func current(from id: String) -> WatchTone {
+        WatchTone(rawValue: id) ?? .note
+    }
+
+    @MainActor
+    func playPreview() {
+        let url = URL(fileURLWithPath: filePath)
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
+            try AVAudioSession.sharedInstance().setActive(true)
+            _previewPlayer = try AVAudioPlayer(contentsOf: url)
+            _previewPlayer?.volume = 0.8
+            _previewPlayer?.play()
+        } catch {
+            // Sound file not available on this device
+        }
+    }
+}
+
+@MainActor private var _previewPlayer: AVAudioPlayer?

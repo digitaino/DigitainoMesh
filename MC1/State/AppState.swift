@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import SwiftData
 import UserNotifications
@@ -227,6 +228,92 @@ public final class AppState {
 
     /// Service tracking live repeater signal quality for the toolbar indicator.
     let signalBarsService = SignalBarsService()
+
+    // MARK: - Watched Repeater
+
+    /// Hex ID of the repeater being actively watched for range testing.
+    /// Persisted across app launches.
+    var watchedRepeaterHexID: String? = UserDefaults.standard.string(forKey: "watchedRepeaterHexID") {
+        didSet {
+            if let id = watchedRepeaterHexID {
+                UserDefaults.standard.set(id, forKey: "watchedRepeaterHexID")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "watchedRepeaterHexID")
+                UserDefaults.standard.removeObject(forKey: "watchedRepeaterName")
+            }
+            signalBarsService.watchedRepeaterHexID = watchedRepeaterHexID
+        }
+    }
+
+    /// Resolved display name for the watched repeater.
+    var watchedRepeaterName: String? = UserDefaults.standard.string(forKey: "watchedRepeaterName") {
+        didSet { UserDefaults.standard.set(watchedRepeaterName, forKey: "watchedRepeaterName") }
+    }
+
+    /// Whether to play an audible tone when the watched repeater is heard.
+    var watchedRepeaterSoundEnabled: Bool = UserDefaults.standard.bool(forKey: "watchedRepeaterSoundEnabled") {
+        didSet { UserDefaults.standard.set(watchedRepeaterSoundEnabled, forKey: "watchedRepeaterSoundEnabled") }
+    }
+
+    /// Raw value of the selected WatchTone for the alert sound.
+    var watchedRepeaterToneID: String = UserDefaults.standard.string(forKey: "watchedRepeaterToneID") ?? WatchTone.note.rawValue {
+        didSet { UserDefaults.standard.set(watchedRepeaterToneID, forKey: "watchedRepeaterToneID") }
+    }
+
+    /// Latest RX signal quality from the watched repeater (drives banner display).
+    var watchedRepeaterRxQuality: SNRQuality?
+
+    /// Latest TX signal quality from the watched repeater.
+    var watchedRepeaterTxSnr: Double?
+
+    /// Packet count since watch started.
+    var watchedRepeaterPacketCount: Int = 0
+
+    /// Timestamp of the most recent packet from the watched repeater.
+    var watchedRepeaterLastHeard: Date?
+
+    /// Incremented on each watched repeater packet — drives flash animation.
+    var watchedRepeaterFlashTick: UInt = 0
+
+    /// Start watching a specific repeater.
+    func watchRepeater(hexID: String, name: String?) {
+        watchedRepeaterHexID = hexID
+        watchedRepeaterName = name
+        watchedRepeaterRxQuality = nil
+        watchedRepeaterTxSnr = nil
+        watchedRepeaterPacketCount = 0
+        watchedRepeaterLastHeard = nil
+        watchedRepeaterFlashTick = 0
+    }
+
+    /// Stop watching the current repeater.
+    func clearWatchedRepeater() {
+        watchedRepeaterHexID = nil
+        watchedRepeaterName = nil
+        watchedRepeaterRxQuality = nil
+        watchedRepeaterTxSnr = nil
+        watchedRepeaterPacketCount = 0
+        watchedRepeaterLastHeard = nil
+    }
+
+    /// Retained audio player so it doesn't deallocate mid-playback.
+    private var watchTonePlayer: AVAudioPlayer?
+
+    /// Plays a short ping tone through AirPods/speakers even when the phone is on silent.
+    /// Uses AVAudioSession `.playback` category which bypasses the hardware mute switch.
+    private func playWatchedRepeaterTone() {
+        let tone = WatchTone.current(from: watchedRepeaterToneID)
+        let url = URL(fileURLWithPath: tone.filePath)
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
+            try AVAudioSession.sharedInstance().setActive(true)
+            watchTonePlayer = try AVAudioPlayer(contentsOf: url)
+            watchTonePlayer?.volume = 0.8
+            watchTonePlayer?.play()
+        } catch {
+            logger.debug("Watch tone playback failed: \(error.localizedDescription)")
+        }
+    }
 
     // MARK: - Adaptive Power
 
@@ -479,6 +566,20 @@ public final class AppState {
                 _ = try await services.binaryProtocolService.sendNodeDiscoverRequest(
                     filter: 0x04, prefixOnly: true
                 )
+            }
+
+            // Wire watched repeater tracking
+            signalBarsService.watchedRepeaterHexID = watchedRepeaterHexID
+            signalBarsService.onWatchedRepeaterHeard = { [weak self] hexID, rxSnr, rxQuality, txSnr in
+                guard let self else { return }
+                self.watchedRepeaterRxQuality = rxQuality
+                self.watchedRepeaterTxSnr = txSnr
+                self.watchedRepeaterPacketCount += 1
+                self.watchedRepeaterLastHeard = Date()
+                self.watchedRepeaterFlashTick &+= 1
+                if self.watchedRepeaterSoundEnabled {
+                    self.playWatchedRepeaterTone()
+                }
             }
 
             // Configure adaptive power service
