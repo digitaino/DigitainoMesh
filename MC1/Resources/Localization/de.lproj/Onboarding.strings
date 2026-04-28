@@ -132,6 +132,9 @@
 /* Location: DeviceScanView.swift - Alert message for demo mode */
 "deviceScan.demoModeAlert.message" = "Du kannst jetzt ohne Gerät fortfahren. Schalte den Demo-Modus jederzeit in den Einstellungen um.";
 
+/* Location: ConnectionUIState.presentPairingFailure(_:) - Pairing failure alert messages */
+"deviceScan.error.authenticationFailed" = "Gerät konnte nicht gekoppelt werden. Überprüfe die PIN, entferne dann das Gerät und versuche es erneut.";
+"deviceScan.error.connectionFailed" = "Verbindung zum Gerät fehlgeschlagen. Versuche es erneut, oder entferne das Gerät, wenn das Problem weiterhin besteht.";
 
 // MARK: - Troubleshooting Sheet
 

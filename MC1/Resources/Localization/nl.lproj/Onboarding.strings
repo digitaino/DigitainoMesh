@@ -10,7 +10,7 @@
 // MARK: - Welcome View
 
 /* Location: WelcomeView.swift - App title displayed on welcome screen */
-"welcome.title" = "DigitainoMesh";
+"welcome.title" = "MeshCore One";
 
 /* Location: WelcomeView.swift - Subtitle describing the app */
 "welcome.subtitle" = "Een MeshCore-client voor Apple-apparaten";
@@ -132,6 +132,9 @@
 /* Location: DeviceScanView.swift - Alert message for demo mode */
 "deviceScan.demoModeAlert.message" = "Je kunt nu doorgaan zonder apparaat. Schakel demomodus op elk moment uit via Instellingen.";
 
+/* Location: ConnectionUIState.presentPairingFailure(_:) - Pairing failure alert messages */
+"deviceScan.error.authenticationFailed" = "Kan apparaat niet koppelen. Controleer de pincode, verwijder vervolgens het apparaat en probeer het opnieuw.";
+"deviceScan.error.connectionFailed" = "Kan geen verbinding maken met het apparaat. Probeer het opnieuw, of verwijder het als het probleem aanhoudt.";
 
 // MARK: - Troubleshooting Sheet
 
@@ -190,7 +193,7 @@
 "radioPreset.title" = "Radio-instellingen";
 
 /* Location: RadioPresetOnboardingView.swift - Subtitle with instructions and Discord link */
-"radioPreset.subtitle" = "Je kunt deze instellingen op elk moment wijzigen in de DigitainoMesh-instellingen. Als je niet zeker weet welke preset je moet gebruiken, vraag het in de [MeshCore Discord](https://meshcore.co.uk/contact.html)";
+"radioPreset.subtitle" = "Je kunt deze instellingen op elk moment wijzigen in de MeshCore One-instellingen. Als je niet zeker weet welke preset je moet gebruiken, vraag het in de [MeshCore Discord](https://meshcore.co.uk/contact.html)";
 
 /* Location: RadioPresetOnboardingView.swift - Button label while applying preset */
 "radioPreset.applying" = "Toepassen...";

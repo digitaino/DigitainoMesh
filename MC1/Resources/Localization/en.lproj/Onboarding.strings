@@ -10,7 +10,7 @@
 // MARK: - Welcome View
 
 /* Location: WelcomeView.swift - App title displayed on welcome screen */
-"welcome.title" = "DigitainoMesh";
+"welcome.title" = "MeshCore One";
 
 /* Location: WelcomeView.swift - Subtitle describing the app */
 "welcome.subtitle" = "A MeshCore client for Apple devices";
@@ -132,6 +132,9 @@
 /* Location: DeviceScanView.swift - Alert message for demo mode */
 "deviceScan.demoModeAlert.message" = "You can now continue without a device. Toggle demo mode in Settings anytime.";
 
+/* Location: ConnectionUIState.presentPairingFailure(_:) - Pairing failure alert messages */
+"deviceScan.error.authenticationFailed" = "Couldn't pair the device. Check the PIN, then remove the device and try again.";
+"deviceScan.error.connectionFailed" = "Couldn't connect to the device. Try again, or remove it if the problem continues.";
 
 // MARK: - Troubleshooting Sheet
 
@@ -190,7 +193,7 @@
 "radioPreset.title" = "Radio Settings";
 
 /* Location: RadioPresetOnboardingView.swift - Subtitle with instructions and Discord link */
-"radioPreset.subtitle" = "You can change these settings at any time in DigitainoMesh's Settings. If you're not sure which preset to use, ask in the [MeshCore Discord](https://meshcore.co.uk/contact.html)";
+"radioPreset.subtitle" = "You can change these settings at any time in MeshCore One's Settings. If you're not sure which preset to use, ask in the [MeshCore Discord](https://meshcore.co.uk/contact.html)";
 
 /* Location: RadioPresetOnboardingView.swift - Button label while applying preset */
 "radioPreset.applying" = "Applying...";
