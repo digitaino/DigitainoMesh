@@ -48,16 +48,25 @@ public final class ConnectionUIState {
     /// Message for connection failure alert
     var connectionFailedMessage: String?
 
+    /// Optional override for the connection-failed alert title. nil falls back
+    /// to L10n.Localizable.Alert.ConnectionFailed.title ("Connection Failed").
+    var connectionFailedTitle: String?
+
+    /// Variant of the pairing-failure alert when `failedPairingDeviceID` is set.
+    var pairingFailureKind: PairingFailureKind?
+
     /// Device ID that failed pairing (wrong PIN) - for recovery UI
     var failedPairingDeviceID: UUID?
 
     /// Device ID that triggered "connected to other app" warning - alert shown when non-nil
     var otherAppWarningDeviceID: UUID?
 
-    /// Whether any user-initiated connection attempt is in flight — pairing, retrying after
-    /// "connected to other app", or simulator connect. Drives spinners and disabled buttons in
-    /// `DeviceScanView`. Distinct from `ConnectionManager.isPairingInProgress`, which is narrowly
-    /// scoped to the `pairNewDevice` flow and is consulted by the BLE-layer reconnect gate.
+    /// Whether any user-initiated connection attempt is in flight — pairing
+    /// (`AppState.startDeviceScan`), the transient-failure retry path
+    /// (`AppState.retryFailedPairingConnect`), or simulator connect. Drives
+    /// spinners and disabled buttons across pairing and retry flows. Distinct from
+    /// `ConnectionManager.isPairingInProgress`, which is narrowly scoped to the
+    /// `pairNewDevice` flow and is consulted by the BLE-layer reconnect gate.
     var isBusy = false
 
     /// Whether the device's node storage is full (set by 0x90 push, cleared on delete/overwrite)
@@ -250,6 +259,48 @@ public final class ConnectionUIState {
 
     /// Posts a VoiceOver announcement for connection state changes
     func announceConnectionState(_ message: String) {
-        UIAccessibility.post(notification: .announcement, argument: message)
+        AccessibilityNotification.Announcement(message).post()
     }
+
+    // MARK: - Connection Failure Routing
+
+    func presentConnectionFailure(message: String?) {
+        connectionFailedTitle = nil
+        pairingFailureKind = nil
+        connectionFailedMessage = message
+        showingConnectionFailedAlert = true
+    }
+
+    func presentPairingFailure(_ error: PairingError) {
+        switch error {
+        case .deviceConnectedToOtherApp(let deviceID):
+            otherAppWarningDeviceID = deviceID
+
+        case .connectionFailed(let deviceID, _):
+            failedPairingDeviceID = deviceID
+            if error.isAuthenticationFailure {
+                connectionFailedTitle = L10n.Localizable.Alert.PairingFailed.title
+                connectionFailedMessage = L10n.Onboarding.DeviceScan.Error.authenticationFailed
+                pairingFailureKind = .authentication
+            } else {
+                connectionFailedTitle = nil
+                connectionFailedMessage = L10n.Onboarding.DeviceScan.Error.connectionFailed
+                pairingFailureKind = .transient
+            }
+            showingConnectionFailedAlert = true
+        }
+    }
+}
+
+/// Variant of the pairing-failure alert. Determines whether the recovery action
+/// is destructive (auth: must remove the bond) or non-destructive (transient:
+/// keep the bond, just retry).
+public enum PairingFailureKind: Sendable {
+    /// Authentication failed — bond is bad. Recovery requires removing the bond
+    /// and re-pairing.
+    case authentication
+
+    /// Transient connection failure — bond is good. Recovery prefers a plain
+    /// retry, with destructive remove available as a fallback.
+    case transient
 }
