@@ -86,9 +86,9 @@ extension ConnectionManager {
         if let accessory = accessorySetupKit.accessory(for: deviceID) {
             try? await accessorySetupKit.removeAccessory(accessory)
         }
-        // Defensive write: connectWithRetry's failure path already sets
-        // .disconnected, but switchDevice propagates throws without resetting
-        // state, so this assignment is required for that path.
+        // Defensive backstop — connectWithRetry and switchDevice both reset state
+        // on throw, so this is normally a no-op. Kept so a future cancellation
+        // path that lands here without doing so still leaves a clean UI.
         connectionState = .disconnected
     }
 
