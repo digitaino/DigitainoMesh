@@ -47,6 +47,8 @@ extension ConnectionManager {
         connectionIntent = .wantsConnection()
         persistIntent()
 
+        await stopBLEScanning()
+
         let deviceID = try await accessorySetupKit.showPicker()
 
         if await waitForOtherAppReconnection(deviceID) {

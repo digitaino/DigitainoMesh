@@ -77,6 +77,40 @@ struct ConnectionManagerPairingTests {
         #expect(manager.isPairingInProgress == true)
     }
 
+    @Test("pairNewDevice stops BLE scanning before showing ASK picker")
+    func pairNewDeviceStopsBLEScanningBeforeShowingPicker() async throws {
+        let env = try ConnectionManager.createForPairingTesting()
+        defer { env.cleanup() }
+
+        let stream = env.manager.startBLEScanning()
+        let scanConsumer = Task {
+            for await _ in stream {}
+        }
+        defer { scanConsumer.cancel() }
+
+        try await waitUntil("BLE scanning should start") {
+            await env.stateMachine.isScanning
+        }
+
+        let pickerEntered = AsyncStream<Void>.makeStream()
+        let pickerGate = AsyncStream<Void>.makeStream()
+        env.accessorySetupKit.pickerEnteredSignal = pickerEntered.continuation
+        env.accessorySetupKit.pickerGate = pickerGate.stream
+        env.accessorySetupKit.setPickerResult(.failure(AccessorySetupKitError.pickerDismissed))
+
+        let pairTask = Task {
+            try? await env.manager.pairNewDevice()
+        }
+
+        for await _ in pickerEntered.stream { break }
+
+        #expect(await env.stateMachine.stopScanningCallCount == 1)
+        #expect(await env.stateMachine.isScanning == false)
+
+        pickerGate.continuation.finish()
+        _ = await pairTask.result
+    }
+
     // MARK: - Device Update Tests
 
     @Test("updateDevice(with:) updates connectedDevice")
