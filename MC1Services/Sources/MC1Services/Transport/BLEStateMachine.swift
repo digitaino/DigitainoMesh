@@ -1114,6 +1114,27 @@ extension BLEStateMachine {
         }
     }
 
+    static func makeConnectionError(_ error: Error?, fallback: String = "Unknown error") -> BLEError {
+        if let nsError = error as NSError? {
+            if nsError.domain == CBATTErrorDomain {
+                switch nsError.code {
+                case CBATTError.insufficientAuthentication.rawValue,
+                     CBATTError.insufficientAuthorization.rawValue,
+                     CBATTError.insufficientEncryption.rawValue,
+                     CBATTError.insufficientEncryptionKeySize.rawValue:
+                    return .authenticationFailed
+                default:
+                    break
+                }
+            }
+            if nsError.domain == CBErrorDomain,
+               nsError.code == CBError.encryptionTimedOut.rawValue {
+                return .authenticationFailed
+            }
+        }
+        return .connectionFailed(error?.localizedDescription ?? fallback)
+    }
+
     /// Handles a disconnect where iOS is auto-reconnecting the peripheral.
     /// Setup-phase continuations route through makeConnectionError so a CBATT
     /// auth/encryption code arriving before the bond is established still maps
