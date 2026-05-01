@@ -1,3 +1,4 @@
+import CoreLocation
 import MC1Services
 import SwiftUI
 
@@ -5,6 +6,8 @@ import SwiftUI
 enum MessageAction: Equatable {
     case react(String)
     case reply
+    case replyWithRoute(String, shareFormat: ShareFormat)
+    case replyWithRepeaterMap(url: URL?, description: String)
     case copy
     case sendAgain
     case sendDM
@@ -22,10 +25,13 @@ struct MessageActionsSheet: View {
     let message: MessageDTO
     let senderName: String
     let recentEmojis: [String]
+    let senderContact: ContactDTO?
     let onAction: (MessageAction) -> Void
+    var onDirectMessage: ((ContactDTO) -> Void)?
+    var onViewContact: ((ContactDTO) -> Void)?
 
     private var availability: MessageActionAvailability {
-        MessageActionAvailability(message: message)
+        MessageActionAvailability(message: message, senderContact: senderContact)
     }
 
     private func performAction(_ action: MessageAction) {
@@ -55,7 +61,16 @@ struct MessageActionsSheet: View {
         VStack(spacing: 0) {
             ActionsPreviewHeader(
                 message: message,
-                senderName: senderName
+                senderName: senderName,
+                senderContact: senderContact,
+                onViewContact: { contact in
+                    dismiss()
+                    // Delay to let sheet dismiss before navigating
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        onViewContact?(contact)
+                    }
+                }
             )
 
             Divider()
@@ -74,7 +89,15 @@ struct MessageActionsSheet: View {
                         }
                         ActionsButtonsSection(
                             availability: availability,
-                            onSelectAction: performAction
+                            senderContact: senderContact,
+                            onSelectAction: performAction,
+                            onDirectMessage: { contact in
+                                dismiss()
+                                Task {
+                                    try? await Task.sleep(for: .milliseconds(300))
+                                    onDirectMessage?(contact)
+                                }
+                            }
                         )
                         ActionsDetailsSection(
                             message: message,
@@ -83,7 +106,13 @@ struct MessageActionsSheet: View {
                             repeats: repeats,
                             contacts: contacts,
                             discoveredNodes: discoveredNodes,
-                            pathViewModel: pathViewModel
+                            pathViewModel: pathViewModel,
+                            onReplyWithRoute: { routeInfo, shareFormat in
+                                performAction(.replyWithRoute(routeInfo, shareFormat: shareFormat))
+                            },
+                            onReplyWithRepeaterMap: { url, description in
+                                performAction(.replyWithRepeaterMap(url: url, description: description))
+                            }
                         )
                         ActionsBlockSection(
                             availability: availability,
@@ -128,6 +157,13 @@ struct MessageActionsSheet: View {
                 repeats = await services.heardRepeatsService.refreshRepeats(for: message.id)
             } else if availability.canViewPath {
                 await pathViewModel.loadContacts(services: services, deviceID: message.deviceID)
+                let userLoc: CLLocation? = {
+                    if let lat = message.userLatitude, let lon = message.userLongitude {
+                        return CLLocation(latitude: lat, longitude: lon)
+                    }
+                    return appState.locationService.currentLocation
+                }()
+                pathViewModel.resolveAllHops(message: message, userLocation: userLoc)
             }
         }
     }
@@ -138,6 +174,8 @@ struct MessageActionsSheet: View {
 private struct ActionsPreviewHeader: View {
     let message: MessageDTO
     let senderName: String
+    let senderContact: ContactDTO?
+    let onViewContact: ((ContactDTO) -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -146,6 +184,25 @@ private struct ActionsPreviewHeader: View {
               let keyPrefix = message.senderKeyPrefix,
               let firstByte = keyPrefix.first else { return nil }
         return String(format: "%02X", firstByte)
+    }
+
+    @ViewBuilder
+    private var senderNameLabel: some View {
+        if let contact = senderContact, let onViewContact {
+            Button {
+                onViewContact(contact)
+            } label: {
+                Text(senderName)
+                    .font(.subheadline)
+                    .bold()
+                    .foregroundStyle(.tint)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Text(senderName)
+                .font(.subheadline)
+                .bold()
+        }
     }
 
     var body: some View {
@@ -158,9 +215,7 @@ private struct ActionsPreviewHeader: View {
                             .foregroundStyle(.secondary)
                             .monospaced()
                     }
-                    Text(senderName)
-                        .font(.subheadline)
-                        .bold()
+                    senderNameLabel
                     Spacer()
                     ActionsTimestampLabel(message: message)
                 }
@@ -173,9 +228,7 @@ private struct ActionsPreviewHeader: View {
                                 .foregroundStyle(.secondary)
                                 .monospaced()
                         }
-                        Text(senderName)
-                            .font(.subheadline)
-                            .bold()
+                        senderNameLabel
                     }
                     ActionsTimestampLabel(message: message)
                 }
@@ -220,7 +273,9 @@ private struct ActionsEmojiSection: View {
 
 private struct ActionsButtonsSection: View {
     let availability: MessageActionAvailability
+    let senderContact: ContactDTO?
     let onSelectAction: (MessageAction) -> Void
+    let onDirectMessage: ((ContactDTO) -> Void)?
     @AppStorage("replyWithQuote") private var replyWithQuote = false
 
     var body: some View {
@@ -232,7 +287,13 @@ private struct ActionsButtonsSection: View {
             )
         }
 
-        if availability.canSendDM {
+        if availability.canDirectMessage, let contact = senderContact {
+            ActionButton(
+                title: L10n.Chats.Chats.Message.Action.directMessage,
+                icon: "paperplane",
+                action: { onDirectMessage?(contact) }
+            )
+        } else if availability.canSendDM {
             ActionButton(
                 title: L10n.Chats.Chats.Message.Action.sendDM,
                 icon: "bubble.left.and.bubble.right",
@@ -253,6 +314,8 @@ private struct ActionsButtonsSection: View {
                 action: { onSelectAction(.sendAgain) }
             )
         }
+
+
     }
 }
 
@@ -300,6 +363,16 @@ private struct ActionsDetailsSection: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
+    var onReplyWithRoute: ((String, ShareFormat) -> Void)?
+    var onReplyWithRepeaterMap: ((URL?, String) -> Void)?
+
+    @Environment(\.appState) private var appState
+
+    /// Location recorded on the message at receive time — preferred over current GPS.
+    private var messageLocation: CLLocation? {
+        guard let lat = message.userLatitude, let lon = message.userLongitude else { return nil }
+        return CLLocation(latitude: lat, longitude: lon)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -311,7 +384,9 @@ private struct ActionsDetailsSection: View {
                     repeats: repeats,
                     contacts: contacts,
                     discoveredNodes: discoveredNodes,
-                    pathViewModel: pathViewModel
+                    pathViewModel: pathViewModel,
+                    onReplyWithRoute: onReplyWithRoute,
+                    onReplyWithRepeaterMap: onReplyWithRepeaterMap
                 )
             }
 
@@ -325,7 +400,13 @@ private struct ActionsDetailsSection: View {
             if message.isOutgoing {
                 ActionsOutgoingDetailsRows(message: message)
             } else {
-                ActionsIncomingDetailsRows(message: message)
+                ActionsIncomingDetailsRows(
+                    message: message,
+                    contacts: contacts.isEmpty ? pathViewModel.allContacts : contacts,
+                    discoveredNodes: discoveredNodes.isEmpty ? pathViewModel.allDiscoveredNodes : discoveredNodes,
+                    userLocation: messageLocation ?? appState.locationService.currentLocation,
+                    resolvedDistanceText: pathViewModel.routeDistanceText
+                )
             }
         }
     }
@@ -341,6 +422,8 @@ private struct ActionsExpandableDetailRow: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
+    var onReplyWithRoute: ((String, ShareFormat) -> Void)?
+    var onReplyWithRepeaterMap: ((URL?, String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -379,7 +462,9 @@ private struct ActionsExpandableDetailRow: View {
                     repeats: repeats,
                     contacts: contacts,
                     discoveredNodes: discoveredNodes,
-                    pathViewModel: pathViewModel
+                    pathViewModel: pathViewModel,
+                    onReplyWithRoute: onReplyWithRoute,
+                    onReplyWithRepeaterMap: onReplyWithRepeaterMap
                 )
                 .padding(.horizontal)
                 .padding(.bottom)
@@ -398,6 +483,26 @@ private struct ActionsExpandedContent: View {
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
     let pathViewModel: MessagePathViewModel
+    var onReplyWithRoute: ((String, ShareFormat) -> Void)?
+    var onReplyWithRepeaterMap: ((URL?, String) -> Void)?
+
+    @State private var showingRepeatsMap = false
+    @State private var isSharing = false
+    @State private var showingShareFormatPicker = false
+    /// Set to true when the user picks "Web Link" — the location picker opens
+    /// after the format picker sheet fully dismisses (via onChange).
+    @State private var pendingLocationPicker = false
+    @State private var showingLocationPicker = false
+    /// When true, the share was attempted but no location is available — skip the
+    /// location picker and share without a location.
+    @State private var noLocationAvailable = false
+
+
+    /// Location recorded on the message at receive time — preferred over current GPS.
+    private var messageLocation: CLLocation? {
+        guard let lat = message.userLatitude, let lon = message.userLongitude else { return nil }
+        return CLLocation(latitude: lat, longitude: lon)
+    }
 
     var body: some View {
         if availability.canShowRepeatDetails {
@@ -405,20 +510,226 @@ private struct ActionsExpandedContent: View {
                 repeats: repeats,
                 contacts: contacts,
                 discoveredNodes: discoveredNodes,
-                userLocation: appState.bestAvailableLocation
+                userLocation: messageLocation ?? appState.locationService.currentLocation
             )
+
+            if let repeats, !repeats.isEmpty {
+                HStack(spacing: 8) {
+                    Button {
+                        showingRepeatsMap = true
+                    } label: {
+                        Label(L10n.Chats.Chats.HeardRepeats.Map.viewOnMap, systemImage: "map")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .sheet(isPresented: $showingRepeatsMap) {
+                        HeardRepeatsMapSheet(
+                            repeats: repeats,
+                            contacts: contacts,
+                            discoveredNodes: discoveredNodes,
+                            messageLocation: messageLocation
+                        )
+                    }
+
+                    Button {
+                        showingShareFormatPicker = true
+                    } label: {
+                        if isSharing {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isSharing)
+                    .sheet(isPresented: $showingShareFormatPicker) {
+                        ShareFormatPickerSheet { format in
+                            if format == .textOnly {
+                                shareHeardRepeatsTextOnly(repeats: repeats)
+                            } else {
+                                pendingLocationPicker = true
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 8)
+                // Open the location picker after the format picker fully dismisses.
+                // Using onChange instead of onDismiss avoids timing races.
+                .onChange(of: showingShareFormatPicker) { _, isShowing in
+                    if !isShowing && pendingLocationPicker {
+                        pendingLocationPicker = false
+                        if trueLocationCoordinate != nil {
+                            showingLocationPicker = true
+                        } else {
+                            noLocationAvailable = true
+                        }
+                    }
+                }
+                // Use fullScreenCover instead of .sheet to avoid nested-sheet
+                // conflicts — this view is already inside MessageActionsSheet.
+                .fullScreenCover(isPresented: $showingLocationPicker) {
+                    ShareLocationPickerSheet(trueLocation: trueLocationCoordinate!) { chosenCoordinate in
+                        Task {
+                            await shareHeardRepeaters(
+                                repeats: repeats,
+                                chosenCoordinate: chosenCoordinate
+                            )
+                        }
+                    }
+                }
+                .onChange(of: noLocationAvailable) { _, shouldShare in
+                    if shouldShare {
+                        noLocationAvailable = false
+                        Task {
+                            await shareHeardRepeaters(
+                                repeats: repeats,
+                                chosenCoordinate: nil
+                            )
+                        }
+                    }
+                }
+            }
         } else if availability.canViewPath {
             MessagePathContent(
                 message: message,
                 viewModel: pathViewModel,
                 receiverName: appState.connectedDevice?.nodeName ?? L10n.Chats.Chats.Path.Receiver.you,
-                userLocation: appState.bestAvailableLocation
+                userLocation: messageLocation ?? appState.locationService.currentLocation,
+                onReplyWithRoute: onReplyWithRoute
             )
         }
+    }
+
+    // MARK: - Location
+
+    /// The user's true location coordinate for the location picker.
+    /// Prefers the location recorded on the message; falls back to current GPS.
+    private var trueLocationCoordinate: CLLocationCoordinate2D? {
+        if let lat = message.userLatitude, let lon = message.userLongitude {
+            return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        }
+        return appState.locationService.currentLocation?.coordinate
+    }
+
+    // MARK: - Share Heard Repeaters
+
+    private func shareHeardRepeaters(
+        repeats: [MessageRepeatDTO],
+        chosenCoordinate: CLLocationCoordinate2D?
+    ) async {
+        isSharing = true
+        defer { isSharing = false }
+
+        let repeaterContacts = contacts.filter { $0.type == .repeater }
+
+        // Use the location recorded on the message at receive time for repeater
+        // matching — the user may be somewhere else when they share.
+        let userLocation: CLLocation? = {
+            guard let lat = message.userLatitude, let lon = message.userLongitude else { return nil }
+            return CLLocation(latitude: lat, longitude: lon)
+        }()
+
+        // Aggregate unique repeaters across all repeats
+        var repeaterMap: [String: (contact: ContactDTO?, heardCount: Int, snrSum: Double, snrCount: Int, rssiSum: Double, rssiCount: Int)] = [:]
+
+        // Build per-repeat path data for map line rendering
+        var repeatPaths: [RouteShareService.RepeatPath] = []
+
+        for repeatDTO in repeats {
+            guard !repeatDTO.pathNodes.isEmpty else { continue }
+
+            let hashes = RouteAggregator.parseHopHashes(
+                pathNodes: repeatDTO.pathNodes,
+                hashSize: repeatDTO.hashSize
+            )
+            guard !hashes.isEmpty else { continue }
+
+            // Build path hop hex IDs for this repeat
+            let hopHexIDs = hashes.map { hash in
+                hash.map { String(format: "%02X", $0) }.joined()
+            }
+            repeatPaths.append(RouteShareService.RepeatPath(
+                hops: hopHexIDs,
+                snr: repeatDTO.snr
+            ))
+
+            for hash in hashes {
+                let hexID = hash.map { String(format: "%02X", $0) }.joined()
+                var entry = repeaterMap[hexID] ?? (contact: nil, heardCount: 0, snrSum: 0, snrCount: 0, rssiSum: 0, rssiCount: 0)
+
+                if entry.contact == nil {
+                    entry.contact = RepeaterResolver.bestMatch(for: hash, in: repeaterContacts, userLocation: userLocation)
+                }
+
+                entry.heardCount += 1
+                if let snr = repeatDTO.snr {
+                    entry.snrSum += snr
+                    entry.snrCount += 1
+                }
+                if let rssi = repeatDTO.rssi {
+                    entry.rssiSum += Double(rssi)
+                    entry.rssiCount += 1
+                }
+
+                repeaterMap[hexID] = entry
+            }
+        }
+
+        let repeaterInfos: [RouteShareService.RepeaterInfo] = repeaterMap.map { hexID, entry in
+            RouteShareService.RepeaterInfo(
+                hexID: hexID,
+                name: entry.contact?.displayName,
+                latitude: entry.contact?.hasLocation == true ? entry.contact?.latitude : nil,
+                longitude: entry.contact?.hasLocation == true ? entry.contact?.longitude : nil,
+                heardCount: entry.heardCount,
+                avgSNR: entry.snrCount > 0 ? entry.snrSum / Double(entry.snrCount) : nil,
+                avgRSSI: entry.rssiCount > 0 ? entry.rssiSum / Double(entry.rssiCount) : nil
+            )
+        }
+
+        guard !repeaterInfos.isEmpty else { return }
+
+        let service = RouteShareService()
+        if let url = await service.shareRepeaterMap(
+            repeaters: repeaterInfos,
+            paths: repeatPaths.isEmpty ? nil : repeatPaths,
+            userLatitude: chosenCoordinate?.latitude,
+            userLongitude: chosenCoordinate?.longitude,
+            userName: appState.connectedDevice?.nodeName
+        ) {
+            let hexList = repeaterInfos.map(\.hexID).joined(separator: ", ")
+            let repeatWord = repeats.count == 1 ? "repeat" : "repeats"
+            let description = "📡 \(repeats.count) \(repeatWord) via \(hexList)"
+            onReplyWithRepeaterMap?(url, description)
+        }
+    }
+
+    /// Text-only share: build description without uploading to server.
+    private func shareHeardRepeatsTextOnly(repeats: [MessageRepeatDTO]) {
+        var repeaterHexIDs: Set<String> = []
+        for repeatDTO in repeats {
+            let hashes = RouteAggregator.parseHopHashes(
+                pathNodes: repeatDTO.pathNodes,
+                hashSize: repeatDTO.hashSize
+            )
+            for hash in hashes {
+                let hexID = hash.map { String(format: "%02X", $0) }.joined()
+                repeaterHexIDs.insert(hexID)
+            }
+        }
+
+        let hexList = repeaterHexIDs.sorted().joined(separator: ", ")
+        let repeatWord = repeats.count == 1 ? "repeat" : "repeats"
+        let description = "📡 \(repeats.count) \(repeatWord) via \(hexList)"
+        onReplyWithRepeaterMap?(nil, description)
     }
 }
 
 private struct ActionsOutgoingDetailsRows: View {
+    @Environment(\.appState) private var appState
     let message: MessageDTO
 
     var body: some View {
@@ -435,15 +746,41 @@ private struct ActionsOutgoingDetailsRows: View {
                 : L10n.Chats.Chats.Message.Repeat.plural
             ActionInfoRow(text: L10n.Chats.Chats.Message.Info.heardRepeats(message.heardRepeats, word))
         }
+
+        if let dbm = message.txPowerDbm {
+            let paGain = appState.adaptivePowerService.paGainDb
+            let eirpDbm = Double(dbm) + paGain
+            let mw = pow(10.0, eirpDbm / 10.0)
+            let mwLabel = mw >= 1000 ? String(format: "%.1fW", mw / 1000) : "\(Int(round(mw)))mW"
+            ActionInfoRow(text: "TX Power: \(dbm)dBm radio · \(mwLabel) EIRP")
+        }
     }
 }
 
 private struct ActionsIncomingDetailsRows: View {
     let message: MessageDTO
+    var contacts: [ContactDTO] = []
+    var discoveredNodes: [DiscoveredNodeDTO] = []
+    var userLocation: CLLocation?
+    /// Pre-computed distance from the path view model's resolved hops (single source of truth).
+    /// Falls back to independent computation when nil (e.g. heard-repeats mode).
+    var resolvedDistanceText: String?
+
+    private var distanceText: String? {
+        if let resolvedDistanceText { return resolvedDistanceText }
+        guard let result = RouteDistanceCalculator.computeRouteDistance(
+            message: message,
+            contacts: contacts,
+            discoveredNodes: discoveredNodes,
+            userLocation: userLocation
+        ) else { return nil }
+        return RouteDistanceCalculator.formatTotal(result.meters, hasGaps: result.hasGaps)
+    }
 
     var body: some View {
         ActionInfoRow(
-            text: L10n.Chats.Chats.Message.Info.hops(hopCountFormatted(message)),
+            text: L10n.Chats.Chats.Message.Info.hops(MessagePathFormatter.format(message))
+                + (distanceText.map { " · \($0)" } ?? ""),
             icon: "arrowshape.bounce.right"
         )
 
@@ -461,7 +798,19 @@ private struct ActionsIncomingDetailsRows: View {
     }
 
     private func snrFormatted(_ snr: Double) -> String {
-        let quality = SNRQuality(snr: snr).localizedLabel
+        let quality: String
+        switch snr {
+        case 10...:
+            quality = L10n.Chats.Chats.Signal.excellent
+        case 5..<10:
+            quality = L10n.Chats.Chats.Signal.good
+        case 0..<5:
+            quality = L10n.Chats.Chats.Signal.fair
+        case -10..<0:
+            quality = L10n.Chats.Chats.Signal.poor
+        default:
+            quality = L10n.Chats.Chats.Signal.veryPoor
+        }
         return "\(snr.formatted(.number.precision(.fractionLength(1)))) dB (\(quality))"
     }
 
@@ -528,7 +877,7 @@ private struct ActionInfoRow: View {
         message: MessageDTO(from: message),
         senderName: "My Device",
         recentEmojis: RecentEmojisStore.defaultEmojis,
-
+        senderContact: nil,
         onAction: { print("Action: \($0)") }
     )
 }
@@ -548,7 +897,7 @@ private struct ActionInfoRow: View {
         message: MessageDTO(from: message),
         senderName: "Alice",
         recentEmojis: RecentEmojisStore.defaultEmojis,
-
+        senderContact: nil,
         onAction: { print("Action: \($0)") }
     )
 }

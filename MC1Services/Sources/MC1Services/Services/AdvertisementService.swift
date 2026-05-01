@@ -151,9 +151,9 @@ public actor AdvertisementService {
             let filter = EventFilter { event in
                 switch event {
                 case .advertisement, .newContact, .pathUpdate, .pathResponse,
-                     .traceData, .contactDeleted, .contactsFull:
+                     .traceData, .contactDeleted, .contactsFull, .discoverResponse:
                     return true
-                case .rxLogData(let log) where log.payloadType == .trace:
+                case .rxLogData:
                     return true
                 default:
                     return false

@@ -279,7 +279,7 @@ public final class ConnectionUIState {
         case .connectionFailed(let deviceID, _):
             failedPairingDeviceID = deviceID
             if error.isAuthenticationFailure {
-                connectionFailedTitle = L10n.Localizable.Alert.PairingFailed.title
+                connectionFailedTitle = "Pairing Failed"
                 connectionFailedMessage = L10n.Onboarding.DeviceScan.Error.authenticationFailed
                 pairingFailureKind = .authentication
             } else {

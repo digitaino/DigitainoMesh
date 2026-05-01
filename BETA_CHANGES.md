@@ -1,4 +1,41 @@
-Beta Changes -- v0.10.1 (Build 32)
+Beta Changes -- v0.10.1 (Build 33)
+
+Upstream Cherry-Picks & Bug Fixes
+
+Cherry-picked safe upstream fixes and features from PocketMesh without adopting the MapLibre migration or deviceID→radioID rename.
+
+Discover Neighbours in Repeater Status
+
+Admin users can now trigger a "Discover Neighbours" command from the Neighbours section in repeater status. Sends the discover.neighbors CLI command, then polls the binary neighbours endpoint every 3 seconds for 60 seconds, updating the list in real time as nodes respond. The button toggles to show a live countdown and stops discovery on tap. Pull-to-refresh and toolbar refresh skip the neighbour fetch during active discovery to avoid conflicts.
+
+Restored Features After Cherry-Pick Breakage
+
+Fixed upstream cherry-pick regressions that stripped personal features: route maps, repeater maps, view contact, TX power display, and distance calculation in the message actions sheet are all restored. SendDM feature added — send a DM to a channel message sender even without a resolved contact, via a new picker sheet.
+
+Signal Bars & Repeater Tracking Fixes
+
+Fixed signal bars permanently showing "Scanning for repeaters..." by adding `.discoverResponse` back to the AdvertisementService EventFilter. Fixed passive repeater tracking only showing 1 repeater by removing an overly restrictive `.rxLogData` filter that blocked relayed packets.
+
+Keyboard & Input Fixes (upstream)
+
+Keep keyboard visible when sending the first message in a conversation. Ghost-text workaround (Apple FB13727682) via InlinePredictionFix that disables inline predictions on the backing UITextView. Force TextField re-creation on send with focus restoration to clear reliably.
+
+Additional Upstream Fixes
+
+- Survive background launch before first unlock (BFU data protection fallback)
+- R1 Neo and LTO battery curves updated from measured data
+- Decode pathLength before displaying hop count (uses new isDirect/hopCount properties)
+- Suppress low battery alerts for batteryless devices
+- Fix inconsistent x-axis date format in telemetry charts
+- Prioritize query hint over deviceTime heuristic in CLIResponse.parse
+- Restored weather channel detection patterns (meshwx-discover, -meshwx-v4)
+- Fixed DiagnosticsSection data race with @MainActor isolation
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 32)
 
 Signal Bars TX SNR & Power Layout
 

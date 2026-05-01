@@ -25,6 +25,9 @@ public final class AppState {
     /// App-wide location service for permission management
     public let locationService = LocationService()
 
+    /// The most recent cached location, if available.
+    public var bestAvailableLocation: CLLocation? { locationService.currentLocation }
+
     // MARK: - Weather
 
     /// In-memory cache for MeshWX weather data from the #meshwx channel

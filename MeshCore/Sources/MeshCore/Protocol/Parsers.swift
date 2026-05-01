@@ -740,7 +740,7 @@ public enum Parsers {
         /// - Offset 49 (2 bytes): Last SNR scaled by 4 (Int16 LE)
         /// - Offset 51 (4 bytes): Duplicate counters
         /// - Offset 55 (4 bytes): Receive airtime
-        static func parse(_ data: Data) -> MeshEvent {
+        static func parse(_ data: Data, layout: MeshCore.StatusResponse.Layout = .repeater) -> MeshEvent {
             guard data.count >= PacketSize.statusResponseMinimum else {
                 return .parseFailure(
                     data: data,
@@ -771,6 +771,7 @@ public enum Parsers {
             let receiveErrors: UInt32 = data.count >= offset + 4 ? data.readUInt32LE(at: offset) : 0
 
             return .statusResponse(MeshCore.StatusResponse(
+                layout: layout,
                 publicKeyPrefix: pubkeyPrefix,
                 battery: battery,
                 txQueueLength: txQueueLen,
@@ -820,7 +821,11 @@ public enum Parsers {
         ///   - data: Raw binary response payload (without the 4-byte tag).
         ///   - publicKeyPrefix: The 6-byte public key prefix from the pending request context.
         /// - Returns: A `StatusResponse` if parsing succeeds, `nil` otherwise.
-        static func parseFromBinaryResponse(_ data: Data, publicKeyPrefix: Data) -> MeshCore.StatusResponse? {
+        static func parseFromBinaryResponse(
+            _ data: Data,
+            publicKeyPrefix: Data,
+            layout: MeshCore.StatusResponse.Layout = .repeater
+        ) -> MeshCore.StatusResponse? {
             // Accept exactly 48 (no rxAirtime), 52 (with rxAirtime), or 56+ (with receiveErrors).
             // Reject malformed payloads with incomplete fields (49-51, 53-55).
             guard data.count == PacketSize.binaryResponseStatusBase ||
@@ -851,6 +856,7 @@ public enum Parsers {
                 ? data.readUInt32LE(at: offset) : 0
 
             return MeshCore.StatusResponse(
+                layout: layout,
                 publicKeyPrefix: publicKeyPrefix,
                 battery: battery,
                 txQueueLength: txQueueLen,
@@ -1760,5 +1766,24 @@ enum NeighboursParser {
             totalCount: totalCount,
             neighbours: neighbours
         )
+    }
+}
+
+// MARK: - Regions Parser
+
+enum RegionsParser {
+    static func parse(_ responseData: Data) throws -> [String] {
+        guard responseData.count >= 4 else {
+            throw MeshCoreError.parseError("Region response too short (\(responseData.count) bytes)")
+        }
+        let regionData = responseData.dropFirst(4)
+        guard let regionString = String(data: regionData, encoding: .utf8) else {
+            throw MeshCoreError.parseError("Invalid UTF-8 in region response")
+        }
+        let trimmed = regionString.trimmingCharacters(in: .controlCharacters)
+        if trimmed.isEmpty { return [] }
+        return trimmed.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0 != "*" }
     }
 }

@@ -42,8 +42,6 @@ public final class NodeStatusSnapshot {
     public var nodePublicKey: Data
 
     // MARK: - Radio metrics
-    // Intentionally excluded: txQueueLength, airtime, sentFlood, sentDirect,
-    // receivedFlood, receivedDirect, fullEvents, directDuplicates, floodDuplicates, receiveErrors
 
     public var batteryMillivolts: UInt16?
     public var lastSNR: Double?
@@ -53,6 +51,9 @@ public final class NodeStatusSnapshot {
     public var rxAirtimeSeconds: UInt32?
     public var packetsSent: UInt32?
     public var packetsReceived: UInt32?
+    public var receiveErrors: UInt32?
+    public var postedCount: UInt16?
+    public var postPushCount: UInt16?
 
     // MARK: - Optional neighbor/telemetry data
 
@@ -74,6 +75,9 @@ public final class NodeStatusSnapshot {
         rxAirtimeSeconds: UInt32? = nil,
         packetsSent: UInt32? = nil,
         packetsReceived: UInt32? = nil,
+        receiveErrors: UInt32? = nil,
+        postedCount: UInt16? = nil,
+        postPushCount: UInt16? = nil,
         neighborSnapshots: [NeighborSnapshotEntry]? = nil,
         telemetryEntries: [TelemetrySnapshotEntry]? = nil
     ) {
@@ -88,6 +92,9 @@ public final class NodeStatusSnapshot {
         self.rxAirtimeSeconds = rxAirtimeSeconds
         self.packetsSent = packetsSent
         self.packetsReceived = packetsReceived
+        self.receiveErrors = receiveErrors
+        self.postedCount = postedCount
+        self.postPushCount = postPushCount
         self.neighborSnapshots = neighborSnapshots
         self.telemetryEntries = telemetryEntries
     }
@@ -107,6 +114,9 @@ public struct NodeStatusSnapshotDTO: Sendable, Equatable, Identifiable {
     public let rxAirtimeSeconds: UInt32?
     public let packetsSent: UInt32?
     public let packetsReceived: UInt32?
+    public let receiveErrors: UInt32?
+    public let postedCount: UInt16?
+    public let postPushCount: UInt16?
     public let neighborSnapshots: [NeighborSnapshotEntry]?
     public let telemetryEntries: [TelemetrySnapshotEntry]?
 
@@ -122,6 +132,9 @@ public struct NodeStatusSnapshotDTO: Sendable, Equatable, Identifiable {
         self.rxAirtimeSeconds = model.rxAirtimeSeconds
         self.packetsSent = model.packetsSent
         self.packetsReceived = model.packetsReceived
+        self.receiveErrors = model.receiveErrors
+        self.postedCount = model.postedCount
+        self.postPushCount = model.postPushCount
         self.neighborSnapshots = model.neighborSnapshots
         self.telemetryEntries = model.telemetryEntries
     }
@@ -138,6 +151,9 @@ public struct NodeStatusSnapshotDTO: Sendable, Equatable, Identifiable {
         rxAirtimeSeconds: UInt32? = nil,
         packetsSent: UInt32? = nil,
         packetsReceived: UInt32? = nil,
+        receiveErrors: UInt32? = nil,
+        postedCount: UInt16? = nil,
+        postPushCount: UInt16? = nil,
         neighborSnapshots: [NeighborSnapshotEntry]? = nil,
         telemetryEntries: [TelemetrySnapshotEntry]? = nil
     ) {
@@ -152,6 +168,9 @@ public struct NodeStatusSnapshotDTO: Sendable, Equatable, Identifiable {
         self.rxAirtimeSeconds = rxAirtimeSeconds
         self.packetsSent = packetsSent
         self.packetsReceived = packetsReceived
+        self.receiveErrors = receiveErrors
+        self.postedCount = postedCount
+        self.postPushCount = postPushCount
         self.neighborSnapshots = neighborSnapshots
         self.telemetryEntries = telemetryEntries
     }

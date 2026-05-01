@@ -138,6 +138,15 @@ public final class Message {
     /// Format: "👍:3,❤️:2,😂:1" (emoji:count pairs, ordered by count desc)
     public var reactionSummary: String?
 
+    /// User's latitude when the message was sent or received
+    public var userLatitude: Double?
+
+    /// User's longitude when the message was sent or received
+    public var userLongitude: Double?
+
+    /// TX power level in dBm used when sending (outgoing only)
+    public var txPowerDbm: Int8?
+
     /// Route type from RxLog correlation (-1 = unknown/uncorrelated)
     public var routeTypeRawValue: Int = -1
 
@@ -180,6 +189,9 @@ public final class Message {
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
         reactionSummary: String? = nil,
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil,
+        txPowerDbm: Int8? = nil,
         routeTypeRawValue: Int = -1
     ) {
         self.id = id
@@ -216,6 +228,9 @@ public final class Message {
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary
+        self.userLatitude = userLatitude
+        self.userLongitude = userLongitude
+        self.txPowerDbm = txPowerDbm
         self.routeTypeRawValue = routeTypeRawValue
     }
 }
@@ -299,6 +314,9 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
     public var timestampCorrected: Bool
     public var senderTimestamp: UInt32?
     public var reactionSummary: String?
+    public var userLatitude: Double?
+    public var userLongitude: Double?
+    public var txPowerDbm: Int8?
     public var routeType: RouteType?
 
     public init(from message: Message) {
@@ -336,6 +354,9 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.timestampCorrected = message.timestampCorrected
         self.senderTimestamp = message.senderTimestamp
         self.reactionSummary = message.reactionSummary
+        self.userLatitude = message.userLatitude
+        self.userLongitude = message.userLongitude
+        self.txPowerDbm = message.txPowerDbm
         self.routeType = UInt8(exactly: message.routeTypeRawValue)
             .flatMap(RouteType.init(rawValue:))
     }
@@ -376,6 +397,9 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         timestampCorrected: Bool = false,
         senderTimestamp: UInt32? = nil,
         reactionSummary: String? = nil,
+        userLatitude: Double? = nil,
+        userLongitude: Double? = nil,
+        txPowerDbm: Int8? = nil,
         routeType: RouteType? = nil
     ) {
         self.id = id
@@ -412,6 +436,9 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable {
         self.timestampCorrected = timestampCorrected
         self.senderTimestamp = senderTimestamp
         self.reactionSummary = reactionSummary
+        self.userLatitude = userLatitude
+        self.userLongitude = userLongitude
+        self.txPowerDbm = txPowerDbm
         self.routeType = routeType
     }
 

@@ -72,7 +72,7 @@ struct DiagnosticsSection: View {
     private func clearDebugLogs() {
         let dataStore = appState.services?.dataStore ?? appState.connectionManager.createStandalonePersistenceStore()
 
-        Task {
+        Task { @MainActor in
             do {
                 try await dataStore.clearDebugLogEntries()
             } catch {

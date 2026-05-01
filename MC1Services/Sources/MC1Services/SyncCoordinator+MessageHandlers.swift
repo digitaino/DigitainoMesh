@@ -120,10 +120,10 @@ extension SyncCoordinator {
                 deduplicationKey: deduplicationKey,
                 containsSelfMention: hasSelfMention,
                 mentionSeen: false,
-                userLatitude: userLoc?.latitude,
-                userLongitude: userLoc?.longitude,
                 timestampCorrected: timestampCorrected,
                 senderTimestamp: timestampCorrected ? timestamp : nil,
+                userLatitude: userLoc?.latitude,
+                userLongitude: userLoc?.longitude,
                 routeType: rxResult.routeType
             )
 
@@ -298,10 +298,10 @@ extension SyncCoordinator {
                 deduplicationKey: deduplicationKey,
                 containsSelfMention: hasSelfMention,
                 mentionSeen: false,
-                userLatitude: userLoc?.latitude,
-                userLongitude: userLoc?.longitude,
                 timestampCorrected: timestampCorrected,
                 senderTimestamp: timestampCorrected ? timestamp : nil,
+                userLatitude: userLoc?.latitude,
+                userLongitude: userLoc?.longitude,
                 routeType: rxResult.routeType
             )
 
@@ -449,11 +449,7 @@ extension SyncCoordinator {
             guard let self else { return }
 
             if let contact {
-                if contact.type == .room {
-                    await services.roomAdminService.invokeCLIHandler(message, fromContact: contact)
-                } else {
-                    await services.repeaterAdminService.invokeCLIHandler(message, fromContact: contact)
-                }
+                await services.repeaterAdminService.invokeCLIHandler(message, fromContact: contact)
             } else {
                 self.logger.warning("Dropping CLI response: no contact found for sender")
             }
@@ -1149,9 +1145,26 @@ extension SyncCoordinator {
         return (nil, text)
     }
 
+    public nonisolated static func isWeatherSystemChannel(_ name: String, commandChannelName: String) -> Bool {
+        let lower = name.lowercased()
+        if isDiscoveryChannel(name) { return false }
+        return isWeatherDataChannel(name)
+            || lower == commandChannelName.lowercased()
+            || lower.hasSuffix("-wx-bot")
+            || lower == "wx-bot"
+    }
+
+    public nonisolated static func isDiscoveryChannel(_ name: String) -> Bool {
+        name.lowercased().hasSuffix("meshwx-discover")
+    }
+
     public nonisolated static func isWeatherDataChannel(_ name: String) -> Bool {
         let lowered = name.lowercased()
-        return lowered.hasSuffix("wx-broadcast") || lowered == "#meshwx" || lowered == "meshwx"
+        return lowered == "meshwx"
+            || lowered == "#meshwx"
+            || lowered.hasSuffix("wx-broadcast")
+            || lowered.hasSuffix("meshwx-discover")
+            || lowered.hasSuffix("-meshwx-v4")
     }
 
     public nonisolated static func isWeatherRelatedChannel(_ name: String) -> Bool {

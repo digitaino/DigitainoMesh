@@ -275,6 +275,14 @@ extension PersistenceStore {
         return try modelContext.fetch(descriptor).first.map { MessageDTO(from: $0) }
     }
 
+    public func fetchMessage(ackCode: UInt32) throws -> MessageDTO? {
+        let targetCode = ackCode
+        let predicate = #Predicate<Message> { $0.ackCode == targetCode }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first.map { MessageDTO(from: $0) }
+    }
+
     /// Fetch a message linked to a survey point by its packet hash.
     ///
     /// First tries a direct `deduplicationKey` match (works when the RxLog lookup
@@ -357,10 +365,10 @@ extension PersistenceStore {
             deduplicationKey: dto.deduplicationKey,
             containsSelfMention: dto.containsSelfMention,
             mentionSeen: dto.mentionSeen,
-            userLatitude: dto.userLatitude,
-            userLongitude: dto.userLongitude,
             timestampCorrected: dto.timestampCorrected,
             senderTimestamp: dto.senderTimestamp,
+            userLatitude: dto.userLatitude,
+            userLongitude: dto.userLongitude,
             routeTypeRawValue: dto.routeType.map { Int($0.rawValue) } ?? -1
         )
         modelContext.insert(message)

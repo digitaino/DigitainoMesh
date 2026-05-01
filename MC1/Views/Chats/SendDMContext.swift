@@ -4,5 +4,5 @@ import Foundation
 struct SendDMContext: Identifiable {
     let id = UUID()
     let senderName: String
-    let radioID: UUID
+    let deviceID: UUID
 }

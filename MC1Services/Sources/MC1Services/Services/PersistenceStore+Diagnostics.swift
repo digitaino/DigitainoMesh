@@ -158,6 +158,18 @@ extension PersistenceStore {
         return entries.map { RxLogEntryDTO(from: $0) }
     }
 
+    public func fetchRxLogEntries(deviceID: UUID, since: Date) throws -> [RxLogEntryDTO] {
+        let targetDeviceID = deviceID
+        let cutoff = since
+        var descriptor = FetchDescriptor<RxLogEntry>(
+            predicate: #Predicate { $0.deviceID == targetDeviceID && $0.receivedAt >= cutoff },
+            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 10_000
+        let entries = try modelContext.fetch(descriptor)
+        return entries.map { RxLogEntryDTO(from: $0) }
+    }
+
     /// Count RX log entries for a device.
     public func countRxLogEntries(deviceID: UUID) throws -> Int {
         let targetDeviceID = deviceID
@@ -295,6 +307,29 @@ extension PersistenceStore {
         }
 
         return match.map { RxLogEntryDTO(from: $0) }
+    }
+
+    public func fetchRecentDMEntriesWithoutTimestamp(deviceID: UUID, since: Date) throws -> [RxLogEntryDTO] {
+        let targetDeviceID = deviceID
+        let cutoff = since
+        let predicate = #Predicate<RxLogEntry> { entry in
+            entry.deviceID == targetDeviceID &&
+            entry.channelIndex == nil &&
+            entry.senderTimestamp == nil &&
+            entry.receivedAt >= cutoff
+        }
+        var descriptor = FetchDescriptor<RxLogEntry>(predicate: predicate)
+        descriptor.sortBy = [SortDescriptor(\.receivedAt, order: .reverse)]
+        return try modelContext.fetch(descriptor).map { RxLogEntryDTO(from: $0) }
+    }
+
+    public func fetchOldestRxLogDate(deviceID: UUID) throws -> Date? {
+        let targetDeviceID = deviceID
+        let predicate = #Predicate<RxLogEntry> { $0.deviceID == targetDeviceID }
+        var descriptor = FetchDescriptor<RxLogEntry>(predicate: predicate)
+        descriptor.sortBy = [SortDescriptor(\.receivedAt, order: .forward)]
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first?.receivedAt
     }
 
     /// Fetch recent RX log entries with a given decrypt status.

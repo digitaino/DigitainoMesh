@@ -12,7 +12,7 @@ struct BlockSenderSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let senderName: String
-    let radioID: UUID
+    let deviceID: UUID
     let onBlock: (_ blockedContactIDs: Set<UUID>) -> Void
 
     @State private var matchingContacts: [ContactDTO] = []
@@ -67,7 +67,7 @@ struct BlockSenderSheet: View {
         }
 
         do {
-            let allContacts = try await store.fetchContacts(radioID: radioID)
+            let allContacts = try await store.fetchContacts(deviceID: deviceID)
             matchingContacts = SenderContactMatcher.filter(
                 contacts: allContacts,
                 senderName: senderName,

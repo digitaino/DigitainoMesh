@@ -582,7 +582,30 @@ public struct ChannelInfo: Sendable, Equatable {
 /// - Binary request responses: offset=0, fields start immediately after response code
 /// - Push notification responses: offset=8, pubkey_prefix at bytes 2-8, fields follow
 /// The parser must handle both cases based on whether this is a solicited vs unsolicited response
+/// Represents owner information from a remote repeater.
+///
+/// The firmware responds with a UTF-8 string: `"<firmware_ver>\n<node_name>\n<owner_info>"`.
+public struct OwnerInfoResponse: Sendable {
+    public let firmwareVersion: String
+    public let nodeName: String
+    public let ownerInfo: String
+
+    public init(firmwareVersion: String, nodeName: String, ownerInfo: String) {
+        self.firmwareVersion = firmwareVersion
+        self.nodeName = nodeName
+        self.ownerInfo = ownerInfo
+    }
+}
+
 public struct StatusResponse: Sendable, Equatable {
+    /// Describes which firmware status layout was used to decode the payload.
+    public enum Layout: Sendable, Equatable {
+        case repeater
+        case roomServer
+    }
+
+    /// The decoded status layout.
+    public let layout: Layout
     /// The public key prefix of the responding node.
     public let publicKeyPrefix: Data
     /// The battery level in millivolts.
@@ -624,6 +647,7 @@ public struct StatusResponse: Sendable, Equatable {
 
     /// Initializes a new status response object.
     public init(
+        layout: Layout = .repeater,
         publicKeyPrefix: Data,
         battery: Int,
         txQueueLength: Int,
@@ -644,6 +668,7 @@ public struct StatusResponse: Sendable, Equatable {
         rxAirtime: UInt32,
         receiveErrors: UInt32 = 0
     ) {
+        self.layout = layout
         self.publicKeyPrefix = publicKeyPrefix
         self.battery = battery
         self.txQueueLength = txQueueLength

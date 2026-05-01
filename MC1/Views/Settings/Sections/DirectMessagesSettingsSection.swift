@@ -13,16 +13,16 @@ struct DirectMessagesSettingsSection: View {
 
     var body: some View {
         Section {
-            Picker(L10n.Settings.DirectMessages.acknowledgments, selection: acksBinding) {
+            Picker("Acknowledgments", selection: acksBinding) {
                 Text("1").tag(1)
                 Text("2").tag(2)
             }
             .pickerStyle(.menu)
             .radioDisabled(for: appState.connectionState, or: isSaving)
         } header: {
-            Text(L10n.Settings.DirectMessages.header)
+            Text("Direct Messages")
         } footer: {
-            Text(L10n.Settings.DirectMessages.footer)
+            Text("Number of acknowledgment packets to request for each direct message.")
         }
         .errorAlert($errorMessage)
         .retryAlert(retryAlert)

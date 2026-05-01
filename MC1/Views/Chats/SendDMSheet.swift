@@ -11,7 +11,7 @@ struct SendDMSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let senderName: String
-    let radioID: UUID
+    let deviceID: UUID
     let onSelect: (ContactDTO) -> Void
 
     @State private var matchingContacts: [ContactDTO] = []
@@ -82,7 +82,7 @@ struct SendDMSheet: View {
         }
 
         do {
-            let allContacts = try await store.fetchContacts(radioID: radioID)
+            let allContacts = try await store.fetchContacts(deviceID: deviceID)
             matchingContacts = SenderContactMatcher.filter(
                 contacts: allContacts,
                 senderName: senderName,
