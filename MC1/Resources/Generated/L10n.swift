@@ -1377,6 +1377,10 @@ public enum L10n {
       public enum PathEdit {
         /// Location: PathEditingSheet.swift - Purpose: Add Hop CTA (primary button when path has >=1 hop)
         public static let addHop = L10n.tr("Contacts", "contacts.pathEdit.addHop", fallback: "Add Hop")
+        /// Location: TracePathListView.swift - Purpose: Accessibility label for adding a repeater to the path, %@ is the node name
+        public static func addToPath(_ p1: Any) -> String {
+          return L10n.tr("Contacts", "contacts.pathEdit.addToPath", String(describing: p1), fallback: "Add %@ to path")
+        }
         /// Location: AddHopPickerView.swift - Purpose: Picker row accessibility label, %1$@ is name, %2$d is target hop number
         public static func addToPathAsHop(_ p1: Any, _ p2: Int) -> String {
           return L10n.tr("Contacts", "contacts.pathEdit.addToPathAsHop", String(describing: p1), p2, fallback: "Add %1$@ to path as hop %2$d")

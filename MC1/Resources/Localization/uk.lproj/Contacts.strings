@@ -661,6 +661,9 @@
 /* Location: AddHopPickerView.swift - Purpose: No-match description when a filter other than All is selected and a matching room exists */
 "contacts.pathEdit.search.noMatches.descriptionWithRoomsHint" = "Спробуйте ім'я або hex-префікс, наприклад 'a3'. Кімнати показуються лише під фільтром Всі.";
 
+/* Location: TracePathListView.swift - Purpose: Accessibility label for adding a repeater to the path, %@ is the node name */
+"contacts.pathEdit.addToPath" = "Додати %@ до шляху";
+
 /* Location: AddHopPickerView.swift - Purpose: Picker row accessibility label, %1$@ is name, %2$d is target hop number */
 "contacts.pathEdit.addToPathAsHop" = "Додати %1$@ до шляху як вузол %2$d";
 

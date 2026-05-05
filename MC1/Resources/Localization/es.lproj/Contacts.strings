@@ -644,6 +644,9 @@
 /* Location: AddHopPickerView.swift - Purpose: No-match description when a filter other than All is selected and a matching room exists */
 "contacts.pathEdit.search.noMatches.descriptionWithRoomsHint" = "Prueba un nombre o prefijo hex como 'a3'. Las salas solo aparecen con el filtro Todos.";
 
+/* Location: TracePathListView.swift - Purpose: Accessibility label for adding a repeater to the path, %@ is the node name */
+"contacts.pathEdit.addToPath" = "Añadir %@ a la ruta";
+
 /* Location: AddHopPickerView.swift - Purpose: Picker row accessibility label, %1$@ is name, %2$d is target hop number */
 "contacts.pathEdit.addToPathAsHop" = "Añadir %1$@ a la ruta como salto %2$d";
 
