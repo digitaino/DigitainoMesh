@@ -1,6 +1,7 @@
 /// Callbacks for message bubble interactions
 struct MessageBubbleCallbacks {
     var onRetry: (() -> Void)?
+    var onResendSamePower: (() -> Void)?
     var onResendAtNextPower: (() -> Void)?
     var onReaction: ((String) -> Void)?
     var onLongPress: (() -> Void)?

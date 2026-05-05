@@ -813,14 +813,9 @@ extension ChatViewModel {
     }
 
     /// Resend a channel message in place, or copy text for direct messages.
-    /// Used for "Send Again" context menu action.
-    /// If adaptive power is enabled, escalates TX power before resend.
+    /// Used for "Send Again" context menu action — resends at current power.
     func sendAgain(_ message: MessageDTO) async {
-        // Escalate power if adaptive power is enabled (user tapped send again → bump up)
-        if let powerService = appState?.adaptivePowerService, powerService.isEnabled {
-            powerService.onNoRepeatsHeard()
-            await powerService.escalate()
-        }
+        clearNoRepeatsRetry()
 
         if message.channelIndex != nil {
             // Channel messages: resend in place (increments send count)
@@ -838,6 +833,15 @@ extension ChatViewModel {
             // Direct messages: send the failed message text directly
             await sendMessage(text: message.text)
         }
+    }
+
+    /// Resend at elevated power — escalates TX power one step before resending.
+    func sendAgainEscalated(_ message: MessageDTO) async {
+        if let powerService = appState?.adaptivePowerService, powerService.isEnabled {
+            powerService.onNoRepeatsHeard()
+            await powerService.escalate()
+        }
+        await sendAgain(message)
     }
 
     /// Delete a single message

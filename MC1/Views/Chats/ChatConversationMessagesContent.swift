@@ -47,6 +47,8 @@ struct ChatConversationMessagesContent: View {
     let onMentionSeen: (UUID) async -> Void
     let onScrollToMention: () -> Void
     let onRetryMessage: (MessageDTO) -> Void
+    let onSendAgain: (MessageDTO) -> Void
+    let onSendAgainEscalated: (MessageDTO) -> Void
     let onReply: ((MessageDTO) -> Void)?
 
     // MARK: - Private State
@@ -259,7 +261,8 @@ struct ChatConversationMessagesContent: View {
                 ),
                 callbacks: MessageBubbleCallbacks(
                     onRetry: { onRetryMessage(message) },
-                    onResendAtNextPower: { onRetryMessage(message) },
+                    onResendSamePower: { onSendAgain(message) },
+                    onResendAtNextPower: { onSendAgainEscalated(message) },
                     onReaction: onReaction(for: message),
                     onLongPress: { selectedMessageForActions = message },
                     onReply: !message.isOutgoing ? { onReply?(message) } : nil,
@@ -391,6 +394,8 @@ private struct ChannelEmptyMessagesView: View {
             onMentionSeen: { _ in },
             onScrollToMention: {},
             onRetryMessage: { _ in },
+            onSendAgain: { _ in },
+            onSendAgainEscalated: { _ in },
             onReply: nil
         )
     }
@@ -427,6 +432,8 @@ private struct ChannelEmptyMessagesView: View {
             onMentionSeen: { _ in },
             onScrollToMention: {},
             onRetryMessage: { _ in },
+            onSendAgain: { _ in },
+            onSendAgainEscalated: { _ in },
             onReply: nil
         )
     }

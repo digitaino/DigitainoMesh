@@ -103,6 +103,12 @@ struct ChatConversationView: View {
             onMentionSeen: { await markMentionSeen(messageID: $0) },
             onScrollToMention: { scrollToNextMention() },
             onRetryMessage: { retryMessage($0) },
+            onSendAgain: { message in
+                Task { await chatViewModel.sendAgain(message) }
+            },
+            onSendAgainEscalated: { message in
+                Task { await chatViewModel.sendAgainEscalated(message) }
+            },
             onReply: { message in
                 let mentionName: String
                 switch conversationType {

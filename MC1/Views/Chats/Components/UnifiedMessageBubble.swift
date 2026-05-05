@@ -109,6 +109,15 @@ struct UnifiedMessageBubble: View {
                             onRetry: callbacks.onRetry
                         )
                     }
+
+                    // No-repeats retry card
+                    if displayState.showNoRepeatsRetry && message.isOutgoing {
+                        NoRepeatsRetryCard(
+                            nextPowerLabel: displayState.nextPowerLabel,
+                            onResendSamePower: callbacks.onResendSamePower,
+                            onResendAtNextPower: callbacks.onResendAtNextPower
+                        )
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(accessibilityMessageLabel)
@@ -436,6 +445,48 @@ private struct BubbleHopCountFooter: View {
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.Chats.Chats.Message.HopCount.accessibilityLabel(hopCount))
+    }
+}
+
+// MARK: - No Repeats Retry Card
+
+private struct NoRepeatsRetryCard: View {
+    let nextPowerLabel: String?
+    var onResendSamePower: (() -> Void)?
+    var onResendAtNextPower: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text("No repeats heard")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Button {
+                    onResendSamePower?()
+                } label: {
+                    Label("Send Again", systemImage: "arrow.clockwise")
+                        .font(.caption2.weight(.medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(.blue)
+
+                if let label = nextPowerLabel {
+                    Button {
+                        onResendAtNextPower?()
+                    } label: {
+                        Label("Send at \(label)", systemImage: "bolt.fill")
+                            .font(.caption2.weight(.medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(.orange)
+                }
+            }
+        }
+        .padding(.top, 4)
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 
