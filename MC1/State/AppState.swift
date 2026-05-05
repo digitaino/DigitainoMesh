@@ -915,10 +915,6 @@ public final class AppState {
             guard let services = services, let deviceID = connectedDevice?.id else { return }
             await provisionWeatherChannelIfNeeded(services: services, deviceID: deviceID)
         } else {
-            // Redirect off the weather tab before hiding it
-            if navigation.selectedTab == 3 {
-                navigation.selectedTab = 0
-            }
             await removeWeatherChannels()
         }
     }

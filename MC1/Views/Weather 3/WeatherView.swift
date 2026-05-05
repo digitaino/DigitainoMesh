@@ -39,6 +39,7 @@ private struct WeatherBody: View {
     @State private var selectedWarningDetail: MeshWXWarning?
     @State private var noticeTask: Task<Void, Never>?
     @State private var showWarnings = true
+    @State private var showAllWarnings = false
     @State private var showNowcasts = true
     @State private var showFavorites = true
     @State private var showRequested = true
@@ -57,6 +58,7 @@ private struct WeatherBody: View {
 
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
     @AppStorage("wxFavoritePlaces") private var favoritePlacesRaw: String = ""
+    @AppStorage("wxPreferredWFO") private var preferredWFO: String = ""
 
     private var favoriteICAOs: Set<String> {
         Set(favoriteICAOsRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
@@ -141,9 +143,10 @@ private struct WeatherBody: View {
                 }
             }
         }
-        .sheet(isPresented: $showingRadarPicker) {
-            RadarRegionPickerView()
-        }
+        // Radar picker disabled for now
+        // .sheet(isPresented: $showingRadarPicker) {
+        //     RadarRegionPickerView()
+        // }
         .sheet(isPresented: $showingInfo) {
             WXInfoSheet()
         }
@@ -685,10 +688,10 @@ private struct WeatherBody: View {
                     if !appState.weatherCache.fireWeathers.isEmpty { fireWeatherSection }
                     if appState.weatherCache.dailyClimate != nil { dailyClimateSection }
 
-                    // Radar — horizontal card pager of mini maps
-                    if !appState.weatherCache.radarFrames.isEmpty {
-                        radarCardPagerSection
-                    }
+                    // Radar disabled for now
+                    // if !appState.weatherCache.radarFrames.isEmpty {
+                    //     radarCardPagerSection
+                    // }
                 }
             }
 
@@ -947,48 +950,272 @@ private struct WeatherBody: View {
             }
     }
 
+    // MARK: - Location-Based Warning Filtering
+
+    private var userPFMPoint: WXBundleLoader.PFMPoint? {
+        guard let location = appState.locationService.currentLocation else { return nil }
+        return WXBundleLoader.nearestPFMPoint(to: location.coordinate)
+    }
+
+    private var autoDetectedWFO: String? {
+        guard let pfm = userPFMPoint, !pfm.wfo.isEmpty else { return nil }
+        return pfm.wfo
+    }
+
+    private var effectiveWFO: String? {
+        if !preferredWFO.isEmpty { return preferredWFO }
+        return autoDetectedWFO
+    }
+
+    private var wfoFilterLabel: String {
+        if preferredWFO.isEmpty {
+            if let wfo = autoDetectedWFO {
+                return "Near Me (\(wfo))"
+            }
+            return "Near Me"
+        }
+        if let pfm = WXBundleLoader.allPFMPoints.first(where: { $0.wfo == preferredWFO }) {
+            return "\(preferredWFO) · \(pfm.name)"
+        }
+        return preferredWFO
+    }
+
+    private var zoneToWFO: [String: String] {
+        var map: [String: String] = [:]
+        for pfm in WXBundleLoader.allPFMPoints where !pfm.zone.isEmpty && !pfm.wfo.isEmpty {
+            map[pfm.zone] = pfm.wfo
+        }
+        return map
+    }
+
+    private func warningWFO(_ warning: MeshWXWarning) -> String? {
+        if !warning.office.isEmpty { return warning.office }
+        let lookup = zoneToWFO
+        for zone in warning.zones {
+            if let code = ZoneGeometryStore.zoneCode(stateIdx: zone.stateIdx, zoneNum: zone.zoneNum),
+               let wfo = lookup[code] {
+                return wfo
+            }
+        }
+        return nil
+    }
+
+    private var availableWarningWFOs: [String] {
+        guard let userZone = userPFMPoint?.zone, userZone.count >= 2 else { return [] }
+        let statePrefix = String(userZone.prefix(2))
+        var wfos = Set<String>()
+        for pfm in WXBundleLoader.allPFMPoints {
+            if pfm.zone.hasPrefix(statePrefix) && !pfm.wfo.isEmpty {
+                wfos.insert(pfm.wfo)
+            }
+        }
+        return wfos.sorted()
+    }
+
+    private var userCoordinate: CLLocationCoordinate2D? {
+        appState.locationService.currentLocation?.coordinate
+    }
+
+    private var canFilterByLocation: Bool { effectiveWFO != nil }
+
+    private func isWarningLocal(_ warning: MeshWXWarning) -> Bool {
+        guard let wfo = effectiveWFO else { return false }
+        if let warningWfo = warningWFO(warning), warningWfo == wfo {
+            return true
+        }
+        if let coord = userCoordinate, warning.vertices.count >= 3 {
+            return Self.pointInPolygon(coord, vertices: warning.vertices)
+        }
+        return false
+    }
+
+    private static func pointInPolygon(
+        _ point: CLLocationCoordinate2D,
+        vertices: [CLLocationCoordinate2D]
+    ) -> Bool {
+        let n = vertices.count
+        guard n >= 3 else { return false }
+        var inside = false
+        var j = n - 1
+        for i in 0..<n {
+            let vi = vertices[i]
+            let vj = vertices[j]
+            if (vi.latitude > point.latitude) != (vj.latitude > point.latitude),
+               point.longitude < (vj.longitude - vi.longitude) *
+                   (point.latitude - vi.latitude) / (vj.latitude - vi.latitude) + vi.longitude {
+                inside.toggle()
+            }
+            j = i
+        }
+        return inside
+    }
+
+    private var localWarnings: [MeshWXWarning] {
+        activeWarnings.filter { isWarningLocal($0) } + upcomingWarnings.filter { isWarningLocal($0) }
+    }
+
+    private var otherWarnings: [MeshWXWarning] {
+        activeWarnings.filter { !isWarningLocal($0) } + upcomingWarnings.filter { !isWarningLocal($0) }
+    }
+
+    private var localUpcomingCount: Int {
+        upcomingWarnings.filter { isWarningLocal($0) }.count
+    }
+
+    private var otherUpcomingCount: Int {
+        upcomingWarnings.filter { !isWarningLocal($0) }.count
+    }
+
+    private func wfoDisplayName(_ code: String) -> String {
+        if let pfm = WXBundleLoader.allPFMPoints.first(where: { $0.wfo == code }) {
+            return "\(code) · \(pfm.name)"
+        }
+        return code
+    }
+
+    // MARK: - Warnings Section UI
+
     @ViewBuilder
     private var warningsSection: some View {
         let allWarnings = activeWarnings + upcomingWarnings
         if !allWarnings.isEmpty {
-            Section {
-                if showWarnings {
-                    // Active warnings first, then upcoming (dimmed)
-                    ForEach(allWarnings) { warning in
-                        warningRow(warning)
-                    }
-                }
-            } header: {
-                Button {
-                    withAnimation { showWarnings.toggle() }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.yellow)
-                        Text("Warnings")
-                            .font(.subheadline.weight(.semibold))
-                            .textCase(nil)
-                        Text("(\(allWarnings.count))")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
-                        if !upcomingWarnings.isEmpty {
-                            Text("· \(upcomingWarnings.count) upcoming")
-                                .font(.caption)
+            if canFilterByLocation {
+                Section {
+                    if showWarnings {
+                        if localWarnings.isEmpty {
+                            Text("No warnings for your area")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                                .textCase(nil)
+                                .listRowBackground(Color.clear)
+                        } else {
+                            ForEach(localWarnings) { warning in
+                                warningRow(warning)
+                            }
                         }
-                        Spacer()
-                        Image(systemName: showWarnings ? "chevron.down" : "chevron.right")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .contentShape(Rectangle())
+                } header: {
+                    warningsSectionHeader(
+                        title: "Warnings",
+                        totalCount: localWarnings.count,
+                        upcomingCount: localUpcomingCount,
+                        isExpanded: $showWarnings,
+                        showWFOPicker: true
+                    )
                 }
-                .buttonStyle(.plain)
+
+                if !otherWarnings.isEmpty {
+                    Section {
+                        if showAllWarnings {
+                            ForEach(otherWarnings) { warning in
+                                warningRow(warning)
+                            }
+                        }
+                    } header: {
+                        warningsSectionHeader(
+                            title: "All Warnings",
+                            totalCount: otherWarnings.count,
+                            upcomingCount: otherUpcomingCount,
+                            isExpanded: $showAllWarnings,
+                            showWFOPicker: false
+                        )
+                    }
+                }
+            } else {
+                Section {
+                    if showWarnings {
+                        ForEach(allWarnings) { warning in
+                            warningRow(warning)
+                        }
+                    }
+                } header: {
+                    warningsSectionHeader(
+                        title: "Warnings",
+                        totalCount: allWarnings.count,
+                        upcomingCount: upcomingWarnings.count,
+                        isExpanded: $showWarnings,
+                        showWFOPicker: false
+                    )
+                }
+            }
+        }
+    }
+
+    private func warningsSectionHeader(
+        title: String,
+        totalCount: Int,
+        upcomingCount: Int,
+        isExpanded: Binding<Bool>,
+        showWFOPicker: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation { isExpanded.wrappedValue.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.yellow)
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .textCase(nil)
+                    Text("(\(totalCount))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                    if upcomingCount > 0 {
+                        Text("· \(upcomingCount) upcoming")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                    }
+                    Spacer()
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showWFOPicker {
+                Menu {
+                    Button {
+                        preferredWFO = ""
+                    } label: {
+                        if preferredWFO.isEmpty {
+                            Label("Near Me" + (autoDetectedWFO.map { " (\($0))" } ?? ""), systemImage: "checkmark")
+                        } else {
+                            Text("Near Me" + (autoDetectedWFO.map { " (\($0))" } ?? ""))
+                        }
+                    }
+
+                    Divider()
+
+                    ForEach(availableWarningWFOs, id: \.self) { wfo in
+                        Button {
+                            preferredWFO = wfo
+                        } label: {
+                            if preferredWFO == wfo {
+                                Label(wfoDisplayName(wfo), systemImage: "checkmark")
+                            } else {
+                                Text(wfoDisplayName(wfo))
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.caption)
+                        Text(wfoFilterLabel)
+                            .font(.caption)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 4)
+                }
             }
         }
     }
@@ -1176,8 +1403,13 @@ private struct WeatherBody: View {
                 LabeledContent("Your Region", value: region.name)
             }
             LabeledContent("Active Warnings", value: "\(appState.weatherCache.warnings.count)")
-            LabeledContent("Radar Regions", value: "\(appState.weatherCache.radarFrames.count)")
             LabeledContent("Messages Received", value: "\(appState.weatherCache.messageLog.count)")
+
+            NavigationLink {
+                WeatherLogView()
+            } label: {
+                Label("Message Log", systemImage: "doc.text.magnifyingglass")
+            }
 
             Button {
                 Task { await requestUpdate() }
@@ -1207,8 +1439,6 @@ private struct WeatherBody: View {
                     Text("Data appears when a MeshWX bot is active on the mesh. Join a bot above, or search for a city to request a forecast.")
                 } actions: {
                     Button("Request Update") { Task { await requestUpdate() } }
-                        .buttonStyle(.bordered)
-                    Button("Radar Region") { showingRadarPicker = true }
                         .buttonStyle(.bordered)
                 }
                 .listRowBackground(Color.clear)

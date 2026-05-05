@@ -74,7 +74,7 @@ public final class NavigationCoordinator {
 
     func navigateToSurvey() {
         pendingSurveyNavigation = true
-        selectedTab = 4  // Tools tab
+        selectedTab = 3  // Tools tab
     }
 
     /// Weather warning to zoom to on the Map tab (set by WeatherView warning rows).

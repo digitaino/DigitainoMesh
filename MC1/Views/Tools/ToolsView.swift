@@ -6,6 +6,7 @@ struct ToolsView: View {
     private static let lineOfSightSidebarWidthMax: CGFloat = 560
 
     private enum ToolSelection: Hashable, CaseIterable {
+        case weather
         case tracePath
         case repeaterBenchmark
         case lineOfSight
@@ -16,10 +17,10 @@ struct ToolsView: View {
         case signalSurvey
         case pathMapGenerator
         case cli
-        case weatherLog
 
         var title: String {
             switch self {
+            case .weather: "Weather"
             case .tracePath: L10n.Tools.Tools.tracePath
             case .repeaterBenchmark: "Repeater Benchmark"
             case .lineOfSight: L10n.Tools.Tools.lineOfSight
@@ -30,12 +31,12 @@ struct ToolsView: View {
             case .signalSurvey: "Signal Survey"
             case .pathMapGenerator: "Path Map"
             case .cli: L10n.Tools.Tools.cli
-            case .weatherLog: "Weather Log"
             }
         }
 
         var systemImage: String {
             switch self {
+            case .weather: "cloud.bolt.fill"
             case .tracePath: "point.3.connected.trianglepath.dotted"
             case .repeaterBenchmark: "gauge.with.dots.needle.33percent"
             case .lineOfSight: "eye"
@@ -46,12 +47,11 @@ struct ToolsView: View {
             case .signalSurvey: "antenna.radiowaves.left.and.right"
             case .pathMapGenerator: "point.3.connected.trianglepath.dotted"
             case .cli: "terminal"
-            case .weatherLog: "cloud.bolt"
             }
         }
 
         var requiresRadio: Bool {
-            self != .lineOfSight && self != .trafficMap && self != .signalSurvey && self != .pathMapGenerator && self != .repeaterBenchmark && self != .weatherLog
+            self != .lineOfSight && self != .trafficMap && self != .signalSurvey && self != .pathMapGenerator && self != .repeaterBenchmark && self != .weather
         }
     }
 
@@ -73,6 +73,10 @@ struct ToolsView: View {
 
     private var shouldUseSplitView: Bool {
         horizontalSizeClass == .regular
+    }
+
+    private var visibleTools: [ToolSelection] {
+        ToolSelection.allCases
     }
 
     var body: some View {
@@ -119,20 +123,11 @@ struct ToolsView: View {
         } else {
             NavigationStack {
                 List {
-                    ForEach(ToolSelection.allCases, id: \.self) { tool in
+                    ForEach(visibleTools, id: \.self) { tool in
                         NavigationLink {
                             toolDestination(for: tool)
                         } label: {
                             toolLabel(for: tool)
-                        }
-                    }
-                    if appState.isWeatherEnabled {
-                        Section {
-                            NavigationLink {
-                                SettingsView()
-                            } label: {
-                                Label(L10n.Localizable.Tabs.settings, systemImage: "gear")
-                            }
                         }
                     }
                 }
@@ -165,20 +160,11 @@ struct ToolsView: View {
     private var sidebarStack: some View {
         NavigationStack(path: $sidebarPath) {
             List {
-                ForEach(ToolSelection.allCases, id: \.self) { tool in
+                ForEach(visibleTools, id: \.self) { tool in
                     Button {
                         selectTool(tool)
                     } label: {
                         toolLabel(for: tool)
-                    }
-                }
-                if appState.isWeatherEnabled {
-                    Section {
-                        NavigationLink {
-                            SettingsView()
-                        } label: {
-                            Label(L10n.Localizable.Tabs.settings, systemImage: "gear")
-                        }
                     }
                 }
             }
@@ -238,6 +224,7 @@ struct ToolsView: View {
     @ViewBuilder
     private func toolDestination(for tool: ToolSelection) -> some View {
         switch tool {
+        case .weather: WeatherView()
         case .tracePath: TracePathView()
         case .repeaterBenchmark: BenchmarkView(viewModel: benchmarkViewModel)
         case .lineOfSight: LineOfSightView()
@@ -248,13 +235,13 @@ struct ToolsView: View {
         case .signalSurvey: SignalSurveyView()
         case .pathMapGenerator: PathMapGeneratorView()
         case .cli: CLIToolView()
-        case .weatherLog: WeatherLogView()
         }
     }
 
     @ViewBuilder
     private var toolDetailView: some View {
         switch selectedTool {
+        case .weather: WeatherView()
         case .tracePath: TracePathView()
         case .repeaterBenchmark: BenchmarkView(viewModel: benchmarkViewModel)
         case .lineOfSight: LineOfSightView(viewModel: lineOfSightViewModel, layoutMode: .map)
@@ -265,7 +252,6 @@ struct ToolsView: View {
         case .signalSurvey: SignalSurveyView()
         case .pathMapGenerator: PathMapGeneratorView()
         case .cli: CLIToolView()
-        case .weatherLog: WeatherLogView()
         case .none: ContentUnavailableView(L10n.Tools.Tools.selectTool, systemImage: "wrench.and.screwdriver")
         }
     }

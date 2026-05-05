@@ -173,7 +173,7 @@ struct MapView: View {
                     allRepeaterLocations: viewModel.allRepeaterLocations,
                     communityRepeaterFilter: viewModel.communityRepeaterFilter,
                     weatherWarnings: viewModel.weatherWarnings,
-                    weatherRadarFrames: viewModel.weatherRadarFrames,
+                    weatherRadarFrames: [],
                     showWeatherOverlay: viewModel.showWeatherOverlay,
                     selectedContact: $viewModel.selectedContact,
                     cameraRegion: $viewModel.cameraRegion,

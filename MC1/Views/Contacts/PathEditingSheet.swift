@@ -19,8 +19,6 @@ struct PathEditingSheet: View {
     @State private var saveCompletedToken = 0
     @State private var routingConfirmedToken = 0
 
-    @State private var showingDirectConfirmation = false
-    @State private var showingFloodConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -60,47 +58,6 @@ struct PathEditingSheet: View {
             .sensoryFeedback(.impact(weight: .medium), trigger: deleteHapticTrigger)
             .sensoryFeedback(.success, trigger: saveCompletedToken)
             .sensoryFeedback(.selection, trigger: routingConfirmedToken)
-            .alert(
-                L10n.Contacts.Contacts.PathEdit.DirectRouting.Confirm.title,
-                isPresented: $showingDirectConfirmation
-            ) {
-                Button(L10n.Contacts.Contacts.Common.cancel, role: .cancel) {}
-                Button(L10n.Contacts.Contacts.PathEdit.DirectRouting.Confirm.confirm, role: .destructive) {
-                    Task {
-                        await viewModel.setPath(
-                            for: contact,
-                            path: Data(),
-                            pathLength: Self.directRoutingPathLength
-                        )
-                        guard viewModel.errorMessage == nil else { return }
-                        routingConfirmedToken += 1
-                        dismiss()
-                    }
-                }
-            } message: {
-                Text(L10n.Contacts.Contacts.PathEdit.DirectRouting.Confirm.message(
-                    contact.displayName,
-                    contact.displayName
-                ))
-            }
-            .alert(
-                L10n.Contacts.Contacts.PathEdit.FloodRouting.Confirm.title,
-                isPresented: $showingFloodConfirmation
-            ) {
-                Button(L10n.Contacts.Contacts.Common.cancel, role: .cancel) {}
-                Button(L10n.Contacts.Contacts.PathEdit.FloodRouting.Confirm.confirm, role: .destructive) {
-                    Task {
-                        await viewModel.resetPath(for: contact)
-                        guard viewModel.errorMessage == nil else { return }
-                        routingConfirmedToken += 1
-                        dismiss()
-                    }
-                }
-            } message: {
-                Text(L10n.Contacts.Contacts.PathEdit.FloodRouting.Confirm.message(
-                    contact.displayName
-                ))
-            }
         }
         .presentationDragIndicator(.visible)
         .presentationSizing(.page)
@@ -204,7 +161,16 @@ struct PathEditingSheet: View {
             .listRowSeparator(.hidden)
 
             Button {
-                showingDirectConfirmation = true
+                Task {
+                    await viewModel.setPath(
+                        for: contact,
+                        path: Data(),
+                        pathLength: Self.directRoutingPathLength
+                    )
+                    guard viewModel.errorMessage == nil else { return }
+                    routingConfirmedToken += 1
+                    dismiss()
+                }
             } label: {
                 stretchedCenteredLabel(
                     L10n.Contacts.Contacts.PathEdit.useDirectRouting,
@@ -218,7 +184,12 @@ struct PathEditingSheet: View {
             .listRowSeparator(.hidden)
 
             Button {
-                showingFloodConfirmation = true
+                Task {
+                    await viewModel.resetPath(for: contact)
+                    guard viewModel.errorMessage == nil else { return }
+                    routingConfirmedToken += 1
+                    dismiss()
+                }
             } label: {
                 stretchedCenteredLabel(
                     L10n.Contacts.Contacts.PathEdit.useFloodRouting,
