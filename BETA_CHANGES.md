@@ -1,4 +1,36 @@
-Beta Changes -- v0.10.1 (Build 33)
+Beta Changes -- v0.10.1 (Build 34)
+
+Heard Repeats Map Fixes
+
+Fixed several issues with the Repeat Coverage map for sent messages:
+
+- **Last-hop SNR lines now render** — The map was missing the SNR-colored line from the last repeater back to your location because it required a stored message location. Now falls back to current GPS when the message has no saved coordinates, with a banner showing "Using current location" and a Save button to persist it to the message for future reference.
+
+- **Wrong repeater on SNR line fixed** — When the actual last repeater (e.g. "Independent Bridge") had no GPS, the SNR-colored line was incorrectly drawn from a different repeater that happened to have location data. Now tracks whether the real last repeater was resolved and only draws the SNR line when it was.
+
+- **Hop count corrected** — The cycling summary showed only the number of located hops instead of the actual path length from the repeat data.
+
+- **SNR colors match signal bars** — The last-hop line colors now use the same SNR→color mapping as the signal bars in the repeat details list (excellent=green, good=yellow, fair/poor/veryPoor=red) via a shared `SNRQuality.uiColor` property, instead of a separate hardcoded mapping.
+
+Restored Chat Features
+
+Restored three message bubble features that were lost in a prior refactor — all infrastructure (parsing, state tracking, callbacks, sheets) was still intact, only the rendering in UnifiedMessageBubble was missing:
+
+- **Shared Route cards** — Incoming messages containing "RX via ..." route info now show an inline card below the bubble again. Tapping opens the route on a map.
+
+- **Hex Path cards** — Messages with hex path chains show a "Path Map" card for visualizing the path on a map.
+
+- **Duplicate message badges** — When duplicate messages are collapsed, a "×N" badge appears with tap to expand/collapse.
+
+Adaptive Power PA Curve
+
+Added measured PA output curve support to the adaptive power service for more accurate EIRP targeting on boards with external amplifiers.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 33)
 
 Upstream Cherry-Picks & Bug Fixes
 

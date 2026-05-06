@@ -206,17 +206,7 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
 
                 // Check if this is a last-hop overlay (has SNR data)
                 if let snrQuality = lastHopSNR[pathOverlay.segmentIndex] {
-                    // Color by SNR quality
-                    switch snrQuality {
-                    case .excellent, .good:
-                        renderer.strokeColor = .systemGreen
-                    case .fair:
-                        renderer.strokeColor = .systemYellow
-                    case .poor, .veryPoor:
-                        renderer.strokeColor = .systemRed
-                    case .unknown:
-                        renderer.strokeColor = .systemGray
-                    }
+                    renderer.strokeColor = snrQuality.uiColor
                     renderer.lineWidth = 4
                 } else {
                     // Neutral outbound chain

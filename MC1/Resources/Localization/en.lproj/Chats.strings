@@ -1053,3 +1053,12 @@
 
 /* Location: HeardRepeatsMapSheet.swift - Accessibility label for center on data button */
 "chats.heardRepeats.map.centerOnData" = "Center on data";
+
+/* Location: HeardRepeatsMapSheet.swift - Banner shown when using current GPS instead of saved message location */
+"chats.heardRepeats.map.location.approximate" = "Using current location — not saved on message";
+
+/* Location: HeardRepeatsMapSheet.swift - Button to save current location to the message */
+"chats.heardRepeats.map.location.save" = "Save";
+
+/* Location: HeardRepeatsMapSheet.swift - Confirmation after location was saved to the message */
+"chats.heardRepeats.map.location.saved" = "Location saved";

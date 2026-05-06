@@ -496,10 +496,12 @@ private struct ActionsExpandedContent: View {
     /// When true, the share was attempted but no location is available — skip the
     /// location picker and share without a location.
     @State private var noLocationAvailable = false
-
+    /// Location saved from the map sheet, overrides the DTO snapshot.
+    @State private var savedMessageLocation: CLLocation?
 
     /// Location recorded on the message at receive time — preferred over current GPS.
     private var messageLocation: CLLocation? {
+        if let savedMessageLocation { return savedMessageLocation }
         guard let lat = message.userLatitude, let lon = message.userLongitude else { return nil }
         return CLLocation(latitude: lat, longitude: lon)
     }
@@ -527,7 +529,9 @@ private struct ActionsExpandedContent: View {
                             repeats: repeats,
                             contacts: contacts,
                             discoveredNodes: discoveredNodes,
-                            messageLocation: messageLocation
+                            messageID: message.id,
+                            messageLocation: messageLocation,
+                            onLocationSaved: { savedMessageLocation = $0 }
                         )
                     }
 

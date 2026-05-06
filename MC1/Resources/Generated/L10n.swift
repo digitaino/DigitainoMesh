@@ -304,6 +304,14 @@ public enum L10n {
             /// Location: HeardRepeatsMapSheet.swift - Empty state title
             public static let title = L10n.tr("Chats", "chats.heardRepeats.map.empty.title", fallback: "No Location Data")
           }
+          public enum Location {
+            /// Location: HeardRepeatsMapSheet.swift - Banner shown when using current GPS instead of saved message location
+            public static let approximate = L10n.tr("Chats", "chats.heardRepeats.map.location.approximate", fallback: "Using current location — not saved on message")
+            /// Location: HeardRepeatsMapSheet.swift - Button to save current location to the message
+            public static let save = L10n.tr("Chats", "chats.heardRepeats.map.location.save", fallback: "Save")
+            /// Location: HeardRepeatsMapSheet.swift - Confirmation after location was saved to the message
+            public static let saved = L10n.tr("Chats", "chats.heardRepeats.map.location.saved", fallback: "Location saved")
+          }
         }
       }
       public enum ImageViewer {

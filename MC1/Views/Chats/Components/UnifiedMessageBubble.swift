@@ -93,6 +93,19 @@ struct UnifiedMessageBubble: View {
                         MalwareWarningCard(url: url)
                     }
 
+                    // Shared route card (for incoming messages with "RX via ..." route info)
+                    if let sharedRoute = displayState.detectedSharedRoute {
+                        SharedRouteCard(
+                            sharedRoute: sharedRoute,
+                            onTap: { callbacks.onShowSharedRoute?() }
+                        )
+                    } else if let hexPath = displayState.detectedHexPath {
+                        HexPathCard(
+                            hexPath: hexPath,
+                            onTap: { callbacks.onShowHexPath?() }
+                        )
+                    }
+
                     // Link preview (if applicable, skip for image URLs shown in bubble)
                     if previewsEnabled && !(displayState.isImageURL && displayState.showInlineImages) {
                         BubbleLinkPreviewContent(
@@ -116,6 +129,16 @@ struct UnifiedMessageBubble: View {
                             nextPowerLabel: displayState.nextPowerLabel,
                             onResendSamePower: callbacks.onResendSamePower,
                             onResendAtNextPower: callbacks.onResendAtNextPower
+                        )
+                    }
+
+                    // Duplicate count badge (collapsed duplicates)
+                    if displayState.duplicateCount > 1,
+                       let onToggle = displayState.onToggleDuplicateGroup {
+                        DuplicateCountBadge(
+                            count: displayState.duplicateCount,
+                            isExpanded: displayState.isDuplicateGroupExpanded,
+                            onTap: onToggle
                         )
                     }
                 }

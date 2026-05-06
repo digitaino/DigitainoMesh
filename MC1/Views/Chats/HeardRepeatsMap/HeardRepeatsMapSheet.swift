@@ -12,11 +12,16 @@ struct HeardRepeatsMapSheet: View {
     let repeats: [MessageRepeatDTO]
     let contacts: [ContactDTO]
     let discoveredNodes: [DiscoveredNodeDTO]
+    let messageID: UUID
     /// Location recorded on the message at receive time. Preferred over current GPS
     /// so the "You" pin reflects where the user was when the message arrived.
     var messageLocation: CLLocation?
+    /// Called when the user saves the current location so the parent can update its state.
+    var onLocationSaved: ((CLLocation) -> Void)?
 
     @State private var viewModel = HeardRepeatsMapViewModel()
+    @State private var usingFallbackLocation = false
+    @State private var locationSaved = false
 
     var body: some View {
         NavigationStack {
@@ -27,7 +32,13 @@ struct HeardRepeatsMapSheet: View {
                     noDataState
                 } else {
                     mapContent
-                    summaryBanner
+                    VStack(spacing: 0) {
+                        summaryBanner
+                        if usingFallbackLocation {
+                            locationBanner
+                        }
+                        Spacer()
+                    }
                     mapToolbar
                 }
             }
@@ -41,15 +52,20 @@ struct HeardRepeatsMapSheet: View {
             }
         }
         .task {
-            // Use only the GPS location stored on the message at send/receive time.
-            // Do NOT fall back to current GPS — the user may have moved significantly
-            // since the message was sent, making current location actively misleading
-            // on a historical route map.
+            let resolvedLocation: CLLocation?
+            if let messageLocation {
+                resolvedLocation = messageLocation
+            } else {
+                resolvedLocation = appState.locationService.currentLocation
+                if resolvedLocation != nil {
+                    usingFallbackLocation = true
+                }
+            }
             viewModel.load(
                 repeats: repeats,
                 contacts: contacts,
                 discoveredNodes: discoveredNodes,
-                userLocation: messageLocation,
+                userLocation: resolvedLocation,
                 userName: appState.connectedDevice?.nodeName
                     ?? L10n.Chats.Chats.Path.Receiver.you
             )
@@ -76,55 +92,91 @@ struct HeardRepeatsMapSheet: View {
     // MARK: - Summary Banner
 
     private var summaryBanner: some View {
-        VStack {
-            HStack(spacing: 4) {
-                if viewModel.canCycleRepeats {
-                    Button {
-                        viewModel.showPreviousRepeat()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
+        HStack(spacing: 4) {
+            if viewModel.canCycleRepeats {
+                Button {
+                    viewModel.showPreviousRepeat()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(.rect)
                 }
-
-                if viewModel.selectedRepeatIndex != nil {
-                    Text(viewModel.selectedRepeatSummary)
-                } else {
-                    Text(L10n.Chats.Chats.HeardRepeats.Map.summary(
-                        viewModel.repeatCount,
-                        viewModel.locatedRepeaterCount
-                    ))
-                }
-
-                if viewModel.canCycleRepeats {
-                    Button {
-                        viewModel.showNextRepeat()
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
+                .buttonStyle(.plain)
             }
-            .font(.subheadline.weight(.medium))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .liquidGlass(in: .capsule)
-            .animation(.easeInOut(duration: 0.2), value: viewModel.selectedRepeatIndex)
 
-            Spacer()
+            if viewModel.selectedRepeatIndex != nil {
+                Text(viewModel.selectedRepeatSummary)
+            } else {
+                Text(L10n.Chats.Chats.HeardRepeats.Map.summary(
+                    viewModel.repeatCount,
+                    viewModel.locatedRepeaterCount
+                ))
+            }
+
+            if viewModel.canCycleRepeats {
+                Button {
+                    viewModel.showNextRepeat()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .font(.subheadline.weight(.medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .liquidGlass(in: .capsule)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.selectedRepeatIndex)
         .padding(.top, 8)
+    }
+
+    // MARK: - Location Fallback Banner
+
+    private var locationBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: locationSaved ? "checkmark.circle.fill" : "location.slash.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(locationSaved ? .green : .orange)
+
+            Text(locationSaved
+                 ? L10n.Chats.Chats.HeardRepeats.Map.Location.saved
+                 : L10n.Chats.Chats.HeardRepeats.Map.Location.approximate)
+                .font(.caption)
+
+            if !locationSaved {
+                Button(L10n.Chats.Chats.HeardRepeats.Map.Location.save) {
+                    saveCurrentLocation()
+                }
+                .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .liquidGlass(in: .capsule)
+        .padding(.top, 4)
+        .animation(.easeInOut(duration: 0.2), value: locationSaved)
+    }
+
+    private func saveCurrentLocation() {
+        guard let location = appState.locationService.currentLocation else { return }
+        Task {
+            try? await appState.offlineDataStore?.updateMessageUserLocation(
+                id: messageID,
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            )
+            locationSaved = true
+            onLocationSaved?(location)
+        }
     }
 
     // MARK: - Empty State

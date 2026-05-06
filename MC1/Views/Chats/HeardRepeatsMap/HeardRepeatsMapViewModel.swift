@@ -18,8 +18,8 @@ private let logger = Logger(subsystem: "com.pocketmesh", category: "HeardRepeats
 ///   in the outbound chain (the initial hop)
 /// - Neutral-colored `PathLineOverlay` lines with arrowheads between consecutive
 ///   hops in the outbound chain
-/// - An SNR-colored `PathLineOverlay` from each "last repeater" to the user's
-///   location — this is the only hop where we have actual signal data
+/// - An SNR-colored `PathLineOverlay` from the actual last repeater (if located)
+///   to the user's location — this is the only hop where we have actual signal data
 /// - A receiver endpoint pin at the user's location
 ///
 /// Supports cycling through individual repeats via `showNextRepeat()` /
@@ -88,6 +88,10 @@ final class HeardRepeatsMapViewModel {
         let hops: [(contact: ContactDTO, coordinate: CLLocationCoordinate2D)]
         /// Number of hops in the path that had no location data.
         let unlocatedHopCount: Int
+        /// Whether the actual last repeater (the one whose SNR we have) was
+        /// successfully resolved with location data. When false, the SNR-colored
+        /// last-hop line must not be drawn because `hops.last` is a different node.
+        let lastRepeaterLocated: Bool
     }
 
     private var resolvedRepeats: [ResolvedRepeat] = []
@@ -125,8 +129,10 @@ final class HeardRepeatsMapViewModel {
 
             var resolvedHops: [(contact: ContactDTO, coordinate: CLLocationCoordinate2D)] = []
             var unlocatedCount = 0
+            let lastHashIndex = hashes.count - 1
+            var lastRepeaterLocated = false
 
-            for hash in hashes {
+            for (index, hash) in hashes.enumerated() {
                 guard let match = RepeaterResolver.bestMatch(
                     for: hash, in: repeaters, userLocation: userLocation
                 ), match.hasLocation else {
@@ -144,13 +150,17 @@ final class HeardRepeatsMapViewModel {
                 }
 
                 resolvedHops.append((contact: match, coordinate: coord))
+                if index == lastHashIndex {
+                    lastRepeaterLocated = true
+                }
             }
 
             guard !resolvedHops.isEmpty else { continue }
             resolved.append(ResolvedRepeat(
                 repeatDTO: repeatDTO,
                 hops: resolvedHops,
-                unlocatedHopCount: unlocatedCount
+                unlocatedHopCount: unlocatedCount,
+                lastRepeaterLocated: lastRepeaterLocated
             ))
         }
 
@@ -203,7 +213,7 @@ final class HeardRepeatsMapViewModel {
         let resolved = resolvedRepeats[index]
         let repeatNum = index + 1
         let total = resolvedRepeats.count
-        let hopCount = resolved.hops.count
+        let hopCount = resolved.repeatDTO.hopCount
 
         let snrText: String
         if let snr = resolved.repeatDTO.snr {
@@ -306,8 +316,11 @@ final class HeardRepeatsMapViewModel {
                 segmentIndex += 1
             }
 
-            // Draw last-hop → user (SNR-colored)
-            if let userLocation = storedUserLocation {
+            // Draw last-hop → user (SNR-colored) only when the actual last
+            // repeater in the chain was resolved with location data.
+            // If the last repeater wasn't located, hops.last is a different
+            // node and drawing an SNR line from it would be misleading.
+            if let userLocation = storedUserLocation, resolved.lastRepeaterLocated {
                 let lastHop = resolved.hops.last!
                 let overlay = PathLineOverlay.line(
                     from: lastHop.coordinate,

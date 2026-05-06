@@ -34,6 +34,45 @@ public final class AdaptivePowerService {
         case reset
     }
 
+    /// Measured PA output curve mapping SX1262 config dBm to actual PA output dBm.
+    public struct PACurve: Sendable {
+        public let minConfig: Int8
+        public let outputDbm: [Double]
+
+        public func radioConfig(forTargetEirp target: Double) -> Int8 {
+            var bestIdx = 0
+            var bestDiff = Double.infinity
+            for (idx, output) in outputDbm.enumerated() {
+                let diff = abs(output - target)
+                if diff < bestDiff {
+                    bestDiff = diff
+                    bestIdx = idx
+                }
+            }
+            return Int8(bestIdx) + minConfig
+        }
+
+        public func actualOutput(atConfig config: Int8) -> Double {
+            let idx = Int(config - minConfig)
+            guard idx >= 0, idx < outputDbm.count else { return Double(config) }
+            return outputDbm[idx]
+        }
+
+        /// WisMesh Pocket 1W measured at 915.2 MHz, SF7. Config range 0–22.
+        public static let pocket1W = PACurve(minConfig: 0, outputDbm: [
+             7.3,  8.4,  9.6, 10.7, 12.0, 13.2, 14.3, 15.5,
+            16.6, 17.7, 18.9, 19.9, 21.0, 22.1, 23.1, 24.1,
+            25.1, 26.2, 27.3, 28.0, 28.8, 29.6, 30.3
+        ])
+
+        /// Heltec V4 measured at 915 MHz. Config range 0–22.
+        public static let heltecV4 = PACurve(minConfig: 0, outputDbm: [
+            11.34, 12.02, 13.12, 13.61, 14.55, 15.52, 16.92, 17.43,
+            18.52, 19.73, 20.93, 21.58, 22.46, 24.04, 24.86, 25.25,
+            25.86, 26.60, 27.20, 27.69, 28.13, 28.26, 28.39
+        ])
+    }
+
     // MARK: - Power Step Table
 
     /// All available power steps, ordered low to high.
@@ -50,8 +89,11 @@ public final class AdaptivePowerService {
 
     // MARK: - Configuration
 
-    /// External PA gain in dB (0 for normal radio, ~8 for WisMesh 1W).
+    /// External PA gain in dB (0 for normal radio, ~8 nominal for WisMesh 1W).
     public private(set) var paGainDb: Double = 0
+
+    /// Measured PA output curve, if available (replaces flat gain assumption).
+    public private(set) var paCurve: PACurve?
 
     /// Maximum TX power the radio chip supports (typically 22 dBm for SX1262).
     public private(set) var radioMaxDbm: Int8 = 22
@@ -106,6 +148,7 @@ public final class AdaptivePowerService {
         enabled: Bool
     ) {
         self.paGainDb = paGainDb
+        self.paCurve = Self.curve(forPAGain: paGainDb)
         self.radioMaxDbm = radioMaxDbm
         self.baseStepIndex = clampStepIndex(baseStepIndex)
         self.isEnabled = enabled
@@ -130,7 +173,8 @@ public final class AdaptivePowerService {
     /// Update PA gain (from settings UI).
     public func setPAGain(_ gain: Double) {
         paGainDb = max(0, gain)
-        logger.info("PA gain set to \(self.paGainDb)dB")
+        paCurve = Self.curve(forPAGain: gain)
+        logger.info("PA gain set to \(self.paGainDb)dB\(self.paCurve != nil ? " (measured curve)" : "")")
     }
 
     /// Enable or disable adaptive power mode.
@@ -159,8 +203,12 @@ public final class AdaptivePowerService {
     }
 
     /// Available steps for the current radio configuration.
+    /// When a measured PA curve is active, deduplicates steps that map to the same radio config.
     public var availableSteps: [PowerStep] {
-        Self.allSteps.filter { radioDbm(for: $0) <= radioMaxDbm }
+        let filtered = Self.allSteps.filter { radioDbm(for: $0) <= radioMaxDbm }
+        guard paCurve != nil else { return filtered }
+        var seenConfigs = Set<Int8>()
+        return filtered.filter { seenConfigs.insert(radioDbm(for: $0)).inserted }
     }
 
     /// Whether the current power is elevated above base.
@@ -182,7 +230,25 @@ public final class AdaptivePowerService {
 
     /// The radio TX power setting (dBm) for a given power step.
     public func radioDbm(for step: PowerStep) -> Int8 {
-        Int8(clamping: Int(step.eirpDbm - paGainDb))
+        if let curve = paCurve {
+            return curve.radioConfig(forTargetEirp: step.eirpDbm)
+        }
+        return Int8(clamping: Int(step.eirpDbm - paGainDb))
+    }
+
+    /// The actual expected EIRP output for a step, accounting for measured PA curve.
+    public func actualEirpDbm(for step: PowerStep) -> Double {
+        if let curve = paCurve {
+            let config = radioDbm(for: step)
+            return curve.actualOutput(atConfig: config)
+        }
+        return step.eirpDbm
+    }
+
+    /// Actual output power in milliwatts for a step.
+    public func actualMilliwatts(for step: PowerStep) -> Int {
+        let dbm = actualEirpDbm(for: step)
+        return Int(round(pow(10.0, dbm / 10.0)))
     }
 
     /// The radio TX power setting for the current step.
@@ -302,5 +368,13 @@ public final class AdaptivePowerService {
 
     private func clampStepIndex(_ index: Int) -> Int {
         max(0, min(index, Self.allSteps.count - 1))
+    }
+
+    private static func curve(forPAGain gain: Double) -> PACurve? {
+        switch gain {
+        case 8.0: .pocket1W
+        case 11.0: .heltecV4
+        default: nil
+        }
     }
 }
