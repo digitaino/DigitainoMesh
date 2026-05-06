@@ -22,9 +22,21 @@ Restored three message bubble features that were lost in a prior refactor — al
 
 - **Duplicate message badges** — When duplicate messages are collapsed, a "×N" badge appears with tap to expand/collapse.
 
-Adaptive Power PA Curve
+Adaptive Power Improvements
 
-Added measured PA output curve support to the adaptive power service for more accurate EIRP targeting on boards with external amplifiers.
+Added measured PA output curve support for more accurate EIRP targeting on boards with external amplifiers. Fixed the power display showing 1.1W for the 1W step — now caps at the target milliwatts. Improved status text: "Not yet verified" replaces "Waiting for radio", "At starting power" replaces "At base level", and escalation messages now say "Escalated from" instead of "Elevated from".
+
+Watch Repeater
+
+Long-press any repeater in the signal bars popover to start watching it. The watched repeater section shows live signal quality bars, a packet counter that flashes on each received packet, and a hex ID badge. Enable audible alerts with a sound picker (Note, Chime, Ping, Pop) so you hear each incoming packet — useful for aiming antennas or walking toward a repeater. A dedicated picker sheet lets you search by name or hex ID, or type a raw hex ID to watch a repeater not yet in your contacts.
+
+Weather Card Sizing Fix
+
+Fixed weather station cards (in Broadcasts, Favorites, and Your Requests sections) rendering clipped on initial load — the top and bottom of the card were cut off until a manual refresh. The card pager used a fixed-height container with a GeometryReader feedback loop that never converged. Replaced with intrinsic content sizing so cards always render at full height immediately.
+
+Spelling Fix
+
+Changed "Discover Neighbours" to "Discover Neighbors" (American English) in the repeater status UI.
 
 ---
 
@@ -34,11 +46,11 @@ v0.10.1 (Build 33)
 
 Upstream Cherry-Picks & Bug Fixes
 
-Cherry-picked safe upstream fixes and features from PocketMesh without adopting the MapLibre migration or deviceID→radioID rename.
+Cherry-picked safe upstream fixes and features from MeshCore One without adopting the MapLibre migration or deviceID→radioID rename.
 
-Discover Neighbours in Repeater Status
+Discover Neighbors in Repeater Status
 
-Admin users can now trigger a "Discover Neighbours" command from the Neighbours section in repeater status. Sends the discover.neighbors CLI command, then polls the binary neighbours endpoint every 3 seconds for 60 seconds, updating the list in real time as nodes respond. The button toggles to show a live countdown and stops discovery on tap. Pull-to-refresh and toolbar refresh skip the neighbour fetch during active discovery to avoid conflicts.
+Admin users can now trigger a "Discover Neighbors" command from the Neighbors section in repeater status. Sends the discover.neighbors CLI command, then polls the binary neighbors endpoint every 3 seconds for 60 seconds, updating the list in real time as nodes respond. The button toggles to show a live countdown and stops discovery on tap. Pull-to-refresh and toolbar refresh skip the neighbor fetch during active discovery to avoid conflicts.
 
 Restored Features After Cherry-Pick Breakage
 

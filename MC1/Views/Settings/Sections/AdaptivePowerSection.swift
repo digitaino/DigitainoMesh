@@ -105,9 +105,9 @@ struct AdaptivePowerSection: View {
                 Text(matches ? "Confirmed" : "Mismatch: radio at \(confirmed) dBm")
                     .foregroundStyle(matches ? Color.secondary : Color.orange)
             } else {
-                Image(systemName: "questionmark.circle")
+                Image(systemName: "checkmark.circle")
                     .foregroundStyle(.secondary)
-                Text("Waiting for radio")
+                Text("Not yet verified")
                     .foregroundStyle(.secondary)
             }
         }
@@ -117,11 +117,11 @@ struct AdaptivePowerSection: View {
     private var escalationRow: some View {
         HStack(spacing: 6) {
             if powerService.isElevated {
-                Text("Elevated from \(powerService.baseStep.label) base")
+                Text("Escalated from \(powerService.baseStep.label)")
                     .font(.caption)
                     .foregroundStyle(.orange)
             } else {
-                Text("At base level")
+                Text("At starting power")
                     .font(.caption)
                     .foregroundStyle(.green)
             }
@@ -152,8 +152,8 @@ struct AdaptivePowerSection: View {
     private func pickerLabel(for step: AdaptivePowerService.PowerStep) -> String {
         if paGainDb > 0 {
             let actualDbm = powerService.actualEirpDbm(for: step)
-            let actualMw = powerService.actualMilliwatts(for: step)
-            return "\(formatPower(actualMw)) (\(String(format: "%.0f", actualDbm)) dBm)"
+            let cappedMw = min(powerService.actualMilliwatts(for: step), step.targetMilliwatts)
+            return "\(formatPower(cappedMw)) (\(String(format: "%.0f", actualDbm)) dBm)"
         }
         return "\(step.label) (\(Int(step.eirpDbm)) dBm)"
     }
@@ -161,8 +161,8 @@ struct AdaptivePowerSection: View {
     private func outputString(for step: AdaptivePowerService.PowerStep) -> String {
         if paGainDb > 0 {
             let actualDbm = powerService.actualEirpDbm(for: step)
-            let actualMw = powerService.actualMilliwatts(for: step)
-            return "\(formatPower(actualMw)) — \(String(format: "%.1f", actualDbm)) dBm"
+            let cappedMw = min(powerService.actualMilliwatts(for: step), step.targetMilliwatts)
+            return "\(formatPower(cappedMw)) — \(String(format: "%.1f", actualDbm)) dBm"
         }
         return "\(step.label) — \(Int(step.eirpDbm)) dBm"
     }

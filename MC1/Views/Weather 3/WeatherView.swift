@@ -52,9 +52,6 @@ private struct WeatherBody: View {
     @State private var selectedRequestedCard: String?
     @State private var selectedBroadcastCard: String?
     @State private var selectedRadarRegion: UInt8?
-    @State private var favCardHeight: CGFloat = 200
-    @State private var requestedCardHeight: CGFloat = 200
-    @State private var broadcastCardHeight: CGFloat = 200
 
     @AppStorage("wxFavoriteICAOs") private var favoriteICAOsRaw: String = ""
     @AppStorage("wxFavoritePlaces") private var favoritePlacesRaw: String = ""
@@ -615,7 +612,6 @@ private struct WeatherBody: View {
                     title: "Favorites", icon: "star.fill",
                     items: favItems,
                     selection: $selectedFavoriteCard,
-                    cardHeight: $favCardHeight,
                     isExpanded: $showFavorites
                 )
                 .id("section:favorites")
@@ -633,7 +629,6 @@ private struct WeatherBody: View {
                         title: "Your Requests", icon: "arrow.up.message",
                         items: requestedItems,
                         selection: $selectedRequestedCard,
-                        cardHeight: $requestedCardHeight,
                         isExpanded: $showRequested
                     )
                     .id("section:requested")
@@ -669,7 +664,6 @@ private struct WeatherBody: View {
                         title: "Broadcasts", icon: "dot.radiowaves.left.and.right",
                         items: broadcastItems,
                         selection: $selectedBroadcastCard,
-                        cardHeight: $broadcastCardHeight,
                         isExpanded: $showBroadcasts
                     )
                     .id("section:broadcasts")
@@ -708,14 +702,13 @@ private struct WeatherBody: View {
         title: String, icon: String,
         items: [WeatherCardItem],
         selection: Binding<String?>,
-        cardHeight: Binding<CGFloat>,
         isExpanded: Binding<Bool>
     ) -> some View {
         Section {
             if isExpanded.wrappedValue {
                 VStack(spacing: 6) {
                     ScrollView(.horizontal) {
-                        HStack(spacing: 0) {
+                        HStack(alignment: .top, spacing: 0) {
                             ForEach(items) { item in
                                 Group {
                                     switch item {
@@ -727,7 +720,6 @@ private struct WeatherBody: View {
                                     }
                                 }
                                 .containerRelativeFrame(.horizontal)
-                                .frame(maxHeight: .infinity, alignment: .top)
                             }
                         }
                         .scrollTargetLayout()
@@ -735,12 +727,6 @@ private struct WeatherBody: View {
                     .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
                     .scrollPosition(id: selection)
                     .scrollIndicators(.hidden)
-                    .frame(height: cardHeight.wrappedValue + 16)
-                    .onPreferenceChange(CardHeightKey.self) { newHeight in
-                        if newHeight > 0 && newHeight > cardHeight.wrappedValue {
-                            cardHeight.wrappedValue = newHeight
-                        }
-                    }
 
                     // Page dots
                     if items.count > 1 {
@@ -2132,11 +2118,6 @@ private struct StationPageCard: View {
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-        .overlay(
-            GeometryReader { geo in
-                Color.clear.preference(key: CardHeightKey.self, value: geo.size.height)
-            }
-        )
     }
 
     @ViewBuilder
@@ -2508,11 +2489,6 @@ private struct CityObservationCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-        .overlay(
-            GeometryReader { geo in
-                Color.clear.preference(key: CardHeightKey.self, value: geo.size.height)
-            }
-        )
     }
 
     private var forecastKey: String? {
@@ -3191,16 +3167,6 @@ private struct RadarRegionPickerView: View {
         fmt.dateFormat = "HH:mm'Z'"
         fmt.timeZone = TimeZone(identifier: "UTC")
         return fmt.string(from: date)
-    }
-}
-
-// MARK: - Card Height Preference Key
-
-/// Preference key that propagates the maximum card height up to the TabView container.
-private struct CardHeightKey: PreferenceKey {
-    nonisolated(unsafe) static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }
 

@@ -2814,7 +2814,7 @@ public enum L10n {
           return L10n.tr("RemoteNodes", "remoteNodes.status.discoveringSeconds", p1, fallback: "Discovering... %ds")
         }
         /// Location: RepeaterStatusView.swift - Discover neighbours button label
-        public static let discoverNeighbors = L10n.tr("RemoteNodes", "remoteNodes.status.discoverNeighbors", fallback: "Discover Neighbours")
+        public static let discoverNeighbors = L10n.tr("RemoteNodes", "remoteNodes.status.discoverNeighbors", fallback: "Discover Neighbors")
         /// Location: RepeaterStatusView.swift - Hours ago format
         public static func hoursAgo(_ p1: Int) -> String {
           return L10n.tr("RemoteNodes", "remoteNodes.status.hoursAgo", p1, fallback: "%dh ago")
