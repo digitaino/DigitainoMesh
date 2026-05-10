@@ -212,6 +212,15 @@
 /* Location: ContactDetailView.swift - Purpose: Admin access button */
 "contacts.detail.adminAccess" = "Admin Access";
 
+/* Location: ContactDetailView.swift - Purpose: Request telemetry from peer button */
+"contacts.detail.requestTelemetry" = "Request Telemetry";
+
+/* Location: ContactDetailView.swift - Purpose: No telemetry data received */
+"contacts.detail.noTelemetryData" = "No telemetry data received";
+
+/* Location: ContactDetailView.swift - Purpose: Peer telemetry section footer */
+"contacts.detail.peerTelemetryFooter" = "Sensor data from this contact. The contact must have telemetry requests enabled.";
+
 /* Location: ContactDetailView.swift - Purpose: Send message button */
 "contacts.detail.sendMessage" = "Send Message";
 

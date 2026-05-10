@@ -1101,10 +1101,14 @@ public enum L10n {
         public static let nickname = L10n.tr("Contacts", "contacts.detail.nickname", fallback: "Nickname")
         /// Location: ContactDetailView.swift - Purpose: No nickname placeholder
         public static let nicknameNone = L10n.tr("Contacts", "contacts.detail.nicknameNone", fallback: "None")
+        /// Location: ContactDetailView.swift - Purpose: No telemetry data received
+        public static let noTelemetryData = L10n.tr("Contacts", "contacts.detail.noTelemetryData", fallback: "No telemetry data received")
         /// Location: ContactDetailView.swift - Purpose: Open in Maps button
         public static let openInMaps = L10n.tr("Contacts", "contacts.detail.openInMaps", fallback: "Open in Maps")
         /// Location: ContactDetailView.swift - Purpose: Footer for path routing
         public static let pathFooter = L10n.tr("Contacts", "contacts.detail.pathFooter", fallback: "Messages route through the path shown. Reset Path to use flood routing instead.")
+        /// Location: ContactDetailView.swift - Purpose: Peer telemetry section footer
+        public static let peerTelemetryFooter = L10n.tr("Contacts", "contacts.detail.peerTelemetryFooter", fallback: "Sensor data from this contact. The contact must have telemetry requests enabled.")
         /// Location: ContactDetailView.swift - Purpose: Ping failure VoiceOver announcement
         public static let pingFailureAnnouncement = L10n.tr("Contacts", "contacts.detail.pingFailureAnnouncement", fallback: "Ping failed")
         /// Location: ContactDetailView.swift - Purpose: Ping failure accessibility label
@@ -1127,6 +1131,8 @@ public enum L10n {
         public static let publicKey = L10n.tr("Contacts", "contacts.detail.publicKey", fallback: "Public Key")
         /// Location: ContactDetailView.swift - Purpose: Remove from favorites button
         public static let removeFromFavorites = L10n.tr("Contacts", "contacts.detail.removeFromFavorites", fallback: "Remove from Favorites")
+        /// Location: ContactDetailView.swift - Purpose: Request telemetry from peer button
+        public static let requestTelemetry = L10n.tr("Contacts", "contacts.detail.requestTelemetry", fallback: "Request Telemetry")
         /// Location: ContactDetailView.swift - Purpose: Reset path button
         public static let resetPath = L10n.tr("Contacts", "contacts.detail.resetPath", fallback: "Reset Path")
         /// Location: ContactDetailView.swift - Purpose: Route label

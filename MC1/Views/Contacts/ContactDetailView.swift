@@ -1,5 +1,6 @@
 import Accessibility
 import MapKit
+import MeshCore
 import os
 import MC1Services
 import SwiftUI
@@ -93,6 +94,11 @@ struct ContactDetailView: View {
     // Ping state
     @State private var isPinging = false
     @State private var pingResult: PingResult?
+    // Peer telemetry state
+    @State private var isRequestingTelemetry = false
+    @State private var telemetryDataPoints: [LPPDataPoint] = []
+    @State private var telemetryLoaded = false
+    @State private var telemetryError: String?
 
     private let pingLogger = Logger(subsystem: "com.mc1", category: "Ping")
 
@@ -116,6 +122,7 @@ struct ContactDetailView: View {
                 showFromDirectChat: showFromDirectChat,
                 isPinging: isPinging,
                 isTogglingFavorite: isTogglingFavorite,
+                isRequestingTelemetry: isRequestingTelemetry,
                 pingResult: pingResult,
                 onJoinRoom: { showRoomJoinSheet = true },
                 onShowTelemetry: { activeSheet = .repeaterAuth },
@@ -124,6 +131,7 @@ struct ContactDetailView: View {
                     showRepeaterAdminAuth = true
                 },
                 onPingRepeater: { Task { await pingRepeater() } },
+                onRequestPeerTelemetry: { Task { await requestPeerTelemetry() } },
                 onToggleFavorite: { Task { await toggleFavorite() } },
                 onShareQR: { showQRShareSheet = true },
                 onShareViaAdvert: { Task { await shareContact() } }
@@ -137,6 +145,15 @@ struct ContactDetailView: View {
                 isSaving: isSaving,
                 onSaveNickname: { Task { await saveNickname() } }
             )
+
+            // Peer telemetry section (chat contacts only)
+            if currentContact.type == .chat && telemetryLoaded {
+                PeerTelemetrySection(
+                    dataPoints: telemetryDataPoints,
+                    contact: currentContact,
+                    error: telemetryError
+                )
+            }
 
             // Location section (if available)
             if currentContact.hasLocation {
@@ -434,6 +451,26 @@ struct ContactDetailView: View {
         isPinging = false
     }
 
+    private func requestPeerTelemetry() async {
+        guard !isRequestingTelemetry else { return }
+        isRequestingTelemetry = true
+        telemetryError = nil
+
+        do {
+            guard let services = appState.services else { return }
+            let response = try await services.binaryProtocolService.requestTelemetry(
+                from: currentContact.publicKey
+            )
+            telemetryDataPoints = LPPDecoder.decode(response.rawData)
+            telemetryLoaded = true
+        } catch {
+            telemetryError = error.localizedDescription
+            telemetryLoaded = true
+        }
+
+        isRequestingTelemetry = false
+    }
+
     private func refreshContact() async {
         if let updated = try? await appState.services?.dataStore.fetchContact(id: currentContact.id) {
             currentContact = updated
@@ -536,11 +573,13 @@ private struct ContactActionsSection: View {
     let showFromDirectChat: Bool
     let isPinging: Bool
     let isTogglingFavorite: Bool
+    let isRequestingTelemetry: Bool
     let pingResult: PingResult?
     let onJoinRoom: () -> Void
     let onShowTelemetry: () -> Void
     let onShowAdminAccess: () -> Void
     let onPingRepeater: () -> Void
+    let onRequestPeerTelemetry: () -> Void
     let onToggleFavorite: () -> Void
     let onShareQR: () -> Void
     let onShareViaAdvert: () -> Void
@@ -595,6 +634,19 @@ private struct ContactActionsSection: View {
                     }
                     .radioDisabled(for: appState.connectionState)
                 }
+
+                // Request Telemetry from peer
+                Button(action: onRequestPeerTelemetry) {
+                    HStack {
+                        Label(L10n.Contacts.Contacts.Detail.requestTelemetry, systemImage: "chart.line.uptrend.xyaxis")
+                        if isRequestingTelemetry {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isRequestingTelemetry)
+                .radioDisabled(for: appState.connectionState)
             }
 
             // Toggle favorite (for all contact types)
@@ -944,6 +996,97 @@ private struct ContactTechnicalSection: View {
             }
         } header: {
             Text(L10n.Contacts.Contacts.Detail.technical)
+        }
+    }
+}
+
+private struct PeerTelemetrySection: View {
+    let dataPoints: [LPPDataPoint]
+    let contact: ContactDTO
+    let error: String?
+
+    private var ocvValues: [Int] {
+        if let presetName = contact.ocvPreset {
+            if presetName == OCVPreset.custom.rawValue, let customString = contact.customOCVArrayString {
+                let parsed = customString.split(separator: ",")
+                    .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                if parsed.count == 11 { return parsed }
+            }
+            if let preset = OCVPreset(rawValue: presetName) {
+                return preset.ocvArray
+            }
+        }
+        return OCVPreset.liIon.ocvArray
+    }
+
+    private var hasMultipleChannels: Bool {
+        Set(dataPoints.map(\.channel)).count > 1
+    }
+
+    private var groupedDataPoints: [(channel: UInt8, dataPoints: [LPPDataPoint])] {
+        Dictionary(grouping: dataPoints, by: \.channel)
+            .sorted { $0.key < $1.key }
+            .map { (channel: $0.key, dataPoints: $0.value) }
+    }
+
+    var body: some View {
+        Section {
+            if let error {
+                Label {
+                    Text(error)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            } else if dataPoints.isEmpty {
+                Text(L10n.Contacts.Contacts.Detail.noTelemetryData)
+                    .foregroundStyle(.secondary)
+            } else if hasMultipleChannels {
+                ForEach(groupedDataPoints, id: \.channel) { group in
+                    Section {
+                        ForEach(group.dataPoints, id: \.self) { dataPoint in
+                            PeerTelemetryRow(dataPoint: dataPoint, ocvArray: ocvValues)
+                        }
+                    } header: {
+                        Text(L10n.RemoteNodes.RemoteNodes.Status.channel(Int(group.channel)))
+                            .fontWeight(.semibold)
+                    }
+                }
+            } else {
+                ForEach(dataPoints, id: \.self) { dataPoint in
+                    PeerTelemetryRow(dataPoint: dataPoint, ocvArray: ocvValues)
+                }
+            }
+        } header: {
+            Text(L10n.Contacts.Contacts.Detail.telemetry)
+        } footer: {
+            Text(L10n.Contacts.Contacts.Detail.peerTelemetryFooter)
+        }
+    }
+}
+
+private struct PeerTelemetryRow: View {
+    let dataPoint: LPPDataPoint
+    let ocvArray: [Int]
+
+    var body: some View {
+        if dataPoint.type == .voltage, case .float(let voltage) = dataPoint.value {
+            let millivolts = Int(voltage * 1000)
+            let battery = BatteryInfo(level: millivolts)
+            let percentage = battery.percentage(using: ocvArray)
+
+            LabeledContent(dataPoint.typeName) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(dataPoint.formattedValue)
+                    Text("\(percentage)%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            LabeledContent(dataPoint.typeName, value: dataPoint.formattedValue)
         }
     }
 }

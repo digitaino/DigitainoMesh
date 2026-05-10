@@ -28,7 +28,6 @@ public final class SignalBarsService {
         // Round-robin tracking
         public var failCount: Int = 0            // consecutive ping failures
         public var lastPingTime: Date?           // when last pinged
-        public var checkCount: Int = 0           // total successful pings (adaptive timing)
     }
 
     /// TX measurement state for a repeater.
@@ -43,10 +42,8 @@ public final class SignalBarsService {
 
     private enum Constants {
         static let minPingSpacing: Duration = .seconds(1)
-        static let bestRepeaterBaseInterval: TimeInterval = 60     // first 10 checks
-        static let bestRepeaterMidInterval: TimeInterval = 120     // checks 10-20
-        static let bestRepeaterLongInterval: TimeInterval = 300    // checks 20+
-        static let otherRepeaterInterval: TimeInterval = 120
+        static let bestRepeaterInterval: TimeInterval = 45         // primary link — keep fresh
+        static let otherRepeaterInterval: TimeInterval = 120       // secondary — periodic check
         static let failRetryInterval1: TimeInterval = 20           // failCount == 1: quick retry
         static let failRetryInterval2: TimeInterval = 45           // failCount == 2
         static let failRetryInterval3: TimeInterval = 90           // failCount == 3
@@ -60,7 +57,7 @@ public final class SignalBarsService {
 
     // MARK: - Published State
 
-    /// All tracked repeaters, sorted by rxSnr descending (best first).
+    /// All tracked repeaters, sorted by signal quality (TX-weighted, best first).
     public private(set) var repeaters: [RepeaterSignal] = []
 
     /// Best repeater (first in sorted list) — drives toolbar indicator.
@@ -193,7 +190,6 @@ public final class SignalBarsService {
         // Reset tracking for all repeaters
         for i in repeaters.indices {
             repeaters[i].failCount = 0
-            repeaters[i].checkCount = 0
             repeaters[i].txState = .measuring
         }
 
@@ -310,12 +306,10 @@ public final class SignalBarsService {
         }
     }
 
-    /// Calculate the desired ping interval for a repeater based on firmware algorithm.
+    /// Calculate the desired ping interval for a repeater.
     private func desiredPingInterval(for repeater: RepeaterSignal) -> TimeInterval? {
-        // At max failures, don't ping
         guard repeater.failCount < Constants.maxFailCount else { return nil }
 
-        // Failed repeaters: quick first retry, then progressive backoff
         if repeater.failCount > 0 {
             switch repeater.failCount {
             case 1:  return Constants.failRetryInterval1
@@ -324,20 +318,8 @@ public final class SignalBarsService {
             }
         }
 
-        // Best repeater uses adaptive intervals based on check count
         let isBest = (bestRepeater?.id == repeater.id)
-        if isBest {
-            if repeater.checkCount < 10 {
-                return Constants.bestRepeaterBaseInterval
-            } else if repeater.checkCount < 20 {
-                return Constants.bestRepeaterMidInterval
-            } else {
-                return Constants.bestRepeaterLongInterval
-            }
-        }
-
-        // Other repeaters: fixed 120s
-        return Constants.otherRepeaterInterval
+        return isBest ? Constants.bestRepeaterInterval : Constants.otherRepeaterInterval
     }
 
     /// Select the next repeater that needs pinging, or nil if none are due.
@@ -513,8 +495,7 @@ public final class SignalBarsService {
                     lastHeard: Date(),
                     publicKey: publicKey ?? repeaters[idx].publicKey,
                     failCount: repeaters[idx].failCount,
-                    lastPingTime: repeaters[idx].lastPingTime,
-                    checkCount: repeaters[idx].checkCount
+                    lastPingTime: repeaters[idx].lastPingTime
                 )
             } else {
                 repeaters[idx].rxSnr = rxSnr
@@ -652,10 +633,9 @@ public final class SignalBarsService {
                 repeater.txState = .measured(repeater.rxQuality)
             }
             repeater.lastHeard = Date()
-            // Success: reset fail count, increment check count
             repeater.failCount = 0
-            repeater.checkCount += 1
         }
+        sortRepeaters()
     }
 
     // MARK: - Periodic Discover Probing
@@ -722,12 +702,20 @@ public final class SignalBarsService {
     }
 
     private func sortRepeaters() {
+        let previousBest = repeaters.first?.id
         repeaters.sort { lhs, rhs in
             let lhsTier = sortTier(for: lhs)
             let rhsTier = sortTier(for: rhs)
             if lhsTier != rhsTier { return lhsTier < rhsTier }
-            // Within same tier, sort by signal strength
             return sortScore(for: lhs) > sortScore(for: rhs)
+        }
+        if let newBest = repeaters.first,
+           newBest.id != previousBest,
+           !isRefreshing {
+            logger.info("Best repeater changed to \(newBest.id) — prioritizing next ping")
+            updateRepeater(hexID: newBest.id) {
+                $0.lastPingTime = nil
+            }
         }
     }
 
@@ -740,11 +728,11 @@ public final class SignalBarsService {
         }
     }
 
-    /// Sort score within a tier: bidirectional uses avg(rx+tx), others use rxSnr only.
+    /// Sort score within a tier: TX-weighted (70/30) when measured, RX-only otherwise.
     private func sortScore(for r: RepeaterSignal) -> Double {
         let rx = r.rxSnr ?? -999
         if case .measured = r.txState, let tx = r.txSnr {
-            return (rx + tx) / 2.0
+            return tx * 0.7 + rx * 0.3
         }
         return rx
     }
