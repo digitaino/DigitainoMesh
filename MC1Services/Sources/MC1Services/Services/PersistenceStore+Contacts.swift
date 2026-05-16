@@ -120,20 +120,42 @@ extension PersistenceStore {
             contact.deviceID == targetDeviceID
         }
         let existing = try modelContext.fetch(FetchDescriptor(predicate: predicate))
-        let existingByKey = Dictionary(uniqueKeysWithValues: existing.map { ($0.publicKey, $0) })
-        logger.info("saveContactsBatch: found \(existing.count) existing, processing \(frames.count) frames")
+        // Tolerate (and clean up) duplicate publicKey rows that may already exist —
+        // Dictionary(uniqueKeysWithValues:) traps on duplicates and would crash every
+        // subsequent sync. Keep the most recently modified row, delete the rest.
+        var contactByKey: [Data: Contact] = [:]
+        var duplicatesDeleted = 0
+        for contact in existing {
+            if let prior = contactByKey[contact.publicKey] {
+                let (keep, drop) = contact.lastModified >= prior.lastModified
+                    ? (contact, prior)
+                    : (prior, contact)
+                contactByKey[contact.publicKey] = keep
+                modelContext.delete(drop)
+                duplicatesDeleted += 1
+            } else {
+                contactByKey[contact.publicKey] = contact
+            }
+        }
+        if duplicatesDeleted > 0 {
+            logger.warning("saveContactsBatch: removed \(duplicatesDeleted) duplicate contact row(s)")
+        }
+        logger.info("saveContactsBatch: found \(contactByKey.count) existing, processing \(frames.count) frames")
 
         var ids: [UUID] = []
         var updatedCount = 0
         var insertedCount = 0
+        // Track newly-inserted contacts so a frames batch that contains the same
+        // publicKey twice updates the first insert instead of creating a second row.
         for frame in frames {
-            if let match = existingByKey[frame.publicKey] {
+            if let match = contactByKey[frame.publicKey] {
                 match.update(from: frame)
                 ids.append(match.id)
                 updatedCount += 1
             } else {
                 let contact = Contact(deviceID: deviceID, from: frame)
                 modelContext.insert(contact)
+                contactByKey[frame.publicKey] = contact
                 ids.append(contact.id)
                 insertedCount += 1
             }
