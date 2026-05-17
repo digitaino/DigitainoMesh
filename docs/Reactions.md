@@ -44,8 +44,10 @@ The `{snippet}` is a human-readable echo of the target message text. It is **cos
 
 #### Length limits
 
-- **Channel reactions** are capped at **136 characters total**. This accounts for the firmware-prepended `NodeName: ` prefix that consumes part of the 160-character on-air message budget. When the full text would exceed 136 chars, shorten the **snippet only** (append `...`). The emoji, sender, and hash suffix must be preserved.
-- **DM reactions** are capped at **150 UTF-8 bytes total**. Same rule: shorten the snippet only.
+All limits are in **UTF-8 bytes** (the firmware enforces a byte budget, not characters). When the full text would exceed the budget, shorten the **snippet only** and append `...`. The emoji, sender, and hash suffix must be preserved.
+
+- **Channel reactions** must fit so that the firmware-prepended `"{NodeName}: "` plus the reaction stays within a total of **147 bytes** (`ProtocolLimits.maxChannelMessageTotalLength`). The user-text budget is therefore `147 - nodeNameBytes - 2`, where `2` covers the literal `": "` separator. With a 12-byte node name the budget is 133 bytes; with the maximum 31-byte node name it shrinks to 114 bytes. Always compute the budget against the **actual local node name**, not a fixed constant.
+- **DM reactions** are capped at **150 UTF-8 bytes total**. No firmware prefix is prepended.
 
 ### v1 — legacy (accept on receive, do not emit)
 

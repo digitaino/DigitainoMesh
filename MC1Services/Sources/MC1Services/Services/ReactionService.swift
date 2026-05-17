@@ -98,13 +98,15 @@ public actor ReactionService {
         emoji: String,
         targetSender: String,
         targetText: String,
-        targetTimestamp: UInt32
+        targetTimestamp: UInt32,
+        localNodeName: String
     ) -> String {
         ReactionParser.buildChannelReactionText(
             emoji: emoji,
             targetSender: targetSender,
             targetText: targetText,
-            targetTimestamp: targetTimestamp
+            targetTimestamp: targetTimestamp,
+            localNodeNameByteCount: localNodeName.utf8.count
         )
     }
 

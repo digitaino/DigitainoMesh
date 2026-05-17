@@ -75,7 +75,8 @@ extension ChatViewModel {
             emoji: emoji,
             targetSender: targetSenderName,
             targetText: message.text,
-            targetTimestamp: message.reactionTimestamp
+            targetTimestamp: message.reactionTimestamp,
+            localNodeName: localNodeName
         )
 
         do {

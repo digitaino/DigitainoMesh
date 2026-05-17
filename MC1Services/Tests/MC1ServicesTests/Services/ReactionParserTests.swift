@@ -461,7 +461,8 @@ struct ReactionParserTests {
             emoji: "👍",
             targetSender: "AlphaNode",
             targetText: "Hello world",
-            targetTimestamp: 1704067200
+            targetTimestamp: 1704067200,
+            localNodeNameByteCount: "Me".utf8.count
         )
         #expect(text.hasPrefix("👍 reacted to [AlphaNode]: \"Hello world\""))
         #expect(text.hasSuffix(")"))
@@ -479,7 +480,8 @@ struct ReactionParserTests {
             emoji: emoji,
             targetSender: sender,
             targetText: targetText,
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeNameByteCount: "Me".utf8.count
         )
 
         let parsed = ReactionParser.parse(text)
@@ -530,14 +532,20 @@ struct ReactionParserTests {
     @Test("Channel reaction truncates long messages")
     func channelReactionTruncatesLong() {
         let longText = String(repeating: "a", count: 200)
+        let localNodeName = "MyNode"
         let text = ReactionParser.buildChannelReactionText(
             emoji: "👍",
             targetSender: "Node",
             targetText: longText,
-            targetTimestamp: 100
+            targetTimestamp: 100,
+            localNodeNameByteCount: localNodeName.utf8.count
         )
-        // Must fit within 147 bytes
-        #expect(text.utf8.count <= 147)
+        // Must fit within the per-node-name channel budget so the firmware-prepended
+        // "{NodeName}: " plus the reaction stays within maxChannelMessageTotalLength.
+        let budget = ProtocolLimits.maxChannelMessageLength(
+            nodeNameByteCount: localNodeName.utf8.count
+        )
+        #expect(text.utf8.count <= budget)
         #expect(text.contains("..."))
 
         // Must still round-trip parse
@@ -545,6 +553,29 @@ struct ReactionParserTests {
         #expect(parsed != nil)
         #expect(parsed?.emoji == "👍")
         #expect(parsed?.targetSender == "Node")
+    }
+
+    @Test("Channel reaction respects longer node name budgets")
+    func channelReactionRespectsLongNodeName() {
+        let longText = String(repeating: "a", count: 200)
+        // A 31-byte node name is the maximum usable length; this exercises the
+        // tightest budget where the snippet has the least room.
+        let localNodeName = String(repeating: "x", count: 31)
+        let text = ReactionParser.buildChannelReactionText(
+            emoji: "👍",
+            targetSender: "Node",
+            targetText: longText,
+            targetTimestamp: 100,
+            localNodeNameByteCount: localNodeName.utf8.count
+        )
+        let budget = ProtocolLimits.maxChannelMessageLength(
+            nodeNameByteCount: localNodeName.utf8.count
+        )
+        #expect(text.utf8.count <= budget)
+
+        // Hash suffix must always be preserved.
+        let parsed = ReactionParser.parse(text)
+        #expect(parsed != nil)
     }
 
     @Test("DM reaction truncates long messages")

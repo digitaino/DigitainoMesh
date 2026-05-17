@@ -14,7 +14,8 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "AlphaNode",
             targetText: "What's the situation at Main St today?",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
 
         // Verify human-readable format: {emoji} reacted to [{sender}]: "{snippet}" ({hash})
@@ -34,7 +35,8 @@ struct ReactionServiceTests {
             emoji: "❤️",
             targetSender: "Node",
             targetText: "ok",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
 
         #expect(text.hasPrefix("❤️ reacted to [Node]: \"ok\""))
@@ -51,14 +53,16 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "Node",
             targetText: targetText,
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
 
         let text2 = service.buildReactionText(
             emoji: "👍",
             targetSender: "Node",
             targetText: targetText,
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
 
         #expect(text1 == text2)
@@ -73,14 +77,16 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "Node",
             targetText: targetText,
-            targetTimestamp: 1704067200
+            targetTimestamp: 1704067200,
+            localNodeName: "Me"
         )
 
         let text2 = service.buildReactionText(
             emoji: "👍",
             targetSender: "Node",
             targetText: targetText,
-            targetTimestamp: 1704067201
+            targetTimestamp: 1704067201,
+            localNodeName: "Me"
         )
 
         #expect(text1 != text2)
@@ -106,7 +112,8 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "Node",
             targetText: "Hello world",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
 
         let parsed = ReactionParser.parse(reactionText)!
@@ -162,7 +169,8 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "Node",
             targetText: "Same message",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
 
         let parsed = ReactionParser.parse(reactionText)!
@@ -186,7 +194,8 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "AlphaNode",
             targetText: "Hello world",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
 
         let parsed = ReactionParser.parse(reactionText)!
@@ -227,7 +236,8 @@ struct ReactionServiceTests {
                 emoji: emoji,
                 targetSender: "AlphaNode",
                 targetText: "Hello world",
-                targetTimestamp: timestamp
+                targetTimestamp: timestamp,
+                localNodeName: "Me"
             )
             let parsed = ReactionParser.parse(reactionText)!
 
@@ -266,7 +276,8 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "AlphaNode",
             targetText: "Hello world",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
         let parsed = ReactionParser.parse(reactionText)!
 
@@ -303,7 +314,8 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "AlphaNode",
             targetText: "Hello world",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
         let parsed = ReactionParser.parse(reactionText)!
 
@@ -342,7 +354,8 @@ struct ReactionServiceTests {
             emoji: "👍",
             targetSender: "AlphaNode",
             targetText: "Hello world",
-            targetTimestamp: timestamp
+            targetTimestamp: timestamp,
+            localNodeName: "Me"
         )
         let parsed = ReactionParser.parse(reactionText)!
 

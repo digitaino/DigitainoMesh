@@ -240,20 +240,26 @@ public enum ReactionParser {
     /// Builds human-readable channel reaction text.
     /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
     ///
-    /// The total is capped at 136 characters (channel message limit excluding the
-    /// firmware-prepended "NodeName: " prefix). The hash suffix is always preserved —
+    /// The total reaction text (in UTF-8 bytes) is capped at
+    /// `ProtocolLimits.maxChannelMessageLength(nodeNameByteCount:)` so that the
+    /// firmware-prepended `"{NodeName}: "` plus the reaction stays within
+    /// `maxChannelMessageTotalLength`. The hash suffix is always preserved —
     /// only the snippet is shortened if needed.
     public static func buildChannelReactionText(
         emoji: String,
         targetSender: String,
         targetText: String,
-        targetTimestamp: UInt32
+        targetTimestamp: UInt32,
+        localNodeNameByteCount: Int
     ) -> String {
         let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
         let prefix = "\(emoji) reacted to [\(targetSender)]: \""
         let closing = "\" (\(hash))"
-        let snippetBudget = max(0, 136 - prefix.count - closing.count)
-        let snippet = truncateToFitChars(targetText, maxChars: snippetBudget)
+        let totalBudget = ProtocolLimits.maxChannelMessageLength(
+            nodeNameByteCount: localNodeNameByteCount
+        )
+        let snippetBudget = max(0, totalBudget - prefix.utf8.count - closing.utf8.count)
+        let snippet = truncateToFit(targetText, maxBytes: snippetBudget)
         return "\(prefix)\(snippet)\(closing)"
     }
 
@@ -285,13 +291,6 @@ public enum ReactionParser {
             byteCount += charBytes
         }
         return result + "..."
-    }
-
-    /// Truncates a string to fit within a character count budget, appending "..." if truncated.
-    private static func truncateToFitChars(_ text: String, maxChars: Int) -> String {
-        guard maxChars > 3 else { return "" }
-        guard text.count > maxChars else { return text }
-        return String(text.prefix(maxChars - 3)) + "..."
     }
 
     /// Generates message identifier for reaction wire format (8-char Crockford Base32)
