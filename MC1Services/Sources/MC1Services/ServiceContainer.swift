@@ -114,6 +114,14 @@ public final class ServiceContainer {
     /// Sync coordinator for managing sync lifecycle
     public let syncCoordinator: SyncCoordinator
 
+    // MARK: - Digitaino custom: iOS sync registry
+
+    /// Pushes per-channel and per-contact notification preferences to the
+    /// Digitaino custom firmware (sync_id = ``SyncID/notifPrefs``).
+    /// Call ``NotifSyncService/syncNow(deviceID:)`` after any mute toggle or
+    /// notification-level change, and once on device connect to reconcile.
+    public let notifSyncService: NotifSyncService
+
     // MARK: - App State
 
     /// Provider for checking app foreground/background state
@@ -191,6 +199,9 @@ public final class ServiceContainer {
 
         // Sync coordinator (no dependencies on other services)
         self.syncCoordinator = SyncCoordinator()
+
+        // Digitaino custom: notification prefs sync to firmware
+        self.notifSyncService = NotifSyncService(session: session, dataStore: dataStore)
     }
 
     // MARK: - Service Wiring

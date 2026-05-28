@@ -298,6 +298,7 @@ final class ChatViewModel {
     private var roomServerService: RoomServerService?
     var contactService: ContactService?
     var syncCoordinator: SyncCoordinator?
+    var notifSyncService: NotifSyncService?
     weak var appState: AppState?
 
     /// Contact ID currently having its favorite status toggled (for loading UI)
@@ -331,6 +332,7 @@ final class ChatViewModel {
         self.roomServerService = appState.services?.roomServerService
         self.contactService = appState.services?.contactService
         self.syncCoordinator = appState.syncCoordinator
+        self.notifSyncService = appState.services?.notifSyncService
         self.linkPreviewCache = linkPreviewCache
     }
 
@@ -344,6 +346,7 @@ final class ChatViewModel {
         self.roomServerService = appState.services?.roomServerService
         self.contactService = appState.services?.contactService
         self.syncCoordinator = appState.syncCoordinator
+        self.notifSyncService = appState.services?.notifSyncService
     }
 
     /// Configure with services (for testing)

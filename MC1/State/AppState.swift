@@ -389,6 +389,9 @@ public final class AppState {
         // Wire device synced callback - runs after sync completes and state is .ready
         connectionManager.onDeviceSynced = { [weak self] in
             self?.performStaleNodeCleanup()
+            // Reconcile firmware notification rules with current iOS state on every
+            // post-sync ready transition (covers fresh boot, reconnect, and reflash).
+            Task { [weak self] in await self?.pushNotifSync() }
         }
 
         // Wire survey active provider - prevents orphan cleanup from closing active survey on BLE reconnect
@@ -766,12 +769,28 @@ public final class AppState {
                 if shouldMute,
                    let channel = try await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
                     try await services.dataStore.setChannelNotificationLevel(channel.id, level: .muted)
+                    await pushNotifSync()
                 }
 
                 logger.info("WeatherChannel: auto-provisioned '\(channelName)' on slot \(freeSlot)")
             }
         } catch {
             logger.error("WeatherChannel: auto-provision failed: \(error)")
+        }
+    }
+
+    // MARK: - Digitaino custom: push notification rules to firmware
+
+    /// Pushes the current iOS notification rule set to the firmware via
+    /// ``NotifSyncService``. Best-effort: failures are logged and ignored
+    /// (firmware falls back to its last-stored rules or the default `.all`).
+    @MainActor
+    func pushNotifSync() async {
+        guard let services = services, let deviceID = currentDeviceID else { return }
+        do {
+            try await services.notifSyncService.syncNow(deviceID: deviceID)
+        } catch {
+            logger.warning("pushNotifSync failed: \(error)")
         }
     }
 
@@ -803,6 +822,7 @@ public final class AppState {
                     )
                     if let ch = try? await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
                         try? await services.dataStore.setChannelNotificationLevel(ch.id, level: .muted)
+                        await pushNotifSync()
                     }
                     logger.info("WeatherDiscovery: provisioned \(discoverName) on slot \(freeSlot)")
                 }
@@ -857,6 +877,7 @@ public final class AppState {
                 )
                 if let ch = try? await services.dataStore.fetchChannel(deviceID: deviceID, index: freeSlot) {
                     try? await services.dataStore.setChannelNotificationLevel(ch.id, level: .muted)
+                    await pushNotifSync()
                 }
                 logger.info("WXBotJoin: provisioned '\(channelName)' on slot \(freeSlot)")
             }

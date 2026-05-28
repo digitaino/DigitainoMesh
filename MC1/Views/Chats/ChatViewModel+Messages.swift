@@ -24,6 +24,20 @@ extension ChatViewModel {
                 try await dataStore?.setSessionNotificationLevel(session.id, level: level)
             }
             await notificationService?.updateBadgeCount()
+            // Push updated rule set to firmware (best-effort; never rolls back the UI).
+            // Rooms don't have a firmware-side counterpart, so we sync for direct/channel only.
+            switch conversation {
+            case .direct, .channel:
+                if let svc = notifSyncService, let deviceID = appState?.currentDeviceID {
+                    do {
+                        try await svc.syncNow(deviceID: deviceID)
+                    } catch {
+                        logger.warning("notifSyncService.syncNow failed: \(error)")
+                    }
+                }
+            case .room:
+                break
+            }
         } catch {
             // Rollback on failure
             updateConversationNotificationLevel(conversation, level: originalLevel)
