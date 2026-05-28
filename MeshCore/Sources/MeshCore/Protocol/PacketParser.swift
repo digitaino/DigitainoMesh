@@ -165,6 +165,41 @@ extension PacketParser {
         case .defaultFloodScope:
             return Parsers.DefaultFloodScope.parse(payload)
 
+        case .syncValue:
+            // Layout: [sync_id][len_lo][len_hi][payload...]
+            guard payload.count >= 3 else {
+                return .parseFailure(data: payload, reason: "syncValue too short: \(payload.count) < 3")
+            }
+            let syncIdRaw = payload[0]
+            let blobLen = Int(payload.readUInt16LE(at: 1))
+            guard payload.count >= 3 + blobLen else {
+                return .parseFailure(data: payload,
+                                     reason: "syncValue payload truncated: have \(payload.count - 3) need \(blobLen)")
+            }
+            guard let syncId = SyncID(rawValue: syncIdRaw) else {
+                return .parseFailure(data: payload, reason: "syncValue: unknown sync_id \(syncIdRaw)")
+            }
+            let blob = payload.subdata(in: 3..<(3 + blobLen))
+            return .syncValue(syncId, blob)
+
+        case .syncList:
+            // Layout: [count]([sync_id][len_lo][len_hi]) x count
+            guard payload.count >= 1 else {
+                return .parseFailure(data: payload, reason: "syncList too short: \(payload.count) < 1")
+            }
+            let count = Int(payload[0])
+            let needed = 1 + count * 3
+            guard payload.count >= needed else {
+                return .parseFailure(data: payload, reason: "syncList truncated: have \(payload.count) need \(needed)")
+            }
+            var entries: [(id: UInt8, length: UInt16)] = []
+            entries.reserveCapacity(count)
+            for i in 0..<count {
+                let base = 1 + i * 3
+                entries.append((id: payload[base], length: payload.readUInt16LE(at: base + 1)))
+            }
+            return .syncList(entries)
+
         default:
             return .parseFailure(data: payload, reason: "Unexpected code in device response: \(code)")
         }

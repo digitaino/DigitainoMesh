@@ -144,6 +144,26 @@ public protocol MeshCoreSessionProtocol: Actor {
     ///   - secret: The 16-byte channel secret.
     /// - Throws: `MeshCoreError` if the channel configuration fails.
     func setChannel(index: UInt8, name: String, secret: Data) async throws
+
+    // MARK: - Digitaino custom: iOS sync registry
+
+    /// Retrieves the stored blob for a sync_id from the device.
+    /// - Parameter id: The sync identifier (see ``SyncID``).
+    /// - Returns: Opaque payload bytes (sync_id-specific format). Empty `Data` if nothing is stored.
+    /// - Throws: `MeshCoreError` if the request fails.
+    func getSync(_ id: SyncID) async throws -> Data
+
+    /// Pushes an opaque payload to the device for a sync_id and waits for acknowledgement.
+    /// - Parameters:
+    ///   - id: The sync identifier (see ``SyncID``).
+    ///   - payload: Opaque bytes; format is sync_id-specific.
+    /// - Throws: `MeshCoreError` if the request fails.
+    func setSync(_ id: SyncID, payload: Data) async throws
+
+    /// Lists sync_ids the device knows about plus their currently-stored payload lengths.
+    /// - Returns: An array of `(sync_id, stored length)` tuples.
+    /// - Throws: `MeshCoreError` if the request fails.
+    func listSync() async throws -> [(id: UInt8, length: UInt16)]
 }
 
 // MARK: - Default Implementations

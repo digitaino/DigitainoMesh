@@ -2114,6 +2114,38 @@ public actor MeshCoreSession: MeshCoreSessionProtocol {
         try await sendSimpleCommand(PacketBuilder.setPathHashMode(mode))
     }
 
+    // MARK: - Digitaino custom: iOS sync registry
+
+    /// Retrieves the stored blob for a sync_id from the device.
+    ///
+    /// - Parameter id: The sync identifier (see ``SyncID``).
+    /// - Returns: The opaque blob bytes (sync_id-specific format). Empty `Data` if the device has nothing stored.
+    public func getSync(_ id: SyncID) async throws -> Data {
+        let data = PacketBuilder.getSync(id: id)
+        return try await sendAndWait(data) { event in
+            if case .syncValue(let evId, let payload) = event, evId == id { return payload }
+            return nil
+        }
+    }
+
+    /// Pushes an opaque payload to the device for a sync_id and waits for acknowledgement.
+    ///
+    /// - Parameters:
+    ///   - id: The sync identifier (see ``SyncID``).
+    ///   - payload: Opaque bytes; format is sync_id-specific (see ``NotifPrefsBlob`` for `.notifPrefs`).
+    public func setSync(_ id: SyncID, payload: Data) async throws {
+        try await sendSimpleCommand(PacketBuilder.setSync(id: id, payload: payload))
+    }
+
+    /// Lists sync_ids the device knows about plus their currently-stored payload lengths.
+    public func listSync() async throws -> [(id: UInt8, length: UInt16)] {
+        let data = PacketBuilder.listSync()
+        return try await sendAndWait(data) { event in
+            if case .syncList(let list) = event { return list }
+            return nil
+        }
+    }
+
     // MARK: - Channel Commands
 
     /// Retrieves configuration for a channel.

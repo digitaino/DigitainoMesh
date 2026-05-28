@@ -118,6 +118,31 @@ public enum CommandCode: UInt8, Sendable {
     case setDefaultFloodScope = 0x3F
     /// Gets the persisted default flood scope. Firmware v11+ (MeshCore v1.15.0+).
     case getDefaultFloodScope = 0x40
+
+    // MARK: - Digitaino custom: iOS sync registry
+
+    /// Requests the device's stored blob for a sync_id. Digitaino custom firmware.
+    case getSync  = 0x44
+    /// Pushes an opaque blob to the device for a sync_id. Digitaino custom firmware.
+    case setSync  = 0x45
+    /// Lists sync_ids the device knows about. Digitaino custom firmware.
+    case listSync = 0x46
+}
+
+/// IDs for the generic iOS-sync registry on Digitaino custom firmware.
+public enum SyncID: UInt8, Sendable {
+    /// Per-channel and per-contact notification rules + a global default mode.
+    case notifPrefs = 1
+}
+
+/// Wire-level notification modes used by the firmware-side rule table.
+///
+/// Maps to the firmware's `NOTIF_MODE_*` defines in `MyMesh.cpp`.
+public enum FirmwareNotifMode: UInt8, Sendable {
+    case silent   = 0
+    case all      = 1
+    case mentions = 2
+    case urgent   = 3   // reserved for future use
 }
 
 /// Defines the response codes received from the mesh device.
@@ -180,6 +205,13 @@ public enum ResponseCode: UInt8, Sendable {
     case channelDataReceived = 0x1B
     /// Contains the persisted default flood scope. Firmware v11+ (MeshCore v1.15.0+).
     case defaultFloodScope = 0x1C
+
+    // MARK: - Digitaino custom: iOS sync registry responses (0x64+, well clear of upstream range)
+
+    /// Reply to ``CommandCode/getSync``: `[code][sync_id][len_lo][len_hi][payload...]`.
+    case syncValue = 0x64
+    /// Reply to ``CommandCode/listSync``: `[code][count]([sync_id][len_lo][len_hi]) x count`.
+    case syncList  = 0x65
 
     // Push notifications (0x80+)
     /// Indicates a node advertisement was received.
@@ -305,6 +337,8 @@ extension ResponseCode {
         case .selfInfo, .deviceInfo, .battery, .currentTime, .privateKey, .disabled, .advertPath, .tuningParams,
              .autoAddConfig, .allowedRepeatFreq, .defaultFloodScope:
             return .device
+        case .syncValue, .syncList:
+            return .device   // shares the device-category parser dispatcher
         case .contactStart, .contact, .contactEnd, .contactURI:
             return .contact
         case .messageSent, .contactMessageReceived, .contactMessageReceivedV3,

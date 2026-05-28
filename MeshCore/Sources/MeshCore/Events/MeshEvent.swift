@@ -121,6 +121,19 @@ public enum MeshEvent: Sendable {
     /// Emitted in response to ``MeshCoreSession/getRepeatFreq()`` (v9+ firmware).
     case allowedRepeatFreq([FrequencyRange])
 
+    // MARK: - Digitaino custom: iOS sync registry
+
+    /// Reply to ``MeshCoreSession/getSync(_:)`` carrying the stored blob.
+    ///
+    /// - Parameters:
+    ///   - id: The sync identifier this blob belongs to.
+    ///   - payload: The opaque blob bytes (sync_id-specific format).
+    case syncValue(SyncID, Data)
+
+    /// Reply to ``MeshCoreSession/listSync()`` listing sync_ids the device knows about
+    /// alongside their current stored payload length.
+    case syncList([(id: UInt8, length: UInt16)])
+
     // MARK: - Contact Management
 
     /// Indicates that a contact list transfer has started.

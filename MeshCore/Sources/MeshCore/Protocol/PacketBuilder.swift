@@ -1093,4 +1093,48 @@ public enum PacketBuilder: Sendable {
     public static func getTuningParams() -> Data {
         Data([CommandCode.getTuningParams.rawValue])
     }
+
+    // MARK: - Digitaino custom: iOS sync registry
+
+    /// Builds a `getSync` command requesting the device's stored blob for a sync_id.
+    ///
+    /// - Parameter id: The sync identifier (see ``SyncID``).
+    /// - Returns: The command packet data.
+    ///
+    /// ### Binary Format
+    /// - Offset 0 (1 byte): Command code `0x44`
+    /// - Offset 1 (1 byte): Sync ID
+    public static func getSync(id: SyncID) -> Data {
+        Data([CommandCode.getSync.rawValue, id.rawValue])
+    }
+
+    /// Builds a `setSync` command pushing an opaque payload to the device.
+    ///
+    /// - Parameters:
+    ///   - id: The sync identifier (see ``SyncID``).
+    ///   - payload: Opaque bytes; format is sync_id-specific.
+    /// - Returns: The command packet data.
+    ///
+    /// ### Binary Format
+    /// - Offset 0 (1 byte): Command code `0x45`
+    /// - Offset 1 (1 byte): Sync ID
+    /// - Offset 2 (2 bytes): Payload length, little-endian
+    /// - Offset 4 (N bytes): Payload
+    public static func setSync(id: SyncID, payload: Data) -> Data {
+        var data = Data([CommandCode.setSync.rawValue, id.rawValue])
+        var lenLE = UInt16(payload.count).littleEndian
+        withUnsafeBytes(of: &lenLE) { data.append(contentsOf: $0) }
+        data.append(payload)
+        return data
+    }
+
+    /// Builds a `listSync` command requesting the list of sync_ids the device knows about.
+    ///
+    /// - Returns: The command packet data.
+    ///
+    /// ### Binary Format
+    /// - Offset 0 (1 byte): Command code `0x46`
+    public static func listSync() -> Data {
+        Data([CommandCode.listSync.rawValue])
+    }
 }

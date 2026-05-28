@@ -206,6 +206,25 @@ public actor MockMeshCoreSession: MeshCoreSessionProtocol {
         // Stub - not used in current tests
     }
 
+    // MARK: - iOS sync registry (Digitaino custom firmware)
+
+    public var syncBlobs: [SyncID: Data] = [:]
+    public var setSyncInvocations: [(id: SyncID, payload: Data)] = []
+    public var listSyncStub: [(id: UInt8, length: UInt16)] = []
+
+    public func getSync(_ id: SyncID) async throws -> Data {
+        return syncBlobs[id] ?? Data()
+    }
+
+    public func setSync(_ id: SyncID, payload: Data) async throws {
+        setSyncInvocations.append((id: id, payload: payload))
+        syncBlobs[id] = payload
+    }
+
+    public func listSync() async throws -> [(id: UInt8, length: UInt16)] {
+        return listSyncStub
+    }
+
     // MARK: - Test Helpers
 
     /// Resets all recorded invocations
