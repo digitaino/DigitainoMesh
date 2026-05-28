@@ -35,6 +35,11 @@ targets:
       - path: MC1
         excludes:
           - "**/*.md"
+          # Duplicates of MC1/Resources/{pfm_points,stations}.json — same bytes,
+          # different path. xcodegen would otherwise add both to the bundle and
+          # cause "Multiple commands produce" build failures.
+          - "pfm_points.json"
+          - "stations.json"
       - path: AppIcon.icon
       - path: Shared
     dependencies:
