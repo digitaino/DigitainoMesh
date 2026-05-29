@@ -72,6 +72,8 @@
 	<string>DigitainoMesh needs camera access to scan channel QR codes.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>DigitainoMesh uses your location to share coordinates with mesh contacts.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>DigitainoMesh uses motion activity to sense when you're moving so your radio can refresh signal strength more often — without GPS, to save battery.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

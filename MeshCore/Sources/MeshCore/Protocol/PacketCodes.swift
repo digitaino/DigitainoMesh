@@ -133,6 +133,13 @@ public enum CommandCode: UInt8, Sendable {
 public enum SyncID: UInt8, Sendable {
     /// Per-channel and per-contact notification rules + a global default mode.
     case notifPrefs = 1
+    /// Live repeater signal table (radio → app). `getSync` serializes the device's
+    /// current in-memory table on demand (not persisted); `setSync` is a
+    /// refresh/ping trigger (`[action][target_id]`), not a stored blob.
+    case signalBars = 2
+    /// Phone motion level (app → radio) so the firmware can adapt its ping cadence
+    /// when its own GPS is off/idle. `setSync` only: `[version][level]` (0/1/2).
+    case motionHint = 3
 }
 
 /// Wire-level notification modes used by the firmware-side rule table.

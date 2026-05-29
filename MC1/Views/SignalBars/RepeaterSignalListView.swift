@@ -37,6 +37,19 @@ struct RepeaterSignalPopover: View {
             .padding(.top, 10)
             .padding(.bottom, 6)
 
+            // Sync status: are these bars mirrored from the radio (viewer) or measured by the app (engine)?
+            HStack(spacing: 4) {
+                Image(systemName: service.mode == .viewer
+                      ? "antenna.radiowaves.left.and.right"
+                      : "iphone.radiowaves.left.and.right")
+                    .font(.system(size: 9))
+                Text(service.mode == .viewer ? "Synced with radio" : "Measuring locally")
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
+
             // Adaptive power quick-picker
             if appState.adaptivePowerService.isEnabled {
                 adaptivePowerRow
@@ -80,6 +93,11 @@ struct RepeaterSignalPopover: View {
                                 || (appState.watchedRepeaterHexID.map { repeater.id.hasPrefix($0) || $0.hasPrefix(repeater.id) } ?? false)
                             RepeaterCompactRow(repeater: repeater, isWatched: isWatched)
                                 .contextMenu {
+                                    Button {
+                                        Task { await service.requestRefresh(targetHexID: repeater.id) }
+                                    } label: {
+                                        Label("Ping Now", systemImage: "dot.radiowaves.left.and.right")
+                                    }
                                     if isWatched {
                                         Button(role: .destructive) {
                                             appState.clearWatchedRepeater()

@@ -231,6 +231,7 @@ public final class AppState {
 
     /// Service tracking live repeater signal quality for the toolbar indicator.
     let signalBarsService = SignalBarsService()
+    let motionHintService = MotionHintService()
 
     // MARK: - Watched Repeater
 
@@ -433,6 +434,7 @@ public final class AppState {
             batteryMonitor.stop()
             batteryMonitor.clearThresholds()
             signalBarsService.stop()
+            motionHintService.stop()
             adaptivePowerService.setEnabled(false)
             await liveActivityManager.handleConnectionLost()
             return
@@ -560,18 +562,49 @@ public final class AppState {
 
         // Start signal bars service for toolbar repeater signal monitoring
         if let device = connectedDevice {
-            logger.info("wireServicesIfConnected: starting SignalBarsService for device \(device.id.uuidString.prefix(8)), pathHashMode=\(device.pathHashMode)")
-            signalBarsService.start(deviceID: device.id, pathHashMode: device.pathHashMode)
-            signalBarsService.setSendTraceHandler { [services] (tag: UInt32, flags: UInt8, path: Data) in
-                let sentInfo = try await services.binaryProtocolService.sendTrace(
-                    tag: tag, flags: flags, path: path
-                )
-                return SendTraceResult(suggestedTimeoutMs: Int(sentInfo.suggestedTimeoutMs))
+            // Signal bars: probe for custom-firmware support off the wiring path so a
+            // stock-firmware listSync timeout never blocks connection setup. If the device
+            // exposes SYNC_ID_SIGNAL_BARS, mirror its table in VIEWER mode (zero extra RF
+            // traffic); otherwise run the app's own ENGINE. On stock firmware the bars
+            // appear once the listSync probe resolves/times out.
+            Task { [weak self, services] in
+                guard let self else { return }
+                let isViewer = ((try? await services.session.listSync()) ?? [])
+                    .contains(where: { $0.id == SyncID.signalBars.rawValue })
+                let signalMode: SignalBarsService.Mode = isViewer ? .viewer : .engine
+                self.logger.info("wireServicesIfConnected: SignalBarsService mode=\(String(describing: signalMode)) for device \(device.id.uuidString.prefix(8)), pathHashMode=\(device.pathHashMode)")
+                self.signalBarsService.start(deviceID: device.id, pathHashMode: device.pathHashMode, mode: signalMode)
+                if isViewer {
+                    self.signalBarsService.setViewerHandlers(
+                        fetch: { try await services.session.getSync(.signalBars) },
+                        trigger: { action, target in
+                            try await services.session.setSync(.signalBars, payload: Data([action, target]))
+                        }
+                    )
+                } else {
+                    self.signalBarsService.setSendTraceHandler { (tag: UInt32, flags: UInt8, path: Data) in
+                        let sentInfo = try await services.binaryProtocolService.sendTrace(
+                            tag: tag, flags: flags, path: path
+                        )
+                        return SendTraceResult(suggestedTimeoutMs: Int(sentInfo.suggestedTimeoutMs))
+                    }
+                    self.signalBarsService.setSendDiscoverHandler {
+                        _ = try await services.binaryProtocolService.sendNodeDiscoverRequest(
+                            filter: 0x04, prefixOnly: true
+                        )
+                    }
+                }
             }
-            signalBarsService.setSendDiscoverHandler { [services] in
-                _ = try await services.binaryProtocolService.sendNodeDiscoverRequest(
-                    filter: 0x04, prefixOnly: true
-                )
+
+            // Phone motion hint → adapt ping cadence when the radio's GPS is off.
+            // Routes to the device in viewer mode (setSync), or the local engine otherwise.
+            motionHintService.start { [weak self] level in
+                guard let self, let services = self.services else { return }
+                if self.signalBarsService.mode == .viewer {
+                    Task { try? await services.session.setSync(.motionHint, payload: Data([1, level])) }
+                } else {
+                    self.signalBarsService.setMotionLevel(level)
+                }
             }
 
             // Wire watched repeater tracking

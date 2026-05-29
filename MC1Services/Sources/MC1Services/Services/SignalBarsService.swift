@@ -38,10 +38,20 @@ public final class SignalBarsService {
         case failed         // ping timed out (shows "X")
     }
 
+    /// How this service sources signal data.
+    public enum Mode: Sendable {
+        /// Stock firmware: the app runs its own ping/discover engine.
+        case engine
+        /// Digitaino custom firmware: the device owns the engine; the app mirrors its
+        /// table via `SYNC_ID_SIGNAL_BARS` and sends no traces/pings of its own.
+        case viewer
+    }
+
     // MARK: - Constants
 
     private enum Constants {
         static let minPingSpacing: Duration = .seconds(1)
+        static let viewerPollInterval: Duration = .seconds(5)      // viewer mode: poll the device's table
         static let bestRepeaterInterval: TimeInterval = 45         // primary link — keep fresh
         static let otherRepeaterInterval: TimeInterval = 120       // secondary — periodic check
         static let failRetryInterval1: TimeInterval = 20           // failCount == 1: quick retry
@@ -52,7 +62,7 @@ public final class SignalBarsService {
         static let reactiveTriggerDelay: Duration = .seconds(2)
         static let reactiveFailedCooldown: TimeInterval = 30       // min gap before reactive re-ping of failed repeater
         static let discoverProbeInterval: Duration = .seconds(30)
-        static let maxTrackedRepeaters: Int = 4
+        static let maxTrackedRepeaters: Int = 8                    // match firmware SIGNAL_MAX
     }
 
     // MARK: - Published State
@@ -79,6 +89,21 @@ public final class SignalBarsService {
     private var deviceID: UUID?
     private var pathHashMode: UInt8 = 0
 
+    /// How this service sources data: `.engine` (app pings, stock firmware) or
+    /// `.viewer` (mirror Digitaino custom firmware's table, no app-side pinging).
+    public private(set) var mode: Mode = .engine
+
+    /// Viewer-mode handler: fetch the device's serialized signal-bars blob.
+    private var fetchSignalBarsHandler: (() async throws -> Data)?
+    /// Viewer-mode handler: trigger a device-side refresh/ping — `(action, targetID)`.
+    private var signalTriggerHandler: ((UInt8, UInt8) async throws -> Void)?
+
+    /// Phone motion level (0=stationary, 1=slow, 2=fast) for engine-mode cadence
+    /// scaling, mirroring the firmware's `_td`. Viewer mode ignores this (the device
+    /// owns cadence; AppState routes the hint to it via `setSync(.motionHint)`).
+    private var motionLevel: UInt8 = 0
+    private var motionDivisor: Int { motionLevel == 0 ? 1 : (motionLevel == 1 ? 2 : 4) }
+
     /// Callback to send a trace via BinaryProtocolService.
     /// Parameters: tag, flags, path → SendTraceResult
     private var sendTraceHandler: ((UInt32, UInt8, Data) async throws -> SendTraceResult)?
@@ -93,6 +118,7 @@ public final class SignalBarsService {
     private var roundRobinTask: Task<Void, Never>?
     private var reactivePingTask: Task<Void, Never>?
     private var discoverProbeTask: Task<Void, Never>?
+    private var viewerPollTask: Task<Void, Never>?
 
     /// In-flight ping tracking: tag → (repeaterHexID, startTime).
     private var pendingPings: [UInt32: (hexID: String, startTime: ContinuousClock.Instant)] = [:]
@@ -121,16 +147,23 @@ public final class SignalBarsService {
     /// - Parameters:
     ///   - deviceID: Current connected device ID.
     ///   - pathHashMode: Device's path hash mode (0, 1, or 2).
-    public func start(deviceID: UUID, pathHashMode: UInt8) {
+    public func start(deviceID: UUID, pathHashMode: UInt8, mode: Mode = .engine) {
         self.deviceID = deviceID
         self.pathHashMode = pathHashMode
+        self.mode = mode
 
-        subscribeToDiscoverResponses()
-        subscribeToRxLogTraces()
-        subscribeToRxLogPackets()
-        startRoundRobin()
-
-        logger.info("SignalBarsService started for device \(deviceID.uuidString.prefix(8))")
+        switch mode {
+        case .viewer:
+            // Custom firmware owns the engine — mirror its table, transmit nothing.
+            startViewerPolling()
+            logger.info("SignalBarsService started in VIEWER mode for device \(deviceID.uuidString.prefix(8))")
+        case .engine:
+            subscribeToDiscoverResponses()
+            subscribeToRxLogTraces()
+            subscribeToRxLogPackets()
+            startRoundRobin()
+            logger.info("SignalBarsService started in ENGINE mode for device \(deviceID.uuidString.prefix(8))")
+        }
     }
 
     /// Stop tracking and clear state.
@@ -147,6 +180,8 @@ public final class SignalBarsService {
         reactivePingTask = nil
         discoverProbeTask?.cancel()
         discoverProbeTask = nil
+        viewerPollTask?.cancel()
+        viewerPollTask = nil
 
         repeaters = []
         pendingPings = [:]
@@ -154,6 +189,9 @@ public final class SignalBarsService {
         isRefreshing = false
         deviceID = nil
         sendDiscoverHandler = nil
+        fetchSignalBarsHandler = nil
+        signalTriggerHandler = nil
+        mode = .engine
         onWatchedRepeaterHeard = nil
 
         logger.info("SignalBarsService stopped")
@@ -174,11 +212,135 @@ public final class SignalBarsService {
         startDiscoverProbing()
     }
 
+    // MARK: - Viewer Mode (mirror custom firmware's table)
+
+    /// Wire the viewer-mode handlers (Digitaino custom firmware present).
+    /// - Parameters:
+    ///   - fetch: returns the device's serialized signal-bars blob (`getSync(.signalBars)`).
+    ///   - trigger: requests a device-side refresh/ping (`setSync(.signalBars, [action, targetID])`).
+    public func setViewerHandlers(
+        fetch: @escaping () async throws -> Data,
+        trigger: @escaping (UInt8, UInt8) async throws -> Void
+    ) {
+        self.fetchSignalBarsHandler = fetch
+        self.signalTriggerHandler = trigger
+    }
+
+    /// Engine mode: set the current phone motion level (0/1/2) to scale ping cadence.
+    /// No-op effect in viewer mode (AppState routes the hint to the device instead).
+    public func setMotionLevel(_ level: UInt8) {
+        motionLevel = min(level, 2)
+    }
+
+    private func startViewerPolling() {
+        viewerPollTask?.cancel()
+        viewerPollTask = Task { [weak self] in
+            // Brief delay so the connection settles and handlers get wired.
+            try? await Task.sleep(for: .seconds(1))
+            while !Task.isCancelled {
+                guard let self else { break }
+                await self.pollSignalBars()
+                try? await Task.sleep(for: Constants.viewerPollInterval)
+            }
+        }
+    }
+
+    private func pollSignalBars() async {
+        guard let fetch = fetchSignalBarsHandler else { return }
+        do {
+            let data = try await fetch()
+            guard let blob = SignalBarsBlob(decoding: data) else { return }
+            applyBlob(blob)
+        } catch {
+            logger.debug("viewer poll failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Replace `repeaters` with the device's table (best repeater first), preserving
+    /// any locally-known name / public key / RSSI for matching entries.
+    private func applyBlob(_ blob: SignalBarsBlob) {
+        let now = Date()
+        let mapped: [RepeaterSignal] = blob.entries.map { e in
+            let existing = repeaters.first {
+                $0.id == e.hexID || $0.id.hasPrefix(e.hexID) || e.hexID.hasPrefix($0.id)
+            }
+            let txState: TXState
+            if e.hasTx {
+                txState = .measured(SNRQuality(snr: e.txSnr))
+            } else if e.txFailed {
+                txState = .failed
+            } else {
+                txState = .unknown
+            }
+            return RepeaterSignal(
+                id: e.hexID,
+                name: existing?.name,
+                rxSnr: e.rxSnr,
+                rxQuality: SNRQuality(snr: e.rxSnr),
+                txSnr: e.txSnr,
+                txState: txState,
+                rssi: existing?.rssi,
+                rttMs: e.rttMs == 0 ? nil : Int(e.rttMs),
+                lastHeard: now.addingTimeInterval(-Double(e.ageSeconds)),
+                publicKey: existing?.publicKey,
+                failCount: 0,
+                lastPingTime: existing?.lastPingTime
+            )
+        }
+        // Order: device's chosen best first, then most-recently heard.
+        let bestID = blob.entries.first(where: { $0.isBest })?.hexID
+        repeaters = mapped.sorted { lhs, rhs in
+            if (lhs.id == bestID) != (rhs.id == bestID) { return lhs.id == bestID }
+            return lhs.lastHeard > rhs.lastHeard
+        }
+        rxFlashTick &+= 1
+
+        // Keep the watched-repeater range-test working in viewer mode (poll-driven).
+        if let watched = watchedRepeaterHexID,
+           let e = blob.entries.first(where: { $0.hexID.hasPrefix(watched) || watched.hasPrefix($0.hexID) }) {
+            onWatchedRepeaterHeard?(e.hexID, e.rxSnr ?? 0, SNRQuality(snr: e.rxSnr), e.txSnr)
+        }
+    }
+
+    /// Refresh signal data. `targetHexID == nil` refreshes all repeaters; otherwise
+    /// pings just that one. Works in both modes — viewer asks the device (one RF ping
+    /// originated by the radio), engine pings directly.
+    public func requestRefresh(targetHexID: String? = nil) async {
+        switch mode {
+        case .viewer:
+            guard let trigger = signalTriggerHandler else { return }
+            let action: UInt8 = (targetHexID != nil) ? 1 : 0
+            let target: UInt8 = targetHexID.flatMap { UInt8($0, radix: 16) } ?? 0
+            if let hexID = targetHexID {
+                updateRepeater(hexID: hexID) { $0.txState = .measuring }
+            }
+            txFlashTick &+= 1
+            try? await trigger(action, target)
+            // Re-poll shortly to surface the device's fresh measurement.
+            try? await Task.sleep(for: .seconds(2))
+            await pollSignalBars()
+        case .engine:
+            if let hexID = targetHexID {
+                guard let target = repeaters.first(where: { $0.id == hexID }),
+                      let pubKey = target.publicKey else { return }
+                updateRepeater(hexID: hexID) {
+                    $0.txState = .measuring
+                    $0.lastPingTime = Date()
+                }
+                await pingRepeater(hexID: hexID, publicKey: pubKey)
+            } else {
+                await refreshAll()
+            }
+        }
+    }
+
     // MARK: - Active Measurement
 
     /// Manual refresh: discover + sequential ping-all with 1s spacing.
     /// Resets fail/check counts so all repeaters get re-measured.
     public func refreshAll() async {
+        // Viewer mode: the device owns pinging — ask it to refresh instead.
+        if mode == .viewer { await requestRefresh(); return }
         guard !isRefreshing else { return }
         guard sendTraceHandler != nil else {
             logger.warning("refreshAll: no sendTrace handler wired")
@@ -310,16 +472,19 @@ public final class SignalBarsService {
     private func desiredPingInterval(for repeater: RepeaterSignal) -> TimeInterval? {
         guard repeater.failCount < Constants.maxFailCount else { return nil }
 
+        let base: TimeInterval
         if repeater.failCount > 0 {
             switch repeater.failCount {
-            case 1:  return Constants.failRetryInterval1
-            case 2:  return Constants.failRetryInterval2
-            default: return Constants.failRetryInterval3
+            case 1:  base = Constants.failRetryInterval1
+            case 2:  base = Constants.failRetryInterval2
+            default: base = Constants.failRetryInterval3
             }
+        } else {
+            let isBest = (bestRepeater?.id == repeater.id)
+            base = isBest ? Constants.bestRepeaterInterval : Constants.otherRepeaterInterval
         }
-
-        let isBest = (bestRepeater?.id == repeater.id)
-        return isBest ? Constants.bestRepeaterInterval : Constants.otherRepeaterInterval
+        // Motion hint shortens intervals when moving (÷1/2/4), mirroring firmware's _td.
+        return base / Double(motionDivisor)
     }
 
     /// Select the next repeater that needs pinging, or nil if none are due.
@@ -480,14 +645,23 @@ public final class SignalBarsService {
         // are the same repeater — merge into the longer ID.
         let idx = findRepeaterIndex(for: hexID)
 
+        // Firmware-matching 75/25 RX smoothing for an already-tracked repeater
+        // (raw value on first sight). Keeps the app's RX bars as steady as the OLED's.
+        var effRx = rxSnr
+        var effQuality = rxQuality
+        if let idx, let old = repeaters[idx].rxSnr {
+            effRx = (old * 3 + rxSnr) / 4
+            effQuality = SNRQuality(snr: effRx)
+        }
+
         if let idx {
             // Upgrade the ID to the longer variant if the new one is longer
             if hexID.count > repeaters[idx].id.count {
                 repeaters[idx] = RepeaterSignal(
                     id: hexID,
                     name: repeaters[idx].name,
-                    rxSnr: rxSnr,
-                    rxQuality: rxQuality,
+                    rxSnr: effRx,
+                    rxQuality: effQuality,
                     txSnr: txSnr ?? repeaters[idx].txSnr,
                     txState: txSnr.map({ .measured(SNRQuality(snr: $0)) }) ?? repeaters[idx].txState,
                     rssi: rssi ?? repeaters[idx].rssi,
@@ -498,8 +672,8 @@ public final class SignalBarsService {
                     lastPingTime: repeaters[idx].lastPingTime
                 )
             } else {
-                repeaters[idx].rxSnr = rxSnr
-                repeaters[idx].rxQuality = rxQuality
+                repeaters[idx].rxSnr = effRx
+                repeaters[idx].rxQuality = effQuality
                 repeaters[idx].lastHeard = Date()
                 if let rssi { repeaters[idx].rssi = rssi }
                 if let publicKey { repeaters[idx].publicKey = publicKey }
@@ -509,17 +683,14 @@ public final class SignalBarsService {
                 }
             }
         } else {
-            // Enforce max tracked repeaters limit
+            // Enforce max tracked repeaters limit. Match firmware: evict the oldest
+            // (least-recently-heard) entry to make room for a newly-heard repeater.
             if repeaters.count >= Constants.maxTrackedRepeaters {
-                // Remove the worst (last after sort) repeater to make room,
-                // but only if the new one has better RX SNR than the worst
-                let worstSnr = repeaters.last?.rxSnr ?? -999
-                if rxSnr > worstSnr {
-                    let removed = repeaters.removeLast()
-                    logger.info("Evicted weakest repeater \(removed.id) to make room for \(hexID)")
-                } else {
-                    // New repeater is worse than all tracked; ignore it
-                    return
+                if let oldestIdx = repeaters.indices.min(by: {
+                    repeaters[$0].lastHeard < repeaters[$1].lastHeard
+                }) {
+                    let removed = repeaters.remove(at: oldestIdx)
+                    logger.info("Evicted oldest repeater \(removed.id) to make room for \(hexID)")
                 }
             }
 
@@ -623,17 +794,23 @@ public final class SignalBarsService {
         updateRepeater(hexID: ping.hexID) { repeater in
             repeater.rttMs = latencyMs
             if let localSnr {
-                repeater.rxSnr = localSnr
-                repeater.rxQuality = SNRQuality(snr: localSnr)
+                // 75/25 RX smoothing (matches firmware onPingResponse).
+                let smoothed = repeater.rxSnr.map { ($0 * 3 + localSnr) / 4 } ?? localSnr
+                repeater.rxSnr = smoothed
+                repeater.rxQuality = SNRQuality(snr: smoothed)
             }
+            repeater.lastHeard = Date()
             if let remoteSnr {
                 repeater.txSnr = remoteSnr
                 repeater.txState = .measured(SNRQuality(snr: remoteSnr))
+                repeater.failCount = 0
             } else {
-                repeater.txState = .measured(repeater.rxQuality)
+                // Reply without a remote SNR — we can't measure how they hear us.
+                // Don't fake TX as RX (firmware never substitutes); mark it unmeasured
+                // and let backoff prevent immediate re-pinging.
+                repeater.txState = .failed
+                repeater.failCount += 1
             }
-            repeater.lastHeard = Date()
-            repeater.failCount = 0
         }
         sortRepeaters()
     }
@@ -728,13 +905,13 @@ public final class SignalBarsService {
         }
     }
 
-    /// Sort score within a tier: TX-weighted (70/30) when measured, RX-only otherwise.
+    /// Sort score within a tier — the unified best-link score shared with the firmware:
+    /// 0.6·TX + 0.4·RX with a weak-leg guard (see ``SignalBarsBlob/score(rxSnr:txSnr:)``).
     private func sortScore(for r: RepeaterSignal) -> Double {
-        let rx = r.rxSnr ?? -999
         if case .measured = r.txState, let tx = r.txSnr {
-            return tx * 0.7 + rx * 0.3
+            return SignalBarsBlob.score(rxSnr: r.rxSnr, txSnr: tx)
         }
-        return rx
+        return SignalBarsBlob.score(rxSnr: r.rxSnr, txSnr: nil)
     }
 
     /// Update a repeater's display name from the contacts database.
