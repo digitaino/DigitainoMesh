@@ -19,7 +19,7 @@ struct RepeaterSignalPopover: View {
                 Spacer()
 
                 Button {
-                    Task { await service.refreshAll() }
+                    Task { await service.startProbe() }
                 } label: {
                     if service.isRefreshing {
                         ProgressView()
@@ -31,7 +31,7 @@ struct RepeaterSignalPopover: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(service.isRefreshing)
-                .accessibilityLabel("Refresh all")
+                .accessibilityLabel("Scan for repeaters")
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)

@@ -1252,11 +1252,11 @@ public enum Parsers {
         /// - Offset 11+pathLen (hopCount bytes): SNR bytes (one per hop)
         /// - Offset 11+pathLen+hopCount (1 byte): Final SNR at destination
         ///
-        /// path_sz encoding:
+        /// path_sz encoding (matches the routing-header path-length mode, see `decodePathLen`):
         /// - 0: 1-byte hashes (pathLen = hopCount)
         /// - 1: 2-byte hashes (hopCount = pathLen / 2)
-        /// - 2: 4-byte hashes (hopCount = pathLen / 4)
-        /// - 3: 8-byte hashes (hopCount = pathLen / 8)
+        /// - 2: 3-byte hashes (hopCount = pathLen / 3)
+        /// - 3: reserved
         static func parse(_ data: Data) -> MeshEvent {
             // Minimum: reserved(1) + pathLen(1) + flags(1) + tag(4) + authCode(4) = 11 bytes
             guard data.count >= PacketSize.traceDataMinimum else {
@@ -1269,7 +1269,10 @@ public enum Parsers {
             let pathLength = Int(data[1])
             let flags = data[2]
             let pathSz = Int(flags & 0x03)
-            let hashSize = 1 << pathSz  // 1, 2, 4, or 8 bytes per hop
+            guard pathSz < 3 else {
+                return .parseFailure(data: data, reason: "TraceData reserved path_sz mode: \(pathSz)")
+            }
+            let hashSize = pathSz + 1  // 1, 2, or 3 bytes per hop (mode + 1)
             let hopCount = pathLength > 0 ? pathLength / hashSize : 0
 
             let tag = data.readUInt32LE(at: 3)

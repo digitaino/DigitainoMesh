@@ -5,16 +5,9 @@ struct ScrollToDividerButton: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            Image(systemName: "chevron.up")
-                .font(.body.bold())
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .contentShape(.circle)
-        .liquidGlassInteractive(in: .circle)
-        .accessibilityLabel(L10n.Chats.Chats.ScrollButton.ScrollToDivider.accessibilityLabel)
-        .accessibilityHint(L10n.Chats.Chats.ScrollButton.ScrollToDivider.accessibilityHint)
+        CircularGlassButton(systemImage: "chevron.up", action: onTap)
+            .accessibilityLabel(L10n.Chats.Chats.ScrollButton.ScrollToDivider.accessibilityLabel)
+            .accessibilityHint(L10n.Chats.Chats.ScrollButton.ScrollToDivider.accessibilityHint)
     }
 }
 

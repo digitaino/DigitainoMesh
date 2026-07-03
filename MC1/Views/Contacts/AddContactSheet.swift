@@ -33,7 +33,7 @@ struct AddContactSheet: View {
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
+        SheetScaffold(L10n.Contacts.Contacts.Add.title) {
             Form {
                 ScannerSection(showScanner: $showScanner)
 
@@ -51,24 +51,6 @@ struct AddContactSheet: View {
                     ErrorSection(message: errorMessage)
                 }
             }
-            .navigationTitle(L10n.Contacts.Contacts.Add.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.Contacts.Contacts.Common.cancel) {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L10n.Contacts.Contacts.Add.add) {
-                        Task {
-                            await handleAdd()
-                        }
-                    }
-                    .disabled(!canAdd)
-                }
-            }
             .navigationDestination(isPresented: $showScanner) {
                 ScanContactQRView { _, _ in
                     // Scanner handles import automatically
@@ -78,6 +60,21 @@ struct AddContactSheet: View {
                 }
             }
             .disabled(isSubmitting)
+        } toolbar: {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L10n.Contacts.Contacts.Common.cancel) {
+                    dismiss()
+                }
+            }
+
+            ToolbarItem(placement: .confirmationAction) {
+                Button(L10n.Contacts.Contacts.Add.add) {
+                    Task {
+                        await handleAdd()
+                    }
+                }
+                .disabled(!canAdd)
+            }
         }
     }
 

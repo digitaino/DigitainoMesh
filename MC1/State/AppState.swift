@@ -690,6 +690,7 @@ public final class AppState {
                 case .pathHashModeUpdated(let mode):
                     await MainActor.run {
                         self.connectionManager.updatePathHashMode(mode)
+                        self.signalBarsService.setPathHashMode(mode)
                     }
                 case .allowedRepeatFreqUpdated(let ranges):
                     await MainActor.run {

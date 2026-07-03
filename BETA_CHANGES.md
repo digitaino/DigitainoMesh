@@ -1,4 +1,40 @@
-Beta Changes -- v0.10.1 (Build 34)
+Beta Changes -- v0.10.1 (Build 40)
+
+Firmware Notification Sync (Wio L1 Pro)
+
+Your per-channel mute and notification choices now sync down to the radio on Digitaino custom firmware, so the device itself respects them even when your phone isn't connected. Whenever you change a channel's notification level (Silent / Mentions / All) — via the swipe action, the channel-info picker, or a weather channel auto-mute — the new preference is pushed to the firmware as a compact rule set (overrides only). A full reconcile is also pushed on every reconnect, reflash, or fresh boot, so the device and app never drift apart. DMs stay a simple muted/unmuted toggle because the firmware contact-rule model has no mentions slot.
+
+This is opt-in by firmware: stock firmware is unaffected, and the device keeps its default "notify on all" behavior until the app syncs the first time.
+
+Wio L1 Device Rules Diagnostic
+
+Settings → Notifications has a new "Wio L1 Pro device rules" row showing exactly what notification rules the radio currently holds: connection state, schema version, default mode, and each per-channel and per-contact rule with a colored mode badge (Silent / Mentions / All / Urgent). Channel and contact names are resolved for readability. "Refresh from device" re-reads the live blob, and "Force resync to device" pushes the full rule set again — a manual recovery path if a sync ever fails silently.
+
+Signal Bars Viewer Mode & Engine Parity
+
+On Digitaino firmware that computes signal bars on-device, the app now mirrors the device's own repeater table with zero extra RF — no pinging needed. A "Synced with radio" / "Measuring locally" badge in the repeater popover tells you which mode is active. On stock firmware the local measurement engine is kept, and it was reworked to match the firmware's math exactly: 75/25 RX EMA, shared weak-leg scorer (0.6/0.4), an 8-repeater cap with oldest-eviction, and removal of the old RX-as-TX fallback. Each repeater row also gets a "Ping Now" action.
+
+Motion Hint
+
+A new opt-in CoreMotion-based motion hint routes your movement level either to the device (on firmware that accepts it) or to the local signal-bars engine, helping it adapt timing while you're walking or driving. Adds the motion usage permission prompt.
+
+Peer Telemetry Request
+
+A "Request Telemetry" button on the contact detail screen fetches LPP sensor data (temperature, voltage, etc.) from a chat contact on demand. Signal-bars ping timing was also simplified to flat 45s / 120s intervals with TX-weighted (70/30) sorting and best-repeater change detection.
+
+Reaction Snippet Sizing Fix
+
+Channel reaction (tapback) messages are now sized against your actual node name length instead of a hardcoded budget, so the firmware-prepended "{NodeName}: " plus the reaction text always fits within the 147-byte channel limit — preventing truncated or rejected reactions for users with longer node names.
+
+Contact Sync Crash-Loop Fix
+
+Fixed a launch-loop crash seen on TestFlight Build 34: when a contact batch arrived containing duplicate public keys, the contact-save path trapped and every subsequent sync crashed. Contact lookup is now built defensively — it keeps the most recently modified row, removes the duplicates, and tracks newly-inserted contacts so a repeated public key no longer spawns a sibling row.
+
+---
+
+Previous Builds
+
+v0.10.1 (Build 34)
 
 Heard Repeats Map Fixes
 

@@ -98,12 +98,12 @@ struct PathMapGeneratorView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let mapVM = viewModel.mapViewModel, mapVM.hasLocatedHops {
             ZStack {
-                MessageRouteMapMKMapView(
+                RouteMapRepresentable(
                     repeaterAnnotations: mapVM.repeaterAnnotations,
                     endpointAnnotations: mapVM.endpointAnnotations,
                     lineOverlays: mapVM.lineOverlays,
                     mapType: mapVM.mapType,
-                    pathState: mapVM.pathState,
+                    hopIndices: mapVM.pathState.mapValues(\.hopIndex),
                     labelMode: mapVM.labelMode,
                     cameraRegion: Binding(
                         get: { mapVM.cameraRegion },

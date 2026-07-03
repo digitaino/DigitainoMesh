@@ -62,12 +62,12 @@ struct MessageRouteMapSheet: View {
     // MARK: - Map Content
 
     private var mapContent: some View {
-        MessageRouteMapMKMapView(
+        RouteMapRepresentable(
             repeaterAnnotations: mapViewModel.repeaterAnnotations,
             endpointAnnotations: mapViewModel.endpointAnnotations,
             lineOverlays: mapViewModel.lineOverlays,
             mapType: mapViewModel.mapType,
-            pathState: mapViewModel.pathState,
+            hopIndices: mapViewModel.pathState.mapValues(\.hopIndex),
             labelMode: mapViewModel.labelMode,
             cameraRegion: $mapViewModel.cameraRegion,
             cameraRegionVersion: mapViewModel.cameraRegionVersion

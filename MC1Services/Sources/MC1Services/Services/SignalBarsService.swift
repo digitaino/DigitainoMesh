@@ -232,6 +232,13 @@ public final class SignalBarsService {
         motionLevel = min(level, 2)
     }
 
+    /// Update the device's path hash mode when the user changes it at runtime.
+    /// Controls how many bytes (mode + 1 → 1/2/3) of the public key form a repeater's
+    /// display/match ID, so the list reflects the configured path hash size.
+    public func setPathHashMode(_ mode: UInt8) {
+        pathHashMode = mode
+    }
+
     private func startViewerPolling() {
         viewerPollTask?.cancel()
         viewerPollTask = Task { [weak self] in
@@ -287,18 +294,33 @@ public final class SignalBarsService {
                 lastPingTime: existing?.lastPingTime
             )
         }
-        // Order: device's chosen best first, then most-recently heard.
-        let bestID = blob.entries.first(where: { $0.isBest })?.hexID
-        repeaters = mapped.sorted { lhs, rhs in
-            if (lhs.id == bestID) != (rhs.id == bestID) { return lhs.id == bestID }
-            return lhs.lastHeard > rhs.lastHeard
-        }
+        // The firmware emits the table already in canonical order (best first), matching
+        // the OLED Signals page — render it verbatim rather than re-sorting by recency.
+        repeaters = mapped
         rxFlashTick &+= 1
 
         // Keep the watched-repeater range-test working in viewer mode (poll-driven).
         if let watched = watchedRepeaterHexID,
            let e = blob.entries.first(where: { $0.hexID.hasPrefix(watched) || watched.hasPrefix($0.hexID) }) {
             onWatchedRepeaterHeard?(e.hexID, e.rxSnr ?? 0, SNRQuality(snr: e.rxSnr), e.txSnr)
+        }
+    }
+
+    /// Start a discovery probe to find repeaters. Viewer mode asks the device to run
+    /// its discovery scan (action 2) and the device's auto-ping then measures TX; engine
+    /// mode runs the app's own discover + ping-all.
+    public func startProbe() async {
+        switch mode {
+        case .viewer:
+            guard let trigger = signalTriggerHandler else { return }
+            isRefreshing = true
+            txFlashTick &+= 1
+            try? await trigger(2, 0)                  // action 2 = discovery probe
+            try? await Task.sleep(for: .seconds(4))   // let the scan + auto-ping run
+            await pollSignalBars()
+            isRefreshing = false
+        case .engine:
+            await refreshAll()                        // already does discover + ping-all
         }
     }
 
@@ -310,7 +332,8 @@ public final class SignalBarsService {
         case .viewer:
             guard let trigger = signalTriggerHandler else { return }
             let action: UInt8 = (targetHexID != nil) ? 1 : 0
-            let target: UInt8 = targetHexID.flatMap { UInt8($0, radix: 16) } ?? 0
+            // Firmware matches on the 1-byte key = first byte of the hash, so send just that.
+            let target: UInt8 = targetHexID.flatMap { UInt8($0.prefix(2), radix: 16) } ?? 0
             if let hexID = targetHexID {
                 updateRepeater(hexID: hexID) { $0.txState = .measuring }
             }
@@ -632,12 +655,25 @@ public final class SignalBarsService {
     // MARK: - Event Handlers
 
     private func handleDiscoverResponse(
-        hexID: String,
+        hexID rawHexID: String,
         rxSnr: Double,
         txSnr: Double?,
         rssi: Int?,
         publicKey: Data?
     ) {
+        // Discover responses carry the full public key, but the wire-level hexID is
+        // only the first byte. Re-derive the display/match ID at the configured path
+        // hash size (mode + 1 → 1/2/3 bytes) so the list honors the device's path hash
+        // mode. Passive packets pass publicKey == nil and already arrive at the right
+        // size — keep theirs.
+        let hexID: String
+        if let publicKey, !publicKey.isEmpty {
+            let size = min(3, max(1, Int(pathHashMode) + 1))
+            hexID = publicKey.prefix(size).map { String(format: "%02X", $0) }.joined()
+        } else {
+            hexID = rawHexID
+        }
+
         let rxQuality = SNRQuality(snr: rxSnr)
 
         // Find existing repeater by exact match or prefix match.

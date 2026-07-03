@@ -202,7 +202,8 @@ public struct RxLogEntryDTO: Sendable, Identifiable, Equatable, Hashable {
     public var traceTargetHashes: [Data]? {
         guard payloadType == .trace, packetPayload.count > 9 else { return nil }
         let pathSz = Int(packetPayload[8] & 0x03)
-        let hashSize = 1 << pathSz
+        guard pathSz < 3 else { return nil }  // mode 3 is reserved
+        let hashSize = pathSz + 1  // 1, 2, or 3 bytes per hop (mode + 1)
         let hashBytes = packetPayload.dropFirst(9)
         guard !hashBytes.isEmpty, hashBytes.count % hashSize == 0 else { return nil }
         return stride(from: hashBytes.startIndex, to: hashBytes.endIndex, by: hashSize).map { start in

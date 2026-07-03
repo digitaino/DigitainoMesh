@@ -17,8 +17,10 @@ public struct SignalBarsBlob: Sendable, Equatable {
 
     /// One tracked repeater as reported by the firmware.
     public struct Entry: Sendable, Equatable {
-        /// 1-byte repeater hash — the same value the OLED status bar shows.
+        /// First byte of the repeater hash — the match/ping key and what the OLED shows.
         public let id: UInt8
+        /// Full advertised repeater hash (1-3 bytes) for display; empty falls back to `[id]`.
+        public let idHash: [UInt8]
         /// RX SNR in 0.25 dB steps (how well *we* hear *them*).
         public let rxSnrX4: Int8
         /// TX SNR in 0.25 dB steps (how well *they* hear *us*).
@@ -34,10 +36,11 @@ public struct SignalBarsBlob: Sendable, Equatable {
         /// Last ping round-trip in ms (0 = unknown).
         public let rttMs: UInt16
 
-        public init(id: UInt8, rxSnrX4: Int8, txSnrX4: Int8,
+        public init(id: UInt8, idHash: [UInt8] = [], rxSnrX4: Int8, txSnrX4: Int8,
                     hasRx: Bool, hasTx: Bool, txFailed: Bool, isBest: Bool,
                     ageSeconds: UInt16, rttMs: UInt16) {
             self.id = id
+            self.idHash = idHash
             self.rxSnrX4 = rxSnrX4
             self.txSnrX4 = txSnrX4
             self.hasRx = hasRx
@@ -52,8 +55,10 @@ public struct SignalBarsBlob: Sendable, Equatable {
         public var rxSnr: Double? { hasRx ? Double(rxSnrX4) / 4.0 : nil }
         /// TX SNR in dB, or `nil` if no TX measurement.
         public var txSnr: Double? { hasTx ? Double(txSnrX4) / 4.0 : nil }
-        /// Hex repeater id (e.g. "0C"), matching the device display.
-        public var hexID: String { String(format: "%02X", id) }
+        /// Hex repeater id at the advertised hash size (e.g. "0C", "0C13", "0C13AB").
+        public var hexID: String {
+            (idHash.isEmpty ? [id] : idHash).map { String(format: "%02X", $0) }.joined()
+        }
     }
 
     /// Schema version for forward compatibility (currently `1`).
@@ -79,21 +84,45 @@ public struct SignalBarsBlob: Sendable, Equatable {
         var entries: [Entry] = []
         entries.reserveCapacity(count)
         var i = 2
-        for _ in 0..<count {
-            guard i + 8 <= bytes.count else { break }
-            let flags = bytes[i + 3]
-            entries.append(Entry(
-                id: bytes[i],
-                rxSnrX4: Int8(bitPattern: bytes[i + 1]),
-                txSnrX4: Int8(bitPattern: bytes[i + 2]),
-                hasRx: flags & 0x01 != 0,
-                hasTx: flags & 0x02 != 0,
-                txFailed: flags & 0x04 != 0,
-                isBest: flags & 0x08 != 0,
-                ageSeconds: UInt16(bytes[i + 4]) | (UInt16(bytes[i + 5]) << 8),
-                rttMs: UInt16(bytes[i + 6]) | (UInt16(bytes[i + 7]) << 8)
-            ))
-            i += 8
+        if version >= 2 {
+            // v2 entry (11 bytes): id_len, h0, h1, h2, rx, tx, flags, age(LE), rtt(LE)
+            for _ in 0..<count {
+                guard i + 11 <= bytes.count else { break }
+                let n = max(1, min(Int(bytes[i]), 3))
+                let idHash = Array(bytes[(i + 1)...(i + n)])   // h0..h(n-1)
+                let flags = bytes[i + 6]
+                entries.append(Entry(
+                    id: bytes[i + 1],
+                    idHash: idHash,
+                    rxSnrX4: Int8(bitPattern: bytes[i + 4]),
+                    txSnrX4: Int8(bitPattern: bytes[i + 5]),
+                    hasRx: flags & 0x01 != 0,
+                    hasTx: flags & 0x02 != 0,
+                    txFailed: flags & 0x04 != 0,
+                    isBest: flags & 0x08 != 0,
+                    ageSeconds: UInt16(bytes[i + 7]) | (UInt16(bytes[i + 8]) << 8),
+                    rttMs: UInt16(bytes[i + 9]) | (UInt16(bytes[i + 10]) << 8)
+                ))
+                i += 11
+            }
+        } else {
+            // v1 entry (8 bytes): id, rx, tx, flags, age(LE), rtt(LE)
+            for _ in 0..<count {
+                guard i + 8 <= bytes.count else { break }
+                let flags = bytes[i + 3]
+                entries.append(Entry(
+                    id: bytes[i],
+                    rxSnrX4: Int8(bitPattern: bytes[i + 1]),
+                    txSnrX4: Int8(bitPattern: bytes[i + 2]),
+                    hasRx: flags & 0x01 != 0,
+                    hasTx: flags & 0x02 != 0,
+                    txFailed: flags & 0x04 != 0,
+                    isBest: flags & 0x08 != 0,
+                    ageSeconds: UInt16(bytes[i + 4]) | (UInt16(bytes[i + 5]) << 8),
+                    rttMs: UInt16(bytes[i + 6]) | (UInt16(bytes[i + 7]) << 8)
+                ))
+                i += 8
+            }
         }
         self.init(version: version, entries: entries)
     }
@@ -104,11 +133,15 @@ public struct SignalBarsBlob: Sendable, Equatable {
     /// the app only decodes — this exists mainly for round-trip tests.
     public func encode() -> Data {
         var out = Data()
-        out.append(version)
+        out.append(2)   // version 2
         let items = Array(entries.prefix(255))
         out.append(UInt8(items.count))
         for e in items {
-            out.append(e.id)
+            let hash = Array((e.idHash.isEmpty ? [e.id] : e.idHash).prefix(3))
+            out.append(UInt8(hash.count))
+            out.append(hash.count > 0 ? hash[0] : e.id)
+            out.append(hash.count > 1 ? hash[1] : 0)
+            out.append(hash.count > 2 ? hash[2] : 0)
             out.append(UInt8(bitPattern: e.rxSnrX4))
             out.append(UInt8(bitPattern: e.txSnrX4))
             var flags: UInt8 = 0

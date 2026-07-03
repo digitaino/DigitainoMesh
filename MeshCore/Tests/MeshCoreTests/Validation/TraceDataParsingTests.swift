@@ -40,18 +40,18 @@ struct TraceDataParsingTests {
         #expect(abs(trace.path[2].snr - 3.0) <= 0.001)
     }
 
-    @Test("traceData pathSz=2 four byte hashes")
-    func traceDataPathSz2FourByteHashes() {
-        // path_sz=2: 4-byte hashes, hopCount = pathLength / 4
+    @Test("traceData pathSz=2 three byte hashes")
+    func traceDataPathSz2ThreeByteHashes() {
+        // path_sz=2: 3-byte hashes (mode + 1), hopCount = pathLength / 3
         var payload = Data()
         payload.append(0x00)  // Reserved
-        payload.append(0x08)  // pathLength = 8 hash bytes = 2 hops
-        payload.append(0x02)  // flags: path_sz = 2 (means 4 bytes per hash)
+        payload.append(0x06)  // pathLength = 6 hash bytes = 2 hops
+        payload.append(0x02)  // flags: path_sz = 2 (means 3 bytes per hash)
         payload.appendLittleEndian(UInt32(111))  // tag
         payload.appendLittleEndian(UInt32(222))  // authCode
-        // 8 hash bytes (2 hops x 4 bytes)
-        payload.append(contentsOf: [0x11, 0x22, 0x33, 0x44])  // hop 0
-        payload.append(contentsOf: [0x55, 0x66, 0x77, 0x88])  // hop 1
+        // 6 hash bytes (2 hops x 3 bytes)
+        payload.append(contentsOf: [0x11, 0x22, 0x33])  // hop 0
+        payload.append(contentsOf: [0x55, 0x66, 0x77])  // hop 1
         // 2 SNR bytes (one per hop)
         payload.append(contentsOf: [0x28, 0x14])  // SNRs: 10.0, 5.0
         payload.append(0x0C)  // final SNR: 3.0
@@ -65,9 +65,9 @@ struct TraceDataParsingTests {
 
         #expect(trace.path.count == 3, "Should have 2 hops + 1 destination")
 
-        // Check 4-byte hashes
-        #expect(trace.path[0].hashBytes == Data([0x11, 0x22, 0x33, 0x44]))
-        #expect(trace.path[1].hashBytes == Data([0x55, 0x66, 0x77, 0x88]))
+        // Check 3-byte hashes
+        #expect(trace.path[0].hashBytes == Data([0x11, 0x22, 0x33]))
+        #expect(trace.path[1].hashBytes == Data([0x55, 0x66, 0x77]))
         #expect(trace.path[2].hashBytes == nil)
 
         // Legacy hash accessor (first byte only)

@@ -9,16 +9,15 @@ struct DuplicateCountBadge: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 3) {
-                Image(systemName: isExpanded ? "chevron.up" : "square.on.square")
-                    .font(.system(size: 9, weight: .semibold))
-                Text("\u{00D7}\(count)")
-                    .font(.system(.caption2, design: .monospaced, weight: .medium))
+            CapsuleBadge(foreground: .secondary, background: .fill.tertiary,
+                         horizontalPadding: 7, verticalPadding: 3) {
+                HStack(spacing: 3) {
+                    Image(systemName: isExpanded ? "chevron.up" : "square.on.square")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("\u{00D7}\(count)")
+                        .font(.system(.caption2, design: .monospaced, weight: .medium))
+                }
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(.fill.tertiary, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(count) duplicate messages")

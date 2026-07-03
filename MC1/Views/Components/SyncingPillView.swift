@@ -18,21 +18,16 @@ struct SyncingPillView: View {
     }
 
     private var pillBody: some View {
-        HStack(spacing: 8) {
-            icon
-            Text(state.displayText)
-                .font(.subheadline)
-                .fontWeight(state.isFailure ? .bold : .medium)
-                .foregroundStyle(state.textColor)
-                .contentTransition(.identity)
-        }
-        .geometryGroup()
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background {
-            Capsule()
-                .fill(backgroundStyle)
-                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        StatusPill(fill: .style(backgroundStyle), horizontalPadding: 16, verticalPadding: 10) {
+            HStack(spacing: 8) {
+                icon
+                Text(state.displayText)
+                    .font(.subheadline)
+                    .fontWeight(state.isFailure ? .bold : .medium)
+                    .foregroundStyle(state.textColor)
+                    .contentTransition(.identity)
+            }
+            .geometryGroup()
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(state.displayText)

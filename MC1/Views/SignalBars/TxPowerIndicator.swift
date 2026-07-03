@@ -13,24 +13,19 @@ struct TxPowerIndicator: View {
             Button {
                 appState.showAdaptivePowerSheet = true
             } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: powerIcon(for: service))
-                        .font(.system(size: 10, weight: .semibold))
-                    Text(service.currentStep.label)
-                        .font(.system(.caption2, design: .monospaced))
-                    if service.lastApplyFailed {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.red)
+                CapsuleBadge(tint: powerColor(for: service)) {
+                    HStack(spacing: 3) {
+                        Image(systemName: powerIcon(for: service))
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(service.currentStep.label)
+                            .font(.system(.caption2, design: .monospaced))
+                        if service.lastApplyFailed {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.red)
+                        }
                     }
                 }
-                .foregroundStyle(powerColor(for: service))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(powerColor(for: service).opacity(0.15))
-                )
             }
             .accessibilityLabel("TX Power: \(service.currentStep.label)\(service.lastApplyFailed ? ", verification failed" : "")")
             .accessibilityHint(service.isElevated ? "Elevated from base \(service.baseStep.label)" : "At base power")

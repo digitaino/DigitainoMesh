@@ -6,11 +6,9 @@ struct NodeKindBadge: View {
     let color: Color
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15), in: .capsule)
-            .foregroundStyle(color)
+        CapsuleBadge(tint: color) {
+            Text(text)
+                .font(.caption2.weight(.medium))
+        }
     }
 }

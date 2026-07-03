@@ -75,16 +75,28 @@ struct HeardRepeatsMapSheet: View {
     // MARK: - Map Content
 
     private var mapContent: some View {
-        HeardRepeatsMapMKMapView(
+        // SNR-colored last-hop overlays; neutral dashed line for the outbound chain.
+        let lastHopSNR = viewModel.lastHopSNR
+        return RouteMapRepresentable(
             repeaterAnnotations: viewModel.repeaterAnnotations,
             endpointAnnotations: viewModel.endpointAnnotations,
             lineOverlays: viewModel.lineOverlays,
             mapType: viewModel.mapType,
-            pathState: viewModel.pathState,
-            lastHopSNR: viewModel.lastHopSNR,
+            hopIndices: viewModel.pathState.mapValues(\.hopIndex),
             labelMode: viewModel.labelMode,
             cameraRegion: $viewModel.cameraRegion,
-            cameraRegionVersion: viewModel.cameraRegionVersion
+            cameraRegionVersion: viewModel.cameraRegionVersion,
+            styleOverlay: { renderer, overlay in
+                if let snrQuality = lastHopSNR[overlay.segmentIndex] {
+                    renderer.strokeColor = snrQuality.uiColor
+                    renderer.lineWidth = 4
+                } else {
+                    // Neutral outbound chain
+                    renderer.strokeColor = .systemBlue
+                    renderer.lineWidth = 3
+                    renderer.lineDashPattern = [8, 4]
+                }
+            }
         )
         .ignoresSafeArea()
     }

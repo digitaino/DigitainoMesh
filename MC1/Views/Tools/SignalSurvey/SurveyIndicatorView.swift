@@ -12,6 +12,8 @@ struct SurveyIndicatorView: View {
 
     var body: some View {
         Button(action: onTap) {
+            StatusPill(fill: .glass, horizontalPadding: 12, verticalPadding: 7,
+                       shadowRadius: 4, shadowY: 2) {
             HStack(spacing: 6) {
                 // Recording dot
                 Circle()
@@ -75,12 +77,9 @@ struct SurveyIndicatorView: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .liquidGlass(in: .capsule)
+            }
         }
         .buttonStyle(.plain)
-        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
         .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: pulse)
         .onAppear { pulse = true }
     }

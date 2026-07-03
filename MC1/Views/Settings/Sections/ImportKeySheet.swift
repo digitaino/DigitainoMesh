@@ -14,21 +14,11 @@ struct ImportKeySheet: View {
     @State private var validatedKeyData: Data?
 
     var body: some View {
-        NavigationStack {
+        SheetScaffold(L10n.Settings.ImportKey.Sheet.title) {
             Form {
                 explanationSection
                 keyInputSection
                 importSection
-            }
-            .navigationTitle(L10n.Settings.ImportKey.Sheet.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.Localizable.Common.cancel) {
-                        dismiss()
-                    }
-                    .disabled(isImporting)
-                }
             }
             .interactiveDismissDisabled(isImporting)
             .alert(L10n.Settings.RegenerateIdentity.Alert.Replace.title, isPresented: $showingReplaceAlert) {
@@ -41,6 +31,13 @@ struct ImportKeySheet: View {
             }
             .errorAlert($errorMessage)
             .sensoryFeedback(.success, trigger: successTrigger)
+        } toolbar: {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L10n.Localizable.Common.cancel) {
+                    dismiss()
+                }
+                .disabled(isImporting)
+            }
         }
     }
 

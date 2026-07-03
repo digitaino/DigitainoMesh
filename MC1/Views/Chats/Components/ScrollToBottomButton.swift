@@ -7,16 +7,12 @@ struct ScrollToBottomButton: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            Image(systemName: "chevron.down")
-                .font(.body.bold())
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .contentShape(.circle)
-        .liquidGlassInteractive(in: .circle)
-        .overlay(alignment: .topTrailing) {
-            unreadBadge
+        CircularGlassButton(systemImage: "chevron.down", action: onTap) {
+            if unreadCount > 0 {
+                CountBadge(count: unreadCount, color: .blue,
+                           overflowText: L10n.Chats.Chats.ScrollButton.Badge.overflow)
+                    .offset(x: 8, y: -8)
+            }
         }
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible ? 1 : 0.5)
@@ -24,19 +20,6 @@ struct ScrollToBottomButton: View {
         .accessibilityLabel(L10n.Chats.Chats.ScrollButton.ScrollToBottom.accessibilityLabel)
         .accessibilityValue(unreadCount > 0 ? String(format: NSLocalizedString("chats.unreadMessages.accessibilityValue", tableName: "Chats", comment: ""), locale: .current, unreadCount) : "")
         .accessibilityHidden(!isVisible)
-    }
-
-    @ViewBuilder
-    private var unreadBadge: some View {
-        if unreadCount > 0 {
-            Text(unreadCount > 99 ? L10n.Chats.Chats.ScrollButton.Badge.overflow : "\(unreadCount)")
-                .font(.caption2.bold())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.blue, in: .capsule)
-                .offset(x: 8, y: -8)
-        }
     }
 }
 

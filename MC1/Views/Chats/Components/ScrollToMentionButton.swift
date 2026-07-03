@@ -6,33 +6,16 @@ struct ScrollToMentionButton: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            Image(systemName: "at")
-                .font(.body.bold())
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .contentShape(.circle)
-        .liquidGlassInteractive(in: .circle)
-        .overlay(alignment: .topTrailing) {
-            unreadBadge
+        CircularGlassButton(systemImage: "at", action: onTap) {
+            if unreadMentionCount > 0 {
+                CountBadge(count: unreadMentionCount, color: .red,
+                           overflowText: L10n.Chats.Chats.ScrollButton.Badge.overflow)
+                    .offset(x: 8, y: -8)
+            }
         }
         .accessibilityLabel(L10n.Chats.Chats.ScrollButton.ScrollToMention.accessibilityLabel)
         .accessibilityValue(L10n.Chats.Chats.ScrollButton.ScrollToMention.accessibilityValue(unreadMentionCount))
         .accessibilityHint(L10n.Chats.Chats.ScrollButton.ScrollToMention.accessibilityHint)
-    }
-
-    @ViewBuilder
-    private var unreadBadge: some View {
-        if unreadMentionCount > 0 {
-            Text(unreadMentionCount > 99 ? L10n.Chats.Chats.ScrollButton.Badge.overflow : "\(unreadMentionCount)")
-                .font(.caption2.bold())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.red, in: .capsule)
-                .offset(x: 8, y: -8)
-        }
     }
 }
 

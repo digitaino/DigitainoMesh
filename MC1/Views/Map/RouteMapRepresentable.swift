@@ -1,24 +1,29 @@
 import MapKit
-import MC1Services
 import SwiftUI
+import MC1Services
 
-/// UIViewRepresentable for the heard repeats map.
-/// Displays repeater pins for outbound chain hops,
-/// neutral-colored line overlays between consecutive hops (with arrowheads),
-/// SNR-colored last-hop lines from the heard repeater to the user, and
-/// a receiver endpoint pin at the user's location.
-struct HeardRepeatsMapMKMapView: UIViewRepresentable {
+/// Read-only `UIViewRepresentable` for displaying a route through mesh repeaters on a map:
+/// repeater pins, sender/receiver endpoint pins, and directional path-line overlays.
+///
+/// This is the shared base for the message route, shared route, generated path, and heard-repeats
+/// maps — which previously each had a near-identical `MKMapView` wrapper. Per-route differences are
+/// expressed through `hopIndices` (the hop number shown on each repeater pin) and the optional
+/// `styleOverlay` closure (to recolor/restyle individual path overlays, e.g. SNR-colored last hops).
+struct RouteMapRepresentable: UIViewRepresentable {
     let repeaterAnnotations: [RepeaterAnnotation]
     let endpointAnnotations: [RouteEndpointAnnotation]
     let lineOverlays: [PathLineOverlay]
     let mapType: MKMapType
-    let pathState: [UUID: HeardRepeatsMapViewModel.PathInfo]
-    /// SNR quality for last-hop overlays (keyed by overlay segmentIndex)
-    let lastHopSNR: [Int: SNRQuality]
+    /// Hop number to display on each repeater pin, keyed by annotation ID.
+    let hopIndices: [UUID: Int]
     let labelMode: AnnotationLabelMode
 
     @Binding var cameraRegion: MKCoordinateRegion?
     let cameraRegionVersion: Int
+
+    /// Optional hook to customize each path overlay's renderer after the default arrowed line is
+    /// configured (e.g. SNR coloring). When nil, overlays render as a plain arrowed path line.
+    var styleOverlay: ((PathLineRenderer, PathLineOverlay) -> Void)?
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = context.coordinator.mapView
@@ -43,9 +48,9 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
         coordinator.isUpdatingFromSwiftUI = true
         defer { coordinator.isUpdatingFromSwiftUI = false }
 
-        coordinator.pathState = pathState
-        coordinator.lastHopSNR = lastHopSNR
+        coordinator.hopIndices = hopIndices
         coordinator.labelMode = labelMode
+        coordinator.styleOverlay = styleOverlay
 
         mapView.mapType = mapType
 
@@ -131,10 +136,10 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
     class Coordinator: NSObject, MKMapViewDelegate {
         var setCameraRegion: (MKCoordinateRegion?) -> Void
 
-        var pathState: [UUID: HeardRepeatsMapViewModel.PathInfo] = [:]
-        var lastHopSNR: [Int: SNRQuality] = [:]
+        var hopIndices: [UUID: Int] = [:]
         var labelMode: AnnotationLabelMode = .name
         var lastLabelMode: AnnotationLabelMode = .name
+        var styleOverlay: ((PathLineRenderer, PathLineOverlay) -> Void)?
 
         var isUpdatingFromSwiftUI = false
         var lastAppliedRegion: MKCoordinateRegion?
@@ -184,11 +189,10 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
                     reuseIdentifier: TracePathRepeaterPinView.reuseID
                 )
 
-                let info = pathState[repeaterAnnotation.annotationID]
                 view.configure(
                     displayName: repeaterAnnotation.displayName,
                     inPath: true,
-                    hopIndex: info?.hopIndex,
+                    hopIndex: hopIndices[repeaterAnnotation.annotationID],
                     isLastHop: false,
                     titleMode: labelMode
                 )
@@ -203,18 +207,7 @@ struct HeardRepeatsMapMKMapView: UIViewRepresentable {
             if let pathOverlay = overlay as? PathLineOverlay {
                 let renderer = PathLineRenderer(overlay: pathOverlay)
                 renderer.showArrowhead = true
-
-                // Check if this is a last-hop overlay (has SNR data)
-                if let snrQuality = lastHopSNR[pathOverlay.segmentIndex] {
-                    renderer.strokeColor = snrQuality.uiColor
-                    renderer.lineWidth = 4
-                } else {
-                    // Neutral outbound chain
-                    renderer.strokeColor = .systemBlue
-                    renderer.lineWidth = 3
-                    renderer.lineDashPattern = [8, 4]
-                }
-
+                styleOverlay?(renderer, pathOverlay)
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
