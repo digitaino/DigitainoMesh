@@ -601,10 +601,9 @@ extension MessageService {
         deviceID: UUID,
         textType: TextType = .plain
     ) async throws -> (id: UUID, timestamp: UInt32) {
-        // Validate message length (byte count matches firmware buffer limits)
-        guard text.utf8.count <= ProtocolLimits.maxChannelMessageTotalLength else {
-            throw MessageServiceError.messageTooLong
-        }
+        // Validate against the firmware ceiling, accounting for the prepended
+        // "{NodeName}: " prefix (byte count matches firmware buffer limits).
+        try await validateChannelMessage(text: text)
 
         let messageID = UUID()
         let timestamp = UInt32(Date().timeIntervalSince1970)
@@ -665,9 +664,7 @@ extension MessageService {
         deviceID: UUID,
         textType: TextType = .plain
     ) async throws -> MessageDTO {
-        guard text.utf8.count <= ProtocolLimits.maxChannelMessageTotalLength else {
-            throw MessageServiceError.messageTooLong
-        }
+        try await validateChannelMessage(text: text)
 
         let messageID = UUID()
         let timestamp = UInt32(Date().timeIntervalSince1970)
@@ -779,6 +776,22 @@ extension MessageService {
     private func validateDirectMessage(text: String, to contact: ContactDTO) throws {
         guard contact.type != .repeater else { throw MessageServiceError.invalidRecipient }
         guard text.utf8.count <= ProtocolLimits.maxDirectMessageLength else { throw MessageServiceError.messageTooLong }
+    }
+
+    /// Validates channel user text against the firmware's true ceiling.
+    ///
+    /// The firmware prepends `"{NodeName}: "` before transmit, so the user text
+    /// budget is `maxChannelMessageTotalLength − nodeNameBytes − 2`, not the full
+    /// total. We measure the node name from the session's self-info; if it isn't
+    /// loaded yet we fall back to the total limit rather than guess a name length.
+    private func validateChannelMessage(text: String) async throws {
+        let budget: Int
+        if let nodeName = await session.currentSelfInfo?.name {
+            budget = ProtocolLimits.maxChannelMessageLength(nodeNameByteCount: nodeName.utf8.count)
+        } else {
+            budget = ProtocolLimits.maxChannelMessageTotalLength
+        }
+        guard text.utf8.count <= budget else { throw MessageServiceError.messageTooLong }
     }
 
     func failMessageAndRethrow(_ error: Error, messageID: UUID) async throws -> Never {

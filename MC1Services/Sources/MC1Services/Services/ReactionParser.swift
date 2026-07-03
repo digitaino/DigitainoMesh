@@ -237,14 +237,22 @@ public enum ReactionParser {
 
     // MARK: - Building
 
+    /// Safety headroom (UTF-8 bytes) reserved below the firmware transmit ceiling
+    /// when building reactions. The snippet is cosmetic, but the trailing hash is
+    /// load-bearing: if the firmware truncates the tail (e.g. because the prepended
+    /// node name is a byte longer than the app measured, or the true text ceiling
+    /// is slightly under our constant), it clips the hash mid-string and the
+    /// reaction fails to parse. Reserving headroom keeps the hash clear of that edge.
+    private static let reactionByteMargin = 8
+
     /// Builds human-readable channel reaction text.
     /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
     ///
     /// The total reaction text (in UTF-8 bytes) is capped at
-    /// `ProtocolLimits.maxChannelMessageLength(nodeNameByteCount:)` so that the
-    /// firmware-prepended `"{NodeName}: "` plus the reaction stays within
-    /// `maxChannelMessageTotalLength`. The hash suffix is always preserved —
-    /// only the snippet is shortened if needed.
+    /// `ProtocolLimits.maxChannelMessageLength(nodeNameByteCount:)` minus
+    /// `reactionByteMargin` so that the firmware-prepended `"{NodeName}: "` plus the
+    /// reaction stays comfortably within `maxChannelMessageTotalLength`. The hash
+    /// suffix is always preserved — only the snippet is shortened if needed.
     public static func buildChannelReactionText(
         emoji: String,
         targetSender: String,
@@ -255,9 +263,9 @@ public enum ReactionParser {
         let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
         let prefix = "\(emoji) reacted to [\(targetSender)]: \""
         let closing = "\" (\(hash))"
-        let totalBudget = ProtocolLimits.maxChannelMessageLength(
+        let totalBudget = max(0, ProtocolLimits.maxChannelMessageLength(
             nodeNameByteCount: localNodeNameByteCount
-        )
+        ) - reactionByteMargin)
         let snippetBudget = max(0, totalBudget - prefix.utf8.count - closing.utf8.count)
         let snippet = truncateToFit(targetText, maxBytes: snippetBudget)
         return "\(prefix)\(snippet)\(closing)"
@@ -273,14 +281,19 @@ public enum ReactionParser {
         let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
         let overhead = emoji.utf8.count + " reacted to: \"".utf8.count
             + "\" (".utf8.count + 8 + ")".utf8.count
-        let snippet = truncateToFit(targetText, maxBytes: 150 - overhead)
+        let snippetBudget = max(0, ProtocolLimits.maxDirectMessageLength - overhead - reactionByteMargin)
+        let snippet = truncateToFit(targetText, maxBytes: snippetBudget)
         return "\(emoji) reacted to: \"\(snippet)\" (\(hash))"
     }
 
     /// Truncates a string to fit within a UTF-8 byte budget, appending "..." if truncated.
     /// Respects character boundaries (never splits a multi-byte character).
     private static func truncateToFit(_ text: String, maxBytes: Int) -> String {
-        guard maxBytes > 3, text.utf8.count > maxBytes else { return text }
+        // Already fits: return unchanged.
+        guard text.utf8.count > maxBytes else { return text }
+        // Budget too small to hold even the "..." marker: return as much of the
+        // ellipsis as fits (never the full text, which would blow the budget).
+        guard maxBytes > 3 else { return String("...".prefix(max(0, maxBytes))) }
         let target = maxBytes - 3 // room for "..."
         var result = ""
         var byteCount = 0
