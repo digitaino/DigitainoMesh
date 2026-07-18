@@ -50,6 +50,8 @@ public struct SamplingPolicy: Sendable {
     }
 
     public private(set) var tierController: TierController
+    /// Manual tier override (nil = automatic speed-based selection, the default).
+    public var tierOverride: SamplingTier?
     private var config: Config
     private var bucket: TokenBucket
     /// Tier-cells (any resolution) that already have at least one sample this session.
@@ -70,7 +72,7 @@ public struct SamplingPolicy: Sendable {
     }
 
     /// Current sampling tier (for UI display).
-    public var currentTier: SamplingTier { tierController.current }
+    public var currentTier: SamplingTier { tierOverride ?? tierController.current }
 
     /// Tokens available right now (for UI display of the TX budget).
     public mutating func budgetAvailable(at now: TimeInterval) -> Double {
@@ -88,7 +90,10 @@ public struct SamplingPolicy: Sendable {
         speed: Double?,
         at now: TimeInterval
     ) -> ProbePlan? {
-        let tier = tierController.update(speed: speed, at: now)
+        // The controller keeps tracking speed even under an override, so clearing
+        // the override snaps straight to the right automatic tier.
+        let autoTier = tierController.update(speed: speed, at: now)
+        let tier = tierOverride ?? autoTier
         guard let tierCell = SurveyGrid.cell(containing: coordinate, resolution: tier.resolution),
               let baseCell = SurveyGrid.cell(containing: coordinate)
         else { return nil }
@@ -123,7 +128,7 @@ public struct SamplingPolicy: Sendable {
         coordinate: GeoCoordinate,
         at now: TimeInterval
     ) -> ProbePlan? {
-        let tier = tierController.current
+        let tier = tierOverride ?? tierController.current
         guard let tierCell = SurveyGrid.cell(containing: coordinate, resolution: tier.resolution),
               let baseCell = SurveyGrid.cell(containing: coordinate)
         else { return nil }

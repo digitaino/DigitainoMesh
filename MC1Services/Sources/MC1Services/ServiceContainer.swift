@@ -86,6 +86,10 @@ public final class ServiceContainer {
     /// Service for signal survey (wardriving) recording
     public let surveyService: SurveyService
 
+    /// Survey v2 transmission engine: speed-adaptive sampling tiers + hard mesh-TX
+    /// budget. The only component allowed to transmit for survey purposes.
+    public let surveyProbeEngine: SurveyProbeEngine
+
     /// Buffer for batching debug log entries to persistence
     public let debugLogBuffer: DebugLogBuffer
 
@@ -169,6 +173,7 @@ public final class ServiceContainer {
         self.rxLogService = RxLogService(session: session, dataStore: dataStore)
         self.heardRepeatsService = HeardRepeatsService(dataStore: dataStore)
         self.surveyService = SurveyService(session: session, dataStore: dataStore)
+        self.surveyProbeEngine = SurveyProbeEngine()
         self.debugLogBuffer = DebugLogBuffer(dataStore: dataStore)
         DebugLogBuffer.shared = debugLogBuffer
         self.reactionService = ReactionService()

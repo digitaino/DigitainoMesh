@@ -3,6 +3,7 @@ import MapKit
 import MC1Services
 import OSLog
 import Security
+import SurveyKit
 import SwiftUI
 
 private let logger = Logger(subsystem: "com.mc1", category: "SignalSurvey")
@@ -750,10 +751,11 @@ final class SignalSurveyViewModel {
             if let surveyService = surveyServiceRef {
                 Task { await surveyService.setProbingActive(probeEnabled) }
             }
-            if probeEnabled, let bps = binaryProtocolService, let ls = locationServiceRef {
+            // The forwarding loop gates on `probeEnabled` each tick, so toggling only
+            // needs to ensure the loop exists; the engine stays armed either way so
+            // the manual probe button keeps working.
+            if probeEnabled, probeTask == nil, let ls = locationServiceRef {
                 startProbeLoop(locationService: ls)
-            } else {
-                stopProbeLoop()
             }
         }
     }
@@ -794,6 +796,28 @@ final class SignalSurveyViewModel {
     private var deviceID: UUID?
     /// Path hash mode from device config, used for flood trace flags.
     private var pathHashMode: UInt8 = 0
+
+    // MARK: - Probe Engine (survey v2)
+
+    /// The v2 transmission engine (speed-adaptive sampling tiers + hard TX budget).
+    /// Owns ALL survey transmissions; injected from ServiceContainer at start.
+    private var probeEngine: SurveyProbeEngine?
+    private var engineObservationTask: Task<Void, Never>?
+
+    /// Mirrored engine state for the UI (tier chip + TX budget gauge).
+    private(set) var samplingTier: SamplingTier = .fine
+    private(set) var isAutoTier: Bool = true
+    private(set) var txBudgetAvailable: Double = 0
+    private(set) var txBudgetCapacity: Double = 6
+
+    /// Manual sampling-tier override (nil = Auto: tier follows GPS speed).
+    var tierOverride: SamplingTier? {
+        didSet {
+            guard let engine = probeEngine else { return }
+            let value = tierOverride
+            Task { await engine.setTierOverride(value) }
+        }
+    }
 
     // MARK: - Probe Channel Selection
 
@@ -1050,7 +1074,8 @@ final class SignalSurveyViewModel {
         binaryProtocolService: BinaryProtocolService? = nil,
         messageService: MessageService? = nil,
         deviceID: UUID? = nil,
-        pathHashMode: UInt8 = 0
+        pathHashMode: UInt8 = 0,
+        probeEngine: SurveyProbeEngine? = nil
     ) async {
         state = .loading
         do {
@@ -1082,6 +1107,9 @@ final class SignalSurveyViewModel {
             self.locationServiceRef = locationService
             self.surveyServiceRef = surveyService
             self.pathHashMode = pathHashMode
+            if let probeEngine {
+                self.probeEngine = probeEngine
+            }
 
             // Start continuous GPS
             locationService.startContinuousUpdates { [weak self] _ in
@@ -1101,12 +1129,23 @@ final class SignalSurveyViewModel {
                 }
             }
 
-            // Start probe loop if enabled and sync active state
+            // Arm the probe engine whenever a radio is available — the forwarding
+            // loop gates automatic probes on `probeEnabled`, and an armed engine is
+            // what makes the manual probe button work.
             if probeEnabled {
                 await surveyService.setProbingActive(true)
-                if binaryProtocolService != nil {
-                    startProbeLoop(locationService: locationService)
-                }
+            }
+            if binaryProtocolService != nil {
+                startProbeLoop(locationService: locationService)
+            }
+
+            // v2 live upload: batched + anonymous by default (receipt-based
+            // deletion), replacing the old per-packet POST firehose.
+            if liveUploadEnabled {
+                await SurveyUploadServiceV2.shared.startLiveQueue(
+                    sessionID: session.id.uuidString,
+                    contributor: nil
+                )
             }
 
             logger.info("Survey started: \(session.id)")
@@ -1132,7 +1171,8 @@ final class SignalSurveyViewModel {
     func pauseSurvey(surveyService: SurveyService) async {
         guard isActive, !isPaused else { return }
         isPaused = true
-        stopProbeLoop()
+        // The forwarding loop gates on `isPaused`; the engine stays armed so its
+        // novelty/budget state survives the pause.
         await surveyService.setProbingActive(false)
         logger.info("Survey paused")
     }
@@ -1146,9 +1186,9 @@ final class SignalSurveyViewModel {
         isPaused = false
         if probeEnabled {
             await surveyService.setProbingActive(true)
-            if binaryProtocolService != nil {
-                startProbeLoop(locationService: locationService)
-            }
+        }
+        if probeTask == nil, binaryProtocolService != nil {
+            startProbeLoop(locationService: locationService)
         }
         logger.info("Survey resumed")
     }
@@ -1161,8 +1201,9 @@ final class SignalSurveyViewModel {
     ) async {
         guard case .active(let sessionID) = state else { return }
 
-        // Stop probing first
+        // Stop probing first, then flush any buffered live uploads.
         stopProbeLoop()
+        await SurveyUploadServiceV2.shared.stopLiveQueue()
 
         do {
             // Persist probe-sent-per-cell data before clearing it,
@@ -1217,8 +1258,12 @@ final class SignalSurveyViewModel {
         messageService: MessageService? = nil,
         deviceID: UUID,
         pathHashMode: UInt8 = 0,
-        dataStore: PersistenceStore
+        dataStore: PersistenceStore,
+        probeEngine: SurveyProbeEngine? = nil
     ) async {
+        if let probeEngine {
+            self.probeEngine = probeEngine
+        }
         // If ViewModel is already active but the new service doesn't have the session
         // (BLE reconnection scenario), re-associate the session with the new service.
         if isActive, case .active(let existingSessionID) = state {
@@ -1239,12 +1284,12 @@ final class SignalSurveyViewModel {
                         }
                     }
 
-                    // Resume probe loop if enabled
+                    // Re-arm the probe engine against the new service instances
                     if probeEnabled {
                         await surveyService.setProbingActive(true)
-                        if binaryProtocolService != nil {
-                            startProbeLoop(locationService: locationService)
-                        }
+                    }
+                    if binaryProtocolService != nil {
+                        startProbeLoop(locationService: locationService)
                     }
 
                     logger.info("Re-wired active survey to new service after BLE reconnection: \(existingSessionID)")
@@ -1302,12 +1347,12 @@ final class SignalSurveyViewModel {
             }
         }
 
-        // Resume probe loop if enabled and sync active state
+        // Re-arm the probe engine and sync active state
         if probeEnabled {
             await surveyService.setProbingActive(true)
-            if binaryProtocolService != nil {
-                startProbeLoop(locationService: locationService)
-            }
+        }
+        if binaryProtocolService != nil {
+            startProbeLoop(locationService: locationService)
         }
 
         // Update the live status immediately so the floating indicator shows correct data
@@ -1352,26 +1397,21 @@ final class SignalSurveyViewModel {
             )
         }
 
-        // Live upload to community map if enabled
+        // Feed the probe engine's novelty gate: a sample here means this cell (at
+        // every tier) no longer needs an automatic probe.
+        if let engine = probeEngine {
+            let lat = point.latitude
+            let lon = point.longitude
+            Task { await engine.recordSample(latitude: lat, longitude: lon) }
+        }
+
+        // v2 live upload: buffer into the batched queue (flushes every 45 s or 20
+        // dirty cells) instead of one POST per received packet.
         if liveUploadEnabled {
-            let refLat = gridReferenceLatitude
-            let contacts = repeaterContacts
-            let activeSessionID = activeSession?.id
-            let service = liveUploadService ?? SurveyUploadService()
-            if liveUploadService == nil {
-                liveUploadService = service
-                Task { await service.setDisplayName(displayNameForUpload) }
-            }
-            Task.detached {
-                await service.uploadLivePoint(
-                    point,
-                    referenceLatitude: refLat,
-                    sessionID: activeSessionID,
-                    repeaterContacts: contacts
-                )
-                await MainActor.run { [weak self] in
-                    self?.liveUploadCount += 1
-                }
+            let sample = point.surveySample
+            liveUploadCount += 1
+            Task {
+                await SurveyUploadServiceV2.shared.enqueueLive(sample)
             }
         }
 
@@ -2134,89 +2174,147 @@ final class SignalSurveyViewModel {
         }
     }
 
-    // MARK: - Probe Loop
+    // MARK: - Probe Loop (survey v2: engine-driven)
 
-    /// Starts the periodic probe loop that sends node discovery requests.
+    /// The radio adapter handed to `SurveyProbeEngine` — the only path from the
+    /// survey system to actual transmissions.
+    private struct SurveyRadioTransmitter: SurveyProbeTransmitter {
+        let bps: BinaryProtocolService
+        let messageService: MessageService?
+        let channel: ChannelDTO?
+        let deviceID: UUID?
+        let pathHashMode: UInt8
+
+        func sendDiscover() async throws {
+            // Zero-hop only, never floods. Provides TX SNR via snrIn in responses.
+            _ = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
+        }
+
+        func sendTrace() async throws {
+            // Hop-by-hop forwarding with natural path_len limit (not a full flood).
+            _ = try await bps.sendTrace(flags: pathHashMode)
+        }
+
+        func sendFloodMessage(probeNumber: Int) async throws {
+            guard let messageService, let deviceID, let channel else { return }
+            _ = try await messageService.sendChannelMessage(
+                text: "~\(probeNumber)",
+                channelIndex: channel.index,
+                deviceID: deviceID
+            )
+        }
+    }
+
+    /// Arms the probe engine and starts the GPS-forwarding loop.
+    ///
+    /// Cadence, novelty, speed-adaptive tiering, and the transmission budget all
+    /// live in `SurveyKit.SamplingPolicy` inside the engine — the view model only
+    /// forwards location fixes and mirrors engine state for the UI. The engine is
+    /// always armed while a radio is available so the manual probe button works
+    /// even when automatic probing is off; the forwarding loop respects
+    /// `probeEnabled` each tick.
     private func startProbeLoop(locationService: LocationService) {
-        stopProbeLoop()
-        probeGeneration += 1
+        stopProbeLoop(stopEngine: false)
 
-        // Set reference latitude from current location using fixed 10° bands
+        guard let bps = binaryProtocolService else { return }
+        let engine = probeEngine ?? SurveyProbeEngine()
+        probeEngine = engine
+
+        // Reference latitude for the legacy display grid's probe bookkeeping.
         if let loc = locationService.currentLocation {
             probeReferenceLatitude = HexGrid.fixedReferenceLatitude(for: loc.coordinate.latitude)
         }
 
-        let generation = probeGeneration
+        let transmitter = SurveyRadioTransmitter(
+            bps: bps,
+            messageService: messageServiceRef,
+            channel: selectedProbeChannel,
+            deviceID: deviceID,
+            pathHashMode: pathHashMode
+        )
+        let floodEnabled = floodMessagesPerCell > 0 && selectedProbeChannel != nil
+        let override = tierOverride
+
+        // Mirror engine snapshots into observable state; record probe locations for
+        // dead-zone detection when the probe count advances.
+        engineObservationTask?.cancel()
+        engineObservationTask = Task { [weak self] in
+            await engine.start(transmitter: transmitter, floodEnabled: floodEnabled)
+            await engine.setTierOverride(override)
+            for await snapshot in await engine.snapshots() {
+                guard let self, !Task.isCancelled else { break }
+                self.applyEngineSnapshot(snapshot)
+            }
+        }
+
         probeTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.probeCheckInterval))
                 guard !Task.isCancelled else { break }
-
                 guard let self else { break }
-                guard self.isActive, self.probeEnabled else { break }
-                guard let locationService = self.locationServiceRef else { break }
-                guard let location = locationService.currentLocation else { continue }
+                guard self.isActive else { break }
 
-                if self.shouldProbe(location: location) {
-                    // Fire-and-forget: decouple probe check cadence from probe execution time.
-                    // State updates (lastProbeTime, lastProbeHex, etc.) happen synchronously
-                    // at the top of sendProbe before any async radio calls, so this is safe.
-                    // Generation check ensures stale tasks from a previous loop don't send.
-                    Task { [weak self] in
-                        guard let self, self.probeGeneration == generation else { return }
-                        await self.sendProbe(location: location)
-                    }
-                }
-
-                // Check for dead zones on every tick — probes that timed out
-                // (no response within deadZoneTimeout) should appear as gray cells.
+                // Dead-zone sweep runs even when auto-probing is off (manual probes
+                // can still create dead-zone candidates).
                 self.refreshDeadZones()
+
+                guard self.probeEnabled, !self.isPaused else { continue }
+                guard let location = self.locationServiceRef?.currentLocation else { continue }
+                let speed = location.speed >= 0 ? location.speed : nil
+                await engine.locationDidUpdate(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    speedMetersPerSecond: speed
+                )
             }
         }
 
-        logger.info("Probe loop started")
+        logger.info("Probe engine armed (flood: \(floodEnabled))")
     }
 
-    /// Stops the periodic probe loop.
-    private func stopProbeLoop() {
+    /// Applies an engine snapshot to observable UI state and records probe-send
+    /// locations (dead-zone bookkeeping) when the probe count advances.
+    private func applyEngineSnapshot(_ snapshot: SurveyProbeEngine.Snapshot) {
+        samplingTier = snapshot.tier
+        isAutoTier = snapshot.isAutoTier
+        txBudgetAvailable = snapshot.budgetAvailable
+        txBudgetCapacity = snapshot.budgetCapacity
+
+        if snapshot.probeCount > probeCount, let location = locationServiceRef?.currentLocation {
+            let hexCoord = HexGrid.axialFromLatLon(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                referenceLatitude: probeReferenceLatitude
+            )
+            probeSendLocations.append((
+                coordinate: location.coordinate,
+                hexCoord: hexCoord,
+                time: snapshot.lastProbeAt ?? Date()
+            ))
+            probesSentPerCell[hexCoord.key, default: 0] += snapshot.probeCount - probeCount
+        }
+        probeCount = snapshot.probeCount
+        if let lastProbeAt = snapshot.lastProbeAt {
+            lastProbeTime = lastProbeAt
+        }
+    }
+
+    /// Stops the probe forwarding loop (and, unless told otherwise, the engine).
+    private func stopProbeLoop(stopEngine: Bool = true) {
         probeTask?.cancel()
         probeTask = nil
-    }
-
-    /// Determines whether a probe should be sent based on time, distance, and cell-exit.
-    private func shouldProbe(location: CLLocation) -> Bool {
-        let elapsed = Date().timeIntervalSince(lastProbeTime)
-        let freq = probeFrequency
-
-        // Cell exit bypasses cooldown — ensures at least one probe per cell
-        let currentHex = HexGrid.axialFromLatLon(
-            latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude,
-            referenceLatitude: probeReferenceLatitude
-        )
-        if let lastHex = lastProbeHex, currentHex != lastHex {
-            return true
-        }
-
-        // All other triggers respect minimum interval
-        guard elapsed >= freq.minInterval else { return false }
-
-        // Fire if max interval exceeded (ensure data even when stationary)
-        if elapsed >= freq.maxInterval { return true }
-
-        // Fire if distance threshold exceeded
-        if let lastLoc = lastProbeLocation {
-            let distance = location.distance(from: lastLoc)
-            if distance >= freq.distanceMeters {
-                return true
+        if stopEngine {
+            engineObservationTask?.cancel()
+            engineObservationTask = nil
+            if let engine = probeEngine {
+                Task { await engine.stop() }
             }
         }
-
-        return false
     }
 
     /// Manually sends a probe using the current GPS location.
-    /// Always sends a channel flood message regardless of per-cell limit.
+    /// Bypasses novelty/cadence gating but not the transmission budget — the
+    /// manual button gets a reserved slice of the budget, never an unlimited one.
     func sendManualProbe() async {
         guard isActive else {
             probeErrorMessage = "Start a survey first"
@@ -2224,7 +2322,7 @@ final class SignalSurveyViewModel {
             return
         }
         guard !isManualProbing else { return }
-        guard binaryProtocolService != nil else {
+        guard binaryProtocolService != nil, let engine = probeEngine else {
             probeErrorMessage = "Radio not connected"
             probeErrorHaptic += 1
             return
@@ -2237,119 +2335,26 @@ final class SignalSurveyViewModel {
 
         // Immediate feedback before the blocking async work
         isManualProbing = true
-        probeSuccessHaptic += 1
         probeVisualPulse += 1
         probeErrorMessage = nil
 
-        await sendProbe(location: location, forceFlood: true)
+        let sent = await engine.manualProbe(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude
+        )
+        if sent {
+            probeSuccessHaptic += 1
+        } else {
+            probeErrorMessage = "Transmission budget exhausted — try again in a moment"
+            probeErrorHaptic += 1
+        }
         isManualProbing = false
     }
 
-    /// Sends a probe cycle and updates tracking state.
-    ///
-    /// Every probe sends a **discover request** (zero-hop only, no flood) and a **trace**
-    /// (hop-by-hop forwarding, naturally limited). These are lightweight and provide TX SNR
-    /// and mesh depth data without flooding the network.
-    ///
-    /// **Channel flood messages** are the only probe type that floods the entire mesh.
-    /// They're gated by `floodMessagesPerCell` — once a cell's quota is reached, no more
-    /// flood messages are sent there. The manual probe button bypasses this limit.
-    private func sendProbe(location: CLLocation, forceFlood: Bool = false) async {
-        guard let bps = binaryProtocolService else {
-            logger.warning("Probe skipped: binaryProtocolService is nil")
-            return
-        }
-
-        // Always increment count and update tracking before the async call
-        probeCount += 1
-        lastProbeTime = Date()
-        lastProbeLocation = location
-        let hexCoord = HexGrid.axialFromLatLon(
-            latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude,
-            referenceLatitude: probeReferenceLatitude
-        )
-        lastProbeHex = hexCoord
-        probesSentPerCell[hexCoord.key, default: 0] += 1
-        probeSendLocations.append((
-            coordinate: location.coordinate,
-            hexCoord: hexCoord,
-            time: Date()
-        ))
-
-        // Discover request: zero-hop only, never floods the network.
-        // Provides TX SNR (how well repeaters hear us) via snrIn in responses.
-        do {
-            let tag = try await bps.sendNodeDiscoverRequest(filter: 0x04, prefixOnly: true)
-            logger.debug("Probe #\(self.probeCount) discover sent (tag: \(tag))")
-        } catch {
-            logger.warning("Probe #\(self.probeCount) discover failed: \(error.localizedDescription)")
-        }
-
-        // Brief delay to separate transmissions
-        try? await Task.sleep(for: .seconds(0.3))
-        guard !Task.isCancelled else { return }
-
-        // Trace: hop-by-hop forwarding with natural path_len limit (not a full flood).
-        // Maps multi-hop paths and mesh depth beyond direct reach.
-        do {
-            _ = try await bps.sendTrace(flags: pathHashMode)
-            logger.debug("Probe #\(self.probeCount) trace sent")
-        } catch {
-            logger.warning("Probe #\(self.probeCount) trace failed: \(error.localizedDescription)")
-        }
-
-        // Channel flood message: the only probe type that floods the entire network.
-        // Gated by per-cell limit and velocity-based spacing to minimize network impact.
-        // A 0-hop heard repeat proves direct 2-way connectivity.
-        let cellKey = hexCoord.key
-        let cellFloodCount = floodMessagesSentPerCell[cellKey, default: 0]
-        let shouldFlood: Bool = {
-            if forceFlood { return true }
-            guard floodMessagesPerCell > 0, cellFloodCount < floodMessagesPerCell else { return false }
-            // Global cooldown: prevent rapid-fire floods at high speed (e.g. highway driving
-            // crosses a 100m cell in ~2.8s at 80 mph). This ensures at least 8s between floods.
-            let sinceLastFlood = Date().timeIntervalSince(lastFloodTime)
-            guard sinceLastFlood >= Self.minimumFloodInterval else { return false }
-            // First flood in this cell: send (cooldown already passed above)
-            if cellFloodCount == 0 { return true }
-            // Subsequent floods: space evenly across estimated cell transit time.
-            // Cell diameter ~100m. Use GPS speed to estimate transit time,
-            // then divide by total floods to get the interval between each.
-            guard let firstFloodTime = firstFloodTimePerCell[cellKey] else { return true }
-            let speed = max(location.speed, 0.5) // floor at 0.5 m/s to avoid infinite wait
-            let cellDiameter: Double = 100.0 // ~100m flat-to-flat
-            let transitTime = cellDiameter / speed
-            let interval = transitTime / Double(floodMessagesPerCell)
-            let elapsed = Date().timeIntervalSince(firstFloodTime)
-            let nextFloodAt = interval * Double(cellFloodCount) // time offset for the Nth flood
-            return elapsed >= nextFloodAt
-        }()
-
-        if shouldFlood, let ms = messageServiceRef, let deviceID, let channel = selectedProbeChannel {
-            try? await Task.sleep(for: .seconds(0.3))
-            guard !Task.isCancelled else { return }
-
-            let now = Date()
-            if firstFloodTimePerCell[cellKey] == nil {
-                firstFloodTimePerCell[cellKey] = now
-            }
-            lastFloodTime = now
-            floodMessagesSentPerCell[cellKey, default: 0] += 1
-
-            do {
-                let probeText = "~\(probeCount)"
-                _ = try await ms.sendChannelMessage(
-                    text: probeText,
-                    channelIndex: channel.index,
-                    deviceID: deviceID
-                )
-                logger.debug("Probe #\(self.probeCount) channel msg sent on ch\(channel.index) (cell flood \(cellFloodCount + 1)/\(self.floodMessagesPerCell))")
-            } catch {
-                logger.warning("Probe #\(self.probeCount) channel msg failed: \(error.localizedDescription)")
-            }
-        }
-    }
+    // (sendProbe was removed: transmission decisions and execution now live in
+    // SurveyProbeEngine + SurveyKit.SamplingPolicy — speed-adaptive tiers, novelty
+    // gating, and a hard token-bucket TX budget replace the per-cell heuristics
+    // that used to be here.)
 
     /// Rebuilds dead zone cells from probe history. Called periodically or on grid rebuild.
     func refreshDeadZones() {

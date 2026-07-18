@@ -97,7 +97,8 @@ struct SignalSurveyView: View {
                     messageService: appState.services?.messageService,
                     deviceID: deviceID,
                     pathHashMode: appState.connectedDevice?.pathHashMode ?? 0,
-                    dataStore: dataStore
+                    dataStore: dataStore,
+                    probeEngine: appState.services?.surveyProbeEngine
                 )
             }
         }
@@ -1745,7 +1746,8 @@ struct SignalSurveyView: View {
                                 binaryProtocolService: appState.services?.binaryProtocolService,
                                 messageService: appState.services?.messageService,
                                 deviceID: appState.currentDeviceID,
-                                pathHashMode: appState.connectedDevice?.pathHashMode ?? 0
+                                pathHashMode: appState.connectedDevice?.pathHashMode ?? 0,
+                                probeEngine: appState.services?.surveyProbeEngine
                             )
                         }
                     }
