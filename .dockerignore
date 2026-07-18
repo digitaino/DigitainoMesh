@@ -1,0 +1,12 @@
+# The only Docker build in this repo is the survey server, whose build context is
+# the repo root (its Package.swift path-depends on SurveyKit/). Exclude everything
+# else so the context stays small.
+*
+!SurveyKit/
+SurveyKit/.build/
+!pocketmesh-survey-server/
+pocketmesh-survey-server/.build/
+pocketmesh-survey-server/data/
+pocketmesh-survey-server/backups/
+pocketmesh-survey-server/frontend/node_modules/
+pocketmesh-survey-server/.env

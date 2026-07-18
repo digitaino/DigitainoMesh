@@ -360,6 +360,13 @@ public struct CellV2Response: Codable, Sendable {
     public var repeaters: [CellRepeaterV2Response]
     public var isDeadZone: Bool
     public var isAmbiguous: Bool
+    /// v2.2: observation counts per UTC day (detail endpoint only).
+    public var dailyCounts: [String: Int]?
+    /// v2.2: mesh-depth distribution (detail endpoint only).
+    public var hopHistogram: [String: Int]?
+    /// v2.2: the H3 resolution of this cell (8–10; coarser when the map requested
+    /// an aggregated rollup). Derivable from `h3`, echoed for convenience.
+    public var res: Int?
 
     public init(
         h3: String,
@@ -381,7 +388,10 @@ public struct CellV2Response: Codable, Sendable {
         lastUpdated: String,
         repeaters: [CellRepeaterV2Response],
         isDeadZone: Bool,
-        isAmbiguous: Bool
+        isAmbiguous: Bool,
+        dailyCounts: [String: Int]? = nil,
+        hopHistogram: [String: Int]? = nil,
+        res: Int? = nil
     ) {
         self.h3 = h3
         self.lat = lat
@@ -403,6 +413,9 @@ public struct CellV2Response: Codable, Sendable {
         self.repeaters = repeaters
         self.isDeadZone = isDeadZone
         self.isAmbiguous = isAmbiguous
+        self.dailyCounts = dailyCounts
+        self.hopHistogram = hopHistogram
+        self.res = res
     }
 
     enum CodingKeys: String, CodingKey {
@@ -424,6 +437,9 @@ public struct CellV2Response: Codable, Sendable {
         case repeaters
         case isDeadZone = "is_dead_zone"
         case isAmbiguous = "is_ambiguous"
+        case dailyCounts = "daily_counts"
+        case hopHistogram = "hop_histogram"
+        case res
     }
 }
 
