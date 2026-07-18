@@ -277,6 +277,15 @@ public actor SurveyService {
         logger.info("Ended survey session \(sessionID) with \(pointCount) points")
     }
 
+    // MARK: - Dedup reservation (reentrancy guard)
+
+    /// Session the dedup caches belong to; caches reset when the session changes.
+    private var dedupSessionID: UUID?
+    /// Keys currently being processed (reserved before the first await).
+    private var inFlightDedupKeys: Set<String> = []
+    /// Keys known saved (in-memory fast path over the DB exists-check).
+    private var savedDedupKeys: Set<String> = []
+
     // MARK: - Packet Processing (called by RxLogService)
 
     /// Process an incoming RX log entry for signal survey recording.
@@ -288,11 +297,6 @@ public actor SurveyService {
         }
         guard let deviceID = self.deviceID else {
             logger.warning("Survey: no deviceID configured")
-            return
-        }
-
-        // Get current GPS location with standard quality gates
-        guard let fix = await getLocationForSurvey(relaxed: false) else {
             return
         }
 
@@ -355,12 +359,34 @@ public actor SurveyService {
             return entry.packetHash
         }()
 
+        // Reserve the dedup key SYNCHRONOUSLY, before any suspension point. The
+        // actor is reentrant across awaits (location fetch, DB check), so two
+        // packets with the same key used to interleave past the exists-check and
+        // both save. The in-memory reservation closes that window; the DB check
+        // below still covers keys persisted before this process launched.
+        if dedupSessionID != sessionID {
+            dedupSessionID = sessionID
+            savedDedupKeys.removeAll()
+            inFlightDedupKeys.removeAll()
+        }
+        if savedDedupKeys.contains(dedupKey) || !inFlightDedupKeys.insert(dedupKey).inserted {
+            logger.debug("Survey: duplicate packet hash+relay (reserved), skipping")
+            return
+        }
+        defer { inFlightDedupKeys.remove(dedupKey) }
+
+        // Get current GPS location with standard quality gates
+        guard let fix = await getLocationForSurvey(relaxed: false) else {
+            return
+        }
+
         do {
             let exists = try await dataStore.surveyPointExists(
                 sessionID: sessionID,
                 packetHash: dedupKey
             )
             if exists {
+                savedDedupKeys.insert(dedupKey)
                 logger.debug("Survey: duplicate packet hash+relay, skipping")
                 return
             }
@@ -409,6 +435,7 @@ public actor SurveyService {
         // Persist
         do {
             try await dataStore.saveSurveyPoint(point)
+            savedDedupKeys.insert(dedupKey)
         } catch {
             logger.error("Failed to save survey point: \(error)")
             return
