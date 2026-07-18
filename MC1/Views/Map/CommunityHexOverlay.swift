@@ -1,5 +1,6 @@
 import MapKit
 import MC1Services
+import SurveyKit
 
 /// MKPolygon subclass that carries signal quality metadata for community hex cell rendering.
 final class CommunityHexOverlay: MKPolygon {
@@ -25,16 +26,10 @@ final class CommunityHexOverlay: MKPolygon {
         return overlay
     }
 
-    /// UIColor matching the 5-tier SNR quality palette from the web frontend.
+    /// UIColor for fill based on signal quality. Derives from the one shared
+    /// 5-tier palette (`SignalQuality.uiColor`) so all overlays agree.
     var fillUIColor: UIColor {
-        switch snrQuality {
-        case .excellent: UIColor(red: 0.133, green: 0.773, blue: 0.369, alpha: 1) // #22c55e
-        case .good:      UIColor(red: 0.918, green: 0.702, blue: 0.031, alpha: 1) // #eab308
-        case .fair:      UIColor(red: 0.976, green: 0.451, blue: 0.086, alpha: 1) // #f97316
-        case .poor:      UIColor(red: 0.937, green: 0.267, blue: 0.267, alpha: 1) // #ef4444
-        case .veryPoor:  UIColor(red: 0.600, green: 0.106, blue: 0.106, alpha: 1) // #991b1b
-        case .unknown:   UIColor.systemGray
-        }
+        snrQuality.signalQuality.uiColor
     }
 
     /// Fill opacity scaled by contribution count (more contributions = more opaque).

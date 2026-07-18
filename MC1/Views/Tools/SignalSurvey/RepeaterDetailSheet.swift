@@ -6,6 +6,8 @@ struct RepeaterDetailSheet: View {
     let contact: ContactDTO
     let onNavigateToContact: (ContactDTO) -> Void
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         NavigationStack {
             List {
@@ -44,6 +46,11 @@ struct RepeaterDetailSheet: View {
             }
             .navigationTitle(contact.displayName)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
     }
 }

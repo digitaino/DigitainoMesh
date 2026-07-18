@@ -1,5 +1,6 @@
 import MapKit
 import MC1Services
+import SurveyKit
 
 /// MKPolygon subclass that carries survey hex cell metadata for efficient MKOverlayRenderer rendering.
 /// Parallel to `CommunityHexOverlay` but for the user's own survey data.
@@ -32,17 +33,11 @@ final class SurveyHexOverlay: MKPolygon {
         return overlay
     }
 
-    /// UIColor for fill based on signal quality. Uses 3-tier mapping matching the SwiftUI view.
+    /// UIColor for fill based on signal quality. Derives from the one shared
+    /// 5-tier palette (`SignalQuality.uiColor`) so all overlays agree.
     var fillUIColor: UIColor {
         if isDeadZone { return .systemGray }
-        switch snrQuality {
-        case .excellent: return .systemGreen
-        case .good:      return .systemYellow
-        case .fair:      return .systemRed
-        case .poor:      return .systemRed
-        case .veryPoor:  return .systemRed
-        case .unknown:   return .systemGray
-        }
+        return snrQuality.signalQuality.uiColor
     }
 
     /// Fill opacity scaled by packet count (more packets = more opaque).

@@ -1,3 +1,4 @@
+import SurveyKit
 import SwiftUI
 
 /// Educational sheet explaining how MeshCore signal surveys work,
@@ -112,18 +113,16 @@ struct SurveyInfoSheet: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 settingRow(label: "Private Channel", description: "Select or create a dedicated channel for probe messages. Avoids cluttering public conversations.")
-                settingRow(label: "Probe Frequency", description: "Distance-based trigger for automatic probes. Faster presets send probes more often.")
+                settingRow(label: "Sampling", description: "Cell size for automatic probes. Auto follows your GPS speed; a manual tier fixes the cell size.")
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Frequency Presets")
+                Text("Sampling Tiers")
                     .font(.caption.weight(.semibold))
-                #if DEBUG
-                frequencyRow(name: "Driving", description: "~15m trigger — best for high-speed travel (debug only)")
-                frequencyRow(name: "Dense", description: "~25m trigger — walking in urban areas (debug only)")
-                #endif
-                frequencyRow(name: "Normal", description: "~50m trigger — walking, cycling, e-bike")
-                frequencyRow(name: "Sparse", description: "~100m trigger — driving, fast cycling")
+                frequencyRow(name: "Auto", description: "Follows your speed — walking maps finely, driving coarsens cells instead of flooding the mesh")
+                frequencyRow(name: "Fine", description: "~130 m cells — walking, jogging, slow cycling")
+                frequencyRow(name: "Medium", description: "~350 m cells — cycling, city driving")
+                frequencyRow(name: "Coarse", description: "~920 m cells — highway driving")
             }
 
             Text("You can also send a manual probe at any time by tapping the wave icon in the toolbar.")
@@ -205,11 +204,12 @@ struct SurveyInfoSheet: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 4) {
-                colorRow(color: .green, label: "Excellent signal")
-                colorRow(color: .yellow, label: "Good signal")
-                colorRow(color: .orange, label: "Fair signal")
-                colorRow(color: .red, label: "Poor signal")
-                colorRow(color: .gray, label: "Dead zone — probes sent, no response")
+                colorRow(color: SignalQuality.excellent.color, label: "Excellent signal (10 dB and up)")
+                colorRow(color: SignalQuality.good.color, label: "Good signal (5 to 10 dB)")
+                colorRow(color: SignalQuality.fair.color, label: "Fair signal (0 to 5 dB)")
+                colorRow(color: SignalQuality.poor.color, label: "Poor signal (-10 to 0 dB)")
+                colorRow(color: SignalQuality.veryPoor.color, label: "Very poor signal (below -10 dB)")
+                colorRow(color: SignalQuality.unknown.color, label: "Dead zone — probes sent, no response")
             }
 
             Text("When active probing is enabled, cells with direct 2-way connectivity are colored by the strongest repeater's SNR. Passive-only cells use the average SNR of all received packets.")

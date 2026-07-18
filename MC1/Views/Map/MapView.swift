@@ -406,7 +406,7 @@ struct MapView: View {
     private var communityFilterBar: some View {
         HStack(spacing: 8) {
             Picker("Coverage", selection: $viewModel.communityCoverageFilter) {
-                ForEach(CommunityMapView.CoverageFilter.allCases, id: \.self) { filter in
+                ForEach(CoverageFilter.allCases, id: \.self) { filter in
                     Text(filter.rawValue).tag(filter)
                 }
             }

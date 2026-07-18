@@ -559,7 +559,7 @@ final class SignalSurveyViewModel {
     }
 
     /// Coverage filter for the community overlay (All/Active/Passive).
-    var communityCoverageFilter: CommunityMapView.CoverageFilter = .all {
+    var communityCoverageFilter: CoverageFilter = .all {
         didSet { refreshCommunityCells() }
     }
 
@@ -576,7 +576,7 @@ final class SignalSurveyViewModel {
     /// Repeaters available for filtering: those referenced by visible cells (not filtered by viewport location).
     /// Returns (hexID, displayName) tuples sorted by name, matching the web map behavior.
     var communityAvailableRepeaters: [(hexID: String, displayName: String)] {
-        let consolidated = CommunityMapView.consolidateHexIDs(communityCells.flatMap(\.repeaterHexIDs))
+        let consolidated = RepeaterHexID.consolidate(communityCells.flatMap(\.repeaterHexIDs))
 
         // Build name lookup from all known repeater locations (not just viewport)
         let allLocs = allRepeaterLocations.isEmpty ? communityRepeaterLocations : allRepeaterLocations

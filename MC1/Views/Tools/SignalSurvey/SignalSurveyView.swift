@@ -1,5 +1,6 @@
 import MapKit
 import MC1Services
+import SurveyKit
 import SwiftUI
 import UIKit
 
@@ -30,6 +31,10 @@ struct SignalSurveyView: View {
     @State private var completionSessionID: UUID?
     @State private var showingHistoricalStats: SurveySessionDTO?
     @State private var isStopping = false
+    /// Incremented when a survey successfully starts — drives success haptic.
+    @State private var surveyStartHaptic = 0
+    /// Incremented on pause/resume taps — drives impact haptic.
+    @State private var pauseResumeHaptic = 0
 
     var body: some View {
         ZStack {
@@ -57,6 +62,8 @@ struct SignalSurveyView: View {
                 stoppingOverlay
             }
         }
+        .sensoryFeedback(.success, trigger: surveyStartHaptic)
+        .sensoryFeedback(.impact(weight: .medium), trigger: pauseResumeHaptic)
         .navigationTitle("Signal Survey")
         .navigationBarBackButtonHidden(isShowingMapSubState)
         .toolbar {
@@ -319,7 +326,7 @@ struct SignalSurveyView: View {
     // MARK: - Stats Overlay
 
     private var statsOverlay: some View {
-        VStack {
+        VStack(alignment: .leading, spacing: 6) {
             if viewModel.isActive {
                 // Active session indicator
                 HStack(spacing: 6) {
@@ -350,10 +357,15 @@ struct SignalSurveyView: View {
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Follow my location")
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .liquidGlass(in: .capsule)
+
+                if viewModel.probeEnabled {
+                    tierBudgetChip
+                }
             } else if let session = viewModel.selectedSession {
                 // Historical session header with close button
                 HStack(spacing: 8) {
@@ -368,17 +380,7 @@ struct SignalSurveyView: View {
                         }
                     }
 
-                    Button {
-                        viewModel.clearSessionData()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24, height: 24)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
+                    sessionCloseButton
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -389,17 +391,7 @@ struct SignalSurveyView: View {
                     Text("\(viewModel.livePointCount) pts")
                         .font(.caption.weight(.medium))
 
-                    Button {
-                        viewModel.clearSessionData()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24, height: 24)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
+                    sessionCloseButton
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -411,6 +403,59 @@ struct SignalSurveyView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)
         .padding(.leading, 16)
+    }
+
+    /// Close button for session pills — 24pt visual, 44pt tap target.
+    private var sessionCloseButton: some View {
+        Button {
+            viewModel.clearSessionData()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(.ultraThinMaterial)
+                .clipShape(Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close session view")
+    }
+
+    /// Compact live chip showing the current sampling tier and remaining TX budget.
+    private var tierBudgetChip: some View {
+        let tier = viewModel.samplingTier.rawValue.capitalized
+        let tierLabel = viewModel.isAutoTier ? "Auto · \(tier)" : "Manual · \(tier)"
+        let available = Int(viewModel.txBudgetAvailable.rounded())
+        let capacity = Int(viewModel.txBudgetCapacity.rounded())
+        let fraction = viewModel.txBudgetCapacity > 0
+            ? viewModel.txBudgetAvailable / viewModel.txBudgetCapacity
+            : 0
+        let budgetColor: Color = fraction <= 0.2 ? .red : fraction <= 0.5 ? .orange : .green
+
+        return HStack(spacing: 6) {
+            Image(systemName: "speedometer")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(tierLabel)
+                .font(.caption2.weight(.medium))
+
+            Divider()
+                .frame(height: 12)
+
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .font(.caption2)
+                .foregroundStyle(budgetColor)
+            Text("TX \(available)/\(capacity)")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(budgetColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .liquidGlass(in: .capsule)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sampling \(tierLabel), transmit budget \(available) of \(capacity)")
     }
 
     // MARK: - Stopping Overlay
@@ -520,6 +565,7 @@ struct SignalSurveyView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Close cell details")
                     }
                 }
 
@@ -1004,68 +1050,70 @@ struct SignalSurveyView: View {
 
     private var mapControlsOverlay: some View {
         VStack {
-            HStack {
+            HStack(alignment: .top) {
                 Spacer()
-                MapControlsToolbar(
-                    onLocationTap: { viewModel.trackingUserLocation.toggle() },
-                    isTrackingLocation: viewModel.trackingUserLocation,
-                    showingLayersMenu: $viewModel.showingLayersMenu
-                ) {
-                    // Visualization toggle
-                    Button {
-                        viewModel.visualizationMode = viewModel.visualizationMode == .pointCloud
-                            ? .gridHeatmap : .pointCloud
-                    } label: {
-                        Image(systemName: viewModel.visualizationMode == .pointCloud
-                              ? "square.grid.3x3.fill" : "circle.fill")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Toggle visualization mode")
+                VStack(alignment: .trailing, spacing: 0) {
+                    MapControlsToolbar(
+                        onLocationTap: { viewModel.trackingUserLocation.toggle() },
+                        isTrackingLocation: viewModel.trackingUserLocation,
+                        showingLayersMenu: $viewModel.showingLayersMenu
+                    ) {
+                        // Visualization toggle
+                        Button {
+                            viewModel.visualizationMode = viewModel.visualizationMode == .pointCloud
+                                ? .gridHeatmap : .pointCloud
+                        } label: {
+                            Image(systemName: viewModel.visualizationMode == .pointCloud
+                                  ? "square.grid.3x3.fill" : "circle.fill")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Toggle visualization mode")
 
-                    // Center on data
-                    Button {
-                        viewModel.centerOnData()
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Center on survey data")
+                        // Center on data
+                        Button {
+                            viewModel.centerOnData()
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Center on survey data")
 
-                    // Community overlay toggle
-                    Button {
-                        viewModel.showCommunityOverlay.toggle()
-                    } label: {
-                        Image(systemName: viewModel.showCommunityOverlay ? "globe.americas.fill" : "globe.americas")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(viewModel.showCommunityOverlay ? .cyan : .primary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
+                        // Community overlay toggle
+                        Button {
+                            viewModel.showCommunityOverlay.toggle()
+                        } label: {
+                            Image(systemName: viewModel.showCommunityOverlay ? "globe.americas.fill" : "globe.americas")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(viewModel.showCommunityOverlay ? .cyan : .primary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Toggle community overlay")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Toggle community overlay")
+
+                    // Layers menu opens downward, anchored below the toolbar
+                    // (no fixed offset — tracks the toolbar's height).
+                    if viewModel.showingLayersMenu {
+                        LayersMenu(
+                            selection: $viewModel.mapStyleSelection,
+                            isPresented: $viewModel.showingLayersMenu
+                        )
+                        .padding(.trailing, 16)
+                        .transition(.scale.combined(with: .opacity))
+                    }
                 }
             }
             .padding(.top, 8)
             Spacer()
-        }
-        .overlay(alignment: .topTrailing) {
-            if viewModel.showingLayersMenu {
-                LayersMenu(
-                    selection: $viewModel.mapStyleSelection,
-                    isPresented: $viewModel.showingLayersMenu
-                )
-                .padding(.trailing, 16)
-                .padding(.top, 240)
-                .transition(.scale.combined(with: .opacity))
-            }
         }
         .animation(.spring(response: 0.3), value: viewModel.showingLayersMenu)
     }
@@ -1119,6 +1167,7 @@ struct SignalSurveyView: View {
                 if viewModel.isActive {
                     // Pause/Resume button
                     Button {
+                        pauseResumeHaptic += 1
                         Task {
                             guard let surveyService = appState.services?.surveyService else { return }
                             if viewModel.isPaused {
@@ -1135,6 +1184,7 @@ struct SignalSurveyView: View {
                     }
                     .tint(viewModel.isPaused ? .green : .yellow)
                     .modifier(GlassButtonStyleModifier())
+                    .accessibilityLabel(viewModel.isPaused ? "Resume survey" : "Pause survey")
                 }
 
                 // Filter menu pill
@@ -1163,6 +1213,7 @@ struct SignalSurveyView: View {
                     .tint(.orange)
                     .modifier(GlassButtonStyleModifier())
                     .disabled(!viewModel.canSendManualProbe || viewModel.isPaused)
+                    .accessibilityLabel("Send manual probe")
                     .onChange(of: viewModel.probeVisualPulse) { _, _ in
                         probePulseScale = 1.0
                         withAnimation(.easeOut(duration: 0.6)) {
@@ -1219,7 +1270,7 @@ struct SignalSurveyView: View {
         if viewModel.showCommunityOverlay {
             HStack(spacing: 8) {
                 Picker("Coverage", selection: $viewModel.communityCoverageFilter) {
-                    ForEach(CommunityMapView.CoverageFilter.allCases, id: \.self) { filter in
+                    ForEach(CoverageFilter.allCases, id: \.self) { filter in
                         Text(filter.rawValue).tag(filter)
                     }
                 }
@@ -1361,6 +1412,7 @@ struct SignalSurveyView: View {
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
+                    .accessibilityLabel("Close cell details")
                 }
 
                 HStack(spacing: 16) {
@@ -1501,29 +1553,18 @@ struct SignalSurveyView: View {
                     Toggle("Enable Active Probing", isOn: $probeEnabledPref)
 
                     if probeEnabledPref {
-                        HStack {
-                            Text("Probe Frequency")
-                            Spacer()
-                            Menu {
-                                ForEach(SignalSurveyViewModel.ProbeFrequency.available) { freq in
-                                    Button {
-                                        probeFrequencyPref = freq.rawValue
-                                    } label: {
-                                        HStack {
-                                            VStack(alignment: .leading) {
-                                                Text(freq.rawValue)
-                                                Text(freq.subtitle)
-                                            }
-                                            if probeFrequencyPref == freq.rawValue {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                }
-                            } label: {
-                                Text(SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref)?.rawValue ?? "Normal")
-                                    .foregroundStyle(.secondary)
-                            }
+                        Picker("Sampling", selection: $viewModel.tierOverride) {
+                            Text("Auto (recommended)").tag(SamplingTier?.none)
+                            Text("Fine (~130 m)").tag(SamplingTier?.some(.fine))
+                            Text("Medium (~350 m)").tag(SamplingTier?.some(.medium))
+                            Text("Coarse (~920 m)").tag(SamplingTier?.some(.coarse))
+                        }
+                        .accessibilityLabel("Sampling tier")
+
+                        if viewModel.tierOverride == nil {
+                            Text("Cell size follows your speed — walking maps finely, driving coarsens cells instead of flooding the mesh")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
                         // TX Power picker (only when adaptive power is enabled)
@@ -1550,11 +1591,10 @@ struct SignalSurveyView: View {
                     }
                 } footer: {
                     if probeEnabledPref {
-                        let freq = SignalSurveyViewModel.ProbeFrequency(rawValue: probeFrequencyPref) ?? .normal
                         if floodMessagesPerCellPref > 0 {
-                            Text("Probes every ~\(Int(freq.distanceMeters))m with discover + trace (no flood). Up to \(floodMessagesPerCellPref) channel message\(floodMessagesPerCellPref == 1 ? "" : "s") per cell floods the network for 2-way proof. Tap the Probe button to manually send a flood message anytime.")
+                            Text("Each new cell is probed with discover + trace (no flood). Up to \(floodMessagesPerCellPref) channel message\(floodMessagesPerCellPref == 1 ? "" : "s") per cell floods the network for 2-way proof. Tap the Probe button to manually send a flood message anytime.")
                         } else {
-                            Text("Probes every ~\(Int(freq.distanceMeters))m with discover + trace only (no flood messages). Tap the Probe button to manually send a flood message when needed.")
+                            Text("Each new cell is probed with discover + trace only (no flood messages). Tap the Probe button to manually send a flood message when needed.")
                         }
                     } else {
                         Text("When disabled, the survey only records passively overheard traffic. Enable probing to actively test coverage and detect dead zones.")
@@ -1749,6 +1789,9 @@ struct SignalSurveyView: View {
                                 pathHashMode: appState.connectedDevice?.pathHashMode ?? 0,
                                 probeEngine: appState.services?.surveyProbeEngine
                             )
+                            if viewModel.isActive {
+                                surveyStartHaptic += 1
+                            }
                         }
                     }
                     .fontWeight(.semibold)
@@ -1826,6 +1869,7 @@ struct SignalSurveyView: View {
             .padding(.vertical, 8)
             .liquidGlass(in: .capsule)
         }
+        .accessibilityLabel("Filter signal quality")
     }
 
     private var filterIconName: String {
@@ -1855,22 +1899,58 @@ struct SignalSurveyView: View {
             if viewModel.probeEnabled {
                 Divider()
 
-                // Frequency
+                // Sampling tier
                 Menu {
-                    ForEach(SignalSurveyViewModel.ProbeFrequency.available) { freq in
-                        Button {
-                            probeFrequencyPref = freq.rawValue
-                        } label: {
-                            HStack {
-                                Text(freq.rawValue)
-                                if viewModel.probeFrequency == freq {
-                                    Image(systemName: "checkmark")
-                                }
+                    Button {
+                        viewModel.tierOverride = nil
+                    } label: {
+                        HStack {
+                            Text("Auto (recommended)")
+                            if viewModel.tierOverride == nil {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    Button {
+                        viewModel.tierOverride = .fine
+                    } label: {
+                        HStack {
+                            Text("Fine (~130 m)")
+                            if viewModel.tierOverride == .fine {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    Button {
+                        viewModel.tierOverride = .medium
+                    } label: {
+                        HStack {
+                            Text("Medium (~350 m)")
+                            if viewModel.tierOverride == .medium {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    Button {
+                        viewModel.tierOverride = .coarse
+                    } label: {
+                        HStack {
+                            Text("Coarse (~920 m)")
+                            if viewModel.tierOverride == .coarse {
+                                Image(systemName: "checkmark")
                             }
                         }
                     }
                 } label: {
-                    Label("Frequency: \(viewModel.probeFrequency.rawValue)", systemImage: "gauge.with.dots.needle.33percent")
+                    Label(
+                        "Sampling: \(viewModel.tierOverride.map { $0.rawValue.capitalized } ?? "Auto")",
+                        systemImage: "gauge.with.dots.needle.33percent"
+                    )
                 }
 
                 // Channel (inline submenu)
@@ -1960,93 +2040,7 @@ struct SignalSurveyView: View {
             .padding(.vertical, 8)
             .liquidGlass(in: .capsule)
         }
-    }
-
-    // MARK: - Probe Channel Menu
-
-    private var probeChannelMenu: some View {
-        Menu {
-            if viewModel.availableProbeChannels.isEmpty {
-                Button {
-                    guard let channelService = appState.services?.channelService,
-                          let dataStore = appState.offlineDataStore,
-                          let deviceID = appState.currentDeviceID else { return }
-                    Task {
-                        await viewModel.createSurveyChannel(
-                            channelService: channelService,
-                            dataStore: dataStore,
-                            deviceID: deviceID,
-                            maxChannels: appState.connectedDevice?.maxChannels ?? 8
-                        )
-                    }
-                } label: {
-                    Label("Create Survey Channel", systemImage: "plus.circle")
-                }
-            } else {
-                ForEach(viewModel.availableProbeChannels, id: \.id) { channel in
-                    Button {
-                        viewModel.selectedProbeChannel = channel
-                    } label: {
-                        HStack {
-                            Text(channel.displayName)
-                            if viewModel.selectedProbeChannel?.id == channel.id {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-
-                Divider()
-
-                Button {
-                    viewModel.selectedProbeChannel = nil
-                } label: {
-                    HStack {
-                        Text("None")
-                        if viewModel.selectedProbeChannel == nil {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-
-                Divider()
-
-                Button {
-                    guard let channelService = appState.services?.channelService,
-                          let dataStore = appState.offlineDataStore,
-                          let deviceID = appState.currentDeviceID else { return }
-                    Task {
-                        await viewModel.createSurveyChannel(
-                            channelService: channelService,
-                            dataStore: dataStore,
-                            deviceID: deviceID,
-                            maxChannels: appState.connectedDevice?.maxChannels ?? 8
-                        )
-                    }
-                } label: {
-                    Label("Create Survey Channel", systemImage: "plus.circle")
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: viewModel.hasProbeChannel
-                      ? "bubble.left.and.bubble.right.fill"
-                      : "bubble.left.and.bubble.right")
-                    .font(.caption)
-                if let channel = viewModel.selectedProbeChannel {
-                    Text(channel.displayName)
-                        .font(.caption)
-                        .lineLimit(1)
-                } else {
-                    Text("Ch")
-                        .font(.caption)
-                }
-            }
-            .foregroundStyle(viewModel.hasProbeChannel ? .cyan : .secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .liquidGlass(in: .capsule)
-        }
+        .accessibilityLabel("Probe settings")
     }
 
     private var surveyToggleButton: some View {
@@ -2125,6 +2119,7 @@ struct SignalSurveyView: View {
         .tint(viewModel.isActive ? .red : (isDisabled ? .secondary : .accentColor))
         .modifier(GlassButtonStyleModifier())
         .disabled(isDisabled || isStopping)
+        .accessibilityLabel(viewModel.isActive ? "Stop survey" : "Start survey")
     }
 
     // MARK: - Toolbar
@@ -2148,6 +2143,7 @@ struct SignalSurveyView: View {
                     } label: {
                         Label("Upload", systemImage: "icloud.and.arrow.up")
                     }
+                    .accessibilityLabel("Upload sessions")
                 }
 
                 Menu {
@@ -2700,6 +2696,7 @@ struct BatchUploadView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(selectedSessions.isEmpty)
+                        .accessibilityLabel("Upload to community map")
                     }
                 }
                 .padding()
@@ -2721,6 +2718,9 @@ struct BatchUploadView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sensoryFeedback(.success, trigger: uploadResult) { _, newValue in
+                newValue != nil
             }
             .alert("Delete Server Data?", isPresented: $showingDeleteConfirm) {
                 Button("Delete", role: .destructive) {

@@ -96,7 +96,7 @@ final class MapViewModel {
     var allRepeaterLocations: [SurveyUploadService.RepeaterLocation] = []
 
     /// Coverage filter for the community overlay (All/Active/Passive)
-    var communityCoverageFilter: CommunityMapView.CoverageFilter = .all {
+    var communityCoverageFilter: CoverageFilter = .all {
         didSet {
             rebuildFilteredCommunityCells()
             refreshCommunityCells()
@@ -165,7 +165,7 @@ final class MapViewModel {
 
     /// Repeaters available for filtering: extracted from visible cells with name lookup.
     var communityAvailableRepeaters: [(hexID: String, displayName: String)] {
-        let consolidated = CommunityMapView.consolidateHexIDs(communityCells.flatMap(\.repeaterHexIDs))
+        let consolidated = RepeaterHexID.consolidate(communityCells.flatMap(\.repeaterHexIDs))
 
         // Build name lookup from all known repeater locations (not just viewport)
         let allLocs = allRepeaterLocations.isEmpty ? repeaterLocations : allRepeaterLocations
