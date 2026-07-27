@@ -5,6 +5,7 @@ import SwiftUI
 /// `ToolsDetailColumn` detail), and persisted as the active selection on `NavigationCoordinator`.
 enum ToolSelection: Hashable, CaseIterable {
   case tracePath
+  case repeaterBenchmark
   case lineOfSight
   case rxLog
   case noiseFloor
@@ -14,6 +15,7 @@ enum ToolSelection: Hashable, CaseIterable {
   var title: String {
     switch self {
     case .tracePath: L10n.Tools.Tools.tracePath
+    case .repeaterBenchmark: L10n.Tools.Tools.benchmark
     case .lineOfSight: L10n.Tools.Tools.lineOfSight
     case .rxLog: L10n.Tools.Tools.rxLog
     case .noiseFloor: L10n.Tools.Tools.noiseFloor
@@ -25,6 +27,7 @@ enum ToolSelection: Hashable, CaseIterable {
   var systemImage: String {
     switch self {
     case .tracePath: "point.3.connected.trianglepath.dotted"
+    case .repeaterBenchmark: "chart.bar.xaxis"
     case .lineOfSight: "eye"
     case .rxLog: "waveform.badge.magnifyingglass"
     case .noiseFloor: "waveform"
