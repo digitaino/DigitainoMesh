@@ -322,6 +322,68 @@
 /* Footer explaining repeat mode in advanced radio */
 "advancedRadio.repeatMode.footer" = "在专用频率上打开转发。适用于徒步旅行和偏远地区。有效频率：433、869.495、918 MHz。";
 
+// MARK: - Adaptive Power Section
+
+/* Section header for adaptive TX power */
+"adaptivePower.header" = "Adaptive Power";
+
+/* Toggle label enabling adaptive TX power */
+"adaptivePower.enable" = "Adaptive Power";
+
+/* Footer shown while adaptive power is off */
+"adaptivePower.footer" = "Manages TX power automatically — starts low and escalates when messages aren't repeated.";
+
+/* Footer shown while adaptive power is on */
+"adaptivePower.footerEnabled" = "Starts at your base output level and escalates when messages aren't repeated. Power stays at the level that worked until you reset or reconnect.";
+
+/* Label for the external amplifier picker */
+"adaptivePower.amplifier" = "Amplifier";
+
+/* Amplifier option: no external amplifier */
+"adaptivePower.amplifier.builtIn" = "None (built-in radio only)";
+
+/* Amplifier option: WisMesh Pocket 1W, measured curve */
+"adaptivePower.amplifier.pocket1W" = "WisMesh Pocket 1W (measured)";
+
+/* Amplifier option: Heltec V4, measured curve */
+"adaptivePower.amplifier.heltecV4" = "Heltec V4 (measured)";
+
+/* Amplifier option for a flat gain - %d is the gain in dB */
+"adaptivePower.amplifier.custom" = "Custom +%d dB";
+
+/* Label for the base output level picker */
+"adaptivePower.baseOutput" = "Base Output";
+
+/* Power step label - %1$@ is the output power, %2$@ is the output in dBm */
+"adaptivePower.stepLabel" = "%1$@ (%2$@ dBm)";
+
+/* Radio-through-amplifier chain readout - %1$d is the radio setting in dBm, %2$@ is the output in dBm */
+"adaptivePower.chain" = "Radio %1$d dBm → PA → %2$@ dBm out";
+
+/* Shown when the device confirmed the requested TX power */
+"adaptivePower.confirmed" = "Confirmed";
+
+/* Shown before any TX power has been confirmed by the device */
+"adaptivePower.notVerified" = "Not yet verified";
+
+/* Shown when the device never confirmed the requested TX power */
+"adaptivePower.notConfirmed" = "Radio did not confirm";
+
+/* Shown when the device reports a different TX power - %d is the reported dBm */
+"adaptivePower.mismatch" = "Mismatch: radio at %d dBm";
+
+/* Shown while power is escalated above base - %@ is the base step label */
+"adaptivePower.escalatedFrom" = "Escalated from %@";
+
+/* Shown while power is at the base step */
+"adaptivePower.atBase" = "At starting power";
+
+/* Badge marking a manually selected power level */
+"adaptivePower.manual" = "Manual";
+
+/* Button returning power to the base step */
+"adaptivePower.reset" = "Reset";
+
 // MARK: - Path Hash Mode Section
 
 /* Section header for path hash mode */

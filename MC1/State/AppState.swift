@@ -562,6 +562,7 @@ final class AppState {
     }
 
     wireSyncDataEvents(services: services)
+    configureAdaptivePower(services: services)
     await wireSettingsEventStream(services: services)
     await wireDeviceUpdateCallbacks(services: services)
     wireMessageEvents(services: services)

@@ -132,6 +132,13 @@ public final class ServiceContainer {
   /// Service for node status history snapshots
   public let nodeSnapshotService: NodeSnapshotService
 
+  /// Adaptive TX power control. Per-connection by design: the active power step
+  /// and the device's confirmation state are meaningless across a radio change,
+  /// so a fresh container starts back at the user's persisted base step. The app
+  /// layer calls `configure(paGainDb:radioMaxDbm:baseStepIndex:enabled:)` once
+  /// the device record and its preferences are known.
+  public let adaptivePowerService: AdaptivePowerService
+
   // MARK: - Remote Node Services
 
   /// Service for remote node session management
@@ -285,6 +292,7 @@ public final class ServiceContainer {
       syncCoordinator: syncCoordinator
     )
     nodeSnapshotService = NodeSnapshotService(dataStore: dataStore)
+    adaptivePowerService = AdaptivePowerService(txPowerApplier: settingsService)
 
     // Higher-level services (depend on other services)
     repeaterAdminService = RepeaterAdminService(

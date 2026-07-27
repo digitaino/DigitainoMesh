@@ -26,6 +26,24 @@ extension AppState {
     }
   }
 
+  /// Seed the adaptive power service from this device's stored preferences.
+  ///
+  /// The service lives on `ServiceContainer` and is rebuilt per connection, so it starts
+  /// unconfigured (disabled, default base step) and only becomes live once the device
+  /// record — which carries `maxTxPower` — and its `DevicePreferenceStore` entries are
+  /// available. Re-running this for the same container is harmless: `configure` resets
+  /// to base, which is the correct state on any reconnect.
+  func configureAdaptivePower(services: ServiceContainer) {
+    guard let device = connectedDevice else { return }
+    let preferences = DevicePreferenceStore()
+    services.adaptivePowerService.configure(
+      paGainDb: preferences.paGainDb(deviceID: device.id),
+      radioMaxDbm: device.maxTxPower,
+      baseStepIndex: preferences.adaptivePowerBaseStep(deviceID: device.id),
+      enabled: preferences.isAdaptivePowerEnabled(deviceID: device.id)
+    )
+  }
+
   /// Consume settings service event stream.
   /// Updates connectedDevice when settings are changed via SettingsService.
   func wireSettingsEventStream(services: ServiceContainer) async {

@@ -4029,6 +4029,60 @@ public enum L10n {
       /// Link to MeshCore website
       public static let website = L10n.tr("Settings", "about.website", fallback: "MeshCore Website")
     }
+    public enum AdaptivePower {
+      /// Label for the external amplifier picker
+      public static let amplifier = L10n.tr("Settings", "adaptivePower.amplifier", fallback: "Amplifier")
+      /// Shown while power is at the base step
+      public static let atBase = L10n.tr("Settings", "adaptivePower.atBase", fallback: "At starting power")
+      /// Label for the base output level picker
+      public static let baseOutput = L10n.tr("Settings", "adaptivePower.baseOutput", fallback: "Base Output")
+      /// Radio-through-amplifier chain readout - %1$d is the radio setting in dBm, %2$@ is the output in dBm
+      public static func chain(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "adaptivePower.chain", p1, String(describing: p2), fallback: "Radio %1$d dBm → PA → %2$@ dBm out")
+      }
+      /// Shown when the device confirmed the requested TX power
+      public static let confirmed = L10n.tr("Settings", "adaptivePower.confirmed", fallback: "Confirmed")
+      /// Toggle label enabling adaptive TX power
+      public static let enable = L10n.tr("Settings", "adaptivePower.enable", fallback: "Adaptive Power")
+      /// Shown while power is escalated above base - %@ is the base step label
+      public static func escalatedFrom(_ p1: Any) -> String {
+        return L10n.tr("Settings", "adaptivePower.escalatedFrom", String(describing: p1), fallback: "Escalated from %@")
+      }
+      /// Footer shown while adaptive power is off
+      public static let footer = L10n.tr("Settings", "adaptivePower.footer", fallback: "Manages TX power automatically — starts low and escalates when messages aren't repeated.")
+      /// Footer shown while adaptive power is on
+      public static let footerEnabled = L10n.tr("Settings", "adaptivePower.footerEnabled", fallback: "Starts at your base output level and escalates when messages aren't repeated. Power stays at the level that worked until you reset or reconnect.")
+      /// Section header for adaptive TX power
+      public static let header = L10n.tr("Settings", "adaptivePower.header", fallback: "Adaptive Power")
+      /// Badge marking a manually selected power level
+      public static let manual = L10n.tr("Settings", "adaptivePower.manual", fallback: "Manual")
+      /// Shown when the device reports a different TX power - %d is the reported dBm
+      public static func mismatch(_ p1: Int) -> String {
+        return L10n.tr("Settings", "adaptivePower.mismatch", p1, fallback: "Mismatch: radio at %d dBm")
+      }
+      /// Shown when the device never confirmed the requested TX power
+      public static let notConfirmed = L10n.tr("Settings", "adaptivePower.notConfirmed", fallback: "Radio did not confirm")
+      /// Shown before any TX power has been confirmed by the device
+      public static let notVerified = L10n.tr("Settings", "adaptivePower.notVerified", fallback: "Not yet verified")
+      /// Button returning power to the base step
+      public static let reset = L10n.tr("Settings", "adaptivePower.reset", fallback: "Reset")
+      /// Power step label - %1$@ is the output power, %2$@ is the output in dBm
+      public static func stepLabel(_ p1: Any, _ p2: Any) -> String {
+        return L10n.tr("Settings", "adaptivePower.stepLabel", String(describing: p1), String(describing: p2), fallback: "%1$@ (%2$@ dBm)")
+      }
+      public enum Amplifier {
+        /// Amplifier option: no external amplifier
+        public static let builtIn = L10n.tr("Settings", "adaptivePower.amplifier.builtIn", fallback: "None (built-in radio only)")
+        /// Amplifier option for a flat gain - %d is the gain in dB
+        public static func custom(_ p1: Int) -> String {
+          return L10n.tr("Settings", "adaptivePower.amplifier.custom", p1, fallback: "Custom +%d dB")
+        }
+        /// Amplifier option: Heltec V4, measured curve
+        public static let heltecV4 = L10n.tr("Settings", "adaptivePower.amplifier.heltecV4", fallback: "Heltec V4 (measured)")
+        /// Amplifier option: WisMesh Pocket 1W, measured curve
+        public static let pocket1W = L10n.tr("Settings", "adaptivePower.amplifier.pocket1W", fallback: "WisMesh Pocket 1W (measured)")
+      }
+    }
     public enum AdvancedRadio {
       /// Button to apply radio settings
       public static let apply = L10n.tr("Settings", "advancedRadio.apply", fallback: "Apply Radio Settings")
