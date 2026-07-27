@@ -16,12 +16,13 @@ private func createContact(
   latitude: Double = 0,
   longitude: Double = 0,
   lastModified: UInt32 = 0,
-  outPathLength: UInt8 = 0
+  outPathLength: UInt8 = 0,
+  publicKey: Data = Data((0..<ProtocolLimits.publicKeySize).map { _ in UInt8.random(in: 0...255) })
 ) -> ContactDTO {
   ContactDTO(
     id: UUID(),
     radioID: radioID,
-    publicKey: Data((0..<ProtocolLimits.publicKeySize).map { _ in UInt8.random(in: 0...255) }),
+    publicKey: publicKey,
     name: name,
     typeRawValue: type.rawValue,
     flags: 0,
@@ -259,6 +260,63 @@ struct ContactsViewModelTests {
     )
 
     #expect(result.isEmpty)
+  }
+
+  // MARK: - Public-key search (Phase 5 · O1, folded onto NodeSearch)
+
+  /// A 32-byte key beginning with `prefix`, padded so it cannot collide with another fixture.
+  private static func key(_ prefix: [UInt8], fill: UInt8) -> Data {
+    Data(prefix) + Data(repeating: fill, count: ProtocolLimits.publicKeySize - prefix.count)
+  }
+
+  @Test
+  func `filteredContacts matches a public key prefix in any case`() {
+    let viewModel = ContactsViewModel()
+    viewModel.contacts = [
+      createContact(name: "HexNode", publicKey: Self.key([0x00, 0xAA], fill: 0x11)),
+      createContact(name: "Other", publicKey: Self.key([0xFF, 0xFF], fill: 0xFF))
+    ]
+
+    for query in ["00AA", "00aa", "00Aa"] {
+      let result = viewModel.filteredContacts(searchText: query, segment: .contacts, sortOrder: .name, userLocation: nil)
+      #expect(result.map(\.name) == ["HexNode"], "query \(query)")
+    }
+  }
+
+  @Test
+  func `filteredContacts ranks a public key match above a name match`() {
+    let viewModel = ContactsViewModel()
+    viewModel.contacts = [
+      // Sorts first by name, but only matches on its name.
+      createContact(name: "00AA Depot", publicKey: Self.key([0xFF, 0xFF], fill: 0xFF)),
+      createContact(name: "Zulu", publicKey: Self.key([0x00, 0xAA], fill: 0x11))
+    ]
+
+    let result = viewModel.filteredContacts(searchText: "00AA", segment: .contacts, sortOrder: .name, userLocation: nil)
+    #expect(result.map(\.name) == ["Zulu", "00AA Depot"])
+  }
+
+  @Test
+  func `filteredContacts does not match 0c against a CC key`() {
+    // Legacy's locale-aware containment matched "0c" against a key of "CC…" (a3057d81);
+    // comparing raw key bytes instead is what stops it.
+    let viewModel = ContactsViewModel()
+    viewModel.contacts = [createContact(name: "Ridge", publicKey: Self.key([0xCC], fill: 0xCC))]
+
+    let result = viewModel.filteredContacts(searchText: "0c", segment: .contacts, sortOrder: .name, userLocation: nil)
+    #expect(result.isEmpty)
+  }
+
+  @Test
+  func `filteredContacts keeps the chosen sort order inside a relevance tier`() {
+    let viewModel = ContactsViewModel()
+    viewModel.contacts = [
+      createContact(name: "Zulu", publicKey: Self.key([0x00, 0xAA, 0x01], fill: 0x11)),
+      createContact(name: "Alpha", publicKey: Self.key([0x00, 0xAA, 0x02], fill: 0x11))
+    ]
+
+    let byName = viewModel.filteredContacts(searchText: "00AA", segment: .contacts, sortOrder: .name, userLocation: nil)
+    #expect(byName.map(\.name) == ["Alpha", "Zulu"])
   }
 
   // MARK: - Sorting

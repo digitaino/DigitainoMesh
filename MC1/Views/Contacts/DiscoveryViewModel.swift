@@ -189,7 +189,7 @@ final class DiscoveryViewModel {
   ) -> [DiscoveredNodeDTO] {
     var result = discoveredNodes
 
-    if searchText.isEmpty {
+    guard !searchText.isEmpty else {
       switch segment {
       case .all:
         break
@@ -200,16 +200,19 @@ final class DiscoveryViewModel {
       case .rooms:
         result = result.filter { $0.nodeType == .room }
       }
-    } else {
-      let query = searchText.lowercased()
-      result = result.filter { node in
-        node.name.localizedStandardContains(searchText)
-          || node.publicKey.hexString.hasPrefix(query)
-      }
+      return sorted(result, by: sortOrder, userLocation: userLocation)
     }
 
-    return sorted(result, by: sortOrder, userLocation: userLocation)
+    // Same engine, same ranking as the saved-contacts list — the two lists used to disagree
+    // about hex casing and about whether to trim the query at all.
+    return Self.nodeSearch.matches(
+      searchText: searchText,
+      among: sorted(result, by: sortOrder, userLocation: userLocation),
+      options: .default.ordering(.inputOrder)
+    )
   }
+
+  private static let nodeSearch = NodeSearchEngine()
 
   // MARK: - Sorting
 

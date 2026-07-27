@@ -316,7 +316,7 @@ final class ContactsViewModel {
     var result = contacts.filter { !pendingRemovalIDs.contains($0.id) }
 
     // If searching, show all types (ignore segment)
-    if searchText.isEmpty {
+    guard !searchText.isEmpty else {
       // Filter by segment
       switch segment {
       case .favorites:
@@ -328,19 +328,23 @@ final class ContactsViewModel {
       case .rooms:
         result = result.filter { $0.type == .room }
       }
-    } else {
-      // Filter by search text only
-      result = result.filter { contact in
-        contact.displayName.localizedStandardContains(searchText)
-          || contact.publicKey.uppercaseHexString().hasPrefix(searchText.uppercased())
-      }
+      return sorted(result, by: sortOrder, userLocation: userLocation)
     }
 
-    // Sort
-    result = sorted(result, by: sortOrder, userLocation: userLocation)
-
-    return result
+    // Sort before searching, not after: `.inputOrder` re-ranks stably by relevance, so the
+    // user's chosen order survives inside each tier and public-key matches still float to
+    // the top of the list.
+    return Self.nodeSearch.matches(
+      searchText: searchText,
+      among: sorted(result, by: sortOrder, userLocation: userLocation),
+      options: .default.ordering(.inputOrder)
+    )
   }
+
+  /// The app's one node matcher. Name substring, strict-hex key matching and the
+  /// prefix-beats-interior-beats-name ranking all live in `MC1Services`; nothing here
+  /// compares key hex by hand.
+  private static let nodeSearch = NodeSearchEngine()
 
   /// Sort contacts by the given order
   private func sorted(
