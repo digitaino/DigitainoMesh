@@ -349,10 +349,12 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable, Codable {
     Int(pathHashMode) + 1
   }
 
-  /// Hash size per hop in trace packets (1, 2, or 4 bytes), derived from ``pathHashMode``.
-  /// Trace protocol uses power-of-2 encoding: `1 << pathHashMode`.
+  /// Hash size per hop in trace packets (1, 2, or 3 bytes), derived from ``pathHashMode``.
+  /// Same `mode + 1` encoding as ``hashSize``; clamped to `1...3` so a reserved mode 3
+  /// never produces an oversized prefix. (Previously used `1 << pathHashMode`, which built
+  /// a 4-byte prefix for 3-byte mode and broke traces.)
   public var traceHashSize: Int {
-    1 << Int(pathHashMode)
+    min(3, Int(pathHashMode) + 1)
   }
 
   public var hasLocation: Bool {
