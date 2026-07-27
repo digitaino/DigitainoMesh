@@ -17,6 +17,9 @@ extension AppState {
         switch event {
         case .contactsChanged:
           contactsVersion += 1
+          // A newly added repeater contact should name its signal-bars row now, not
+          // whenever the directory's cache window happens to lapse.
+          await services.signalBarsNodeDirectory.invalidate()
         case .conversationsChanged:
           refreshConversations()
         case .directMessageReceived, .channelMessageReceived, .roomMessageReceived, .reactionReceived:
@@ -82,6 +85,9 @@ extension AppState {
         case let .pathHashModeUpdated(mode):
           await MainActor.run {
             self.connectionManager.updatePathHashMode(mode)
+            // Probes are addressed with `mode + 1` key bytes and the table tracks hashes
+            // of that width, so the engine has to hear about a runtime change.
+            self.applyPathHashModeToSignalBars(mode)
           }
         case let .allowedRepeatFreqUpdated(ranges):
           await MainActor.run {

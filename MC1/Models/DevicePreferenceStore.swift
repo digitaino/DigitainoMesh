@@ -41,6 +41,21 @@ struct DevicePreferenceStore {
     userDefaults.set(source.rawValue, forKey: Self.gpsSourceKey(deviceID: deviceID))
   }
 
+  // MARK: - Signal Bars
+
+  /// Whether repeater signal tracking runs for this radio. Defaults to on: on custom
+  /// firmware the app only mirrors a table the radio is building anyway, and on stock
+  /// firmware the engine's probe cadence is the same one the firmware would use.
+  /// Turning it off is how a user on a busy or duty-cycle-limited band opts out of the
+  /// engine's discover broadcasts and trace probes.
+  func isSignalBarsEnabled(deviceID: UUID) -> Bool {
+    userDefaults.object(forKey: Self.signalBarsEnabledKey(deviceID: deviceID)) as? Bool ?? true
+  }
+
+  func setSignalBarsEnabled(_ enabled: Bool, deviceID: UUID) {
+    userDefaults.set(enabled, forKey: Self.signalBarsEnabledKey(deviceID: deviceID))
+  }
+
   // MARK: - Adaptive Power
 
   func isAdaptivePowerEnabled(deviceID: UUID) -> Bool {
@@ -78,6 +93,11 @@ struct DevicePreferenceStore {
 
   private static func gpsSourceKey(deviceID: UUID) -> String {
     "device.\(deviceID.uuidString).gpsSource"
+  }
+
+  /// Same key legacy used, so an existing install keeps whatever the user chose.
+  private static func signalBarsEnabledKey(deviceID: UUID) -> String {
+    "device.\(deviceID.uuidString).signalBarsEnabled"
   }
 
   private static func adaptivePowerEnabledKey(deviceID: UUID) -> String {

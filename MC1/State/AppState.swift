@@ -248,6 +248,15 @@ final class AppState {
   /// Battery monitoring (polling, thresholds, low-battery notifications)
   let batteryMonitor = BatteryMonitor()
 
+  /// SwiftUI's view of the per-connection signal-bars engine. Lives at app scope and binds
+  /// to each connection's engine, so the toolbar renders an empty table while disconnected
+  /// rather than vanishing.
+  let repeaterSignals = RepeaterSignalModel()
+
+  /// CoreMotion movement classification feeding the engine's probe cadence and the radio's
+  /// motion hint. Started only while signal tracking is running, never at launch.
+  let movementHintMonitor = MovementHintMonitor()
+
   /// Live Activity lifecycle (start/update/stop on Lock Screen and Dynamic Island)
   let liveActivityManager = LiveActivityManager()
 
@@ -271,6 +280,10 @@ final class AppState {
 
   /// Task consuming RxLogService's entry stream for Live Activity freshness, canceled on disconnect
   var rxLogEventsTask: Task<Void, Never>?
+
+  /// Task probing the radio's sync registry and starting the signal-bars engine. Runs off
+  /// the wiring path so a `listSync` timeout can't stall connection setup.
+  var signalBarsStartTask: Task<Void, Never>?
 
   #if DEBUG
     /// Optional test-only hooks for deterministic lifecycle ordering tests.
@@ -490,6 +503,7 @@ final class AppState {
     advertisementEventsTask = nil
     rxLogEventsTask?.cancel()
     rxLogEventsTask = nil
+    tearDownSignalBars()
     messageEventDispatcher.cancelAll()
     chatCoordinatorRegistry?.tearDown()
     chatCoordinatorRegistry = nil
@@ -566,6 +580,7 @@ final class AppState {
 
     wireSyncDataEvents(services: services)
     configureAdaptivePower(services: services)
+    wireSignalBars(services: services)
     await wireSettingsEventStream(services: services)
     await wireDeviceUpdateCallbacks(services: services)
     wireMessageEvents(services: services)
