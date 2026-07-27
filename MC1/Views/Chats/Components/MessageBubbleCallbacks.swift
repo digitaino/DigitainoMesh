@@ -15,6 +15,9 @@ struct MessageBubbleCallbacks {
   var onResendAtNextPower: (() -> Void)?
   var onReaction: ((String) -> Void)?
   var onLongPress: (() -> Void)?
+  /// Reply to this message. Backs the swipe-right gesture's VoiceOver equivalent; the
+  /// gesture itself is applied outside the bubble by `ChatCellContentFactory`.
+  var onReply: (() -> Void)?
   var onImageTap: (() -> Void)?
   var onRetryInlineImage: (() -> Void)?
   var onRequestPreviewFetch: (() -> Void)?

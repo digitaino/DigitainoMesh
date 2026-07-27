@@ -152,7 +152,8 @@ struct ChatConversationView: View {
       onDividerTargetConsumed: { chatViewModel.timeline.consumeAnchor() },
       selectedMessageForActions: $selectedMessageForActions,
       imageViewerData: $imageViewerData,
-      onRetryMessage: { retryMessage($0) }
+      onRetryMessage: { retryMessage($0) },
+      onReply: { dispatch(.reply, for: $0) }
     )
     .mentionTapHandling(
       contacts: chatViewModel.allContacts,

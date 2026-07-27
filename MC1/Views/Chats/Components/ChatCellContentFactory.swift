@@ -28,7 +28,14 @@ struct ChatCellContentFactory {
   let openURL: OpenURLAction
   let resolver: BubbleResolver
   let actions: BubbleActions
+  /// Shared timestamp-reveal offset for the conversation. A reference type so a mid-drag
+  /// mutation reaches every hosted cell; see `ChatTimestampRevealState`.
+  let timestampReveal: ChatTimestampRevealState
 
+  /// The swipe modifiers wrap `MessageBubbleView` rather than living inside it. Both bubble
+  /// views are `Equatable` on `MessageItem` alone so SwiftUI can skip re-bodying unchanged
+  /// rows; putting gesture-driven state inside them would either be skipped or defeat that
+  /// optimization. Out here the offsets animate while the bubble itself never re-bodies.
   func makeContent(for item: MessageItem) -> some View {
     MessageBubbleView(
       item: item,
@@ -38,7 +45,15 @@ struct ChatCellContentFactory {
       resolver: resolver,
       actions: actions
     )
+    // Reply availability matches `MessageActionAvailability.canReply`: you reply to someone
+    // else's message, so outgoing rows install no gesture at all.
+    .swipeToReply(isEnabled: !item.envelope.isOutgoing) {
+      guard let message = resolver.message(item) else { return }
+      actions.onReply(message)
+    }
+    .swipeToRevealTimestamp(date: item.envelope.date)
     .environment(\.appTheme, theme)
     .environment(\.openURL, openURL)
+    .environment(\.chatTimestampReveal, timestampReveal)
   }
 }

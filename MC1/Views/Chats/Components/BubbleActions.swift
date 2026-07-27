@@ -25,6 +25,9 @@ struct BubbleActions {
   let onResendAtNextPower: (MessageDTO) -> Void
   let onReaction: (String, MessageDTO) -> Void
   let onLongPress: (MessageDTO) -> Void
+  /// Swipe-right-to-reply. Routes to the same handler as the actions sheet's Reply,
+  /// so the swipe is a shortcut to that action rather than a second implementation.
+  let onReply: (MessageDTO) -> Void
   let onImageTap: (MessageDTO) -> Void
   let onRetryInlineImage: (UUID) -> Void
   let onRequestPreviewFetch: (UUID) -> Void

@@ -162,6 +162,11 @@ struct UnifiedMessageBubble: View, Equatable {
               }
             }
           }
+          // VoiceOver equivalent of swipe-right-to-reply, which a gesture-free navigation
+          // cannot reach. Mirrors `MessageActionAvailability.canReply`.
+          if !item.envelope.isOutgoing, let onReply = callbacks.onReply {
+            Button(L10n.Chats.Chats.Message.Action.reply) { onReply() }
+          }
           if hasReactionSummary {
             Button(L10n.Chats.Chats.Message.Action.viewReactions) {
               showingReactionDetails = true

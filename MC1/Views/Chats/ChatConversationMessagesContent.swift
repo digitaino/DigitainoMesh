@@ -39,6 +39,11 @@ struct ChatConversationMessagesContent: View {
   // MARK: - Callbacks
 
   let onRetryMessage: (MessageDTO) -> Void
+  /// Swipe-right-to-reply on a bubble; the same handler the actions sheet's Reply uses.
+  let onReply: (MessageDTO) -> Void
+
+  /// Shared offset for the timestamp reveal, scoped to this conversation's list.
+  @State private var timestampReveal = ChatTimestampRevealState()
 
   @Environment(\.appTheme) private var theme
   @Environment(\.openURL) private var openURL
@@ -112,6 +117,7 @@ struct ChatConversationMessagesContent: View {
           Task { await viewModel.sendReaction(emoji: emoji, to: message) }
         },
         onLongPress: { message in selectedMessageForActions = message },
+        onReply: onReply,
         onImageTap: { message in
           if let data = viewModel.imageData(for: message.id) {
             imageViewerData = ImageViewerData(
@@ -143,7 +149,8 @@ struct ChatConversationMessagesContent: View {
         snapshotResolver: { MapSnapshotStore.shared.image(for: $0) },
         requestSnapshot: { MapSnapshotStore.shared.request($0) },
         retrySnapshot: { MapSnapshotStore.shared.retry($0) }
-      )
+      ),
+      timestampReveal: timestampReveal
     )
   }
 
@@ -254,7 +261,8 @@ private struct ChannelEmptyMessagesView: View {
       onDividerTargetConsumed: {},
       selectedMessageForActions: .constant(nil),
       imageViewerData: .constant(nil),
-      onRetryMessage: { _ in }
+      onRetryMessage: { _ in },
+      onReply: { _ in }
     )
   }
   .environment(\.appState, AppState())
@@ -281,7 +289,8 @@ private struct ChannelEmptyMessagesView: View {
       onDividerTargetConsumed: {},
       selectedMessageForActions: .constant(nil),
       imageViewerData: .constant(nil),
-      onRetryMessage: { _ in }
+      onRetryMessage: { _ in },
+      onReply: { _ in }
     )
   }
   .environment(\.appState, AppState())
