@@ -145,6 +145,28 @@ public final class ServiceContainer {
   /// device, not of the app.
   public let notifSyncService: NotifSyncService
 
+  /// Classifies the connected radio's sync-registry support. Per-connection because the
+  /// classification is a property of the firmware on the other end of the link; a fresh
+  /// container starts back at `.unknown` so a device swap or a reflash re-probes.
+  public let syncRegistryProbe: SyncRegistryProbe
+
+  /// Pushes the phone's movement level to the radio (`SyncID.motionHint`) so its ping
+  /// cadence adapts without GPS. Inert unless `syncRegistryProbe` advertises the slot.
+  public let motionHintService: MotionHintService
+
+  /// The phone's latest movement level, written by the app target's CoreMotion monitor and
+  /// read by `signalBarsEngine`. Lives here because the engine needs it at construction and
+  /// MC1Services must not import CoreMotion.
+  public let movementHintRelay: MovementHintRelay
+
+  /// Tracks how well this radio and the repeaters around it hear each other. Started by
+  /// `AppState` once `syncRegistryProbe` has decided between viewer and engine mode; stopped
+  /// and finished in `tearDown()`.
+  public let signalBarsEngine: SignalBarsEngine
+
+  /// The node pool `signalBarsEngine` resolves repeater hashes against.
+  public let signalBarsNodeDirectory: PersistedSignalBarsNodeDirectory
+
   // MARK: - Remote Node Services
 
   /// Service for remote node session management
@@ -300,6 +322,23 @@ public final class ServiceContainer {
     nodeSnapshotService = NodeSnapshotService(dataStore: dataStore)
     adaptivePowerService = AdaptivePowerService(txPowerApplier: settingsService)
     notifSyncService = NotifSyncService(session: session, dataStore: dataStore)
+
+    // Signal bars. The engine is built here so it exists for the whole connection, but it
+    // stays idle until `AppState` probes the firmware and calls `start(mode:pathHashMode:)`
+    // — the mode is a property of the radio, and the path hash mode of the device record,
+    // neither of which is known at container-build time.
+    syncRegistryProbe = SyncRegistryProbe(session: session)
+    motionHintService = MotionHintService(session: session, registry: syncRegistryProbe)
+    movementHintRelay = MovementHintRelay()
+    signalBarsNodeDirectory = PersistedSignalBarsNodeDirectory(
+      dataStore: dataStore,
+      radioID: radioID
+    )
+    signalBarsEngine = SignalBarsEngine(
+      session: session,
+      directory: signalBarsNodeDirectory,
+      movementHints: movementHintRelay
+    )
 
     // Higher-level services (depend on other services)
     repeaterAdminService = RepeaterAdminService(
@@ -466,6 +505,12 @@ public final class ServiceContainer {
     roomServerService.finishEvents()
     contactService.finishEvents()
     rxLogService.finishEntryStream()
+
+    // The engine owns two long-lived tasks (event ingest and its probe loop) and a
+    // broadcaster the observable façade is parked on. Stopping cancels the tasks; finishing
+    // ends the façade's for-await loop so it releases this container.
+    await signalBarsEngine.stop()
+    signalBarsEngine.finishSnapshots()
 
     // The action forwarders AppState installs capture notificationActionHandler
     // strongly, and the handler strong-holds notificationService back, forming a
