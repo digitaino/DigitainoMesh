@@ -101,6 +101,12 @@ struct ChatConversationMessagesContent: View {
       resolver: BubbleResolver(viewModel: viewModel),
       actions: BubbleActions(
         onRetryMessage: onRetryMessage,
+        onResendSamePower: { message in
+          Task { await viewModel.resendAtSamePower(message) }
+        },
+        onResendAtNextPower: { message in
+          Task { await viewModel.resendAtNextPower(message) }
+        },
         onReaction: { emoji, message in
           recentEmojisStore.recordUsage(emoji)
           Task { await viewModel.sendReaction(emoji: emoji, to: message) }

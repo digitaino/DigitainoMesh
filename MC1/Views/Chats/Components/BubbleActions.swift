@@ -19,6 +19,10 @@ import UIKit
 @MainActor
 struct BubbleActions {
   let onRetryMessage: (MessageDTO) -> Void
+  /// No-repeats retry card: resend at the power currently in force.
+  let onResendSamePower: (MessageDTO) -> Void
+  /// No-repeats retry card: escalate one power rung, then resend.
+  let onResendAtNextPower: (MessageDTO) -> Void
   let onReaction: (String, MessageDTO) -> Void
   let onLongPress: (MessageDTO) -> Void
   let onImageTap: (MessageDTO) -> Void

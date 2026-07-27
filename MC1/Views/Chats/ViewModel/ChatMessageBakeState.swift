@@ -71,6 +71,15 @@ final class ChatMessageBakeState {
   /// Whether the divider position has been computed for the current conversation
   var dividerComputed = false
 
+  /// Message currently offered the "no repeats heard" retry card, or nil when none is.
+  /// Single-slot by design, matching the detector: only the most recent unheard send is
+  /// worth resending.
+  var noRepeatsRetryMessageID: UUID?
+
+  /// The card's payload for `noRepeatsRetryMessageID`. Held next to the id rather than
+  /// inside it so a power-rung change can re-emit the card without moving it.
+  var noRepeatsRetryPrompt: NoRepeatsRetryPrompt?
+
   private var inlineImageDimensionsStoreProvider: @MainActor () -> InlineImageDimensionsStore? = { nil }
 
   var inlineImageDimensionsStore: InlineImageDimensionsStore? {

@@ -29,6 +29,11 @@ extension ChatTimeline {
     case dimensionsResolved(url: URL)
     /// A map snapshot rendered: rebake the rows indexed under its request.
     case mapSnapshotResolved(request: MapSnapshotRequest)
+    /// The "no repeats heard" retry card moved to a different message, changed its
+    /// escalated-power label, or retired (`messageID: nil`). Rebakes the row losing the
+    /// card and the row gaining it — two single-row updates, never a full rebake, so a
+    /// verdict landing mid-scroll cannot reflow the list.
+    case noRepeatsRetry(messageID: UUID?, prompt: NoRepeatsRetryPrompt?)
   }
 
   /// Applies a prefetch/resolution result. The mutation and the rebake of
@@ -84,6 +89,20 @@ extension ChatTimeline {
       for messageID in messageIDs {
         rebakeRow(messageID)
       }
+
+    case let .noRepeatsRetry(messageID, prompt):
+      let previous = bake.noRepeatsRetryMessageID
+      guard previous != messageID || bake.noRepeatsRetryPrompt != prompt else { return }
+      bake.noRepeatsRetryMessageID = messageID
+      bake.noRepeatsRetryPrompt = prompt
+      // The losing row may have been paged out or deleted between the arm and the
+      // verdict; `rebakeRow` warns on a missing id, so check before asking.
+      if let previous, previous != messageID, messagesByID[previous] != nil {
+        rebakeRow(previous)
+      }
+      if let messageID, messagesByID[messageID] != nil {
+        rebakeRow(messageID)
+      }
     }
   }
 
@@ -100,12 +119,18 @@ extension ChatTimeline {
     bake.loadedImageData.removeAllObjects()
     bake.decodedImages.removeAll()
     bake.imageIsGIF.removeAll()
+    bake.noRepeatsRetryMessageID = nil
+    bake.noRepeatsRetryPrompt = nil
   }
 
   /// Drops one message's bake state (message deletion), including its
   /// map-preview index entries so a late snapshot resolution cannot rebake
   /// a row that no longer exists.
   func removeBakeState(for messageID: UUID) {
+    if bake.noRepeatsRetryMessageID == messageID {
+      bake.noRepeatsRetryMessageID = nil
+      bake.noRepeatsRetryPrompt = nil
+    }
     bake.previewStates.removeValue(forKey: messageID)
     bake.loadedPreviews.removeValue(forKey: messageID)
     bake.decodedPreviewAssets.removeValue(forKey: messageID)

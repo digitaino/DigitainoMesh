@@ -14,6 +14,7 @@ extension ChatViewModel {
   /// `PendingSend` row on the next hydrate.
   func retryMessage(_ message: MessageDTO) async {
     logger.info("retryMessage called for message: \(message.id)")
+    noteResendRequested(messageID: message.id)
 
     guard !retryInFlight else { return }
     retryInFlight = true
@@ -54,8 +55,11 @@ extension ChatViewModel {
   }
 
   /// Resend a channel message in place, or copy text for direct messages.
-  /// Used for "Send Again" context menu action.
+  /// Used for "Send Again" context menu action and by the no-repeats retry card
+  /// (`resendAtSamePower` / `resendAtNextPower`), so both routes share this one
+  /// send-queue path.
   func sendAgain(_ message: MessageDTO) async {
+    noteResendRequested(messageID: message.id)
     if let channelIndex = message.channelIndex {
       // Channel messages: enqueue with isResend: true so the queue drain
       // refreshes the mesh timestamp via resendChannelMessage. Reusing the

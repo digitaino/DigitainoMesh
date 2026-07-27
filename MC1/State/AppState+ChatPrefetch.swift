@@ -34,7 +34,12 @@ extension AppState {
       reactionService: { self.services?.reactionService },
       chatSendQueueService: { self.services?.chatSendQueueService },
       inlineImageDimensionsStore: { self.services?.inlineImageDimensionsStore },
-      prefetchDataStore: { self.services?.dataStore }
+      prefetchDataStore: { self.services?.dataStore },
+      adaptivePowerService: { self.services?.adaptivePowerService },
+      // True exactly while the signal-bars engine is running for this connection (engine
+      // or viewer mode, per `SyncRegistryProbe.signalBarsMode()`). The no-repeats retry
+      // card is a signal-data feature, so it stays entirely inert otherwise.
+      signalDataAvailable: { self.repeaterSignals.isAttached }
     )
   }
 

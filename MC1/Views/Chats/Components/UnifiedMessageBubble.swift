@@ -125,6 +125,17 @@ struct UnifiedMessageBubble: View, Equatable {
           ForEach(Array(layout.siblings.enumerated()), id: \.offset) { _, fragment in
             siblingFragmentView(fragment)
           }
+
+          // Retry offer for a send no repeater was heard relaying. Rendered after the
+          // sibling fragments so it always reads as the last thing about this message,
+          // and outside the fragment list because it is an affordance, not content.
+          if let noRepeatsRetry = item.footer.noRepeatsRetry {
+            NoRepeatsRetryCard(
+              prompt: noRepeatsRetry,
+              onResendSamePower: callbacks.onResendSamePower,
+              onResendAtNextPower: callbacks.onResendAtNextPower
+            )
+          }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityMessageLabel)
@@ -136,6 +147,20 @@ struct UnifiedMessageBubble: View, Equatable {
              item.footer.status == .failed,
              let onRetry = callbacks.onRetry {
             Button(L10n.Chats.Chats.Message.Action.retry) { onRetry() }
+          }
+          // The enclosing `.accessibilityElement(children: .combine)` merges the card's
+          // buttons into the bubble element, so they reach VoiceOver as custom actions —
+          // the same pattern the failed-send retry above uses.
+          if let noRepeatsRetry = item.footer.noRepeatsRetry {
+            if let onResendSamePower = callbacks.onResendSamePower {
+              Button(L10n.Chats.Chats.Message.NoRepeats.sendAgain) { onResendSamePower() }
+            }
+            if let nextPowerLabel = noRepeatsRetry.nextPowerLabel,
+               let onResendAtNextPower = callbacks.onResendAtNextPower {
+              Button(L10n.Chats.Chats.Message.NoRepeats.sendAtPower(nextPowerLabel)) {
+                onResendAtNextPower()
+              }
+            }
           }
           if hasReactionSummary {
             Button(L10n.Chats.Chats.Message.Action.viewReactions) {
@@ -316,6 +341,9 @@ struct UnifiedMessageBubble: View, Equatable {
     label += message.text
     if item.envelope.isOutgoing {
       label += ", \(MessageStatusText.text(for: item.footer))"
+      if item.footer.noRepeatsRetry != nil {
+        label += ", \(L10n.Chats.Chats.Message.NoRepeats.title)"
+      }
     }
     if !item.envelope.isOutgoing {
       if item.footer.showHop {

@@ -118,7 +118,11 @@ struct RoomConversationView: View {
             reactionService: { appState.services?.reactionService },
             chatSendQueueService: { appState.services?.chatSendQueueService },
             inlineImageDimensionsStore: { nil },
-            prefetchDataStore: { nil }
+            prefetchDataStore: { nil },
+            // Room conversations are server-relayed, not flood broadcasts, so there is no
+            // repeat evidence to wait on: no-repeats detection stays off here.
+            adaptivePowerService: { nil },
+            signalDataAvailable: { false }
           ),
           onNavigateToMap: { appState.navigation.navigateToMap(coordinate: $0) },
           linkPreviewCache: nil,

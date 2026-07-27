@@ -9,6 +9,10 @@ import UIKit
 /// than reaching `MapSnapshotStore.shared` from the view body.
 struct MessageBubbleCallbacks {
   var onRetry: (() -> Void)?
+  /// No-repeats retry card: resend unchanged, at the power currently in force.
+  var onResendSamePower: (() -> Void)?
+  /// No-repeats retry card: escalate TX power one rung, then resend.
+  var onResendAtNextPower: (() -> Void)?
   var onReaction: ((String) -> Void)?
   var onLongPress: (() -> Void)?
   var onImageTap: (() -> Void)?

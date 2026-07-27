@@ -61,7 +61,11 @@ struct ChatsListModifiers: ViewModifier {
             reactionService: { appState.services?.reactionService },
             chatSendQueueService: { appState.services?.chatSendQueueService },
             inlineImageDimensionsStore: { nil },
-            prefetchDataStore: { nil }
+            prefetchDataStore: { nil },
+            // List-level view model: no conversation is bound, so no send can arm
+            // no-repeats detection.
+            adaptivePowerService: { nil },
+            signalDataAvailable: { false }
           ),
           onNavigateToMap: { appState.navigation.navigateToMap(coordinate: $0) },
           linkPreviewCache: nil,

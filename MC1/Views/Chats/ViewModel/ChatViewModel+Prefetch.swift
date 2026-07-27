@@ -255,6 +255,9 @@ extension ChatViewModel {
     imageFetchTasks.values.forEach { $0.cancel() }
     imageFetchTasks.removeAll()
     timeline.clearBakeState()
+    // The detector's armed/prompted slots are conversation-scoped like the bake state
+    // this clears, so they retire together on a conversation switch.
+    resetNoRepeatsDetection()
   }
 
   /// Clean up preview and image state for a specific message (called on

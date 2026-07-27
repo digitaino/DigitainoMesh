@@ -283,6 +283,11 @@ final class ChatViewModel {
     var chatSendQueueService: @MainActor () -> ChatSendQueueService?
     var inlineImageDimensionsStore: @MainActor () -> InlineImageDimensionsStore?
     var prefetchDataStore: @MainActor () -> (any PersistenceStoreProtocol)?
+    /// Live TX-power state for the escalated resend on the no-repeats retry card.
+    var adaptivePowerService: @MainActor () -> AdaptivePowerService?
+    /// Whether repeater signal tracking is up for this connection. Gates no-repeats
+    /// detection entirely: see `ChatViewModel+NoRepeatsRetry`.
+    var signalDataAvailable: @MainActor () -> Bool
   }
 
   @ObservationIgnored private var dataStoreProvider: @MainActor () -> DataStore? = { nil }
@@ -331,6 +336,13 @@ final class ChatViewModel {
   @ObservationIgnored var sessionProvider: @MainActor () -> MeshCoreSession? = { nil }
   @ObservationIgnored var reactionServiceProvider: @MainActor () -> ReactionService? = { nil }
   @ObservationIgnored var chatSendQueueServiceProvider: @MainActor () -> ChatSendQueueService? = { nil }
+  @ObservationIgnored var adaptivePowerServiceProvider: @MainActor () -> AdaptivePowerService? = { nil }
+  @ObservationIgnored var signalDataAvailableProvider: @MainActor () -> Bool = { false }
+
+  /// Watches this conversation's sends for the "no repeats heard" case and drives the
+  /// inline retry card. Owned per view model, inert until fed; see
+  /// `ChatViewModel+NoRepeatsRetry`.
+  @ObservationIgnored let noRepeatsDetector = ChatNoRepeatsDetector()
 
   var inlineImageDimensionsStore: InlineImageDimensionsStore? {
     bake.inlineImageDimensionsStore
@@ -384,7 +396,11 @@ final class ChatViewModel {
 
   // MARK: - Initialization
 
-  init() {}
+  init() {
+    noRepeatsDetector.onPromptChange = { [weak self] messageID in
+      self?.applyNoRepeatsPrompt(messageID)
+    }
+  }
 
   /// Forwards a map-thumbnail tap to the same navigation sink the coordinate
   /// text link uses. `onNavigateToMap` is optional; if nil, the tap is a
@@ -418,6 +434,8 @@ final class ChatViewModel {
     sessionProvider = dependencies.session
     reactionServiceProvider = dependencies.reactionService
     chatSendQueueServiceProvider = dependencies.chatSendQueueService
+    adaptivePowerServiceProvider = dependencies.adaptivePowerService
+    signalDataAvailableProvider = dependencies.signalDataAvailable
     bake.bindInlineImageDimensionsStore(dependencies.inlineImageDimensionsStore)
     prefetchDataStoreProvider = dependencies.prefetchDataStore
     self.onNavigateToMap = onNavigateToMap
@@ -467,6 +485,9 @@ final class ChatViewModel {
   /// `configure` rebinds on the next appearance. Deallocation is not a
   /// substitute: SwiftUI can keep a popped destination's state alive.
   func releaseTimelineWriter() {
+    // A verdict landing after the screen is gone would write the card into a timeline
+    // nobody is watching, and re-arm on the next open regardless.
+    noRepeatsDetector.cancel()
     timeline.releaseWriter()
   }
 

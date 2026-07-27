@@ -163,7 +163,8 @@ extension ChatMessageBakeState {
       showDirectionGap: flags.showDirectionGap,
       showSenderName: flags.showSenderName,
       showNewMessagesDivider: message.id == newMessagesDividerMessageID,
-      showDayDivider: flags.showDayDivider
+      showDayDivider: flags.showDayDivider,
+      noRepeatsRetry: message.id == noRepeatsRetryMessageID ? noRepeatsRetryPrompt : nil
     )
   }
 

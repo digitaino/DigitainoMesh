@@ -183,6 +183,7 @@ extension ChatViewModel {
   /// button hides (UI gate), so a fresh tap cannot enqueue again until the
   /// channel send later fails and the row returns to `.failed`.
   func retryChannelMessage(_ message: MessageDTO) async {
+    noteResendRequested(messageID: message.id)
     guard messageService != nil,
           currentChannel != nil,
           let channelIndex = message.channelIndex,

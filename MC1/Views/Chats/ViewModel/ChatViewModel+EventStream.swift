@@ -39,18 +39,32 @@ extension ChatViewModel {
           roundTripTime: roundTripTime
         )
       }
+      // A channel broadcast reaching `.sent` is the moment the packet left the radio and
+      // the repeat-detection window starts.
+      noteSendResolved(messageID: messageID, status: status)
 
     case let .messageRetrying(messageID, _, _):
       // Payload-bearing variant routed straight to the reload chokepoint;
       // not coalescer-eligible because attempt/maxAttempts are per-event.
       timeline.enqueueReload(messageID: messageID)
 
-    case let .messageResent(messageID),
-         let .messageFailed(messageID):
+    case let .messageResent(messageID):
       timeline.enqueueReload(messageID: messageID)
+      // `resendChannelMessage` commits `.sent` and zeroes `heardRepeats` before
+      // broadcasting `.resent`, so a resend is a fresh send for detection purposes and
+      // re-arms the window rather than inheriting the original's.
+      noteSendResolved(messageID: messageID, status: .sent)
 
-    case let .heardRepeatRecorded(messageID, _),
-         let .reactionReceived(messageID, _):
+    case let .messageFailed(messageID):
+      timeline.enqueueReload(messageID: messageID)
+      noteNoRepeatsInput(.sendFailed(messageID: messageID))
+
+    case let .heardRepeatRecorded(messageID, count):
+      timeline.enqueueReload(messageID: messageID)
+      // A repeater echoed our packet: the send was heard, so nothing to offer.
+      noteNoRepeatsInput(.repeatHeard(messageID: messageID, count: count))
+
+    case let .reactionReceived(messageID, _):
       timeline.enqueueReload(messageID: messageID)
 
     case let .routingChanged(contactID, _):
