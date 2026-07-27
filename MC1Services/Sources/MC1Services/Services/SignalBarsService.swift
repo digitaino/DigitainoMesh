@@ -68,10 +68,62 @@ public final class SignalBarsService {
     // MARK: - Published State
 
     /// All tracked repeaters, sorted by signal quality (TX-weighted, best first).
+    /// This is the *complete* table (used for scoring and the toolbar indicator).
+    /// The list UI renders ``displayRepeaters``, which hides stale/dismissed rows.
     public private(set) var repeaters: [RepeaterSignal] = []
 
     /// Best repeater (first in sorted list) — drives toolbar indicator.
     public var bestRepeater: RepeaterSignal? { repeaters.first }
+
+    /// Age (seconds) past which a repeater is hidden from ``displayRepeaters``.
+    /// This is a *display* filter only: in viewer mode the firmware's table and the
+    /// OLED are untouched, so the radio sync is preserved and a hidden repeater
+    /// reappears the instant the radio hears it again. `nil` disables auto-hide.
+    public var staleHideThreshold: TimeInterval? = 900   // 15 minutes
+
+    /// Repeaters the user manually dismissed, keyed by hex ID → time of dismissal.
+    /// A dismissal only suppresses rows not heard *since* it was dismissed, so a
+    /// repeater that becomes active again (fresh `lastHeard`) shows up on its own.
+    private var dismissedRepeaters: [String: Date] = [:]
+
+    /// Rows to render in the list: the full table minus entries older than
+    /// ``staleHideThreshold`` and minus manually-dismissed ones that haven't been
+    /// heard since. Firmware sync is unaffected — this filters the view, not the table.
+    public var displayRepeaters: [RepeaterSignal] {
+        let now = Date()
+        let cutoff = staleHideThreshold.map { now.addingTimeInterval(-$0) }
+        return repeaters.filter { repeater in
+            if let cutoff, repeater.lastHeard < cutoff { return false }
+            if let dismissedAt = dismissedRepeaters[repeater.id],
+               repeater.lastHeard <= dismissedAt { return false }
+            return true
+        }
+    }
+
+    /// Manually hide a single repeater from the list until it's heard again.
+    /// Works in both modes; in viewer mode it does not alter the radio's table.
+    public func dismissRepeater(hexID: String) {
+        dismissedRepeaters[hexID] = Date()
+    }
+
+    /// Hide every currently-stale/idle repeater from the list in one action.
+    /// Dismisses all rows not heard within ``staleHideThreshold`` (or, if auto-hide
+    /// is off, all rows not heard in the last minute).
+    public func clearStaleRepeaters() {
+        let now = Date()
+        let window = staleHideThreshold ?? 60
+        let cutoff = now.addingTimeInterval(-window)
+        for repeater in repeaters where repeater.lastHeard < cutoff {
+            dismissedRepeaters[repeater.id] = now
+        }
+    }
+
+    /// Whether any currently-tracked repeater is stale enough to clear.
+    public var hasStaleRepeaters: Bool {
+        let window = staleHideThreshold ?? 60
+        let cutoff = Date().addingTimeInterval(-window)
+        return repeaters.contains { $0.lastHeard < cutoff }
+    }
 
     /// Whether a manual refresh (ping-all) is in progress.
     public private(set) var isRefreshing: Bool = false
@@ -184,6 +236,7 @@ public final class SignalBarsService {
         viewerPollTask = nil
 
         repeaters = []
+        dismissedRepeaters = [:]
         pendingPings = [:]
         reactivePingTargets = []
         isRefreshing = false
@@ -417,7 +470,7 @@ public final class SignalBarsService {
         guard let sendTrace = sendTraceHandler else { return }
 
         let tag = UInt32.random(in: 0 ..< UInt32.max)
-        let traceHashSize = 1 << Int(pathHashMode)
+        let traceHashSize = min(3, Int(pathHashMode) + 1)   // mode + 1 → 1/2/3 bytes per hop
         let pathData = Data(publicKey.prefix(traceHashSize))
 
         let startTime = ContinuousClock.now

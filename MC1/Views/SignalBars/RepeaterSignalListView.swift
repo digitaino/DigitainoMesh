@@ -18,6 +18,19 @@ struct RepeaterSignalPopover: View {
                     .font(.system(.subheadline, weight: .semibold))
                 Spacer()
 
+                // Hide every stale/idle repeater from the list in one tap. Local-only:
+                // the radio's table and OLED are untouched, so the sync stays intact.
+                if service.hasStaleRepeaters {
+                    Button {
+                        service.clearStaleRepeaters()
+                    } label: {
+                        Image(systemName: "eraser.line.dashed")
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear stale repeaters")
+                }
+
                 Button {
                     Task { await service.startProbe() }
                 } label: {
@@ -57,7 +70,8 @@ struct RepeaterSignalPopover: View {
                     .padding(.horizontal, 8)
             }
 
-            if service.repeaters.isEmpty {
+            let visibleRepeaters = service.displayRepeaters
+            if visibleRepeaters.isEmpty {
                 Text("Scanning for repeaters…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -88,7 +102,7 @@ struct RepeaterSignalPopover: View {
                 // Repeater rows
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(service.repeaters) { repeater in
+                        ForEach(visibleRepeaters) { repeater in
                             let isWatched = appState.watchedRepeaterHexID == repeater.id
                                 || (appState.watchedRepeaterHexID.map { repeater.id.hasPrefix($0) || $0.hasPrefix(repeater.id) } ?? false)
                             RepeaterCompactRow(repeater: repeater, isWatched: isWatched)
@@ -111,8 +125,15 @@ struct RepeaterSignalPopover: View {
                                             Label("Watch Repeater", systemImage: "binoculars")
                                         }
                                     }
+                                    Divider()
+                                    // Local-only hide — reappears if the radio hears it again.
+                                    Button(role: .destructive) {
+                                        service.dismissRepeater(hexID: repeater.id)
+                                    } label: {
+                                        Label("Remove from List", systemImage: "eye.slash")
+                                    }
                                 }
-                            if repeater.id != service.repeaters.last?.id {
+                            if repeater.id != visibleRepeaters.last?.id {
                                 Divider()
                                     .padding(.horizontal, 8)
                             }
