@@ -1046,3 +1046,83 @@
 
 /* Location: BenchmarkComparisonView.swift - Success rate metric label */
 "tools.benchmark.comparison.reliability" = "Success";
+
+// MARK: - Traffic Map
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.trafficMap" = "流量地图";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state title */
+"tools.trafficMap.notConnected" = "需要连接电台";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state description */
+"tools.trafficMap.notConnectedDescription" = "连接电台后即可绘制它听到的流量。";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when the packet log is empty */
+"tools.trafficMap.noData" = "暂无流量";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when the packet log is empty */
+"tools.trafficMap.noDataDescription" = "电台听到数据包后会显示在这里。让它监听一段时间后再回来查看。";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodes" = "无可定位节点";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodesDescription" = "听到了流量，但转发它的中继器都还没有已知位置。";
+
+/* Location: TrafficHeatmapView.swift - Toolbar menu selecting how far back the map reaches */
+"tools.trafficMap.timeWindow" = "时间范围";
+
+/* Location: TrafficHeatmapView.swift - Banner counting what the map is showing; %1$lld is nodes, %2$lld links, %3$lld packets */
+"tools.trafficMap.summary" = "%1$lld 个节点 · %2$lld 条链路 · %3$lld 个数据包";
+
+/* Location: TrafficHeatmapView.swift - Map control that frames every mapped node */
+"tools.trafficMap.centerOnTraffic" = "居中显示流量";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last fifteen minutes */
+"tools.trafficMap.window.minutes15" = "最近 15 分钟";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last thirty minutes */
+"tools.trafficMap.window.minutes30" = "最近 30 分钟";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last hour */
+"tools.trafficMap.window.hour1" = "最近 1 小时";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three hours */
+"tools.trafficMap.window.hours3" = "最近 3 小时";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last six hours */
+"tools.trafficMap.window.hours6" = "最近 6 小时";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last twelve hours */
+"tools.trafficMap.window.hours12" = "最近 12 小时";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last day */
+"tools.trafficMap.window.day1" = "最近 24 小时";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three days */
+"tools.trafficMap.window.days3" = "最近 3 天";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last seven days */
+"tools.trafficMap.window.days7" = "最近 7 天";
+
+/* Location: TrafficHeatmapView.swift - Time window covering everything still logged */
+"tools.trafficMap.window.all" = "全部时间";
+
+/* Location: TrafficHeatmapLegend.swift - Legend title */
+"tools.trafficMap.legend.title" = "图例";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining size and thickness */
+"tools.trafficMap.legend.weight" = "气泡越大、链路越粗，承载的流量越多。";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining bubble color */
+"tools.trafficMap.legend.signal" = "气泡颜色表示你的电台直接听到该节点的信号质量。链路从不按信号着色——只有到你电台的最后一跳才是可测量的。";
+
+/* Location: TrafficNodeCallout.swift - Packets a node relayed; %lld is the count */
+"tools.trafficMap.callout.packets" = "已转发 %lld 个数据包";
+
+/* Location: TrafficNodeCallout.swift - Mean signal when this node was the last hop; %@ is the already-formatted decibel number */
+"tools.trafficMap.callout.averageSignal" = "平均 %@ dB";
+
+/* Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others */
+"tools.trafficMap.callout.neverHeardDirectly" = "从未直接听到";

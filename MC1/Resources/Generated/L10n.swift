@@ -5776,6 +5776,8 @@ public enum L10n {
       public static let title = L10n.tr("Tools", "tools.title", fallback: "Tools")
       /// Location: ToolsView.swift - Tool selection label
       public static let tracePath = L10n.tr("Tools", "tools.tracePath", fallback: "Trace Path")
+      /// Location: ToolSelection.swift - Tool selection label
+      public static let trafficMap = L10n.tr("Tools", "tools.trafficMap", fallback: "Traffic Map")
       public enum Benchmark {
         /// Location: BenchmarkHistoryView.swift - Average round-trip time of a saved run; %lld is milliseconds
         public static func averageMilliseconds(_ p1: Int) -> String {
@@ -6469,6 +6471,70 @@ public enum L10n {
         public static let loadFailed = L10n.tr("Tools", "tools.savedPaths.loadFailed", fallback: "Failed to load saved paths.")
         /// Location: SavedPathsViewModel.swift - Error renaming a saved path
         public static let renameFailed = L10n.tr("Tools", "tools.savedPaths.renameFailed", fallback: "Failed to rename path.")
+      }
+      public enum TrafficMap {
+        /// Location: TrafficHeatmapView.swift - Map control that frames every mapped node
+        public static let centerOnTraffic = L10n.tr("Tools", "tools.trafficMap.centerOnTraffic", fallback: "Center on Traffic")
+        /// Location: TrafficHeatmapView.swift - Empty state title when the packet log is empty
+        public static let noData = L10n.tr("Tools", "tools.trafficMap.noData", fallback: "No Traffic Yet")
+        /// Location: TrafficHeatmapView.swift - Empty state description when the packet log is empty
+        public static let noDataDescription = L10n.tr("Tools", "tools.trafficMap.noDataDescription", fallback: "Packets appear here as your radio hears them. Leave it listening for a while and come back.")
+        /// Location: TrafficHeatmapView.swift - Empty state title when no relaying node has a known location
+        public static let noPlacedNodes = L10n.tr("Tools", "tools.trafficMap.noPlacedNodes", fallback: "Nothing to Place")
+        /// Location: TrafficHeatmapView.swift - Empty state description when no relaying node has a known location
+        public static let noPlacedNodesDescription = L10n.tr("Tools", "tools.trafficMap.noPlacedNodesDescription", fallback: "Traffic was heard, but none of the repeaters that relayed it have a known location yet.")
+        /// Location: TrafficHeatmapView.swift - Disconnected state title
+        public static let notConnected = L10n.tr("Tools", "tools.trafficMap.notConnected", fallback: "Radio Required")
+        /// Location: TrafficHeatmapView.swift - Disconnected state description
+        public static let notConnectedDescription = L10n.tr("Tools", "tools.trafficMap.notConnectedDescription", fallback: "Connect a radio to map the traffic it has been hearing.")
+        /// Location: TrafficHeatmapView.swift - Banner counting what the map is showing; %1$lld is nodes, %2$lld links, %3$lld packets
+        public static func summary(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
+          return L10n.tr("Tools", "tools.trafficMap.summary", p1, p2, p3, fallback: "%1$lld nodes · %2$lld links · %3$lld packets")
+        }
+        /// Location: TrafficHeatmapView.swift - Toolbar menu selecting how far back the map reaches
+        public static let timeWindow = L10n.tr("Tools", "tools.trafficMap.timeWindow", fallback: "Time Window")
+        public enum Callout {
+          /// Location: TrafficNodeCallout.swift - Mean signal when this node was the last hop; %@ is the already-formatted decibel number
+          public static func averageSignal(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.trafficMap.callout.averageSignal", String(describing: p1), fallback: "%@ dB average")
+          }
+          /// Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others
+          public static let neverHeardDirectly = L10n.tr("Tools", "tools.trafficMap.callout.neverHeardDirectly", fallback: "Never heard directly")
+          /// Location: TrafficNodeCallout.swift - Packets a node relayed; %lld is the count
+          public static func packets(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.trafficMap.callout.packets", p1, fallback: "%lld packets relayed")
+          }
+        }
+        public enum Legend {
+          /// Location: TrafficHeatmapLegend.swift - Legend note explaining bubble color
+          public static let signal = L10n.tr("Tools", "tools.trafficMap.legend.signal", fallback: "Bubble color is how well your radio hears that node directly. Links are never colored by signal — only the last hop into your radio is measured.")
+          /// Location: TrafficHeatmapLegend.swift - Legend title
+          public static let title = L10n.tr("Tools", "tools.trafficMap.legend.title", fallback: "Legend")
+          /// Location: TrafficHeatmapLegend.swift - Legend note explaining size and thickness
+          public static let weight = L10n.tr("Tools", "tools.trafficMap.legend.weight", fallback: "Bigger bubbles and thicker links carry more traffic.")
+        }
+        public enum Window {
+          /// Location: TrafficHeatmapView.swift - Time window covering everything still logged
+          public static let all = L10n.tr("Tools", "tools.trafficMap.window.all", fallback: "All Time")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last day
+          public static let day1 = L10n.tr("Tools", "tools.trafficMap.window.day1", fallback: "Last 24 Hours")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last three days
+          public static let days3 = L10n.tr("Tools", "tools.trafficMap.window.days3", fallback: "Last 3 Days")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last seven days
+          public static let days7 = L10n.tr("Tools", "tools.trafficMap.window.days7", fallback: "Last 7 Days")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last hour
+          public static let hour1 = L10n.tr("Tools", "tools.trafficMap.window.hour1", fallback: "Last Hour")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last twelve hours
+          public static let hours12 = L10n.tr("Tools", "tools.trafficMap.window.hours12", fallback: "Last 12 Hours")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last three hours
+          public static let hours3 = L10n.tr("Tools", "tools.trafficMap.window.hours3", fallback: "Last 3 Hours")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last six hours
+          public static let hours6 = L10n.tr("Tools", "tools.trafficMap.window.hours6", fallback: "Last 6 Hours")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last fifteen minutes
+          public static let minutes15 = L10n.tr("Tools", "tools.trafficMap.window.minutes15", fallback: "Last 15 Minutes")
+          /// Location: TrafficHeatmapView.swift - Time window covering the last thirty minutes
+          public static let minutes30 = L10n.tr("Tools", "tools.trafficMap.window.minutes30", fallback: "Last 30 Minutes")
+        }
       }
     }
   }

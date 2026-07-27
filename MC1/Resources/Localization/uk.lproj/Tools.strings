@@ -1046,3 +1046,83 @@
 
 /* Location: BenchmarkComparisonView.swift - Success rate metric label */
 "tools.benchmark.comparison.reliability" = "Success";
+
+// MARK: - Traffic Map
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.trafficMap" = "Карта трафіку";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state title */
+"tools.trafficMap.notConnected" = "Потрібна рація";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state description */
+"tools.trafficMap.notConnectedDescription" = "Підключіть рацію, щоб побудувати карту трафіку, який вона чула.";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when the packet log is empty */
+"tools.trafficMap.noData" = "Трафіку ще немає";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when the packet log is empty */
+"tools.trafficMap.noDataDescription" = "Пакети з’являтимуться тут, щойно рація їх почує. Залиште її на прийомі й поверніться пізніше.";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodes" = "Нічого розмістити";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodesDescription" = "Трафік було почуто, але жоден із ретрансляторів, які його передали, ще не має відомого розташування.";
+
+/* Location: TrafficHeatmapView.swift - Toolbar menu selecting how far back the map reaches */
+"tools.trafficMap.timeWindow" = "Часове вікно";
+
+/* Location: TrafficHeatmapView.swift - Banner counting what the map is showing; %1$lld is nodes, %2$lld links, %3$lld packets */
+"tools.trafficMap.summary" = "%1$lld вузлів · %2$lld зв’язків · %3$lld пакетів";
+
+/* Location: TrafficHeatmapView.swift - Map control that frames every mapped node */
+"tools.trafficMap.centerOnTraffic" = "Центрувати на трафіку";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last fifteen minutes */
+"tools.trafficMap.window.minutes15" = "Останні 15 хвилин";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last thirty minutes */
+"tools.trafficMap.window.minutes30" = "Останні 30 хвилин";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last hour */
+"tools.trafficMap.window.hour1" = "Остання година";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three hours */
+"tools.trafficMap.window.hours3" = "Останні 3 години";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last six hours */
+"tools.trafficMap.window.hours6" = "Останні 6 годин";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last twelve hours */
+"tools.trafficMap.window.hours12" = "Останні 12 годин";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last day */
+"tools.trafficMap.window.day1" = "Останні 24 години";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three days */
+"tools.trafficMap.window.days3" = "Останні 3 дні";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last seven days */
+"tools.trafficMap.window.days7" = "Останні 7 днів";
+
+/* Location: TrafficHeatmapView.swift - Time window covering everything still logged */
+"tools.trafficMap.window.all" = "Увесь час";
+
+/* Location: TrafficHeatmapLegend.swift - Legend title */
+"tools.trafficMap.legend.title" = "Легенда";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining size and thickness */
+"tools.trafficMap.legend.weight" = "Більші кола та товщі зв’язки несуть більше трафіку.";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining bubble color */
+"tools.trafficMap.legend.signal" = "Колір кола показує, наскільки добре ваша рація чує цей вузол напряму. Зв’язки ніколи не забарвлюються за сигналом — вимірюється лише останній перехід до вашої рації.";
+
+/* Location: TrafficNodeCallout.swift - Packets a node relayed; %lld is the count */
+"tools.trafficMap.callout.packets" = "Передано пакетів: %lld";
+
+/* Location: TrafficNodeCallout.swift - Mean signal when this node was the last hop; %@ is the already-formatted decibel number */
+"tools.trafficMap.callout.averageSignal" = "%@ дБ у середньому";
+
+/* Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others */
+"tools.trafficMap.callout.neverHeardDirectly" = "Напряму не чути";

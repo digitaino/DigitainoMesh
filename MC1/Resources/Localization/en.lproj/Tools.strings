@@ -1046,3 +1046,83 @@
 
 /* Location: BenchmarkComparisonView.swift - Success rate metric label */
 "tools.benchmark.comparison.reliability" = "Success";
+
+// MARK: - Traffic Map
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.trafficMap" = "Traffic Map";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state title */
+"tools.trafficMap.notConnected" = "Radio Required";
+
+/* Location: TrafficHeatmapView.swift - Disconnected state description */
+"tools.trafficMap.notConnectedDescription" = "Connect a radio to map the traffic it has been hearing.";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when the packet log is empty */
+"tools.trafficMap.noData" = "No Traffic Yet";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when the packet log is empty */
+"tools.trafficMap.noDataDescription" = "Packets appear here as your radio hears them. Leave it listening for a while and come back.";
+
+/* Location: TrafficHeatmapView.swift - Empty state title when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodes" = "Nothing to Place";
+
+/* Location: TrafficHeatmapView.swift - Empty state description when no relaying node has a known location */
+"tools.trafficMap.noPlacedNodesDescription" = "Traffic was heard, but none of the repeaters that relayed it have a known location yet.";
+
+/* Location: TrafficHeatmapView.swift - Toolbar menu selecting how far back the map reaches */
+"tools.trafficMap.timeWindow" = "Time Window";
+
+/* Location: TrafficHeatmapView.swift - Banner counting what the map is showing; %1$lld is nodes, %2$lld links, %3$lld packets */
+"tools.trafficMap.summary" = "%1$lld nodes · %2$lld links · %3$lld packets";
+
+/* Location: TrafficHeatmapView.swift - Map control that frames every mapped node */
+"tools.trafficMap.centerOnTraffic" = "Center on Traffic";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last fifteen minutes */
+"tools.trafficMap.window.minutes15" = "Last 15 Minutes";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last thirty minutes */
+"tools.trafficMap.window.minutes30" = "Last 30 Minutes";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last hour */
+"tools.trafficMap.window.hour1" = "Last Hour";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three hours */
+"tools.trafficMap.window.hours3" = "Last 3 Hours";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last six hours */
+"tools.trafficMap.window.hours6" = "Last 6 Hours";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last twelve hours */
+"tools.trafficMap.window.hours12" = "Last 12 Hours";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last day */
+"tools.trafficMap.window.day1" = "Last 24 Hours";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last three days */
+"tools.trafficMap.window.days3" = "Last 3 Days";
+
+/* Location: TrafficHeatmapView.swift - Time window covering the last seven days */
+"tools.trafficMap.window.days7" = "Last 7 Days";
+
+/* Location: TrafficHeatmapView.swift - Time window covering everything still logged */
+"tools.trafficMap.window.all" = "All Time";
+
+/* Location: TrafficHeatmapLegend.swift - Legend title */
+"tools.trafficMap.legend.title" = "Legend";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining size and thickness */
+"tools.trafficMap.legend.weight" = "Bigger bubbles and thicker links carry more traffic.";
+
+/* Location: TrafficHeatmapLegend.swift - Legend note explaining bubble color */
+"tools.trafficMap.legend.signal" = "Bubble color is how well your radio hears that node directly. Links are never colored by signal — only the last hop into your radio is measured.";
+
+/* Location: TrafficNodeCallout.swift - Packets a node relayed; %lld is the count */
+"tools.trafficMap.callout.packets" = "%lld packets relayed";
+
+/* Location: TrafficNodeCallout.swift - Mean signal when this node was the last hop; %@ is the already-formatted decibel number */
+"tools.trafficMap.callout.averageSignal" = "%@ dB average";
+
+/* Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others */
+"tools.trafficMap.callout.neverHeardDirectly" = "Never heard directly";
