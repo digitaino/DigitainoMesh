@@ -107,6 +107,14 @@ upstream's v1.3.0 design (which now has themes — components must be theme-awar
 `NodeKindBadge`, `MiniSparkline`, `StatusPill`, `CapsuleBadge`, `CountBadge`, swipe-action
 modifiers. Anything used once doesn't belong here.
 
+*Phase 1 finding (2026-07-27):* upstream's `MC1/Views/Components/` is already a rich kit
+(30+ views incl. `NodeAvatar`, `GlassFilterBar`, `TintedLabel`, `SyncingPillView`). No
+skeleton gets ported ahead of consumers — each legacy candidate is audited against an
+upstream equivalent at the moment its first consumer lands (Phases 2–3), and only genuine
+gaps come across. **Naming hazard:** upstream has `SignalBars.swift`, a BLE RSSI glyph for
+device pickers. Our repeater signal-bars feature (B1–B3) must not reuse that type name —
+engine is `SignalBarsEngine` (service layer), views get `RepeaterSignal…` prefixes.
+
 ---
 
 ## 3. Feature dispositions
