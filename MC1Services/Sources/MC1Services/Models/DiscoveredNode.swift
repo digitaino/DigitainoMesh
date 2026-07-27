@@ -148,6 +148,12 @@ public struct DiscoveredNodeDTO: Sendable, Equatable, Identifiable, Codable, Rep
     name
   }
 
+  /// Discovered nodes are heard passively and may be gone; ``NodeIdentityResolver``
+  /// drops them from resolution once they pass its stale window.
+  public var expiresWhenStale: Bool {
+    true
+  }
+
   public init(
     id: UUID,
     radioID: UUID,

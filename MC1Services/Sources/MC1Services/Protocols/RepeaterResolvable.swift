@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared interface for types that can be matched by `RepeaterResolver`.
+/// Shared interface for types that can be matched by ``NodeIdentityResolver``.
 /// Both `ContactDTO` and `DiscoveredNodeDTO` conform.
 public protocol RepeaterResolvable: Sendable {
   var publicKey: Data { get }
@@ -12,4 +12,17 @@ public protocol RepeaterResolvable: Sendable {
   var recencyDate: Date { get }
   /// Display name used for path hops and resolver tiebreaking.
   var resolvableName: String { get }
+  /// Whether this candidate drops out of resolution once it goes stale.
+  ///
+  /// `true` for passively discovered nodes, which may have been deleted or moved since
+  /// they were last heard and must not win a hash collision against an active node.
+  /// `false` — the default — for records the user deliberately keeps, such as saved
+  /// contacts, which stay resolvable however long they have been quiet.
+  var expiresWhenStale: Bool { get }
+}
+
+public extension RepeaterResolvable {
+  var expiresWhenStale: Bool {
+    false
+  }
 }
