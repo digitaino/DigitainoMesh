@@ -85,4 +85,7 @@ enum PacketSize {
   /// Size of the sync-registry value header preceding the blob.
   /// Format: `[sync_id:1][len:2]` = 3 bytes.
   static let syncValueHeader = 3
+  /// Size of one sync-registry list entry.
+  /// Format: `[sync_id:1][len:2]` = 3 bytes.
+  static let syncListEntryBytes = 3
 }

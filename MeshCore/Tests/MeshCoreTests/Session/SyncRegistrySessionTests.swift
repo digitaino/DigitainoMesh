@@ -193,6 +193,66 @@ struct SyncRegistrySessionTests {
     #expect(code == 5)
     await session.stop()
   }
+
+  // MARK: - listSync
+
+  @Test
+  func `listSync emits the bare command and returns the advertised slots`() async throws {
+    let transport = MockTransport()
+    let session = MeshCoreSession(
+      transport: transport,
+      configuration: SessionConfiguration(defaultTimeout: 10, clientIdentifier: "MCTst")
+    )
+    try await startSession(session, transport: transport)
+
+    let task = Task {
+      try await session.listSync()
+    }
+    try await waitUntil("listSync should be sent") {
+      await transport.sentData.count == 2
+    }
+    let sent = await transport.sentData[1]
+    #expect(sent == Data([0x46]))
+
+    await transport.simulateReceive(Data([0x65, 0x02, 0x01, 0x20, 0x00, 0x02, 0x00, 0x00]))
+
+    let entries = try await task.value
+    #expect(entries == [
+      SyncListEntry(id: 0x01, length: 32),
+      SyncListEntry(id: 0x02, length: 0),
+    ])
+    await session.stop()
+  }
+
+  @Test
+  func `listSync surfaces the stock-firmware rejection as deviceError`() async throws {
+    // Callers use this as the capability probe for Digitaino custom firmware.
+    let transport = MockTransport()
+    let session = MeshCoreSession(
+      transport: transport,
+      configuration: SessionConfiguration(defaultTimeout: 10, clientIdentifier: "MCTst")
+    )
+    try await startSession(session, transport: transport)
+
+    let task = Task {
+      try await session.listSync()
+    }
+    try await waitUntil("listSync should be sent") {
+      await transport.sentData.count == 2
+    }
+    await transport.simulateError(code: 1)
+
+    let err = await #expect(throws: MeshCoreError.self) {
+      try await task.value
+    }
+    guard case let .deviceError(code)? = err else {
+      Issue.record("Expected deviceError, got \(String(describing: err))")
+      await session.stop()
+      return
+    }
+    #expect(code == 1)
+    await session.stop()
+  }
 }
 
 private func makeSyncValuePacket(id: SyncID, blob: Data) -> Data {

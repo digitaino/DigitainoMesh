@@ -232,6 +232,10 @@ actor MockConfigurationSession: ConfigurationSessionOps {
     throw MeshCoreError.deviceError(code: 1)
   }
 
+  func listSync() async throws -> [SyncListEntry] {
+    throw MeshCoreError.deviceError(code: 1)
+  }
+
   func factoryReset() async throws {}
   func getStatsCore() async throws -> CoreStats {
     throw MeshCoreError.timeout

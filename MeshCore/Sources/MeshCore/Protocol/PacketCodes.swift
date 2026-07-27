@@ -130,6 +130,8 @@ public enum CommandCode: UInt8, Sendable {
   case getSync = 0x44
   /// Pushes an opaque blob to the device for a sync_id. Digitaino custom firmware.
   case setSync = 0x45
+  /// Lists the sync_ids the device knows about. Digitaino custom firmware.
+  case listSync = 0x46
 }
 
 /// Identifies a slot in the generic iOS-sync registry on Digitaino custom firmware.
@@ -143,6 +145,27 @@ public enum SyncID: UInt8, Sendable {
   /// device's current in-memory table on demand (it is not persisted);
   /// ``CommandCode/setSync`` is a refresh/ping trigger rather than a stored blob.
   case signalBars = 2
+  /// Phone motion level (app → radio) so the firmware can adapt its ping cadence
+  /// when its own GPS is off or idle. ``CommandCode/setSync`` only: `[version][level]`
+  /// with level 0/1/2 (stationary/walking/driving).
+  case motionHint = 3
+}
+
+/// One entry of a ``CommandCode/listSync`` reply: a sync_id the device knows about
+/// and the byte length of its currently-stored payload.
+///
+/// The id is kept raw rather than as a ``SyncID`` because firmware may advertise
+/// slots this library version does not know yet.
+public struct SyncListEntry: Sendable, Equatable {
+  /// The raw sync registry slot identifier.
+  public let id: UInt8
+  /// Byte length of the payload currently stored in the slot.
+  public let length: UInt16
+
+  public init(id: UInt8, length: UInt16) {
+    self.id = id
+    self.length = length
+  }
 }
 
 /// Wire-level notification modes used by the firmware-side rule table.
@@ -225,6 +248,8 @@ public enum ResponseCode: UInt8, Sendable {
 
   /// Reply to ``CommandCode/getSync``: `[code][sync_id][len_lo][len_hi][payload...]`.
   case syncValue = 0x64
+  /// Reply to ``CommandCode/listSync``: `[code][count]([sync_id][len_lo][len_hi]) x count`.
+  case syncList = 0x65
 
   /// Push notifications (0x80+)
   /// Indicates a node advertisement was received.
@@ -350,7 +375,7 @@ public extension ResponseCode {
     case .selfInfo, .deviceInfo, .battery, .currentTime, .privateKey, .disabled, .advertPath, .tuningParams,
          .autoAddConfig, .allowedRepeatFreq, .defaultFloodScope:
       .device
-    case .syncValue:
+    case .syncValue, .syncList:
       // Digitaino custom; shares the device-category parser dispatcher.
       .device
     case .contactStart, .contact, .contactEnd, .contactURI:

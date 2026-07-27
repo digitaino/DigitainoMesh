@@ -110,4 +110,75 @@ struct SyncRegistryParsingTests {
     #expect(id == .notifPrefs)
     #expect(decoded == blob)
   }
+
+  // MARK: - syncList
+
+  @Test
+  func `syncList parses entries with little-endian lengths`() {
+    // Wire frame: [0x65][count]([sync_id][len_lo][len_hi]) x count
+    // 300 == 0x012C -> low byte 0x2C, high byte 0x01.
+    let frame = Data([0x65, 0x02, 0x01, 0x10, 0x00, 0x02, 0x2C, 0x01])
+
+    let event = PacketParser.parse(frame)
+    guard case let .syncList(entries) = event else {
+      Issue.record("Expected .syncList, got \(event)")
+      return
+    }
+    #expect(entries == [
+      SyncListEntry(id: 0x01, length: 16),
+      SyncListEntry(id: 0x02, length: 300),
+    ])
+  }
+
+  @Test
+  func `syncList parses an empty registry`() {
+    let event = PacketParser.parse(Data([0x65, 0x00]))
+    guard case let .syncList(entries) = event else {
+      Issue.record("Expected .syncList, got \(event)")
+      return
+    }
+    #expect(entries.isEmpty)
+  }
+
+  @Test
+  func `syncList preserves sync_ids this library does not know`() {
+    // Newer firmware may advertise slots beyond SyncID; the raw id must survive.
+    let event = PacketParser.parse(Data([0x65, 0x01, 0x7F, 0x02, 0x00]))
+    guard case let .syncList(entries) = event else {
+      Issue.record("Expected .syncList, got \(event)")
+      return
+    }
+    #expect(entries == [SyncListEntry(id: 0x7F, length: 2)])
+  }
+
+  @Test
+  func `syncList ignores bytes past the declared count`() {
+    let event = PacketParser.parse(Data([0x65, 0x01, 0x02, 0x08, 0x00, 0xDE, 0xAD]))
+    guard case let .syncList(entries) = event else {
+      Issue.record("Expected .syncList, got \(event)")
+      return
+    }
+    #expect(entries == [SyncListEntry(id: 0x02, length: 8)], "Only the declared count is taken")
+  }
+
+  @Test
+  func `syncList rejects an empty payload`() {
+    let event = PacketParser.parse(Data([0x65]))
+    guard case let .parseFailure(_, reason) = event else {
+      Issue.record("Expected .parseFailure, got \(event)")
+      return
+    }
+    #expect(reason.contains("empty"))
+  }
+
+  @Test
+  func `syncList rejects a truncated entry table`() {
+    // Declares two entries but carries bytes for one and a half.
+    let event = PacketParser.parse(Data([0x65, 0x02, 0x01, 0x10, 0x00, 0x02, 0x2C]))
+    guard case let .parseFailure(_, reason) = event else {
+      Issue.record("Expected .parseFailure, got \(event)")
+      return
+    }
+    #expect(reason.contains("truncated"))
+  }
 }

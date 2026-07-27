@@ -441,6 +441,28 @@ public extension MeshCoreSession {
     try await sendSimpleCommand(PacketBuilder.setSync(id: id, payload: payload))
   }
 
+  /// Lists the sync registry slots the device knows about and their stored payload lengths.
+  ///
+  /// Digitaino custom firmware only. Stock firmware rejects the opcode, which surfaces
+  /// as ``MeshCoreError/deviceError(code:)`` — callers can use that to detect capability.
+  ///
+  /// - Returns: One ``SyncListEntry`` per slot the firmware advertises.
+  /// - Throws: ``MeshCoreError/timeout`` if the device doesn't respond;
+  ///           ``MeshCoreError/deviceError(code:)`` if the device rejected the command
+  ///           (stock firmware does not implement the opcode).
+  func listSync() async throws -> [SyncListEntry] {
+    try await sendAndMatch(PacketBuilder.listSync()) { event in
+      switch event {
+      case let .syncList(entries):
+        .success(entries)
+      case let .error(code):
+        .failure(MeshCoreError.deviceError(code: code ?? 0))
+      default:
+        .ignore
+      }
+    }
+  }
+
   // MARK: - Stats Commands
 
   /// Retrieves core device statistics.

@@ -10,9 +10,12 @@ struct SyncRegistryCommandsTests {
   func `sync registry opcodes match firmware`() {
     #expect(CommandCode.getSync.rawValue == 0x44)
     #expect(CommandCode.setSync.rawValue == 0x45)
+    #expect(CommandCode.listSync.rawValue == 0x46)
     #expect(ResponseCode.syncValue.rawValue == 0x64)
+    #expect(ResponseCode.syncList.rawValue == 0x65)
     #expect(SyncID.notifPrefs.rawValue == 1)
     #expect(SyncID.signalBars.rawValue == 2)
+    #expect(SyncID.motionHint.rawValue == 3)
     #expect(FirmwareNotifMode.silent.rawValue == 0)
     #expect(FirmwareNotifMode.all.rawValue == 1)
     #expect(FirmwareNotifMode.mentions.rawValue == 2)
@@ -22,6 +25,11 @@ struct SyncRegistryCommandsTests {
   @Test
   func `syncValue routes through the device-category parser`() {
     #expect(ResponseCode.syncValue.category == .device)
+  }
+
+  @Test
+  func `syncList routes through the device-category parser`() {
+    #expect(ResponseCode.syncList.category == .device)
   }
 
   // MARK: - getSync
@@ -74,5 +82,24 @@ struct SyncRegistryCommandsTests {
 
     #expect(packet[2] == 0xFF && packet[3] == 0xFF, "Length saturates at 0xFFFF")
     #expect(packet.count == 4 + PacketBuilder.syncMaxPayloadBytes)
+  }
+
+  // MARK: - listSync
+
+  @Test
+  func `listSync format is the bare command code`() {
+    #expect(PacketBuilder.listSync() == Data([0x46]))
+  }
+
+  // MARK: - motionHint
+
+  @Test
+  func `motionHint rides setSync with a version and level byte`() {
+    // The blob layout ([version][level]) belongs to the consuming service; MeshCore
+    // only needs the slot id to frame it correctly.
+    #expect(
+      PacketBuilder.setSync(id: .motionHint, payload: Data([0x01, 0x02]))
+        == Data([0x45, 0x03, 0x02, 0x00, 0x01, 0x02])
+    )
   }
 }

@@ -164,6 +164,15 @@ public protocol ConfigurationSessionOps: Actor {
   /// - Throws: `MeshCoreError` on timeout or device error.
   func setSync(_ id: SyncID, payload: Data) async throws
 
+  /// Lists the sync registry slots the device knows about and their stored payload lengths.
+  ///
+  /// Digitaino custom firmware only; stock firmware surfaces the unknown opcode as a
+  /// device error, which callers can use as a capability probe.
+  ///
+  /// - Returns: One ``SyncListEntry`` per slot the firmware advertises.
+  /// - Throws: `MeshCoreError` on timeout or device error.
+  func listSync() async throws -> [SyncListEntry]
+
   // MARK: - Lifecycle
 
   /// Reboots the device. The session will be disconnected.

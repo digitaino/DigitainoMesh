@@ -130,6 +130,13 @@ public enum MeshEvent: Sendable {
   ///   - payload: The opaque blob bytes; the layout is sync_id-specific.
   case syncValue(SyncID, Data)
 
+  /// Lists the sync registry slots a Digitaino custom firmware device knows about.
+  ///
+  /// Emitted in response to ``MeshCoreSession/listSync()``.
+  ///
+  /// - Parameter entries: One entry per slot, with the stored payload length.
+  case syncList([SyncListEntry])
+
   // MARK: - Contact Management
 
   /// Indicates that a contact list transfer has started.

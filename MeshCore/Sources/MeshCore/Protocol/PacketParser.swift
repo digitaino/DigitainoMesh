@@ -185,6 +185,27 @@ extension PacketParser {
       let blob = payload.subdata(in: PacketSize.syncValueHeader..<(PacketSize.syncValueHeader + blobLength))
       return .syncValue(syncID, blob)
 
+    case .syncList:
+      // Inline - 1-byte count followed by fixed 3-byte entries.
+      // Layout: [count:1]([sync_id:1][len_lo:1][len_hi:1]) x count
+      guard payload.count >= 1 else {
+        return .parseFailure(data: payload, reason: "SyncList response empty")
+      }
+      let count = Int(payload[0])
+      let expected = 1 + count * PacketSize.syncListEntryBytes
+      guard payload.count >= expected else {
+        return .parseFailure(
+          data: payload,
+          reason: "SyncList truncated: have \(payload.count) need \(expected) for \(count) entries"
+        )
+      }
+      // Ids stay raw: firmware may advertise slots this library version doesn't know.
+      let entries = (0..<count).map { index -> SyncListEntry in
+        let offset = 1 + index * PacketSize.syncListEntryBytes
+        return SyncListEntry(id: payload[offset], length: payload.readUInt16LE(at: offset + 1))
+      }
+      return .syncList(entries)
+
     default:
       return .parseFailure(data: payload, reason: "Unexpected code in device response: \(code)")
     }

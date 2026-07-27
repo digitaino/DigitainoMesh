@@ -1205,4 +1205,14 @@ public enum PacketBuilder: Sendable {
     data.append(clamped)
     return data
   }
+
+  /// Builds a listSync command requesting the sync_ids the device knows about.
+  ///
+  /// - Returns: The command packet data.
+  ///
+  /// ### Binary Format
+  /// - Offset 0 (1 byte): Command code `0x46`
+  public static func listSync() -> Data {
+    Data([CommandCode.listSync.rawValue])
+  }
 }
