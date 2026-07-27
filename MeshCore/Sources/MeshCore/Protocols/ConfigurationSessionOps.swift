@@ -145,6 +145,25 @@ public protocol ConfigurationSessionOps: Actor {
   /// - Throws: `MeshCoreError` on timeout or device error.
   func getDefaultFloodScope() async throws -> DefaultFloodScope?
 
+  // MARK: - Sync Registry
+
+  /// Reads the blob the device has stored for a sync registry slot.
+  ///
+  /// Digitaino custom firmware only; stock firmware surfaces the unknown opcode as a device error.
+  ///
+  /// - Parameter id: The registry slot to read.
+  /// - Returns: The opaque blob bytes, empty when nothing is stored.
+  /// - Throws: `MeshCoreError` on timeout or device error.
+  func getSync(_ id: SyncID) async throws -> Data
+
+  /// Writes an opaque blob to a sync registry slot.
+  ///
+  /// - Parameters:
+  ///   - id: The registry slot to write.
+  ///   - payload: Opaque bytes; the layout is sync_id-specific.
+  /// - Throws: `MeshCoreError` on timeout or device error.
+  func setSync(_ id: SyncID, payload: Data) async throws
+
   // MARK: - Lifecycle
 
   /// Reboots the device. The session will be disconnected.

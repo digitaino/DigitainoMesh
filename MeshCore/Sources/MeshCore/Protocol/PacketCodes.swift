@@ -123,6 +123,41 @@ public enum CommandCode: UInt8, Sendable {
   /// No builder is provided; this library does not use raw-packet injection. The case
   /// exists so the command table stays complete against firmware.
   case sendRawPacket = 0x41
+
+  // MARK: - Digitaino custom: iOS sync registry
+
+  /// Requests the device's stored blob for a sync_id. Digitaino custom firmware.
+  case getSync = 0x44
+  /// Pushes an opaque blob to the device for a sync_id. Digitaino custom firmware.
+  case setSync = 0x45
+}
+
+/// Identifies a slot in the generic iOS-sync registry on Digitaino custom firmware.
+///
+/// Each slot carries an opaque, sync_id-specific blob. MeshCore moves the bytes;
+/// the blob codecs live in the consuming service layer.
+public enum SyncID: UInt8, Sendable {
+  /// Per-channel and per-contact notification rules plus a global default mode.
+  case notifPrefs = 1
+  /// Live repeater signal table (radio → app). ``CommandCode/getSync`` serializes the
+  /// device's current in-memory table on demand (it is not persisted);
+  /// ``CommandCode/setSync`` is a refresh/ping trigger rather than a stored blob.
+  case signalBars = 2
+}
+
+/// Wire-level notification modes used by the firmware-side rule table.
+///
+/// Maps to the firmware's `NOTIF_MODE_*` defines. Carried by the ``SyncID/notifPrefs``
+/// blob, which MeshCore treats as opaque bytes.
+public enum FirmwareNotifMode: UInt8, Sendable {
+  /// Suppress notifications entirely.
+  case silent = 0
+  /// Notify for every message.
+  case all = 1
+  /// Notify only when the device owner is mentioned.
+  case mentions = 2
+  /// Notify only for urgent traffic. Reserved for future firmware use.
+  case urgent = 3
 }
 
 /// Defines the response codes received from the mesh device.
@@ -185,6 +220,11 @@ public enum ResponseCode: UInt8, Sendable {
   case channelDataReceived = 0x1B
   /// Contains the persisted default flood scope. Firmware v11+ (MeshCore v1.15.0+).
   case defaultFloodScope = 0x1C
+
+  // MARK: - Digitaino custom: iOS sync registry responses (0x64+, clear of the upstream range)
+
+  /// Reply to ``CommandCode/getSync``: `[code][sync_id][len_lo][len_hi][payload...]`.
+  case syncValue = 0x64
 
   /// Push notifications (0x80+)
   /// Indicates a node advertisement was received.
@@ -309,6 +349,9 @@ public extension ResponseCode {
       .simple
     case .selfInfo, .deviceInfo, .battery, .currentTime, .privateKey, .disabled, .advertPath, .tuningParams,
          .autoAddConfig, .allowedRepeatFreq, .defaultFloodScope:
+      .device
+    case .syncValue:
+      // Digitaino custom; shares the device-category parser dispatcher.
       .device
     case .contactStart, .contact, .contactEnd, .contactURI:
       .contact

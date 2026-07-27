@@ -121,6 +121,15 @@ public enum MeshEvent: Sendable {
   /// Emitted in response to ``MeshCoreSession/getRepeatFreq()`` (v9+ firmware).
   case allowedRepeatFreq([FrequencyRange])
 
+  /// Carries the blob stored in a sync registry slot on Digitaino custom firmware.
+  ///
+  /// Emitted in response to ``MeshCoreSession/getSync(_:)``.
+  ///
+  /// - Parameters:
+  ///   - id: The registry slot the blob belongs to.
+  ///   - payload: The opaque blob bytes; the layout is sync_id-specific.
+  case syncValue(SyncID, Data)
+
   // MARK: - Contact Management
 
   /// Indicates that a contact list transfer has started.

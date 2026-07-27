@@ -51,6 +51,8 @@ public enum PacketBuilder: Sendable {
   static let defaultScopeMaxNameBytes = 30
   /// Default-scope key width on the wire (16 bytes).
   static let defaultScopeKeyBytes = 16
+  /// Largest `setSync` payload the command's 16-bit length field can describe.
+  static let syncMaxPayloadBytes = Int(UInt16.max)
   /// Fixed-point scale firmware applies to latitude/longitude (degrees × 1e6, stored as Int32).
   static let coordinateScale: Double = 1_000_000
   /// Fixed-point scale firmware applies to radio frequency and bandwidth (MHz/kHz × 1,000).
@@ -1166,5 +1168,41 @@ public enum PacketBuilder: Sendable {
   /// - Offset 0 (1 byte): Command code `0x2B`
   public static func getTuningParams() -> Data {
     Data([CommandCode.getTuningParams.rawValue])
+  }
+
+  // MARK: - Digitaino custom: iOS sync registry
+
+  /// Builds a getSync command requesting the device's stored blob for a sync_id.
+  ///
+  /// - Parameter id: The sync registry slot (see ``SyncID``).
+  /// - Returns: The command packet data.
+  ///
+  /// ### Binary Format
+  /// - Offset 0 (1 byte): Command code `0x44`
+  /// - Offset 1 (1 byte): Sync ID
+  public static func getSync(id: SyncID) -> Data {
+    Data([CommandCode.getSync.rawValue, id.rawValue])
+  }
+
+  /// Builds a setSync command pushing an opaque payload to the device.
+  ///
+  /// - Parameters:
+  ///   - id: The sync registry slot (see ``SyncID``).
+  ///   - payload: Opaque bytes; the layout is sync_id-specific and MeshCore does not interpret it.
+  ///     Truncated to ``syncMaxPayloadBytes``, the most the 16-bit length field can describe.
+  /// - Returns: The command packet data.
+  ///
+  /// ### Binary Format
+  /// - Offset 0 (1 byte): Command code `0x45`
+  /// - Offset 1 (1 byte): Sync ID
+  /// - Offset 2 (2 bytes): Payload length, little-endian
+  /// - Offset 4 (N bytes): Payload
+  public static func setSync(id: SyncID, payload: Data) -> Data {
+    var data = Data([CommandCode.setSync.rawValue, id.rawValue])
+    let clamped = payload.prefix(syncMaxPayloadBytes)
+    var lengthLE = UInt16(clamped.count).littleEndian
+    withUnsafeBytes(of: &lengthLE) { data.append(contentsOf: $0) }
+    data.append(clamped)
+    return data
   }
 }

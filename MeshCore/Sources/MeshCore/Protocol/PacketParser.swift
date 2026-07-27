@@ -163,6 +163,28 @@ extension PacketParser {
     case .defaultFloodScope:
       return Parsers.DefaultFloodScope.parse(payload)
 
+    case .syncValue:
+      // Inline - fixed 3-byte header followed by an opaque blob.
+      // Layout: [sync_id:1][len_lo:1][len_hi:1][blob...]
+      guard payload.count >= PacketSize.syncValueHeader else {
+        return .parseFailure(
+          data: payload,
+          reason: "SyncValue response too short: \(payload.count) < \(PacketSize.syncValueHeader)"
+        )
+      }
+      let blobLength = Int(payload.readUInt16LE(at: 1))
+      guard payload.count >= PacketSize.syncValueHeader + blobLength else {
+        return .parseFailure(
+          data: payload,
+          reason: "SyncValue payload truncated: have \(payload.count - PacketSize.syncValueHeader) need \(blobLength)"
+        )
+      }
+      guard let syncID = SyncID(rawValue: payload[0]) else {
+        return .parseFailure(data: payload, reason: "SyncValue unknown sync_id: \(payload[0])")
+      }
+      let blob = payload.subdata(in: PacketSize.syncValueHeader..<(PacketSize.syncValueHeader + blobLength))
+      return .syncValue(syncID, blob)
+
     default:
       return .parseFailure(data: payload, reason: "Unexpected code in device response: \(code)")
     }

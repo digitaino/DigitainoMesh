@@ -403,6 +403,44 @@ public extension MeshCoreSession {
     selfInfo = try await sendAppStart()
   }
 
+  // MARK: - Sync Registry
+
+  /// Reads the blob the device has stored for a sync registry slot.
+  ///
+  /// Digitaino custom firmware only. MeshCore moves the bytes without interpreting
+  /// them; the blob codecs live in the consuming service layer.
+  ///
+  /// - Parameter id: The registry slot to read (see ``SyncID``).
+  /// - Returns: The opaque blob bytes. Empty when the device has nothing stored.
+  /// - Throws: ``MeshCoreError/timeout`` if no response arrives;
+  ///           ``MeshCoreError/deviceError(code:)`` if the device rejected the command
+  ///           (stock firmware does not implement the opcode).
+  func getSync(_ id: SyncID) async throws -> Data {
+    let data = PacketBuilder.getSync(id: id)
+    return try await sendAndMatch(data) { event in
+      switch event {
+      case let .syncValue(responseID, payload) where responseID == id:
+        .success(payload)
+      case let .error(code):
+        .failure(MeshCoreError.deviceError(code: code ?? 0))
+      default:
+        .ignore
+      }
+    }
+  }
+
+  /// Writes an opaque blob to a sync registry slot and waits for acknowledgement.
+  ///
+  /// Digitaino custom firmware only.
+  ///
+  /// - Parameters:
+  ///   - id: The registry slot to write (see ``SyncID``).
+  ///   - payload: Opaque bytes; the layout is sync_id-specific.
+  /// - Throws: ``MeshCoreError/timeout`` or ``MeshCoreError/deviceError(code:)`` on failure.
+  func setSync(_ id: SyncID, payload: Data) async throws {
+    try await sendSimpleCommand(PacketBuilder.setSync(id: id, payload: payload))
+  }
+
   // MARK: - Stats Commands
 
   /// Retrieves core device statistics.

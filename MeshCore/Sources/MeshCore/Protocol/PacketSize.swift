@@ -82,4 +82,7 @@ enum PacketSize {
   static let defaultFloodScopeKeyBytes = 16
   /// Size for populated default flood scope response (name field + key).
   static let defaultFloodScopeSet = defaultFloodScopeNameField + defaultFloodScopeKeyBytes
+  /// Size of the sync-registry value header preceding the blob.
+  /// Format: `[sync_id:1][len:2]` = 3 bytes.
+  static let syncValueHeader = 3
 }
