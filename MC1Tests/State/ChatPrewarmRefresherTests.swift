@@ -36,7 +36,9 @@ struct ChatPrewarmRefresherTests {
       reactionService: { nil },
       chatSendQueueService: { nil },
       inlineImageDimensionsStore: { nil },
-      prefetchDataStore: { nil }
+      prefetchDataStore: { nil },
+      adaptivePowerService: { nil },
+      signalDataAvailable: { false }
     )
   }
 

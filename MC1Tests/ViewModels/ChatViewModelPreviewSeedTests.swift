@@ -106,7 +106,9 @@ struct ChatViewModelPreviewSeedTests {
         reactionService: { nil },
         chatSendQueueService: { nil },
         inlineImageDimensionsStore: { dimensionsStore },
-        prefetchDataStore: { nil }
+        prefetchDataStore: { nil },
+        adaptivePowerService: { nil },
+        signalDataAvailable: { false }
       ),
       onNavigateToMap: nil,
       linkPreviewCache: nil,

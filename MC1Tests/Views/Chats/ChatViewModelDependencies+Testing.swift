@@ -22,7 +22,9 @@ extension ChatViewModel.Dependencies {
     reactionService: @escaping @MainActor () -> ReactionService? = { nil },
     chatSendQueueService: @escaping @MainActor () -> ChatSendQueueService? = { nil },
     inlineImageDimensionsStore: @escaping @MainActor () -> InlineImageDimensionsStore? = { nil },
-    prefetchDataStore: @escaping @MainActor () -> (any PersistenceStoreProtocol)? = { nil }
+    prefetchDataStore: @escaping @MainActor () -> (any PersistenceStoreProtocol)? = { nil },
+    adaptivePowerService: @escaping @MainActor () -> AdaptivePowerService? = { nil },
+    signalDataAvailable: @escaping @MainActor () -> Bool = { false }
   ) -> Self {
     ChatViewModel.Dependencies(
       dataStore: dataStore,
@@ -40,7 +42,9 @@ extension ChatViewModel.Dependencies {
       reactionService: reactionService,
       chatSendQueueService: chatSendQueueService,
       inlineImageDimensionsStore: inlineImageDimensionsStore,
-      prefetchDataStore: prefetchDataStore
+      prefetchDataStore: prefetchDataStore,
+      adaptivePowerService: adaptivePowerService,
+      signalDataAvailable: signalDataAvailable
     )
   }
 }
