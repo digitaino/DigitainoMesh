@@ -8,9 +8,12 @@ import SwiftUI
 /// screen needs a single target. Splitting them would mean two copies of the same search,
 /// ordering and empty state.
 ///
-/// TODO(Phase5): retarget onto NodeSearch. The `searchable` filter here is deliberately
-/// minimal — name substring plus hex prefix — and is replaced wholesale by §2.2's shared
-/// search field, result row and ranking.
+/// Matching is ``NodeSearchEngine``'s, shared with the contacts and discovery lists. What
+/// stays local is the *base* order — heard first, then favourites (see
+/// ``RepeaterCandidateSource/ordered(_:)``) — because a range test is about what the radio
+/// can hear right now. Search re-ranks that order by relevance rather than replacing it, so
+/// a key-prefix match still surfaces while an audible repeater keeps its precedence over a
+/// quiet one that matched equally well.
 struct RepeaterPickerView: View {
   /// Single or multiple selection.
   enum Mode {
@@ -32,8 +35,14 @@ struct RepeaterPickerView: View {
   @State private var query = ""
 
   private var filtered: [RepeaterCandidate] {
-    candidates.filter { $0.matches(query: query) }
+    Self.nodeSearch.matches(
+      searchText: query,
+      among: candidates,
+      options: .default.ordering(.inputOrder)
+    )
   }
+
+  private static let nodeSearch = NodeSearchEngine()
 
   var body: some View {
     List {

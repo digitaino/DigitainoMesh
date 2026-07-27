@@ -13,8 +13,10 @@ import MC1Services
 /// A table row with no public key is dropped: it cannot be probed, so offering it as a
 /// benchmark target or a watch target would only produce failures.
 ///
-/// TODO(Phase5): retarget onto NodeSearch. §2.2's contacts-facing query replaces the manual
-/// fetch-and-filter here, and its ranking rules replace ``ordered(_:)``.
+/// ``ordered(_:)`` survived the §2.2 retarget deliberately. NodeSearch ranks by *relevance
+/// to a query*; this ranks by *usefulness as a probe target*, which is what the picker
+/// needs before anything is typed and what it should keep falling back to inside a
+/// relevance tier. ``RepeaterPickerView`` composes the two rather than choosing between them.
 @MainActor
 enum RepeaterCandidateSource {
   /// Loads and orders the candidate list.

@@ -9,9 +9,9 @@ import MC1Services
 /// ``NodeHexID``-based — hex plus a resolved name where one exists — so nothing here
 /// string-compares hashes.
 ///
-/// TODO(Phase5): retarget onto NodeSearch. §2.2 replaces the ad-hoc name/hex filtering in
-/// `RepeaterPickerView` with the shared search engine and its ranking rules; this type
-/// becomes a projection of a search result rather than its own loader.
+/// Conforming to ``RepeaterResolvable`` is what lets ``NodeSearchEngine`` rank these
+/// directly: the picker's search field runs the same matcher, with the same strict-hex
+/// and prefix-priority rules, as the contacts and discovery lists.
 struct RepeaterCandidate: Identifiable, Hashable {
   /// Full public key. Required — a candidate without one cannot be probed.
   let publicKey: Data
@@ -41,23 +41,41 @@ struct RepeaterCandidate: Identifiable, Hashable {
     name != nil
   }
 
-  /// Full-width hex, for hex-prefix search.
-  var publicKeyHex: String {
-    publicKey.map { String(format: "%02X", $0) }.joined()
-  }
-
   /// The engine's view of this candidate.
   var benchmarkTarget: BenchmarkTarget {
     BenchmarkTarget(publicKey: publicKey, name: displayName)
   }
+}
 
-  /// Whether the free-text query matches this candidate by name or by hex prefix.
-  func matches(query: String) -> Bool {
-    let trimmed = query.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty else { return true }
-    if let name, name.localizedStandardContains(trimmed) { return true }
-    let hex = trimmed.uppercased()
-    guard hex.allSatisfy(\.isHexDigit) else { return false }
-    return publicKeyHex.hasPrefix(hex)
+// MARK: - RepeaterResolvable
+
+extension RepeaterCandidate: RepeaterResolvable {
+  /// The picker searches what it shows. An unnamed candidate is labelled with its hash, so
+  /// typing that hash finds it by name as well as by key — either route reaches the row.
+  var resolvableName: String {
+    displayName
+  }
+
+  /// Candidates carry no advert timestamp of their own; ``lastSeen`` is the recency signal,
+  /// and ``recencyDate`` is where the search engine looks for it.
+  var lastAdvertTimestamp: UInt32 {
+    0
+  }
+
+  var recencyDate: Date {
+    lastSeen ?? .distantPast
+  }
+
+  /// The picker has no map, and a candidate is worth probing wherever it is.
+  var latitude: Double {
+    0
+  }
+
+  var longitude: Double {
+    0
+  }
+
+  var hasLocation: Bool {
+    false
   }
 }
