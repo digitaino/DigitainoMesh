@@ -5,7 +5,7 @@ import SwiftData
 
 /// Dependency injection container for MC1Services.
 ///
-/// `ServiceContainer` creates and manages all services needed by the MeshCore One app,
+/// `ServiceContainer` creates and manages all services needed by the DigitainoMesh app,
 /// handling the dependency graph between services. It provides a single point of
 /// initialization for the service layer.
 ///

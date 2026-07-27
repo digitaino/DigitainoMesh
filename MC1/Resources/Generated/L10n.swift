@@ -1742,7 +1742,7 @@ public enum L10n {
         /// Location: ContactQRShareSheet.swift - Purpose: Share button
         public static let share = L10n.tr("Contacts", "contacts.qr.share", fallback: "Share")
         /// Location: ContactQRShareSheet.swift - Purpose: Share subject
-        public static let shareSubject = L10n.tr("Contacts", "contacts.qr.shareSubject", fallback: "MeshCore One Contact")
+        public static let shareSubject = L10n.tr("Contacts", "contacts.qr.shareSubject", fallback: "DigitainoMesh Contact")
         /// Location: ContactQRShareSheet.swift - Purpose: Navigation title
         public static let title = L10n.tr("Contacts", "contacts.qr.title", fallback: "Share Contact")
       }
@@ -1969,7 +1969,7 @@ public enum L10n {
       public enum Share {
         /// Location: ContactQRShareSheet.swift - Purpose: Contact label in share text, %@ is contact name
         public static func contactLabel(_ p1: Any) -> String {
-          return L10n.tr("Contacts", "contacts.share.contactLabel", String(describing: p1), fallback: "MeshCore One Contact: %@")
+          return L10n.tr("Contacts", "contacts.share.contactLabel", String(describing: p1), fallback: "DigitainoMesh Contact: %@")
         }
         /// Location: ContactQRShareSheet.swift - Purpose: Key label in share text, %@ is hex public key
         public static func keyLabel(_ p1: Any) -> String {
@@ -2120,7 +2120,7 @@ public enum L10n {
   }
   public enum Localizable {
     /// Title of the radio-status Control Center control that opens the app; resolved in the app process
-    public static let openMeshCoreOne = L10n.tr("Localizable", "Open MeshCore One", fallback: "Open MeshCore One")
+    public static let openDigitainoMesh = L10n.tr("Localizable", "Open DigitainoMesh", fallback: "Open DigitainoMesh")
     public enum Accessibility {
       /// Accessibility value for toggle in Off state
       public static let off = L10n.tr("Localizable", "accessibility.off", fallback: "Off")
@@ -2390,7 +2390,7 @@ public enum L10n {
         /// Location: IntentError.swift - The message text exceeds the maximum length the radio can send
         public static let messageTooLong = L10n.tr("Localizable", "error.intent.messageTooLong", fallback: "The message is too long to send.")
         /// Location: IntentError.swift - No radio is connected, so retrying alone will not help until one is connected
-        public static let notConnected = L10n.tr("Localizable", "error.intent.notConnected", fallback: "No radio is connected. Connect a radio in MeshCore One, then try again.")
+        public static let notConnected = L10n.tr("Localizable", "error.intent.notConnected", fallback: "No radio is connected. Connect a radio in DigitainoMesh, then try again.")
         /// Location: IntentError.swift - Persisting the message to the send queue failed, so it was never queued
         public static let sendFailed = L10n.tr("Localizable", "error.intent.sendFailed", fallback: "The message couldn't be queued to send. Try again.")
       }
@@ -3049,7 +3049,7 @@ public enum L10n {
       /// Location: WelcomeView.swift - Subtitle describing the app
       public static let subtitle = L10n.tr("Onboarding", "welcome.subtitle", fallback: "Send messages through a community built network, even without internet.")
       /// Location: WelcomeView.swift - App title displayed on welcome screen
-      public static let title = L10n.tr("Onboarding", "welcome.title", fallback: "MeshCore One")
+      public static let title = L10n.tr("Onboarding", "welcome.title", fallback: "DigitainoMesh")
     }
     public enum WifiConnection {
       /// Location: WiFiConnectionSheet.swift - Button to initiate connection
@@ -5438,7 +5438,7 @@ public enum L10n {
         /// Location: SendMessageIntent.swift - App Intents: description of the send message intent
         public static let description = L10n.tr("Tools", "intent.send.description", fallback: "Send text to a contact or a channel on your radio.")
         /// Location: SendMessageIntent.swift - Spoken when the app must come to the foreground to send (still connecting or reconnecting)
-        public static let foreground = L10n.tr("Tools", "intent.send.foreground", fallback: "Open MeshCore One to finish sending this message.")
+        public static let foreground = L10n.tr("Tools", "intent.send.foreground", fallback: "Open DigitainoMesh to finish sending this message.")
         /// Location: MC1AppShortcutsProvider.swift - App Shortcuts: short title for the send message shortcut
         public static let shortTitle = L10n.tr("Tools", "intent.send.shortTitle", fallback: "Send message")
         /// Location: SendMessageIntent.swift - App Intents: title of the send message intent
@@ -5479,7 +5479,7 @@ public enum L10n {
           /// Location: StatusQueryIntent.swift - Spoken when not connected and no radio has been connected before
           public static let disconnectedUnknown = L10n.tr("Tools", "intent.status.dialog.disconnectedUnknown", fallback: "No radio is connected.")
           /// Location: StatusQueryIntent.swift - Spoken when the app is still launching and has no state to read yet
-          public static let notReady = L10n.tr("Tools", "intent.status.dialog.notReady", fallback: "MeshCore One is still starting up. Try again in a moment.")
+          public static let notReady = L10n.tr("Tools", "intent.status.dialog.notReady", fallback: "DigitainoMesh is still starting up. Try again in a moment.")
         }
       }
     }
@@ -5656,7 +5656,7 @@ public enum L10n {
         /// Location: CLIToolViewModel.swift - Welcome banner line 3
         public static let welcomeHint = L10n.tr("Tools", "tools.cli.welcomeHint", fallback: "Type 'help' for available commands.")
         /// Location: CLIToolViewModel.swift - Welcome banner line 1
-        public static let welcomeLine1 = L10n.tr("Tools", "tools.cli.welcomeLine1", fallback: "MeshCore One CLI")
+        public static let welcomeLine1 = L10n.tr("Tools", "tools.cli.welcomeLine1", fallback: "DigitainoMesh CLI")
       }
       public enum LineOfSight {
         /// Location: LineOfSightView.swift - Additional height label

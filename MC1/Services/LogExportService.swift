@@ -88,7 +88,7 @@ enum LogExportService {
     let exportedAt = formatter.string(from: Date())
 
     return """
-    === MeshCore One Debug Export ===
+    === DigitainoMesh Debug Export ===
     Exported: \(exportedAt)
     App Version: \(appVersion) (\(buildNumber))
     Device: \(deviceModel), iOS \(systemVersion)

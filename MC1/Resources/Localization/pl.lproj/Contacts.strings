@@ -494,7 +494,7 @@
 "contacts.qr.title" = "Udostępnij kontakt";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Share subject */
-"contacts.qr.shareSubject" = "Kontakt MeshCore One";
+"contacts.qr.shareSubject" = "Kontakt DigitainoMesh";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Copy button when not copied */
 "contacts.qr.copy" = "Kopiuj";
@@ -506,7 +506,7 @@
 "contacts.qr.share" = "Udostępnij";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Contact label in share text, %@ is contact name */
-"contacts.share.contactLabel" = "Kontakt MeshCore One: %@";
+"contacts.share.contactLabel" = "Kontakt DigitainoMesh: %@";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Key label in share text, %@ is hex public key */
 "contacts.share.keyLabel" = "Klucz: %@";

@@ -58,7 +58,7 @@ public actor PersistenceStore: PersistenceStoreProtocol {
     var incrementPendingSendAttemptCountFaultInjection: (@Sendable () throws -> Void)?
   #endif
 
-  /// Shared schema for MeshCore One models
+  /// Shared schema for DigitainoMesh models
   public static let schema = Schema([
     Device.self,
     Contact.self,

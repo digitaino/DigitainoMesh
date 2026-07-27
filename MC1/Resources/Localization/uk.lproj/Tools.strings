@@ -696,7 +696,7 @@
 "tools.cli.channelEmpty" = "порожній";
 
 /* Location: CLIToolViewModel.swift - Welcome banner line 1 */
-"tools.cli.welcomeLine1" = "MeshCore One CLI";
+"tools.cli.welcomeLine1" = "DigitainoMesh CLI";
 
 /* Location: CLIToolViewModel.swift - Welcome banner line 2 */
 "tools.cli.welcomeConnected" = "Підключено до %@";
@@ -789,7 +789,7 @@
 "intent.status.description" = "Повідомляє назву, стан підключення та останній відомий рівень заряду підключеної рації.";
 
 /* Location: StatusQueryIntent.swift - Spoken when the app is still launching and has no state to read yet */
-"intent.status.dialog.notReady" = "MeshCore One ще запускається. Спробуйте ще раз за мить.";
+"intent.status.dialog.notReady" = "DigitainoMesh ще запускається. Спробуйте ще раз за мить.";
 
 /* Location: StatusQueryIntent.swift - Spoken when connected; %1$@ is the radio name, %2$lld is the cached battery percent */
 "intent.status.dialog.connectedWithBattery" = "%1$@ підключена. Заряд батареї приблизно %2$lld%%, за даними останнього вимірювання.";
@@ -828,7 +828,7 @@
 "intent.send.confirm" = "Надіслати це повідомлення для %@?";
 
 /* Location: SendMessageIntent.swift - Spoken when the app must come to the foreground to send (still connecting or reconnecting) */
-"intent.send.foreground" = "Відкрийте MeshCore One, щоб завершити надсилання цього повідомлення.";
+"intent.send.foreground" = "Відкрийте DigitainoMesh, щоб завершити надсилання цього повідомлення.";
 
 /* Location: SendMessageIntent.swift - App Intents parameter summary shown in the shortcut editor; ${message} and ${target} are framework parameter tokens */
 "Send ${message} to ${target}" = "Надіслати ${message} для ${target}";

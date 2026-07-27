@@ -494,7 +494,7 @@
 "contacts.qr.title" = "分享联系人";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Share subject */
-"contacts.qr.shareSubject" = "MeshCore One 联系人";
+"contacts.qr.shareSubject" = "DigitainoMesh 联系人";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Copy button when not copied */
 "contacts.qr.copy" = "复制";
@@ -506,7 +506,7 @@
 "contacts.qr.share" = "分享";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Contact label in share text, %@ is contact name */
-"contacts.share.contactLabel" = "MeshCore One 联系人：%@";
+"contacts.share.contactLabel" = "DigitainoMesh 联系人：%@";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Key label in share text, %@ is hex public key */
 "contacts.share.keyLabel" = "密钥：%@";

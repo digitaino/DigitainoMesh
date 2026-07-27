@@ -1,7 +1,7 @@
 import Foundation
 import MC1Services
 
-/// Errors thrown by MeshCore One's App Intents, mirroring the
+/// Errors thrown by DigitainoMesh's App Intents, mirroring the
 /// `.sessionError(MeshCoreError)` wrapping convention of `MessageServiceError`.
 enum IntentError: LocalizedError {
   case notConnected

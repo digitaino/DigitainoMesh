@@ -1,6 +1,6 @@
 import AppIntents
 
-/// Foregrounds MeshCore One from a Control Center / Action Button control.
+/// Foregrounds DigitainoMesh from a Control Center / Action Button control.
 ///
 /// This type compiles into both the app and the widget extension, but a
 /// control's `perform()` runs in the widget process where there is no live
@@ -10,7 +10,7 @@ import AppIntents
 /// belt-and-suspenders UX choice; the real send gate lives on
 /// `SendMessageIntent` in the app process.
 struct OpenRadioStatusIntent: AppIntent {
-  static let title = LocalizedStringResource("Open MeshCore One")
+  static let title = LocalizedStringResource("Open DigitainoMesh")
   static let openAppWhenRun = true
   static let isDiscoverable = false
 

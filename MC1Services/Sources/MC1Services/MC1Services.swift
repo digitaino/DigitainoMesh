@@ -1,4 +1,4 @@
-// MC1Services - iOS-specific services for MeshCore One
+// MC1Services - iOS-specific services for DigitainoMesh
 // Re-exports MeshCore so consumers only need to import MC1Services
 
 @_exported import MeshCore

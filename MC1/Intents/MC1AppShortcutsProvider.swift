@@ -5,7 +5,7 @@ import AppIntents
 /// Phrases must each carry `\(.applicationName)` or the system rejects the
 /// utterance. Only an `AppEntity`/`AppEnum` parameter may be interpolated into a
 /// phrase, so the send phrases bind the target (resolving "Message <name> in
-/// MeshCore One" by voice) and the advert phrase binds the reach, but neither
+/// DigitainoMesh" by voice) and the advert phrase binds the reach, but neither
 /// binds free text.
 struct MC1AppShortcutsProvider: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {

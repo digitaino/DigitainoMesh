@@ -698,7 +698,7 @@ public extension ConnectionManager {
       persistConnection(
         deviceID: MockDataProvider.simulatorDeviceID,
         radioID: MockDataProvider.simulatorDeviceID,
-        deviceName: "MeshCore One Sim"
+        deviceName: "DigitainoMesh Sim"
       )
 
       // Notify observers
