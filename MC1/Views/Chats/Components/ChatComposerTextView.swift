@@ -24,6 +24,9 @@ struct ChatComposerTextView: UIViewRepresentable {
   /// Incremented by the parent to request focus; compared against the
   /// coordinator's last-applied value so each request fires exactly once.
   let focusRequest: Int
+  /// Incremented by the parent to ask the keyboard back to its letters plane
+  /// after a mention is inserted. Same one-shot-token contract as `focusRequest`.
+  let keyboardResetRequest: Int
   let isEncrypted: Bool
   /// Receives the text view on creation so the parent can finalize IME
   /// composition before reading the text to send.
@@ -92,6 +95,17 @@ struct ChatComposerTextView: UIViewRepresentable {
         }
       }
     }
+
+    // Reset the keyboard plane once per token increment. Deferred a turn so the
+    // mention text has already been applied to the field; resetting mid-update
+    // would re-enter the text-input pipeline while it is still writing.
+    if keyboardResetRequest != context.coordinator.lastKeyboardResetRequest {
+      context.coordinator.lastKeyboardResetRequest = keyboardResetRequest
+      Task { @MainActor in
+        guard textView.window != nil else { return }
+        textView.resetKeyboardToLetters()
+      }
+    }
   }
 
   func sizeThatFits(_ proposal: ProposedViewSize, uiView: ChatComposerUITextView, context: Context) -> CGSize? {
@@ -113,10 +127,13 @@ struct ChatComposerTextView: UIViewRepresentable {
     var parent: ChatComposerTextView
     /// Last `focusRequest` value acted on, so a request fires only once.
     var lastFocusRequest: Int
+    /// Last `keyboardResetRequest` value acted on; same once-only contract.
+    var lastKeyboardResetRequest: Int
 
     init(_ parent: ChatComposerTextView) {
       self.parent = parent
       lastFocusRequest = parent.focusRequest
+      lastKeyboardResetRequest = parent.keyboardResetRequest
     }
 
     func textViewDidBeginEditing(_: UITextView) {
@@ -170,6 +187,24 @@ final class ChatComposerUITextView: UITextView {
     inputDelegate?.selectionDidChange(self)
     inputDelegate?.textDidChange(self)
     contentOffset = .zero
+  }
+
+  /// Returns the keyboard to its letters plane.
+  ///
+  /// Reaching `@` means switching to the symbols plane, and UIKit leaves the keyboard
+  /// there after a mention is picked from the suggestion list — so the next thing the
+  /// user types lands on numbers and punctuation instead of the name they were about to
+  /// finish. Resigning and immediately re-becoming first responder rebuilds the keyboard
+  /// on its default plane. Both calls happen in the same run-loop turn, so UIKit never
+  /// starts a dismissal animation and the keyboard does not visibly move.
+  ///
+  /// This is the composer's only resign, and it is a one-shot paired with an immediate
+  /// become — the `focusRequest` token still has no resign path, and native dismissal is
+  /// untouched.
+  func resetKeyboardToLetters() {
+    guard isFirstResponder else { return }
+    resignFirstResponder()
+    becomeFirstResponder()
   }
 
   /// Commits a marked IME composition and any pending autocorrect so a send

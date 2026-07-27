@@ -48,10 +48,12 @@ struct ChatConversationView: View {
   // MARK: - Other State
 
   @State private var recentEmojisStore = RecentEmojisStore()
-  @State private var mentionSenderOrder: [String: UInt32]?
   /// Focus-request token: each increment asks the composer to raise the
   /// keyboard once. See `ChatComposerTextView` for why a token, not `@FocusState`.
   @State private var inputFocusRequest = 0
+  /// Keyboard-plane reset token: each increment asks the composer to rebuild the
+  /// keyboard on letters, undoing the symbols plane the user reached `@` from.
+  @State private var keyboardResetRequest = 0
 
   // MARK: - AppStorage
 
@@ -166,6 +168,7 @@ struct ChatConversationView: View {
         conversationType: conversationType,
         composingText: $chatViewModel.composingText,
         focusRequest: $inputFocusRequest,
+        keyboardResetRequest: keyboardResetRequest,
         nodeNameByteCount: appState.connectedDevice?.nodeName.utf8.count ?? 0,
         onSend: { text in
           switch conversationType {
@@ -299,13 +302,6 @@ struct ChatConversationView: View {
         flushDraft()
       @unknown default:
         break
-      }
-    }
-    .onChange(of: activeMentionQuery != nil) { _, isActive in
-      if isActive {
-        mentionSenderOrder = chatViewModel.channelSenderOrder
-      } else {
-        mentionSenderOrder = nil
       }
     }
     .task {
@@ -551,8 +547,14 @@ struct ChatConversationView: View {
       return MentionUtilities.filterContacts(chatViewModel.allContacts, query: query)
     case .channel:
       let combined = chatViewModel.allContacts + chatViewModel.channelSenders
-      let order = mentionSenderOrder ?? chatViewModel.channelSenderOrder
-      return MentionUtilities.filterContacts(combined, query: query, senderOrder: order)
+      // Read the live order rather than a snapshot taken when `@` was typed: a
+      // message arriving mid-mention should move its sender to the front of the
+      // list, which is the whole point of ordering by recency.
+      return MentionUtilities.filterContacts(
+        combined,
+        query: query,
+        senderOrder: chatViewModel.channelSenderOrder
+      )
     }
   }
 
@@ -564,6 +566,9 @@ struct ChatConversationView: View {
       let mention = MentionUtilities.createMention(for: contact.name)
       chatViewModel.composingText.replaceSubrange(range, with: mention + " ")
     }
+    // Typing `@` means the user is on the symbols plane, and UIKit stays there after
+    // the suggestion is picked — so the next keystroke of a sentence lands on numbers.
+    keyboardResetRequest += 1
   }
 
   // MARK: - Message Actions Sheet

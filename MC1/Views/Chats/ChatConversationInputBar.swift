@@ -6,6 +6,7 @@ struct ChatConversationInputBar: View {
   let conversationType: ChatConversationType
   @Binding var composingText: String
   @Binding var focusRequest: Int
+  let keyboardResetRequest: Int
   let nodeNameByteCount: Int
   let onSend: (String) async -> Void
   let onWillSend: () -> Void
@@ -17,6 +18,7 @@ struct ChatConversationInputBar: View {
       ChatInputBar(
         text: $composingText,
         focusRequest: focusRequest,
+        keyboardResetRequest: keyboardResetRequest,
         placeholder: L10n.Chats.Chats.Input.Placeholder.directMessage,
         maxBytes: ProtocolLimits.maxDirectMessageLength,
         isEncrypted: true,
@@ -34,6 +36,7 @@ struct ChatConversationInputBar: View {
       ChatInputBar(
         text: $composingText,
         focusRequest: focusRequest,
+        keyboardResetRequest: keyboardResetRequest,
         placeholder: conversationType.isPublicStyleChannel
           ? L10n.Chats.Chats.Channel.typePublic
           : L10n.Chats.Chats.Channel.typePrivate,

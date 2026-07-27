@@ -19,6 +19,8 @@ struct ChatInputBar<Leading: View>: View {
   @Binding var text: String
   /// Focus-request token forwarded to the composer; see `ChatComposerTextView`.
   let focusRequest: Int
+  /// Keyboard-plane reset token forwarded to the composer; see `ChatComposerTextView`.
+  var keyboardResetRequest: Int = 0
   let placeholder: String
   let maxBytes: Int
   let isEncrypted: Bool
@@ -53,6 +55,7 @@ struct ChatInputBar<Leading: View>: View {
             text: $text,
             placeholder: placeholder,
             focusRequest: focusRequest,
+            keyboardResetRequest: keyboardResetRequest,
             isEncrypted: isEncrypted,
             proxy: composerProxy,
             onSend: handleHardwareSend,
@@ -164,6 +167,7 @@ private struct ChatInputTextField: View {
   @Binding var text: String
   let placeholder: String
   let focusRequest: Int
+  let keyboardResetRequest: Int
   let isEncrypted: Bool
   let proxy: ChatComposerProxy
   let onSend: () -> Bool
@@ -174,6 +178,7 @@ private struct ChatInputTextField: View {
     ChatComposerTextView(
       text: $text,
       focusRequest: focusRequest,
+      keyboardResetRequest: keyboardResetRequest,
       isEncrypted: isEncrypted,
       proxy: proxy,
       onSend: onSend,
