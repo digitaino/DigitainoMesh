@@ -6,6 +6,26 @@ import OSLog
   import CoreMotion
 #endif
 
+/// Whether motion activity is available to us, and whether asking for it would prompt.
+///
+/// Kept as its own enum so CoreMotion's types stay behind ``MovementHintMonitor`` and callers
+/// can reason about the prompt without importing the framework.
+enum MovementHintAuthorization {
+  /// Asking would show the Motion & Fitness prompt.
+  case notDetermined
+  /// Already granted; starting updates prompts nothing.
+  case authorized
+  /// Refused or restricted. Starting updates would deliver nothing.
+  case denied
+  /// No motion coprocessor, or not an iOS device.
+  case unavailable
+
+  /// Whether starting updates could produce data — either now or after a prompt.
+  var canDeliverUpdates: Bool {
+    self == .notDetermined || self == .authorized
+  }
+}
+
 /// Classifies how the phone is moving, so signal probing speeds up when links are changing
 /// and stays quiet when they are not.
 ///
@@ -15,10 +35,14 @@ import OSLog
 ///
 /// ## Permission
 ///
-/// Motion & Fitness is requested by the first `startActivityUpdates` call, so this must only
-/// be started when the signal-bars feature is genuinely running — never at launch. A denial
-/// is not an error state: updates simply never arrive and the level stays `.stationary`,
-/// which is the cadence a parked radio wants anyway.
+/// Motion & Fitness is requested by the first `startActivityUpdates` call, so starting this
+/// *is* the act of prompting. Connecting a radio must never be enough to trigger that: the
+/// hint only shortens a probe interval, which is nowhere near proportionate to a permission
+/// dialog thrown over whatever the user was doing — including, on an auto-reconnect, the
+/// launch screen. ``authorization`` lets a caller tell "already granted, start freely" from
+/// "starting would prompt, so wait until the user opens the feature". A denial is not an error
+/// state: updates simply never arrive and the level stays `.stationary`, which is the cadence
+/// a parked radio wants anyway.
 ///
 /// ## Readings, not edges
 ///
@@ -51,6 +75,21 @@ final class MovementHintMonitor {
 
   init(keepaliveInterval: TimeInterval = MovementHintMonitor.keepaliveInterval) {
     self.keepaliveInterval = keepaliveInterval
+  }
+
+  /// Whether motion data is available, and whether asking for it would prompt.
+  nonisolated static var authorization: MovementHintAuthorization {
+    #if canImport(CoreMotion) && os(iOS)
+      guard CMMotionActivityManager.isActivityAvailable() else { return .unavailable }
+      return switch CMMotionActivityManager.authorizationStatus() {
+      case .notDetermined: .notDetermined
+      case .authorized: .authorized
+      case .denied, .restricted: .denied
+      @unknown default: .denied
+      }
+    #else
+      return .unavailable
+    #endif
   }
 
   /// Begins classifying motion.

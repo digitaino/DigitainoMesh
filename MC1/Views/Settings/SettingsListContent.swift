@@ -32,6 +32,7 @@ struct SettingsListContent: View {
       .navigationTitle(L10n.Settings.title)
       .toolbar {
         bleStatusToolbarItem()
+        repeaterSignalToolbarItem()
       }
       .sheet(isPresented: $showingDeviceSelection) {
         DeviceSelectionSheet()

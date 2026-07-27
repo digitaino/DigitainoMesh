@@ -20,6 +20,9 @@ struct AdvancedSettingsView: View {
       // Adaptive TX Power
       AdaptivePowerSection()
 
+      // Repeater Signal Tracking
+      SignalBarsSection()
+
       // Path Hash Mode (firmware v10+)
       if appState.connectedDevice?.supportsPathHashMode == true {
         PathHashModeSection()

@@ -200,6 +200,89 @@
 /* Status pill message when sync has failed */
 "statusPill.syncFailed" = "Sync Failed";
 
+// MARK: - Signal Bars
+
+/* Location: RepeaterSignalPopover.swift - Title of the repeater signal table */
+"signalBars.title" = "Repeaters";
+
+/* Location: RepeaterSignalToolbarItem.swift - Toolbar value when no repeater has been heard */
+"signalBars.noRepeaters" = "No repeaters heard";
+
+/* Location: RepeaterSignalPopover.swift - Placeholder while the table is still empty */
+"signalBars.scanning" = "Looking for repeaters…";
+
+/* Location: RepeaterSignalPopover.swift - Source label when the radio owns the table */
+"signalBars.sourceRadio" = "Synced with radio";
+
+/* Location: RepeaterSignalPopover.swift - Source label when the app measures the table itself */
+"signalBars.sourceApp" = "Measured on this iPhone";
+
+/* Location: RepeaterSignalPopover.swift - Button that re-scans for repeaters */
+"signalBars.scan" = "Scan for repeaters";
+
+/* Location: RepeaterSignalPopover.swift - Button that hides every stale row */
+"signalBars.clearStale" = "Clear stale repeaters";
+
+/* Location: RepeaterSignalPopover.swift - Row action that measures one repeater now */
+"signalBars.pingNow" = "Ping Now";
+
+/* Location: RepeaterSignalPopover.swift - Row action that starts watching a repeater */
+"signalBars.watch" = "Watch Repeater";
+
+/* Location: RepeaterSignalPopover.swift - Row action that stops watching a repeater */
+"signalBars.stopWatching" = "Stop Watching";
+
+/* Location: RepeaterSignalPopover.swift - Row action that hides a repeater until it is heard again */
+"signalBars.removeFromList" = "Remove from List";
+
+/* Location: RepeaterSignalPopover.swift - Label of the transmit power control */
+"signalBars.txPower" = "TX Power";
+
+/* Location: RepeaterSignalPopover.swift - Menu action returning transmit power to the base step */
+"signalBars.resetPower" = "Reset to Base";
+
+/* Location: RepeaterSignalGlyph.swift - Compact signal-to-noise readout - %lld is the value in dB */
+"signalBars.snrValue" = "%llddB";
+
+/* Location: RepeaterSignalRow.swift - Compact round-trip time readout - %lld is the value in milliseconds */
+"signalBars.rttValue" = "%lldms";
+
+/* Location: RepeaterSignalPopover.swift - Column header for the repeater identifier */
+"signalBars.column.id" = "ID";
+
+/* Location: RepeaterSignalPopover.swift - Column header for how well we hear the repeater */
+"signalBars.column.rx" = "RX";
+
+/* Location: RepeaterSignalPopover.swift - Column header for how well the repeater hears us */
+"signalBars.column.tx" = "TX";
+
+/* Location: RepeaterSignalPopover.swift - Column header for how long ago the repeater was heard */
+"signalBars.column.age" = "Age";
+
+/* Location: RepeaterSignalToolbarItem.swift - VoiceOver hint for the signal bars toolbar button */
+"signalBars.accessibility.toolbarHint" = "Shows every reachable repeater and its signal";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description of the receive leg - %1$@ is a quality word, %2$lld is the SNR in dB */
+"signalBars.accessibility.rxLeg" = "we hear it %1$@ at %2$lld decibels";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description when the receive leg has no measurement */
+"signalBars.accessibility.rxUnknown" = "not yet heard";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description of the transmit leg - %1$@ is a quality word, %2$lld is the SNR in dB */
+"signalBars.accessibility.txLeg" = "it hears us %1$@ at %2$lld decibels";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description when the transmit leg has never been probed */
+"signalBars.accessibility.txUnknown" = "unknown whether it hears us";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description while a transmit probe is in flight */
+"signalBars.accessibility.txMeasuring" = "measuring whether it hears us";
+
+/* Location: RepeaterSignalGlyph.swift - VoiceOver description when the transmit probe got no answer */
+"signalBars.accessibility.txFailed" = "it did not answer our probe";
+
+/* Location: RepeaterSignalRow.swift - VoiceOver suffix marking the watched repeater */
+"signalBars.accessibility.watched" = "watched";
+
 // MARK: - Error Messages
 
 /* Location: MeshCoreError+UserFacingMessage.swift - Session operation timed out */

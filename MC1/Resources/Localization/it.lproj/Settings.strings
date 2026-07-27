@@ -1885,3 +1885,14 @@
 "Appearance.Accessibility.ThemeCard.SelectedLabel" = "Tema %@, attualmente selezionato";
 "Appearance.Accessibility.Swatch.DualMode" = "%@, varianti chiara e scura";
 "Appearance.Accessibility.Swatch.DarkOnly" = "%@, solo scura";
+
+// MARK: - Signal Bars Section
+
+/* Section header for repeater signal tracking */
+"signalBars.header" = "Repeater Signals";
+
+/* Toggle label enabling repeater signal tracking */
+"signalBars.enable" = "Track Repeater Signals";
+
+/* Footer explaining what repeater signal tracking does and costs */
+"signalBars.footer" = "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.";

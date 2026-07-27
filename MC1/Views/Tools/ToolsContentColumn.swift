@@ -55,6 +55,7 @@ struct ToolsContentColumn: View {
     .modifier(SidebarContentColumnBackground(theme: theme))
     .toolbar {
       bleStatusToolbarItem()
+      repeaterSignalToolbarItem()
     }
   }
 
@@ -72,6 +73,7 @@ struct ToolsContentColumn: View {
         }
         // The back button owns the leading slot here, so the radio moves to the trailing edge.
         bleStatusToolbarItem(placement: .topBarTrailing)
+        repeaterSignalToolbarItem(placement: .topBarTrailing)
       }
   }
 }

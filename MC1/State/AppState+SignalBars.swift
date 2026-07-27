@@ -33,7 +33,7 @@ extension AppState {
       )
       await services.signalBarsEngine.start(mode: mode, pathHashMode: device.pathHashMode)
       await repeaterSignals.attach(to: services.signalBarsEngine)
-      startMovementHints(services: services)
+      startMovementHintsIfAlreadyPermitted()
     }
   }
 
@@ -46,16 +46,35 @@ extension AppState {
     repeaterSignals.detach()
   }
 
-  /// Starts CoreMotion classification and routes each reading to both consumers.
+  /// Starts movement classification only when it costs nothing to ask.
+  ///
+  /// Connecting a radio is not consent to a Motion & Fitness prompt, and on an auto-reconnect
+  /// it would land over the launch screen. So the connect path starts the monitor only when
+  /// permission already exists; when it does not, the hint stays stationary — which merely
+  /// means probes run at their base cadence — until the user opens the signal table.
+  func startMovementHintsIfAlreadyPermitted() {
+    guard MovementHintMonitor.authorization == .authorized else { return }
+    guard let services, !movementHintMonitor.isRunning else { return }
+    startMovementHints(services: services)
+  }
+
+  /// Starts movement classification, prompting for Motion & Fitness if that is what it takes.
+  ///
+  /// Called when the user opens the repeater signal table: that is a deliberate visit to the
+  /// feature the permission serves, which makes it the one moment the prompt is proportionate.
+  func requestMovementHintsIfNeeded() {
+    guard MovementHintMonitor.authorization.canDeliverUpdates else { return }
+    guard let services, !movementHintMonitor.isRunning else { return }
+    startMovementHints(services: services)
+  }
+
+  /// Routes each movement reading to both consumers.
   ///
   /// The relay feeds the app's own probe scheduler; the sync write tells the radio, which
   /// runs its own cadence in viewer mode. Both are fed unconditionally because both
   /// de-duplicate: `MotionHintService` is inert unless the radio advertises the slot, and
   /// the relay is free to update. That is simpler — and less fragile across a mode change —
   /// than legacy's either/or routing.
-  ///
-  /// This is also the moment Motion & Fitness is requested. It is deliberately not at
-  /// launch: the permission is only meaningful once signal tracking is actually running.
   private func startMovementHints(services: ServiceContainer) {
     // Capture the two actors rather than the container, so the monitor's callback does not
     // pin the whole per-connection service graph until it is torn down.

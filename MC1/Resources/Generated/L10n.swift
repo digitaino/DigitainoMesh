@@ -2651,6 +2651,74 @@ public enum L10n {
         }
       }
     }
+    public enum SignalBars {
+      /// Location: RepeaterSignalPopover.swift - Button that hides every stale row
+      public static let clearStale = L10n.tr("Localizable", "signalBars.clearStale", fallback: "Clear stale repeaters")
+      /// Location: RepeaterSignalToolbarItem.swift - Toolbar value when no repeater has been heard
+      public static let noRepeaters = L10n.tr("Localizable", "signalBars.noRepeaters", fallback: "No repeaters heard")
+      /// Location: RepeaterSignalPopover.swift - Row action that measures one repeater now
+      public static let pingNow = L10n.tr("Localizable", "signalBars.pingNow", fallback: "Ping Now")
+      /// Location: RepeaterSignalPopover.swift - Row action that hides a repeater until it is heard again
+      public static let removeFromList = L10n.tr("Localizable", "signalBars.removeFromList", fallback: "Remove from List")
+      /// Location: RepeaterSignalPopover.swift - Menu action returning transmit power to the base step
+      public static let resetPower = L10n.tr("Localizable", "signalBars.resetPower", fallback: "Reset to Base")
+      /// Location: RepeaterSignalRow.swift - Compact round-trip time readout - %lld is the value in milliseconds
+      public static func rttValue(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "signalBars.rttValue", p1, fallback: "%lldms")
+      }
+      /// Location: RepeaterSignalPopover.swift - Button that re-scans for repeaters
+      public static let scan = L10n.tr("Localizable", "signalBars.scan", fallback: "Scan for repeaters")
+      /// Location: RepeaterSignalPopover.swift - Placeholder while the table is still empty
+      public static let scanning = L10n.tr("Localizable", "signalBars.scanning", fallback: "Looking for repeaters…")
+      /// Location: RepeaterSignalGlyph.swift - Compact signal-to-noise readout - %lld is the value in dB
+      public static func snrValue(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "signalBars.snrValue", p1, fallback: "%llddB")
+      }
+      /// Location: RepeaterSignalPopover.swift - Source label when the app measures the table itself
+      public static let sourceApp = L10n.tr("Localizable", "signalBars.sourceApp", fallback: "Measured on this iPhone")
+      /// Location: RepeaterSignalPopover.swift - Source label when the radio owns the table
+      public static let sourceRadio = L10n.tr("Localizable", "signalBars.sourceRadio", fallback: "Synced with radio")
+      /// Location: RepeaterSignalPopover.swift - Row action that stops watching a repeater
+      public static let stopWatching = L10n.tr("Localizable", "signalBars.stopWatching", fallback: "Stop Watching")
+      /// Location: RepeaterSignalPopover.swift - Title of the repeater signal table
+      public static let title = L10n.tr("Localizable", "signalBars.title", fallback: "Repeaters")
+      /// Location: RepeaterSignalPopover.swift - Label of the transmit power control
+      public static let txPower = L10n.tr("Localizable", "signalBars.txPower", fallback: "TX Power")
+      /// Location: RepeaterSignalPopover.swift - Row action that starts watching a repeater
+      public static let watch = L10n.tr("Localizable", "signalBars.watch", fallback: "Watch Repeater")
+      public enum Accessibility {
+        /// Location: RepeaterSignalGlyph.swift - VoiceOver description of the receive leg - %1$@ is a quality word, %2$lld is the SNR in dB
+        public static func rxLeg(_ p1: Any, _ p2: Int) -> String {
+          return L10n.tr("Localizable", "signalBars.accessibility.rxLeg", String(describing: p1), p2, fallback: "we hear it %1$@ at %2$lld decibels")
+        }
+        /// Location: RepeaterSignalGlyph.swift - VoiceOver description when the receive leg has no measurement
+        public static let rxUnknown = L10n.tr("Localizable", "signalBars.accessibility.rxUnknown", fallback: "not yet heard")
+        /// Location: RepeaterSignalToolbarItem.swift - VoiceOver hint for the signal bars toolbar button
+        public static let toolbarHint = L10n.tr("Localizable", "signalBars.accessibility.toolbarHint", fallback: "Shows every reachable repeater and its signal")
+        /// Location: RepeaterSignalGlyph.swift - VoiceOver description when the transmit probe got no answer
+        public static let txFailed = L10n.tr("Localizable", "signalBars.accessibility.txFailed", fallback: "it did not answer our probe")
+        /// Location: RepeaterSignalGlyph.swift - VoiceOver description of the transmit leg - %1$@ is a quality word, %2$lld is the SNR in dB
+        public static func txLeg(_ p1: Any, _ p2: Int) -> String {
+          return L10n.tr("Localizable", "signalBars.accessibility.txLeg", String(describing: p1), p2, fallback: "it hears us %1$@ at %2$lld decibels")
+        }
+        /// Location: RepeaterSignalGlyph.swift - VoiceOver description while a transmit probe is in flight
+        public static let txMeasuring = L10n.tr("Localizable", "signalBars.accessibility.txMeasuring", fallback: "measuring whether it hears us")
+        /// Location: RepeaterSignalGlyph.swift - VoiceOver description when the transmit leg has never been probed
+        public static let txUnknown = L10n.tr("Localizable", "signalBars.accessibility.txUnknown", fallback: "unknown whether it hears us")
+        /// Location: RepeaterSignalRow.swift - VoiceOver suffix marking the watched repeater
+        public static let watched = L10n.tr("Localizable", "signalBars.accessibility.watched", fallback: "watched")
+      }
+      public enum Column {
+        /// Location: RepeaterSignalPopover.swift - Column header for how long ago the repeater was heard
+        public static let age = L10n.tr("Localizable", "signalBars.column.age", fallback: "Age")
+        /// Location: RepeaterSignalPopover.swift - Column header for the repeater identifier
+        public static let id = L10n.tr("Localizable", "signalBars.column.id", fallback: "ID")
+        /// Location: RepeaterSignalPopover.swift - Column header for how well we hear the repeater
+        public static let rx = L10n.tr("Localizable", "signalBars.column.rx", fallback: "RX")
+        /// Location: RepeaterSignalPopover.swift - Column header for how well the repeater hears us
+        public static let tx = L10n.tr("Localizable", "signalBars.column.tx", fallback: "TX")
+      }
+    }
     public enum StatusPill {
       /// Status pill message when sync has failed
       public static let syncFailed = L10n.tr("Localizable", "statusPill.syncFailed", fallback: "Sync Failed")
@@ -5450,6 +5518,14 @@ public enum L10n {
           }
         }
       }
+    }
+    public enum SignalBars {
+      /// Toggle label enabling repeater signal tracking
+      public static let enable = L10n.tr("Settings", "signalBars.enable", fallback: "Track Repeater Signals")
+      /// Footer explaining what repeater signal tracking does and costs
+      public static let footer = L10n.tr("Settings", "signalBars.footer", fallback: "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.")
+      /// Section header for repeater signal tracking
+      public static let header = L10n.tr("Settings", "signalBars.header", fallback: "Repeater Signals")
     }
     public enum Telemetry {
       /// Toggle label for allowing telemetry requests

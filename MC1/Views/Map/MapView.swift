@@ -53,6 +53,7 @@ struct MapView: View {
       )
       .toolbar {
         bleStatusToolbarItem()
+        repeaterSignalToolbarItem()
         ToolbarItem(placement: .topBarTrailing) {
           MapRefreshButton(
             isLoading: viewModel.isLoading,

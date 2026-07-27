@@ -24,6 +24,7 @@ struct ChatsListModifiers: ViewModifier {
       .searchable(text: $searchText, prompt: L10n.Chats.Chats.Search.placeholder)
       .toolbar {
         bleStatusToolbarItem()
+        repeaterSignalToolbarItem()
         ToolbarItem(placement: .automatic) {
           Menu {
             Button {

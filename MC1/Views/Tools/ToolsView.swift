@@ -23,6 +23,7 @@ struct ToolsView: View {
       .navigationTitle(L10n.Tools.Tools.title)
       .toolbar {
         bleStatusToolbarItem()
+        repeaterSignalToolbarItem()
       }
     }
   }
