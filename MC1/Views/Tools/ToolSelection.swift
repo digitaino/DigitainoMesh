@@ -8,6 +8,7 @@ enum ToolSelection: Hashable, CaseIterable {
   case repeaterBenchmark
   case lineOfSight
   case rxLog
+  case trafficHeatmap
   case noiseFloor
   case nodeDiscovery
   case cli
@@ -18,6 +19,7 @@ enum ToolSelection: Hashable, CaseIterable {
     case .repeaterBenchmark: L10n.Tools.Tools.benchmark
     case .lineOfSight: L10n.Tools.Tools.lineOfSight
     case .rxLog: L10n.Tools.Tools.rxLog
+    case .trafficHeatmap: L10n.Tools.Tools.trafficMap
     case .noiseFloor: L10n.Tools.Tools.noiseFloor
     case .nodeDiscovery: L10n.Tools.Tools.nodeDiscovery
     case .cli: L10n.Tools.Tools.cli
@@ -30,6 +32,7 @@ enum ToolSelection: Hashable, CaseIterable {
     case .repeaterBenchmark: "chart.bar.xaxis"
     case .lineOfSight: "eye"
     case .rxLog: "waveform.badge.magnifyingglass"
+    case .trafficHeatmap: "point.3.filled.connected.trianglepath.dotted"
     case .noiseFloor: "waveform"
     case .nodeDiscovery: "dot.radiowaves.left.and.right"
     case .cli: "terminal"

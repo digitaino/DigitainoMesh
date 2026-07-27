@@ -14,6 +14,7 @@ struct ToolDestinationView<LineOfSight: View>: View {
     case .repeaterBenchmark: RepeaterBenchmarkView()
     case .lineOfSight: lineOfSight()
     case .rxLog: RxLogView()
+    case .trafficHeatmap: TrafficHeatmapView()
     case .noiseFloor: NoiseFloorView()
     case .nodeDiscovery: NodeDiscoveryView()
     case .cli: CLIToolView()
