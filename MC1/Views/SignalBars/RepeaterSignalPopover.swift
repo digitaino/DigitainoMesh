@@ -11,6 +11,10 @@ struct RepeaterSignalPopover: View {
   @Environment(\.appState) private var appState
   @Environment(\.appTheme) private var theme
 
+  /// Presents the full range-testing screen. The compact row below is only an entry point —
+  /// heard counts, alert tones and target switching live on `RepeaterWatchView`.
+  @State private var showWatchScreen = false
+
   private var model: RepeaterSignalModel {
     appState.repeaterSignals
   }
@@ -40,6 +44,11 @@ struct RepeaterSignalPopover: View {
     }
     .frame(width: 288)
     .padding(.bottom, 8)
+    .sheet(isPresented: $showWatchScreen) {
+      NavigationStack {
+        RepeaterWatchView()
+      }
+    }
     // Opening the table is the one deliberate visit to this feature, so it is where a
     // Motion & Fitness prompt belongs — never on the connect path, which can fire during an
     // auto-reconnect at launch.
@@ -188,30 +197,48 @@ struct RepeaterSignalPopover: View {
 
   /// The repeater under range test, with how many times it has been heard since the watch
   /// started — the number that tells a user walking a boundary whether they are still in
-  /// range. The alerting and history built on top of this belong to the benchmark tool.
+  /// range.
+  ///
+  /// Only a summary and an entry point: tapping it opens `RepeaterWatchView`, where the
+  /// alert tones and target switching a walking range test actually needs have room to live.
   @ViewBuilder
   private var watchedRow: some View {
     if let watched = model.watched {
       HStack(spacing: 6) {
-        Image(systemName: "binoculars.fill")
-          .font(.system(size: 10))
-          .foregroundStyle(theme.accentColor)
+        Button {
+          showWatchScreen = true
+        } label: {
+          HStack(spacing: 6) {
+            Image(systemName: "binoculars.fill")
+              .font(.system(size: 10))
+              .foregroundStyle(theme.accentColor)
 
-        Text(watchedName(for: watched))
-          .font(.system(.caption, design: .monospaced).weight(.semibold))
-          .lineLimit(1)
+            Text(watchedName(for: watched))
+              .font(.system(.caption, design: .monospaced).weight(.semibold))
+              .lineLimit(1)
 
-        RepeaterSignalGlyph(leg: .rx, quality: watched.rxQuality, size: 12)
+            RepeaterSignalGlyph(leg: .rx, quality: watched.rxQuality, size: 12)
 
-        Spacer(minLength: 0)
+            Spacer(minLength: 0)
 
-        if watched.heardCount > 0 {
-          Text(watched.heardCount, format: .number)
-            .font(.system(.caption2, design: .rounded).weight(.semibold))
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
-            .contentTransition(.numericText())
+            if watched.heardCount > 0 {
+              Text(watched.heardCount, format: .number)
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .contentTransition(.numericText())
+            }
+
+            Image(systemName: "chevron.forward")
+              .font(.system(size: 10, weight: .semibold))
+              .foregroundStyle(.tertiary)
+          }
+          .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.Localizable.SignalBars.Watch.openAccessibility(
+          watchedName(for: watched)
+        ))
 
         Button(role: .destructive) {
           Task { await model.watchRepeater(nil) }
