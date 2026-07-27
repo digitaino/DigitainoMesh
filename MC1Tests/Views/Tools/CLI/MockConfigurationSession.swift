@@ -223,6 +223,15 @@ actor MockConfigurationSession: ConfigurationSessionOps {
     nil
   }
 
+  /// Stock-firmware behaviour: the sync registry opcodes are rejected.
+  func getSync(_ id: SyncID) async throws -> Data {
+    throw MeshCoreError.deviceError(code: 1)
+  }
+
+  func setSync(_ id: SyncID, payload: Data) async throws {
+    throw MeshCoreError.deviceError(code: 1)
+  }
+
   func factoryReset() async throws {}
   func getStatsCore() async throws -> CoreStats {
     throw MeshCoreError.timeout
