@@ -1,15 +1,5 @@
 import Foundation
-
-/// Firmware-side notification mode, as stored in ``NotifPrefsBlob``.
-///
-/// Raw values are the on-wire byte values the custom firmware parses — do not renumber.
-public enum FirmwareNotifMode: UInt8, Sendable {
-  case silent = 0
-  case all = 1
-  case mentions = 2
-  /// Reserved for future firmware use; the app never emits it.
-  case urgent = 3
-}
+import MeshCore
 
 /// Wire-format notification preferences blob for Digitaino's custom-firmware
 /// notification-prefs sync slot.

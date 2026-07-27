@@ -1,5 +1,6 @@
 import Foundation
 @testable import MC1Services
+import MeshCore
 import Testing
 
 @Suite("NotifPrefsBlob")
