@@ -13,14 +13,15 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "AlphaNode",
       targetText: "What's the situation at Main St today?",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
 
-    // Verify format: {emoji}@[{sender}]\n{hash}
-    #expect(text.hasPrefix("👍@[AlphaNode]\n"))
+    // Verify human-readable format: {emoji} reacted to [{sender}]: "{snippet}" ({hash})
+    #expect(text.hasPrefix("👍 reacted to [AlphaNode]: \""))
 
     // Verify 8-char Crockford Base32 identifier is present (lowercase) at end
-    let idPattern = #/\n([0-9a-hj-km-np-tv-z]{8})$/#
+    let idPattern = #/\(([0-9a-hj-km-np-tv-z]{8})\)$/#
     #expect(text.firstMatch(of: idPattern) != nil)
   }
 
@@ -33,11 +34,12 @@ struct ReactionServiceTests {
       emoji: "❤️",
       targetSender: "Node",
       targetText: "ok",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
 
-    #expect(text.hasPrefix("❤️@[Node]\n"))
-    #expect(text.hasSuffix(text.suffix(8))) // ends with 8-char hash
+    #expect(text.hasPrefix("❤️ reacted to [Node]: \"ok\""))
+    #expect(text.hasSuffix(")")) // ends with the "(hash)" suffix
   }
 
   @Test
@@ -50,14 +52,16 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "Node",
       targetText: targetText,
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
 
     let text2 = service.buildReactionText(
       emoji: "👍",
       targetSender: "Node",
       targetText: targetText,
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
 
     #expect(text1 == text2)
@@ -72,14 +76,16 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "Node",
       targetText: targetText,
-      targetTimestamp: 1_704_067_200
+      targetTimestamp: 1_704_067_200,
+      localNodeName: "Me"
     )
 
     let text2 = service.buildReactionText(
       emoji: "👍",
       targetSender: "Node",
       targetText: targetText,
-      targetTimestamp: 1_704_067_201
+      targetTimestamp: 1_704_067_201,
+      localNodeName: "Me"
     )
 
     #expect(text1 != text2)
@@ -105,7 +111,8 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "Node",
       targetText: "Hello world",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
 
     let parsed = try #require(ReactionParser.parse(reactionText))
@@ -161,7 +168,8 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "Node",
       targetText: "Same message",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
 
     let parsed = try #require(ReactionParser.parse(reactionText))
@@ -185,7 +193,8 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "AlphaNode",
       targetText: "Hello world",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
 
     let parsed = try #require(ReactionParser.parse(reactionText))
@@ -226,7 +235,8 @@ struct ReactionServiceTests {
         emoji: emoji,
         targetSender: "AlphaNode",
         targetText: "Hello world",
-        targetTimestamp: timestamp
+        targetTimestamp: timestamp,
+        localNodeName: "Me"
       )
       let parsed = try #require(ReactionParser.parse(reactionText))
 
@@ -265,7 +275,8 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "AlphaNode",
       targetText: "Hello world",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
     let parsed = try #require(ReactionParser.parse(reactionText))
 
@@ -302,7 +313,8 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "AlphaNode",
       targetText: "Hello world",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
     let parsed = try #require(ReactionParser.parse(reactionText))
 
@@ -341,7 +353,8 @@ struct ReactionServiceTests {
       emoji: "👍",
       targetSender: "AlphaNode",
       targetText: "Hello world",
-      targetTimestamp: timestamp
+      targetTimestamp: timestamp,
+      localNodeName: "Me"
     )
     let parsed = try #require(ReactionParser.parse(reactionText))
 
@@ -386,9 +399,10 @@ struct ReactionServiceTests {
       targetText: "Hello world",
       targetTimestamp: 1_704_067_200
     )
-    #expect(text.hasPrefix("👍\n"))
-    #expect(text.count == 10) // emoji + newline + 8 char hash
+    #expect(text.hasPrefix("👍 reacted to: \"Hello world\""))
+    #expect(text.hasSuffix(")")) // ends with the "(hash)" suffix
     #expect(!text.contains("@["))
+    #expect(!text.contains("\n"))
   }
 
   @Test

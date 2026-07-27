@@ -894,7 +894,8 @@ struct PersistenceStoreTests {
       emoji: "👍",
       targetSender: "RemoteNode",
       targetText: message.text,
-      targetTimestamp: message.timestamp
+      targetTimestamp: message.timestamp,
+      localNodeName: "Me"
     )
     let parsed = try #require(ReactionParser.parse(reactionText))
 
@@ -953,7 +954,8 @@ struct PersistenceStoreTests {
       emoji: "🔥",
       targetSender: "LocalNode",
       targetText: outgoingMessage.text,
-      targetTimestamp: outgoingMessage.timestamp
+      targetTimestamp: outgoingMessage.timestamp,
+      localNodeName: "Me"
     )
     let parsed = try #require(ReactionParser.parse(reactionText))
 

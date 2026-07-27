@@ -83,8 +83,19 @@ public struct ParsedDMReaction: Sendable, Equatable {
   public let messageHash: String // 8 Crockford Base32 chars (lowercase)
 }
 
-/// Parses reaction wire format using end-to-start strategy.
-/// Format: `{emoji}@[{sender}]\nxxxxxxxx`
+/// Parses and builds the reaction wire format.
+///
+/// Two formats are on the wire; see `docs/Reactions.md` for the interoperability spec.
+///
+/// - v2 (human-readable, canonical — always emitted):
+///   - channel: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+///   - DM: `{emoji} reacted to: "{snippet}" ({hash})`
+/// - v1 (legacy — accepted on receive, never emitted):
+///   - channel: `{emoji}@[{sender}]\n{hash}`
+///   - DM: `{emoji}\n{hash}`
+///
+/// Parsing tries v2 first and falls back to v1. The `{snippet}` is a cosmetic echo of the
+/// target text and is never parsed or compared — only `{hash}` carries identity.
 public enum ReactionParser {
   /// Returns true if the text matches any known reaction format (PocketMesh or meshcore-open).
   static func isReactionText(_ text: String, isDM: Bool) -> Bool {
@@ -93,8 +104,81 @@ public enum ReactionParser {
     return isDM ? parseDM(text) != nil : parse(text) != nil
   }
 
-  /// Parses reaction text, returns nil if format doesn't match
+  /// Parses channel reaction text. Tries the human-readable v2 format first, then legacy v1.
   public static func parse(_ text: String) -> ParsedReaction? {
+    if let result = parseHumanReadable(text) { return result }
+    return parseLegacy(text)
+  }
+
+  /// Parses DM reaction text. Tries the human-readable v2 format first, then legacy v1.
+  public static func parseDM(_ text: String) -> ParsedDMReaction? {
+    if let result = parseDMHumanReadable(text) { return result }
+    return parseDMLegacy(text)
+  }
+
+  // MARK: - Human-Readable Format (v2)
+
+  /// Parses the human-readable channel reaction format.
+  /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+  private static func parseHumanReadable(_ text: String) -> ParsedReaction? {
+    // Step 1: Extract hash from trailing " ({8-char-hash})"
+    guard let hash = extractTrailingHash(text) else { return nil }
+    let withoutHash = String(text[..<text.index(text.endIndex, offsetBy: -(hash.count + 3))])
+
+    // Step 2: Find " reacted to [" to locate the sender
+    guard let reactedRange = withoutHash.range(of: " reacted to [") else { return nil }
+
+    let emoji = String(withoutHash[..<reactedRange.lowerBound])
+    guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
+
+    // Step 3: Extract sender from "[sender]: " after "reacted to"
+    let afterReacted = withoutHash[reactedRange.upperBound...]
+    guard let closeBracket = afterReacted.range(of: "]: ") else { return nil }
+    let sender = String(afterReacted[..<closeBracket.lowerBound])
+    guard !sender.isEmpty else { return nil }
+
+    return ParsedReaction(emoji: emoji, targetSender: sender, messageHash: hash)
+  }
+
+  /// Parses the human-readable DM reaction format.
+  /// Format: `{emoji} reacted to: "{snippet}" ({hash})`
+  private static func parseDMHumanReadable(_ text: String) -> ParsedDMReaction? {
+    // Reject channel format
+    if text.contains(" reacted to [") { return nil }
+
+    guard let hash = extractTrailingHash(text) else { return nil }
+    let withoutHash = String(text[..<text.index(text.endIndex, offsetBy: -(hash.count + 3))])
+
+    guard let reactedRange = withoutHash.range(of: " reacted to: ") else { return nil }
+
+    let emoji = String(withoutHash[..<reactedRange.lowerBound])
+    guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
+
+    return ParsedDMReaction(emoji: emoji, messageHash: hash)
+  }
+
+  /// Extracts an 8-char Crockford Base32 hash from a trailing `" ({hash})"` pattern.
+  /// Returns the normalized (lowercase) hash, or nil if the shape doesn't match.
+  private static func extractTrailingHash(_ text: String) -> String? {
+    guard text.hasSuffix(")") else { return nil }
+
+    let withoutParen = text.dropLast() // remove ")"
+    guard withoutParen.count >= 10 else { return nil } // " (" + 8 chars minimum
+    let hashStart = withoutParen.index(withoutParen.endIndex, offsetBy: -8)
+    let rawHash = String(withoutParen[hashStart...])
+    guard isValidCrockfordBase32(rawHash) else { return nil }
+
+    // Verify " (" precedes the hash
+    guard withoutParen[..<hashStart].hasSuffix(" (") else { return nil }
+
+    return normalizeCrockfordBase32(rawHash)
+  }
+
+  // MARK: - Legacy Format (v1)
+
+  /// Parses the legacy channel reaction format.
+  /// Format: `{emoji}@[{sender}]\n{hash}`
+  private static func parseLegacy(_ text: String) -> ParsedReaction? {
     // Step 1: Split on last newline to get hash
     guard let newlineIndex = text.lastIndex(of: "\n") else {
       return nil
@@ -141,9 +225,9 @@ public enum ReactionParser {
     )
   }
 
-  /// Parses DM reaction text, returns nil if format doesn't match.
-  /// Format: `{emoji}\nxxxxxxxx` (no sender field)
-  public static func parseDM(_ text: String) -> ParsedDMReaction? {
+  /// Parses the legacy DM reaction format.
+  /// Format: `{emoji}\n{hash}` (no sender field)
+  private static func parseDMLegacy(_ text: String) -> ParsedDMReaction? {
     // Reject channel format (contains `@[`)
     if text.contains("@[") {
       return nil
@@ -171,15 +255,78 @@ public enum ReactionParser {
     return ParsedDMReaction(emoji: emoji, messageHash: messageHash)
   }
 
-  /// Builds DM reaction text in wire format.
-  /// Format: `{emoji}\n{hash}`
+  // MARK: - Building
+
+  /// Safety headroom (UTF-8 bytes) reserved below the firmware transmit ceiling
+  /// when building reactions. The snippet is cosmetic, but the trailing hash is
+  /// load-bearing: if the firmware truncates the tail (e.g. because the prepended
+  /// node name is a byte longer than the app measured, or the true text ceiling
+  /// is slightly under our constant), it clips the hash mid-string and the
+  /// reaction fails to parse. Reserving headroom keeps the hash clear of that edge.
+  static let reactionByteMargin = 8
+
+  /// Builds human-readable channel reaction text.
+  /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+  ///
+  /// The total reaction text (in UTF-8 bytes) is capped at
+  /// `ProtocolLimits.maxChannelMessageLength(nodeNameByteCount:)` minus
+  /// `reactionByteMargin` so that the firmware-prepended `"{NodeName}: "` plus the
+  /// reaction stays comfortably within `maxChannelMessageTotalLength`. The hash
+  /// suffix is always preserved — only the snippet is shortened if needed.
+  static func buildChannelReactionText(
+    emoji: String,
+    targetSender: String,
+    targetText: String,
+    targetTimestamp: UInt32,
+    localNodeNameByteCount: Int
+  ) -> String {
+    let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
+    let prefix = "\(emoji) reacted to [\(targetSender)]: \""
+    let closing = "\" (\(hash))"
+    let totalBudget = max(0, ProtocolLimits.maxChannelMessageLength(
+      nodeNameByteCount: localNodeNameByteCount
+    ) - reactionByteMargin)
+    let snippetBudget = max(0, totalBudget - prefix.utf8.count - closing.utf8.count)
+    let snippet = truncateToFit(targetText, maxBytes: snippetBudget)
+    return "\(prefix)\(snippet)\(closing)"
+  }
+
+  /// Builds human-readable DM reaction text.
+  /// Format: `{emoji} reacted to: "{snippet}" ({hash})`
+  ///
+  /// Capped at `ProtocolLimits.maxDirectMessageLength` minus `reactionByteMargin`;
+  /// no node-name prefix is prepended on the DM path.
   static func buildDMReactionText(
     emoji: String,
     targetText: String,
     targetTimestamp: UInt32
   ) -> String {
     let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
-    return "\(emoji)\n\(hash)"
+    let overhead = emoji.utf8.count + " reacted to: \"".utf8.count
+      + "\" (".utf8.count + 8 + ")".utf8.count
+    let snippetBudget = max(0, ProtocolLimits.maxDirectMessageLength - overhead - reactionByteMargin)
+    let snippet = truncateToFit(targetText, maxBytes: snippetBudget)
+    return "\(emoji) reacted to: \"\(snippet)\" (\(hash))"
+  }
+
+  /// Truncates a string to fit within a UTF-8 byte budget, appending "..." if truncated.
+  /// Respects character boundaries (never splits a multi-byte character).
+  private static func truncateToFit(_ text: String, maxBytes: Int) -> String {
+    // Already fits: return unchanged.
+    guard text.utf8.count > maxBytes else { return text }
+    // Budget too small to hold even the "..." marker: return as much of the
+    // ellipsis as fits (never the full text, which would blow the budget).
+    guard maxBytes > 3 else { return String("...".prefix(max(0, maxBytes))) }
+    let target = maxBytes - 3 // room for "..."
+    var result = ""
+    var byteCount = 0
+    for char in text {
+      let charBytes = String(char).utf8.count
+      if byteCount + charBytes > target { break }
+      result.append(char)
+      byteCount += charBytes
+    }
+    return result + "..."
   }
 
   /// Generates message identifier for reaction wire format (8-char Crockford Base32)

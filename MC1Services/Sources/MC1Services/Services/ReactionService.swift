@@ -92,19 +92,28 @@ public actor ReactionService {
     return matched
   }
 
-  /// Builds reaction wire format text for sending
-  /// Format: `{emoji}@[{sender}]\n{hash}`
+  /// Builds channel reaction wire format text for sending.
+  /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+  ///
+  /// `localNodeName` sizes the snippet budget: the firmware prepends
+  /// `"{NodeName}: "` before transmit, so a longer local name leaves less room.
   public nonisolated func buildReactionText(
     emoji: String,
     targetSender: String,
     targetText: String,
-    targetTimestamp: UInt32
+    targetTimestamp: UInt32,
+    localNodeName: String
   ) -> String {
-    let hash = ReactionParser.generateMessageHash(text: targetText, timestamp: targetTimestamp)
-    return "\(emoji)@[\(targetSender)]\n\(hash)"
+    ReactionParser.buildChannelReactionText(
+      emoji: emoji,
+      targetSender: targetSender,
+      targetText: targetText,
+      targetTimestamp: targetTimestamp,
+      localNodeNameByteCount: localNodeName.utf8.count
+    )
   }
 
-  /// Builds DM reaction wire format (shorter, no sender)
+  /// Builds DM reaction wire format (no sender — two-party is unambiguous)
   public nonisolated func buildDMReactionText(
     emoji: String,
     targetText: String,
