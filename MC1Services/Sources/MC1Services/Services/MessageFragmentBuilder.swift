@@ -234,7 +234,11 @@ public enum MessageFragmentBuilder {
       heardRepeats: message.heardRepeats,
       retryAttempt: message.retryAttempt,
       maxRetryAttempts: message.maxRetryAttempts,
-      sendCount: message.sendCount
+      sendCount: message.sendCount,
+      // Second gate on direction: the detector only ever arms outgoing sends, but the
+      // card is meaningless on an incoming row, so an inconsistent input can never
+      // render one.
+      noRepeatsRetry: message.isOutgoing ? inputs.noRepeatsRetry : nil
     )
   }
 

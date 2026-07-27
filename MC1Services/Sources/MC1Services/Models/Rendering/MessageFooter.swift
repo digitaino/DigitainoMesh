@@ -37,6 +37,12 @@ public struct MessageFooter: Sendable, Hashable {
   public let retryAttempt: Int
   public let maxRetryAttempts: Int
   public let sendCount: Int
+  /// Present when this row is the one offered the "no repeats heard" retry card. Lives on
+  /// the footer rather than as a `MessageFragment` because it is an affordance attached to
+  /// the send's outcome, not a piece of message content — and because the footer already
+  /// carries the other send-outcome slots (`status`, `heardRepeats`, `sendCount`) the card
+  /// reasons about. Baked in, so the item-only `Equatable` seam still decides the redraw.
+  public let noRepeatsRetry: NoRepeatsRetryPrompt?
 
   public init(
     showHop: Bool,
@@ -51,7 +57,8 @@ public struct MessageFooter: Sendable, Hashable {
     heardRepeats: Int,
     retryAttempt: Int,
     maxRetryAttempts: Int,
-    sendCount: Int
+    sendCount: Int,
+    noRepeatsRetry: NoRepeatsRetryPrompt? = nil
   ) {
     self.showHop = showHop
     self.hopCount = hopCount
@@ -66,6 +73,7 @@ public struct MessageFooter: Sendable, Hashable {
     self.retryAttempt = retryAttempt
     self.maxRetryAttempts = maxRetryAttempts
     self.sendCount = sendCount
+    self.noRepeatsRetry = noRepeatsRetry
   }
 
   /// Returns a new footer with `status` overridden. Eliminates the 10-field
@@ -84,7 +92,8 @@ public struct MessageFooter: Sendable, Hashable {
       heardRepeats: heardRepeats,
       retryAttempt: retryAttempt,
       maxRetryAttempts: maxRetryAttempts,
-      sendCount: sendCount
+      sendCount: sendCount,
+      noRepeatsRetry: noRepeatsRetry
     )
   }
 }

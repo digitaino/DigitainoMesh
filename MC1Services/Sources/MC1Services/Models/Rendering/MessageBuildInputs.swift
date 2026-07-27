@@ -49,6 +49,11 @@ public struct MessageBuildInputs: Sendable, Hashable {
   public let showNewMessagesDivider: Bool
   /// True for the first message of a new calendar day; drives the day separator.
   public let showDayDivider: Bool
+  /// Set only on the one message currently offered the "no repeats heard" retry card.
+  /// Threaded through the builder (rather than patched onto the item afterwards) so a
+  /// rebake for any unrelated reason — theme switch, pagination, preview resolution —
+  /// re-emits the card instead of silently dropping it.
+  public let noRepeatsRetry: NoRepeatsRetryPrompt?
 
   public init(
     messageID: UUID,
@@ -73,7 +78,8 @@ public struct MessageBuildInputs: Sendable, Hashable {
     showDirectionGap: Bool,
     showSenderName: Bool,
     showNewMessagesDivider: Bool,
-    showDayDivider: Bool = false
+    showDayDivider: Bool = false,
+    noRepeatsRetry: NoRepeatsRetryPrompt? = nil
   ) {
     self.messageID = messageID
     self.previewState = previewState
@@ -98,5 +104,6 @@ public struct MessageBuildInputs: Sendable, Hashable {
     self.showSenderName = showSenderName
     self.showNewMessagesDivider = showNewMessagesDivider
     self.showDayDivider = showDayDivider
+    self.noRepeatsRetry = noRepeatsRetry
   }
 }
