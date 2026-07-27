@@ -78,36 +78,58 @@ extension ChatViewModel {
       localNodeName: localNodeName
     )
 
+    // Reactions ride the same persisted send queue as ordinary messages: the
+    // pending row survives an app restart and drains on the next transport-open,
+    // which is what replaces the fork's in-memory outgoing-reaction queue.
+    let carrier: MessageDTO
     do {
-      _ = try await messageService.sendChannelMessage(
+      carrier = try await messageService.createPendingChannelMessage(
         text: reactionText,
         channelIndex: channelIndex,
         radioID: message.radioID
       )
+    } catch {
+      logger.error("Failed to stage channel reaction: \(error)")
+      errorMessage = error.userFacingMessage
+      return
+    }
 
-      // Optimistic local update
-      let messageHash = ReactionParser.generateMessageHash(
-        text: message.text,
-        timestamp: message.reactionTimestamp
-      )
-      let reactionDTO = ReactionDTO(
+    // Optimistic local update — the badge appears immediately; the queue
+    // owns getting the packet out.
+    await persistOutgoingReaction(
+      ReactionDTO(
         messageID: message.id,
         emoji: emoji,
         senderName: localNodeName,
-        messageHash: messageHash,
+        messageHash: ReactionParser.generateMessageHash(
+          text: message.text,
+          timestamp: message.reactionTimestamp
+        ),
         rawText: reactionText,
         channelIndex: channelIndex,
         radioID: message.radioID
-      )
-      if let result = await reactionService.persistReactionAndUpdateSummary(
-        reactionDTO,
-        using: dataStore
-      ) {
-        updateReactionSummary(for: result.messageID, summary: result.summary)
-      }
+      ),
+      using: reactionService,
+      dataStore: dataStore
+    )
+
+    // `localNodeName: nil` deliberately: the envelope's node name exists so the
+    // drain can index a sent message as a reaction *target*. A reaction is never
+    // itself reactable, so it must not enter the reaction index.
+    let envelope = ChannelMessageEnvelope(
+      messageID: carrier.id,
+      channelIndex: channelIndex,
+      isResend: false,
+      messageText: carrier.text,
+      messageTimestamp: carrier.timestamp,
+      localNodeName: nil
+    )
+    do {
+      try await enqueueChannel(envelope)
     } catch {
-      logger.error("Failed to send channel reaction: \(error)")
-      errorMessage = error.userFacingMessage
+      logger.error("enqueueChannel reaction failed for messageID=\(carrier.id, privacy: .public): \(String(describing: error))")
+      await failReactionCarrier(carrier.id)
+      sendErrorMessage = Self.copyForEnqueueFailure(error)
     }
   }
 
@@ -132,37 +154,64 @@ extension ChatViewModel {
       targetText: message.text,
       targetTimestamp: message.reactionTimestamp
     )
-    do {
-      // Send as DM to the contact
-      _ = try await messageService.sendDirectMessage(
-        text: reactionText,
-        to: contact
-      )
 
-      // Optimistic local update
-      let messageHash = ReactionParser.generateMessageHash(
-        text: message.text,
-        timestamp: message.reactionTimestamp
-      )
-      let reactionDTO = ReactionDTO(
+    let carrier: MessageDTO
+    do {
+      carrier = try await messageService.createPendingMessage(text: reactionText, to: contact)
+    } catch {
+      logger.error("Failed to stage DM reaction: \(error)")
+      errorMessage = error.userFacingMessage
+      return
+    }
+
+    await persistOutgoingReaction(
+      ReactionDTO(
         messageID: message.id,
         emoji: emoji,
         senderName: localNodeName,
-        messageHash: messageHash,
+        messageHash: ReactionParser.generateMessageHash(
+          text: message.text,
+          timestamp: message.reactionTimestamp
+        ),
         rawText: reactionText,
         contactID: contactID,
         radioID: message.radioID
-      )
-      if let result = await reactionService.persistReactionAndUpdateSummary(
-        reactionDTO,
-        using: dataStore
-      ) {
-        updateReactionSummary(for: result.messageID, summary: result.summary)
-      }
+      ),
+      using: reactionService,
+      dataStore: dataStore
+    )
+
+    do {
+      try await enqueueDM(DirectMessageEnvelope(messageID: carrier.id, contactID: contact.id))
     } catch {
-      logger.error("Failed to send DM reaction: \(error)")
-      errorMessage = error.userFacingMessage
+      logger.error("enqueueDM reaction failed for messageID=\(carrier.id, privacy: .public): \(String(describing: error))")
+      await failReactionCarrier(carrier.id)
+      sendErrorMessage = Self.copyForEnqueueFailure(error)
     }
+  }
+
+  // MARK: - Carrier Bookkeeping
+
+  /// Writes the optimistic reaction row and pushes the refreshed summary into the timeline.
+  private func persistOutgoingReaction(
+    _ reactionDTO: ReactionDTO,
+    using reactionService: ReactionService,
+    dataStore: DataStore
+  ) async {
+    if let result = await reactionService.persistReactionAndUpdateSummary(
+      reactionDTO,
+      using: dataStore
+    ) {
+      updateReactionSummary(for: result.messageID, summary: result.summary)
+    }
+  }
+
+  /// Marks a reaction's carrier message failed. A failed outgoing reaction is the one
+  /// case `filterOutgoingReactionMessages` lets through to the timeline, so the user
+  /// sees the send that didn't make it and can retry it like any other message.
+  private func failReactionCarrier(_ messageID: UUID) async {
+    _ = try? await dataStore?.updateMessageStatusUnlessDelivered(id: messageID, status: .failed)
+    timeline.applyStatusUpdate(messageID: messageID, status: .failed)
   }
 
   // MARK: - Reaction Updates

@@ -158,7 +158,8 @@ struct ChatViewModelReactionIndexingTests {
       emoji: "🔥",
       targetSender: "Alice",
       targetText: message.text,
-      targetTimestamp: message.timestamp
+      targetTimestamp: message.timestamp,
+      localNodeName: "Me"
     )
     let parsed = try #require(ReactionParser.parse(rawText))
     await reactionService.queuePendingReaction(
@@ -247,7 +248,8 @@ struct ChatViewModelReactionIndexingTests {
       emoji: "🔥",
       targetSender: "Me",
       targetText: message.text,
-      targetTimestamp: message.timestamp
+      targetTimestamp: message.timestamp,
+      localNodeName: "Me"
     )
     let parsed = try #require(ReactionParser.parse(rawText))
     await reactionService.queuePendingReaction(
