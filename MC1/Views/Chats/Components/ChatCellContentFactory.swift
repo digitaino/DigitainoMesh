@@ -52,6 +52,18 @@ struct ChatCellContentFactory {
       actions.onReply(message)
     }
     .swipeToRevealTimestamp(date: item.envelope.date)
+    // Search flash. Drawn out here for the same reason the swipe modifiers are: the bubble
+    // is `Equatable` on `MessageItem` and would skip re-bodying, but the wrapper re-renders
+    // whenever the item changes — which is exactly when the flag flips.
+    .background(alignment: .center) {
+      if item.isSearchHighlighted {
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color.accentColor.opacity(0.22))
+          .padding(.horizontal, 6)
+          .transition(.opacity)
+      }
+    }
+    .animation(.easeInOut(duration: 0.25), value: item.isSearchHighlighted)
     .environment(\.appTheme, theme)
     .environment(\.openURL, openURL)
     .environment(\.chatTimestampReveal, timestampReveal)

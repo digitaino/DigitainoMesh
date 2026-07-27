@@ -26,6 +26,14 @@ struct ConversationListContent: View {
   private let onDeleteConversation: (Conversation) -> Void
   @Binding private var selectedFilter: ChatFilter
 
+  /// The live search-field text. Conversation rows are already filtered by it upstream;
+  /// this copy drives the message-search half of the results.
+  private let searchText: String
+
+  /// Global message search, owned here so both layouts get it without threading another
+  /// binding through two root views.
+  @State private var messageSearch = MessageSearchViewModel()
+
   /// Leading inset for the inter-row divider, aligning it under the row text past the avatar
   /// (row horizontal padding 16 + avatar 44 + avatar-to-text spacing 12).
   private static let rowSeparatorLeadingInset: CGFloat = 72
@@ -37,6 +45,7 @@ struct ConversationListContent: View {
     selectedFilter: Binding<ChatFilter>,
     hasLoadedOnce: Bool,
     emptyStateMessage: (title: String, description: String, systemImage: String),
+    searchText: String,
     selection: Binding<ChatRoute?>,
     onDeleteConversation: @escaping (Conversation) -> Void
   ) {
@@ -46,6 +55,7 @@ struct ConversationListContent: View {
     _selectedFilter = selectedFilter
     self.hasLoadedOnce = hasLoadedOnce
     self.emptyStateMessage = emptyStateMessage
+    self.searchText = searchText
     mode = .selection(selection)
     self.onDeleteConversation = onDeleteConversation
   }
@@ -57,6 +67,7 @@ struct ConversationListContent: View {
     selectedFilter: Binding<ChatFilter>,
     hasLoadedOnce: Bool,
     emptyStateMessage: (title: String, description: String, systemImage: String),
+    searchText: String,
     onNavigate: @escaping (ChatRoute) -> Void,
     onRequestRoomAuth: @escaping (RemoteNodeSessionDTO) -> Void,
     onDeleteConversation: @escaping (Conversation) -> Void
@@ -67,6 +78,7 @@ struct ConversationListContent: View {
     _selectedFilter = selectedFilter
     self.hasLoadedOnce = hasLoadedOnce
     self.emptyStateMessage = emptyStateMessage
+    self.searchText = searchText
     mode = .navigation(onNavigate: onNavigate, onRequestRoomAuth: onRequestRoomAuth)
     self.onDeleteConversation = onDeleteConversation
   }
@@ -87,6 +99,56 @@ struct ConversationListContent: View {
       guard hasLoadedOnce else { return }
       await prewarmTopConversations()
     }
+    // Debounced so a query is not run per keystroke: each edit cancels the previous task,
+    // and only a pause long enough to finish typing a word reaches the store.
+    .task(id: searchText) {
+      guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        messageSearch.clear()
+        return
+      }
+      try? await Task.sleep(for: .milliseconds(300))
+      guard !Task.isCancelled else { return }
+      await messageSearch.search(
+        query: searchText,
+        radioID: appState.currentRadioID,
+        store: appState.offlineDataStore,
+        conversationName: conversationName(for:)
+      )
+    }
+  }
+
+  // MARK: - Message Search
+
+  /// Resolves a result's conversation to its display name; `nil` for a conversation the
+  /// list no longer holds, which drops the group rather than offering an untappable row.
+  private func conversationName(for scope: MessageSearchResult.Scope) -> String? {
+    conversation(for: scope)?.displayName
+  }
+
+  private func conversation(for scope: MessageSearchResult.Scope) -> Conversation? {
+    viewModel.allConversations.first { candidate in
+      switch (scope, candidate) {
+      case let (.direct(contactID), .direct(contact)): contact.id == contactID
+      case let (.channel(index), .channel(channel)): channel.index == index
+      default: false
+      }
+    }
+  }
+
+  /// Opens the conversation a result belongs to, handing the message id to
+  /// `ChatConversationView` through the same pending-scroll channel a reaction
+  /// notification uses. `ChatRoute` hashes on the conversation alone, so the target cannot
+  /// ride along inside the route.
+  private func openMessageResult(_ result: MessageSearchResult) {
+    guard let conversation = conversation(for: result.conversation) else { return }
+    appState.navigation.pendingScrollToMessageID = result.id
+    let route = ChatRoute(conversation: conversation)
+    switch mode {
+    case let .selection(selection):
+      selection.wrappedValue = route
+    case let .navigation(onNavigate, _):
+      onNavigate(route)
+    }
   }
 
   private var loadingBody: some View {
@@ -102,16 +164,28 @@ struct ConversationListContent: View {
     ScrollView {
       LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
         Section {
-          if hasNoConversations {
+          // While searching, an empty conversation list is not an empty screen: the
+          // message results below may well be what the user was after.
+          if hasNoConversations, !isSearching {
             emptyState
           } else {
             rows(referenceDate: referenceDate)
           }
+          MessageSearchResultsSection(
+            search: messageSearch,
+            query: searchText,
+            referenceDate: referenceDate,
+            onOpen: openMessageResult
+          )
         } header: {
           pinnedFilterHeader
         }
       }
     }
+  }
+
+  private var isSearching: Bool {
+    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   /// Filter bar as the pinned section header; `pinnedFilterHeaderBackground` documents the

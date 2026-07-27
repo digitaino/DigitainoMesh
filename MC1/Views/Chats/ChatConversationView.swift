@@ -33,6 +33,12 @@ struct ChatConversationView: View {
   @State private var scrollToTargetRequest = 0
   @State private var scrollToTargetID: UUID?
 
+  // MARK: - Message Search
+
+  /// Find-in-conversation. Owned here because the bar, the jump and the flash are three
+  /// views' worth of work driven by one piece of state.
+  @State private var messageSearch = ConversationMessageSearchState()
+
   /// Pending debounced draft persist; cancelled and restarted on each keystroke,
   /// cancelled-then-flushed synchronously on view teardown and app suspension.
   @State private var draftSaveTask: Task<Void, Never>?
@@ -205,7 +211,21 @@ struct ChatConversationView: View {
       titleIcon: AnyView(titleAvatar),
       onTitleTap: { showingInfo = true }
     )
+    // Find-in-conversation bar. A top inset rather than `.searchable`, which would take
+    // over the navigation bar and hide the conversation's own title and subtitle.
+    .safeAreaInset(edge: .top, spacing: 0) {
+      if messageSearch.isActive {
+        ConversationMessageSearchBar(state: messageSearch)
+          .transition(.move(edge: .top).combined(with: .opacity))
+      }
+    }
+    .animation(.snappy(duration: 0.2), value: messageSearch.isActive)
     .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button(L10n.Chats.Chats.Search.InConversation.open, systemImage: "magnifyingglass") {
+          messageSearch.isActive = true
+        }
+      }
       if #unavailable(iOS 26) {
         ToolbarItem(placement: .primaryAction) {
           Button(L10n.Chats.Chats.Common.info, systemImage: "info.circle") {
@@ -213,6 +233,21 @@ struct ChatConversationView: View {
           }
         }
       }
+    }
+    // Debounced so each keystroke cancels the previous query instead of queueing one.
+    .task(id: messageSearch.query) {
+      guard messageSearch.isActive else { return }
+      try? await Task.sleep(for: .milliseconds(300))
+      guard !Task.isCancelled else { return }
+      await messageSearch.run(
+        query: messageSearch.query,
+        conversation: conversationType,
+        store: appState.offlineDataStore
+      )
+    }
+    .onChange(of: messageSearch.currentMatchID) { _, match in
+      guard let match else { return }
+      Task { await jumpToMessage(match) }
     }
     // Info sheet — type-specific
     .sheet(isPresented: $showingInfo, onDismiss: {
@@ -335,6 +370,20 @@ struct ChatConversationView: View {
     }
   }
 
+  // MARK: - Jump to a Message
+
+  /// Pages the message into the loaded window, scrolls the list to it, and flashes it.
+  ///
+  /// The order matters: `TiledScrollPosition.scrollTo(id:)` no-ops for an id the list does
+  /// not hold, so asking for the scroll before the paging completes would look like the
+  /// tap did nothing at all.
+  private func jumpToMessage(_ messageID: UUID) async {
+    guard await ChatMessageSearchNavigator.loadUntilVisible(messageID, in: chatViewModel) == .loaded else { return }
+    scrollToTargetID = messageID
+    scrollToTargetRequest += 1
+    await ChatMessageSearchNavigator.flash(messageID, in: chatViewModel)
+  }
+
   // MARK: - Initial Load (.task)
 
   private func performInitialLoad() async {
@@ -372,10 +421,11 @@ struct ChatConversationView: View {
     // bubble tracking, mark them all seen here so chat-list mention badges clear.
     await markConversationMentionsSeen()
 
-    // Trigger scroll to target message if pending (notification deeplink)
+    // Trigger scroll to target message if pending (notification deeplink, or a tapped
+    // global search result). Paging is needed for the search case: a result can be far
+    // older than the first page this open just fetched.
     if let targetID = pendingTarget {
-      scrollToTargetID = targetID
-      scrollToTargetRequest += 1
+      Task { await jumpToMessage(targetID) }
     }
 
     // Clear any notifications for this conversation still sitting in the tray

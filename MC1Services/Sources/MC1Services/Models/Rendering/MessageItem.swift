@@ -24,13 +24,23 @@ public struct MessageItem: Identifiable, Sendable, Hashable {
   public let grouping: GroupingFlags
   public let shouldRequestPreviewFetch: Bool
 
+  /// Transient flash marking the row a search result jumped to.
+  ///
+  /// It lives here, rather than in a side-channel set on the coordinator, for exactly the
+  /// reason the Equatable invariant above gives: a highlight held outside the item would
+  /// leave `==` returning true and the flash would never paint. Set and cleared through
+  /// `updateRenderItem`; any subsequent rebake drops it, which is the right lifetime for
+  /// something meant to fade.
+  public let isSearchHighlighted: Bool
+
   public init(
     id: UUID,
     envelope: MessageEnvelope,
     content: [MessageFragment],
     footer: MessageFooter,
     grouping: GroupingFlags,
-    shouldRequestPreviewFetch: Bool
+    shouldRequestPreviewFetch: Bool,
+    isSearchHighlighted: Bool = false
   ) {
     self.id = id
     self.envelope = envelope
@@ -38,6 +48,7 @@ public struct MessageItem: Identifiable, Sendable, Hashable {
     self.footer = footer
     self.grouping = grouping
     self.shouldRequestPreviewFetch = shouldRequestPreviewFetch
+    self.isSearchHighlighted = isSearchHighlighted
   }
 
   /// Message-scoped identity for the bubble's preview-fetch `.task(id:)`. Holds
@@ -62,7 +73,21 @@ public struct MessageItem: Identifiable, Sendable, Hashable {
       content: content,
       footer: footer ?? self.footer,
       grouping: grouping,
-      shouldRequestPreviewFetch: shouldRequestPreviewFetch
+      shouldRequestPreviewFetch: shouldRequestPreviewFetch,
+      isSearchHighlighted: isSearchHighlighted
+    )
+  }
+
+  /// Returns a copy with only the search flash changed.
+  public func with(isSearchHighlighted: Bool) -> MessageItem {
+    MessageItem(
+      id: id,
+      envelope: envelope,
+      content: content,
+      footer: footer,
+      grouping: grouping,
+      shouldRequestPreviewFetch: shouldRequestPreviewFetch,
+      isSearchHighlighted: isSearchHighlighted
     )
   }
 }

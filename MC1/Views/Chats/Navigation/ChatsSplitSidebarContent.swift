@@ -32,6 +32,7 @@ struct ChatsSplitSidebarContent: View {
       selectedFilter: $selectedFilter,
       hasLoadedOnce: hasLoadedOnce,
       emptyStateMessage: emptyStateMessage,
+      searchText: searchText,
       selection: $selectedRoute,
       onDeleteConversation: onDeleteConversation
     )

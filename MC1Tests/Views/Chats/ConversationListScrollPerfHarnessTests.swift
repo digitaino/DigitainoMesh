@@ -197,6 +197,7 @@ private struct HostedConversationList: View {
       selectedFilter: $selectedFilter,
       hasLoadedOnce: true,
       emptyStateMessage: ("None", "None", "message"),
+      searchText: "",
       onNavigate: { _ in },
       onRequestRoomAuth: { _ in },
       onDeleteConversation: { _ in }

@@ -35,6 +35,7 @@ struct ChatsStackRootContent: View {
       selectedFilter: $selectedFilter,
       hasLoadedOnce: hasLoadedOnce,
       emptyStateMessage: emptyStateMessage,
+      searchText: searchText,
       onNavigate: { route in
         prefetch(route)
         navigationPath.append(route)
