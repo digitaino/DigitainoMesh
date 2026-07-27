@@ -108,17 +108,21 @@ struct RepeaterBenchmarkEngineTests {
     }
     await run.value
 
-    let traces = await session.traces
-    #expect(traces.count == 6)
     // Path is test → target → test, one byte per hop at pathHashMode 0.
-    #expect(traces.prefix(3).allSatisfy { $0.path == Data([0x0A, 0x0C, 0x0A]) })
-    #expect(traces.suffix(3).allSatisfy { $0.path == Data([0x0A, 0x1F, 0x0A]) })
+    let paths = await session.traces.map(\.path)
+    #expect(paths.count == 6)
+    #expect(paths.prefix(3) == ArraySlice(repeatElement(Data([0x0A, 0x0C, 0x0A]), count: 3)))
+    #expect(paths.suffix(3) == ArraySlice(repeatElement(Data([0x0A, 0x1F, 0x0A]), count: 3)))
 
     let snapshot = await engine.currentSnapshot()
+    let allComplete = snapshot.results.allSatisfy(\.isComplete)
+    let outcomeCounts = snapshot.results.map(\.outcomes.count)
+    let failures = snapshot.results.flatMap { $0.outcomes.map(\.failure) }
+
     #expect(snapshot.results.count == 2)
-    #expect(snapshot.results.allSatisfy(\.isComplete))
-    #expect(snapshot.results.allSatisfy { $0.outcomes.count == 3 })
-    #expect(snapshot.results.allSatisfy { $0.outcomes.allSatisfy { $0.failure == .timeout } })
+    #expect(allComplete)
+    #expect(outcomeCounts == [3, 3])
+    #expect(failures.allSatisfy { $0 == .timeout })
     #expect(!snapshot.isRunning)
 
     await engine.shutdown()
@@ -231,14 +235,15 @@ struct RepeaterBenchmarkEngineTests {
 
     await engine.setTestRepeater(tower)
     await engine.setTargets([ridge])
-    await engine.setTracesPerTarget(2)
+    await engine.setTracesPerTarget(3)
     await engine.run()
 
     let result = try #require(await engine.currentSnapshot().results.first)
-    #expect(result.outcomes.map(\.failure) == [.sendFailed, .sendFailed])
+    #expect(result.outcomes.map(\.failure) == [.sendFailed, .sendFailed, .sendFailed])
     #expect(result.successRate == 0)
     // Nothing parked on a deadline: a send that never happened has nothing to wait for.
-    #expect(await sleeper.recorded.allSatisfy { $0 < .seconds(1) })
+    let waitedOnAReply = await sleeper.recorded.contains { $0 >= .seconds(1) }
+    #expect(!waitedOnAReply)
 
     await engine.shutdown()
   }
