@@ -1219,3 +1219,15 @@
 
 /* Location: UnifiedMessageBubble.swift - Format string for unverified nickname display - %@ is the nickname */
 "chats.message.sender.unverifiedNicknameFormat" = "(%@)";
+
+/* Location: NoRepeatsRetryCard.swift - Title of the inline card shown when no repeater relayed a sent message */
+"chats.message.noRepeats.title" = "No repeats heard";
+
+/* Location: NoRepeatsRetryCard.swift - Button that resends the message at the current TX power */
+"chats.message.noRepeats.sendAgain" = "Send Again";
+
+/* Location: NoRepeatsRetryCard.swift - Button that resends one power step higher - %@ is the next power level, e.g. "500mW" */
+"chats.message.noRepeats.sendAtPower" = "Send at %@";
+
+/* Location: NoRepeatsRetryCard.swift - Accessibility label for the no-repeats retry card */
+"chats.message.noRepeats.accessibilityLabel" = "No repeats heard. Resend options.";

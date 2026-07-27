@@ -699,6 +699,18 @@ public enum L10n {
             return L10n.tr("Chats", "chats.message.info.snr", String(describing: p1), fallback: "SNR: %@")
           }
         }
+        public enum NoRepeats {
+          /// Location: NoRepeatsRetryCard.swift - Accessibility label for the no-repeats retry card
+          public static let accessibilityLabel = L10n.tr("Chats", "chats.message.noRepeats.accessibilityLabel", fallback: "No repeats heard. Resend options.")
+          /// Location: NoRepeatsRetryCard.swift - Button that resends the message at the current TX power
+          public static let sendAgain = L10n.tr("Chats", "chats.message.noRepeats.sendAgain", fallback: "Send Again")
+          /// Location: NoRepeatsRetryCard.swift - Button that resends one power step higher - %@ is the next power level, e.g. "500mW"
+          public static func sendAtPower(_ p1: Any) -> String {
+            return L10n.tr("Chats", "chats.message.noRepeats.sendAtPower", String(describing: p1), fallback: "Send at %@")
+          }
+          /// Location: NoRepeatsRetryCard.swift - Title of the inline card shown when no repeater relayed a sent message
+          public static let title = L10n.tr("Chats", "chats.message.noRepeats.title", fallback: "No repeats heard")
+        }
         public enum Path {
           /// Location: UnifiedMessageBubble.swift - Accessibility label for routing path - %@ is the path
           public static func accessibilityLabel(_ p1: Any) -> String {
