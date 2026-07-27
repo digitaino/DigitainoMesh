@@ -141,6 +141,9 @@ struct MC1MapView: UIViewRepresentable {
   // Data
   let points: [MapPoint]
   let lines: [MapLine]
+  /// Weighted data layers contributed by a tool, drawn beneath `lines` and `points`.
+  /// See ``MapOverlay``.
+  var overlays: [MapOverlay] = []
   let mapStyle: MapStyleSelection
   let isDarkMode: Bool
   var isOffline: Bool = false
@@ -152,8 +155,13 @@ struct MC1MapView: UIViewRepresentable {
   let showsScale: Bool
   var isNorthLocked: Bool = false
 
-  // Camera
+  /// Camera
   @Binding var cameraRegion: MKCoordinateRegion?
+  /// MapLibre-native camera target, honored ahead of `cameraRegion` when set and driven by the
+  /// same version counter. It exists so a screen built on the MapLibre stack can frame the map
+  /// without taking on MapKit's geometry types (§2.3); callers that already hold an
+  /// `MKCoordinateRegion` keep using `cameraRegion` and leave this nil.
+  var cameraBounds: MLNCoordinateBounds?
   let cameraRegionVersion: Int
   var cameraEdgePadding: UIEdgeInsets = .zero
   var cameraBottomSheetFraction: CGFloat?
@@ -247,6 +255,7 @@ struct MC1MapView: UIViewRepresentable {
     coordinator.setIsCenteredOnUser = { isCenteredOnUser.wrappedValue = $0 }
     coordinator.currentPoints = points
     coordinator.currentLines = lines
+    coordinator.currentOverlays = overlays
     // Set before the styleURL below: a theme switch changes the styleURL and triggers
     // a reload, so didFinishLoading -> renderAll must already see the new theme.
     coordinator.currentIsDarkMode = isDarkMode
@@ -290,6 +299,10 @@ struct MC1MapView: UIViewRepresentable {
         coordinator.updateLineSource(mapView: mapView)
         coordinator.lastAppliedLines = lines
       }
+      if coordinator.lastAppliedOverlays != overlays {
+        coordinator.updateOverlays(mapView: mapView)
+        coordinator.lastAppliedOverlays = overlays
+      }
       if coordinator.currentShowLabels != showLabels {
         coordinator.currentShowLabels = showLabels
         coordinator.updateLabelVisibility(mapView: mapView, showLabels: showLabels)
@@ -317,13 +330,27 @@ struct MC1MapView: UIViewRepresentable {
   /// uncaught `std::domain_error` (aborting the app) for any value beyond ±90.
   private static let latitudeLimit = 90.0
 
-  private func updateCameraRegion(in mapView: MLNMapView, coordinator: Coordinator) {
-    guard let region = cameraRegion else { return }
-    guard cameraRegionVersion != coordinator.lastAppliedRegionVersion else { return }
+  /// The corners this version bump wants framed: `cameraBounds` when a caller supplied one,
+  /// otherwise `cameraRegion` converted.
+  ///
+  /// Returns nil — after recording the version as applied — for a value MapLibre would abort
+  /// on, so a bad camera request is skipped rather than retried on every render. A caller that
+  /// has simply supplied no camera at all leaves the version unrecorded, so a target arriving
+  /// later under the same version still lands.
+  private func requestedCameraBounds(coordinator: Coordinator) -> MLNCoordinateBounds? {
+    if let cameraBounds {
+      guard CLLocationCoordinate2DIsValid(cameraBounds.sw),
+            CLLocationCoordinate2DIsValid(cameraBounds.ne) else {
+        coordinator.lastAppliedRegionVersion = cameraRegionVersion
+        return nil
+      }
+      return cameraBounds
+    }
 
+    guard let region = cameraRegion else { return nil }
     guard CLLocationCoordinate2DIsValid(region.center) else {
       coordinator.lastAppliedRegionVersion = cameraRegionVersion
-      return
+      return nil
     }
 
     // Corners are center ± span/2, so a non-finite span makes MapLibre's LatLng
@@ -332,17 +359,13 @@ struct MC1MapView: UIViewRepresentable {
     guard region.span.latitudeDelta.isFinite,
           region.span.longitudeDelta.isFinite else {
       coordinator.lastAppliedRegionVersion = cameraRegionVersion
-      return
+      return nil
     }
-
-    let isInflated = mapView.window.map { mapView.bounds.height > $0.bounds.height * 1.5 } ?? false
-    let animated = coordinator.lastAppliedRegionVersion > 0 && !isInflated
-    coordinator.lastAppliedRegionVersion = cameraRegionVersion
 
     // Clamp latitude so a near-pole center can't push a corner past ±90 (another
     // LatLng abort). Longitude is left unclamped because MapLibre wraps it.
     let limit = Self.latitudeLimit
-    let bounds = MLNCoordinateBounds(
+    return MLNCoordinateBounds(
       sw: CLLocationCoordinate2D(
         latitude: max(-limit, region.center.latitude - region.span.latitudeDelta / 2),
         longitude: region.center.longitude - region.span.longitudeDelta / 2
@@ -352,6 +375,16 @@ struct MC1MapView: UIViewRepresentable {
         longitude: region.center.longitude + region.span.longitudeDelta / 2
       )
     )
+  }
+
+  private func updateCameraRegion(in mapView: MLNMapView, coordinator: Coordinator) {
+    guard cameraRegionVersion != coordinator.lastAppliedRegionVersion else { return }
+    guard let bounds = requestedCameraBounds(coordinator: coordinator) else { return }
+
+    let isInflated = mapView.window.map { mapView.bounds.height > $0.bounds.height * 1.5 } ?? false
+    let animated = coordinator.lastAppliedRegionVersion > 0 && !isInflated
+    coordinator.lastAppliedRegionVersion = cameraRegionVersion
+
     var padding = cameraEdgePadding
     if let sheetFraction = cameraBottomSheetFraction {
       let insets = mapView.safeAreaInsets
@@ -384,7 +417,7 @@ struct MC1MapView: UIViewRepresentable {
       let pixelOffset = (Double(padding.top) - Double(padding.bottom)) / 2
       let offsetDeg = pixelOffset * requiredMPP / 111_000
       let center = CLLocationCoordinate2D(
-        latitude: min(limit, max(-limit, centerLat + offsetDeg)),
+        latitude: min(Self.latitudeLimit, max(-Self.latitudeLimit, centerLat + offsetDeg)),
         longitude: centerLon
       )
 
@@ -432,12 +465,16 @@ extension MC1MapView {
     var lastAppliedMapStyle: MapStyleSelection?
     var currentPoints: [MapPoint] = []
     var currentLines: [MapLine] = []
+    var currentOverlays: [MapOverlay] = []
     var lastAppliedPoints: [MapPoint] = []
     var lastAppliedClusterablePoints: [MapPoint] = []
     var lastAppliedFixedPoints: [MapPoint] = []
     var lastAppliedLines: [MapLine] = []
+    var lastAppliedOverlays: [MapOverlay] = []
     var clusterSource: MLNShapeSource?
     var fixedSource: MLNShapeSource?
+    /// Shape sources for tool-contributed overlays, keyed by ``MapOverlay/id``.
+    var overlaySources: [String: MLNShapeSource] = [:]
 
     // MARK: - Style loading
 
@@ -458,6 +495,7 @@ extension MC1MapView {
       lastAppliedLines = []
       lastAppliedMapStyle = nil
       currentShowLabels = true
+      resetOverlayState()
 
       PinSpriteRenderer.renderAll(into: style, isDarkMode: currentIsDarkMode)
       setupRasterSources(style: style, mapView: mapView)
@@ -465,6 +503,9 @@ extension MC1MapView {
 
       updatePointSource(mapView: mapView)
       updateLineSource(mapView: mapView)
+      // After the line layers exist, so overlays find their insertion anchor.
+      updateOverlays(mapView: mapView)
+      lastAppliedOverlays = currentOverlays
     }
 
     func mapView(_ mapView: MLNMapView, didFailToLoadImage imageName: String) -> UIImage? {
