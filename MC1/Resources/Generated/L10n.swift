@@ -3050,6 +3050,16 @@ public enum L10n {
       public static let subtitle = L10n.tr("Onboarding", "welcome.subtitle", fallback: "Send messages through a community built network, even without internet.")
       /// Location: WelcomeView.swift - App title displayed on welcome screen
       public static let title = L10n.tr("Onboarding", "welcome.title", fallback: "DigitainoMesh")
+      public enum Fork {
+        /// Location: WelcomeView.swift - Attribution line naming the upstream project
+        public static let attribution = L10n.tr("Onboarding", "welcome.fork.attribution", fallback: "A fork of PocketMesh")
+        /// Location: WelcomeView.swift - Feedback hint shown outside TestFlight
+        public static let feedbackEmail = L10n.tr("Onboarding", "welcome.fork.feedbackEmail", fallback: "Feedback: mesh@digitaino.com")
+        /// Location: WelcomeView.swift - Feedback hint shown in TestFlight beta builds
+        public static let feedbackTestFlight = L10n.tr("Onboarding", "welcome.fork.feedbackTestFlight", fallback: "Send feedback via TestFlight or email mesh@digitaino.com")
+        /// Location: WelcomeView.swift - Link label for the fork's GitHub repository
+        public static let github = L10n.tr("Onboarding", "welcome.fork.github", fallback: "GitHub")
+      }
     }
     public enum WifiConnection {
       /// Location: WiFiConnectionSheet.swift - Button to initiate connection

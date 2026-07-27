@@ -18,6 +18,18 @@
 /* Location: WelcomeView.swift - Button to proceed to next onboarding step */
 "welcome.getStarted" = "Los geht's";
 
+/* Location: WelcomeView.swift - Attribution line naming the upstream project */
+"welcome.fork.attribution" = "A fork of PocketMesh";
+
+/* Location: WelcomeView.swift - Feedback hint shown in TestFlight beta builds */
+"welcome.fork.feedbackTestFlight" = "Send feedback via TestFlight or email mesh@digitaino.com";
+
+/* Location: WelcomeView.swift - Feedback hint shown outside TestFlight */
+"welcome.fork.feedbackEmail" = "Feedback: mesh@digitaino.com";
+
+/* Location: WelcomeView.swift - Link label for the fork's GitHub repository */
+"welcome.fork.github" = "GitHub";
+
 
 // MARK: - Permissions View
 
