@@ -86,9 +86,9 @@ targets:
         NSSupportsLiveActivities: true
         UIBackgroundModes:
           - bluetooth-central
-        NSBluetoothAlwaysUsageDescription: "MeshCore One uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app."
-        NSBluetoothPeripheralUsageDescription: "MeshCore One uses Bluetooth to connect to MeshCore radios."
-        NSLocationWhenInUseUsageDescription: "MeshCore One uses your location to suggest a recommended radio preset for your area, show your position on maps, and sort contacts by distance. When you enable location sharing, MeshCore One also advertises your location to your mesh contacts."
+        NSBluetoothAlwaysUsageDescription: "DigitainoMesh uses Bluetooth to maintain connections with MeshCore radios, even in the background, so you can send and receive messages without opening the app."
+        NSBluetoothPeripheralUsageDescription: "DigitainoMesh uses Bluetooth to connect to MeshCore radios."
+        NSLocationWhenInUseUsageDescription: "DigitainoMesh uses your location to suggest a recommended radio preset for your area, show your position on maps, and sort contacts by distance. When you enable location sharing, DigitainoMesh also advertises your location to your mesh contacts."
         NSAccessorySetupSupports:
           - Bluetooth
         NSAccessorySetupKitSupports:
@@ -114,10 +114,10 @@ targets:
       configs:
         Debug:
           INFOPLIST_FILE: MC1/Info-Debug.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmeshtest.app
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh
         Release:
           INFOPLIST_FILE: MC1/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh
 
   MC1Tests:
     type: bundle.unit-test
@@ -150,10 +150,10 @@ targets:
       configs:
         Debug:
           INFOPLIST_FILE: MC1Widgets/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmeshtest.app.widgets
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.widgets
         Release:
           INFOPLIST_FILE: MC1Widgets/Info.plist
-          PRODUCT_BUNDLE_IDENTIFIER: io.pocketmesh.app.widgets
+          PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.widgets
 
 schemes:
   MC1:
