@@ -21,9 +21,14 @@ extension ChatViewModel {
       case let .direct(contact):
         // Contacts still use boolean muted
         try await dataStore?.setContactMuted(contact.id, isMuted: level == .muted)
+        await pushNotifSyncToFirmware()
       case let .channel(channel):
         try await dataStore?.setChannelNotificationLevel(channel.id, level: level)
+        await pushNotifSyncToFirmware()
       case let .room(session):
+        // Rooms have no firmware-side counterpart: the notif-prefs blob keys
+        // contacts by public key and channels by index, and a room server session
+        // is neither. Nothing to push.
         try await dataStore?.setSessionNotificationLevel(session.id, level: level)
       }
       await notificationService?.updateBadgeCount()
@@ -38,6 +43,21 @@ extension ChatViewModel {
   func toggleMute(_ conversation: Conversation) async {
     let newLevel: NotificationLevel = conversation.isMuted ? .all : .muted
     await setNotificationLevel(conversation, level: newLevel)
+  }
+
+  /// Pushes the updated rule set to Digitaino custom firmware so on-device alerts
+  /// honour the same mute state.
+  ///
+  /// Best-effort by design: the local write already succeeded and the UI reflects it, so
+  /// a radio failure must not roll it back. The service is inert on firmware without the
+  /// sync registry, so this costs nothing on other devices.
+  private func pushNotifSyncToFirmware() async {
+    guard let notifSyncService, let radioID = currentRadioIDProvider() else { return }
+    do {
+      try await notifSyncService.syncNow(radioID: radioID)
+    } catch {
+      logger.warning("Notification prefs sync to firmware failed: \(error.localizedDescription)")
+    }
   }
 
   /// Updates the notification level in the local conversations array

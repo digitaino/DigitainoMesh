@@ -44,6 +44,16 @@ extension AppState {
     )
   }
 
+  /// Pull the firmware's stored notification rules and push ours if they differ.
+  ///
+  /// Runs once per post-sync `.ready` transition. Inert on firmware without the sync
+  /// registry, and never throws: the rules are an optimisation of on-device alerting,
+  /// not something a connection can fail on.
+  func reconcileNotifSync() async {
+    guard let services, let radioID = currentRadioID else { return }
+    await services.notifSyncService.reconcileOnConnect(radioID: radioID)
+  }
+
   /// Consume settings service event stream.
   /// Updates connectedDevice when settings are changed via SettingsService.
   func wireSettingsEventStream(services: ServiceContainer) async {

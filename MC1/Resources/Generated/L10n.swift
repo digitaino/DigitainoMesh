@@ -4681,6 +4681,70 @@ public enum L10n {
         public static let header = L10n.tr("Settings", "deviceInfo.powerStorage.header", fallback: "Power & Storage")
       }
     }
+    public enum DeviceNotificationRules {
+      /// Footer explaining the refresh and resync actions
+      public static let actionsFooter = L10n.tr("Settings", "deviceNotificationRules.actionsFooter", fallback: "Refresh re-reads the rules stored on the device. Force resync pushes the app's current mute and notification-level state to it.")
+      /// Subtitle for a channel rule - %d is the channel index
+      public static func channelIndex(_ p1: Int) -> String {
+        return L10n.tr("Settings", "deviceNotificationRules.channelIndex", p1, fallback: "Index %d")
+      }
+      /// Row label for the number of per-channel overrides
+      public static let channelOverrides = L10n.tr("Settings", "deviceNotificationRules.channelOverrides", fallback: "Channel Overrides")
+      /// Section header for per-channel rules
+      public static let channelRules = L10n.tr("Settings", "deviceNotificationRules.channelRules", fallback: "Per-Channel Rules")
+      /// Shown when the radio is connected and supports notification rules
+      public static let connected = L10n.tr("Settings", "deviceNotificationRules.connected", fallback: "Connected")
+      /// Row label for the number of per-contact overrides
+      public static let contactOverrides = L10n.tr("Settings", "deviceNotificationRules.contactOverrides", fallback: "Contact Overrides")
+      /// Section header for per-contact rules
+      public static let contactRules = L10n.tr("Settings", "deviceNotificationRules.contactRules", fallback: "Per-Contact Rules")
+      /// Row label for the fallback notification mode
+      public static let defaultMode = L10n.tr("Settings", "deviceNotificationRules.defaultMode", fallback: "Default Mode")
+      /// Section header for the raw device state
+      public static let deviceState = L10n.tr("Settings", "deviceNotificationRules.deviceState", fallback: "Device State")
+      /// Footer for the device state section
+      public static let deviceStateFooter = L10n.tr("Settings", "deviceNotificationRules.deviceStateFooter", fallback: "Anything not listed below uses the default mode.")
+      /// Row label for when the rules were last read from the device
+      public static let fetched = L10n.tr("Settings", "deviceNotificationRules.fetched", fallback: "Fetched")
+      /// Footer explaining where the rules come from
+      public static let footer = L10n.tr("Settings", "deviceNotificationRules.footer", fallback: "These rules are read directly from the radio. It uses them to decide when to beep or vibrate on its own.")
+      /// Shown when the device stores no per-channel overrides
+      public static let noChannelRules = L10n.tr("Settings", "deviceNotificationRules.noChannelRules", fallback: "No per-channel overrides")
+      /// Shown when the device stores no per-contact overrides
+      public static let noContactRules = L10n.tr("Settings", "deviceNotificationRules.noContactRules", fallback: "No per-contact overrides")
+      /// Shown when no radio is connected
+      public static let notConnected = L10n.tr("Settings", "deviceNotificationRules.notConnected", fallback: "Device is not connected")
+      /// Section header shown when the rules could not be read
+      public static let readFailed = L10n.tr("Settings", "deviceNotificationRules.readFailed", fallback: "Couldn't read device state")
+      /// Button re-reading the rules from the device
+      public static let refresh = L10n.tr("Settings", "deviceNotificationRules.refresh", fallback: "Refresh From Device")
+      /// Button pushing the app's rules to the device
+      public static let resync = L10n.tr("Settings", "deviceNotificationRules.resync", fallback: "Force Resync To Device")
+      /// Shown after a successful manual resync
+      public static let resynced = L10n.tr("Settings", "deviceNotificationRules.resynced", fallback: "Resynced")
+      /// Footer on the row linking to the firmware notification rules screen
+      public static let rowFooter = L10n.tr("Settings", "deviceNotificationRules.rowFooter", fallback: "View the per-channel and per-contact notification rules stored on your radio, and force a resync if needed.")
+      /// Row label for the blob schema version
+      public static let schemaVersion = L10n.tr("Settings", "deviceNotificationRules.schemaVersion", fallback: "Schema Version")
+      /// Title of the firmware notification rules screen
+      public static let title = L10n.tr("Settings", "deviceNotificationRules.title", fallback: "Device Notification Rules")
+      /// Shown for a rule whose channel is not on this device
+      public static let unknownChannel = L10n.tr("Settings", "deviceNotificationRules.unknownChannel", fallback: "Unknown channel")
+      /// Shown for a rule whose contact is not on this device
+      public static let unknownContact = L10n.tr("Settings", "deviceNotificationRules.unknownContact", fallback: "Unknown contact")
+      /// Shown when the connected radio's firmware has no notification rule support
+      public static let unsupported = L10n.tr("Settings", "deviceNotificationRules.unsupported", fallback: "This firmware does not store notification rules")
+      public enum Mode {
+        /// Firmware notification mode: all messages
+        public static let all = L10n.tr("Settings", "deviceNotificationRules.mode.all", fallback: "All Messages")
+        /// Firmware notification mode: mentions only
+        public static let mentions = L10n.tr("Settings", "deviceNotificationRules.mode.mentions", fallback: "Mentions Only")
+        /// Firmware notification mode: silent
+        public static let silent = L10n.tr("Settings", "deviceNotificationRules.mode.silent", fallback: "Silent")
+        /// Firmware notification mode: urgent only
+        public static let urgent = L10n.tr("Settings", "deviceNotificationRules.mode.urgent", fallback: "Urgent Only")
+      }
+    }
     public enum DeviceSelection {
       /// Fallback connection type description
       public static let bluetooth = L10n.tr("Settings", "deviceSelection.bluetooth", fallback: "Bluetooth")

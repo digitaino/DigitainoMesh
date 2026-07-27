@@ -26,6 +26,7 @@ extension AppState {
       roomServerService: { self.services?.roomServerService },
       contactService: { self.services?.contactService },
       syncCoordinator: { self.syncCoordinator },
+      notifSyncService: { self.services?.notifSyncService },
       connectionState: { self.connectionState },
       connectedDevice: { self.connectedDevice },
       currentRadioID: { self.currentRadioID },

@@ -274,6 +274,7 @@ final class ChatViewModel {
     var roomServerService: @MainActor () -> RoomServerService?
     var contactService: @MainActor () -> ContactService?
     var syncCoordinator: @MainActor () -> SyncCoordinator?
+    var notifSyncService: @MainActor () -> NotifSyncService?
     var connectionState: @MainActor () -> DeviceConnectionState
     var connectedDevice: @MainActor () -> DeviceDTO?
     var currentRadioID: @MainActor () -> UUID?
@@ -317,6 +318,11 @@ final class ChatViewModel {
   @ObservationIgnored private var syncCoordinatorProvider: @MainActor () -> SyncCoordinator? = { nil }
   var syncCoordinator: SyncCoordinator? {
     syncCoordinatorProvider()
+  }
+
+  @ObservationIgnored private var notifSyncServiceProvider: @MainActor () -> NotifSyncService? = { nil }
+  var notifSyncService: NotifSyncService? {
+    notifSyncServiceProvider()
   }
 
   @ObservationIgnored var connectionStateProvider: @MainActor () -> DeviceConnectionState = { .disconnected }
@@ -405,6 +411,7 @@ final class ChatViewModel {
     roomServerServiceProvider = dependencies.roomServerService
     contactServiceProvider = dependencies.contactService
     syncCoordinatorProvider = dependencies.syncCoordinator
+    notifSyncServiceProvider = dependencies.notifSyncService
     connectionStateProvider = dependencies.connectionState
     connectedDeviceProvider = dependencies.connectedDevice
     currentRadioIDProvider = dependencies.currentRadioID

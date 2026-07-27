@@ -415,6 +415,9 @@ final class AppState {
     // Wire device synced callback - runs after sync completes and state is .ready
     connectionManager.onDeviceSynced = { [weak self] in
       self?.performStaleNodeCleanup()
+      // Reconcile the firmware's notification rules with current iOS state on every
+      // post-sync ready transition — covers fresh boot, reconnect, and reflash.
+      Task { [weak self] in await self?.reconcileNotifSync() }
     }
 
     loadPersistedRegionSelection()

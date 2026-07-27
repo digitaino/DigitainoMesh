@@ -52,6 +52,7 @@ struct ChatsListModifiers: ViewModifier {
             roomServerService: { appState.services?.roomServerService },
             contactService: { appState.services?.contactService },
             syncCoordinator: { appState.syncCoordinator },
+            notifSyncService: { appState.services?.notifSyncService },
             connectionState: { appState.connectionState },
             connectedDevice: { appState.connectedDevice },
             currentRadioID: { appState.currentRadioID },

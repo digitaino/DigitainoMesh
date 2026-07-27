@@ -139,6 +139,12 @@ public final class ServiceContainer {
   /// the device record and its preferences are known.
   public let adaptivePowerService: AdaptivePowerService
 
+  /// Pushes per-channel and per-contact notification preferences to Digitaino custom
+  /// firmware (`SyncID.notifPrefs`). Per-connection because its firmware-support
+  /// classification and its last-pushed blob are both properties of the connected
+  /// device, not of the app.
+  public let notifSyncService: NotifSyncService
+
   // MARK: - Remote Node Services
 
   /// Service for remote node session management
@@ -293,6 +299,7 @@ public final class ServiceContainer {
     )
     nodeSnapshotService = NodeSnapshotService(dataStore: dataStore)
     adaptivePowerService = AdaptivePowerService(txPowerApplier: settingsService)
+    notifSyncService = NotifSyncService(session: session, dataStore: dataStore)
 
     // Higher-level services (depend on other services)
     repeaterAdminService = RepeaterAdminService(

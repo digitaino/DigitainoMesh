@@ -57,11 +57,14 @@ public actor NotifSyncService {
   /// Inert on devices without the sync registry. Errors other than an unsupported-opcode
   /// rejection are rethrown so an explicit user action (the diagnostic screen's force
   /// resync) can report them; the fire-and-forget call sites ignore them.
-  public func syncNow(radioID: UUID) async throws {
+  ///
+  /// - Parameter force: Writes even when the rule set is unchanged. Used by the manual
+  ///   resync action, where "nothing was sent" would read as a failure.
+  public func syncNow(radioID: UUID, force: Bool = false) async throws {
     guard support != .unsupported else { return }
 
     let blob = try await buildBlob(radioID: radioID)
-    guard blob != lastPushedBlob else { return }
+    guard force || blob != lastPushedBlob else { return }
 
     do {
       try await session.setSync(.notifPrefs, payload: blob.encode())

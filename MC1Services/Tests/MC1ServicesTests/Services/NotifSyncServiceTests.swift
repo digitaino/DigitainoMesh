@@ -91,6 +91,23 @@ struct NotifSyncServiceTests {
   }
 
   @Test
+  func `a forced sync writes even when nothing changed`() async throws {
+    let store = try await makeStore(channels: [], contacts: [])
+    let (service, session, transport) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    let first = Task { try await service.syncNow(radioID: Self.radioID) }
+    try await waitUntil("first setSync should be sent") { await transport.sentData.count == 2 }
+    await transport.simulateOK()
+    try await first.value
+
+    let forced = Task { try await service.syncNow(radioID: Self.radioID, force: true) }
+    try await waitUntil("forced setSync should be sent") { await transport.sentData.count == 3 }
+    await transport.simulateOK()
+    try await forced.value
+  }
+
+  @Test
   func `a changed rule set is written again`() async throws {
     let store = try await makeStore(channels: [], contacts: [])
     let (service, session, transport) = try await makeService(store: store)

@@ -10,6 +10,7 @@ enum SettingsSubpage: Hashable {
   case blockedChannelSenders
   case blockedContacts
   case trustedContacts
+  case deviceNotificationRules
 }
 
 extension View {
@@ -33,6 +34,8 @@ extension View {
         BlockedContactsView()
       case .trustedContacts:
         TrustedContactsPickerView()
+      case .deviceNotificationRules:
+        DeviceNotificationRulesView()
       }
     }
   }

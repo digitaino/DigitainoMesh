@@ -28,6 +28,7 @@ struct ChatPrewarmRefresherTests {
       roomServerService: { nil },
       contactService: { nil },
       syncCoordinator: { nil },
+      notifSyncService: { nil },
       connectionState: { .disconnected },
       connectedDevice: { nil },
       currentRadioID: { nil },

@@ -811,6 +811,95 @@
 
 /* Message shown when device not connected */
 /* Footer for notifications navigation row */
+// MARK: - Device Notification Rules
+
+/* Title of the firmware notification rules screen */
+"deviceNotificationRules.title" = "Device Notification Rules";
+
+/* Footer on the row linking to the firmware notification rules screen */
+"deviceNotificationRules.rowFooter" = "View the per-channel and per-contact notification rules stored on your radio, and force a resync if needed.";
+
+/* Shown when the radio is connected and supports notification rules */
+"deviceNotificationRules.connected" = "Connected";
+
+/* Shown when no radio is connected */
+"deviceNotificationRules.notConnected" = "Device is not connected";
+
+/* Shown when the connected radio's firmware has no notification rule support */
+"deviceNotificationRules.unsupported" = "This firmware does not store notification rules";
+
+/* Footer explaining where the rules come from */
+"deviceNotificationRules.footer" = "These rules are read directly from the radio. It uses them to decide when to beep or vibrate on its own.";
+
+/* Section header for the raw device state */
+"deviceNotificationRules.deviceState" = "Device State";
+
+/* Footer for the device state section */
+"deviceNotificationRules.deviceStateFooter" = "Anything not listed below uses the default mode.";
+
+/* Row label for the blob schema version */
+"deviceNotificationRules.schemaVersion" = "Schema Version";
+
+/* Row label for the fallback notification mode */
+"deviceNotificationRules.defaultMode" = "Default Mode";
+
+/* Row label for the number of per-channel overrides */
+"deviceNotificationRules.channelOverrides" = "Channel Overrides";
+
+/* Row label for the number of per-contact overrides */
+"deviceNotificationRules.contactOverrides" = "Contact Overrides";
+
+/* Row label for when the rules were last read from the device */
+"deviceNotificationRules.fetched" = "Fetched";
+
+/* Section header for per-channel rules */
+"deviceNotificationRules.channelRules" = "Per-Channel Rules";
+
+/* Section header for per-contact rules */
+"deviceNotificationRules.contactRules" = "Per-Contact Rules";
+
+/* Shown when the device stores no per-channel overrides */
+"deviceNotificationRules.noChannelRules" = "No per-channel overrides";
+
+/* Shown when the device stores no per-contact overrides */
+"deviceNotificationRules.noContactRules" = "No per-contact overrides";
+
+/* Subtitle for a channel rule - %d is the channel index */
+"deviceNotificationRules.channelIndex" = "Index %d";
+
+/* Shown for a rule whose channel is not on this device */
+"deviceNotificationRules.unknownChannel" = "Unknown channel";
+
+/* Shown for a rule whose contact is not on this device */
+"deviceNotificationRules.unknownContact" = "Unknown contact";
+
+/* Section header shown when the rules could not be read */
+"deviceNotificationRules.readFailed" = "Couldn't read device state";
+
+/* Button re-reading the rules from the device */
+"deviceNotificationRules.refresh" = "Refresh From Device";
+
+/* Button pushing the app's rules to the device */
+"deviceNotificationRules.resync" = "Force Resync To Device";
+
+/* Shown after a successful manual resync */
+"deviceNotificationRules.resynced" = "Resynced";
+
+/* Footer explaining the refresh and resync actions */
+"deviceNotificationRules.actionsFooter" = "Refresh re-reads the rules stored on the device. Force resync pushes the app's current mute and notification-level state to it.";
+
+/* Firmware notification mode: silent */
+"deviceNotificationRules.mode.silent" = "Silent";
+
+/* Firmware notification mode: all messages */
+"deviceNotificationRules.mode.all" = "All Messages";
+
+/* Firmware notification mode: mentions only */
+"deviceNotificationRules.mode.mentions" = "Mentions Only";
+
+/* Firmware notification mode: urgent only */
+"deviceNotificationRules.mode.urgent" = "Urgent Only";
+
 // MARK: - Radio Preset Section
 
 /* Section header for radio settings */
