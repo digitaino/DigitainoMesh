@@ -1223,3 +1223,38 @@
 
 /* Location: NoRepeatsRetryCard.swift - Accessibility label for the no-repeats retry card */
 "chats.message.noRepeats.accessibilityLabel" = "No repeats heard. Resend options.";
+
+// MARK: - Message Search (Phase 5 · C1)
+
+/* Location: MessageSearchResultsSection.swift - Header above the message hits in the chats-list search results */
+"chats.search.messages.section" = "消息";
+
+/* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
+"chats.search.messages.empty" = "未找到消息";
+
+/* Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total */
+"chats.search.messages.showingCount" = "显示 %1$d 条，共 %2$d 条";
+
+/* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
+"chats.search.messages.showMore" = "再显示 %d 条";
+
+/* Location: ChatConversationView.swift - Toolbar button that opens find-in-conversation */
+"chats.search.inConversation.open" = "搜索";
+
+/* Location: ConversationMessageSearchBar.swift - Placeholder in the find-in-conversation field */
+"chats.search.inConversation.placeholder" = "在对话中查找";
+
+/* Location: ConversationMessageSearchBar.swift - Closes the find-in-conversation bar */
+"chats.search.inConversation.done" = "完成";
+
+/* Location: ConversationMessageSearchBar.swift - Shown when the conversation holds no match */
+"chats.search.inConversation.noResults" = "无结果";
+
+/* Location: ConversationMessageSearchBar.swift - Which match the user is on - %1$d is the position, %2$d is the total */
+"chats.search.inConversation.matchPosition" = "第 %1$d 条，共 %2$d 条";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the previous-match button */
+"chats.search.inConversation.previous" = "上一个匹配项";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the next-match button */
+"chats.search.inConversation.next" = "下一个匹配项";

@@ -985,6 +985,38 @@ public enum L10n {
       public enum Search {
         /// Location: ChatsView.swift - Search placeholder
         public static let placeholder = L10n.tr("Chats", "chats.search.placeholder", fallback: "Search conversations")
+        public enum InConversation {
+          /// Location: ConversationMessageSearchBar.swift - Closes the find-in-conversation bar
+          public static let done = L10n.tr("Chats", "chats.search.inConversation.done", fallback: "Done")
+          /// Location: ConversationMessageSearchBar.swift - Which match the user is on - %1$d is the position, %2$d is the total
+          public static func matchPosition(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Chats", "chats.search.inConversation.matchPosition", p1, p2, fallback: "%1$d of %2$d")
+          }
+          /// Location: ConversationMessageSearchBar.swift - Accessibility label for the next-match button
+          public static let next = L10n.tr("Chats", "chats.search.inConversation.next", fallback: "Next match")
+          /// Location: ConversationMessageSearchBar.swift - Shown when the conversation holds no match
+          public static let noResults = L10n.tr("Chats", "chats.search.inConversation.noResults", fallback: "No results")
+          /// Location: ChatConversationView.swift - Toolbar button that opens find-in-conversation
+          public static let `open` = L10n.tr("Chats", "chats.search.inConversation.open", fallback: "Search")
+          /// Location: ConversationMessageSearchBar.swift - Placeholder in the find-in-conversation field
+          public static let placeholder = L10n.tr("Chats", "chats.search.inConversation.placeholder", fallback: "Find in conversation")
+          /// Location: ConversationMessageSearchBar.swift - Accessibility label for the previous-match button
+          public static let previous = L10n.tr("Chats", "chats.search.inConversation.previous", fallback: "Previous match")
+        }
+        public enum Messages {
+          /// Location: MessageSearchResultsSection.swift - Shown when a search matched no message text
+          public static let empty = L10n.tr("Chats", "chats.search.messages.empty", fallback: "No messages found")
+          /// Location: MessageSearchResultsSection.swift - Header above the message hits in the chats-list search results
+          public static let section = L10n.tr("Chats", "chats.search.messages.section", fallback: "Messages")
+          /// Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total
+          public static func showingCount(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Chats", "chats.search.messages.showingCount", p1, p2, fallback: "Showing %1$d of %2$d")
+          }
+          /// Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are
+          public static func showMore(_ p1: Int) -> String {
+            return L10n.tr("Chats", "chats.search.messages.showMore", p1, fallback: "Show %d more")
+          }
+        }
       }
       public enum SendDM {
         /// Location: SendDMSheet.swift - Purpose: Cancel button

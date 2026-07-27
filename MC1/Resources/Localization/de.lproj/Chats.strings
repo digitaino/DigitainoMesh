@@ -1225,3 +1225,38 @@
 
 /* Location: NoRepeatsRetryCard.swift - Accessibility label for the no-repeats retry card */
 "chats.message.noRepeats.accessibilityLabel" = "No repeats heard. Resend options.";
+
+// MARK: - Message Search (Phase 5 · C1)
+
+/* Location: MessageSearchResultsSection.swift - Header above the message hits in the chats-list search results */
+"chats.search.messages.section" = "Nachrichten";
+
+/* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
+"chats.search.messages.empty" = "Keine Nachrichten gefunden";
+
+/* Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total */
+"chats.search.messages.showingCount" = "%1$d von %2$d werden angezeigt";
+
+/* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
+"chats.search.messages.showMore" = "%d weitere anzeigen";
+
+/* Location: ChatConversationView.swift - Toolbar button that opens find-in-conversation */
+"chats.search.inConversation.open" = "Suchen";
+
+/* Location: ConversationMessageSearchBar.swift - Placeholder in the find-in-conversation field */
+"chats.search.inConversation.placeholder" = "In Unterhaltung suchen";
+
+/* Location: ConversationMessageSearchBar.swift - Closes the find-in-conversation bar */
+"chats.search.inConversation.done" = "Fertig";
+
+/* Location: ConversationMessageSearchBar.swift - Shown when the conversation holds no match */
+"chats.search.inConversation.noResults" = "Keine Treffer";
+
+/* Location: ConversationMessageSearchBar.swift - Which match the user is on - %1$d is the position, %2$d is the total */
+"chats.search.inConversation.matchPosition" = "%1$d von %2$d";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the previous-match button */
+"chats.search.inConversation.previous" = "Vorheriger Treffer";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the next-match button */
+"chats.search.inConversation.next" = "Nächster Treffer";

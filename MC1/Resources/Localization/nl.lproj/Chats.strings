@@ -1221,3 +1221,38 @@
 
 /* Location: NoRepeatsRetryCard.swift - Accessibility label for the no-repeats retry card */
 "chats.message.noRepeats.accessibilityLabel" = "No repeats heard. Resend options.";
+
+// MARK: - Message Search (Phase 5 · C1)
+
+/* Location: MessageSearchResultsSection.swift - Header above the message hits in the chats-list search results */
+"chats.search.messages.section" = "Berichten";
+
+/* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
+"chats.search.messages.empty" = "Geen berichten gevonden";
+
+/* Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total */
+"chats.search.messages.showingCount" = "%1$d van %2$d weergegeven";
+
+/* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
+"chats.search.messages.showMore" = "Toon %d meer";
+
+/* Location: ChatConversationView.swift - Toolbar button that opens find-in-conversation */
+"chats.search.inConversation.open" = "Zoeken";
+
+/* Location: ConversationMessageSearchBar.swift - Placeholder in the find-in-conversation field */
+"chats.search.inConversation.placeholder" = "Zoeken in gesprek";
+
+/* Location: ConversationMessageSearchBar.swift - Closes the find-in-conversation bar */
+"chats.search.inConversation.done" = "Gereed";
+
+/* Location: ConversationMessageSearchBar.swift - Shown when the conversation holds no match */
+"chats.search.inConversation.noResults" = "Geen resultaten";
+
+/* Location: ConversationMessageSearchBar.swift - Which match the user is on - %1$d is the position, %2$d is the total */
+"chats.search.inConversation.matchPosition" = "%1$d van %2$d";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the previous-match button */
+"chats.search.inConversation.previous" = "Vorig resultaat";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the next-match button */
+"chats.search.inConversation.next" = "Volgend resultaat";

@@ -1221,3 +1221,38 @@
 
 /* Location: NoRepeatsRetryCard.swift - Accessibility label for the no-repeats retry card */
 "chats.message.noRepeats.accessibilityLabel" = "No repeats heard. Resend options.";
+
+// MARK: - Message Search (Phase 5 · C1)
+
+/* Location: MessageSearchResultsSection.swift - Header above the message hits in the chats-list search results */
+"chats.search.messages.section" = "Messages";
+
+/* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
+"chats.search.messages.empty" = "Aucun message trouvé";
+
+/* Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total */
+"chats.search.messages.showingCount" = "Affichage de %1$d sur %2$d";
+
+/* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
+"chats.search.messages.showMore" = "Afficher %d de plus";
+
+/* Location: ChatConversationView.swift - Toolbar button that opens find-in-conversation */
+"chats.search.inConversation.open" = "Rechercher";
+
+/* Location: ConversationMessageSearchBar.swift - Placeholder in the find-in-conversation field */
+"chats.search.inConversation.placeholder" = "Rechercher dans la conversation";
+
+/* Location: ConversationMessageSearchBar.swift - Closes the find-in-conversation bar */
+"chats.search.inConversation.done" = "OK";
+
+/* Location: ConversationMessageSearchBar.swift - Shown when the conversation holds no match */
+"chats.search.inConversation.noResults" = "Aucun résultat";
+
+/* Location: ConversationMessageSearchBar.swift - Which match the user is on - %1$d is the position, %2$d is the total */
+"chats.search.inConversation.matchPosition" = "%1$d sur %2$d";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the previous-match button */
+"chats.search.inConversation.previous" = "Résultat précédent";
+
+/* Location: ConversationMessageSearchBar.swift - Accessibility label for the next-match button */
+"chats.search.inConversation.next" = "Résultat suivant";
