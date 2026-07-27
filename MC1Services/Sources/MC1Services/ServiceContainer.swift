@@ -167,6 +167,14 @@ public final class ServiceContainer {
   /// The node pool `signalBarsEngine` resolves repeater hashes against.
   public let signalBarsNodeDirectory: PersistedSignalBarsNodeDirectory
 
+  /// Runs repeater benchmarks. Lives here rather than on the benchmark screen so a run
+  /// survives navigating away from it — a ten-probe batch across five targets takes minutes,
+  /// and the tool is useless if leaving the tab abandons it. Stopped in `tearDown()`.
+  public let repeaterBenchmarkEngine: RepeaterBenchmarkEngine
+
+  /// Benchmark history, stored as saved trace paths scoped to this radio.
+  public let benchmarkHistoryStore: BenchmarkHistoryStore
+
   // MARK: - Remote Node Services
 
   /// Service for remote node session management
@@ -340,6 +348,11 @@ public final class ServiceContainer {
       movementHints: movementHintRelay
     )
 
+    // The benchmark's trace geometry comes from the device record, which the app applies
+    // with `configure(traceHashSize:traceFlags:localNodeName:)` when the screen opens.
+    repeaterBenchmarkEngine = RepeaterBenchmarkEngine(session: session)
+    benchmarkHistoryStore = BenchmarkHistoryStore(dataStore: dataStore, radioID: radioID)
+
     // Higher-level services (depend on other services)
     repeaterAdminService = RepeaterAdminService(
       session: session,
@@ -511,6 +524,10 @@ public final class ServiceContainer {
     // ends the façade's for-await loop so it releases this container.
     await signalBarsEngine.stop()
     signalBarsEngine.finishSnapshots()
+
+    // A benchmark in flight is measuring a radio that is going away; stop it and end its
+    // façade's loop the same way.
+    await repeaterBenchmarkEngine.shutdown()
 
     // The action forwarders AppState installs capture notificationActionHandler
     // strongly, and the handler strong-holds notificationService back, forming a
