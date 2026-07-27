@@ -4004,6 +4004,8 @@ public enum L10n {
       }
     }
     public enum About {
+      /// Section footer crediting the upstream project
+      public static let forkFooter = L10n.tr("Settings", "about.forkFooter", fallback: "DigitainoMesh is an unofficial fork of PocketMesh by Avi0n.")
       /// Link to GitHub repository
       public static let github = L10n.tr("Settings", "about.github", fallback: "GitHub")
       /// Section header for about links
@@ -4012,6 +4014,8 @@ public enum L10n {
       public static let onlineMap = L10n.tr("Settings", "about.onlineMap", fallback: "MeshCore Online Map")
       /// Link to the privacy policy
       public static let privacyPolicy = L10n.tr("Settings", "about.privacyPolicy", fallback: "Privacy Policy")
+      /// Link to the upstream project this app is forked from
+      public static let upstream = L10n.tr("Settings", "about.upstream", fallback: "PocketMesh (Upstream)")
       /// Link to MeshCore website
       public static let website = L10n.tr("Settings", "about.website", fallback: "MeshCore Website")
     }

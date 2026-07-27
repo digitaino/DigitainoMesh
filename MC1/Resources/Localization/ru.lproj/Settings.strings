@@ -257,6 +257,12 @@
 /* AI-translated - please verify with native speakers. */
 "about.privacyPolicy" = "Политика конфиденциальности";
 
+/* Link to the upstream project this app is forked from */
+"about.upstream" = "PocketMesh (Upstream)";
+
+/* Section footer crediting the upstream project */
+"about.forkFooter" = "DigitainoMesh is an unofficial fork of PocketMesh by Avi0n.";
+
 // MARK: - Advanced Radio Section
 
 /* Section header for radio configuration */
