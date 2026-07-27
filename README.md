@@ -1,3 +1,33 @@
+# DigitainoMesh
+
+**DigitainoMesh is an unofficial fork of [PocketMesh](https://github.com/Avi0n/PocketMesh) by [Avi0n](https://github.com/Avi0n).**
+Fork repository: <https://github.com/digitaino/PocketMesh>
+
+It is not affiliated with or endorsed by the upstream project. All credit for the app itself belongs upstream; this fork exists to try out ideas that are experimental, hardware-specific, or otherwise a poor fit for the main project.
+
+Everything in the upstream README below applies here too. The fork adds branding, its own bundle identity, and the features listed next.
+
+## Fork status
+
+This branch (`v2`) is a rebuild on top of upstream v1.3.0. The fork's own features are being **re-ported incrementally** onto upstream's current architecture rather than carried over wholesale:
+
+- Signal bars (per-repeater link quality)
+- Adaptive TX power
+- Traffic heatmap
+- Repeater benchmark and repeater watch
+- Wio L1 Pro notification sync
+- Message search
+- Reactions
+- Chat gestures
+
+Signal Survey, weather, and route sharing from the previous fork line are **dropped for now** and will be reconsidered as separate, redesigned features. See [BETA_CHANGES.md](BETA_CHANGES.md) for the running beta log.
+
+## Beta and feedback
+
+Fork builds are distributed through TestFlight. Send feedback through TestFlight directly, or email <mesh@digitaino.com>. Bugs in upstream behaviour are better reported to [the upstream project](https://github.com/Avi0n/PocketMesh/issues); please report fork-specific issues here.
+
+---
+
 # MeshCore One (MC1)
 
 A MeshCore client built for Apple devices in Swift.   
