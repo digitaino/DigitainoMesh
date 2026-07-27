@@ -864,3 +864,185 @@
 
 /* Location: SendAdvertIntent.swift - App Intents parameter summary shown in the shortcut editor; ${reach} is the framework parameter token */
 "Send a ${reach} advert" = "发送${reach}广播";
+
+// MARK: - Repeater Benchmark
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.benchmark" = "Repeater Benchmark";
+
+/* Location: RepeaterBenchmarkView.swift - Disconnected state title */
+"tools.benchmark.notConnected" = "Radio Required";
+
+/* Location: RepeaterBenchmarkView.swift - Disconnected state description */
+"tools.benchmark.notConnectedDescription" = "Connect a radio to benchmark the repeaters around it.";
+
+/* Location: RepeaterBenchmarkView.swift - Toolbar button opening saved runs */
+"tools.benchmark.history" = "History";
+
+/* Location: RepeaterBenchmarkView.swift - Title of the error alert */
+"tools.benchmark.errorTitle" = "Benchmark Error";
+
+/* Location: RepeaterBenchmarkView.swift - Section header for the run setup fields */
+"tools.benchmark.setup" = "Setup";
+
+/* Location: RepeaterBenchmarkView.swift - Section footer explaining what is measured */
+"tools.benchmark.setupFooter" = "Each probe travels out through the test repeater to a target and back, so one reply measures both directions of the link.";
+
+/* Location: RepeaterBenchmarkView.swift - Row label for the repeater whose links are measured */
+"tools.benchmark.testRepeater" = "Test Repeater";
+
+/* Location: RepeaterBenchmarkView.swift - Row label for the repeaters being reached */
+"tools.benchmark.targets" = "Targets";
+
+/* Location: RepeaterBenchmarkView.swift - Placeholder shown when nothing is chosen yet */
+"tools.benchmark.selectPrompt" = "Select…";
+
+/* Location: RepeaterBenchmarkView.swift - Trailing value showing how many targets are chosen; %lld is the count */
+"tools.benchmark.targetsSelected" = "%lld selected";
+
+/* Location: RepeaterBenchmarkView.swift - Toolbar action selecting every repeater currently being heard */
+"tools.benchmark.selectHeard" = "Select Heard";
+
+/* Location: RepeaterBenchmarkView.swift - Picker label for the number of probes sent at each target */
+"tools.benchmark.tracesPerTarget" = "Probes per Target";
+
+/* Location: RepeaterBenchmarkView.swift - Button that starts the run */
+"tools.benchmark.run" = "Run Benchmark";
+
+/* Location: RepeaterBenchmarkView.swift - Button that stops a run in progress */
+"tools.benchmark.cancel" = "Cancel";
+
+/* Location: RepeaterBenchmarkView.swift - Section header while a run is in progress */
+"tools.benchmark.progress" = "Progress";
+
+/* Location: RepeaterBenchmarkView.swift - Which target is being probed; %1$lld is the current index, %2$lld the total */
+"tools.benchmark.targetProgress" = "Target %1$lld of %2$lld";
+
+/* Location: RepeaterBenchmarkView.swift - Which probe is in flight; %1$lld is the current index, %2$lld the batch size */
+"tools.benchmark.traceProgress" = "Probe %1$lld of %2$lld";
+
+/* Location: RepeaterBenchmarkView.swift - Section header for the measured results */
+"tools.benchmark.results" = "Results";
+
+/* Location: RepeaterBenchmarkView.swift - Text field placeholder for the note a run is saved under */
+"tools.benchmark.notePlaceholder" = "Note (e.g. \"stock whip antenna\")";
+
+/* Location: RepeaterBenchmarkView.swift - Section header for saving results */
+"tools.benchmark.saveHeader" = "Save";
+
+/* Location: RepeaterBenchmarkView.swift - Section footer explaining how saved runs are grouped */
+"tools.benchmark.saveFooter" = "Runs are grouped in history by their note, so two notes can be compared side by side.";
+
+/* Location: RepeaterBenchmarkView.swift - Button that saves the run to history */
+"tools.benchmark.save" = "Save Results";
+
+/* Location: RepeaterBenchmarkView.swift - Button state after the run has been saved */
+"tools.benchmark.saved" = "Saved";
+
+/* Location: BenchmarkTargetRow.swift - Disclosure label for the per-probe log; %lld is the probe count */
+"tools.benchmark.traceLog" = "Probes (%lld)";
+
+/* Location: BenchmarkTargetRow.swift - Successful probes out of total; %1$lld is successes, %2$lld the total */
+"tools.benchmark.successCount" = "%1$lld/%2$lld";
+
+/* Location: BenchmarkTargetRow.swift - Round-trip time value; %lld is milliseconds */
+"tools.benchmark.milliseconds" = "%lldms";
+
+/* Location: BenchmarkHistoryView.swift - Average round-trip time of a saved run; %lld is milliseconds */
+"tools.benchmark.averageMilliseconds" = "avg %lldms";
+
+/* Location: BenchmarkTargetRow.swift - Signal value; %@ is the already-formatted decibel number */
+"tools.benchmark.decibels" = "%@ dB";
+
+/* Location: BenchmarkHistoryView.swift - Success rate; %lld is the percentage */
+"tools.benchmark.percent" = "%lld%%";
+
+/* Location: BenchmarkTargetRow.swift - Probe failed because the radio refused the send */
+"tools.benchmark.sendFailed" = "send failed";
+
+/* Location: BenchmarkTargetRow.swift - Probe failed because no reply arrived in time */
+"tools.benchmark.timedOut" = "timed out";
+
+/* Location: BenchmarkHistoryView.swift - Toolbar button opening the comparison of two runs */
+"tools.benchmark.compare" = "Compare";
+
+/* Location: BenchmarkTargetRow.swift - Mean round-trip time label */
+"tools.benchmark.stat.average" = "avg";
+
+/* Location: BenchmarkTargetRow.swift - Fastest round-trip time label */
+"tools.benchmark.stat.minimum" = "min";
+
+/* Location: BenchmarkTargetRow.swift - Slowest round-trip time label */
+"tools.benchmark.stat.maximum" = "max";
+
+/* Location: BenchmarkComparisonView.swift - Unit suffix appended to a round-trip delta */
+"tools.benchmark.unit.milliseconds" = "ms";
+
+/* Location: BenchmarkComparisonView.swift - Unit suffix appended to a signal delta */
+"tools.benchmark.unit.decibels" = " dB";
+
+/* Location: BenchmarkComparisonView.swift - Unit suffix appended to a success-rate delta */
+"tools.benchmark.unit.percent" = "%%";
+
+/* Location: RepeaterPickerView.swift - Empty state when no repeater matches */
+"tools.benchmark.picker.empty" = "No Repeaters";
+
+/* Location: RepeaterPickerView.swift - Empty state description */
+"tools.benchmark.picker.emptyDescription" = "Repeaters appear here once they are saved as contacts or heard on the mesh.";
+
+/* Location: RepeaterPickerView.swift - Search field prompt */
+"tools.benchmark.picker.searchPrompt" = "Name or hex prefix";
+
+/* Location: RepeaterPickerView.swift - Toolbar button that closes the picker */
+"tools.benchmark.picker.done" = "Done";
+
+/* Location: BenchmarkHistoryView.swift - Navigation title of saved runs */
+"tools.benchmark.history.title" = "Benchmark History";
+
+/* Location: BenchmarkHistoryView.swift - Empty state title */
+"tools.benchmark.history.empty" = "No Saved Runs";
+
+/* Location: BenchmarkHistoryView.swift - Empty state description */
+"tools.benchmark.history.emptyDescription" = "Run a benchmark and save the results to compare them later.";
+
+/* Location: BenchmarkHistoryView.swift - Section header telling the user to pick runs to compare */
+"tools.benchmark.history.selectPrompt" = "Tap to select runs for comparison";
+
+/* Location: BenchmarkHistoryView.swift - Section footer counting picked runs; %lld is how many of two are chosen */
+"tools.benchmark.history.selectedCount" = "%lld of 2 selected";
+
+/* Location: BenchmarkHistoryView.swift - Name shown for a run saved without a note */
+"tools.benchmark.history.untitled" = "No note";
+
+/* Location: BenchmarkHistoryView.swift - How many targets a saved run covered; %lld is the count */
+"tools.benchmark.history.targetCount" = "%lld targets";
+
+/* Location: BenchmarkHistoryView.swift - Swipe action deleting a saved run */
+"tools.benchmark.history.delete" = "Delete";
+
+/* Location: BenchmarkHistoryView.swift - Swipe action loading a saved run's setup back into the plan */
+"tools.benchmark.history.repeatRun" = "Repeat";
+
+/* Location: BenchmarkComparisonView.swift - Navigation title */
+"tools.benchmark.comparison.title" = "Comparison";
+
+/* Location: BenchmarkComparisonView.swift - Section header naming the two runs being compared */
+"tools.benchmark.comparison.comparing" = "Comparing";
+
+/* Location: BenchmarkComparisonView.swift - Label for the older of the two runs */
+"tools.benchmark.comparison.before" = "A (Before)";
+
+/* Location: BenchmarkComparisonView.swift - Label for the newer of the two runs */
+"tools.benchmark.comparison.after" = "B (After)";
+
+/* Location: BenchmarkComparisonView.swift - Section header for the overall deltas */
+"tools.benchmark.comparison.summary" = "Summary";
+
+/* Location: BenchmarkComparisonView.swift - Section header for the per-target deltas */
+"tools.benchmark.comparison.perTarget" = "Per Target";
+
+/* Location: BenchmarkComparisonView.swift - Round-trip time metric label */
+"tools.benchmark.comparison.roundTrip" = "RTT";
+
+/* Location: BenchmarkComparisonView.swift - Success rate metric label */
+"tools.benchmark.comparison.reliability" = "Success";

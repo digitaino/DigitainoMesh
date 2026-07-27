@@ -2730,6 +2730,60 @@ public enum L10n {
         /// Location: RepeaterSignalPopover.swift - Column header for how well the repeater hears us
         public static let tx = L10n.tr("Localizable", "signalBars.column.tx", fallback: "TX")
       }
+      public enum Watch {
+        /// Location: RepeaterWatchView.swift - VoiceOver summary of the live readout; %1$@ is the repeater name, %2$lld the times heard
+        public static func accessibilitySummary(_ p1: Any, _ p2: Int) -> String {
+          return L10n.tr("Localizable", "signalBars.watch.accessibilitySummary", String(describing: p1), p2, fallback: "Watching %1$@, heard %2$lld times")
+        }
+        /// Location: RepeaterWatchView.swift - Section header for the audible alert settings
+        public static let alerts = L10n.tr("Localizable", "signalBars.watch.alerts", fallback: "Alerts")
+        /// Location: RepeaterWatchView.swift - Section footer explaining silent-switch behavior
+        public static let alertsFooter = L10n.tr("Localizable", "signalBars.watch.alertsFooter", fallback: "The tone plays through headphones or the speaker even when the phone is on silent, and mixes with whatever else is playing.")
+        /// Location: RepeaterWatchView.swift - Toggle enabling a sound on every sighting
+        public static let alertTone = L10n.tr("Localizable", "signalBars.watch.alertTone", fallback: "Play a Tone When Heard")
+        /// Location: RepeaterWatchView.swift - Button that switches to a different repeater
+        public static let change = L10n.tr("Localizable", "signalBars.watch.change", fallback: "Change Repeater")
+        /// Location: RepeaterWatchView.swift - Button and title for choosing which repeater to watch
+        public static let choose = L10n.tr("Localizable", "signalBars.watch.choose", fallback: "Choose Repeater")
+        /// Location: RepeaterWatchView.swift - Signal value; %@ is the already-formatted decibel number
+        public static func decibels(_ p1: Any) -> String {
+          return L10n.tr("Localizable", "signalBars.watch.decibels", String(describing: p1), fallback: "%@ dB")
+        }
+        /// Location: RepeaterWatchView.swift - Empty state description
+        public static let emptyDescription = L10n.tr("Localizable", "signalBars.watch.emptyDescription", fallback: "Watch a repeater to see how often it is heard while you move — useful for finding the edge of its range.")
+        /// Location: RepeaterWatchView.swift - Empty state title when nothing is being watched
+        public static let emptyTitle = L10n.tr("Localizable", "signalBars.watch.emptyTitle", fallback: "Nothing Watched")
+        /// Location: RepeaterWatchView.swift - Label under the count of times the repeater has been heard
+        public static let heardCountLabel = L10n.tr("Localizable", "signalBars.watch.heardCountLabel", fallback: "times heard")
+        /// Location: RepeaterWatchView.swift - Prefix before the relative time of the last sighting
+        public static let lastHeard = L10n.tr("Localizable", "signalBars.watch.lastHeard", fallback: "Last heard")
+        /// Location: RepeaterWatchView.swift - Shown when the watch has started but nothing has arrived yet
+        public static let notYetHeard = L10n.tr("Localizable", "signalBars.watch.notYetHeard", fallback: "Not heard yet")
+        /// Location: RepeaterSignalPopover.swift - VoiceOver label for the row that opens the watch screen; %@ is the repeater name
+        public static func openAccessibility(_ p1: Any) -> String {
+          return L10n.tr("Localizable", "signalBars.watch.openAccessibility", String(describing: p1), fallback: "Open Repeater Watch for %@")
+        }
+        /// Location: RepeaterWatchView.swift - Button that plays the selected tone once
+        public static let preview = L10n.tr("Localizable", "signalBars.watch.preview", fallback: "Play Preview")
+        /// Location: RepeaterWatchView.swift - Navigation title of the range-testing screen
+        public static let title = L10n.tr("Localizable", "signalBars.watch.title", fallback: "Repeater Watch")
+        /// Location: RepeaterWatchView.swift - Picker label for which tone to play
+        public static let tone = L10n.tr("Localizable", "signalBars.watch.tone", fallback: "Tone")
+        public enum Tones {
+          /// Location: RepeaterWatchTone.swift - Alert tone name
+          public static let bell = L10n.tr("Localizable", "signalBars.watch.tones.bell", fallback: "Bell")
+          /// Location: RepeaterWatchTone.swift - Alert tone name
+          public static let chime = L10n.tr("Localizable", "signalBars.watch.tones.chime", fallback: "Chime")
+          /// Location: RepeaterWatchTone.swift - Alert tone name
+          public static let note = L10n.tr("Localizable", "signalBars.watch.tones.note", fallback: "Note")
+          /// Location: RepeaterWatchTone.swift - Alert tone name
+          public static let tink = L10n.tr("Localizable", "signalBars.watch.tones.tink", fallback: "Tink")
+          /// Location: RepeaterWatchTone.swift - Alert tone name
+          public static let tock = L10n.tr("Localizable", "signalBars.watch.tones.tock", fallback: "Tock")
+          /// Location: RepeaterWatchTone.swift - Alert tone name
+          public static let tweet = L10n.tr("Localizable", "signalBars.watch.tones.tweet", fallback: "Tweet")
+        }
+      }
     }
     public enum StatusPill {
       /// Status pill message when sync has failed
@@ -5704,6 +5758,8 @@ public enum L10n {
       }
     }
     public enum Tools {
+      /// Location: ToolSelection.swift - Tool selection label
+      public static let benchmark = L10n.tr("Tools", "tools.benchmark", fallback: "Repeater Benchmark")
       /// Location: CLIToolView.swift - Tool selection label
       public static let cli = L10n.tr("Tools", "tools.cli", fallback: "CLI")
       /// Location: ToolsView.swift - Tool selection label
@@ -5720,6 +5776,158 @@ public enum L10n {
       public static let title = L10n.tr("Tools", "tools.title", fallback: "Tools")
       /// Location: ToolsView.swift - Tool selection label
       public static let tracePath = L10n.tr("Tools", "tools.tracePath", fallback: "Trace Path")
+      public enum Benchmark {
+        /// Location: BenchmarkHistoryView.swift - Average round-trip time of a saved run; %lld is milliseconds
+        public static func averageMilliseconds(_ p1: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.averageMilliseconds", p1, fallback: "avg %lldms")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Button that stops a run in progress
+        public static let cancel = L10n.tr("Tools", "tools.benchmark.cancel", fallback: "Cancel")
+        /// Location: BenchmarkHistoryView.swift - Toolbar button opening the comparison of two runs
+        public static let compare = L10n.tr("Tools", "tools.benchmark.compare", fallback: "Compare")
+        /// Location: BenchmarkTargetRow.swift - Signal value; %@ is the already-formatted decibel number
+        public static func decibels(_ p1: Any) -> String {
+          return L10n.tr("Tools", "tools.benchmark.decibels", String(describing: p1), fallback: "%@ dB")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Title of the error alert
+        public static let errorTitle = L10n.tr("Tools", "tools.benchmark.errorTitle", fallback: "Benchmark Error")
+        /// Location: RepeaterBenchmarkView.swift - Toolbar button opening saved runs
+        public static let history = L10n.tr("Tools", "tools.benchmark.history", fallback: "History")
+        /// Location: BenchmarkTargetRow.swift - Round-trip time value; %lld is milliseconds
+        public static func milliseconds(_ p1: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.milliseconds", p1, fallback: "%lldms")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Disconnected state title
+        public static let notConnected = L10n.tr("Tools", "tools.benchmark.notConnected", fallback: "Radio Required")
+        /// Location: RepeaterBenchmarkView.swift - Disconnected state description
+        public static let notConnectedDescription = L10n.tr("Tools", "tools.benchmark.notConnectedDescription", fallback: "Connect a radio to benchmark the repeaters around it.")
+        /// Location: RepeaterBenchmarkView.swift - Text field placeholder for the note a run is saved under
+        public static let notePlaceholder = L10n.tr("Tools", "tools.benchmark.notePlaceholder", fallback: "Note (e.g. \"stock whip antenna\")")
+        /// Location: BenchmarkHistoryView.swift - Success rate; %lld is the percentage
+        public static func percent(_ p1: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.percent", p1, fallback: "%lld%%")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Section header while a run is in progress
+        public static let progress = L10n.tr("Tools", "tools.benchmark.progress", fallback: "Progress")
+        /// Location: RepeaterBenchmarkView.swift - Section header for the measured results
+        public static let results = L10n.tr("Tools", "tools.benchmark.results", fallback: "Results")
+        /// Location: RepeaterBenchmarkView.swift - Button that starts the run
+        public static let run = L10n.tr("Tools", "tools.benchmark.run", fallback: "Run Benchmark")
+        /// Location: RepeaterBenchmarkView.swift - Button that saves the run to history
+        public static let save = L10n.tr("Tools", "tools.benchmark.save", fallback: "Save Results")
+        /// Location: RepeaterBenchmarkView.swift - Button state after the run has been saved
+        public static let saved = L10n.tr("Tools", "tools.benchmark.saved", fallback: "Saved")
+        /// Location: RepeaterBenchmarkView.swift - Section footer explaining how saved runs are grouped
+        public static let saveFooter = L10n.tr("Tools", "tools.benchmark.saveFooter", fallback: "Runs are grouped in history by their note, so two notes can be compared side by side.")
+        /// Location: RepeaterBenchmarkView.swift - Section header for saving results
+        public static let saveHeader = L10n.tr("Tools", "tools.benchmark.saveHeader", fallback: "Save")
+        /// Location: RepeaterBenchmarkView.swift - Toolbar action selecting every repeater currently being heard
+        public static let selectHeard = L10n.tr("Tools", "tools.benchmark.selectHeard", fallback: "Select Heard")
+        /// Location: RepeaterBenchmarkView.swift - Placeholder shown when nothing is chosen yet
+        public static let selectPrompt = L10n.tr("Tools", "tools.benchmark.selectPrompt", fallback: "Select…")
+        /// Location: BenchmarkTargetRow.swift - Probe failed because the radio refused the send
+        public static let sendFailed = L10n.tr("Tools", "tools.benchmark.sendFailed", fallback: "send failed")
+        /// Location: RepeaterBenchmarkView.swift - Section header for the run setup fields
+        public static let setup = L10n.tr("Tools", "tools.benchmark.setup", fallback: "Setup")
+        /// Location: RepeaterBenchmarkView.swift - Section footer explaining what is measured
+        public static let setupFooter = L10n.tr("Tools", "tools.benchmark.setupFooter", fallback: "Each probe travels out through the test repeater to a target and back, so one reply measures both directions of the link.")
+        /// Location: BenchmarkTargetRow.swift - Successful probes out of total; %1$lld is successes, %2$lld the total
+        public static func successCount(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.successCount", p1, p2, fallback: "%1$lld/%2$lld")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Which target is being probed; %1$lld is the current index, %2$lld the total
+        public static func targetProgress(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.targetProgress", p1, p2, fallback: "Target %1$lld of %2$lld")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Row label for the repeaters being reached
+        public static let targets = L10n.tr("Tools", "tools.benchmark.targets", fallback: "Targets")
+        /// Location: RepeaterBenchmarkView.swift - Trailing value showing how many targets are chosen; %lld is the count
+        public static func targetsSelected(_ p1: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.targetsSelected", p1, fallback: "%lld selected")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Row label for the repeater whose links are measured
+        public static let testRepeater = L10n.tr("Tools", "tools.benchmark.testRepeater", fallback: "Test Repeater")
+        /// Location: BenchmarkTargetRow.swift - Probe failed because no reply arrived in time
+        public static let timedOut = L10n.tr("Tools", "tools.benchmark.timedOut", fallback: "timed out")
+        /// Location: BenchmarkTargetRow.swift - Disclosure label for the per-probe log; %lld is the probe count
+        public static func traceLog(_ p1: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.traceLog", p1, fallback: "Probes (%lld)")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Which probe is in flight; %1$lld is the current index, %2$lld the batch size
+        public static func traceProgress(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Tools", "tools.benchmark.traceProgress", p1, p2, fallback: "Probe %1$lld of %2$lld")
+        }
+        /// Location: RepeaterBenchmarkView.swift - Picker label for the number of probes sent at each target
+        public static let tracesPerTarget = L10n.tr("Tools", "tools.benchmark.tracesPerTarget", fallback: "Probes per Target")
+        public enum Comparison {
+          /// Location: BenchmarkComparisonView.swift - Label for the newer of the two runs
+          public static let after = L10n.tr("Tools", "tools.benchmark.comparison.after", fallback: "B (After)")
+          /// Location: BenchmarkComparisonView.swift - Label for the older of the two runs
+          public static let before = L10n.tr("Tools", "tools.benchmark.comparison.before", fallback: "A (Before)")
+          /// Location: BenchmarkComparisonView.swift - Section header naming the two runs being compared
+          public static let comparing = L10n.tr("Tools", "tools.benchmark.comparison.comparing", fallback: "Comparing")
+          /// Location: BenchmarkComparisonView.swift - Section header for the per-target deltas
+          public static let perTarget = L10n.tr("Tools", "tools.benchmark.comparison.perTarget", fallback: "Per Target")
+          /// Location: BenchmarkComparisonView.swift - Success rate metric label
+          public static let reliability = L10n.tr("Tools", "tools.benchmark.comparison.reliability", fallback: "Success")
+          /// Location: BenchmarkComparisonView.swift - Round-trip time metric label
+          public static let roundTrip = L10n.tr("Tools", "tools.benchmark.comparison.roundTrip", fallback: "RTT")
+          /// Location: BenchmarkComparisonView.swift - Section header for the overall deltas
+          public static let summary = L10n.tr("Tools", "tools.benchmark.comparison.summary", fallback: "Summary")
+          /// Location: BenchmarkComparisonView.swift - Navigation title
+          public static let title = L10n.tr("Tools", "tools.benchmark.comparison.title", fallback: "Comparison")
+        }
+        public enum History {
+          /// Location: BenchmarkHistoryView.swift - Swipe action deleting a saved run
+          public static let delete = L10n.tr("Tools", "tools.benchmark.history.delete", fallback: "Delete")
+          /// Location: BenchmarkHistoryView.swift - Empty state title
+          public static let empty = L10n.tr("Tools", "tools.benchmark.history.empty", fallback: "No Saved Runs")
+          /// Location: BenchmarkHistoryView.swift - Empty state description
+          public static let emptyDescription = L10n.tr("Tools", "tools.benchmark.history.emptyDescription", fallback: "Run a benchmark and save the results to compare them later.")
+          /// Location: BenchmarkHistoryView.swift - Swipe action loading a saved run's setup back into the plan
+          public static let repeatRun = L10n.tr("Tools", "tools.benchmark.history.repeatRun", fallback: "Repeat")
+          /// Location: BenchmarkHistoryView.swift - Section footer counting picked runs; %lld is how many of two are chosen
+          public static func selectedCount(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.benchmark.history.selectedCount", p1, fallback: "%lld of 2 selected")
+          }
+          /// Location: BenchmarkHistoryView.swift - Section header telling the user to pick runs to compare
+          public static let selectPrompt = L10n.tr("Tools", "tools.benchmark.history.selectPrompt", fallback: "Tap to select runs for comparison")
+          /// Location: BenchmarkHistoryView.swift - How many targets a saved run covered; %lld is the count
+          public static func targetCount(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.benchmark.history.targetCount", p1, fallback: "%lld targets")
+          }
+          /// Location: BenchmarkHistoryView.swift - Navigation title of saved runs
+          public static let title = L10n.tr("Tools", "tools.benchmark.history.title", fallback: "Benchmark History")
+          /// Location: BenchmarkHistoryView.swift - Name shown for a run saved without a note
+          public static let untitled = L10n.tr("Tools", "tools.benchmark.history.untitled", fallback: "No note")
+        }
+        public enum Picker {
+          /// Location: RepeaterPickerView.swift - Toolbar button that closes the picker
+          public static let done = L10n.tr("Tools", "tools.benchmark.picker.done", fallback: "Done")
+          /// Location: RepeaterPickerView.swift - Empty state when no repeater matches
+          public static let empty = L10n.tr("Tools", "tools.benchmark.picker.empty", fallback: "No Repeaters")
+          /// Location: RepeaterPickerView.swift - Empty state description
+          public static let emptyDescription = L10n.tr("Tools", "tools.benchmark.picker.emptyDescription", fallback: "Repeaters appear here once they are saved as contacts or heard on the mesh.")
+          /// Location: RepeaterPickerView.swift - Search field prompt
+          public static let searchPrompt = L10n.tr("Tools", "tools.benchmark.picker.searchPrompt", fallback: "Name or hex prefix")
+        }
+        public enum Stat {
+          /// Location: BenchmarkTargetRow.swift - Mean round-trip time label
+          public static let average = L10n.tr("Tools", "tools.benchmark.stat.average", fallback: "avg")
+          /// Location: BenchmarkTargetRow.swift - Slowest round-trip time label
+          public static let maximum = L10n.tr("Tools", "tools.benchmark.stat.maximum", fallback: "max")
+          /// Location: BenchmarkTargetRow.swift - Fastest round-trip time label
+          public static let minimum = L10n.tr("Tools", "tools.benchmark.stat.minimum", fallback: "min")
+        }
+        public enum Unit {
+          /// Location: BenchmarkComparisonView.swift - Unit suffix appended to a signal delta
+          public static let decibels = L10n.tr("Tools", "tools.benchmark.unit.decibels", fallback: " dB")
+          /// Location: BenchmarkComparisonView.swift - Unit suffix appended to a round-trip delta
+          public static let milliseconds = L10n.tr("Tools", "tools.benchmark.unit.milliseconds", fallback: "ms")
+          /// Location: BenchmarkComparisonView.swift - Unit suffix appended to a success-rate delta
+          public static let percent = L10n.tr("Tools", "tools.benchmark.unit.percent", fallback: "%%")
+        }
+      }
       public enum Cli {
         /// Location: CLIToolView.swift - Command cancelled
         public static let cancelled = L10n.tr("Tools", "tools.cli.cancelled", fallback: "Command cancelled")

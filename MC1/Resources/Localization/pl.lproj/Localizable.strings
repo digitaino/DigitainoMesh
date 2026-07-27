@@ -712,3 +712,71 @@
 
 /* Location: KeyGenerationError+UserFacingMessage.swift - Key data is not a valid Ed25519 expanded private key */
 "error.keyGeneration.invalidKey" = "Klucz nie jest prawidłowym kluczem prywatnym Ed25519.";
+
+// MARK: - Repeater Watch
+
+/* Location: RepeaterWatchView.swift - Navigation title of the range-testing screen */
+"signalBars.watch.title" = "Repeater Watch";
+
+/* Location: RepeaterWatchView.swift - Button and title for choosing which repeater to watch */
+"signalBars.watch.choose" = "Choose Repeater";
+
+/* Location: RepeaterWatchView.swift - Empty state title when nothing is being watched */
+"signalBars.watch.emptyTitle" = "Nothing Watched";
+
+/* Location: RepeaterWatchView.swift - Empty state description */
+"signalBars.watch.emptyDescription" = "Watch a repeater to see how often it is heard while you move — useful for finding the edge of its range.";
+
+/* Location: RepeaterWatchView.swift - Label under the count of times the repeater has been heard */
+"signalBars.watch.heardCountLabel" = "times heard";
+
+/* Location: RepeaterWatchView.swift - Prefix before the relative time of the last sighting */
+"signalBars.watch.lastHeard" = "Last heard";
+
+/* Location: RepeaterWatchView.swift - Shown when the watch has started but nothing has arrived yet */
+"signalBars.watch.notYetHeard" = "Not heard yet";
+
+/* Location: RepeaterWatchView.swift - Signal value; %@ is the already-formatted decibel number */
+"signalBars.watch.decibels" = "%@ dB";
+
+/* Location: RepeaterWatchView.swift - Section header for the audible alert settings */
+"signalBars.watch.alerts" = "Alerts";
+
+/* Location: RepeaterWatchView.swift - Toggle enabling a sound on every sighting */
+"signalBars.watch.alertTone" = "Play a Tone When Heard";
+
+/* Location: RepeaterWatchView.swift - Section footer explaining silent-switch behavior */
+"signalBars.watch.alertsFooter" = "The tone plays through headphones or the speaker even when the phone is on silent, and mixes with whatever else is playing.";
+
+/* Location: RepeaterWatchView.swift - Picker label for which tone to play */
+"signalBars.watch.tone" = "Tone";
+
+/* Location: RepeaterWatchView.swift - Button that plays the selected tone once */
+"signalBars.watch.preview" = "Play Preview";
+
+/* Location: RepeaterWatchView.swift - Button that switches to a different repeater */
+"signalBars.watch.change" = "Change Repeater";
+
+/* Location: RepeaterWatchView.swift - VoiceOver summary of the live readout; %1$@ is the repeater name, %2$lld the times heard */
+"signalBars.watch.accessibilitySummary" = "Watching %1$@, heard %2$lld times";
+
+/* Location: RepeaterSignalPopover.swift - VoiceOver label for the row that opens the watch screen; %@ is the repeater name */
+"signalBars.watch.openAccessibility" = "Open Repeater Watch for %@";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.note" = "Note";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.chime" = "Chime";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.bell" = "Bell";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.tweet" = "Tweet";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.tink" = "Tink";
+
+/* Location: RepeaterWatchTone.swift - Alert tone name */
+"signalBars.watch.tones.tock" = "Tock";
