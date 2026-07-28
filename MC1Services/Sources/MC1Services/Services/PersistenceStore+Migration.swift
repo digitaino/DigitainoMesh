@@ -6,14 +6,28 @@ extension PersistenceStore {
   private static let migrationLogger = Logger(subsystem: "com.mc1", category: "RadioIDMigration")
   private static let migrationKey = "hasPopulatedRadioIDs"
 
-  /// One-time migration: populate radioID on all Devices and propagate to children,
-  /// then backfill deduplicationKey on outgoing Messages with nil keys.
+  /// One-time migration: populate radioID on all Devices, then backfill
+  /// deduplicationKey on outgoing Messages with nil keys.
+  ///
+  /// Children's radioID column already contains the old BLE UUID (`device.id`)
+  /// via the `@Attribute(originalName: "deviceID")` rename, so the device simply
+  /// adopts its own id as the radioID and every child row is reachable with zero
+  /// rewrites. (An earlier revision minted a fresh UUID per device and rewrote
+  /// every child table to match — on multi-year stores that materialized hundreds
+  /// of thousands of rows through the model context in one transaction, which
+  /// never finished inside a launch the user was willing to wait through, and the
+  /// single atomic save meant an interrupted run left nothing behind. Equality of
+  /// `radioID` and the legacy `id` is harmless: the field's purpose is stability
+  /// against future BLE re-pairs, which the separate column provides regardless
+  /// of its initial value.)
   public func performRadioIDMigration(defaults: UserDefaults = .standard) throws {
-    guard !defaults.bool(forKey: Self.migrationKey) else { return }
+    Self.migrationLogger.info("radioID migration: entered")
+    guard !defaults.bool(forKey: Self.migrationKey) else {
+      Self.migrationLogger.info("radioID migration: already complete, skipping")
+      return
+    }
 
-    // Step 1: For each Device, children's radioID column still contains the old BLE UUID
-    // (device.id) due to the @Attribute(originalName: "deviceID") rename. Generate a new
-    // radioID for each Device and propagate to all children.
+    // Step 1: each device adopts its legacy id as its radioID.
     let devices = try modelContext.fetch(FetchDescriptor<Device>())
 
     let lastDeviceIDString = defaults.string(forKey: PersistenceKeys.lastConnectedDeviceID)
@@ -21,81 +35,40 @@ extension PersistenceStore {
     var mappedRadioID: UUID?
 
     for device in devices {
-      let newRadioID = UUID()
-      let oldRadioID = device.id
-      device.radioID = newRadioID
-
-      if oldRadioID == lastDeviceID {
-        mappedRadioID = newRadioID
-      }
-
-      let targetOldID = oldRadioID
-
-      let contacts = try modelContext.fetch(FetchDescriptor<Contact>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for contact in contacts {
-        contact.radioID = newRadioID
-      }
-
-      let channels = try modelContext.fetch(FetchDescriptor<Channel>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for channel in channels {
-        channel.radioID = newRadioID
-      }
-
-      let messages = try modelContext.fetch(FetchDescriptor<Message>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for message in messages {
-        message.radioID = newRadioID
-      }
-
-      let reactions = try modelContext.fetch(FetchDescriptor<Reaction>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for reaction in reactions {
-        reaction.radioID = newRadioID
-      }
-
-      let sessions = try modelContext.fetch(FetchDescriptor<RemoteNodeSession>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for session in sessions {
-        session.radioID = newRadioID
-      }
-
-      let paths = try modelContext.fetch(FetchDescriptor<SavedTracePath>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for path in paths {
-        path.radioID = newRadioID
-      }
-
-      let nodes = try modelContext.fetch(FetchDescriptor<DiscoveredNode>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for node in nodes {
-        node.radioID = newRadioID
-      }
-
-      let blocked = try modelContext.fetch(FetchDescriptor<BlockedChannelSender>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for sender in blocked {
-        sender.radioID = newRadioID
-      }
-
-      let logs = try modelContext.fetch(FetchDescriptor<RxLogEntry>(predicate: #Predicate { $0.radioID == targetOldID }))
-      for log in logs {
-        log.radioID = newRadioID
+      device.radioID = device.id
+      if device.id == lastDeviceID {
+        mappedRadioID = device.id
       }
     }
+    try modelContext.save()
 
     // Step 2: Backfill deduplicationKey on outgoing messages with nil keys.
     // Only outgoing (directionRawValue == 1); incoming messages get keys during re-sync.
+    // Chunked with a save per batch: processed rows stop matching the predicate, so an
+    // interrupted launch resumes where it left off instead of starting over.
     let outgoingDirection = MessageDirection.outgoing.rawValue
     let nilKeyPredicate = #Predicate<Message> { message in
       message.deduplicationKey == nil && message.directionRawValue == outgoingDirection
     }
-    let messagesNeedingKeys = try modelContext.fetch(FetchDescriptor(predicate: nilKeyPredicate))
+    var backfilled = 0
+    while true {
+      var descriptor = FetchDescriptor(predicate: nilKeyPredicate)
+      descriptor.fetchLimit = 500
+      let batch = try modelContext.fetch(descriptor)
+      guard !batch.isEmpty else { break }
 
-    for message in messagesNeedingKeys {
-      message.deduplicationKey = DeduplicationKey.contentBased(
-        contactID: message.contactID,
-        channelIndex: message.channelIndex,
-        senderNodeName: message.senderNodeName,
-        timestamp: message.timestamp,
-        content: message.text
-      )
+      for message in batch {
+        message.deduplicationKey = DeduplicationKey.contentBased(
+          contactID: message.contactID,
+          channelIndex: message.channelIndex,
+          senderNodeName: message.senderNodeName,
+          timestamp: message.timestamp,
+          content: message.text
+        )
+      }
+      try modelContext.save()
+      backfilled += batch.count
     }
-
-    try modelContext.save()
 
     if let mappedRadioID {
       defaults.set(mappedRadioID.uuidString, forKey: PersistenceKeys.lastConnectedRadioID)
@@ -105,7 +78,7 @@ extension PersistenceStore {
 
     defaults.set(true, forKey: Self.migrationKey)
 
-    Self.migrationLogger.info("radioID migration complete: \(devices.count) devices, \(messagesNeedingKeys.count) dedup keys backfilled")
+    Self.migrationLogger.info("radioID migration complete: \(devices.count) devices, \(backfilled) dedup keys backfilled")
   }
 
   /// Resets the migration flag (for testing only).

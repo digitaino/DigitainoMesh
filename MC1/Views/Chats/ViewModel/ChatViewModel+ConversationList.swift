@@ -289,6 +289,11 @@ extension ChatViewModel {
     guard let radioID = currentRadioIDProvider() else {
       reloadTask = nil
       clearConversations()
+      // No radio to scope by is a settled answer, not a pending load: show the
+      // empty state rather than parking on the loading spinner with no retrigger.
+      // (A store upgraded from a pre-radioID build hits this until the one-time
+      // migration lands; `AppState.initialize()` re-kicks the reload after it.)
+      hasLoadedOnce = true
       return nil
     }
     let task = Task { @MainActor [weak self] in

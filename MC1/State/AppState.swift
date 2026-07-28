@@ -482,6 +482,11 @@ final class AppState {
     await liveActivityManager.recoverExistingActivity()
     liveActivityManager.startObservingEnablement()
     await connectionManager.activate()
+    // The one-time store migrations inside activate() can materialize data the UI
+    // already asked for and missed — most importantly the radioID backfill that
+    // makes offline browsing resolve on a store upgraded from a pre-radioID build.
+    // Nudge every store-derived view to re-query now that the store is settled.
+    notifyDataRestored()
     // Check if disconnected pill should show (for fresh launch after termination)
     connectionUI.updateDisconnectedPillState(
       connectionState: connectionState,

@@ -126,10 +126,13 @@ public extension ConnectionManager {
 
     // Reset stale room session connections from previous app launch
     let resetStore = createStandalonePersistenceStore()
+    logger.info("Activation: resetting stale room session connections")
     try? await resetStore.resetAllRemoteNodeSessionConnections()
+    logger.info("Activation: room session reset done")
 
     // Populate radioID on existing devices and backfill deduplication keys (one-time migration)
     do {
+      logger.info("Activation: running one-time store migrations")
       try await resetStore.performRadioIDMigration()
     } catch {
       logger.error("radioID migration failed: \(error)")

@@ -61,11 +61,12 @@ struct RadioIDMigrationTests {
 
     try await store.performRadioIDMigration(defaults: defaults)
 
-    // Device's radioID should be different from bleUUID
+    // The device adopts its legacy id as its radioID: children already carry that
+    // value via the deviceID→radioID column rename, so no child rewrite happens.
     let fetchedDevice = try await store.fetchDevice(id: bleUUID)
     #expect(fetchedDevice != nil)
     let newRadioID = try #require(fetchedDevice?.radioID)
-    #expect(newRadioID != bleUUID, "Device should have a new radioID, not the old BLE UUID")
+    #expect(newRadioID == bleUUID, "Migrated device adopts its legacy id as the radioID")
 
     // All children should share the new radioID
     let contacts = try await store.fetchContacts(radioID: newRadioID)
@@ -258,7 +259,7 @@ struct RadioIDMigrationTests {
 
     let fetchedDevice = try await store.fetchDevice(id: bleUUID)
     let firstRadioID = try #require(fetchedDevice?.radioID)
-    #expect(firstRadioID != bleUUID)
+    #expect(firstRadioID == bleUUID, "Migrated device adopts its legacy id as the radioID")
 
     // Second run should be a no-op (guarded by UserDefaults)
     try await store.performRadioIDMigration(defaults: defaults)
@@ -268,6 +269,47 @@ struct RadioIDMigrationTests {
 
     let contacts = try await store.fetchContacts(radioID: firstRadioID)
     #expect(contacts.count == 1, "Contact should still have the radioID from the first run")
+  }
+
+  // MARK: - Upgrade-shaped store (Build 40 regression)
+
+  /// Mirrors the real state a legacy store lands in after the lightweight schema
+  /// migration: the device's brand-new radioID column holds the model default (a
+  /// constant that is NOT the device id), while every child row carries the legacy
+  /// device id via the deviceID→radioID rename. Regression for the Build 40 → v2
+  /// upgrade where the old per-child rewrite never finished on a 300 MB store.
+  @Test
+  func `Upgrade-shaped store binds children and backfills defaults in one cheap pass`() async throws {
+    let suiteName = "test.\(UUID().uuidString)"
+    nonisolated(unsafe) let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+    let store = try await createTestStore()
+
+    let legacyDeviceID = UUID()
+    let lightweightDefault = UUID() // the constant the schema migration stamps on every device
+    let device = DeviceDTO.testDevice(id: legacyDeviceID, radioID: lightweightDefault)
+    try await store.saveDevice(device)
+
+    let contact = ContactDTO.testContact(id: UUID(), radioID: legacyDeviceID, name: "Upgrader")
+    try await store.saveContact(contact)
+
+    defaults.set(legacyDeviceID.uuidString, forKey: "com.pocketmesh.lastConnectedDeviceID")
+    defaults.removeObject(forKey: "com.pocketmesh.lastConnectedRadioID")
+
+    try await store.performRadioIDMigration(defaults: defaults)
+
+    let fetchedDevice = try await store.fetchDevice(id: legacyDeviceID)
+    #expect(fetchedDevice?.radioID == legacyDeviceID)
+
+    // The contact was never rewritten, yet resolves through the device's radioID.
+    let contacts = try await store.fetchContacts(radioID: legacyDeviceID)
+    #expect(contacts.count == 1)
+
+    // Offline browsing resolves immediately: the preference points at the same value.
+    #expect(
+      defaults.string(forKey: "com.pocketmesh.lastConnectedRadioID") == legacyDeviceID.uuidString
+    )
   }
 
   // MARK: - lastConnectedRadioID Backfill
