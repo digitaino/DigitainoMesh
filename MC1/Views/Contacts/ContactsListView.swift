@@ -29,6 +29,7 @@ struct ContactsListView: View {
       sidebarContent
         .navigationDestination(isPresented: $showDiscovery) {
           DiscoveryView()
+            .radioStatusToolbar()
         }
     }
   }

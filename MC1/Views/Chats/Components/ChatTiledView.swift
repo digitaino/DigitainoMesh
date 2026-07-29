@@ -39,6 +39,16 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// later `.id` rebuild does not re-jump to it.
   var onInitialTargetConsumed: (() -> Void)?
 
+  /// Invoked when the reader, already at the newest message, pulls up past the end far enough
+  /// to cross `ChatSearchRevealPolicy.triggerThreshold`. Optional and defaulted so consumers
+  /// without the affordance (the room conversation) are unaffected.
+  var onBottomOverscrollTrigger: (() -> Void)?
+
+  /// Whether whatever `onBottomOverscrollTrigger` reveals is already showing. Passed in rather
+  /// than inferred so the latch can consume a crossing without re-firing the trigger — and its
+  /// haptic — while the reader holds the list stretched.
+  var isBottomOverscrollTargetActive: Bool = false
+
   @Environment(\.appTheme) private var appTheme
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -48,6 +58,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   @State private var host = CellContentHost<Item, Content>()
   @State private var newestID: Item.ID?
   @State private var hasConsumedInitialGeometry = false
+  @State private var searchRevealLatch = ChatSearchRevealLatchBox()
 
   init(
     items: [Item],
@@ -60,7 +71,9 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     scrollTargetID: Item.ID? = nil,
     initialScrollTargetID: Item.ID? = nil,
     onLoadOlder: (@MainActor @Sendable () async -> Void)? = nil,
-    onInitialTargetConsumed: (() -> Void)? = nil
+    onInitialTargetConsumed: (() -> Void)? = nil,
+    onBottomOverscrollTrigger: (() -> Void)? = nil,
+    isBottomOverscrollTargetActive: Bool = false
   ) {
     self.items = items
     self.cellContent = cellContent
@@ -73,6 +86,8 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     self.initialScrollTargetID = initialScrollTargetID
     self.onLoadOlder = onLoadOlder
     self.onInitialTargetConsumed = onInitialTargetConsumed
+    self.onBottomOverscrollTrigger = onBottomOverscrollTrigger
+    self.isBottomOverscrollTargetActive = isBottomOverscrollTargetActive
     // Open at the bottom by default; with an initial target present, hold off
     // append-follow until the geometry callback re-derives it from the resting
     // position, so an append during open does not fight the target.
@@ -108,6 +123,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
         onInitialTargetConsumed?()
       }
       hasConsumedInitialGeometry = true
+      reportBottomOverscroll(geometry)
     }
     .onDragIntoBottomSafeArea {
       UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -137,6 +153,26 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     }
   }
 
+  /// Feeds one geometry frame to the reveal latch and forwards a crossing to the owner.
+  ///
+  /// `pointsFromBottom` is no help here — it clamps at 0, so the whole rubber band reads as
+  /// "at the bottom" — hence the raw offset arithmetic in `ChatSearchRevealPolicy`.
+  private func reportBottomOverscroll(_ geometry: TiledScrollGeometry) {
+    guard let onBottomOverscrollTrigger else { return }
+    let overscroll = ChatSearchRevealPolicy.overscrollPastBottom(
+      contentOffsetY: geometry.contentOffset.y,
+      contentHeight: geometry.contentSize.height,
+      visibleHeight: geometry.visibleSize.height,
+      topInset: geometry.contentInset.top,
+      bottomInset: geometry.contentInset.bottom
+    )
+    let shouldReveal = searchRevealLatch.latch.shouldReveal(
+      overscroll: overscroll,
+      isSearchActive: isBottomOverscrollTargetActive
+    )
+    if shouldReveal { onBottomOverscrollTrigger() }
+  }
+
   /// Fingerprint of theme + appearance. A change fully rebuilds the list (via `.id`) so the
   /// baked bubble colors repaint — the library does not reconfigure cells when only the
   /// environment changes.
@@ -148,4 +184,16 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     )
     return "\(appTheme.id)|\(appearance)"
   }
+}
+
+/// Reference box for the reveal latch.
+///
+/// The latch re-arms on every resting geometry frame, and geometry arrives on every frame of
+/// every scroll. Holding it directly in `@State` would write through the property wrapper each
+/// time and rebuild the whole list mid-scroll; a class instance parked in `@State` keeps the
+/// arming state alive across body evaluations without invalidating anything. Same reason
+/// `CellContentHost` above is a class.
+@MainActor
+private final class ChatSearchRevealLatchBox {
+  var latch = ChatSearchRevealLatch()
 }

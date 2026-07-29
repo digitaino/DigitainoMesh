@@ -7,7 +7,16 @@ struct SettingsDetailView: View {
   @Environment(\.appState) private var appState
   let detail: SettingsDetail
 
+  /// The radio status pair is mounted here rather than on `SettingsView`'s
+  /// `navigationDestination` so it reaches both hosts from one place: the compact push and the
+  /// iPad detail column both land on this view.
   var body: some View {
+    page
+      .radioStatusToolbar()
+  }
+
+  @ViewBuilder
+  private var page: some View {
     switch detail {
     case .deviceInfo:
       DeviceInfoView()

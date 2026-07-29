@@ -41,15 +41,20 @@ struct ContactsSidebarContent: View {
     )
     .navigationTitle(L10n.Contacts.Contacts.List.title)
     .navigationDestination(for: ContactRoute.self) { route in
-      switch route {
-      case let .detail(contact):
-        // Prefer the freshest row from the loaded list; fall back to the carried
-        // payload for pushes that precede a load (e.g. a notification deep link).
-        ContactDetailView(contact: viewModel.contacts.first { $0.id == contact.id } ?? contact)
-          .id(contact.id)
-      case .blockedContacts:
-        BlockedContactsView()
+      Group {
+        switch route {
+        case let .detail(contact):
+          // Prefer the freshest row from the loaded list; fall back to the carried
+          // payload for pushes that precede a load (e.g. a notification deep link).
+          ContactDetailView(contact: viewModel.contacts.first { $0.id == contact.id } ?? contact)
+            .id(contact.id)
+        case .blockedContacts:
+          BlockedContactsView()
+        }
       }
+      // Chokepoint mount: node detail and the blocked list are pushed onto this stack, where
+      // the list's own toolbar (below) no longer applies.
+      .radioStatusToolbar()
     }
     .searchable(text: $searchText, prompt: searchPrompt)
     .toolbar {

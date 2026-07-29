@@ -42,6 +42,14 @@ struct ChatConversationMessagesContent: View {
   /// Swipe-right-to-reply on a bubble; the same handler the actions sheet's Reply uses.
   let onReply: (MessageDTO) -> Void
 
+  /// Pull-up-past-the-newest-message reveal for find-in-conversation. Defaulted so the previews
+  /// (and any future consumer without the affordance) need not supply it.
+  var onBottomOverscrollTrigger: (() -> Void)?
+
+  /// Whether the find-in-conversation bar is already showing; suppresses a repeat reveal while
+  /// the reader holds the list stretched.
+  var isSearchActive: Bool = false
+
   /// Shared offset for the timestamp reveal, scoped to this conversation's list.
   @State private var timestampReveal = ChatTimestampRevealState()
 
@@ -89,7 +97,9 @@ struct ChatConversationMessagesContent: View {
       scrollTargetID: scrollToTargetID,
       initialScrollTargetID: initialScrollTargetID,
       onLoadOlder: { await viewModel.loadOlderMessages() },
-      onInitialTargetConsumed: onDividerTargetConsumed
+      onInitialTargetConsumed: onDividerTargetConsumed,
+      onBottomOverscrollTrigger: onBottomOverscrollTrigger,
+      isBottomOverscrollTargetActive: isSearchActive
     )
     .onChange(of: envInputs) { _, new in
       viewModel.applyEnvInputs(new)

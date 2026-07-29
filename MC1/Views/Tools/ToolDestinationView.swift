@@ -8,7 +8,16 @@ struct ToolDestinationView<LineOfSight: View>: View {
   let tool: ToolSelection
   @ViewBuilder let lineOfSight: () -> LineOfSight
 
+  /// Like `SettingsDetailView`, the radio status pair is mounted on the shared destination view
+  /// rather than on `ToolsView`'s `navigationDestination`, so the compact push and the iPad
+  /// detail column both pick it up from one place.
   var body: some View {
+    destination
+      .radioStatusToolbar()
+  }
+
+  @ViewBuilder
+  private var destination: some View {
     switch tool {
     case .tracePath: TracePathView()
     case .repeaterBenchmark: RepeaterBenchmarkView()

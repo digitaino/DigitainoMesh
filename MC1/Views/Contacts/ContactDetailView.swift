@@ -426,6 +426,7 @@ struct ContactDetailView: View {
         radioID: route.radioID,
         showNeighbors: route.showNeighbors
       )
+      .radioStatusToolbar()
     }
   }
 

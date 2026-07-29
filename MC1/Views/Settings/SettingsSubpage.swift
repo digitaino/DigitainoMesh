@@ -21,22 +21,27 @@ extension View {
   @MainActor
   func settingsSubpageDestinations() -> some View {
     navigationDestination(for: SettingsSubpage.self) { subpage in
-      switch subpage {
-      case let .publicKey(publicKey):
-        PublicKeyView(publicKey: publicKey)
-      case .configExport:
-        NodeConfigExportView()
-      case .configImport:
-        NodeConfigImportView()
-      case .blockedChannelSenders:
-        BlockedChannelSendersView()
-      case .blockedContacts:
-        BlockedContactsView()
-      case .trustedContacts:
-        TrustedContactsPickerView()
-      case .deviceNotificationRules:
-        DeviceNotificationRulesView()
+      Group {
+        switch subpage {
+        case let .publicKey(publicKey):
+          PublicKeyView(publicKey: publicKey)
+        case .configExport:
+          NodeConfigExportView()
+        case .configImport:
+          NodeConfigImportView()
+        case .blockedChannelSenders:
+          BlockedChannelSendersView()
+        case .blockedContacts:
+          BlockedContactsView()
+        case .trustedContacts:
+          TrustedContactsPickerView()
+        case .deviceNotificationRules:
+          DeviceNotificationRulesView()
+        }
       }
+      // Applied at the chokepoint so every subpage inherits the radio status pair; none of
+      // these leaves mounts it itself, so there is nothing to double up on.
+      .radioStatusToolbar()
     }
   }
 }

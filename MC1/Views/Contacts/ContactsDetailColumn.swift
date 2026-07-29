@@ -8,7 +8,15 @@ import SwiftUI
 struct ContactsDetailColumn: View {
   @Environment(\.appState) private var appState
 
+  /// The detail column is its own navigation stack, so it carries the radio status pair itself —
+  /// the content column's toolbar never reaches across the split.
   var body: some View {
+    detail
+      .radioStatusToolbar()
+  }
+
+  @ViewBuilder
+  private var detail: some View {
     if appState.navigation.nodesShowingDiscovery {
       DiscoveryView()
     } else if let selectedContact = appState.navigation.selectedContact {

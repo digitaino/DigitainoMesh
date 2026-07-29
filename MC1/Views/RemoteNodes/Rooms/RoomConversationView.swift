@@ -59,6 +59,9 @@ struct RoomConversationView: View {
         onTitleTap: { showingRoomInfo = true }
       )
       .toolbar {
+        // Mounted on the leaf rather than the `ChatRoute` destination builder because the room
+        // conversation is also the iPad split's detail content, which never goes through it.
+        radioStatusToolbarItems()
         if #unavailable(iOS 26) {
           ToolbarItem(placement: .primaryAction) {
             Button(L10n.RemoteNodes.RemoteNodes.Room.infoTitle, systemImage: "info.circle") {
