@@ -31,8 +31,7 @@ struct SettingsListContent: View {
       .themedCanvas(theme)
       .navigationTitle(L10n.Settings.title)
       .toolbar {
-        bleStatusToolbarItem()
-        repeaterSignalToolbarItem()
+        radioStatusToolbarItems(placement: .topBarLeading)
       }
       .sheet(isPresented: $showingDeviceSelection) {
         DeviceSelectionSheet()

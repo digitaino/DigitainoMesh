@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Display helpers for battery information.
 /// Consolidates LiPo voltage-to-percentage calculation previously duplicated in
-/// BLEStatusIndicatorView and DeviceInfoView.
+/// RadioStatusControl and DeviceInfoView.
 extension BatteryInfo {
   /// Whether this reading represents a real battery.
   /// 0mV indicates no battery hardware (e.g., mains-powered device with no ADC pin).

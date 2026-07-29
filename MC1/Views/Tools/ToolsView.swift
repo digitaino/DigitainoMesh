@@ -22,8 +22,7 @@ struct ToolsView: View {
       .themedCanvas(theme)
       .navigationTitle(L10n.Tools.Tools.title)
       .toolbar {
-        bleStatusToolbarItem()
-        repeaterSignalToolbarItem()
+        radioStatusToolbarItems(placement: .topBarLeading)
       }
     }
   }

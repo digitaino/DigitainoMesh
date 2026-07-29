@@ -129,12 +129,20 @@ struct RepeaterSignalPopover: View {
     } else {
       columnHeaders
       ScrollView {
-        LazyVStack(spacing: 0) {
-          ForEach(repeaters) { repeater in
-            RepeaterSignalRow(repeater: repeater, isWatched: model.isWatched(repeater))
+        // One clock for every row's Age column, ticking while the popover is open.
+        // Coarse on purpose: single-unit ages (see `RepeaterAgeFormat`) change rarely.
+        TimelineView(.periodic(from: .now, by: 10)) { context in
+          LazyVStack(spacing: 0) {
+            ForEach(repeaters) { repeater in
+              RepeaterSignalRow(
+                repeater: repeater,
+                isWatched: model.isWatched(repeater),
+                now: context.date
+              )
               .contextMenu { rowActions(for: repeater) }
-            if repeater.id != repeaters.last?.id {
-              Divider().padding(.horizontal, 8)
+              if repeater.id != repeaters.last?.id {
+                Divider().padding(.horizontal, 8)
+              }
             }
           }
         }
@@ -143,16 +151,18 @@ struct RepeaterSignalPopover: View {
     }
   }
 
+  /// Mirrors `RepeaterSignalRow`'s frames exactly — same flexible identity column, same fixed
+  /// leg and age widths — so the headers sit over their columns at every popover width.
   private var columnHeaders: some View {
     HStack(spacing: 4) {
       Text(L10n.Localizable.SignalBars.Column.id)
-        .frame(width: 84, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
       Text(L10n.Localizable.SignalBars.Column.rx)
-        .frame(width: 36)
+        .frame(width: RepeaterSignalRow.Column.leg)
       Text(L10n.Localizable.SignalBars.Column.tx)
-        .frame(width: 36)
+        .frame(width: RepeaterSignalRow.Column.leg)
       Text(L10n.Localizable.SignalBars.Column.age)
-        .frame(width: 52, alignment: .trailing)
+        .frame(width: RepeaterSignalRow.Column.age, alignment: .trailing)
     }
     .font(.caption2.weight(.medium))
     .foregroundStyle(.tertiary)

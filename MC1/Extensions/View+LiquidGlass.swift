@@ -103,6 +103,30 @@ struct ToolbarMenu<Content: View, LabelView: View>: View {
   }
 }
 
+/// `ToolbarMenu` for a control with a primary action: a tap runs `primaryAction`, a sustained
+/// press opens the menu — `Menu(primaryAction:)`'s split, carried through the same ghost-box
+/// workaround. A separate type rather than an optional on `ToolbarMenu` so the two shapes are
+/// distinct static structures: a runtime branch between the `Menu` inits would hand a hosted
+/// toolbar item a new identity mid-update.
+struct ToolbarActionMenu<Content: View, LabelView: View>: View {
+  let primaryAction: () -> Void
+  @ViewBuilder let content: Content
+  @ViewBuilder let label: LabelView
+
+  var body: some View {
+    if #available(iOS 26, *) {
+      label
+        .accessibilityHidden(true)
+        .overlay {
+          Menu { content } label: { label } primaryAction: { primaryAction() }
+            .colorMultiply(.clear)
+        }
+    } else {
+      Menu { content } label: { label } primaryAction: { primaryAction() }
+    }
+  }
+}
+
 /// A container that uses GlassEffectContainer on iOS 26+, passes through content on earlier versions
 struct LiquidGlassContainer<Content: View>: View {
   let spacing: CGFloat

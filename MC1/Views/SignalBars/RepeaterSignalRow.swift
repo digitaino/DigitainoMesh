@@ -4,24 +4,30 @@ import SwiftUI
 /// One repeater in the signal table: who it is, both legs of its link, and how fresh the
 /// measurement is.
 ///
-/// Fixed column widths rather than a flexible layout: the value of this list is scanning
-/// down a column to compare repeaters, which only works if the columns line up.
+/// Fixed widths for the comparable columns (the legs and the age), because the value of this
+/// list is scanning down a column, which only works if the columns line up. The identity
+/// column is the one that flexes: it soaks up whatever width the popover has to spare, so
+/// names get the slack instead of it collecting as dead space at the trailing edge (the layout
+/// bug this replaces: 44pt of nothing to the right of an Age column truncating at 52pt).
+/// `RepeaterSignalPopover.columnHeaders` mirrors these frames exactly.
 struct RepeaterSignalRow: View {
   @Environment(\.appTheme) private var theme
 
   let repeater: RepeaterSignal
   var isWatched = false
+  /// The instant ages are measured against, supplied by the popover's `TimelineView` so the
+  /// column stays live while open.
+  var now = Date()
 
-  private enum Column {
-    static let identity: CGFloat = 84
+  enum Column {
     static let leg: CGFloat = 36
-    static let age: CGFloat = 52
+    static let age: CGFloat = 44
   }
 
   var body: some View {
     HStack(spacing: 4) {
       identity
-        .frame(width: Column.identity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
       RepeaterSignalGlyph(leg: .rx, quality: repeater.rxQuality, size: 13)
         .frame(width: Column.leg)
@@ -81,10 +87,11 @@ struct RepeaterSignalRow: View {
 
   /// When the repeater was last heard, with the last round-trip time beneath it when one has
   /// been measured — a link can be recent and still slow, and the two answer different
-  /// questions.
+  /// questions. Compact single-unit age (see `RepeaterAgeFormat`); the system relative style
+  /// spells out units and truncated in the column.
   private var freshness: some View {
     VStack(alignment: .trailing, spacing: 0) {
-      Text(repeater.lastHeard, style: .relative)
+      Text(RepeaterAgeFormat.compact(from: repeater.lastHeard, to: now))
         .font(.caption2)
         .foregroundStyle(.tertiary)
         .lineLimit(1)

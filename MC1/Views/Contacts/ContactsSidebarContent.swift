@@ -58,8 +58,7 @@ struct ContactsSidebarContent: View {
     }
     .searchable(text: $searchText, prompt: searchPrompt)
     .toolbar {
-      bleStatusToolbarItem()
-      repeaterSignalToolbarItem()
+      radioStatusToolbarItems(placement: .topBarLeading)
 
       ToolbarItem(placement: .automatic) {
         Menu {

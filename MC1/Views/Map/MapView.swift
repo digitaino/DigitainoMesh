@@ -52,8 +52,7 @@ struct MapView: View {
         onPersistCamera: { savedCameraRegion = MapCameraStore.encode($0) }
       )
       .toolbar {
-        bleStatusToolbarItem()
-        repeaterSignalToolbarItem()
+        radioStatusToolbarItems(placement: .topBarLeading)
         ToolbarItem(placement: .topBarTrailing) {
           MapRefreshButton(
             isLoading: viewModel.isLoading,

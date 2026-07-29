@@ -207,7 +207,7 @@ final class NavigationCoordinator {
     }
   }
 
-  /// Tabs where BLEStatusIndicatorView exists and the device menu tip can anchor (Chats, Contacts, Map).
+  /// Tabs where RadioStatusControl exists and the device menu tip can anchor (Chats, Contacts, Map).
   var isOnValidTabForDeviceMenuTip: Bool {
     selectedTab == AppTab.chats.rawValue
       || selectedTab == AppTab.nodes.rawValue
