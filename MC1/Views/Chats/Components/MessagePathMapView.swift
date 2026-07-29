@@ -221,12 +221,11 @@ struct MessagePathMapView: View {
       }
     }
 
-    // Receiver (this device)
-    let receiverLocation: CLLocation? = if let device = appState.connectedDevice, device.hasLocation {
-      CLLocation(latitude: device.latitude, longitude: device.longitude)
-    } else {
-      appState.bestAvailableLocation
-    }
+    // Receiver (this device). `bestAvailableLocation` prefers phone GPS and only falls
+    // back to the radio's stored coordinates — the radio is physically at the user's
+    // side, while its *configured* location is a manually-set advert value that can be
+    // arbitrarily stale (a radio set up on a trip keeps reporting that spot forever).
+    let receiverLocation = appState.bestAvailableLocation
 
     if let loc = receiverLocation {
       let coord = loc.coordinate
