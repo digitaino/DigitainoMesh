@@ -100,30 +100,39 @@ struct RadioStatusControl: View {
 
   /// The control's face. Branches only *inside* the always-mounted label, varying content by
   /// value; the toolbar item itself never comes or goes.
+  ///
+  /// `fixedSize` is load-bearing: a long navigation title makes the bar compress its items,
+  /// and without it the compression lands on the smallest texts first — the dB readouts
+  /// truncate to "11…" while the bars stay whole. The cluster renders at its natural width
+  /// and the title does the yielding; it is the larger, more redundant element.
   @ViewBuilder
   private var labelContent: some View {
-    if showsSignalCluster, let best = signals.best {
-      HStack(spacing: 3) {
-        legColumn(
-          glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
-          readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
-        )
-        legColumn(
-          glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
-          readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
-        )
-        identityColumn(for: best)
-        watchBadge
+    Group {
+      if showsSignalCluster, let best = signals.best {
+        HStack(spacing: 6) {
+          legColumn(
+            glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
+            readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
+          )
+          legColumn(
+            glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
+            readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
+          )
+          identityColumn(for: best)
+          watchBadge
+        }
+        .padding(.horizontal, 2)
+      } else if showsSignalCluster {
+        HStack(spacing: 6) {
+          scanningGlyph
+          powerLabel
+          watchBadge
+        }
+      } else {
+        StatusIcon(iconName: iconName, iconColor: iconColor, isAnimating: isAnimating)
       }
-    } else if showsSignalCluster {
-      HStack(spacing: 3) {
-        scanningGlyph
-        powerLabel
-        watchBadge
-      }
-    } else {
-      StatusIcon(iconName: iconName, iconColor: iconColor, isAnimating: isAnimating)
     }
+    .fixedSize(horizontal: true, vertical: false)
   }
 
   private func legColumn(glyph: some View, readout: some View) -> some View {
