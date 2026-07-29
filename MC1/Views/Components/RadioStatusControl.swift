@@ -36,6 +36,12 @@ struct RadioStatusControl: View {
   @State private var isTxFlashing = false
   @State private var lastRxTick: UInt = 0
   @State private var lastTxTick: UInt = 0
+  @State private var menuHapticTrigger = 0
+
+  /// How long the device-menu press must be held before the haptic confirms it.
+  /// Matches the system menu-open hold on `Menu(primaryAction:)` closely enough
+  /// that the thump lands as the menu unfolds.
+  private static let menuHapticHoldDuration: Double = 0.5
 
   private let deviceMenuTip = DeviceMenuTip()
 
@@ -56,8 +62,17 @@ struct RadioStatusControl: View {
     } label: {
       labelContent
     }
+    // Confirms the sustained press that opens the device menu, which the system
+    // plays no haptic for. A *simultaneous* gesture so it only observes the
+    // press the menu recognizer owns; if the recognizers ever stop sharing the
+    // touch the failure mode is a missing thump, never a spurious one.
+    .simultaneousGesture(
+      LongPressGesture(minimumDuration: Self.menuHapticHoldDuration)
+        .onEnded { _ in menuHapticTrigger += 1 }
+    )
     .popoverTip(deviceMenuTip)
     .dynamicTypeSize(...DynamicTypeSize.xLarge)
+    .sensoryFeedback(.impact(flexibility: .solid), trigger: menuHapticTrigger)
     .sensoryFeedback(.success, trigger: successFeedbackTrigger)
     .sensoryFeedback(.error, trigger: errorFeedbackTrigger)
     .accessibilityLabel(L10n.Settings.BleStatus.accessibilityLabel)
