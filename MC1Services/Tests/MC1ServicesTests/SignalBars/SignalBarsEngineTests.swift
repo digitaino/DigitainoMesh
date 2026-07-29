@@ -571,6 +571,97 @@ struct SignalBarsEngineTests {
   }
 
   @Test
+  func `A row holding the full public key is named from it, not from the hash guess`() async {
+    let session = MockSignalBarsSession()
+    // Ridge advertised more recently, so a 1-byte hash guess for 0x0C would pick it.
+    let directory = StubNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x0C, 0x99]),
+        lastAdvertTimestamp: 2_000,
+        resolvableName: "Ridge"
+      )),
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
+        lastAdvertTimestamp: 1_000,
+        resolvableName: "Hilltop"
+      ))
+    ])
+    let engine = makeEngine(
+      session: session,
+      clock: TestClock(),
+      pathHashMode: 0,
+      directory: directory
+    )
+
+    await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+      publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13])
+    )))
+
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Hilltop")
+  }
+
+  @Test
+  func `A discover response corrects a wrong 1-byte hash guess`() async {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let directory = StubNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x0C, 0x99]),
+        lastAdvertTimestamp: 2_000,
+        resolvableName: "Ridge"
+      )),
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
+        lastAdvertTimestamp: 1_000,
+        resolvableName: "Hilltop"
+      ))
+    ])
+    let engine = makeEngine(
+      session: session,
+      clock: clock,
+      pathHashMode: 0,
+      directory: directory
+    )
+
+    // Passive 1-byte sighting: recency picks Ridge — the best available guess.
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x0C])))
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Ridge")
+
+    // The discover response proves the row is Hilltop; the stored key must beat
+    // the earlier guess even though the row already had a name.
+    clock.advance(6)
+    await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+      publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13])
+    )))
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Hilltop")
+  }
+
+  @Test
+  func `nodePoolDidChange re-resolves already-named rows`() async {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let directory = MutableNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
+        resolvableName: "Old Name"
+      ))
+    ])
+    let engine = makeEngine(session: session, clock: clock, directory: directory)
+
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x0C])))
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Old Name")
+
+    await directory.replace([
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
+        resolvableName: "New Name"
+      ))
+    ])
+    await engine.nodePoolDidChange()
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "New Name")
+  }
+
+  @Test
   func `A hash that names no known node stays unnamed`() async {
     let session = MockSignalBarsSession()
     let directory = StubNodeDirectory(nodes: [

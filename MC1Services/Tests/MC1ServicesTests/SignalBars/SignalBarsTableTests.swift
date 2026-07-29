@@ -54,6 +54,57 @@ struct SignalBarsTableTests {
   }
 
   @Test
+  func `Widening a row's hash drops the resolved name for re-resolution`() throws {
+    var table = SignalBarsTable()
+    try table.ingest(sighting("0C"), now: start)
+    table.setName("Ridge Relay", for: nodeID("0C"))
+
+    try table.ingest(sighting("0C13"), now: start)
+    #expect(table.repeaters[0].id.hex == "0C13")
+    #expect(table.repeaters[0].name == nil, "a name resolved at 1 byte cannot label a 2-byte identity")
+  }
+
+  @Test
+  func `A changed public key drops the resolved name and an unchanged one keeps it`() throws {
+    var table = SignalBarsTable()
+    try table.ingest(sighting("0C", key: [0x0C, 0x99]), now: start)
+    table.setName("Ridge Relay", for: nodeID("0C"))
+
+    try table.ingest(sighting("0C", key: [0x0C, 0x99]), now: start)
+    #expect(table.repeaters[0].name == "Ridge Relay", "same identity, name stays")
+
+    try table.ingest(sighting("0C", key: [0x0C, 0x13]), now: start)
+    #expect(table.repeaters[0].name == nil, "the row turned out to be a different node")
+  }
+
+  @Test
+  func `Applying a device blob at a different hash width carries neither name nor key`() throws {
+    var table = SignalBarsTable()
+    try table.ingest(sighting("0C", key: [0x0C, 0x99]), now: start)
+    table.setName("Ridge Relay", for: nodeID("0C"))
+
+    table.apply(SignalBarsBlob(version: 2, entries: [
+      SignalBarsFixtures.entry(hash: [0x0C, 0x13], rxSnrX4: 8)
+    ]), now: start)
+
+    let row = try #require(table[nodeID("0C13")])
+    #expect(row.name == nil)
+    #expect(row.publicKey == nil)
+  }
+
+  @Test
+  func `clearNames drops every resolved name`() throws {
+    var table = SignalBarsTable()
+    try table.ingest(sighting("0C"), now: start)
+    try table.ingest(sighting("AA"), now: start)
+    table.setName("One", for: nodeID("0C"))
+    table.setName("Two", for: nodeID("AA"))
+
+    table.clearNames()
+    #expect(table.repeaters.allSatisfy { $0.name == nil })
+  }
+
+  @Test
   func `Nil fields never erase what is already known`() throws {
     var table = SignalBarsTable()
     try table.ingest(sighting("0C", txSnr: 3, rssi: -60, key: [0x0C]), now: start)

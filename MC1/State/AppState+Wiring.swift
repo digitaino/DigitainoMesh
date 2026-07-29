@@ -20,6 +20,9 @@ extension AppState {
           // A newly added repeater contact should name its signal-bars row now, not
           // whenever the directory's cache window happens to lapse.
           await services.signalBarsNodeDirectory.invalidate()
+          // And already-named rows must re-resolve too — a rename or deletion
+          // otherwise leaves the old name beside the hex for the whole session.
+          await services.signalBarsEngine.nodePoolDidChange()
         case .conversationsChanged:
           refreshConversations()
         case .directMessageReceived, .channelMessageReceived, .roomMessageReceived, .reactionReceived:

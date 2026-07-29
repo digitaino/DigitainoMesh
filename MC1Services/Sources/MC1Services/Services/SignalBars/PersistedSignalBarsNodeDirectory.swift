@@ -48,7 +48,12 @@ public actor PersistedSignalBarsNodeDirectory: SignalBarsNodeDirectory {
     do {
       let contacts = try await dataStore.fetchContacts(radioID: radioID)
       let discovered = try await dataStore.fetchDiscoveredNodes(radioID: radioID)
-      cached = contacts.map(AnyResolvableNode.init) + discovered.map(AnyResolvableNode.init)
+      // Repeaters only: these names label rows in the *repeater* signal table. An
+      // unfiltered pool lets a chat contact sharing a leading key byte win a hash
+      // collision on advert recency and put a person's name next to a repeater's hex —
+      // and it diverges from the repeater-narrowed pools every path view resolves with.
+      cached = contacts.filter { $0.type == .repeater }.map(AnyResolvableNode.init)
+        + discovered.filter { $0.nodeType == .repeater }.map(AnyResolvableNode.init)
       cachedAt = at
     } catch {
       logger.warning("Node directory read failed: \(error.localizedDescription)")

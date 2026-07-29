@@ -70,9 +70,18 @@ struct SignalBarsTable: Sendable, Equatable {
     var entry = repeaters[index]
     entry.rxSnr = entry.rxSnr.map { ($0 * 3 + sighting.rxSnr) / 4 } ?? sighting.rxSnr
     entry.lastHeard = now
-    if sighting.id.byteWidth > entry.id.byteWidth { entry.id = sighting.id }
+    // Identity facts invalidate the resolved name: a wider hash or a changed key means
+    // the name may have been resolved for a different node at the old, vaguer identity.
+    // The engine re-resolves nil names on its next pass, now against the better facts.
+    if sighting.id.byteWidth > entry.id.byteWidth {
+      entry.id = sighting.id
+      entry.name = nil
+    }
     if let rssi = sighting.rssi { entry.rssi = rssi }
-    if let publicKey = sighting.publicKey { entry.publicKey = publicKey }
+    if let publicKey = sighting.publicKey {
+      if entry.publicKey != publicKey { entry.name = nil }
+      entry.publicKey = publicKey
+    }
     if let txSnr = sighting.txSnr {
       entry.txSnr = txSnr
       entry.txState = .measured(SNRQuality(snr: txSnr))
@@ -100,13 +109,17 @@ struct SignalBarsTable: Sendable, Equatable {
   /// Replaces the table with the device's own, as decoded from the sync blob.
   ///
   /// The firmware emits its entries in canonical order (best first, matching the OLED
-  /// Signals page), so the order is rendered verbatim rather than re-scored. Locally known
-  /// facts the blob has no room for — resolved name, RSSI, public key, last probe time —
-  /// survive the replacement for any entry that names the same node.
+  /// Signals page), so the order is rendered verbatim rather than re-scored. Link facts
+  /// the blob has no room for — RSSI, last probe time — survive the replacement for any
+  /// entry that names the same node. Identity facts (resolved name, public key) survive
+  /// only an *exact* ID match: carrying them across a hash-width change re-attaches an
+  /// identity established at a different specificity to a row that may be another node,
+  /// which is how a stale name outlives every blob poll in viewer mode.
   mutating func apply(_ blob: SignalBarsBlob, now: Date) {
     repeaters = blob.entries.compactMap { entry -> RepeaterSignal? in
       guard let id = NodeHexID(entry.hexID) else { return nil }
       let existing = self[id]
+      let identityCarries = existing?.id == id
       let txState: RepeaterTXState =
         if entry.hasTx {
           .measured(SNRQuality(snr: entry.txSnr))
@@ -117,14 +130,14 @@ struct SignalBarsTable: Sendable, Equatable {
         }
       return RepeaterSignal(
         id: id,
-        name: existing?.name,
+        name: identityCarries ? existing?.name : nil,
         rxSnr: entry.rxSnr,
         txSnr: entry.txSnr,
         txState: txState,
         rssi: existing?.rssi,
         rttMs: entry.rttMs == 0 ? nil : Int(entry.rttMs),
         lastHeard: now.addingTimeInterval(-Double(entry.ageSeconds)),
-        publicKey: existing?.publicKey,
+        publicKey: identityCarries ? existing?.publicKey : nil,
         lastProbeAt: existing?.lastProbeAt,
         isDeviceBest: entry.isBest
       )
@@ -205,6 +218,14 @@ struct SignalBarsTable: Sendable, Equatable {
   /// Sets a resolved display name.
   mutating func setName(_ name: String?, for id: NodeHexID) {
     update(id) { $0.name = name }
+  }
+
+  /// Drops every resolved name so the next resolution pass starts fresh — called when
+  /// the node pool itself changes (contact added, renamed, or removed).
+  mutating func clearNames() {
+    for index in repeaters.indices {
+      repeaters[index].name = nil
+    }
   }
 
   // MARK: - Staleness

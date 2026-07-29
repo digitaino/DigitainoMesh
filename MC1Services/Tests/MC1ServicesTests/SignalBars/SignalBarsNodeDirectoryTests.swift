@@ -15,7 +15,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
-      name: "Saved Repeater"
+      name: "Saved Repeater",
+      typeRawValue: ContactType.repeater.rawValue
     ))
     _ = try await store.upsertDiscoveredNode(
       radioID: Self.radioID,
@@ -31,17 +32,44 @@ struct SignalBarsNodeDirectoryTests {
   }
 
   @Test
+  func `non-repeater contacts never enter the pool`() async throws {
+    let store = MockPersistenceStore()
+    try await store.saveContact(.testContact(
+      radioID: Self.radioID,
+      publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
+      name: "Chat Buddy",
+      typeRawValue: ContactType.chat.rawValue
+    ))
+    try await store.saveContact(.testContact(
+      radioID: Self.radioID,
+      publicKey: SignalBarsFixtures.publicKey([0x0C, 0x99]),
+      name: "Actual Repeater",
+      typeRawValue: ContactType.repeater.rawValue
+    ))
+
+    let directory = PersistedSignalBarsNodeDirectory(dataStore: store, radioID: Self.radioID)
+    let nodes = await directory.resolvableNodes()
+
+    #expect(
+      nodes.map(\.resolvableName) == ["Actual Repeater"],
+      "a chat contact must never label a repeater row on a hash collision"
+    )
+  }
+
+  @Test
   func `the pool is scoped to the connected radio`() async throws {
     let store = MockPersistenceStore()
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x01]),
-      name: "Mine"
+      name: "Mine",
+      typeRawValue: ContactType.repeater.rawValue
     ))
     try await store.saveContact(.testContact(
       radioID: Self.otherRadioID,
       publicKey: SignalBarsFixtures.publicKey([0x02]),
-      name: "Someone else's"
+      name: "Someone else's",
+      typeRawValue: ContactType.repeater.rawValue
     ))
 
     let directory = PersistedSignalBarsNodeDirectory(dataStore: store, radioID: Self.radioID)
@@ -56,7 +84,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x01]),
-      name: "Contact"
+      name: "Contact",
+      typeRawValue: ContactType.repeater.rawValue
     ))
     _ = try await store.upsertDiscoveredNode(
       radioID: Self.radioID,
@@ -80,12 +109,14 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
-      name: "Hilltop"
+      name: "Hilltop",
+      typeRawValue: ContactType.repeater.rawValue
     ))
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x7F]),
-      name: "Valley"
+      name: "Valley",
+      typeRawValue: ContactType.repeater.rawValue
     ))
 
     let directory = PersistedSignalBarsNodeDirectory(dataStore: store, radioID: Self.radioID)
@@ -104,7 +135,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x01]),
-      name: "First"
+      name: "First",
+      typeRawValue: ContactType.repeater.rawValue
     ))
 
     let directory = PersistedSignalBarsNodeDirectory(
@@ -118,7 +150,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x02]),
-      name: "Second"
+      name: "Second",
+      typeRawValue: ContactType.repeater.rawValue
     ))
     clock.advance(29)
 
@@ -132,7 +165,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x01]),
-      name: "First"
+      name: "First",
+      typeRawValue: ContactType.repeater.rawValue
     ))
 
     let directory = PersistedSignalBarsNodeDirectory(
@@ -146,7 +180,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x02]),
-      name: "Second"
+      name: "Second",
+      typeRawValue: ContactType.repeater.rawValue
     ))
     clock.advance(31)
 
@@ -160,7 +195,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x01]),
-      name: "First"
+      name: "First",
+      typeRawValue: ContactType.repeater.rawValue
     ))
 
     let directory = PersistedSignalBarsNodeDirectory(
@@ -174,7 +210,8 @@ struct SignalBarsNodeDirectoryTests {
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
       publicKey: SignalBarsFixtures.publicKey([0x02]),
-      name: "Second"
+      name: "Second",
+      typeRawValue: ContactType.repeater.rawValue
     ))
     await directory.invalidate()
 

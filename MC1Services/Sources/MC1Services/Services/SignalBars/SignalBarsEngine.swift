@@ -579,11 +579,29 @@ public actor SignalBarsEngine {
     let candidates = await directory.resolvableNodes()
     guard !candidates.isEmpty else { return }
     for repeater in table.repeaters where repeater.name == nil {
+      // A row that holds the full public key (discover responses store it) is exactly
+      // identified — name it from the key and never fall back to hash guessing, which
+      // ranks by advert recency and can pick a different node on a prefix collision.
+      if let publicKey = repeater.publicKey,
+         let exact = candidates.first(where: { $0.publicKey == publicKey }) {
+        table.setName(exact.resolvableName, for: repeater.id)
+        continue
+      }
       guard let match = resolver.bestMatch(for: repeater.id, among: candidates, now: at) else {
         continue
       }
       table.setName(match.resolvableName, for: repeater.id)
     }
+  }
+
+  /// The node pool changed (contact added, renamed, removed): every resolved name is a
+  /// candidate for being wrong now, so drop them all and re-resolve immediately rather
+  /// than letting stale names ride until the row happens to be recreated.
+  public func nodePoolDidChange() async {
+    table.clearNames()
+    lastNameResolveAt = nil
+    await resolveNames(now: now())
+    publish()
   }
 
   // MARK: - Publishing

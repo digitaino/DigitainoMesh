@@ -74,6 +74,24 @@ struct StubNodeDirectory: SignalBarsNodeDirectory {
   }
 }
 
+/// A pool the test can swap mid-run, for exercising re-resolution after the
+/// contacts or discovered nodes change (renames, deletions).
+actor MutableNodeDirectory: SignalBarsNodeDirectory {
+  private var nodes: [AnyResolvableNode]
+
+  init(nodes: [AnyResolvableNode]) {
+    self.nodes = nodes
+  }
+
+  func resolvableNodes() async -> [AnyResolvableNode] {
+    nodes
+  }
+
+  func replace(_ nodes: [AnyResolvableNode]) {
+    self.nodes = nodes
+  }
+}
+
 /// Minimal ``RepeaterResolvable`` for directory fixtures.
 struct StubResolvableNode: RepeaterResolvable {
   var publicKey: Data
