@@ -41,7 +41,12 @@ struct ConversationMessageSearchBar: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .background(.bar)
-    .onAppear { isFieldFocused = true }
+    // The scroll-up reveal presents the bar passively and must not raise the keyboard;
+    // explicit invocations ask for focus via the flag. Tapping the field focuses it either way.
+    .onAppear { isFieldFocused = state.activatesFieldOnAppear }
+    .onChange(of: isFieldFocused) { _, focused in
+      state.isFieldFocused = focused
+    }
   }
 
   @ViewBuilder

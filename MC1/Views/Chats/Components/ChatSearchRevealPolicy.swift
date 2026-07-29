@@ -1,45 +1,57 @@
 import CoreGraphics
 
-/// Tuning and arming rules for the bottom-overscroll reveal of find-in-conversation.
+/// Tuning and arming rules for the scroll-up reveal of find-in-conversation.
 ///
-/// Find-in-conversation used to sit behind a magnifying-glass toolbar button. That slot now
-/// carries the radio status pair, so the search bar is reached the way the rest of the
-/// conversation is driven — by scrolling. Standing at the newest message and pulling *up* past
-/// the end (the rubber band) opens the bar, mirroring pull-to-refresh at the other end of the
-/// list.
+/// Find-in-conversation used to sit behind a magnifying-glass toolbar button; that slot now
+/// carries the radio status pair. The bar is reached the way the rest of the conversation is
+/// driven — by scrolling: standing at the newest message and scrolling a little way back into
+/// history slides the bar in. It appears without claiming the keyboard, and settles away again
+/// when the reader returns to the bottom without having typed, so browsing history leaves no
+/// residue. (An earlier revision used a rubber-band pull past the newest message instead; the
+/// deliberate stretch felt like work for what should be an ambient affordance.)
 ///
-/// `TiledScrollGeometry.pointsFromBottom` cannot express this: it clamps at 0 and so reads the
-/// entire rubber band as "at the bottom". The raw overscroll has to be derived from the offset
-/// and the scroll view's resting maximum instead, which is what `overscrollPastBottom` does.
+/// A conversation short enough to fit on screen cannot scroll up, so there — and only there —
+/// the rubber-band pull still opens the bar; `TiledView` bounces vertically regardless of
+/// content height, so the pull is always available.
 ///
 /// Pure and host-independent so the arming rules can be unit-tested; the felt behavior is
 /// device-only.
 enum ChatSearchRevealPolicy {
-  // MARK: - Threshold
+  // MARK: - Thresholds
 
-  /// Rubber-band distance past the newest message at which the search bar opens.
-  ///
+  /// Distance scrolled back from the newest message at which the bar appears. Roughly a
+  /// bubble's height past the at-bottom slack: enough that a nudge to peek at the previous
+  /// message doesn't open it, small enough that "scroll up a bit" is literally the gesture.
+  static let revealDistance: CGFloat = 100
+
+  /// Slack for "resting at the bottom", shared with the scroll surface's own at-bottom rule
+  /// (`ChatScrollConstants.bottomDetectionThreshold`) so arming, auto-hide, and the
+  /// scroll-to-bottom button all agree on where the bottom is.
+  static let atBottomSlack: CGFloat = ChatScrollConstants.bottomDetectionThreshold
+
+  /// Rubber-band distance that opens the bar in a conversation too short to scroll.
   /// Deliberately larger than the slack a fling leaves behind: iOS keeps reporting a decaying
-  /// overscroll for a few frames after a fast scroll to the bottom, and a small threshold would
-  /// turn "jump to the newest message" into "open search". ~56pt takes a deliberate pull.
-  static let triggerThreshold: CGFloat = 56
+  /// overscroll for a few frames after a fast settle, and a small threshold would turn every
+  /// bounce into a reveal.
+  static let shortContentPullThreshold: CGFloat = 56
 
-  /// Overscroll at or below which the gesture re-arms. Not exactly zero: the band settles
-  /// through a couple of sub-point frames, and demanding a true zero would leave the gesture
-  /// disarmed until the next full scroll.
-  static let rearmThreshold: CGFloat = 4
+  /// Overscroll at or below which the band counts as settled for re-arming. Not exactly zero:
+  /// the band settles through a couple of sub-point frames, and demanding a true zero would
+  /// leave the gesture disarmed until the next full scroll.
+  static let settledSlack: CGFloat = 4
 
   // MARK: - Geometry
 
   /// How far the list is rubber-banded past its newest message; `<= 0` anywhere at or above
   /// the resting bottom.
   ///
-  /// The resting maximum offset is UIScrollView's own: `contentHeight + bottomInset -
-  /// visibleHeight`, floored at `-topInset`. That floor is what makes short conversations work.
-  /// When the whole conversation fits on screen the unclamped maximum goes sharply negative,
-  /// and every resting frame would read as a huge overscroll; the floor pins the resting offset
-  /// to `-topInset` instead, so a short conversation rests at 0 and still reveals when pulled —
-  /// the list bounces vertically regardless of content height.
+  /// `TiledScrollGeometry.pointsFromBottom` cannot express this — it clamps at 0 and reads the
+  /// whole rubber band as "at the bottom" — so the raw offset arithmetic derives it. The
+  /// resting maximum offset is UIScrollView's own: `contentHeight + bottomInset -
+  /// visibleHeight`, floored at `-topInset`. The floor is what makes short conversations work:
+  /// when the whole conversation fits on screen the unclamped maximum goes sharply negative
+  /// and every resting frame would read as a huge overscroll; the floor pins the resting
+  /// offset to `-topInset` instead.
   static func overscrollPastBottom(
     contentOffsetY: CGFloat,
     contentHeight: CGFloat,
@@ -52,32 +64,63 @@ enum ChatSearchRevealPolicy {
   }
 }
 
-/// One-shot arming for the reveal, carried across the continuous stream of scroll-geometry
+/// What one scroll-geometry frame means for the search bar.
+enum ChatSearchRevealEvent {
+  /// Nothing to do.
+  case none
+  /// The reader scrolled up from the bottom (or, in a short conversation, pulled past the
+  /// end): open the bar — without claiming the keyboard.
+  case reveal
+  /// The list just came to rest at the bottom again: the owner may retire an untouched bar.
+  case settledAtBottom
+}
+
+/// Arming state for the reveal, carried across the continuous stream of scroll-geometry
 /// reports.
 ///
-/// Geometry arrives on every frame of the drag, so a bare threshold test would fire dozens of
-/// times across a single pull. The latch consumes a crossing the first time it is seen and
-/// stays consumed until the band settles back to rest, which is also what stops the gesture
-/// from re-firing while the reader simply holds the list stretched.
+/// Geometry arrives on every frame of a scroll, so bare threshold tests would fire dozens of
+/// times per gesture. The latch arms only while resting at the bottom and consumes itself on
+/// the first crossing, which yields the intended shape: a conversation opened deep in history
+/// (a search jump, an unread divider) never reveals uninvited, and each reveal requires
+/// having visited the bottom since the last one. `settledAtBottom` is edge-triggered the same
+/// way, firing once per return rather than once per frame.
 struct ChatSearchRevealLatch {
-  private var isArmed = true
+  private var isArmed = false
+  private var wasAtBottom = false
 
   init() {}
 
-  /// Reports whether this geometry frame should open the search bar, updating the arming state.
+  /// Classifies one geometry frame, updating the arming state.
   ///
   /// - Parameters:
+  ///   - pointsFromBottom: the scroll surface's clamped distance from the newest message.
   ///   - overscroll: raw rubber-band distance from `overscrollPastBottom`.
-  ///   - isSearchActive: whether the bar is already showing. A crossing is still consumed in
-  ///     that case, so releasing and pulling again is what re-fires — holding the stretch does
-  ///     not queue up a second reveal (and, more visibly, a second haptic).
-  mutating func shouldReveal(overscroll: CGFloat, isSearchActive: Bool) -> Bool {
-    guard overscroll > ChatSearchRevealPolicy.rearmThreshold else {
+  ///   - contentFits: whether the whole conversation fits on screen (no upward travel
+  ///     exists, so the pull is the only possible reveal gesture).
+  ///   - isSearchActive: whether the bar is already showing. A crossing is still consumed,
+  ///     so the next reveal requires returning to the bottom first.
+  mutating func event(
+    pointsFromBottom: CGFloat,
+    overscroll: CGFloat,
+    contentFits: Bool,
+    isSearchActive: Bool
+  ) -> ChatSearchRevealEvent {
+    let atRest = pointsFromBottom < ChatSearchRevealPolicy.atBottomSlack
+      && overscroll <= ChatSearchRevealPolicy.settledSlack
+    defer { wasAtBottom = atRest }
+
+    if atRest {
       isArmed = true
-      return false
+      return wasAtBottom ? .none : .settledAtBottom
     }
-    guard isArmed, overscroll >= ChatSearchRevealPolicy.triggerThreshold else { return false }
+
+    guard isArmed else { return .none }
+    let crossed = contentFits
+      ? overscroll >= ChatSearchRevealPolicy.shortContentPullThreshold
+      : pointsFromBottom >= ChatSearchRevealPolicy.revealDistance
+    guard crossed else { return .none }
+
     isArmed = false
-    return !isSearchActive
+    return isSearchActive ? .none : .reveal
   }
 }

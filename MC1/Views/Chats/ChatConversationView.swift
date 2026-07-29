@@ -39,11 +39,6 @@ struct ChatConversationView: View {
   /// views' worth of work driven by one piece of state.
   @State private var messageSearch = ConversationMessageSearchState()
 
-  /// Bumped when the bottom-overscroll pull opens the search bar, so the reveal lands with a
-  /// tap the reader feels — the bar animates in from behind the navigation bar and is easy to
-  /// miss while looking at the bottom of the list.
-  @State private var searchRevealHaptic = 0
-
   /// Pending debounced draft persist; cancelled and restarted on each keystroke,
   /// cancelled-then-flushed synchronously on view teardown and app suspension.
   @State private var draftSaveTask: Task<Void, Never>?
@@ -165,12 +160,13 @@ struct ChatConversationView: View {
       imageViewerData: $imageViewerData,
       onRetryMessage: { retryMessage($0) },
       onReply: { dispatch(.reply, for: $0) },
-      onBottomOverscrollTrigger: { revealMessageSearch() },
+      onSearchRevealEvent: { handleSearchRevealEvent($0) },
       isSearchActive: messageSearch.isActive
     )
-    // VoiceOver cannot rubber-band the list, so the reveal gesture needs a spoken equivalent.
-    // Same string the retired toolbar button carried.
+    // VoiceOver cannot drive the scroll reveal, so it needs a spoken equivalent. Same string
+    // the retired toolbar button carried. Explicit invocation, so the field takes focus.
     .accessibilityAction(named: L10n.Chats.Chats.Search.InConversation.open) {
+      messageSearch.activatesFieldOnAppear = true
       messageSearch.isActive = true
     }
     .mentionTapHandling(
@@ -232,10 +228,9 @@ struct ChatConversationView: View {
       }
     }
     .animation(.snappy(duration: 0.2), value: messageSearch.isActive)
-    .sensoryFeedback(.impact(weight: .light), trigger: searchRevealHaptic)
     .toolbar {
-      // Search moved off the toolbar and onto the bottom-overscroll pull, freeing this slot for
-      // the radio status pair — which is otherwise invisible for as long as a conversation is open.
+      // Search moved off the toolbar and onto the scroll-up reveal, freeing this slot for the
+      // radio status pair — which is otherwise invisible for as long as a conversation is open.
       radioStatusToolbarItems()
       if #unavailable(iOS 26) {
         ToolbarItem(placement: .primaryAction) {
@@ -383,13 +378,25 @@ struct ChatConversationView: View {
 
   // MARK: - Search Reveal
 
-  /// Opens find-in-conversation from the bottom-overscroll pull. The latch in
-  /// `ChatSearchRevealPolicy` already guarantees one call per crossing, so this only has to
-  /// stay idempotent against a bar that is somehow already up.
-  private func revealMessageSearch() {
-    guard !messageSearch.isActive else { return }
-    messageSearch.isActive = true
-    searchRevealHaptic += 1
+  /// Applies a scroll-derived search event. A reveal opens the bar *without* claiming the
+  /// keyboard — the reader is mid-scroll, and yanking the keyboard up would shove the very
+  /// content they are reading. Settling back at the bottom retires the bar, but only when it
+  /// was never engaged: an entered query or a focused field means the reader is using it, and
+  /// scrolling home must not eat their state.
+  private func handleSearchRevealEvent(_ event: ChatSearchRevealEvent) {
+    switch event {
+    case .reveal:
+      guard !messageSearch.isActive else { return }
+      messageSearch.activatesFieldOnAppear = false
+      messageSearch.isActive = true
+    case .settledAtBottom:
+      guard messageSearch.isActive,
+            messageSearch.query.isEmpty,
+            !messageSearch.isFieldFocused else { return }
+      messageSearch.dismiss()
+    case .none:
+      break
+    }
   }
 
   // MARK: - Jump to a Message

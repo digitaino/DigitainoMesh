@@ -39,15 +39,16 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   /// later `.id` rebuild does not re-jump to it.
   var onInitialTargetConsumed: (() -> Void)?
 
-  /// Invoked when the reader, already at the newest message, pulls up past the end far enough
-  /// to cross `ChatSearchRevealPolicy.triggerThreshold`. Optional and defaulted so consumers
-  /// without the affordance (the room conversation) are unaffected.
-  var onBottomOverscrollTrigger: (() -> Void)?
+  /// Search-reveal events derived from the scroll geometry: `.reveal` when the reader scrolls
+  /// up from the bottom far enough (or pulls past the end of a conversation too short to
+  /// scroll), `.settledAtBottom` when the list comes to rest at the newest message again.
+  /// Optional and defaulted so consumers without the affordance (the room conversation) are
+  /// unaffected. `.none` frames are not forwarded.
+  var onSearchRevealEvent: ((ChatSearchRevealEvent) -> Void)?
 
-  /// Whether whatever `onBottomOverscrollTrigger` reveals is already showing. Passed in rather
-  /// than inferred so the latch can consume a crossing without re-firing the trigger — and its
-  /// haptic — while the reader holds the list stretched.
-  var isBottomOverscrollTargetActive: Bool = false
+  /// Whether the bar `.reveal` opens is already showing. Passed in rather than inferred so the
+  /// latch can consume a crossing without re-firing the reveal while the bar is up.
+  var isSearchBarActive: Bool = false
 
   @Environment(\.appTheme) private var appTheme
   @Environment(\.colorScheme) private var colorScheme
@@ -72,8 +73,8 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     initialScrollTargetID: Item.ID? = nil,
     onLoadOlder: (@MainActor @Sendable () async -> Void)? = nil,
     onInitialTargetConsumed: (() -> Void)? = nil,
-    onBottomOverscrollTrigger: (() -> Void)? = nil,
-    isBottomOverscrollTargetActive: Bool = false
+    onSearchRevealEvent: ((ChatSearchRevealEvent) -> Void)? = nil,
+    isSearchBarActive: Bool = false
   ) {
     self.items = items
     self.cellContent = cellContent
@@ -86,8 +87,8 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     self.initialScrollTargetID = initialScrollTargetID
     self.onLoadOlder = onLoadOlder
     self.onInitialTargetConsumed = onInitialTargetConsumed
-    self.onBottomOverscrollTrigger = onBottomOverscrollTrigger
-    self.isBottomOverscrollTargetActive = isBottomOverscrollTargetActive
+    self.onSearchRevealEvent = onSearchRevealEvent
+    self.isSearchBarActive = isSearchBarActive
     // Open at the bottom by default; with an initial target present, hold off
     // append-follow until the geometry callback re-derives it from the resting
     // position, so an append during open does not fight the target.
@@ -123,7 +124,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
         onInitialTargetConsumed?()
       }
       hasConsumedInitialGeometry = true
-      reportBottomOverscroll(geometry)
+      reportSearchRevealEvent(geometry)
     }
     .onDragIntoBottomSafeArea {
       UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -153,12 +154,12 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     }
   }
 
-  /// Feeds one geometry frame to the reveal latch and forwards a crossing to the owner.
-  ///
-  /// `pointsFromBottom` is no help here — it clamps at 0, so the whole rubber band reads as
-  /// "at the bottom" — hence the raw offset arithmetic in `ChatSearchRevealPolicy`.
-  private func reportBottomOverscroll(_ geometry: TiledScrollGeometry) {
-    guard let onBottomOverscrollTrigger else { return }
+  /// Feeds one geometry frame to the reveal latch and forwards a meaningful event to the
+  /// owner. The rubber-band distance still has to be derived from raw offsets — the clamped
+  /// `pointsFromBottom` reads the whole band as "at the bottom" — because it both gates
+  /// re-arming (a stretched band is not at rest) and carries the short-conversation pull.
+  private func reportSearchRevealEvent(_ geometry: TiledScrollGeometry) {
+    guard let onSearchRevealEvent else { return }
     let overscroll = ChatSearchRevealPolicy.overscrollPastBottom(
       contentOffsetY: geometry.contentOffset.y,
       contentHeight: geometry.contentSize.height,
@@ -166,11 +167,13 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
       topInset: geometry.contentInset.top,
       bottomInset: geometry.contentInset.bottom
     )
-    let shouldReveal = searchRevealLatch.latch.shouldReveal(
+    let event = searchRevealLatch.latch.event(
+      pointsFromBottom: geometry.pointsFromBottom,
       overscroll: overscroll,
-      isSearchActive: isBottomOverscrollTargetActive
+      contentFits: geometry.contentSize.height <= geometry.visibleSize.height,
+      isSearchActive: isSearchBarActive
     )
-    if shouldReveal { onBottomOverscrollTrigger() }
+    if event != .none { onSearchRevealEvent(event) }
   }
 
   /// Fingerprint of theme + appearance. A change fully rebuilds the list (via `.id`) so the

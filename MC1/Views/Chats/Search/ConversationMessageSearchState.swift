@@ -14,6 +14,15 @@ final class ConversationMessageSearchState {
   /// Whether the search bar is showing.
   var isActive = false
 
+  /// Whether the bar should claim keyboard focus when it appears. Explicit invocations (the
+  /// VoiceOver action) want the keyboard immediately; the passive scroll-up reveal must not
+  /// yank it up over the history the reader is scrolling through.
+  var activatesFieldOnAppear = true
+
+  /// Mirror of the bar's field focus, published by the bar itself. The scroll-settle
+  /// auto-hide reads it to leave an engaged bar alone.
+  var isFieldFocused = false
+
   /// Live search-field text.
   var query = ""
 
@@ -101,6 +110,9 @@ final class ConversationMessageSearchState {
   func dismiss() {
     isActive = false
     query = ""
+    // The bar unmounts without reliably delivering a final focus change; a stale `true`
+    // here would block every future scroll-settle auto-hide.
+    isFieldFocused = false
     reset()
   }
 
