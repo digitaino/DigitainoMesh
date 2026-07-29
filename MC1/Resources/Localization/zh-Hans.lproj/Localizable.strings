@@ -107,6 +107,20 @@
 /* VoiceOver label for the destructive Remove and Try Again button — clarifies that "remove" means removing the device pairing */
 "accessibility.alert.connectionFailed.removeAndRetry" = "移除设备配对并重试";
 
+// MARK: - Stale Node Location Prompt
+
+/* Alert title offering to move the radio's configured advert location to the phone's current position */
+"alert.nodeLocationStale.title" = "更新节点位置？";
+
+/* Alert body for the stale node-location prompt - %@ is the localized distance between the radio's configured location and the phone, e.g. "1,400 mi" */
+"alert.nodeLocationStale.message" = "你的电台仍在报告约 %@ 外的位置，整个 Mesh 网络看到的就是这个位置。要将它设为你当前的位置吗？";
+
+/* Button that writes the phone's current coordinates to the radio */
+"alert.nodeLocationStale.update" = "更新";
+
+/* Button that dismisses the stale node-location prompt (snoozed for a week) */
+"alert.nodeLocationStale.notNow" = "暂不";
+
 // MARK: - Accessibility
 
 /* Location: SyncingPillView.swift - Accessibility hint for disconnected state */

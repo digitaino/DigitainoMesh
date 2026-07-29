@@ -70,6 +70,20 @@
 /* VoiceOver label for the destructive Remove and Try Again button — clarifies that "remove" means removing the device pairing */
 "accessibility.alert.connectionFailed.removeAndRetry" = "Видалити сполучення пристрою та спробувати знову";
 
+// MARK: - Stale Node Location Prompt
+
+/* Alert title offering to move the radio's configured advert location to the phone's current position */
+"alert.nodeLocationStale.title" = "Оновити місцезнаходження вузла?";
+
+/* Alert body for the stale node-location prompt - %@ is the localized distance between the radio's configured location and the phone, e.g. "1,400 mi" */
+"alert.nodeLocationStale.message" = "Ваша рація досі повідомляє місцезнаходження приблизно за %@ звідси — саме його бачить уся mesh-мережа. Встановити ваше поточне місце?";
+
+/* Button that writes the phone's current coordinates to the radio */
+"alert.nodeLocationStale.update" = "Оновити";
+
+/* Button that dismisses the stale node-location prompt (snoozed for a week) */
+"alert.nodeLocationStale.notNow" = "Не зараз";
+
 // MARK: - Accessibility (from English source)
 
 "common.accessibility.connectHint" = "Натисніть двічі, щоб підключити пристрій";

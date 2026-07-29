@@ -56,6 +56,23 @@ struct DevicePreferenceStore {
     userDefaults.set(enabled, forKey: Self.signalBarsEnabledKey(deviceID: deviceID))
   }
 
+  // MARK: - Stale Node Location Prompt
+
+  /// When the user last chose "Not Now" on the stale-node-location prompt for this radio,
+  /// or `nil` if never. See ``NodeLocationStalenessPolicy/snoozeInterval``.
+  func nodeLocationPromptSnoozedAt(deviceID: UUID) -> Date? {
+    let stored = userDefaults.double(forKey: Self.nodeLocationPromptSnoozedAtKey(deviceID: deviceID))
+    guard stored > 0 else { return nil }
+    return Date(timeIntervalSinceReferenceDate: stored)
+  }
+
+  func setNodeLocationPromptSnoozedAt(_ date: Date, deviceID: UUID) {
+    userDefaults.set(
+      date.timeIntervalSinceReferenceDate,
+      forKey: Self.nodeLocationPromptSnoozedAtKey(deviceID: deviceID)
+    )
+  }
+
   // MARK: - Adaptive Power
 
   func isAdaptivePowerEnabled(deviceID: UUID) -> Bool {
@@ -98,6 +115,15 @@ struct DevicePreferenceStore {
   /// Same key legacy used, so an existing install keeps whatever the user chose.
   private static func signalBarsEnabledKey(deviceID: UUID) -> String {
     "device.\(deviceID.uuidString).signalBarsEnabled"
+  }
+
+  /// Device-local by design, like every other `device.*` key here: none of them are
+  /// registered in `BackupUserDefaults`, and a snooze is a fact about *this* install's
+  /// nagging history, not a preference worth carrying to restored hardware. A restore
+  /// re-asks once, which is the correct behavior for a radio whose location may well
+  /// have changed in the meantime.
+  private static func nodeLocationPromptSnoozedAtKey(deviceID: UUID) -> String {
+    "device.\(deviceID.uuidString).nodeLocationPromptSnoozedAt"
   }
 
   private static func adaptivePowerEnabledKey(deviceID: UUID) -> String {

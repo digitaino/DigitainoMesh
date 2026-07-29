@@ -2210,6 +2210,18 @@ public enum L10n {
         /// Alert title when connection cannot be established
         public static let title = L10n.tr("Localizable", "alert.couldNotConnect.title", fallback: "Could Not Connect")
       }
+      public enum NodeLocationStale {
+        /// Alert body for the stale node-location prompt - %@ is the localized distance between the radio's configured location and the phone, e.g. "1,400 mi"
+        public static func message(_ p1: Any) -> String {
+          return L10n.tr("Localizable", "alert.nodeLocationStale.message", String(describing: p1), fallback: "Your radio still reports a location about %@ away, and that's what everyone on the mesh sees. Set it to where you are now?")
+        }
+        /// Button that dismisses the stale node-location prompt (snoozed for a week)
+        public static let notNow = L10n.tr("Localizable", "alert.nodeLocationStale.notNow", fallback: "Not Now")
+        /// Alert title offering to move the radio's configured advert location to the phone's current position
+        public static let title = L10n.tr("Localizable", "alert.nodeLocationStale.title", fallback: "Update node location?")
+        /// Button that writes the phone's current coordinates to the radio
+        public static let update = L10n.tr("Localizable", "alert.nodeLocationStale.update", fallback: "Update")
+      }
       public enum PairingFailed {
         /// Alert title when device pairing fails (e.g., wrong PIN)
         public static let title = L10n.tr("Localizable", "alert.pairingFailed.title", fallback: "Couldn't Pair")

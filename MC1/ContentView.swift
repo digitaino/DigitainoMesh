@@ -26,6 +26,11 @@ struct ContentView: View {
         appState.handleBecameActive()
       }
     }
+    // The stale-location check needs a ready radio *and* a phone fix. Connect-ready is
+    // handled by `onDeviceSynced`; this is the other half, for when the fix lands second.
+    .onChange(of: appState.locationService.currentLocation) { _, _ in
+      appState.evaluateNodeLocationStaleness()
+    }
     .alert(
       connectionUI.connectionFailedTitle ?? L10n.Localizable.Alert.ConnectionFailed.title,
       isPresented: $connectionUI.showingConnectionFailedAlert
@@ -98,6 +103,30 @@ struct ContentView: View {
     )) { release in
       WhatsNewSheet(release: release)
     }
+    // Same co-presentation contract as the What's New sheet above: the getter yields the
+    // prompt only while this host is quiescent, and `pending` stays set meanwhile, so the
+    // alert re-presents on a later render once the higher-priority surface clears.
+    .alert(
+      L10n.Localizable.Alert.NodeLocationStale.title,
+      isPresented: Binding(
+        get: { nodeLocationPromptPresentable },
+        set: { if !$0 { appState.nodeLocationPrompt.clearPending() } }
+      ),
+      presenting: appState.nodeLocationPrompt.pending
+    ) { _ in
+      Button(L10n.Localizable.Alert.NodeLocationStale.update) {
+        Task { await appState.applyPendingNodeLocation() }
+      }
+      Button(L10n.Localizable.Alert.NodeLocationStale.notNow, role: .cancel) {
+        appState.nodeLocationPrompt.snoozeCurrent()
+      }
+    } message: { prompt in
+      Text(L10n.Localizable.Alert.NodeLocationStale.message(
+        NodeLocationStalenessPolicy.formattedDistance(prompt.distanceMeters)
+      ))
+    }
+    .sensoryFeedback(.success, trigger: appState.nodeLocationPrompt.successTrigger)
+    .sensoryFeedback(.error, trigger: appState.nodeLocationPrompt.failureTrigger)
   }
 
   /// True when no connection alert or scan picker from this host is presenting.
@@ -105,6 +134,14 @@ struct ContentView: View {
     !appState.connectionUI.showingConnectionFailedAlert
       && appState.connectionUI.otherAppWarningDeviceID == nil
       && !(appState.connectionManager.bluetoothScanPicker?.isPresenting ?? false)
+  }
+
+  /// The stale-location prompt is the lowest-priority surface on this host: it yields to the
+  /// connection alerts, the scan picker, and the What's New sheet.
+  private var nodeLocationPromptPresentable: Bool {
+    appState.nodeLocationPrompt.pending != nil
+      && connectionUIQuiescent
+      && appState.whatsNew.pendingRelease == nil
   }
 }
 

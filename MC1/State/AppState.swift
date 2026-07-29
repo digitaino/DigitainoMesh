@@ -301,6 +301,13 @@ final class AppState {
   /// What's New presentation gate (device-local baseline, pending release)
   let whatsNew = WhatsNewState()
 
+  // MARK: - Stale Node Location
+
+  /// One-shot prompt offering to move the radio's configured advert location to the phone's
+  /// current position when the two have drifted far apart. Driven by
+  /// `evaluateNodeLocationStaleness()`.
+  let nodeLocationPrompt = NodeLocationPromptState()
+
   // MARK: - Navigation State
 
   /// Navigation coordinator (tab selection, pending targets, cross-tab navigation)
@@ -428,6 +435,9 @@ final class AppState {
     // Wire device synced callback - runs after sync completes and state is .ready
     connectionManager.onDeviceSynced = { [weak self] in
       self?.performStaleNodeCleanup()
+      // Ready is the first moment the Device row carries the radio's configured location,
+      // so it is the earliest the staleness check can mean anything.
+      self?.evaluateNodeLocationStaleness()
       // Reconcile the firmware's notification rules with current iOS state on every
       // post-sync ready transition — covers fresh boot, reconnect, and reflash.
       Task { [weak self] in await self?.reconcileNotifSync() }
@@ -513,6 +523,7 @@ final class AppState {
     chatCoordinatorRegistry?.tearDown()
     chatCoordinatorRegistry = nil
     navigation.clearPendingLinks()
+    nodeLocationPrompt.endSession()
   }
 
   /// Presents the guided pairing-failure recovery for an invalidated bond, only

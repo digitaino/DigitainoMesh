@@ -103,6 +103,20 @@
 /* VoiceOver label for the destructive Remove and Try Again button — clarifies that "remove" means removing the device pairing */
 "accessibility.alert.connectionFailed.removeAndRetry" = "Supprimer l'appairage de l'appareil et réessayer";
 
+// MARK: - Stale Node Location Prompt
+
+/* Alert title offering to move the radio's configured advert location to the phone's current position */
+"alert.nodeLocationStale.title" = "Mettre à jour la position du nœud ?";
+
+/* Alert body for the stale node-location prompt - %@ is the localized distance between the radio's configured location and the phone, e.g. "1,400 mi" */
+"alert.nodeLocationStale.message" = "Votre radio indique toujours une position à environ %@ d'ici, et c'est ce que voit tout le maillage. La définir sur votre position actuelle ?";
+
+/* Button that writes the phone's current coordinates to the radio */
+"alert.nodeLocationStale.update" = "Mettre à jour";
+
+/* Button that dismisses the stale node-location prompt (snoozed for a week) */
+"alert.nodeLocationStale.notNow" = "Plus tard";
+
 // MARK: - Accessibility
 
 /* Location: SyncingPillView.swift - Accessibility hint for disconnected state */
