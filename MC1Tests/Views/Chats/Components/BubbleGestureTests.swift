@@ -15,7 +15,7 @@ struct BubbleGestureTests {
 
   @Test
   func `yielding tap denies simultaneity with a long-press, allows it with others`() {
-    let coordinator = TapYieldingToLongPress.Coordinator(onTap: {})
+    let coordinator = TapYieldingToLongPress.Coordinator(onTap: {}, isMac: false)
     let tap = UITapGestureRecognizer()
 
     #expect(
@@ -29,16 +29,30 @@ struct BubbleGestureTests {
   }
 
   @Test
-  func `yielding tap never consumes touches and gates its delegate off Mac`() {
-    let coordinator = TapYieldingToLongPress.Coordinator(onTap: {})
+  func `yielding tap vetoes nothing on Mac, where the context-menu interaction must not be disturbed`() {
+    let coordinator = TapYieldingToLongPress.Coordinator(onTap: {}, isMac: true)
+    let tap = UITapGestureRecognizer()
 
-    let iPad = TapYieldingToLongPress.makeRecognizer(coordinator: coordinator, isMac: false)
-    #expect(iPad.cancelsTouchesInView == false)
-    #expect(iPad.delegate != nil)
+    #expect(
+      coordinator.gestureRecognizer(tap, shouldRecognizeSimultaneouslyWith: UILongPressGestureRecognizer())
+        == true
+    )
+    #expect(
+      coordinator.gestureRecognizer(tap, shouldRecognizeSimultaneouslyWith: UIPanGestureRecognizer())
+        == true
+    )
+  }
 
-    let mac = TapYieldingToLongPress.makeRecognizer(coordinator: coordinator, isMac: true)
-    #expect(mac.cancelsTouchesInView == false)
-    #expect(mac.delegate == nil)
+  @Test
+  func `yielding tap never consumes touches and always carries its scoping delegate`() {
+    for isMac in [false, true] {
+      let coordinator = TapYieldingToLongPress.Coordinator(onTap: {}, isMac: isMac)
+      let recognizer = TapYieldingToLongPress.makeRecognizer(coordinator: coordinator)
+      #expect(recognizer.cancelsTouchesInView == false)
+      // The recognizer's host spans the whole row; the delegate's frame scoping is what
+      // keeps a tap elsewhere in the row from firing the fragment. Load-bearing on Mac too.
+      #expect(recognizer.delegate === coordinator)
+    }
   }
 
   // MARK: - Sibling long-press coverage

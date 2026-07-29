@@ -43,8 +43,10 @@ private struct ChatTimestampRevealModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .offset(x: -offset)
+      // The label overlay must sit inside the slide: `.offset` moves only the view it
+      // wraps, so an overlay applied after it would stay pinned to the un-slid frame.
       .overlay(alignment: .trailing) { timestampLabel }
+      .offset(x: -offset)
       .overlay {
         if reveal != nil {
           BubbleHorizontalPanRecognizer(
@@ -65,9 +67,10 @@ private struct ChatTimestampRevealModifier: ViewModifier {
         .lineLimit(1)
         .fixedSize()
         .opacity(BubbleSwipeGesturePolicy.revealProgress(for: offset))
-        // The row slid left by `offset`; shift the label back by the same amount so it sits
-        // in the strip the row vacated, pinned to the conversation's trailing edge.
-        .offset(x: offset)
+        // Glued to the rows, iMessage-style: the label starts one full reveal-width past
+        // the row's trailing edge, rides in with the slide, and lands right-aligned in the
+        // strip the rows vacated once the drag reaches its maximum.
+        .offset(x: BubbleSwipeGesturePolicy.revealMaxTranslation)
         .padding(.trailing, 4)
         .accessibilityHidden(true)
     }

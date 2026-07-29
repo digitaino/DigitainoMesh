@@ -6,53 +6,55 @@ import UIKit
 /// opens. It replaces a SwiftUI `Button`, whose press gesture grabs the touch on touch-down and
 /// cancels the bubble's long-press.
 ///
-/// The `UITapGestureRecognizer` does not consume touches (`cancelsTouchesInView = false`), and its
-/// delegate denies simultaneous recognition with a `UILongPressGestureRecognizer` so the bubble's
-/// long-press wins a contested press. The delegate is set only off Mac; on Mac the secondary click
-/// routes through the table's context-menu interaction, which this delegate must not disturb.
+/// The overlay is a `GestureHostingProxyView`: it marks the fragment's active region while the
+/// recognizer lives on the enclosing cell, so the overlay never hit-tests and the bubble's own
+/// long-press below keeps receiving touches. The delegate scopes the tap to the proxy's frame
+/// (the recognizer's host spans the whole row) and, off Mac, denies simultaneous recognition
+/// with a `UILongPressGestureRecognizer` so the bubble's long-press wins a contested press. On
+/// Mac the secondary click routes through a context-menu interaction, which that denial must
+/// not disturb — there the delegate scopes the touch but vetoes nothing.
 struct TapYieldingToLongPress: UIViewRepresentable {
   let onTap: () -> Void
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(onTap: onTap)
+    Coordinator(onTap: onTap, isMac: ProcessInfo.processInfo.isiOSAppOnMac)
   }
 
-  func makeUIView(context: Context) -> UIView {
-    let view = UIView()
-    view.backgroundColor = .clear
-    view.addGestureRecognizer(
-      Self.makeRecognizer(
-        coordinator: context.coordinator,
-        isMac: ProcessInfo.processInfo.isiOSAppOnMac
-      )
+  func makeUIView(context: Context) -> GestureHostingProxyView {
+    let view = GestureHostingProxyView(
+      recognizer: Self.makeRecognizer(coordinator: context.coordinator)
     )
+    context.coordinator.proxy = view
     return view
   }
 
-  func updateUIView(_ uiView: UIView, context: Context) {
+  func updateUIView(_ uiView: GestureHostingProxyView, context: Context) {
     context.coordinator.onTap = onTap
   }
 
-  /// Builds the tap recognizer with the yielding policy. Pure and `isMac`-parameterized so the
-  /// `cancelsTouchesInView` flag and the off-Mac delegate gate can be exercised in a unit test.
-  static func makeRecognizer(coordinator: Coordinator, isMac: Bool) -> UITapGestureRecognizer {
+  /// Builds the tap recognizer with the yielding policy. Pure so the `cancelsTouchesInView`
+  /// flag and the delegate wiring can be exercised in a unit test.
+  static func makeRecognizer(coordinator: Coordinator) -> UITapGestureRecognizer {
     let recognizer = UITapGestureRecognizer(
       target: coordinator,
       action: #selector(Coordinator.handleTap)
     )
     recognizer.cancelsTouchesInView = false
-    if !isMac {
-      recognizer.delegate = coordinator
-    }
+    recognizer.delegate = coordinator
     return recognizer
   }
 
   @MainActor
   final class Coordinator: NSObject, UIGestureRecognizerDelegate {
     var onTap: () -> Void
+    let isMac: Bool
+    /// The overlay marking the fragment's active region; the recognizer itself lives on the
+    /// enclosing cell and would otherwise fire for taps anywhere in the row.
+    weak var proxy: GestureHostingProxyView?
 
-    init(onTap: @escaping () -> Void) {
+    init(onTap: @escaping () -> Void, isMac: Bool) {
       self.onTap = onTap
+      self.isMac = isMac
     }
 
     @objc func handleTap() {
@@ -63,7 +65,16 @@ struct TapYieldingToLongPress: UIViewRepresentable {
       _ gestureRecognizer: UIGestureRecognizer,
       shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-      !(otherGestureRecognizer is UILongPressGestureRecognizer)
+      if isMac { return true }
+      return !(otherGestureRecognizer is UILongPressGestureRecognizer)
+    }
+
+    func gestureRecognizer(
+      _: UIGestureRecognizer,
+      shouldReceive touch: UITouch
+    ) -> Bool {
+      guard let proxy else { return true }
+      return proxy.containsTouch(touch)
     }
   }
 }

@@ -3,11 +3,13 @@ import UIKit
 
 /// Attaches a horizontal `UIPanGestureRecognizer` to a bubble without taking its touches.
 ///
-/// Built the same way as `TapYieldingToLongPress`: a transparent overlay view carrying a
-/// recognizer with `cancelsTouchesInView = false` and an explicit delegate. A SwiftUI
-/// `DragGesture` cannot be used here — inside a scrolling list it reserves the touch on the
-/// first movement and the conversation stops scrolling, which is exactly the regression the
-/// fork hit before moving these swipes to UIKit recognizers.
+/// Built the same way as `TapYieldingToLongPress`: a `GestureHostingProxyView` that marks
+/// the gesture's active region while the recognizer itself lives on the enclosing cell, so
+/// the overlay never becomes a hit-test target and the SwiftUI gestures beneath it (the
+/// bubble's long-press, link taps) keep receiving touches. A SwiftUI `DragGesture` cannot
+/// be used here — inside a scrolling list it reserves the touch on the first movement and
+/// the conversation stops scrolling, which is exactly the regression the fork hit before
+/// moving these swipes to UIKit recognizers.
 ///
 /// `shouldBegin` runs the direction gate, so an ambiguous or vertical drag never starts the
 /// swipe and the list keeps the pan. `allowsSimultaneousRecognition` decides whether the
@@ -30,14 +32,15 @@ struct BubbleHorizontalPanRecognizer: UIViewRepresentable {
     )
   }
 
-  func makeUIView(context: Context) -> UIView {
-    let view = UIView()
-    view.backgroundColor = .clear
-    view.addGestureRecognizer(Self.makeRecognizer(coordinator: context.coordinator))
+  func makeUIView(context: Context) -> GestureHostingProxyView {
+    let view = GestureHostingProxyView(
+      recognizer: Self.makeRecognizer(coordinator: context.coordinator)
+    )
+    context.coordinator.proxy = view
     return view
   }
 
-  func updateUIView(_: UIView, context: Context) {
+  func updateUIView(_: GestureHostingProxyView, context: Context) {
     context.coordinator.shouldBegin = shouldBegin
     context.coordinator.allowsSimultaneousRecognition = allowsSimultaneousRecognition
     context.coordinator.onChange = onChange
@@ -62,6 +65,9 @@ struct BubbleHorizontalPanRecognizer: UIViewRepresentable {
     var shouldBegin: (CGPoint) -> Bool
     var allowsSimultaneousRecognition: Bool
     var onChange: (UIGestureRecognizer.State, CGFloat) -> Void
+    /// The overlay marking the gesture's active region; the recognizer itself lives on the
+    /// enclosing cell and would otherwise fire for touches anywhere in the row.
+    weak var proxy: GestureHostingProxyView?
 
     init(
       shouldBegin: @escaping (CGPoint) -> Bool,
@@ -80,6 +86,14 @@ struct BubbleHorizontalPanRecognizer: UIViewRepresentable {
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
       guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
       return shouldBegin(pan.velocity(in: pan.view))
+    }
+
+    func gestureRecognizer(
+      _: UIGestureRecognizer,
+      shouldReceive touch: UITouch
+    ) -> Bool {
+      guard let proxy else { return true }
+      return proxy.containsTouch(touch)
     }
 
     func gestureRecognizer(
