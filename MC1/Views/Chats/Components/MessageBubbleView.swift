@@ -41,6 +41,7 @@ struct MessageBubbleView: View, Equatable {
           onRequestPreviewFetch: { actions.onRequestPreviewFetch(message.id) },
           onManualPreviewFetch: { actions.onManualPreviewFetch(message.id) },
           onMapPreviewTap: { coordinate in actions.onMapPreviewTap(coordinate) },
+          onShowSharedRoute: { route in actions.onShowSharedRoute(route, message) },
           snapshotResolver: actions.snapshotResolver,
           requestSnapshot: actions.requestSnapshot,
           retrySnapshot: actions.retrySnapshot

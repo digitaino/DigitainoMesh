@@ -18,4 +18,9 @@ public enum MessageFragment: Sendable, Hashable {
   /// the payload is a non-optional `String`. Parsing back into per-emoji
   /// counts happens at render time.
   case reactionSummary(String)
+  /// A route another user embedded in the text via Reply with Route
+  /// ("RX via ..."). Emitted for incoming messages only — our own outgoing
+  /// route replies read as plain text, since the local device already has the
+  /// full path view for them.
+  case sharedRoute(SharedRoute)
 }

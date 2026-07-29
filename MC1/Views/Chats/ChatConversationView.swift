@@ -50,6 +50,7 @@ struct ChatConversationView: View {
   @State private var blockSenderContext: BlockSenderContext?
   @State private var sendDMContext: SendDMContext?
   @State private var imageViewerData: ImageViewerData?
+  @State private var sharedRouteForMap: SharedRouteMapContext?
 
   // MARK: - Other State
 
@@ -158,6 +159,7 @@ struct ChatConversationView: View {
       onDividerTargetConsumed: { chatViewModel.timeline.consumeAnchor() },
       selectedMessageForActions: $selectedMessageForActions,
       imageViewerData: $imageViewerData,
+      sharedRouteForMap: $sharedRouteForMap,
       onRetryMessage: { retryMessage($0) },
       onReply: { dispatch(.reply, for: $0) },
       onSearchRevealEvent: { handleSearchRevealEvent($0) },
@@ -317,6 +319,10 @@ struct ChatConversationView: View {
     }
     .fullScreenCover(item: $imageViewerData) { data in
       FullScreenImageViewer(data: data)
+    }
+    // Path map for a route another user embedded in a message ("RX via ...").
+    .sheet(item: $sharedRouteForMap) { context in
+      SharedRouteMapSheet(context: context)
     }
     .task(id: appState.servicesVersion) {
       await performInitialLoad()
@@ -698,6 +704,8 @@ struct ChatConversationView: View {
       handleReact(emoji: emoji, for: message)
     case .reply:
       handleReply(for: message)
+    case let .replyWithRoute(routeInfo):
+      handleReplyWithRoute(routeInfo: routeInfo, for: message)
     case .copy:
       handleCopy(for: message)
     case .sendAgain:
@@ -737,6 +745,15 @@ struct ChatConversationView: View {
       try? await Task.sleep(for: MessageActionsPresentation.dismissalDelay)
       inputFocusRequest += 1
     }
+  }
+
+  /// The regular reply pre-fill plus the route info on its own line, so a
+  /// receiving client's `SharedRouteParser` finds the "RX via ..." pattern.
+  private func handleReplyWithRoute(routeInfo: String, for message: MessageDTO) {
+    handleReply(for: message)
+    let base = chatViewModel.composingText
+    let separator = base.isEmpty || base.hasSuffix("\n") ? "" : "\n"
+    chatViewModel.composingText = base + separator + routeInfo + "\n"
   }
 
   private func handleCopy(for message: MessageDTO) {

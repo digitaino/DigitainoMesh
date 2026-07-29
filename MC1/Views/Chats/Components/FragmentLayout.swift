@@ -35,7 +35,7 @@ struct FragmentLayout {
         if textPayload == nil { textPayload = payload }
       case let .inlineImage(image):
         if inlineImage == nil { inlineImage = image }
-      case .linkPreview, .mapPreview, .malwareWarning, .reactionSummary:
+      case .linkPreview, .mapPreview, .malwareWarning, .reactionSummary, .sharedRoute:
         siblings.append(fragment)
       }
     }

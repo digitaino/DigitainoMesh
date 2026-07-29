@@ -72,7 +72,8 @@ struct MessageActionsSheet: View {
               repeats: repeats,
               contacts: contacts,
               discoveredNodes: discoveredNodes,
-              pathViewModel: pathViewModel
+              pathViewModel: pathViewModel,
+              onSelectAction: performAction
             )
             ActionsDestructiveSection(
               availability: availability,

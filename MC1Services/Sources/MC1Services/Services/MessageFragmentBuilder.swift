@@ -41,6 +41,11 @@ public enum MessageFragmentBuilder {
       fragments.append(.reactionSummary(summary))
     }
 
+    if !message.isOutgoing,
+       let sharedRoute = SharedRouteParser.parse(message.text) ?? SharedRouteParser.detectChain(message.text) {
+      fragments.append(.sharedRoute(sharedRoute))
+    }
+
     let url = inputs.cachedURL
     let isImageURL = inputs.isInlineImageURL
 

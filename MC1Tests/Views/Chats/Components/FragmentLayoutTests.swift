@@ -36,6 +36,10 @@ struct FragmentLayoutTests {
     MapPreviewFragmentState(latitude: 37.7749, longitude: -122.4194, isDark: false, isOffline: false, isReady: true)
   )
 
+  private static let sharedRouteFragment: MessageFragment = .sharedRoute(
+    SharedRoute(hexIDs: ["80", "8F"], hopCount: 2, distanceText: "2.3 mi")
+  )
+
   // MARK: - Per-kind placement (the rule)
 
   @Test
@@ -66,6 +70,14 @@ struct FragmentLayoutTests {
   func `malware warning renders as a sibling, not in the box`() {
     let layout = FragmentLayout(content: [Self.malwareFragment])
     #expect(Self.kinds(layout.siblings) == [.malwareWarning])
+  }
+
+  @Test
+  func `shared route renders as a sibling, not in the box`() {
+    let layout = FragmentLayout(content: [Self.sharedRouteFragment])
+    #expect(layout.textPayload == nil)
+    #expect(layout.inlineImage == nil)
+    #expect(Self.kinds(layout.siblings) == [.sharedRoute])
   }
 
   @Test
@@ -144,7 +156,7 @@ struct FragmentLayoutTests {
     let expectedSiblings = content.filter {
       switch $0 {
       case .text, .inlineImage: false
-      case .linkPreview, .mapPreview, .malwareWarning, .reactionSummary: true
+      case .linkPreview, .mapPreview, .malwareWarning, .reactionSummary, .sharedRoute: true
       }
     }
     #expect(Self.kinds(layout.siblings) == Self.kinds(expectedSiblings))
@@ -157,7 +169,8 @@ struct FragmentLayoutTests {
     KindScenario(name: "text + inline image", kinds: [.text, .inlineImage]),
     KindScenario(name: "text + link preview", kinds: [.text, .linkPreview]),
     KindScenario(name: "text + map preview", kinds: [.text, .mapPreview]),
-    KindScenario(name: "all kinds", kinds: [.text, .reactionSummary, .inlineImage, .linkPreview, .mapPreview])
+    KindScenario(name: "text + shared route", kinds: [.text, .sharedRoute]),
+    KindScenario(name: "all kinds", kinds: [.text, .reactionSummary, .inlineImage, .linkPreview, .mapPreview, .sharedRoute])
   ]
 
   struct KindScenario: CustomStringConvertible {
@@ -171,7 +184,7 @@ struct FragmentLayoutTests {
   // MARK: - Helpers
 
   enum FragmentKind: Equatable {
-    case text, inlineImage, linkPreview, mapPreview, malwareWarning, reactionSummary
+    case text, inlineImage, linkPreview, mapPreview, malwareWarning, reactionSummary, sharedRoute
   }
 
   private static func fragment(for kind: FragmentKind) -> MessageFragment {
@@ -182,6 +195,7 @@ struct FragmentLayoutTests {
     case .mapPreview: mapPreviewFragment
     case .malwareWarning: malwareFragment
     case .reactionSummary: reactionFragment
+    case .sharedRoute: sharedRouteFragment
     }
   }
 
@@ -193,6 +207,7 @@ struct FragmentLayoutTests {
     case .mapPreview: .mapPreview
     case .malwareWarning: .malwareWarning
     case .reactionSummary: .reactionSummary
+    case .sharedRoute: .sharedRoute
     }
   }
 

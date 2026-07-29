@@ -172,6 +172,11 @@ struct UnifiedMessageBubble: View, Equatable {
               showingReactionDetails = true
             }
           }
+          // The combined element swallows the shared-route card's tap target, so
+          // its open-map tap surfaces as a custom action, like the image ones below.
+          if let sharedRoute, let onShowSharedRoute = callbacks.onShowSharedRoute {
+            Button(L10n.Chats.Chats.SharedRoute.Card.title) { onShowSharedRoute(sharedRoute) }
+          }
           ForEach(MessageLinkAccessibility.actions(
             previewURL: linkPreviewURL,
             formatted: layout.textPayload?.formatted
@@ -273,6 +278,11 @@ struct UnifiedMessageBubble: View, Equatable {
         onRequestSnapshot: { callbacks.requestSnapshot?($0) },
         onRetry: { callbacks.retrySnapshot?($0) }
       )
+    case let .sharedRoute(route):
+      SharedRouteCard(
+        sharedRoute: route,
+        onTap: { callbacks.onShowSharedRoute?(route) }
+      )
     case .text, .inlineImage:
       EmptyView()
     }
@@ -283,7 +293,7 @@ struct UnifiedMessageBubble: View, Equatable {
   /// their own long-press; text and inline image render in the box, which already carries it.
   static func siblingWantsActionsLongPress(_ fragment: MessageFragment) -> Bool {
     switch fragment {
-    case .linkPreview, .mapPreview, .malwareWarning:
+    case .linkPreview, .mapPreview, .malwareWarning, .sharedRoute:
       true
     case .reactionSummary, .text, .inlineImage:
       false
@@ -378,6 +388,15 @@ private extension UnifiedMessageBubble {
     for fragment in layout.siblings {
       if case let .linkPreview(state) = fragment {
         return state.primaryURL
+      }
+    }
+    return nil
+  }
+
+  var sharedRoute: SharedRoute? {
+    for fragment in layout.siblings {
+      if case let .sharedRoute(route) = fragment {
+        return route
       }
     }
     return nil

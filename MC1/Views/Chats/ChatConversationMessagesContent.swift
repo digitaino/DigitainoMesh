@@ -35,6 +35,8 @@ struct ChatConversationMessagesContent: View {
 
   @Binding var selectedMessageForActions: MessageDTO?
   @Binding var imageViewerData: ImageViewerData?
+  /// Shared route whose path map sheet is showing; set by a shared-route card tap.
+  @Binding var sharedRouteForMap: SharedRouteMapContext?
 
   // MARK: - Callbacks
 
@@ -156,6 +158,9 @@ struct ChatConversationMessagesContent: View {
         onMapPreviewTap: { coordinate in
           viewModel.navigateToMap(coordinate)
         },
+        onShowSharedRoute: { route, message in
+          sharedRouteForMap = SharedRouteMapContext(route: route, radioID: message.radioID)
+        },
         snapshotResolver: { MapSnapshotStore.shared.image(for: $0) },
         requestSnapshot: { MapSnapshotStore.shared.request($0) },
         retrySnapshot: { MapSnapshotStore.shared.retry($0) }
@@ -271,6 +276,7 @@ private struct ChannelEmptyMessagesView: View {
       onDividerTargetConsumed: {},
       selectedMessageForActions: .constant(nil),
       imageViewerData: .constant(nil),
+      sharedRouteForMap: .constant(nil),
       onRetryMessage: { _ in },
       onReply: { _ in }
     )
@@ -299,6 +305,7 @@ private struct ChannelEmptyMessagesView: View {
       onDividerTargetConsumed: {},
       selectedMessageForActions: .constant(nil),
       imageViewerData: .constant(nil),
+      sharedRouteForMap: .constant(nil),
       onRetryMessage: { _ in },
       onReply: { _ in }
     )

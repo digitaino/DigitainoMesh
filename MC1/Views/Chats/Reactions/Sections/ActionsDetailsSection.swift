@@ -9,13 +9,20 @@ struct ActionsDetailsSection: View {
   let contacts: [ContactDTO]
   let discoveredNodes: [DiscoveredNodeDTO]
   let pathViewModel: MessagePathViewModel
+  /// Routes Reply with Route through the sheet's `performAction`, so the sheet
+  /// dismisses like any other action row. Defaulted for previews.
+  var onSelectAction: ((MessageAction) -> Void)?
 
+  @Environment(\.appState) private var appState
   @State private var showPathMap = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       if availability.canViewPath {
         pathMapButton
+        if let onSelectAction, let routeInfo = routeInfoText {
+          replyWithRouteButton(routeInfo: routeInfo, onSelectAction: onSelectAction)
+        }
       }
 
       if availability.canShowRepeatDetails || availability.canViewPath {
@@ -44,7 +51,7 @@ struct ActionsDetailsSection: View {
       }
     }
     .sheet(isPresented: $showPathMap) {
-      MessagePathMapView(message: message, pathViewModel: pathViewModel)
+      MessagePathMapView(source: .message(message), pathViewModel: pathViewModel)
     }
   }
 
@@ -60,6 +67,55 @@ struct ActionsDetailsSection: View {
       .contentShape(.rect)
     }
     .foregroundStyle(.primary)
+  }
+
+  private func replyWithRouteButton(
+    routeInfo: String,
+    onSelectAction: @escaping (MessageAction) -> Void
+  ) -> some View {
+    Button {
+      onSelectAction(.replyWithRoute(routeInfo))
+    } label: {
+      HStack {
+        Label(L10n.Chats.Chats.Path.replyWithRoute, systemImage: "arrowshape.turn.up.left")
+        Spacer()
+      }
+      .padding()
+      .contentShape(.rect)
+    }
+    .foregroundStyle(.primary)
+  }
+
+  /// The "RX via ..." line a route reply carries. Deliberately not localized:
+  /// it is a wire format other clients parse back into a shared-route card
+  /// (`SharedRouteParser`), so the shape must stay stable across locales.
+  private var routeInfoText: String? {
+    let hopCount = message.hopCount
+    guard hopCount > 0 else { return nil }
+    let pathHex = message.pathNodesHex.joined(separator: ",")
+    guard !pathHex.isEmpty else { return nil }
+    let hopWord = hopCount == 1 ? "hop" : "hops"
+    let distancePart = routeDistanceText.map { " \($0)" } ?? ""
+    return "RX via \(pathHex). \(hopCount) \(hopWord)\(distancePart)"
+  }
+
+  /// Distance over the same nodes the path map plots, so the shared figure
+  /// matches the pill the recipient would see. Prefixed "≥" when some hops
+  /// could not be located — the drawn path is then a lower bound.
+  private var routeDistanceText: String? {
+    let nodes = MessagePathMapView.locatedNodes(
+      for: .message(message),
+      contacts: pathViewModel.contacts,
+      repeaters: pathViewModel.repeaters,
+      discoveredRepeaters: pathViewModel.discoveredRepeaters,
+      userLocation: appState.bestAvailableLocation,
+      receiverName: appState.connectedDevice?.nodeName
+    )
+    guard let distance = nodes.map(\.coordinate).totalDistance() else { return nil }
+    let formatted = Measurement(value: distance, unit: UnitLength.meters)
+      .formatted(.measurement(width: .abbreviated, usage: .road))
+    let locatedHops = nodes.count(where: { $0.point.pinStyle == .repeaterHop })
+    return locatedHops < message.hopCount ? "≥ \(formatted)" : formatted
   }
 }
 

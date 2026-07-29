@@ -833,6 +833,8 @@ public enum L10n {
         public static let copyHint = L10n.tr("Chats", "chats.path.copyHint", fallback: "Copies node IDs as hexadecimal values")
         /// Location: MessagePathMapView.swift - Path map button and sheet navigation title
         public static let map = L10n.tr("Chats", "chats.path.map", fallback: "Path Map")
+        /// Location: ActionsDetailsSection.swift - Action that replies with this message's route info
+        public static let replyWithRoute = L10n.tr("Chats", "chats.path.replyWithRoute", fallback: "Reply with Route")
         public enum Hop {
           /// Location: PathHopRowView.swift - Accessibility value format for non-last hops - %@ is hex ID
           public static func nodeId(_ p1: Any) -> String {
@@ -1041,6 +1043,30 @@ public enum L10n {
         public static let location = L10n.tr("Chats", "chats.share.location", fallback: "Share Location")
         /// Location: ChatShareMenu.swift - Share menu action to share the user's own node info
         public static let myInfo = L10n.tr("Chats", "chats.share.myInfo", fallback: "Share My Info")
+      }
+      public enum SharedRoute {
+        public enum Card {
+          /// Location: SharedRouteCard.swift - Accessibility hint
+          public static let accessibilityHint = L10n.tr("Chats", "chats.sharedRoute.card.accessibilityHint", fallback: "Opens a map showing the shared route")
+          /// Location: SharedRouteCard.swift - Accessibility label - %@ is the card summary
+          public static func accessibilityLabel(_ p1: Any) -> String {
+            return L10n.tr("Chats", "chats.sharedRoute.card.accessibilityLabel", String(describing: p1), fallback: "Show shared route, %@")
+          }
+          /// Location: SharedRouteCard.swift - Card summary - %d is hop count, %@ is the hop hex ID list
+          public static func summary(_ p1: Int, _ p2: Any) -> String {
+            return L10n.tr("Chats", "chats.sharedRoute.card.summary", p1, String(describing: p2), fallback: "%d hops via %@")
+          }
+          /// Location: SharedRouteCard.swift - Card summary for a single hop - %@ is the hop hex ID list
+          public static func summaryOneHop(_ p1: Any) -> String {
+            return L10n.tr("Chats", "chats.sharedRoute.card.summaryOneHop", String(describing: p1), fallback: "1 hop via %@")
+          }
+          /// Location: SharedRouteCard.swift - Title of the card shown under a message containing a shared route
+          public static let title = L10n.tr("Chats", "chats.sharedRoute.card.title", fallback: "Shared Route")
+        }
+        public enum Unavailable {
+          /// Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location
+          public static let description = L10n.tr("Chats", "chats.sharedRoute.unavailable.description", fallback: "None of this route's repeaters have a known location on this device")
+        }
       }
       public enum Signal {
         /// Location: UnifiedMessageBubble.swift - SNR quality excellent

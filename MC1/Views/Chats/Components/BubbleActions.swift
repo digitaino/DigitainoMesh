@@ -33,6 +33,9 @@ struct BubbleActions {
   let onRequestPreviewFetch: (UUID) -> Void
   let onManualPreviewFetch: (UUID) -> Void
   let onMapPreviewTap: (CLLocationCoordinate2D) -> Void
+  /// Shared-route card tap: open the path map for a route embedded in the text.
+  /// The message rides along for its radio ID, which hop resolution needs.
+  let onShowSharedRoute: (SharedRoute, MessageDTO) -> Void
   /// Map snapshot providers, injected so the bubble resolves, requests, and
   /// retries thumbnails without reaching `MapSnapshotStore.shared`.
   let snapshotResolver: (MapSnapshotRequest) -> UIImage?

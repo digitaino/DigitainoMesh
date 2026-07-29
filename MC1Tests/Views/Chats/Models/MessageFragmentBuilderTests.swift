@@ -21,6 +21,43 @@ struct MessageFragmentBuilderTests {
   }
 
   @Test
+  func `incoming message with RX via text gets a shared route fragment`() {
+    let message = makeMessage(text: "RX via 80,8F. 2 hops 2.3 mi", direction: .incoming)
+    let inputs = makeInputs(messageID: message.id)
+    let item = MessageFragmentBuilder.makeItem(for: message, inputs: inputs, envInputs: makeEnvInputs())
+    let routes = item.content.compactMap { fragment -> SharedRoute? in
+      if case let .sharedRoute(route) = fragment { route } else { nil }
+    }
+    #expect(routes.count == 1)
+    #expect(routes.first?.hexIDs == ["80", "8F"])
+    #expect(routes.first?.hopCount == 2)
+    #expect(routes.first?.distanceText == "2.3 mi")
+  }
+
+  @Test
+  func `incoming message with a bare hex chain gets a shared route fragment`() {
+    let message = makeMessage(text: "@[Logan] 🫰 51fb,1776,e19e,42da", direction: .incoming)
+    let inputs = makeInputs(messageID: message.id)
+    let item = MessageFragmentBuilder.makeItem(for: message, inputs: inputs, envInputs: makeEnvInputs())
+    let routes = item.content.compactMap { fragment -> SharedRoute? in
+      if case let .sharedRoute(route) = fragment { route } else { nil }
+    }
+    #expect(routes.first?.hexIDs == ["51FB", "1776", "E19E", "42DA"])
+    #expect(routes.first?.hopCount == 4)
+  }
+
+  @Test
+  func `outgoing message with RX via text gets no shared route fragment`() {
+    let message = makeMessage(text: "RX via 80,8F. 2 hops 2.3 mi")
+    let inputs = makeInputs(messageID: message.id)
+    let item = MessageFragmentBuilder.makeItem(for: message, inputs: inputs, envInputs: makeEnvInputs())
+    let hasRoute = item.content.contains { fragment in
+      if case .sharedRoute = fragment { true } else { false }
+    }
+    #expect(!hasRoute)
+  }
+
+  @Test
   func `reaction summary appears after the text fragment`() {
     let message = makeMessage(text: "hi", reactionSummary: "👍:1")
     let inputs = makeInputs(messageID: message.id)
@@ -571,6 +608,7 @@ struct MessageFragmentBuilderTests {
   private func makeMessage(
     id: UUID = UUID(),
     text: String = "hello",
+    direction: MessageDirection = .outgoing,
     status: MessageStatus = .sent,
     reactionSummary: String? = nil,
     linkPreviewURL: String? = nil,
@@ -589,7 +627,7 @@ struct MessageFragmentBuilderTests {
       text: text,
       timestamp: UInt32(Self.referenceDate.timeIntervalSince1970),
       createdAt: Self.referenceDate,
-      direction: .outgoing,
+      direction: direction,
       status: status,
       textType: .plain,
       ackCode: nil,
@@ -750,7 +788,7 @@ struct MessageFragmentBuilderTests {
   }
 
   private enum FragmentKind: Equatable {
-    case text, inlineImage, linkPreview, mapPreview, malwareWarning, reactionSummary
+    case text, inlineImage, linkPreview, mapPreview, malwareWarning, reactionSummary, sharedRoute
   }
 
   private static func kind(of fragment: MessageFragment) -> FragmentKind {
@@ -761,6 +799,7 @@ struct MessageFragmentBuilderTests {
     case .mapPreview: .mapPreview
     case .malwareWarning: .malwareWarning
     case .reactionSummary: .reactionSummary
+    case .sharedRoute: .sharedRoute
     }
   }
 }

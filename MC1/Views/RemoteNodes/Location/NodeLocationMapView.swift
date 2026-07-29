@@ -14,12 +14,12 @@ import SwiftUI
 struct NodeLocationMapView: View {
   /// Span used when the path resolves to a single fix, with no box to fit.
   private static let singleFixSpanDelta: CLLocationDegrees = 0.05
-  /// A small breathing margin around the multi-fix bounding box. Unlike
-  /// `MessagePathMapView` (which inflates the span 2.5x and passes no edge padding),
-  /// this map passes `cameraBottomSheetFraction: 0`, so `setVisibleCoordinateBounds`
-  /// already insets the fit by the safe-area padding that clears the nav bar and
-  /// controls. A large multiplier on top of that padding double-margins the fit and
-  /// leaves the path filling a fraction of the screen, so keep this just above 1.
+  /// A small breathing margin around the multi-fix bounding box. This map passes
+  /// `cameraBottomSheetFraction: 0` (as `MessagePathMapView` now does too), so
+  /// `setVisibleCoordinateBounds` already insets the fit by the safe-area padding
+  /// that clears the nav bar and controls. A large multiplier on top of that
+  /// padding double-margins the fit and leaves the path filling a fraction of
+  /// the screen, so keep this just above 1.
   private static let pathBoundingPaddingMultiplier: Double = 1.3
 
   @Environment(\.appState) private var appState

@@ -1,4 +1,5 @@
 import CoreLocation
+import MC1Services
 import UIKit
 
 /// Callbacks for message bubble interactions.
@@ -23,6 +24,8 @@ struct MessageBubbleCallbacks {
   var onRequestPreviewFetch: (() -> Void)?
   var onManualPreviewFetch: (() -> Void)?
   var onMapPreviewTap: ((CLLocationCoordinate2D) -> Void)?
+  /// Open the path map for a shared route embedded in the message text.
+  var onShowSharedRoute: ((SharedRoute) -> Void)?
   var snapshotResolver: ((MapSnapshotRequest) -> UIImage?)?
   var requestSnapshot: ((MapSnapshotRequest) -> Void)?
   var retrySnapshot: ((MapSnapshotRequest) -> Void)?
