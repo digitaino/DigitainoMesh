@@ -93,12 +93,14 @@ public enum SharedRouteParser {
 
   private static let hexCharacters = CharacterSet(charactersIn: "0123456789ABCDEFabcdef")
 
-  /// Detect a bare hex-ID chain pasted into a message ("51fb,1776,e19e,42da"),
-  /// the informal cousin of Reply with Route. Returns the longest run of 2+
-  /// consecutive valid tokens; a lone token is too ambiguous to card. At least
-  /// one token in the run must contain a hex letter — an all-digit run is far
-  /// more likely a list of numbers ("2024, 2025") than a path. Never fires on
-  /// "RX via" text, which `parse` owns.
+  /// Detect a bare hex-ID chain pasted into a message ("51fb,1776,e19e,42da"
+  /// or "D0A0->DA1C->A3DD" — arrows are how the app itself prints paths, so
+  /// they come back pasted), the informal cousin of Reply with Route. Returns
+  /// the longest run of 2+ consecutive valid tokens; a lone token is too
+  /// ambiguous to card. At least one token in the run must contain a hex
+  /// letter — an all-digit run is far more likely a list of numbers
+  /// ("2024, 2025") than a path. Never fires on "RX via" text, which `parse`
+  /// owns.
   public static func detectChain(_ text: String) -> SharedRoute? {
     if text.contains("RX via") { return nil }
 
@@ -106,7 +108,13 @@ public enum SharedRouteParser {
     var bestRun: [String] = []
 
     for word in text.components(separatedBy: .whitespacesAndNewlines) {
-      for token in word.split(separator: ",").map(String.init) {
+      // Hop separators inside a word all normalize to commas. A word that is
+      // *only* separators ("->" between spaced hops) yields no tokens and
+      // deliberately does not break the run.
+      let separable = word
+        .replacingOccurrences(of: "->", with: ",")
+        .replacingOccurrences(of: "→", with: ",")
+      for token in separable.split(separator: ",").map(String.init) {
         if isValidChainToken(token) {
           currentRun.append(token.uppercased())
         } else {

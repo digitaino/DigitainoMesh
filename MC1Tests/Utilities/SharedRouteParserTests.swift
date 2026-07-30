@@ -161,6 +161,25 @@ struct SharedRouteParserDetectChainTests {
     #expect(result?.hexIDs == ["A3", "7F", "42"])
   }
 
+  @Test("detects an arrow-separated chain after a mention")
+  func arrowSeparatedChain() {
+    let result = SharedRouteParser.detectChain("@[Digitaino] D0A0->DA1C->A3DD->7DD0->349D->5790->90E2")
+    #expect(result?.hexIDs == ["D0A0", "DA1C", "A3DD", "7DD0", "349D", "5790", "90E2"])
+    #expect(result?.hopCount == 7)
+  }
+
+  @Test("detects arrows with spaces around them")
+  func spacedArrowChain() {
+    let result = SharedRouteParser.detectChain("path was A3 -> 7F -> 42 today")
+    #expect(result?.hexIDs == ["A3", "7F", "42"])
+  }
+
+  @Test("detects the app's own typographic arrow format")
+  func typographicArrowChain() {
+    let result = SharedRouteParser.detectChain("A3 → 7F → 42")
+    #expect(result?.hexIDs == ["A3", "7F", "42"])
+  }
+
   @Test("picks the longest run in the message")
   func longestRunWins() {
     let result = SharedRouteParser.detectChain("was A3,7F now via B1,C2,D3 instead")
