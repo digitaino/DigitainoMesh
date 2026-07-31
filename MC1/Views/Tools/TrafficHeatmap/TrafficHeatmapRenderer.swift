@@ -93,10 +93,13 @@ enum TrafficHeatmapRenderer {
   /// Node bubbles: a translucent disc under each pin, sized by how much traffic the node
   /// relayed and tinted by how well our radio hears it. A node only ever seen relaying for
   /// others has no direct reading at all and stays neutral.
+  ///
+  /// Every quality is declared whether or not it has members in this snapshot, so the stack
+  /// order is settled by the map's first apply rather than by which tint happened to show up
+  /// first (see `updateOverlays`).
   private static func bubbleOverlays(for nodes: [TrafficNodeLoad]) -> [MapOverlay] {
-    SNRQuality.trafficBubbleOrder.compactMap { quality in
+    SNRQuality.trafficBubbleOrder.map { quality in
       let members = nodes.filter { SNRQuality(snr: $0.averageSNR) == quality }
-      guard !members.isEmpty else { return nil }
       return MapOverlay(
         id: bubbleOverlayID(quality),
         features: members.map { node in
@@ -144,14 +147,17 @@ enum TrafficHeatmapRenderer {
     let latitudePad = max((maxLatitude - minLatitude) * (paddingMultiplier - 1) / 2, minimumSpan)
     let longitudePad = max((maxLongitude - minLongitude) * (paddingMultiplier - 1) / 2, minimumSpan)
 
+    // Padding is clamped, not wrapped: a corner past ±180 is not a valid coordinate, and the
+    // map drops the whole camera move — leaving "Center on Traffic" inert for that dataset,
+    // because the version it bumped is already marked applied.
     return MLNCoordinateBounds(
       sw: CLLocationCoordinate2D(
         latitude: max(-90, minLatitude - latitudePad),
-        longitude: minLongitude - longitudePad
+        longitude: max(-180, minLongitude - longitudePad)
       ),
       ne: CLLocationCoordinate2D(
         latitude: min(90, maxLatitude + latitudePad),
-        longitude: maxLongitude + longitudePad
+        longitude: min(180, maxLongitude + longitudePad)
       )
     )
   }
@@ -161,11 +167,11 @@ enum TrafficHeatmapRenderer {
     MLNCoordinateBounds(
       sw: CLLocationCoordinate2D(
         latitude: max(-90, coordinate.latitude - span / 2),
-        longitude: coordinate.longitude - span / 2
+        longitude: max(-180, coordinate.longitude - span / 2)
       ),
       ne: CLLocationCoordinate2D(
         latitude: min(90, coordinate.latitude + span / 2),
-        longitude: coordinate.longitude + span / 2
+        longitude: min(180, coordinate.longitude + span / 2)
       )
     )
   }

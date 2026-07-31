@@ -54,6 +54,9 @@ public struct TrafficHeatmapAggregator: Sendable {
     var analyzedEntryCount = 0
     var contributingEntryCount = 0
     var oldestEntryDate: Date?
+    // One identity match per distinct hop hash for the whole pass; the pool and the clock are
+    // fixed here, and the route-dependent half of resolution stays per hop.
+    var resolutionCache = TrafficHopResolver.ResolutionCache()
 
     for entry in entries where window.contains(entry.receivedAt, now: now) {
       analyzedEntryCount += 1
@@ -75,7 +78,8 @@ public struct TrafficHeatmapAggregator: Sendable {
         among: candidates,
         origin: origin,
         now: now,
-        overrides: overrides
+        overrides: overrides,
+        cache: &resolutionCache
       )
       guard !hops.isEmpty else { continue }
       contributingEntryCount += 1
