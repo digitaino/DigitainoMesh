@@ -1735,6 +1735,15 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     }
   }
 
+  @discardableResult
+  public func deleteReaction(messageID: UUID, senderName: String, emoji: String) async throws -> String? {
+    reactions[messageID]?.removeAll { $0.senderName == senderName && $0.emoji == emoji }
+    let remaining = reactions[messageID] ?? []
+    let summary = remaining.isEmpty ? nil : ReactionParser.buildSummary(from: remaining)
+    try await updateMessageReactionSummary(messageID: messageID, summary: summary)
+    return summary
+  }
+
   public func deleteReactionsForMessage(messageID: UUID) async throws {
     deletedReactionsForMessageIDs.append(messageID)
     reactions.removeValue(forKey: messageID)

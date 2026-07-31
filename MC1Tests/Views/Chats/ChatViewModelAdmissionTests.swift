@@ -644,6 +644,10 @@ private actor AdmissionStubDataStore: PersistenceStoreProtocol {
   }
 
   func updateMessageReactionSummary(messageID: UUID, summary: String?) async throws {}
+  func deleteReaction(messageID: UUID, senderName: String, emoji: String) async throws -> String? {
+    nil
+  }
+
   func deleteReactionsForMessage(messageID: UUID) async throws {}
   func findChannelMessageForReaction(radioID: UUID, channelIndex: UInt8, parsedReaction: ParsedReaction, localNodeName: String?, timestampWindow: ClosedRange<UInt32>, limit: Int) async throws -> MessageDTO? {
     nil
