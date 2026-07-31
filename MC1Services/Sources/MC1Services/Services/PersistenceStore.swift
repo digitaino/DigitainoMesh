@@ -76,7 +76,12 @@ public actor PersistenceStore: PersistenceStoreProtocol {
     DiscoveredNode.self,
     NodeStatusSnapshot.self,
     BlockedChannelSender.self,
-    PendingSend.self
+    PendingSend.self,
+    // Dormant, data-preservation only — no UI, no services, no queries. Build 40
+    // stores carry these tables; omitting them from the schema would let lightweight
+    // migration drop the rows on the in-place update. See the model doc comments.
+    SurveySession.self,
+    SignalSurveyPoint.self
   ])
 
   /// Creates a ModelContainer for the app.
@@ -96,6 +101,12 @@ public actor PersistenceStore: PersistenceStoreProtocol {
   ///          index.
   /// - v5→v6: Added Contact.avatarImageData (Data?, default nil) storing a
   ///          user-picked profile picture as a compressed JPEG blob.
+  /// - v6→v7: Build 40 data preservation (all dormant — nothing reads these):
+  ///          re-registered SurveySession and SignalSurveyPoint, and re-added the
+  ///          fork-only columns Message.userLatitude/userLongitude/txPowerDbm,
+  ///          Reaction.sentMessageID and TracePathRun.note. Fresh v2 stores get
+  ///          empty tables and NULL columns; Build 40 stores keep their rows
+  ///          instead of having them dropped by lightweight migration.
   public static func createContainer(inMemory: Bool = false) throws -> ModelContainer {
     if !inMemory {
       let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

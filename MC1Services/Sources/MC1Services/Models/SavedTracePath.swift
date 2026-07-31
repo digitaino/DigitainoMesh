@@ -63,6 +63,12 @@ final class TracePathRun {
   /// Encoded per-hop SNR data (JSON array of doubles)
   var hopsData: Data
 
+  /// Dormant — nothing reads or writes this. Build 40 let users tag a run with a free-text
+  /// note (e.g. "stock whip antenna"); the column is re-declared so the in-place update to
+  /// v2 preserves it. Exact Build 40 name/type/optionality. Deliberately not surfaced in
+  /// `TracePathRunDTO` — that DTO is the backup wire format.
+  var note: String?
+
   /// The saved path this run belongs to
   var savedPath: SavedTracePath?
 

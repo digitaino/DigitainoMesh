@@ -146,6 +146,21 @@ public final class Message {
   /// Format: "👍:3,❤️:2,😂:1" (emoji:count pairs, ordered by count desc)
   public var reactionSummary: String?
 
+  /// Dormant — nothing reads or writes these three. Build 40 stamped the sender's own
+  /// GPS fix and TX power onto every message row; the columns are re-declared here so
+  /// the in-place update to v2 keeps that data instead of having lightweight migration
+  /// drop it. Exact Build 40 names/types/optionality. Deliberately not surfaced in
+  /// `MessageDTO` — the DTO is the backup wire format, and these carry no behaviour.
+  ///
+  /// User's latitude when the message was sent or received.
+  public var userLatitude: Double?
+
+  /// Dormant (see `userLatitude`). User's longitude when the message was sent or received.
+  public var userLongitude: Double?
+
+  /// Dormant (see `userLatitude`). TX power level in dBm used when sending (outgoing only).
+  public var txPowerDbm: Int8?
+
   /// Route type from RxLog correlation (-1 = unknown/uncorrelated)
   public var routeTypeRawValue: Int = -1
 
