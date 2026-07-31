@@ -952,8 +952,8 @@
 /* Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 2 bytes per hop */
 "contacts.trace.list.hashSizeTwoBytes" = "2 bajty";
 
-/* Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 4 bytes per hop */
-"contacts.trace.list.hashSizeFourBytes" = "4 bajty";
+/* Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 3 bytes per hop */
+"contacts.trace.list.hashSizeThreeBytes" = "3 bajty";
 
 /* Location: PathActionsSectionView.swift - Purpose: Caveat shown for multi-byte trace hash sizes */
 "contacts.trace.list.hashSizeFooter" = "Przekaźniki z oprogramowaniem starszym niż 1.11.0 nie przekażą śledzeń o rozmiarze skrótu większym niż 1 bajt.";

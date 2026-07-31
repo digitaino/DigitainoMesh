@@ -27,6 +27,43 @@ private func createTestRun(date: Date, roundTripMs: Int = 100, success: Bool = t
   )
 }
 
+/// A radio whose firmware honors the per-trace hash-size override (v1.11+).
+private func createOverrideCapableDevice() -> DeviceDTO {
+  DeviceDTO(
+    id: UUID(),
+    radioID: UUID(),
+    publicKey: Data(repeating: 0x01, count: 32),
+    nodeName: "TestDevice",
+    firmwareVersion: 8,
+    firmwareVersionString: "v1.11.0",
+    manufacturerName: "TestMfg",
+    buildDate: "01 Jan 2025",
+    maxContacts: 100,
+    maxChannels: 8,
+    frequency: 915_000,
+    bandwidth: 250_000,
+    spreadingFactor: 10,
+    codingRate: 5,
+    txPower: 20,
+    maxTxPower: 20,
+    latitude: 0,
+    longitude: 0,
+    blePin: 0,
+    manualAddContacts: false,
+    multiAcks: 2,
+    telemetryModeBase: 2,
+    telemetryModeLoc: 0,
+    telemetryModeEnv: 0,
+    advertLocationPolicy: 0,
+    lastConnected: Date(),
+    lastContactSync: 0,
+    isActive: false,
+    ocvPreset: nil,
+    customOCVArrayString: nil,
+    connectionMethods: []
+  )
+}
+
 private func createTestContact() -> ContactDTO {
   let contact = Contact(
     id: UUID(),
@@ -701,6 +738,36 @@ struct SavedPathHashSizeTests {
     #expect(vm.outboundPath.count == 2)
     #expect(vm.outboundPath[0].hashBytes == Data([0xAA]))
     #expect(vm.outboundPath[1].hashBytes == Data([0xBB]))
+  }
+
+  @Test(arguments: [(size: 1, mode: UInt8(0)), (size: 2, mode: UInt8(1)), (size: 3, mode: UInt8(2))])
+  func `loadSavedPath derives the trace mode from the stored width`(
+    testCase: (size: Int, mode: UInt8)
+  ) {
+    let savedPath = SavedTracePathDTO(
+      id: UUID(),
+      radioID: UUID(),
+      name: "stored path",
+      pathBytes: Data(repeating: 0xAA, count: testCase.size * 3),
+      hashSize: testCase.size,
+      createdDate: Date(),
+      runs: []
+    )
+
+    let vm = TracePathViewModel()
+    vm.configure(dependencies: TracePathViewModel.Dependencies(
+      dataStore: { nil },
+      session: { nil },
+      advertisementService: { nil },
+      connectedDevice: { createOverrideCapableDevice() },
+      bestAvailableLocation: { nil }
+    ))
+    vm.loadSavedPath(savedPath)
+
+    // A 3-byte width used to derive mode 0 via `trailingZeroBitCount`, re-tracing a saved
+    // 3-byte path with 1-byte hops.
+    #expect(vm.traceHashMode == testCase.mode)
+    #expect(vm.hashSize == testCase.size)
   }
 }
 
@@ -1815,9 +1882,9 @@ struct TraceHashSizeOverrideTests {
     #expect(viewModel.outboundPath[0].hashBytes == Data([0xAB, 0x00]))
 
     viewModel.setTraceHashMode(2)
-    #expect(viewModel.hashSize == 4)
-    #expect(viewModel.outboundPath[0].hashBytes.count == 4)
-    #expect(viewModel.outboundPath[0].hashBytes == Data([0xAB, 0x00, 0x00, 0x00]))
+    #expect(viewModel.hashSize == 3)
+    #expect(viewModel.outboundPath[0].hashBytes.count == 3)
+    #expect(viewModel.outboundPath[0].hashBytes == Data([0xAB, 0x00, 0x00]))
 
     viewModel.setTraceHashMode(0)
     #expect(viewModel.hashSize == 1)
@@ -1838,7 +1905,7 @@ struct TraceHashSizeOverrideTests {
     #expect(viewModel.fullPathData.count == 3 * 2)
 
     viewModel.setTraceHashMode(2)
-    #expect(viewModel.fullPathData.count == 3 * 4)
+    #expect(viewModel.fullPathData.count == 3 * 3)
   }
 
   @Test
@@ -1863,10 +1930,10 @@ struct TraceHashSizeOverrideTests {
 
     viewModel.setTraceHashMode(2)
 
-    #expect(viewModel.hashSize == 4)
-    #expect(viewModel.outboundPath.allSatisfy { $0.hashBytes.count == 4 })
+    #expect(viewModel.hashSize == 3)
+    #expect(viewModel.outboundPath.allSatisfy { $0.hashBytes.count == 3 })
     // A short hop would break divisibility and misalign the firmware's parse.
-    #expect(viewModel.fullPathData.count % 4 == 0)
+    #expect(viewModel.fullPathData.count % 3 == 0)
   }
 
   @Test
@@ -1908,8 +1975,8 @@ struct InferredTraceHashModeTests {
   }
 
   @Test
-  func `Uniform 4-byte codes infer mode 2`() {
-    #expect(TracePathViewModel.inferredTraceHashMode(from: "AABBCCDD,11223344") == 2)
+  func `Uniform 3-byte codes infer mode 2`() {
+    #expect(TracePathViewModel.inferredTraceHashMode(from: "1A2B3C,4D5E6F") == 2)
   }
 
   @Test
@@ -1933,8 +2000,8 @@ struct InferredTraceHashModeTests {
   }
 
   @Test
-  func `Uniform but non-power-of-2 width (3 bytes) infers nothing`() {
-    #expect(TracePathViewModel.inferredTraceHashMode(from: "1A2B3C,4D5E6F") == nil)
+  func `Uniform width beyond the 3-byte maximum infers nothing`() {
+    #expect(TracePathViewModel.inferredTraceHashMode(from: "AABBCCDD,11223344") == nil)
   }
 
   @Test

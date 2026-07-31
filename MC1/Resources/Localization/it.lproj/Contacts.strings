@@ -950,8 +950,8 @@
 /* Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 2 bytes per hop */
 "contacts.trace.list.hashSizeTwoBytes" = "2 byte";
 
-/* Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 4 bytes per hop */
-"contacts.trace.list.hashSizeFourBytes" = "4 byte";
+/* Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 3 bytes per hop */
+"contacts.trace.list.hashSizeThreeBytes" = "3 byte";
 
 /* Location: PathActionsSectionView.swift - Purpose: Caveat shown for multi-byte trace hash sizes */
 "contacts.trace.list.hashSizeFooter" = "I ripetitori con firmware precedente a 1.11.0 non inoltreranno tracciature con una dimensione hash superiore a 1 byte.";
