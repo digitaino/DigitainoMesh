@@ -106,3 +106,10 @@ __pycache__
 .idea/
 # Brainstorming visual companion mockups
 .superpowers/
+
+# Build-time secrets. Secrets.xcconfig claims in its own header to be ignored —
+# it was not, and it carries a live API key. Never let it become tracked.
+Secrets.xcconfig
+
+# The signal-mapper server is its own repository, checked out inside this tree.
+pocketmesh-survey-server/
