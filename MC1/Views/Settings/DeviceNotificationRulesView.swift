@@ -121,6 +121,8 @@ struct DeviceNotificationRulesView: View {
       }
     } header: {
       Text(L10n.Settings.DeviceNotificationRules.channelRules)
+    } footer: {
+      overflowNote(local: localChannelRuleCount, cap: NotifPrefsBlob.maxChannelRules)
     }
     .themedRowBackground(theme)
   }
@@ -141,8 +143,20 @@ struct DeviceNotificationRulesView: View {
       }
     } header: {
       Text(L10n.Settings.DeviceNotificationRules.contactRules)
+    } footer: {
+      overflowNote(local: localContactRuleCount, cap: NotifPrefsBlob.maxContactRules)
     }
     .themedRowBackground(theme)
+  }
+
+  /// Names the rules the firmware's per-list cap left behind, which are otherwise invisible:
+  /// the app enforces the same cap when it builds the blob, so the device state looks complete.
+  @ViewBuilder
+  private func overflowNote(local: Int, cap: Int) -> some View {
+    if local > cap {
+      Text(L10n.Settings.DeviceNotificationRules.ruleOverflow(cap, local))
+        .foregroundStyle(.orange)
+    }
   }
 
   private func errorSection(_ message: String) -> some View {
@@ -226,6 +240,15 @@ struct DeviceNotificationRulesView: View {
     isConnected && support != .unsupported
   }
 
+  /// What the phone's preferences ask for, before the firmware cap.
+  private var localChannelRuleCount: Int {
+    NotifSyncService.channelRules(from: channels).count
+  }
+
+  private var localContactRuleCount: Int {
+    NotifSyncService.contactRules(from: contacts).count
+  }
+
   private func description(of mode: FirmwareNotifMode) -> String {
     switch mode {
     case .silent: L10n.Settings.DeviceNotificationRules.Mode.silent
@@ -300,8 +323,12 @@ struct DeviceNotificationRulesView: View {
     defer { isResyncing = false }
 
     do {
-      try await services.notifSyncService.syncNow(radioID: radioID, force: true)
-      resyncStatus = .succeeded(at: Date())
+      // A rejected write is swallowed by the service, so the outcome — not the absence of a
+      // thrown error — is what says whether anything reached the radio.
+      let outcome = try await services.notifSyncService.syncNow(radioID: radioID, force: true)
+      resyncStatus = outcome == .unsupported
+        ? .failed(L10n.Settings.DeviceNotificationRules.unsupported)
+        : .succeeded(at: Date())
       await loadDevice()
     } catch {
       resyncStatus = .failed(error.localizedDescription)

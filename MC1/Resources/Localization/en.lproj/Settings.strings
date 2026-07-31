@@ -917,6 +917,9 @@
 /* Subtitle for a channel rule - %d is the channel index */
 "deviceNotificationRules.channelIndex" = "Index %d";
 
+/* Shown when the app has more rules than the firmware can store - %1$d fit, %2$d in the app */
+"deviceNotificationRules.ruleOverflow" = "%1$d of %2$d rules fit on the device. The rest apply on this phone only.";
+
 /* Shown for a rule whose channel is not on this device */
 "deviceNotificationRules.unknownChannel" = "Unknown channel";
 

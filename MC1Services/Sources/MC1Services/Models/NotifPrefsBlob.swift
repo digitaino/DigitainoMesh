@@ -34,16 +34,20 @@ public struct NotifPrefsBlob: Sendable, Equatable {
     }
   }
 
+  /// The newest schema version this build can read or write.
+  public static let currentVersion: UInt8 = 1
+
   /// Schema version for forward compatibility (currently `1`).
   public var version: UInt8
 
   /// Default notification mode when no per-channel or per-contact rule matches.
   public var globalMode: FirmwareNotifMode
 
-  /// Per-channel overrides. Firmware caps at 16; entries beyond that are dropped during encode.
+  /// Per-channel overrides. Firmware caps at 16; producers are expected to apply the cap
+  /// themselves so a cached blob matches the wire, and the encoder truncates as a backstop.
   public var channelRules: [ChannelRule]
 
-  /// Per-contact overrides. Firmware caps at 16; entries beyond that are dropped during encode.
+  /// Per-contact overrides, capped like ``channelRules``.
   public var contactRules: [ContactRule]
 
   /// Firmware's hard limit per rule list. Encoder truncates above this.
@@ -51,7 +55,7 @@ public struct NotifPrefsBlob: Sendable, Equatable {
   public static let maxContactRules = 16
 
   public init(
-    version: UInt8 = 1,
+    version: UInt8 = Self.currentVersion,
     globalMode: FirmwareNotifMode = .all,
     channelRules: [ChannelRule] = [],
     contactRules: [ContactRule] = []
@@ -113,11 +117,14 @@ public struct NotifPrefsBlob: Sendable, Equatable {
   /// Parses a blob previously fetched from the notification-prefs sync slot.
   ///
   /// Tolerant of partial / truncated payloads: returns `nil` if the version
-  /// byte is missing, otherwise reads as much as the bytes allow.
+  /// byte is missing, otherwise reads as much as the bytes allow. A version
+  /// beyond ``currentVersion`` also returns `nil` — a newer layout read as v1
+  /// would report confident nonsense about which conversations the radio mutes.
   public init?(decoding data: Data) {
     guard data.count >= 2 else { return nil }
     var i = data.startIndex
     let version = data[i]; i = data.index(after: i)
+    guard version <= Self.currentVersion else { return nil }
     let globalRaw = data[i]; i = data.index(after: i)
     guard let global = FirmwareNotifMode(rawValue: globalRaw) else { return nil }
 

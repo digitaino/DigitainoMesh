@@ -4950,6 +4950,10 @@ public enum L10n {
       public static let resynced = L10n.tr("Settings", "deviceNotificationRules.resynced", fallback: "Resynced")
       /// Footer on the row linking to the firmware notification rules screen
       public static let rowFooter = L10n.tr("Settings", "deviceNotificationRules.rowFooter", fallback: "View the per-channel and per-contact notification rules stored on your radio, and force a resync if needed.")
+      /// Shown when the app has more rules than the firmware can store - %1$d fit, %2$d in the app
+      public static func ruleOverflow(_ p1: Int, _ p2: Int) -> String {
+        return L10n.tr("Settings", "deviceNotificationRules.ruleOverflow", p1, p2, fallback: "%1$d of %2$d rules fit on the device. The rest apply on this phone only.")
+      }
       /// Row label for the blob schema version
       public static let schemaVersion = L10n.tr("Settings", "deviceNotificationRules.schemaVersion", fallback: "Schema Version")
       /// Title of the firmware notification rules screen
