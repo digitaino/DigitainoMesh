@@ -315,8 +315,10 @@ final class ContactsViewModel {
   ) -> [ContactDTO] {
     var result = contacts.filter { !pendingRemovalIDs.contains($0.id) }
 
-    // If searching, show all types (ignore segment)
-    guard !searchText.isEmpty else {
+    // If searching, show all types (ignore segment). Gated on the trimmed text because the
+    // matcher trims too: a query of only spaces matches everything, which would drop the
+    // segment filter and show every node type under a field that looks empty.
+    guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       // Filter by segment
       switch segment {
       case .favorites:

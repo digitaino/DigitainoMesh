@@ -122,6 +122,26 @@ struct DiscoveryViewModelTests {
     #expect(Set(result.map(\.name)) == Set(["ChatOne", "RepeaterOne"]))
   }
 
+  /// Same trap as the saved-contacts list: the matcher trims, so an all-spaces query matched
+  /// every node and the segment filter never ran.
+  @Test
+  func `filteredNodes keeps the segment filter for a whitespace-only search`() {
+    let viewModel = DiscoveryViewModel()
+    viewModel.discoveredNodes = [
+      makeNode(name: "ChatOne", type: .chat),
+      makeNode(name: "RepeaterOne", type: .repeater),
+    ]
+
+    let result = viewModel.filteredNodes(
+      searchText: " ",
+      segment: .repeaters,
+      sortOrder: .name,
+      userLocation: nil
+    )
+
+    #expect(result.map(\.name) == ["RepeaterOne"])
+  }
+
   // MARK: - Segments
 
   @Test

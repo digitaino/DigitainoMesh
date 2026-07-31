@@ -244,6 +244,27 @@ struct ContactsViewModelTests {
     #expect(names.contains("Relay-Alpha"))
   }
 
+  /// The matcher trims the query itself, so a whitespace-only field matches everything. Gated
+  /// on the raw text, that read as "searching" and silently dropped the segment filter.
+  @Test
+  func `filteredContacts keeps the segment filter for a whitespace-only search`() {
+    let viewModel = ContactsViewModel()
+    let deviceID = UUID()
+    viewModel.contacts = [
+      createContact(radioID: deviceID, name: "Alice", type: .chat),
+      createContact(radioID: deviceID, name: "Relay-Alpha", type: .repeater)
+    ]
+
+    let result = viewModel.filteredContacts(
+      searchText: "   ",
+      segment: .repeaters,
+      sortOrder: .name,
+      userLocation: nil
+    )
+
+    #expect(result.map(\.name) == ["Relay-Alpha"])
+  }
+
   @Test
   func `filteredContacts with no matching search returns empty`() {
     let viewModel = ContactsViewModel()
