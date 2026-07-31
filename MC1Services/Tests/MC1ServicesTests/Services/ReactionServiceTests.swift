@@ -17,11 +17,12 @@ struct ReactionServiceTests {
       localNodeName: "Me"
     )
 
-    // Verify human-readable format: {emoji} reacted to [{sender}]: "{snippet}" ({hash})
-    #expect(text.hasPrefix("👍 reacted to [AlphaNode]: \""))
+    // Verify piggyback format: {emoji} reacted to "{snippet}" @[{sender}]\n{hash}
+    #expect(text.hasPrefix("👍 reacted to \""))
+    #expect(text.contains("\" @[AlphaNode]\n"))
 
     // Verify 8-char Crockford Base32 identifier is present (lowercase) at end
-    let idPattern = #/\(([0-9a-hj-km-np-tv-z]{8})\)$/#
+    let idPattern = #/\n([0-9a-hj-km-np-tv-z]{8})$/#
     #expect(text.firstMatch(of: idPattern) != nil)
   }
 
@@ -38,8 +39,7 @@ struct ReactionServiceTests {
       localNodeName: "Me"
     )
 
-    #expect(text.hasPrefix("❤️ reacted to [Node]: \"ok\""))
-    #expect(text.hasSuffix(")")) // ends with the "(hash)" suffix
+    #expect(text.hasPrefix("❤️ reacted to \"ok\" @[Node]\n"))
   }
 
   @Test
@@ -399,10 +399,8 @@ struct ReactionServiceTests {
       targetText: "Hello world",
       targetTimestamp: 1_704_067_200
     )
-    #expect(text.hasPrefix("👍 reacted to: \"Hello world\""))
-    #expect(text.hasSuffix(")")) // ends with the "(hash)" suffix
-    #expect(!text.contains("@["))
-    #expect(!text.contains("\n"))
+    #expect(text.hasPrefix("👍 reacted to \"Hello world\"\n"))
+    #expect(!text.contains("@[")) // the DM form must never carry the channel's sender field
   }
 
   @Test

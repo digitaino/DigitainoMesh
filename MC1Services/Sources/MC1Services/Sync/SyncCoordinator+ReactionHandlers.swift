@@ -53,8 +53,11 @@ extension SyncCoordinator {
       )
     }
 
-    // Try meshcore-open v1 format
-    if let v1Reaction = MeshCoreOpenReactionParser.parseV1(text) {
+    // Try meshcore-open v1 format. Its emoji field is free text on the wire, so it is
+    // validated here the same way the PocketMesh formats validate theirs; a rejected field
+    // falls through to plain-message handling.
+    if let v1Reaction = MeshCoreOpenReactionParser.parseV1(text),
+       ReactionParser.isValidReactionEmoji(v1Reaction.emoji) {
       return await handleMCOV1DMReaction(
         v1Reaction,
         rawText: text,
@@ -152,8 +155,9 @@ extension SyncCoordinator {
       )
     }
 
-    // Try meshcore-open v1 format
-    if let v1Reaction = MeshCoreOpenReactionParser.parseV1(text) {
+    // Try meshcore-open v1 format (free-text emoji field; validated as above)
+    if let v1Reaction = MeshCoreOpenReactionParser.parseV1(text),
+       ReactionParser.isValidReactionEmoji(v1Reaction.emoji) {
       return await handleMCOV1ChannelReaction(
         v1Reaction,
         rawText: text,

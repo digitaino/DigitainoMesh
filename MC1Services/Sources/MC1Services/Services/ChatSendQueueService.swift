@@ -285,7 +285,8 @@ public final class ChatSendQueueService {
               try await messageServiceRef.sendPendingChannelMessage(messageID: envelope.messageID)
               indexTimestamp = envelope.messageTimestamp
             }
-            if let nodeName = envelope.localNodeName {
+            if let nodeName = envelope.localNodeName,
+               ChatSendQueueService.indexesAsReactionTarget(text: envelope.messageText) {
               _ = await reactionServiceRef.indexMessage(
                 id: envelope.messageID,
                 channelIndex: envelope.channelIndex,
@@ -611,6 +612,16 @@ public final class ChatSendQueueService {
     } catch {
       return .transient(error)
     }
+  }
+
+  /// Whether a drained channel envelope's text may enter the reaction index as a reactable
+  /// target. A reaction carrier never can: nothing reacts to a reaction, and indexing one
+  /// lets a later reaction hash-match it. The reaction send path passes
+  /// `localNodeName: nil` to express that, but the retry paths reuse the ordinary
+  /// resend envelope and pass the real node name, so the invariant is enforced here — one
+  /// guard covering every envelope that reaches the drain.
+  nonisolated static func indexesAsReactionTarget(text: String) -> Bool {
+    !ReactionParser.isReactionText(text, isDM: false)
   }
 
   nonisolated static func isTransientDirectMessageError(_ error: Error) -> Bool {

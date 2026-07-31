@@ -93,10 +93,11 @@ public actor ReactionService {
   }
 
   /// Builds channel reaction wire format text for sending.
-  /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+  /// Format: `{emoji} reacted to "{snippet}" @[{sender}]\n{hash}` (v3 piggyback)
   ///
-  /// `localNodeName` sizes the snippet budget: the firmware prepends
-  /// `"{NodeName}: "` before transmit, so a longer local name leaves less room.
+  /// `localNodeName` is a safety floor only: the snippet budget is sized against the
+  /// protocol's worst-case node name so every reactor emits byte-identical text
+  /// (upstream MC1 groups badge counts by the full phrase).
   public nonisolated func buildReactionText(
     emoji: String,
     targetSender: String,

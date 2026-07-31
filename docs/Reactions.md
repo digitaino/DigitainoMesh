@@ -24,30 +24,50 @@ Crockford Base32 maps 5 bytes to exactly 8 characters using only alphanumerics �
 
 ## Wire Format
 
-Reactions are sent as regular mesh messages with a specific text format. There are two formats: **v2 (human-readable)** is what current clients emit; **v1 (legacy)** is still accepted on receive for back-compat with older clients.
+Reactions are sent as regular mesh messages with a specific text format. There are three formats: **v3 (piggyback)** is what current clients emit; **v2 (human-readable)** and **v1 (legacy)** are still accepted on receive for back-compat with older clients.
 
-### v2 — human-readable (canonical, emit this)
+### v3 — piggyback (canonical, emit this)
 
 **Channel** (includes target sender to disambiguate identical messages from different users):
+```
+{emoji} reacted to "{snippet}" @[{targetSenderName}]\n{hash}
+```
+Example: `👍 reacted to "see you at the meetup" @[AlphaNode]` + newline + `b45pc4ek`
+
+**DM** (two-party, sender is unambiguous):
+```
+{emoji} reacted to "{snippet}"\n{hash}
+```
+Example: `👍 reacted to "see you at the meetup"` + newline + `b45pc4ek`
+
+**Why this shape:** v3 is structurally a **v1 reaction whose emoji field carries a readable phrase**. Stock upstream MC1 (v1.3.0, which parses only the v1 grammar) accepts it: the hash sits after the last newline, the first `@[` starts the sender field, and its emoji check only requires the field to *start* with an emoji. Upstream therefore attaches the reaction to the correct message and hides the carrier — rendering the whole phrase in its badge — while clients with no reaction support display a readable sentence. Upstream's badge-tap "react back" echoes the stored phrase, which reproduces the v3 string byte-for-byte, so echoes parse as clean tapbacks here too.
+
+The `{snippet}` is a human-readable echo of the target message text. It is **cosmetic only** — receivers MUST NOT parse it or compare it to anything. Only the `{hash}` carries identity. Snippets may be truncated with a trailing `...`.
+
+**Snippet sanitization (mandatory for emitters):** the phrase (everything before `@[` on channels / before the newline in DMs) lands verbatim in upstream MC1's persisted `{emoji}:{count}` summary cache, whose delimiters are `:` and `,`. Emitters MUST therefore replace `:`, `,`, and line breaks in the snippet with spaces (collapsing runs), and MUST split an echoed `@[` with a no-break space (`@ [`, U+00A0) so the structural `@[` stays the first occurrence.
+
+#### Length limits
+
+All limits are in **UTF-8 bytes** (the firmware enforces a byte budget, not characters). When the full text would exceed the budget, shorten the **snippet** and append `...`. The hash line must always be preserved; a target sender long enough to crowd out the hash is truncated inside the brackets too, before the snippet is dropped entirely.
+
+- **Channel reactions** must fit so that the firmware-prepended `"{NodeName}: "` plus the reaction stays within a total of **147 bytes** (`ProtocolLimits.maxChannelMessageTotalLength`). Unlike v2, the budget is computed against the protocol's **worst-case 31-byte node name** (budget = `147 - 31 - 2` = 114 bytes), *not* the actual local name: upstream MC1 groups badge counts by the full phrase string, so two reactors sending the same emoji to the same message must emit byte-identical text regardless of their own name lengths.
+- **DM reactions** are capped at **150 UTF-8 bytes total**. No firmware prefix is prepended.
+
+### v2 — human-readable (accept on receive, do not emit; emitted by fork Builds 19–40)
+
+**Channel:**
 ```
 {emoji} reacted to [{targetSenderName}]: "{snippet}" ({hash})
 ```
 Example: `👍 reacted to [AlphaNode]: "see you at the meetup" (b45pc4ek)`
 
-**DM** (two-party, sender is unambiguous):
+**DM:**
 ```
 {emoji} reacted to: "{snippet}" ({hash})
 ```
 Example: `👍 reacted to: "see you at the meetup" (b45pc4ek)`
 
-The `{snippet}` is a human-readable echo of the target message text. It is **cosmetic only** — receivers MUST NOT parse it or compare it to anything. Only the `{hash}` carries identity. Snippets may be truncated with a trailing `...`.
-
-#### Length limits
-
-All limits are in **UTF-8 bytes** (the firmware enforces a byte budget, not characters). When the full text would exceed the budget, shorten the **snippet only** and append `...`. The emoji, sender, and hash suffix must be preserved.
-
-- **Channel reactions** must fit so that the firmware-prepended `"{NodeName}: "` plus the reaction stays within a total of **147 bytes** (`ProtocolLimits.maxChannelMessageTotalLength`). The user-text budget is therefore `147 - nodeNameBytes - 2`, where `2` covers the literal `": "` separator. With a 12-byte node name the budget is 133 bytes; with the maximum 31-byte node name it shrinks to 114 bytes. Always compute the budget against the **actual local node name**, not a fixed constant.
-- **DM reactions** are capped at **150 UTF-8 bytes total**. No firmware prefix is prepended.
+v2 reads best on clients with no reaction support, but stock upstream MC1 does not parse it — there it degrades to a plain-text message instead of a tapback, which is why v3 replaced it. Where the echoed text itself contains ` reacted to [` or ` reacted to: `, v2 senders replace that leading space with a no-break space (U+00A0); the v2 budget is computed against the **actual** local node name (`147 - nodeNameBytes - 2` for channels, 150 for DMs).
 
 ### v1 — legacy (accept on receive, do not emit)
 

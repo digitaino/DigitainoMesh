@@ -85,35 +85,137 @@ public struct ParsedDMReaction: Sendable, Equatable {
 
 /// Parses and builds the reaction wire format.
 ///
-/// Two formats are on the wire; see `docs/Reactions.md` for the interoperability spec.
+/// Three formats are on the wire; see `docs/Reactions.md` for the interoperability spec.
 ///
-/// - v2 (human-readable, canonical — always emitted):
+/// - v3 (piggyback, canonical — always emitted):
+///   - channel: `{emoji} reacted to "{snippet}" @[{sender}]\n{hash}`
+///   - DM: `{emoji} reacted to "{snippet}"\n{hash}`
+///   Structurally a v1 reaction whose emoji field carries a readable phrase: stock
+///   upstream MC1 parses it with its v1-only parser (exact `@[{sender}]`, trailing
+///   hash line) and attaches it to the right message, while clients with no reactions
+///   support display a sentence. The phrase must never contain `:` or `,` — it lands
+///   verbatim in upstream's `{emoji}:{count}` summary cache — nor a second `@[`.
+/// - v2 (human-readable — accepted on receive; emitted by fork Builds 19–40):
 ///   - channel: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
 ///   - DM: `{emoji} reacted to: "{snippet}" ({hash})`
-/// - v1 (legacy — accepted on receive, never emitted):
+/// - v1 (legacy — accepted on receive; emitted by stock upstream MC1):
 ///   - channel: `{emoji}@[{sender}]\n{hash}`
 ///   - DM: `{emoji}\n{hash}`
 ///
-/// Parsing tries v2 first and falls back to v1. The `{snippet}` is a cosmetic echo of the
+/// Parsing tries v3, then v2, then v1. The `{snippet}` is a cosmetic echo of the
 /// target text and is never parsed or compared — only `{hash}` carries identity.
 public enum ReactionParser {
   /// Returns true if the text matches any known reaction format (PocketMesh or meshcore-open).
   static func isReactionText(_ text: String, isDM: Bool) -> Bool {
     if MeshCoreOpenReactionParser.parse(text) != nil { return true }
-    if MeshCoreOpenReactionParser.parseV1(text) != nil { return true }
+    // meshcore-open v1 carries a free-text emoji field, so it gets the same validation the
+    // receive handlers apply — otherwise this would classify as a reaction a string those
+    // handlers hand back to plain-message handling.
+    if let v1 = MeshCoreOpenReactionParser.parseV1(text), isValidReactionEmoji(v1.emoji) {
+      return true
+    }
     return isDM ? parseDM(text) != nil : parse(text) != nil
   }
 
-  /// Parses channel reaction text. Tries the human-readable v2 format first, then legacy v1.
+  /// Parses channel reaction text. Tries v3 piggyback, then human-readable v2, then legacy v1.
   public static func parse(_ text: String) -> ParsedReaction? {
+    if let result = parsePiggyback(text) { return result }
     if let result = parseHumanReadable(text) { return result }
     return parseLegacy(text)
   }
 
-  /// Parses DM reaction text. Tries the human-readable v2 format first, then legacy v1.
+  /// Parses DM reaction text. Tries v3 piggyback, then human-readable v2, then legacy v1.
   public static func parseDM(_ text: String) -> ParsedDMReaction? {
+    if let result = parseDMPiggyback(text) { return result }
     if let result = parseDMHumanReadable(text) { return result }
     return parseDMLegacy(text)
+  }
+
+  // MARK: - Emoji Field Validation
+
+  /// Validates the emoji field extracted from a received reaction.
+  ///
+  /// The field is unbounded on the wire but lands in the persisted summary cache, whose own
+  /// grammar is `{emoji}:{count}` pairs joined by `,` — so accepting anything that merely
+  /// *starts* with an emoji lets a peer with the channel key inject those delimiters and
+  /// fabricate counts. Every legitimate producer (this app's picker, a Build-40 fork,
+  /// meshcore-open's emoji table) sends exactly one emoji grapheme cluster, so that is what
+  /// is accepted. Rejection is not an error path: the text falls through to plain-message
+  /// handling, which is what a client with no reactions support displays anyway.
+  static func isValidReactionEmoji(_ emoji: String) -> Bool {
+    guard emoji.count == 1, let cluster = emoji.first, cluster.isEmoji else { return false }
+    return cluster.unicodeScalars.allSatisfy(isEmojiComponentScalar)
+  }
+
+  /// Whether a scalar may appear inside a reaction's emoji cluster: an emoji scalar (which
+  /// covers skin-tone modifiers and regional indicators), a joiner or variation selector,
+  /// the keycap enclosing mark, or a tag character from a subdivision flag.
+  private static func isEmojiComponentScalar(_ scalar: Unicode.Scalar) -> Bool {
+    if scalar.properties.isEmoji { return true }
+    switch scalar.value {
+    case 0x200D, 0xFE0E, 0xFE0F, 0x20E3: return true
+    case 0xE0020...0xE007F: return true
+    default: return false
+    }
+  }
+
+  // MARK: - Piggyback Format (v3)
+
+  /// Parses the piggyback channel reaction format.
+  /// Format: `{emoji} reacted to "{snippet}" @[{sender}]\n{hash}`
+  private static func parsePiggyback(_ text: String) -> ParsedReaction? {
+    guard let newlineIndex = text.lastIndex(of: "\n") else { return nil }
+
+    let rawHash = String(text[text.index(after: newlineIndex)...])
+    guard rawHash.count == 8, isValidCrockfordBase32(rawHash) else { return nil }
+    let messageHash = normalizeCrockfordBase32(rawHash)
+
+    let withoutHash = String(text[..<newlineIndex])
+
+    // The structural `@[` is the first occurrence — the snippet sanitizer guarantees
+    // an echoed `@[` never survives into the phrase.
+    guard let atBracket = withoutHash.range(of: "@[") else { return nil }
+    let afterAtBracket = withoutHash[atBracket.upperBound...]
+    guard afterAtBracket.hasSuffix("]") else { return nil }
+    let sender = String(afterAtBracket.dropLast())
+    guard !sender.isEmpty else { return nil }
+
+    let phrase = withoutHash[..<atBracket.lowerBound]
+    guard let emoji = piggybackEmoji(fromPhrase: phrase, phraseSuffix: "\" ") else { return nil }
+
+    return ParsedReaction(emoji: emoji, targetSender: sender, messageHash: messageHash)
+  }
+
+  /// Parses the piggyback DM reaction format.
+  /// Format: `{emoji} reacted to "{snippet}"\n{hash}`
+  private static func parseDMPiggyback(_ text: String) -> ParsedDMReaction? {
+    // Reject the channel form — its `@[{sender}]` would land inside the phrase here.
+    // Mirrors upstream MC1's own DM/channel discrimination so both classify alike.
+    if text.contains("@[") { return nil }
+
+    guard let newlineIndex = text.lastIndex(of: "\n") else { return nil }
+
+    let rawHash = String(text[text.index(after: newlineIndex)...])
+    guard rawHash.count == 8, isValidCrockfordBase32(rawHash) else { return nil }
+    let messageHash = normalizeCrockfordBase32(rawHash)
+
+    let phrase = text[..<newlineIndex]
+    guard let emoji = piggybackEmoji(fromPhrase: phrase, phraseSuffix: "\"") else { return nil }
+
+    return ParsedDMReaction(emoji: emoji, messageHash: messageHash)
+  }
+
+  /// Extracts and validates the leading emoji of a piggyback phrase
+  /// (`{emoji} reacted to "{snippet}"` + the given suffix). Returns nil when the
+  /// phrase doesn't have that structure.
+  private static func piggybackEmoji(fromPhrase phrase: Substring, phraseSuffix: String) -> String? {
+    guard let cluster = phrase.first else { return nil }
+    let emoji = String(cluster)
+    guard isValidReactionEmoji(emoji) else { return nil }
+
+    let rest = phrase.dropFirst()
+    guard rest.hasPrefix(" reacted to \""), rest.hasSuffix(phraseSuffix) else { return nil }
+    return emoji
   }
 
   // MARK: - Human-Readable Format (v2)
@@ -125,11 +227,13 @@ public enum ReactionParser {
     guard let hash = extractTrailingHash(text) else { return nil }
     let withoutHash = String(text[..<text.index(text.endIndex, offsetBy: -(hash.count + 3))])
 
-    // Step 2: Find " reacted to [" to locate the sender
+    // Step 2: Find " reacted to [" to locate the sender. `range(of:)` finds the first
+    // occurrence, which is the structural one — the snippet that follows can echo the
+    // marker verbatim without stealing the match.
     guard let reactedRange = withoutHash.range(of: " reacted to [") else { return nil }
 
     let emoji = String(withoutHash[..<reactedRange.lowerBound])
-    guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
+    guard isValidReactionEmoji(emoji) else { return nil }
 
     // Step 3: Extract sender from "[sender]: " after "reacted to"
     let afterReacted = withoutHash[reactedRange.upperBound...]
@@ -143,16 +247,16 @@ public enum ReactionParser {
   /// Parses the human-readable DM reaction format.
   /// Format: `{emoji} reacted to: "{snippet}" ({hash})`
   private static func parseDMHumanReadable(_ text: String) -> ParsedDMReaction? {
-    // Reject channel format
-    if text.contains(" reacted to [") { return nil }
-
     guard let hash = extractTrailingHash(text) else { return nil }
     let withoutHash = String(text[..<text.index(text.endIndex, offsetBy: -(hash.count + 3))])
 
     guard let reactedRange = withoutHash.range(of: " reacted to: ") else { return nil }
 
+    // Structural, not whole-string: everything before the first marker must be the emoji
+    // field. That rejects the channel format (its bracketed sender sits there) without
+    // rejecting a DM whose snippet merely quotes a marker.
     let emoji = String(withoutHash[..<reactedRange.lowerBound])
-    guard !emoji.isEmpty, emoji.first?.isEmoji == true else { return nil }
+    guard isValidReactionEmoji(emoji) else { return nil }
 
     return ParsedDMReaction(emoji: emoji, messageHash: hash)
   }
@@ -200,8 +304,7 @@ public enum ReactionParser {
 
     let emoji = String(withoutHash[..<atBracketIndex.lowerBound])
 
-    // Validate emoji is not empty and starts with emoji character
-    guard !emoji.isEmpty, emoji.first?.isEmoji == true else {
+    guard isValidReactionEmoji(emoji) else {
       return nil
     }
 
@@ -247,8 +350,7 @@ public enum ReactionParser {
     // Extract emoji (everything before the newline)
     let emoji = String(text[..<newlineIndex])
 
-    // Validate emoji is not empty and starts with emoji character
-    guard !emoji.isEmpty, emoji.first?.isEmoji == true else {
+    guard isValidReactionEmoji(emoji) else {
       return nil
     }
 
@@ -265,14 +367,33 @@ public enum ReactionParser {
   /// reaction fails to parse. Reserving headroom keeps the hash clear of that edge.
   static let reactionByteMargin = 8
 
-  /// Builds human-readable channel reaction text.
-  /// Format: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
+  /// Prepares target text for embedding as a piggyback snippet.
   ///
-  /// The total reaction text (in UTF-8 bytes) is capped at
-  /// `ProtocolLimits.maxChannelMessageLength(nodeNameByteCount:)` minus
-  /// `reactionByteMargin` so that the firmware-prepended `"{NodeName}: "` plus the
-  /// reaction stays comfortably within `maxChannelMessageTotalLength`. The hash
-  /// suffix is always preserved — only the snippet is shortened if needed.
+  /// The piggyback phrase travels through upstream MC1's v1 parser as its *emoji field*
+  /// and from there into its persisted `{emoji}:{count}` summary cache, so the snippet
+  /// must never carry the cache delimiters — `:` and `,` become spaces (as do line
+  /// breaks, which the trailing-hash split can't contain). An echoed `@[` would end the
+  /// phrase early on any first-match parser, so a no-break space splits it — invisible
+  /// in display, structurally inert. Space runs left by the replacements collapse.
+  private static func sanitizePiggybackSnippet(_ text: String) -> String {
+    let neutralized = text.replacingOccurrences(of: "@[", with: "@\u{00A0}[")
+    let delimiters: Set<Character> = [":", ",", "\n", "\r"]
+    var result = String(neutralized.map { delimiters.contains($0) ? " " : $0 })
+    while result.contains("  ") {
+      result = result.replacingOccurrences(of: "  ", with: " ")
+    }
+    return result
+  }
+
+  /// Builds piggyback channel reaction text.
+  /// Format: `{emoji} reacted to "{snippet}" @[{sender}]\n{hash}`
+  ///
+  /// The budget is computed against the protocol's worst-case node name
+  /// (`ProtocolLimits.maxUsableNameBytes`), not the actual local name: upstream MC1
+  /// groups badge counts by the full phrase string, so two reactors sending the same
+  /// emoji to the same message must emit byte-identical text regardless of their own
+  /// name lengths. The hash suffix is always preserved — the display fields absorb
+  /// the budget instead: the bracketed sender first, then the snippet.
   static func buildChannelReactionText(
     emoji: String,
     targetSender: String,
@@ -281,18 +402,25 @@ public enum ReactionParser {
     localNodeNameByteCount: Int
   ) -> String {
     let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
-    let prefix = "\(emoji) reacted to [\(targetSender)]: \""
-    let closing = "\" (\(hash))"
     let totalBudget = max(0, ProtocolLimits.maxChannelMessageLength(
-      nodeNameByteCount: localNodeNameByteCount
+      nodeNameByteCount: max(localNodeNameByteCount, ProtocolLimits.maxUsableNameBytes)
     ) - reactionByteMargin)
-    let snippetBudget = max(0, totalBudget - prefix.utf8.count - closing.utf8.count)
-    let snippet = truncateToFit(targetText, maxBytes: snippetBudget)
-    return "\(prefix)\(snippet)\(closing)"
+
+    // The sender field yields before the snippet: it must survive byte-exact for
+    // upstream's sender-gated matching, but a name long enough to threaten the trailing
+    // hash can't be matched by anyone anyway, so clamping it is the lesser harm.
+    let closing = "\"\u{0020}@[]\n\(hash)"
+    let framing = "\(emoji) reacted to \"".utf8.count + closing.utf8.count
+    let sender = truncateToFit(targetSender, maxBytes: max(0, totalBudget - framing))
+    let prefix = "\(emoji) reacted to \""
+    let suffix = "\" @[\(sender)]\n\(hash)"
+    let snippetBudget = max(0, totalBudget - prefix.utf8.count - suffix.utf8.count)
+    let snippet = truncateToFit(sanitizePiggybackSnippet(targetText), maxBytes: snippetBudget)
+    return "\(prefix)\(snippet)\(suffix)"
   }
 
-  /// Builds human-readable DM reaction text.
-  /// Format: `{emoji} reacted to: "{snippet}" ({hash})`
+  /// Builds piggyback DM reaction text.
+  /// Format: `{emoji} reacted to "{snippet}"\n{hash}`
   ///
   /// Capped at `ProtocolLimits.maxDirectMessageLength` minus `reactionByteMargin`;
   /// no node-name prefix is prepended on the DM path.
@@ -302,11 +430,10 @@ public enum ReactionParser {
     targetTimestamp: UInt32
   ) -> String {
     let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
-    let overhead = emoji.utf8.count + " reacted to: \"".utf8.count
-      + "\" (".utf8.count + 8 + ")".utf8.count
+    let overhead = emoji.utf8.count + " reacted to \"".utf8.count + "\"\n".utf8.count + 8
     let snippetBudget = max(0, ProtocolLimits.maxDirectMessageLength - overhead - reactionByteMargin)
-    let snippet = truncateToFit(targetText, maxBytes: snippetBudget)
-    return "\(emoji) reacted to: \"\(snippet)\" (\(hash))"
+    let snippet = truncateToFit(sanitizePiggybackSnippet(targetText), maxBytes: snippetBudget)
+    return "\(emoji) reacted to \"\(snippet)\"\n\(hash)"
   }
 
   /// Truncates a string to fit within a UTF-8 byte budget, appending "..." if truncated.
@@ -360,14 +487,19 @@ public enum ReactionParser {
     return sorted.map { "\($0.emoji):\($0.count)" }.joined(separator: ",")
   }
 
-  /// Parses summary string into emoji/count pairs
+  /// Parses summary string into emoji/count pairs.
+  ///
+  /// Malformed pairs are dropped rather than rendered: a cache written before the emoji
+  /// field was validated on receive can hold injected delimiters, and those must not keep
+  /// producing badges after the upgrade.
   public static func parseSummary(_ summary: String?) -> [(emoji: String, count: Int)] {
     guard let summary, !summary.isEmpty else { return [] }
 
     return summary.split(separator: ",").compactMap { part in
       let components = part.split(separator: ":")
       guard components.count == 2,
-            let count = Int(components[1]) else { return nil }
+            let count = Int(components[1]), count > 0,
+            isValidReactionEmoji(String(components[0])) else { return nil }
       return (String(components[0]), count)
     }
   }
