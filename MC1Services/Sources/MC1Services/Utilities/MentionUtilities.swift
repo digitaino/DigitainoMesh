@@ -153,7 +153,11 @@ public enum MentionUtilities {
 
   /// Builds reply text with a mention and quoted preview of the original message.
   /// Strips any leading mention from the message text before generating the preview.
-  public static func buildReplyText(mentionName: String, messageText: String) -> String {
+  ///
+  /// - Parameter draft: whatever the composer already holds, kept below the quote block rather
+  ///   than replaced. Reply is reachable by an accidental drag (swipe-to-reply), so quoting has
+  ///   to be additive the way `appendMention` is; passing `""` yields the bare quote header.
+  public static func buildReplyText(mentionName: String, messageText: String, draft: String = "") -> String {
     let previewSource: String = if let regex = leadingMentionRegex,
                                    let match = regex.firstMatch(in: messageText, range: NSRange(messageText.startIndex..., in: messageText)),
                                    let matchRange = Range(match.range, in: messageText) {
@@ -164,6 +168,6 @@ public enum MentionUtilities {
     let preview = String(previewSource.prefix(10))
     let suffix = previewSource.count > 10 ? ".." : ""
     let mention = createMention(for: mentionName)
-    return "\(mention)\n>\(preview)\(suffix)\n"
+    return "\(mention)\n>\(preview)\(suffix)\n\(draft)"
   }
 }

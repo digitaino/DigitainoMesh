@@ -41,6 +41,12 @@ struct SharedRoutePropertyTests {
     #expect(route.hashBytesPerHop == [Data([0x80])])
   }
 
+  @Test("hashBytesPerHop drops an odd-length hop instead of zero-extending it")
+  func hashBytesOddLengthHop() {
+    let route = SharedRoute(hexIDs: ["80", "80F"], hopCount: 2, distanceText: nil)
+    #expect(route.hashBytesPerHop == [Data([0x80])])
+  }
+
   @Test("hashBytesPerHop truncates a full public key to its 3-byte prefix")
   func hashBytesFullKeyTruncated() {
     let fullKey = "A3B5C9" + String(repeating: "0", count: 58)
@@ -121,6 +127,12 @@ struct SharedRouteParserParseTests {
     #expect(SharedRouteParser.parse("RX via oops not hex. 1 hop") == nil)
   }
 
+  @Test("returns nil for an odd-length hex ID, which has no whole-byte reading")
+  func oddLengthHexIDRejected() {
+    #expect(SharedRouteParser.parse("RX via 80F,0C. 2 hops") == nil)
+    #expect(SharedRouteParser.parse("RX via 80F. 1 hop") == nil)
+  }
+
   @Test("parses route embedded in longer message")
   func routeInLongerMessage() {
     let text = "Hey check this out!\nRX via 80,8F,0C. 3 hops 2.3 mi\nPretty cool right?"
@@ -155,9 +167,9 @@ struct SharedRouteParserDetectChainTests {
     #expect(result?.distanceText == nil)
   }
 
-  @Test("detects a space-separated chain")
-  func spaceSeparatedChain() {
-    let result = SharedRouteParser.detectChain("try A3 7F 42")
+  @Test("detects a chain whose commas are followed by spaces")
+  func spacedCommaChain() {
+    let result = SharedRouteParser.detectChain("try A3, 7F, 42")
     #expect(result?.hexIDs == ["A3", "7F", "42"])
   }
 
@@ -212,5 +224,20 @@ struct SharedRouteParserDetectChainTests {
   func plainTextRejected() {
     #expect(SharedRouteParser.detectChain("Testing from Liberty Hill") == nil)
     #expect(SharedRouteParser.detectChain("Amazing!") == nil)
+  }
+
+  @Test("hex-shaped words that are merely adjacent are prose, not a chain")
+  func whitespaceAdjacencyRejected() {
+    #expect(SharedRouteParser.detectChain("battery might be dead") == nil)
+    #expect(SharedRouteParser.detectChain("uno de cada nodo") == nil)
+    #expect(SharedRouteParser.detectChain("AC DC") == nil)
+    #expect(SharedRouteParser.detectChain("dead beef") == nil)
+    #expect(SharedRouteParser.detectChain("try A3 7F 42") == nil)
+  }
+
+  @Test("a separator re-joins hex words that whitespace alone would not")
+  func separatorJoinsWhatWhitespaceDoesNot() {
+    #expect(SharedRouteParser.detectChain("dead,beef")?.hexIDs == ["DEAD", "BEEF"])
+    #expect(SharedRouteParser.detectChain("dead -> beef")?.hexIDs == ["DEAD", "BEEF"])
   }
 }

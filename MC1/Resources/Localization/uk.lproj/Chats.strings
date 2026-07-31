@@ -812,6 +812,29 @@
 /* Location: MessagePathSheet.swift - Fallback name when device name unavailable */
 "chats.path.receiver.you" = "Ти";
 
+// MARK: - Shared Route Card
+
+/* Location: SharedRouteCard.swift - Title of the card shown under a message containing a shared route */
+"chats.sharedRoute.card.title" = "Надісланий шлях";
+
+/* Location: SharedRouteCard.swift - Card summary for a single hop - %@ is the hop hex ID list */
+"chats.sharedRoute.card.summaryOneHop" = "1 перехід через %@";
+
+/* Location: SharedRouteCard.swift - Card summary - %d is hop count, %@ is the hop hex ID list */
+"chats.sharedRoute.card.summary" = "%d переходів через %@";
+
+/* Location: SharedRouteCard.swift - Accessibility label - %@ is the card summary */
+"chats.sharedRoute.card.accessibilityLabel" = "Показати надісланий шлях, %@";
+
+/* Location: SharedRouteCard.swift - Accessibility hint */
+"chats.sharedRoute.card.accessibilityHint" = "Відкриває карту з надісланим шляхом";
+
+/* Location: ActionsDetailsSection.swift - Action that replies with this message's route info */
+"chats.path.replyWithRoute" = "Відповісти зі шляхом";
+
+/* Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location */
+"chats.sharedRoute.unavailable.description" = "Жоден ретранслятор цього шляху не має відомого місця розташування на цьому пристрої";
+
 // MARK: - Repeat Details Sheet
 
 /* Location: RepeatDetailsSheet.swift - Empty state title */
@@ -1222,9 +1245,6 @@
 
 /* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
 "chats.search.messages.empty" = "Повідомлень не знайдено";
-
-/* Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total */
-"chats.search.messages.showingCount" = "Показано %1$d з %2$d";
 
 /* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
 "chats.search.messages.showMore" = "Показати ще %d";

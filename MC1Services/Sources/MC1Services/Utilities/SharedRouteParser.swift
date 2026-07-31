@@ -28,19 +28,22 @@ public struct SharedRoute: Sendable, Hashable, Identifiable {
   /// Per-hop hash bytes for repeater resolution. Each hex ID is 2, 4, or 6
   /// characters → 1, 2, or 3 bytes (multi-byte hashes come from newer
   /// firmware). A full 64-character public key is truncated to its 3-byte
-  /// prefix, which is the longest form the resolvers match on.
+  /// prefix, which is the longest form the resolvers match on. An odd-length
+  /// hop has no whole-byte reading, so it is dropped: zero-extending it
+  /// ("80F" → 80 0F) would resolve to a repeater the sender never named.
   public var hashBytesPerHop: [Data] {
     hexIDs.compactMap { hex in
       let workingHex = hex.count == 64 ? String(hex.prefix(6)) : hex
+      guard !workingHex.isEmpty, workingHex.count.isMultiple(of: 2) else { return nil }
       var bytes = Data()
       var index = workingHex.startIndex
       while index < workingHex.endIndex {
-        let next = workingHex.index(index, offsetBy: 2, limitedBy: workingHex.endIndex) ?? workingHex.endIndex
+        let next = workingHex.index(index, offsetBy: 2)
         guard let byte = UInt8(workingHex[index..<next], radix: 16) else { return nil }
         bytes.append(byte)
         index = next
       }
-      return bytes.isEmpty ? nil : bytes
+      return bytes
     }
   }
 }
@@ -53,13 +56,15 @@ public enum SharedRouteParser {
 
   // swiftlint:disable force_try
   /// Matches "RX via {hex},{hex},...  {N} hop(s){optional distance tail}".
-  /// Hex IDs are 2–6 hex digits each (1–3 byte hash). The tail is captured
-  /// verbatim to end-of-line and trimmed, so unit/precision stay exactly as the
-  /// sender wrote them. `try!` is intentional: the pattern is a literal, so an
-  /// init failure is a programmer error that must crash at first use rather
-  /// than silently disable route cards.
+  /// Hex IDs are whole bytes — 2, 4, or 6 hex digits each (1–3 byte hash) — so
+  /// an odd-length ID fails the match rather than reaching `hashBytesPerHop`,
+  /// which has no whole-byte reading for it. The tail is captured verbatim to
+  /// end-of-line and trimmed, so unit/precision stay exactly as the sender
+  /// wrote them. `try!` is intentional: the pattern is a literal, so an init
+  /// failure is a programmer error that must crash at first use rather than
+  /// silently disable route cards.
   private static let routeRegex = try! NSRegularExpression(
-    pattern: #"RX via ([0-9A-Fa-f]{2,6}(?:,[0-9A-Fa-f]{2,6})*)\.\s+(\d+)\s+hops?([^\n]*)"#
+    pattern: #"RX via ((?:[0-9A-Fa-f]{2}){1,3}(?:,(?:[0-9A-Fa-f]{2}){1,3})*)\.\s+(\d+)\s+hops?([^\n]*)"#
   )
   // swiftlint:enable force_try
 
@@ -95,33 +100,50 @@ public enum SharedRouteParser {
 
   /// Detect a bare hex-ID chain pasted into a message ("51fb,1776,e19e,42da"
   /// or "D0A0->DA1C->A3DD" — arrows are how the app itself prints paths, so
-  /// they come back pasted), the informal cousin of Reply with Route. Returns
-  /// the longest run of 2+ consecutive valid tokens; a lone token is too
-  /// ambiguous to card. At least one token in the run must contain a hex
-  /// letter — an all-digit run is far more likely a list of numbers
-  /// ("2024, 2025") than a path. Never fires on "RX via" text, which `parse`
-  /// owns.
+  /// they come back pasted), the informal cousin of Reply with Route. Hops must
+  /// be joined by an explicit separator: bare whitespace adjacency is not a
+  /// chain, because hex-shaped words neighbour each other in ordinary prose
+  /// ("battery might be dead", "de cada nodo", "AC DC"). Returns the longest
+  /// run of 2+ separator-joined valid tokens; a lone token is too ambiguous to
+  /// card. At least one token in the run must contain a hex letter — an
+  /// all-digit run is far more likely a list of numbers ("2024, 2025") than a
+  /// path. Never fires on "RX via" text, which `parse` owns.
   public static func detectChain(_ text: String) -> SharedRoute? {
     if text.contains("RX via") { return nil }
 
     var currentRun: [String] = []
     var bestRun: [String] = []
+    // A separator that ended the previous word links it to the next one across
+    // the whitespace, so "A3, 7F" and "A3 -> 7F" read as one chain.
+    var separatorPending = false
 
-    for word in text.components(separatedBy: .whitespacesAndNewlines) {
-      // Hop separators inside a word all normalize to commas. A word that is
-      // *only* separators ("->" between spaced hops) yields no tokens and
-      // deliberately does not break the run.
+    for word in text.components(separatedBy: .whitespacesAndNewlines) where !word.isEmpty {
+      // Hop separators inside a word all normalize to commas.
       let separable = word
         .replacingOccurrences(of: "->", with: ",")
         .replacingOccurrences(of: "→", with: ",")
-      for token in separable.split(separator: ",").map(String.init) {
-        if isValidChainToken(token) {
+      let tokens = separable.split(separator: ",").map(String.init)
+      // A word that is *only* separators ("->" between spaced hops) yields no
+      // tokens and deliberately does not break the run.
+      guard !tokens.isEmpty else {
+        separatorPending = true
+        continue
+      }
+
+      // Tokens after the first within one word are separator-joined by
+      // construction; only the first has to inherit a link from the last word.
+      var isJoined = separatorPending || separable.hasPrefix(",")
+      for token in tokens {
+        let isValid = isValidChainToken(token)
+        if isValid, isJoined || currentRun.isEmpty {
           currentRun.append(token.uppercased())
         } else {
           if currentRun.count > bestRun.count { bestRun = currentRun }
-          currentRun = []
+          currentRun = isValid ? [token.uppercased()] : []
         }
+        isJoined = true
       }
+      separatorPending = separable.hasSuffix(",")
     }
     if currentRun.count > bestRun.count { bestRun = currentRun }
 

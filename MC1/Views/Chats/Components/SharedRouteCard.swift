@@ -35,6 +35,11 @@ struct SharedRouteCard: View {
     .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: RichPreviewMetrics.cornerRadius))
     .contentShape(.rect(cornerRadius: RichPreviewMetrics.cornerRadius))
     .tapYieldingToLongPress { onTap() }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(L10n.Chats.Chats.SharedRoute.Card.accessibilityLabel(summary))
+    .accessibilityHint(L10n.Chats.Chats.SharedRoute.Card.accessibilityHint)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityAction { onTap() }
   }
 
   var summary: String {

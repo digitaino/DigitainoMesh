@@ -387,4 +387,35 @@ struct MentionUtilitiesTests {
     let result = MentionUtilities.containsSelfMention(in: "Hello world", selfName: "Alice")
     #expect(result == false)
   }
+
+  // MARK: - buildReplyText Tests
+
+  @Test
+  func `buildReplyText quotes the mention and a clipped preview`() {
+    let reply = MentionUtilities.buildReplyText(mentionName: "Alice", messageText: "hello")
+    #expect(reply == "@[Alice]\n>hello\n")
+
+    let clipped = MentionUtilities.buildReplyText(mentionName: "Alice", messageText: "hello there friend")
+    #expect(clipped == "@[Alice]\n>hello ther..\n")
+  }
+
+  @Test
+  func `buildReplyText strips a leading mention from the preview`() {
+    let reply = MentionUtilities.buildReplyText(mentionName: "Alice", messageText: "@[Bob] hi")
+    #expect(reply == "@[Alice]\n>hi\n")
+  }
+
+  /// Reply is reachable by an accidental drag (swipe-to-reply), so quoting has to keep a
+  /// half-typed message the way `appendMention` does. The quote block goes above it: the
+  /// draft is what the user will keep typing.
+  @Test
+  func `buildReplyText keeps an existing draft below the quote`() {
+    let reply = MentionUtilities.buildReplyText(
+      mentionName: "Alice",
+      messageText: "hello",
+      draft: "half typed thought"
+    )
+    #expect(reply == "@[Alice]\n>hello\nhalf typed thought")
+    #expect(reply.hasSuffix("half typed thought"))
+  }
 }
