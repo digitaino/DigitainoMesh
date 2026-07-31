@@ -66,45 +66,147 @@ struct AdaptivePowerServiceTests {
   }
 
   @Test
-  func `disabling returns to base and clears confirmation state`() async {
-    let service = makeService(baseStepIndex: 1)
+  func `configure only seeds state, leaving the radio to the caller`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 2)
+    #expect(service.currentStepIndex == 2)
+    #expect(await applier.appliedDbm.isEmpty)
+  }
+
+  @Test
+  func `the connect-time apply writes base even when base is already the ceiling`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, radioMaxDbm: 22, baseStepIndex: 3)
+    #expect(service.isAtMax, "The default bare-radio base is the ceiling; escalation cannot cover it")
+
+    await service.applyCurrentPower()
+    #expect(await applier.appliedDbm == [22])
+  }
+
+  @Test
+  func `enabling writes the base level to the radio`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 1, enabled: false)
+
+    await service.setEnabled(true)
+    #expect(service.isEnabled)
+    #expect(service.currentStepIndex == 1)
+    #expect(await applier.appliedDbm == [13])
+    #expect(service.isPowerConfirmed)
+  }
+
+  @Test
+  func `re-enabling an already-enabled service does not rewrite the radio`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 1, enabled: true)
+
+    await service.setEnabled(true)
+    #expect(await applier.appliedDbm.isEmpty)
+  }
+
+  @Test
+  func `disabling returns the radio to base and clears confirmation state`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 1)
     await service.escalate()
     #expect(service.isElevated)
 
-    service.setEnabled(false)
+    await service.setEnabled(false)
     #expect(service.currentStepIndex == service.baseStepIndex)
     #expect(!service.isElevated)
     #expect(service.confirmedRadioDbm == nil)
     #expect(service.lastChangeReason == nil)
+    #expect(await applier.appliedDbm == [20, 13], "The escalation has to be undone on the radio")
+  }
+
+  @Test
+  func `disabling a service that never escalated writes nothing`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 1)
+
+    await service.setEnabled(false)
+    #expect(await applier.appliedDbm.isEmpty)
+  }
+
+  @Test
+  func `a failed restore stays on the record after disabling`() async {
+    let applier = MockTxPowerApplier(failuresBeforeSuccess: 99)
+    let service = makeService(applier: applier, baseStepIndex: 1)
+    await service.escalate()
+
+    await service.setEnabled(false)
+    #expect(service.lastApplyFailed)
   }
 
   @Test
   func `raising the base while escalated does not lower the active step`() async {
-    let service = makeService(baseStepIndex: 0)
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 0)
     await service.escalate()
     await service.escalate()
     #expect(service.currentStepIndex == 2)
 
-    service.setBaseStep(1)
+    await service.setBaseStep(1)
     #expect(service.currentStepIndex == 2)
     #expect(service.isElevated)
+    #expect(await applier.appliedDbm == [13, 20], "Nothing beyond the two escalations")
   }
 
   @Test
-  func `raising the base pulls a non-escalated step up with it`() {
-    let service = makeService(baseStepIndex: 0)
-    service.setBaseStep(2)
+  func `raising the base pulls a non-escalated step up with it and applies it`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 0)
+
+    await service.setBaseStep(2)
     #expect(service.currentStepIndex == 2)
+    #expect(await applier.appliedDbm == [20])
   }
 
   @Test
-  func `changing PA gain re-derives the policy`() {
-    let service = makeService(paGainDb: 0, radioMaxDbm: 22)
+  func `lowering the base while at base lowers the radio`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 3)
+
+    await service.setBaseStep(1)
+    #expect(service.currentStepIndex == 1)
+    #expect(!service.isElevated)
+    #expect(await applier.appliedDbm == [13])
+  }
+
+  @Test
+  func `a base step change is inert on the radio while disabled`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, baseStepIndex: 0, enabled: false)
+
+    await service.setBaseStep(2)
+    #expect(service.currentStepIndex == 2)
+    #expect(await applier.appliedDbm.isEmpty)
+  }
+
+  @Test
+  func `changing PA gain re-derives the policy and rewrites the derived target`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, paGainDb: 0, radioMaxDbm: 22, baseStepIndex: 3)
     #expect(service.availableSteps.count == 4)
 
-    service.setPAGain(8)
+    await service.setPAGain(8)
     #expect(service.policy.paCurve == AdaptivePowerPolicy.PACurve.pocket1W)
     #expect(service.availableSteps.last?.id == 7)
+    // 22dBm EIRP through the measured 1W curve is a much lower radio config.
+    #expect(await applier.appliedDbm == [service.currentRadioDbm])
+    #expect(service.currentRadioDbm < 22)
+  }
+
+  @Test
+  func `losing PA gain snaps an unreachable step down to the radio ceiling`() async {
+    let applier = MockTxPowerApplier()
+    let service = makeService(applier: applier, paGainDb: 8, radioMaxDbm: 22, baseStepIndex: 5)
+    #expect(service.currentStepIndex == 5)
+
+    await service.setPAGain(0)
+    #expect(service.baseStepIndex == 3)
+    #expect(service.currentStepIndex == 3)
+    #expect(await applier.appliedDbm == [22], "Never above the chip's own ceiling")
   }
 
   // MARK: - Escalation

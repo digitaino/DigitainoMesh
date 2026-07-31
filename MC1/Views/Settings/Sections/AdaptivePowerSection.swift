@@ -34,7 +34,7 @@ struct AdaptivePowerSection: View {
       }
       .onChange(of: isEnabled) { _, newValue in
         save()
-        service?.setEnabled(newValue)
+        Task { await service?.setEnabled(newValue) }
       }
 
       if isEnabled {
@@ -47,8 +47,8 @@ struct AdaptivePowerSection: View {
         .tint(.primary)
         .onChange(of: paGainDb) { _, newValue in
           save()
-          service?.setPAGain(newValue)
-          clampBaseStepToReachable()
+          Task { await service?.setPAGain(newValue) }
+          clampBaseStepToReachable(forGain: newValue)
         }
 
         Picker(L10n.Settings.AdaptivePower.baseOutput, selection: $baseStepIndex) {
@@ -60,7 +60,7 @@ struct AdaptivePowerSection: View {
         .tint(.primary)
         .onChange(of: baseStepIndex) { _, newValue in
           save()
-          service?.setBaseStep(newValue)
+          Task { await service?.setBaseStep(newValue) }
         }
 
         if let service {
@@ -217,8 +217,12 @@ struct AdaptivePowerSection: View {
   /// A gain change can strand the stored base step above what the radio now reaches
   /// (the step table is filtered per amplifier), which would leave the picker with no
   /// matching tag. Snap down to the highest reachable step in that case.
-  private func clampBaseStepToReachable() {
-    guard let highest = availableSteps.last, baseStepIndex > highest.id else { return }
+  ///
+  /// Derives the new step table from `gain` directly rather than from the service, whose
+  /// policy is only re-derived once its write completes.
+  private func clampBaseStepToReachable(forGain gain: Double) {
+    let reachable = AdaptivePowerPolicy(paGainDb: gain, radioMaxDbm: policy.radioMaxDbm).availableSteps
+    guard let highest = reachable.last, baseStepIndex > highest.id else { return }
     baseStepIndex = highest.id
   }
 
