@@ -694,7 +694,11 @@ final class TracePathViewModel {
 
   /// Find a saved path matching the current path bytes
   /// Returns the most recently used match if multiple exist
-  private func findMatchingSavedPath() async -> SavedTracePathDTO? {
+  ///
+  /// Benchmark history lives in the same table and its paths are byte-identical to a
+  /// hand-built `test → target → test` path, so they are excluded: appending a trace run to
+  /// one would silently fold it into a saved benchmark's numbers.
+  func findMatchingSavedPath() async -> SavedTracePathDTO? {
     guard let radioID = connectedDevice?.radioID,
           let dataStore else { return nil }
 
@@ -703,7 +707,9 @@ final class TracePathViewModel {
 
     do {
       let savedPaths = try await dataStore.fetchSavedTracePaths(radioID: radioID)
-      let matches = savedPaths.filter { $0.pathHashBytes == pathBytes }
+      let matches = savedPaths.filter {
+        $0.pathHashBytes == pathBytes && !BenchmarkNaming.isBenchmarkPath($0.name)
+      }
 
       // Return most recently used (by latest run date)
       return matches.max { path1, path2 in

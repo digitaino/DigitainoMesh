@@ -2,15 +2,18 @@ import Foundation
 
 // MARK: - Run group
 
-/// One saved benchmark run: every target measured under the same note.
+/// One saved benchmark run: every target measured in the same save.
 ///
-/// The note is the identity because that is what the user changes between runs — swap an
-/// antenna, re-run with a new note, compare the two groups.
+/// The save is the identity, not the note: the note is optional and cleared after every save,
+/// so two consecutive runs would otherwise be one group with mixed averages. The note stays
+/// the label — it is what the user changed between runs, and what a comparison is read by.
 public struct BenchmarkRunGroup: Sendable, Equatable, Identifiable {
   public var id: String {
-    note
+    key
   }
 
+  /// What the group is keyed by: the save's stamp, or the note on pre-stamp history.
+  public let key: String
   /// The note the run was saved under; empty when it was saved without one.
   public let note: String
   /// One saved path per target.
@@ -23,12 +26,14 @@ public struct BenchmarkRunGroup: Sendable, Equatable, Identifiable {
   public let averageSuccessRate: Int
 
   public init(
+    key: String,
     note: String,
     paths: [SavedTracePathDTO],
     date: Date,
     averageRTT: Int,
     averageSuccessRate: Int
   ) {
+    self.key = key
     self.note = note
     self.paths = paths
     self.date = date
@@ -136,26 +141,29 @@ public struct BenchmarkComparisonSummary: Sendable, Equatable {
 /// Pure functions over persisted DTOs: history and comparison never touch the engine, the
 /// radio or the clock, so both are exercised from literal fixtures.
 public enum BenchmarkComparison {
-  /// Groups saved paths into runs by the note encoded in their names, newest run first.
+  /// Groups saved paths into runs by the save encoded in their names, newest run first.
   ///
   /// Paths that were not written by the benchmark tool are dropped rather than lumped into a
   /// group — the same store also holds hand-saved trace paths.
   public static func groups(from paths: [SavedTracePathDTO]) -> [BenchmarkRunGroup] {
-    var byNote: [String: [SavedTracePathDTO]] = [:]
+    var byKey: [String: (note: String, paths: [SavedTracePathDTO])] = [:]
     for path in paths {
       guard let components = BenchmarkNaming.components(from: path.name) else { continue }
-      byNote[components.note, default: []].append(path)
+      var group = byKey[components.groupKey] ?? (note: components.note, paths: [])
+      group.paths.append(path)
+      byKey[components.groupKey] = group
     }
 
-    return byNote.map { note, paths in
-      let latest = paths.flatMap { $0.runs.map(\.date) }.max() ?? .distantPast
-      let rtts = paths.compactMap(\.averageRoundTripMs)
+    return byKey.map { key, group in
+      let latest = group.paths.flatMap { $0.runs.map(\.date) }.max() ?? .distantPast
+      let rtts = group.paths.compactMap(\.averageRoundTripMs)
       return BenchmarkRunGroup(
-        note: note,
-        paths: paths,
+        key: key,
+        note: group.note,
+        paths: group.paths,
         date: latest,
         averageRTT: BenchmarkScoring.mean(rtts) ?? 0,
-        averageSuccessRate: BenchmarkScoring.mean(paths.map(\.successRate)) ?? 0
+        averageSuccessRate: BenchmarkScoring.mean(group.paths.map(\.successRate)) ?? 0
       )
     }
     .sorted { $0.date > $1.date }

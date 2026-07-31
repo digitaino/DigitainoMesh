@@ -5,9 +5,11 @@ import os
 ///
 /// A benchmark result is a trace path with runs, so it is persisted through the store's
 /// existing `TracePathPersisting` surface rather than a schema of its own: history survives
-/// backup/restore, shows up beside hand-saved paths, and needs no migration. What separates
-/// the two is the name — see ``BenchmarkNaming`` — which also carries the note a run is
-/// grouped by, because `TracePathRunDTO` has nowhere to put one.
+/// backup/restore and needs no migration. What separates the two is the name — see
+/// ``BenchmarkNaming`` — which also carries the save a run is grouped by and the note it is
+/// labelled with, because `TracePathRunDTO` has nowhere to put either. The prefix is the
+/// isolation: the Trace Path tool filters these rows out of its own list and its
+/// path-matching, so a benchmark's numbers only ever change here.
 ///
 /// One saved path per target; one run per probe, in probe order. `hopsSNR` is the
 /// intermediate-hop array, which is what ``BenchmarkScoring`` indexes for the TX and RX
@@ -40,7 +42,7 @@ public actor BenchmarkHistoryStore {
       .filter { BenchmarkNaming.isBenchmarkPath($0.name) }
   }
 
-  /// Benchmark history grouped into runs by note, newest run first.
+  /// Benchmark history grouped into runs by save, newest run first.
   public func runGroups() async throws -> [BenchmarkRunGroup] {
     try await BenchmarkComparison.groups(from: benchmarkPaths())
   }
@@ -64,11 +66,15 @@ public actor BenchmarkHistoryStore {
     var saved: [SavedTracePathDTO] = []
     let testHash = testRepeater.pathHash(byteWidth: traceHashSize)
     let savedAt = now()
+    // One stamp for the whole save, so this run's targets group together and the next save
+    // under the same note (or none) is still a run of its own.
+    let runStamp = BenchmarkNaming.runStamp(for: savedAt)
 
     for result in results where !result.outcomes.isEmpty {
       let targetHash = result.target.pathHash(byteWidth: traceHashSize)
       let name = BenchmarkNaming.pathName(
         note: note,
+        runStamp: runStamp,
         testRepeater: testRepeater.name,
         target: result.target.name
       )
@@ -83,12 +89,26 @@ public actor BenchmarkHistoryStore {
           hashSize: traceHashSize,
           initialRun: nil
         )
+
+        var appended = 0
         for outcome in result.outcomes {
-          try await dataStore.appendTracePathRun(
-            pathID: path.id,
-            run: run(from: outcome, savedAt: savedAt)
-          )
+          do {
+            try await dataStore.appendTracePathRun(
+              pathID: path.id,
+              run: run(from: outcome, savedAt: savedAt)
+            )
+            appended += 1
+          } catch {
+            logger.error("Failed to save benchmark run: \(error.localizedDescription)")
+          }
         }
+        // A runless path reads as 100% success and would inflate the group's averages, so a
+        // wholly failed append takes its path with it.
+        guard appended > 0 else {
+          try await dataStore.deleteSavedTracePath(id: path.id)
+          continue
+        }
+
         if let stored = try await dataStore.fetchSavedTracePath(id: path.id) {
           saved.append(stored)
         }

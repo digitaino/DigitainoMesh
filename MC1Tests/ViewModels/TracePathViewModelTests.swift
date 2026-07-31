@@ -771,6 +771,121 @@ struct SavedPathHashSizeTests {
   }
 }
 
+// MARK: - Saved Path Matching Tests
+
+@Suite("Saved Path Matching")
+@MainActor
+struct SavedPathMatchingTests {
+  private func run(date: Date, roundTripMs: Int) -> TracePathRunDTO {
+    TracePathRunDTO(id: UUID(), date: date, success: true, roundTripMs: roundTripMs, hopsSNR: [])
+  }
+
+  @Test
+  func `Benchmark history is never matched as the active saved path`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let device = createOverrideCapableDevice()
+
+    let handSaved = try await dataStore.createSavedTracePath(
+      radioID: device.radioID,
+      name: "Tower and back",
+      pathBytes: Data([0xAB]),
+      hashSize: 1,
+      initialRun: run(date: Date(timeIntervalSince1970: 1_700_000_000), roundTripMs: 100)
+    )
+    // Byte-identical and newer, so a match that ignored the prefix would prefer it — and
+    // every trace the user ran would land in this saved benchmark's numbers.
+    _ = try await dataStore.createSavedTracePath(
+      radioID: device.radioID,
+      name: BenchmarkNaming.pathName(
+        note: "yagi",
+        runStamp: BenchmarkNaming.runStamp(for: Date(timeIntervalSince1970: 1_700_003_600)),
+        testRepeater: "Tower",
+        target: "Ridge"
+      ),
+      pathBytes: Data([0xAB]),
+      hashSize: 1,
+      initialRun: run(date: Date(timeIntervalSince1970: 1_700_003_600), roundTripMs: 200)
+    )
+
+    let viewModel = TracePathViewModel()
+    viewModel.configure(dependencies: TracePathViewModel.Dependencies(
+      dataStore: { dataStore },
+      session: { nil },
+      advertisementService: { nil },
+      connectedDevice: { device },
+      bestAvailableLocation: { nil }
+    ))
+    viewModel.addNode(createTestContact())
+
+    let match = await viewModel.findMatchingSavedPath()
+    #expect(match?.id == handSaved.id)
+  }
+
+  @Test
+  func `A path that only benchmark history holds matches nothing`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let device = createOverrideCapableDevice()
+
+    _ = try await dataStore.createSavedTracePath(
+      radioID: device.radioID,
+      name: BenchmarkNaming.pathName(note: "", testRepeater: "Tower", target: "Ridge"),
+      pathBytes: Data([0xAB]),
+      hashSize: 1,
+      initialRun: run(date: Date(timeIntervalSince1970: 1_700_000_000), roundTripMs: 100)
+    )
+
+    let viewModel = TracePathViewModel()
+    viewModel.configure(dependencies: TracePathViewModel.Dependencies(
+      dataStore: { dataStore },
+      session: { nil },
+      advertisementService: { nil },
+      connectedDevice: { device },
+      bestAvailableLocation: { nil }
+    ))
+    viewModel.addNode(createTestContact())
+
+    #expect(await viewModel.findMatchingSavedPath() == nil)
+  }
+}
+
+// MARK: - Saved Paths List Tests
+
+@Suite("Saved Paths List")
+@MainActor
+struct SavedPathsListTests {
+  @Test
+  func `Benchmark history is not offered in the saved paths list`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let device = createOverrideCapableDevice()
+
+    _ = try await dataStore.createSavedTracePath(
+      radioID: device.radioID,
+      name: "Tower and back",
+      pathBytes: Data([0xAB]),
+      hashSize: 1,
+      initialRun: nil
+    )
+    // Renaming this row here would strip the prefix that keeps it in history, and deleting it
+    // would erase a measurement; the Benchmark screen owns both.
+    _ = try await dataStore.createSavedTracePath(
+      radioID: device.radioID,
+      name: BenchmarkNaming.pathName(note: "yagi", testRepeater: "Tower", target: "Ridge"),
+      pathBytes: Data([0xAB]),
+      hashSize: 1,
+      initialRun: nil
+    )
+
+    let viewModel = SavedPathsViewModel()
+    viewModel.configure(dataStore: { dataStore }, connectedDevice: { device })
+    await viewModel.loadSavedPaths()
+
+    #expect(viewModel.savedPaths.map(\.name) == ["Tower and back"])
+  }
+}
+
 // MARK: - Device ID Validation Tests
 
 @Suite("Device ID Validation")

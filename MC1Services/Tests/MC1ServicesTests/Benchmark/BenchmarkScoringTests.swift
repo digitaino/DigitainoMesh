@@ -154,8 +154,52 @@ struct BenchmarkNamingTests {
     let parsed = try #require(BenchmarkNaming.components(from: "[Benchmark] Tower → Ridge"))
 
     #expect(parsed.note.isEmpty)
+    #expect(parsed.runStamp == nil)
     #expect(parsed.testRepeater == "Tower")
     #expect(parsed.target == "Ridge")
+  }
+
+  @Test
+  func `A run stamp round-trips alongside the note`() throws {
+    let stamp = BenchmarkNaming.runStamp(for: Date(timeIntervalSince1970: 1_700_000_000))
+    let name = BenchmarkNaming.pathName(
+      note: "yagi",
+      runStamp: stamp,
+      testRepeater: "Tower",
+      target: "Ridge"
+    )
+    let parsed = try #require(BenchmarkNaming.components(from: name))
+
+    #expect(parsed.note == "yagi")
+    #expect(parsed.runStamp == stamp)
+    #expect(parsed.groupKey == stamp)
+    #expect(parsed.testRepeater == "Tower")
+    #expect(parsed.target == "Ridge")
+  }
+
+  @Test
+  func `A stamp keeps two noteless saves apart`() throws {
+    let earlier = BenchmarkNaming.runStamp(for: Date(timeIntervalSince1970: 1_700_000_000))
+    let later = BenchmarkNaming.runStamp(for: Date(timeIntervalSince1970: 1_700_000_600))
+    let names = [earlier, later].map {
+      BenchmarkNaming.pathName(note: "", runStamp: $0, testRepeater: "Tower", target: "Ridge")
+    }
+    let parsed = try names.map { try #require(BenchmarkNaming.components(from: $0)) }
+
+    let allNoteless = parsed.allSatisfy(\.note.isEmpty)
+    #expect(allNoteless)
+    #expect(parsed.allSatisfy { $0.target == "Ridge" })
+    #expect(parsed[0].groupKey != parsed[1].groupKey)
+  }
+
+  @Test
+  func `A stampless name groups by its note, as it always did`() throws {
+    let parsed = try #require(
+      BenchmarkNaming.components(from: "[Benchmark] stock whip · Tower → Ridge")
+    )
+
+    #expect(parsed.runStamp == nil)
+    #expect(parsed.groupKey == "stock whip")
   }
 
   @Test

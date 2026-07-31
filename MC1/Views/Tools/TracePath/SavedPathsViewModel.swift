@@ -40,7 +40,11 @@ final class SavedPathsViewModel {
     errorMessage = nil
 
     do {
+      // Benchmark runs are persisted as trace paths in this same table, but their home is
+      // the Benchmark history screen: renaming one here strips the prefix that keeps it in
+      // history, and deleting one here erases a measurement the user cannot re-take.
       savedPaths = try await dataStore.fetchSavedTracePaths(radioID: radioID)
+        .filter { !BenchmarkNaming.isBenchmarkPath($0.name) }
       logger.info("Loaded \(self.savedPaths.count) saved paths")
     } catch {
       logger.error("Failed to load saved paths: \(error.localizedDescription)")

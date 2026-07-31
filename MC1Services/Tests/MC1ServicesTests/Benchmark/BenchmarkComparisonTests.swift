@@ -10,7 +10,7 @@ struct BenchmarkComparisonTests {
   // MARK: - Grouping
 
   @Test
-  func `Paths group by the note they were saved under, newest run first`() throws {
+  func `Pre-stamp paths group by the note they were saved under, newest run first`() throws {
     let paths = [
       BenchmarkFixtures.savedPath(
         note: "stock whip",
@@ -42,6 +42,36 @@ struct BenchmarkComparisonTests {
     #expect(stock.averageSuccessRate == 100)
     #expect(stock.testRepeaterName == "Tower")
     #expect(Set(stock.targetNames) == ["Ridge", "Barn"])
+  }
+
+  @Test
+  func `Two noteless saves group separately, keyed by their stamps`() {
+    let paths = [
+      BenchmarkFixtures.savedPath(
+        note: "",
+        runStamp: BenchmarkNaming.runStamp(for: earlier),
+        target: "Ridge",
+        createdDate: earlier,
+        runs: [(rtt: 400, snrs: [9, 4, 6], success: true)]
+      ),
+      BenchmarkFixtures.savedPath(
+        note: "",
+        runStamp: BenchmarkNaming.runStamp(for: later),
+        target: "Ridge",
+        createdDate: later,
+        runs: [(rtt: 900, snrs: [9, 1, 2], success: true)]
+      ),
+    ]
+
+    let groups = BenchmarkComparison.groups(from: paths)
+
+    let allNoteless = groups.allSatisfy(\.note.isEmpty)
+    #expect(groups.count == 2)
+    #expect(allNoteless)
+    #expect(groups.map(\.averageRTT) == [900, 400])
+    // Both rows are the same target, so a merged group would have hidden the older one.
+    #expect(groups.allSatisfy { $0.paths.count == 1 })
+    #expect(Set(groups.map(\.id)).count == 2)
   }
 
   @Test

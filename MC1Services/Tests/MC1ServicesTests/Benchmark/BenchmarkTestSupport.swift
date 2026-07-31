@@ -90,6 +90,9 @@ actor MockBenchmarkSession: BenchmarkSessionOps, SessionEventStreaming {
 
   var traceError: (any Error)?
   var sentInfo = MessageSentInfo(route: 0, expectedAck: Data(), suggestedTimeoutMs: 5000)
+  /// Runs while the send is still in flight, which is how a test lands a reply before the
+  /// probe has installed its waiter.
+  private var onSend: (@Sendable (UInt32?) async -> Void)?
 
   var traceCount: Int {
     traces.count
@@ -103,6 +106,10 @@ actor MockBenchmarkSession: BenchmarkSessionOps, SessionEventStreaming {
     sentInfo = info
   }
 
+  func setOnSend(_ hook: (@Sendable (UInt32?) async -> Void)?) {
+    onSend = hook
+  }
+
   func sendTrace(
     tag: UInt32?,
     authCode _: UInt32?,
@@ -111,6 +118,7 @@ actor MockBenchmarkSession: BenchmarkSessionOps, SessionEventStreaming {
   ) async throws -> MessageSentInfo {
     traces.append((tag, flags, path))
     if let traceError { throw traceError }
+    await onSend?(tag)
     return sentInfo
   }
 
@@ -195,9 +203,11 @@ enum BenchmarkFixtures {
     )
   }
 
-  /// A saved benchmark path with one run per `(rtt, snrs)` pair.
+  /// A saved benchmark path with one run per `(rtt, snrs)` pair. A `nil` `runStamp` writes the
+  /// pre-stamp name format, which is what history holds for runs saved before stamps existed.
   static func savedPath(
     note: String,
+    runStamp: String? = nil,
     testRepeater: String = "Tower",
     target: String,
     createdDate: Date = Date(timeIntervalSince1970: 1_700_000_000),
@@ -206,7 +216,12 @@ enum BenchmarkFixtures {
     SavedTracePathDTO(
       id: UUID(),
       radioID: UUID(),
-      name: BenchmarkNaming.pathName(note: note, testRepeater: testRepeater, target: target),
+      name: BenchmarkNaming.pathName(
+        note: note,
+        runStamp: runStamp,
+        testRepeater: testRepeater,
+        target: target
+      ),
       pathBytes: Data([0x01, 0x02, 0x01]),
       hashSize: 1,
       createdDate: createdDate,
@@ -224,6 +239,52 @@ enum BenchmarkFixtures {
 }
 
 struct BenchmarkTestError: Error {}
+
+// MARK: - Failing store
+
+/// A trace-path store that accepts paths and refuses every run append, for the case where a
+/// save must not leave a runless path behind.
+actor FailingAppendTracePathStore: TracePathPersisting {
+  private(set) var paths: [UUID: SavedTracePathDTO] = [:]
+
+  func fetchSavedTracePaths(radioID: UUID) async throws -> [SavedTracePathDTO] {
+    paths.values.filter { $0.radioID == radioID }
+  }
+
+  func fetchSavedTracePath(id: UUID) async throws -> SavedTracePathDTO? {
+    paths[id]
+  }
+
+  func createSavedTracePath(
+    radioID: UUID,
+    name: String,
+    pathBytes: Data,
+    hashSize: Int,
+    initialRun: TracePathRunDTO?
+  ) async throws -> SavedTracePathDTO {
+    let path = SavedTracePathDTO(
+      id: UUID(),
+      radioID: radioID,
+      name: name,
+      pathBytes: pathBytes,
+      hashSize: hashSize,
+      createdDate: Date(timeIntervalSince1970: 1_700_000_000),
+      runs: initialRun.map { [$0] } ?? []
+    )
+    paths[path.id] = path
+    return path
+  }
+
+  func updateSavedTracePathName(id _: UUID, name _: String) async throws {}
+
+  func deleteSavedTracePath(id: UUID) async throws {
+    paths.removeValue(forKey: id)
+  }
+
+  func appendTracePathRun(pathID _: UUID, run _: TracePathRunDTO) async throws {
+    throw BenchmarkTestError()
+  }
+}
 
 /// Waits for an actor-isolated condition, for the tests that let the engine run its own loop.
 func waitForBenchmarkCondition(

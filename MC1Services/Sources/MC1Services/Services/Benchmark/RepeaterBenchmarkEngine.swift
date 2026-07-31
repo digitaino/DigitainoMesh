@@ -21,8 +21,9 @@ public actor RepeaterBenchmarkEngine {
 
   /// The parts of a run that come from the connected radio rather than the user.
   public struct Configuration: Sendable {
-    /// Bytes per hop in a trace path: `1 << pathHashMode`, so 1, 2 or 4. This is the trace
-    /// protocol's power-of-two width, *not* the linear 1/2/3-byte routing hash width.
+    /// Bytes per hop in a trace path: 1, 2 or 3, from
+    /// ``PathEncoding/hashSize(forMode:)`` — the same derivation the parser splits a reply
+    /// at, so probe and reply widths cannot disagree.
     public var traceHashSize: Int
     /// The `path_sz` code written into the trace's flags byte.
     public var traceFlags: UInt8
@@ -157,9 +158,14 @@ public actor RepeaterBenchmarkEngine {
     publish()
   }
 
+  /// Chooses the targets to measure. Like ``setTestRepeater(_:)`` this drops the previous
+  /// run's results: a batch saved against an edited target set would claim measurements for
+  /// targets it never probed.
   public func setTargets(_ targets: [BenchmarkTarget]) {
     guard !isRunning else { return }
     plan.targets = plan.selectable(from: targets)
+    results = []
+    completedAt = nil
     publish()
   }
 
@@ -170,6 +176,8 @@ public actor RepeaterBenchmarkEngine {
     } else if plan.testRepeater?.publicKey != target.publicKey {
       plan.targets.append(target)
     }
+    results = []
+    completedAt = nil
     publish()
   }
 
@@ -202,6 +210,10 @@ public actor RepeaterBenchmarkEngine {
     results = plan.targets.map { BenchmarkTargetResult(target: $0) }
     currentTargetIndex = 0
     currentTraceIndex = 0
+    // Neither set survives a run: a stale expiry would fail this run's first probe with the
+    // same tag, and a stale reply would answer it with another run's measurement.
+    earlyReplies.removeAll()
+    expiredTags.removeAll()
     startListening()
     publish()
 
@@ -228,10 +240,18 @@ public actor RepeaterBenchmarkEngine {
       publish()
     }
 
+    // A cancelled run leaves targets it never reached, and a row spins until its result says
+    // the batch is over — so every remaining one resolves here, probes or no probes.
+    for index in results.indices where !results[index].isComplete {
+      results[index].isComplete = true
+    }
+
     isRunning = false
     currentTargetIndex = 0
     currentTraceIndex = 0
     completedAt = now()
+    earlyReplies.removeAll()
+    expiredTags.removeAll()
     stopListening()
     publish()
   }
@@ -315,6 +335,9 @@ public actor RepeaterBenchmarkEngine {
 
     let deadline = Task { [weak self, sleep] in
       await sleep(timeout)
+      // The reply resolved the probe and cancelled this task: expiring now would leave the
+      // tag in `expiredTags` for the rest of the run.
+      guard !Task.isCancelled else { return }
       await self?.expire(tag: tag)
     }
     defer { deadline.cancel() }
