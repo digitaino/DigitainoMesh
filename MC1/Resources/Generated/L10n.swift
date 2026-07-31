@@ -2859,6 +2859,28 @@ public enum L10n {
       /// Status pill message when sync has failed
       public static let syncFailed = L10n.tr("Localizable", "statusPill.syncFailed", fallback: "Sync Failed")
     }
+    public enum StoreRecovery {
+      /// Location: StoreRecoveryView.swift - Button that moves the current database aside and starts fresh
+      public static let backUpAndReset = L10n.tr("Localizable", "storeRecovery.backUpAndReset", fallback: "Back Up & Reset")
+      /// Location: StoreRecoveryView.swift - Expandable section holding the underlying error text
+      public static let details = L10n.tr("Localizable", "storeRecovery.details", fallback: "Technical Details")
+      /// Location: StoreRecoveryView.swift - Reassurance shown under the title
+      public static let message = L10n.tr("Localizable", "storeRecovery.message", fallback: "DigitainoMesh couldn't open its database. Nothing has been deleted — your messages and contacts are still on this device.")
+      /// Location: StoreRecoveryView.swift - Title of the screen shown when the app's database cannot be opened
+      public static let title = L10n.tr("Localizable", "storeRecovery.title", fallback: "Can't Open Your Data")
+      /// Location: StoreRecoveryView.swift - Shown while a recovery attempt is running
+      public static let working = L10n.tr("Localizable", "storeRecovery.working", fallback: "Working…")
+      public enum BackUpAndReset {
+        /// Location: StoreRecoveryView.swift - Explains what Back Up & Reset does
+        public static let footnote = L10n.tr("Localizable", "storeRecovery.backUpAndReset.footnote", fallback: "Moves your current data into a dated backup folder in the app's storage and starts with an empty database. Nothing is deleted.")
+      }
+      public enum Confirm {
+        /// Location: StoreRecoveryView.swift - Confirmation dialog message before resetting
+        public static let message = L10n.tr("Localizable", "storeRecovery.confirm.message", fallback: "Your current data is moved into a dated backup folder and the app starts with an empty database. The backup stays on this device, but the app won't show it.")
+        /// Location: StoreRecoveryView.swift - Confirmation dialog title before resetting
+        public static let title = L10n.tr("Localizable", "storeRecovery.confirm.title", fallback: "Back Up & Reset?")
+      }
+    }
     public enum Tabs {
       /// Tab bar title for the messaging/conversations screen
       public static let chats = L10n.tr("Localizable", "tabs.chats", fallback: "Chats")

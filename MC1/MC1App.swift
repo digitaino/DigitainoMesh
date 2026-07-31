@@ -11,7 +11,20 @@ private let logger = Logger(subsystem: "com.mc1", category: "MC1App")
 struct MC1App: App {
   @State private var appState: AppState
   @State private var awaitingDataProtection = false
+  /// Non-nil while the on-disk store cannot be opened: the scene shows
+  /// `StoreRecoveryView` instead of the app, and `appState` is a throwaway
+  /// in-memory container that must never be treated as the user's data.
+  @State private var storeFailure: StoreOpenFailure?
   @Environment(\.scenePhase) private var scenePhase
+
+  /// An unopenable store, reduced to what the recovery screen needs.
+  private struct StoreOpenFailure: Equatable {
+    let message: String
+
+    init(_ error: any Error) {
+      message = (error as NSError).localizedDescription
+    }
+  }
 
   /// Stable holder that App Intents read through `AppDependencyManager`. It
   /// must outlive the before-first-unlock `AppState` swap, so it is a plain
@@ -30,8 +43,8 @@ struct MC1App: App {
     let intentBridge = intentBridge
     AppDependencyManager.shared.add(dependency: intentBridge)
 
-    // True only on the before-first-unlock path, where the normal init site
-    // holds an in-memory throwaway the bridge must not adopt.
+    // True on the before-first-unlock path and on the store-recovery path — both hold an
+    // in-memory throwaway the bridge must not adopt.
     var usingThrowawayStore = false
 
     let container: ModelContainer
@@ -55,11 +68,26 @@ struct MC1App: App {
           desc=\(nsError.localizedDescription, privacy: .public) \
           userInfo=\(String(describing: nsError.userInfo), privacy: .public)
           """)
-          fatalError("ModelContainer creation failed after retry while data is available: \(nsError.domain) \(nsError.code)")
+          // Deliberately not a fatalError. A store that fails to open is almost always a
+          // permanent condition (a migration the schema can't perform), so crashing here
+          // produced a launch loop the user could never escape — with their messages and
+          // contacts still on disk and no way to reach them. Come up on a throwaway
+          // in-memory container instead and let `StoreRecoveryView` offer retry or a
+          // non-destructive back-up-and-reset. Nothing is deleted automatically.
+          do {
+            container = try PersistenceStore.createContainer(inMemory: true)
+          } catch {
+            fatalError("In-memory ModelContainer creation failed while recovering from a store-open failure: \(error)")
+          }
+          _storeFailure = State(initialValue: StoreOpenFailure(nsError))
+          usingThrowawayStore = true
         }
         let appState = AppState(modelContainer: container)
         _appState = State(initialValue: appState)
-        intentBridge.adopt(appState)
+        // Same rule as the BFU path: the bridge must not adopt a throwaway store.
+        if !usingThrowawayStore {
+          intentBridge.adopt(appState)
+        }
         return
       }
 
@@ -86,67 +114,134 @@ struct MC1App: App {
 
   var body: some Scene {
     WindowGroup {
-      ContentView()
-        .environment(\.appState, appState)
-        .environment(\.appTheme, appState.themeService.current)
-        .tint(appState.themeService.current.chromeTint)
-        .preferredColorScheme(appState.themeService.effectiveColorScheme)
-      #if !SIDELOAD
-        .task(id: ObjectIdentifier(appState)) { await appState.storeState.service.load() }
-      #endif
-        .task {
-          if awaitingDataProtection {
-            await waitForProtectedData()
-            do {
-              let container = try PersistenceStore.createContainer()
-              // Tear down the BFU-bootstrap AppState's StoreService listener Task
-              // before swapping in the real AppState — otherwise the bootstrap
-              // instance's Transaction.updates listener leaks for the process
-              // lifetime and every later transaction event fires `walkCurrentEntitlements`
-              // twice (once per orphaned StoreService).
-              appState.shutdown()
-              let realAppState = AppState(modelContainer: container)
-              appState = realAppState
-              // First real store on the BFU path; the bridge was
-              // left nil in `init()` until now.
-              intentBridge.adopt(realAppState)
-              awaitingDataProtection = false
-            } catch {
-              let nsError = error as NSError
-              logger.fault("""
-              Container creation failed after unlock: \
-              domain=\(nsError.domain, privacy: .public) \
-              code=\(nsError.code, privacy: .public) \
-              desc=\(nsError.localizedDescription, privacy: .public) \
-              userInfo=\(String(describing: nsError.userInfo), privacy: .public)
-              """)
-              fatalError("ModelContainer creation failed after protected data became available: \(nsError.domain) \(nsError.code)")
-            }
+      Group {
+        if let storeFailure {
+          // Swapped in for the whole app, not layered over it: none of ContentView's
+          // launch work may touch the throwaway in-memory store standing in for the
+          // user's real one.
+          StoreRecoveryView(
+            theme: appState.themeService.current,
+            errorDescription: storeFailure.message,
+            onTryAgain: reopenStore,
+            onBackUpAndReset: backUpAndResetStore
+          )
+        } else {
+          mainContent
+        }
+      }
+      .environment(\.appState, appState)
+      .environment(\.appTheme, appState.themeService.current)
+      .tint(appState.themeService.current.chromeTint)
+      .preferredColorScheme(appState.themeService.effectiveColorScheme)
+    }
+  }
+
+  private var mainContent: some View {
+    ContentView()
+    #if !SIDELOAD
+      .task(id: ObjectIdentifier(appState)) { await appState.storeState.service.load() }
+    #endif
+      .task {
+        if awaitingDataProtection {
+          await waitForProtectedData()
+          do {
+            let container = try PersistenceStore.createContainer()
+            // Tear down the BFU-bootstrap AppState's StoreService listener Task
+            // before swapping in the real AppState — otherwise the bootstrap
+            // instance's Transaction.updates listener leaks for the process
+            // lifetime and every later transaction event fires `walkCurrentEntitlements`
+            // twice (once per orphaned StoreService).
+            appState.shutdown()
+            let realAppState = AppState(modelContainer: container)
+            appState = realAppState
+            // First real store on the BFU path; the bridge was
+            // left nil in `init()` until now.
+            intentBridge.adopt(realAppState)
+            awaitingDataProtection = false
+          } catch {
+            let nsError = error as NSError
+            logger.fault("""
+            Container creation failed after unlock: \
+            domain=\(nsError.domain, privacy: .public) \
+            code=\(nsError.code, privacy: .public) \
+            desc=\(nsError.localizedDescription, privacy: .public) \
+            userInfo=\(String(describing: nsError.userInfo), privacy: .public)
+            """)
+            // Same reasoning as the `init()` path: hand the user a recovery screen
+            // rather than a crash loop. `appState` is already the BFU throwaway, so
+            // the scene stays up on it.
+            storeFailure = StoreOpenFailure(nsError)
+            awaitingDataProtection = false
+            return
           }
+        }
 
-          try? Tips.configure([
-            .displayFrequency(.immediate)
-          ])
+        // Launch-time, not radio-connect: the preference belongs to the phone, and a
+        // Build 40 user who never reconnects still deserves the silence they chose.
+        // Self-latching, so this is a single defaults read on every later launch.
+        LegacyNotificationSwitchMigration.run()
 
-          #if DEBUG
-            if ProcessInfo.processInfo.isScreenshotMode {
-              await setupScreenshotMode()
-            } else {
-              await appState.initialize()
-            }
-          #else
+        try? Tips.configure([
+          .displayFrequency(.immediate)
+        ])
+
+        #if DEBUG
+          if ProcessInfo.processInfo.isScreenshotMode {
+            await setupScreenshotMode()
+          } else {
             await appState.initialize()
-          #endif
+          }
+        #else
+          await appState.initialize()
+        #endif
 
-          await runInitialForegroundReconciliationIfNeeded()
-          pendingExternalURL.markReady(appState)
-        }
-        .onOpenURL { url in
-          pendingExternalURL.submit(url, appState: appState)
-        }
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-          handleScenePhaseChange(from: oldPhase, to: newPhase)
-        }
+        await runInitialForegroundReconciliationIfNeeded()
+        pendingExternalURL.markReady(appState)
+      }
+      .onOpenURL { url in
+        pendingExternalURL.submit(url, appState: appState)
+      }
+      .onChange(of: scenePhase) { oldPhase, newPhase in
+        handleScenePhaseChange(from: oldPhase, to: newPhase)
+      }
+  }
+
+  // MARK: - Store recovery
+
+  /// "Try Again": re-attempt the real store with nothing changed on disk. Worth offering
+  /// because a share of open failures are transient (a device still finishing a restore,
+  /// a file briefly locked by the previous process).
+  private func reopenStore() async {
+    await adoptRealStore { try PersistenceStore.createContainer() }
+  }
+
+  /// "Back Up & Reset": move the unopenable store into `StoreBackups/<timestamp>/` and open
+  /// a fresh one. User-confirmed in `StoreRecoveryView` — it takes live data out of the path
+  /// the app reads. Nothing is deleted, so a later repair tool (or the user, via the Files
+  /// app) can still get at it.
+  private func backUpAndResetStore() async {
+    await adoptRealStore {
+      let folder = try PersistenceStore.backUpAndClearStore()
+      logger.notice("Store moved aside to \(folder.lastPathComponent, privacy: .public); opening a fresh store")
+      return try PersistenceStore.createContainer()
+    }
+  }
+
+  /// Runs `makeContainer` off the main actor (opening a store can take seconds on a large
+  /// migration), then swaps the throwaway `AppState` for one backed by the real store.
+  /// Clearing `storeFailure` re-inserts `ContentView`, whose `.task` performs the normal
+  /// launch sequence against the new container.
+  private func adoptRealStore(_ makeContainer: @escaping @Sendable () throws -> ModelContainer) async {
+    do {
+      let container = try await Task.detached(priority: .userInitiated, operation: makeContainer).value
+      appState.shutdown()
+      let realAppState = AppState(modelContainer: container)
+      appState = realAppState
+      intentBridge.adopt(realAppState)
+      storeFailure = nil
+    } catch {
+      logger.error("Store recovery attempt failed: \(error)")
+      storeFailure = StoreOpenFailure(error)
     }
   }
 
