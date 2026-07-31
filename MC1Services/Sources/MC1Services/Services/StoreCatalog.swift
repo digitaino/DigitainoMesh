@@ -2,18 +2,22 @@ import Foundation
 
 /// Single source of truth for every in-app-purchase product identifier.
 /// Adding a new theme, bundle, or tip means adding a constant here.
+///
+/// IDs are namespaced under this app's own bundle identifier. App Store Connect product IDs
+/// are globally unique, so an ID under another app's namespace cannot be registered by this
+/// record and every product would fail to load — the store screen shows nothing at all.
 public enum StoreCatalog {
   public enum Theme {
-    public static let ember = "io.pocketmesh.app.theme.ember"
-    public static let fern = "io.pocketmesh.app.theme.fern"
-    public static let marine = "io.pocketmesh.app.theme.marine"
-    public static let olive = "io.pocketmesh.app.theme.olive"
-    public static let lavender = "io.pocketmesh.app.theme.lavender"
-    public static let sakura = "io.pocketmesh.app.theme.sakura"
-    public static let solarized = "io.pocketmesh.app.theme.solarized"
-    public static let nord = "io.pocketmesh.app.theme.nord"
-    public static let catppuccin = "io.pocketmesh.app.theme.catppuccin"
-    public static let bundleAll = "io.pocketmesh.app.theme.bundle.all"
+    public static let ember = "com.digitaino.PocketMesh.theme.ember"
+    public static let fern = "com.digitaino.PocketMesh.theme.fern"
+    public static let marine = "com.digitaino.PocketMesh.theme.marine"
+    public static let olive = "com.digitaino.PocketMesh.theme.olive"
+    public static let lavender = "com.digitaino.PocketMesh.theme.lavender"
+    public static let sakura = "com.digitaino.PocketMesh.theme.sakura"
+    public static let solarized = "com.digitaino.PocketMesh.theme.solarized"
+    public static let nord = "com.digitaino.PocketMesh.theme.nord"
+    public static let catppuccin = "com.digitaino.PocketMesh.theme.catppuccin"
+    public static let bundleAll = "com.digitaino.PocketMesh.theme.bundle.all"
 
     /// Every theme the `bundleAll` purchase unlocks. Themes are not sold individually — the
     /// bundle is the only theme purchase — so this set is purely the bundle's entitlement
@@ -23,12 +27,12 @@ public enum StoreCatalog {
   }
 
   public enum Tip {
-    public static let coffee = "io.pocketmesh.app.tips.coffee"
-    public static let lunch = "io.pocketmesh.app.tips.lunch"
-    public static let dinner = "io.pocketmesh.app.tips.dinner"
-    public static let generous = "io.pocketmesh.app.tips.generous"
-    public static let massive = "io.pocketmesh.app.tips.massive"
-    public static let epic = "io.pocketmesh.app.tips.epic"
+    public static let coffee = "com.digitaino.PocketMesh.tips.coffee"
+    public static let lunch = "com.digitaino.PocketMesh.tips.lunch"
+    public static let dinner = "com.digitaino.PocketMesh.tips.dinner"
+    public static let generous = "com.digitaino.PocketMesh.tips.generous"
+    public static let massive = "com.digitaino.PocketMesh.tips.massive"
+    public static let epic = "com.digitaino.PocketMesh.tips.epic"
 
     public static let all: Set<String> = [coffee, lunch, dinner, generous, massive, epic]
   }

@@ -54,7 +54,7 @@ final class StoreServiceTests {
   @Test
   func `load with only unknown IDs fails`() async {
     let service = StoreService()
-    await service.load(productIDs: ["io.pocketmesh.app.nonexistent"])
+    await service.load(productIDs: ["com.digitaino.PocketMesh.nonexistent"])
     #expect(service.loadState == .failed)
     #expect(service.products.isEmpty)
   }

@@ -24,10 +24,13 @@ struct StoreCatalogTests {
     #expect(!StoreCatalog.Tip.all.contains(StoreCatalog.Theme.bundleAll))
   }
 
+  /// App Store Connect product IDs are globally unique, so every ID must sit under this app's
+  /// own bundle namespace — an upstream-prefixed ID cannot be registered by this record and
+  /// StoreKit would fail the whole product load.
   @Test
-  func `every product ID uses the io.pocketmesh.app prefix`() {
+  func `every product ID uses the app's own bundle prefix`() {
     for id in StoreCatalog.sellableProductIDs.union(StoreCatalog.Theme.bundledThemeIDs) {
-      #expect(id.hasPrefix("io.pocketmesh.app."))
+      #expect(id.hasPrefix("com.digitaino.PocketMesh."))
     }
   }
 }

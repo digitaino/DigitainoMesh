@@ -39,6 +39,8 @@ MeshCore One uses a modular structure with Swift Packages:
 - `MC1Services`: The business logic framework.
 - `MeshCore One`: The main iOS application.
 
+> **Warning — Debug and Release share one bundle identifier** (`com.digitaino.PocketMesh` for both configs in `project.yml`). That is deliberate: a single bundle ID keeps a TestFlight install and its store purchases continuous across builds. The consequence is that running Debug on a device that already has the TestFlight build **replaces it and opens the same data container** — your local run migrates, writes to, and can corrupt real beta message history. Before a local device run, export a backup from Settings → Backup & Restore → Export App Data, or run on a device/simulator that carries no TestFlight install.
+
 ### Command Line Build
 
 ```bash
