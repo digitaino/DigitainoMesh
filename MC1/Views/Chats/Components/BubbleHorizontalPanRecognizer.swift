@@ -37,6 +37,9 @@ struct BubbleHorizontalPanRecognizer: UIViewRepresentable {
       recognizer: Self.makeRecognizer(coordinator: context.coordinator)
     )
     context.coordinator.proxy = view
+    view.onWillDetach = { [coordinator = context.coordinator] state in
+      coordinator.cancelTrackingGesture(state: state)
+    }
     return view
   }
 
@@ -81,6 +84,16 @@ struct BubbleHorizontalPanRecognizer: UIViewRepresentable {
 
     @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
       onChange(recognizer.state, recognizer.translation(in: recognizer.view).x)
+    }
+
+    /// Delivers the terminal state UIKit omits when the recognizer is taken off its host
+    /// mid-gesture (`GestureHostingProxyView.onWillDetach`), so consumers unwind through the
+    /// same `.cancelled` arm they already have. Detaching an idle recognizer — every ordinary
+    /// cell recycle — reports nothing: the conversation-wide reveal offset is observable, and
+    /// writing zero over zero on each recycled row would invalidate every visible cell.
+    func cancelTrackingGesture(state: UIGestureRecognizer.State) {
+      guard state == .began || state == .changed else { return }
+      onChange(.cancelled, 0)
     }
 
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {

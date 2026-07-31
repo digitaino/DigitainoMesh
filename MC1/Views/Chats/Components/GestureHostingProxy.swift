@@ -19,6 +19,15 @@ final class GestureHostingProxyView: UIView {
   private let recognizer: UIGestureRecognizer
   private weak var host: UIView?
 
+  /// Invoked with the recognizer's current state immediately before it leaves its host.
+  ///
+  /// `removeGestureRecognizer` delivers no terminal state, so a gesture still tracking when the
+  /// cell is recycled never reaches `.cancelled` and anything it left mutated outside the row —
+  /// the conversation-wide timestamp-reveal offset — is stranded there. Whether UIKit cancels
+  /// first is not decidable from here, so owners of state that outlives the row unwind it from
+  /// this callback and tolerate the duplicate.
+  var onWillDetach: ((UIGestureRecognizer.State) -> Void)?
+
   init(recognizer: UIGestureRecognizer) {
     self.recognizer = recognizer
     super.init(frame: .zero)
@@ -35,7 +44,10 @@ final class GestureHostingProxyView: UIView {
     super.didMoveToWindow()
     let next = window == nil ? nil : Self.recognizerHost(above: self)
     guard next !== host else { return }
-    host?.removeGestureRecognizer(recognizer)
+    if let host {
+      onWillDetach?(recognizer.state)
+      host.removeGestureRecognizer(recognizer)
+    }
     next?.addGestureRecognizer(recognizer)
     host = next
   }

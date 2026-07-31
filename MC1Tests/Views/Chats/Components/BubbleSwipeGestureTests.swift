@@ -101,8 +101,10 @@ struct BubbleSwipeGestureTests {
     #expect(extreme == BubbleSwipeGesturePolicy.revealOverdragCeiling)
   }
 
+  /// The labels ride in glued to the rows, so the fade finishes at half travel — while they are
+  /// still outside the row's trailing edge — rather than at the end of the drag.
   @Test
-  func `Timestamps fade in well before the drag bottoms out`() {
+  func `Timestamps reach full strength at half travel, still riding in`() {
     let fadeIn = BubbleSwipeGesturePolicy.revealFadeInDistance
     #expect(BubbleSwipeGesturePolicy.revealProgress(for: 0) == 0)
     #expect(BubbleSwipeGesturePolicy.revealProgress(for: fadeIn) == 1)
@@ -182,6 +184,31 @@ struct BubbleSwipeGestureTests {
 
     #expect(coordinator.gestureRecognizerShouldBegin(recognizer) == false)
     #expect(seen != nil)
+  }
+
+  /// Cell recycling can take the recognizer off its host mid-drag, and UIKit sends no terminal
+  /// state when it does — so the detach is translated into the `.cancelled` consumers already
+  /// unwind on. An idle detach must stay silent: recycling is continuous while scrolling, and
+  /// the shared reveal offset is observable, so a cancel per recycled row would rewrite zero
+  /// over zero and invalidate every visible cell.
+  @Test
+  func `A detach mid-drag cancels, an idle detach says nothing`() {
+    var seen: [(UIGestureRecognizer.State, CGFloat)] = []
+    let coordinator = BubbleHorizontalPanRecognizer.Coordinator(
+      shouldBegin: { _ in true },
+      allowsSimultaneousRecognition: true,
+      onChange: { state, dragX in seen.append((state, dragX)) }
+    )
+
+    for idle in [UIGestureRecognizer.State.possible, .ended, .cancelled, .failed] {
+      coordinator.cancelTrackingGesture(state: idle)
+    }
+    #expect(seen.isEmpty)
+
+    coordinator.cancelTrackingGesture(state: .began)
+    coordinator.cancelTrackingGesture(state: .changed)
+    #expect(seen.count == 2)
+    #expect(seen.allSatisfy { $0.0 == .cancelled && $0.1 == 0 })
   }
 
   // MARK: - Shared reveal state
