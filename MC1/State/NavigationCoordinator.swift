@@ -60,8 +60,17 @@ final class NavigationCoordinator {
   /// (`requiresDevice`).
   var selectedSetting: SettingsDetail?
 
-  /// Message to scroll to after navigation (for reaction notifications)
-  var pendingScrollToMessageID: UUID?
+  /// Message to scroll to after navigation (reaction notification, tapped search result),
+  /// tagged with the conversation that armed it.
+  ///
+  /// Untagged, whichever conversation opened next consumed it — a stale target then made a
+  /// foreign conversation page its entire history looking for an id it does not hold.
+  struct PendingMessageScroll: Equatable {
+    let conversationID: UUID
+    let messageID: UUID
+  }
+
+  var pendingMessageScroll: PendingMessageScroll?
 
   /// Whether device menu tip donation is pending (waiting for valid tab)
   var pendingDeviceMenuTipDonation = false
@@ -83,7 +92,9 @@ final class NavigationCoordinator {
   func navigateToChat(with contact: ContactDTO, scrollToMessageID: UUID? = nil) {
     tabBarVisibility = .hidden // Hide tab bar BEFORE switching tabs
     pendingChatContact = contact
-    pendingScrollToMessageID = scrollToMessageID
+    pendingMessageScroll = scrollToMessageID.map {
+      PendingMessageScroll(conversationID: contact.id, messageID: $0)
+    }
     chatsSelectedRoute = .direct(contact)
     selectedTab = 0
   }
@@ -98,7 +109,9 @@ final class NavigationCoordinator {
   func navigateToChannel(with channel: ChannelDTO, scrollToMessageID: UUID? = nil) {
     tabBarVisibility = .hidden
     pendingChannel = channel
-    pendingScrollToMessageID = scrollToMessageID
+    pendingMessageScroll = scrollToMessageID.map {
+      PendingMessageScroll(conversationID: channel.id, messageID: $0)
+    }
     chatsSelectedRoute = .channel(channel)
     selectedTab = 0
   }
@@ -151,8 +164,8 @@ final class NavigationCoordinator {
     pendingDiscoveryNavigation = false
   }
 
-  func clearPendingScrollToMessage() {
-    pendingScrollToMessageID = nil
+  func clearPendingMessageScroll() {
+    pendingMessageScroll = nil
   }
 
   func clearPendingContactDetailNavigation() {

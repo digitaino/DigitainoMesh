@@ -13,23 +13,36 @@ import Foundation
 public protocol MessageSearching: Actor {
   /// Messages matching `query` across every conversation on a radio, newest first.
   ///
+  /// Hidden outgoing reaction carriers are excluded: their wire text quotes the message they
+  /// react to, and they are absent from the timeline, so a result pointing at one could never
+  /// be opened.
+  ///
   /// - Parameters:
   ///   - limit: Hard cap on rows returned. Always bounded — a bare substring query can
   ///     match a large fraction of the history.
-  ///   - offset: Rows to skip, for paging a long result list.
+  ///   - offset: Rows to skip, for paging a long result list. Counted in *store* rows, which
+  ///     includes the carriers a page filtered out, so a page taken at `offset: limit` can
+  ///     overlap the one before it by however many rows that page had to skip.
   /// - Returns: An empty array for a blank query; matching a blank query against every
-  ///   row is never what a caller wants.
+  ///   row is never what a caller wants. Fewer than `limit` results means these are all the
+  ///   matches there are — the implementation refills the page past filtered-out carriers, so
+  ///   callers need no separate total to know when they have them all. The refill is bounded
+  ///   (``MessageSearchLimits/carrierRefillPasses``), so a query matching *mostly* carriers can
+  ///   return a short page with more behind it rather than walking the whole history.
   func searchMessages(radioID: UUID, query: String, limit: Int, offset: Int) async throws -> [MessageSearchResult]
 
   /// How many messages match across every conversation, ignoring `limit`.
-  /// Lets a result list say "showing 50 of 312" and offer to page.
+  ///
+  /// Counts raw matches, reaction carriers included, so it can exceed what `searchMessages`
+  /// returns for the same query: it is a store-level count, not a display total.
   func searchMessagesCount(radioID: UUID, query: String) async throws -> Int
 
   /// Message ids matching `query` inside one direct-message conversation, oldest first.
   ///
   /// Ids rather than rows, and chronological rather than newest-first, because the
   /// in-conversation search steps through matches with previous/next: it needs the
-  /// positions, and the timeline already holds the content.
+  /// positions, and the timeline already holds the content. Ordering matches the timeline's,
+  /// and hidden reaction carriers are excluded, so every id can be stepped to.
   func searchMessageIDs(contactID: UUID, query: String, limit: Int) async throws -> [UUID]
 
   /// Message ids matching `query` inside one channel conversation, oldest first.
@@ -60,8 +73,14 @@ public enum MessageSearchLimits {
   /// Rows fetched per page of global results.
   public static let globalPageSize = 50
 
+  /// How many raw pages one page of results may consume. Hidden reaction carriers are
+  /// dropped after the fetch, so filling a page can take more than one; past a few passes the
+  /// query is matching carriers rather than messages and refilling costs more than it returns.
+  public static let carrierRefillPasses = 4
+
   /// Ceiling on matches collected for one conversation's previous/next navigation.
   /// Past this many hits in a single conversation the query is not selective enough for
-  /// stepping through to be useful anyway.
+  /// stepping through to be useful anyway. Truncation keeps the newest matches, which is
+  /// where stepping starts.
   public static let conversationMatches = 500
 }

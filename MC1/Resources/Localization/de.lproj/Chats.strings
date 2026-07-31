@@ -1257,6 +1257,9 @@
 /* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
 "chats.search.messages.empty" = "Keine Nachrichten gefunden";
 
+/* Location: MessageSearchResultsSection.swift - Header caption when the page is full and older matches may remain - %d is how many are on screen */
+"chats.search.messages.showingFirst" = "Erste %d werden angezeigt";
+
 /* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
 "chats.search.messages.showMore" = "%d weitere anzeigen";
 

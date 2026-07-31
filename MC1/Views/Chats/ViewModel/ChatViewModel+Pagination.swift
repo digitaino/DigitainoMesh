@@ -8,8 +8,12 @@ extension ChatViewModel {
   /// the paging sequence (spinner, fetch, dedupe, prepend, rebake); this
   /// wrapper layers the caller-side bookkeeping on top: mention-picker
   /// sender registration, reaction indexing, and the error surface.
-  func loadOlderMessages() async {
-    guard let dataStore else { return }
+  ///
+  /// Reports what the page did so a caller that pages in a loop (the search jump) can tell
+  /// progress from a no-op; scroll-driven paging ignores it.
+  @discardableResult
+  func loadOlderMessages() async -> ChatTimeline.OlderPage {
+    guard let dataStore else { return .unavailable }
 
     // Snapshot conversation context before any await — actor reentrancy
     // means currentContact/currentChannel can change during suspensions
@@ -17,8 +21,8 @@ extension ChatViewModel {
     let channel = currentChannel
 
     do {
-      let olderMessages = try await timeline.loadOlder()
-      guard !olderMessages.isEmpty else { return }
+      let page = try await timeline.loadOlder()
+      guard let olderMessages = page.loadedMessages, !olderMessages.isEmpty else { return page }
 
       // Register senders from the older page; without this, scrolling
       // back to a sender who only appears in older pages leaves them
@@ -53,9 +57,11 @@ extension ChatViewModel {
         )
       }
 
+      return page
     } catch {
       errorBannerMessage = L10n.Chats.Chats.Error.loadOlderMessagesFailed
       logger.error("Failed to load older messages: \(error)")
+      return .unavailable
     }
   }
 }

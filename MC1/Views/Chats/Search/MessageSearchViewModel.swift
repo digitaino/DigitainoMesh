@@ -28,8 +28,11 @@ final class MessageSearchViewModel {
   }
 
   private(set) var groups: [Group] = []
-  /// Total matches in the store, which can exceed what the page returned.
-  private(set) var totalCount = 0
+  /// Whether the store had more matches than this page carried, so the header can say
+  /// "showing first N" instead of a total. There is no honest cheap total to show: the page
+  /// is capped, and carriers are filtered after the fetch, so a store-side count would
+  /// disagree with the list it is captioning.
+  private(set) var hasMoreThanLoaded = false
   private(set) var isLoading = false
   /// The query the current `groups` were produced for; guards against showing stale hits
   /// under a query the user has already changed.
@@ -37,13 +40,9 @@ final class MessageSearchViewModel {
 
   private var expandedGroups: Set<MessageSearchResult.Scope> = []
 
-  /// Matches found, capped at the page size — `totalCount` is the honest total.
+  /// Matches on screen, after grouping dropped the ones no conversation claims.
   var loadedCount: Int {
     groups.reduce(0) { $0 + $1.results.count }
-  }
-
-  var hasMoreThanLoaded: Bool {
-    totalCount > loadedCount
   }
 
   func isExpanded(_ scope: MessageSearchResult.Scope) -> Bool {
@@ -84,14 +83,17 @@ final class MessageSearchViewModel {
 
     do {
       let results = try await store.searchMessages(radioID: radioID, query: trimmed)
-      let total = try await store.searchMessagesCount(radioID: radioID, query: trimmed)
       guard !Task.isCancelled else { return }
       groups = Self.group(results, name: conversationName)
-      totalCount = total
+      // A short page is every match there is, so nothing else has to be asked of the store —
+      // the count query is an unindexable full scan on the one persistence actor, and it ran
+      // per settled keystroke. (A query matching mostly reaction carriers can return a short
+      // page with more behind it; the cost of that is one missing caption.)
+      hasMoreThanLoaded = results.count >= MessageSearchLimits.globalPageSize
     } catch {
       // A failed search shows nothing rather than the previous query's hits.
       groups = []
-      totalCount = 0
+      hasMoreThanLoaded = false
     }
     expandedGroups.removeAll()
     resolvedQuery = trimmed
@@ -99,7 +101,7 @@ final class MessageSearchViewModel {
 
   func clear() {
     groups = []
-    totalCount = 0
+    hasMoreThanLoaded = false
     expandedGroups.removeAll()
     resolvedQuery = ""
   }

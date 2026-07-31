@@ -1255,6 +1255,9 @@
 /* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
 "chats.search.messages.empty" = "未找到消息";
 
+/* Location: MessageSearchResultsSection.swift - Header caption when the page is full and older matches may remain - %d is how many are on screen */
+"chats.search.messages.showingFirst" = "显示前 %d 条";
+
 /* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
 "chats.search.messages.showMore" = "再显示 %d 条";
 

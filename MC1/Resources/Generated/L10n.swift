@@ -1010,9 +1010,9 @@ public enum L10n {
           public static let empty = L10n.tr("Chats", "chats.search.messages.empty", fallback: "No messages found")
           /// Location: MessageSearchResultsSection.swift - Header above the message hits in the chats-list search results
           public static let section = L10n.tr("Chats", "chats.search.messages.section", fallback: "Messages")
-          /// Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total
-          public static func showingCount(_ p1: Int, _ p2: Int) -> String {
-            return L10n.tr("Chats", "chats.search.messages.showingCount", p1, p2, fallback: "Showing %1$d of %2$d")
+          /// Location: MessageSearchResultsSection.swift - Header caption when the page is full and older matches may remain - %d is how many are on screen
+          public static func showingFirst(_ p1: Int) -> String {
+            return L10n.tr("Chats", "chats.search.messages.showingFirst", p1, fallback: "Showing first %d")
           }
           /// Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are
           public static func showMore(_ p1: Int) -> String {

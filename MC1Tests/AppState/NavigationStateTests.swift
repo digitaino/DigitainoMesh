@@ -97,7 +97,7 @@ struct NavigationStateTests {
     #expect(appState.navigation.pendingRoomAuthentication == nil)
     #expect(appState.navigation.pendingDiscoveryNavigation == false)
     #expect(appState.navigation.pendingContactDetail == nil)
-    #expect(appState.navigation.pendingScrollToMessageID == nil)
+    #expect(appState.navigation.pendingMessageScroll == nil)
     #expect(appState.navigation.chatsSelectedRoute == nil)
     #expect(appState.navigation.tabBarVisibility == .visible)
   }
@@ -115,7 +115,7 @@ struct NavigationStateTests {
     #expect(appState.navigation.chatsSelectedRoute == .direct(contact))
     #expect(appState.navigation.selectedTab == 0)
     #expect(appState.navigation.tabBarVisibility == .hidden)
-    #expect(appState.navigation.pendingScrollToMessageID == nil)
+    #expect(appState.navigation.pendingMessageScroll == nil)
   }
 
   @Test
@@ -127,7 +127,8 @@ struct NavigationStateTests {
     appState.navigation.navigateToChat(with: contact, scrollToMessageID: messageID)
 
     #expect(appState.navigation.pendingChatContact == contact)
-    #expect(appState.navigation.pendingScrollToMessageID == messageID)
+    // Tagged with the conversation that armed it, so no other chat can consume it.
+    #expect(appState.navigation.pendingMessageScroll == .init(conversationID: contact.id, messageID: messageID))
     #expect(appState.navigation.chatsSelectedRoute == .direct(contact))
     #expect(appState.navigation.selectedTab == 0)
   }
@@ -172,7 +173,7 @@ struct NavigationStateTests {
     #expect(appState.navigation.chatsSelectedRoute == .channel(channel))
     #expect(appState.navigation.selectedTab == 0)
     #expect(appState.navigation.tabBarVisibility == .hidden)
-    #expect(appState.navigation.pendingScrollToMessageID == nil)
+    #expect(appState.navigation.pendingMessageScroll == nil)
   }
 
   @Test
@@ -184,7 +185,7 @@ struct NavigationStateTests {
     appState.navigation.navigateToChannel(with: channel, scrollToMessageID: messageID)
 
     #expect(appState.navigation.pendingChannel == channel)
-    #expect(appState.navigation.pendingScrollToMessageID == messageID)
+    #expect(appState.navigation.pendingMessageScroll == .init(conversationID: channel.id, messageID: messageID))
   }
 
   // MARK: - navigateToDiscovery
@@ -286,13 +287,13 @@ struct NavigationStateTests {
   }
 
   @Test
-  func `clearPendingScrollToMessage clears message ID`() {
+  func `clearPendingMessageScroll clears the pending target`() {
     let appState = AppState()
-    appState.navigation.pendingScrollToMessageID = UUID()
+    appState.navigation.pendingMessageScroll = .init(conversationID: UUID(), messageID: UUID())
 
-    appState.navigation.clearPendingScrollToMessage()
+    appState.navigation.clearPendingMessageScroll()
 
-    #expect(appState.navigation.pendingScrollToMessageID == nil)
+    #expect(appState.navigation.pendingMessageScroll == nil)
   }
 
   @Test

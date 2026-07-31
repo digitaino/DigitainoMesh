@@ -29,18 +29,37 @@ enum ChatMessageSearchNavigator {
     /// The budget expired first. The caller leaves the timeline where it is rather than
     /// jumping somewhere arbitrary.
     case timedOut
+    /// A newer jump superseded this one. The caller must not touch the scroll target: the
+    /// jump that replaced it owns where the list ends up.
+    case cancelled
   }
 
   /// Pages older messages in until `messageID` is loaded.
-  static func loadUntilVisible(_ messageID: UUID, in viewModel: ChatViewModel) async -> Outcome {
+  ///
+  /// - Parameter budget: How long paging may run. Overridden only by tests.
+  static func loadUntilVisible(
+    _ messageID: UUID,
+    in viewModel: ChatViewModel,
+    budget: Duration = pagingBudget
+  ) async -> Outcome {
     if viewModel.itemIndexByID[messageID] != nil { return .loaded }
 
-    let deadline = ContinuousClock.now + pagingBudget
+    let deadline = ContinuousClock.now + budget
     while viewModel.itemIndexByID[messageID] == nil {
-      guard viewModel.hasMoreMessages else { return .notFound }
+      guard !Task.isCancelled else { return .cancelled }
       guard ContinuousClock.now < deadline else { return .timedOut }
-      guard !Task.isCancelled else { return .timedOut }
-      await viewModel.loadOlderMessages()
+
+      switch await viewModel.loadOlderMessages() {
+      case .loaded:
+        continue
+      case .skippedBusy:
+        // Every step of paging is main-actor work, so the load already in flight can only
+        // reach its continuation if this loop hands the actor back. Without the yield the
+        // retry loop and the holder deadlock each other for the whole budget.
+        await Task.yield()
+      case .endOfHistory, .unavailable:
+        return .notFound
+      }
     }
     return .loaded
   }

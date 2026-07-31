@@ -1263,8 +1263,8 @@
 /* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
 "chats.search.messages.empty" = "No messages found";
 
-/* Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total */
-"chats.search.messages.showingCount" = "Showing %1$d of %2$d";
+/* Location: MessageSearchResultsSection.swift - Header caption when the page is full and older matches may remain - %d is how many are on screen */
+"chats.search.messages.showingFirst" = "Showing first %d";
 
 /* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
 "chats.search.messages.showMore" = "Show %d more";
