@@ -106,9 +106,9 @@ public actor SyncRegistryProbe {
   // MARK: - Helpers
 
   /// Whether the error is the device saying "I don't know this opcode" rather than a
-  /// transport problem.
+  /// transport problem. Other device errors (busy, bad state) stay inconclusive so a
+  /// late or unrelated error frame can't latch a supporting radio as unsupported.
   private func isRejection(_ error: MeshCoreError) -> Bool {
-    if case .deviceError = error { return true }
-    return false
+    error.deviceErrorCode == .unsupportedCommand
   }
 }

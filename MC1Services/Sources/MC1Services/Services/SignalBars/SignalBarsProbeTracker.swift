@@ -38,6 +38,21 @@ struct SignalBarsProbeTracker: Sendable, Equatable {
     )
   }
 
+  /// Replaces an outstanding probe's deadline, keeping its original send time.
+  ///
+  /// A tag that is no longer outstanding — a reply already claimed it, or a sweep already
+  /// wrote it off — is left alone: re-registering it would hand the next sweep a probe that
+  /// is already resolved to fail.
+  mutating func retime(tag: UInt32, timeoutMs: Int) {
+    guard let probe = probes[tag] else { return }
+    probes[tag] = Probe(
+      tag: probe.tag,
+      target: probe.target,
+      sentAt: probe.sentAt,
+      deadline: probe.sentAt.addingTimeInterval(Double(timeoutMs) / 1000)
+    )
+  }
+
   /// Claims the probe a reply belongs to, removing it. Returns `nil` for a tag that is not
   /// ours or has already timed out, so late and unsolicited replies are ignored.
   mutating func claim(tag: UInt32) -> Probe? {

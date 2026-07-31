@@ -86,22 +86,13 @@ public struct SignalBarsPolicy: Sendable, Equatable {
     var choice: (repeater: RepeaterSignal, urgency: TimeInterval)?
 
     for repeater in repeaters {
-      guard repeater.publicKey != nil else { continue }
-      guard !repeater.isMeasuring else { continue }
       let isBest = bestID.map { repeater.id == $0 } ?? false
-      guard let interval = probeInterval(for: repeater, isBest: isBest, movement: movement) else {
-        continue
-      }
-
-      let urgency: TimeInterval
-      if repeater.txState == .unknown {
-        urgency = -.infinity
-      } else {
-        let elapsed = now.timeIntervalSince(repeater.lastProbeAt ?? .distantPast)
-        let overdue = elapsed - interval
-        guard overdue >= 0 else { continue }
-        urgency = -overdue
-      }
+      guard let urgency = probeUrgency(
+        for: repeater,
+        isBest: isBest,
+        now: now,
+        movement: movement
+      ) else { continue }
 
       if choice == nil || urgency < choice!.urgency {
         choice = (repeater, urgency)
@@ -109,6 +100,30 @@ public struct SignalBarsPolicy: Sendable, Equatable {
     }
 
     return choice?.repeater
+  }
+
+  /// How badly this repeater needs a probe, as a sort key where lower goes first, or `nil` when
+  /// it must not be probed at all right now: unprobeable, already in flight, burnt out, or
+  /// still inside its interval.
+  ///
+  /// Exposed so a caller with an ordering preference of its own — the engine's newly promoted
+  /// best link — asks whether a row is due instead of reaching around the cadence and the
+  /// failure ladder to probe it.
+  public func probeUrgency(
+    for repeater: RepeaterSignal,
+    isBest: Bool,
+    now: Date,
+    movement: MovementHint
+  ) -> TimeInterval? {
+    guard repeater.publicKey != nil else { return nil }
+    guard !repeater.isMeasuring else { return nil }
+    guard let interval = probeInterval(for: repeater, isBest: isBest, movement: movement) else {
+      return nil
+    }
+    // A never-measured TX leg is the biggest gap in the table, so it outranks any overdue row.
+    guard repeater.txState != .unknown else { return -TimeInterval.infinity }
+    let overdue = now.timeIntervalSince(repeater.lastProbeAt ?? .distantPast) - interval
+    return overdue >= 0 ? -overdue : nil
   }
 
   /// Whether hearing this repeater should schedule a reactive probe.

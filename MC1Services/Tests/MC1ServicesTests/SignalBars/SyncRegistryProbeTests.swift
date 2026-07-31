@@ -73,6 +73,15 @@ struct SyncRegistryProbeTests {
   }
 
   @Test
+  func `a device error that is not an opcode rejection leaves the classification unknown`() async {
+    let session = MockSyncRegistrySession(listSyncResult: .failure(MeshCoreError.deviceError(code: 0)))
+    let probe = SyncRegistryProbe(session: session)
+
+    #expect(await probe.probe() == .unknown)
+    #expect(await probe.advertisedSlots.isEmpty)
+  }
+
+  @Test
   func `a timeout leaves the classification unknown`() async {
     let session = MockSyncRegistrySession(listSyncResult: .failure(SyncRegistryFixtures.timeout))
     let probe = SyncRegistryProbe(session: session)

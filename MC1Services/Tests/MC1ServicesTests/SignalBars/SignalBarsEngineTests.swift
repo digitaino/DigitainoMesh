@@ -85,13 +85,16 @@ struct SignalBarsEngineTests {
   }
 
   @Test
-  func `A changed device table is a fresh sighting`() async {
+  func `A table the radio heard again is a fresh sighting`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let clock = TestClock()
+    let engine = makeEngine(session: session, clock: clock, mode: .viewer)
 
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x0C], rxSnrX4: 8)
     ])))
+    // Still age 0 five seconds later: the device is reporting a repeater it keeps hearing.
+    clock.advance(5)
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x0C], rxSnrX4: 24)
     ])))
@@ -99,6 +102,90 @@ struct SignalBarsEngineTests {
     let snapshot = await engine.currentSnapshot()
     #expect(snapshot.rxFlashTick == 2)
     #expect(snapshot.repeaters.first?.rxSnr == 6)
+  }
+
+  @Test
+  func `A silent repeater aging between polls is not a fresh sighting`() async throws {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let engine = makeEngine(session: session, clock: clock, mode: .viewer)
+    try await engine.watchRepeater(hexID("0C"))
+    await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
+      SignalBarsFixtures.entry(hash: [0x0C], ageSeconds: 100)
+    ])))
+    let first = await engine.currentSnapshot()
+
+    clock.advance(5)
+    await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
+      SignalBarsFixtures.entry(hash: [0x0C], ageSeconds: 105)
+    ])))
+
+    let second = await engine.currentSnapshot()
+    #expect(second.rxFlashTick == first.rxFlashTick, "only the age advanced")
+    #expect(
+      second.watched?.heardCount == first.watched?.heardCount,
+      "a watch tone every five seconds on a repeater nobody heard is the bug this guards"
+    )
+    #expect(second.watched?.lastHeardAt == clock.now.addingTimeInterval(-105))
+  }
+
+  @Test
+  func `A repeater whose age dropped since the last poll was heard again`() async throws {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let engine = makeEngine(session: session, clock: clock, mode: .viewer)
+    try await engine.watchRepeater(hexID("0C"))
+    await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
+      SignalBarsFixtures.entry(hash: [0x0C], ageSeconds: 100)
+    ])))
+
+    clock.advance(5)
+    await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
+      SignalBarsFixtures.entry(hash: [0x0C], ageSeconds: 2)
+    ])))
+
+    let snapshot = await engine.currentSnapshot()
+    #expect(snapshot.rxFlashTick == 2)
+    #expect(snapshot.watched?.heardCount == 2)
+    #expect(snapshot.watched?.lastHeardAt == clock.now.addingTimeInterval(-2))
+  }
+
+  @Test
+  func `A watched leg the device has no measurement for keeps the last reading`() async throws {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let engine = makeEngine(session: session, clock: clock, mode: .viewer)
+    try await engine.watchRepeater(hexID("0C"))
+    await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
+      SignalBarsFixtures.entry(hash: [0x0C], rxSnrX4: 20, txSnrX4: 8, hasTx: true)
+    ])))
+    #expect(await engine.currentSnapshot().watched?.rxSnr == 5)
+
+    clock.advance(5)
+    await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
+      SignalBarsFixtures.entry(hash: [0x0C], hasRx: false)
+    ])))
+
+    let watched = try #require(await engine.currentSnapshot().watched)
+    #expect(watched.heardCount == 2)
+    #expect(watched.rxSnr == 5, "an unmeasured RX leg preserves the last reading, as TX does")
+    #expect(watched.txSnr == 2)
+  }
+
+  @Test
+  func `A watched repeater with no measurement at all reads as no data, not zero`() async throws {
+    let session = MockSignalBarsSession()
+    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    try await engine.watchRepeater(hexID("0C"))
+
+    await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
+      SignalBarsFixtures.entry(hash: [0x0C], hasRx: false)
+    ])))
+
+    let watched = try #require(await engine.currentSnapshot().watched)
+    #expect(watched.heardCount == 1)
+    #expect(watched.rxSnr == nil, "0.0 dB would render as a real, fair-looking reading")
+    #expect(watched.rxQuality == .unknown)
   }
 
   @Test
@@ -341,6 +428,103 @@ struct SignalBarsEngineTests {
     let entry = try #require(await engine.currentSnapshot().repeaters.first)
     #expect(entry.txState == .failed)
     #expect(entry.failCount == 1)
+  }
+
+  @Test
+  func `A probe timeout leaves a measurement that arrived while it was in flight alone`() async throws {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let engine = makeEngine(session: session, clock: clock)
+    await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+      publicKey: SignalBarsFixtures.publicKey([0x0C]),
+      snrIn: 2
+    )))
+    await engine.runCycle()
+
+    // A discover response answers the TX leg while the trace is still outstanding.
+    clock.advance(1)
+    await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+      publicKey: SignalBarsFixtures.publicKey([0x0C]),
+      snrIn: 6
+    )))
+    clock.advance(5)
+    await engine.expireProbes(now: clock.now)
+
+    let entry = try #require(await engine.currentSnapshot().repeaters.first)
+    #expect(entry.txSnr == 6)
+    #expect(entry.txState == .measured(SNRQuality(snr: 6)))
+    #expect(entry.failCount == 0, "the link answered; the timeout is stale news about it")
+  }
+
+  @Test
+  func `Best-link flapping cannot probe faster than the cadence allows`() async throws {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let engine = makeEngine(session: session, clock: clock)
+    for byte in [UInt8(0x01), 0x02] {
+      await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+        publicKey: SignalBarsFixtures.publicKey([byte])
+      )))
+    }
+    // Measure both, so neither is the "never probed" case that outranks everything anyway.
+    for _ in 0..<2 {
+      await engine.runCycle()
+      let tag = try #require(await session.traces.last?.tag)
+      await engine.ingest(.rxLogData(SignalBarsFixtures.traceReply(tag: tag)))
+      clock.advance(1)
+    }
+    #expect(await session.traces.count == 2)
+
+    // Two comparably scored repeaters trading places, once a second.
+    for step in 0..<10 {
+      await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+        publicKey: SignalBarsFixtures.publicKey([step.isMultiple(of: 2) ? 0x01 : 0x02]),
+        snr: 20,
+        snrIn: 20
+      )))
+      clock.advance(1)
+      await engine.runCycle()
+    }
+    #expect(
+      await session.traces.count == 2,
+      "a promotion re-orders the probe queue; it does not bring the probe clock forward"
+    )
+
+    clock.advance(45)
+    await engine.runCycle()
+    #expect(await session.traces.count == 3, "the cadence itself still comes due")
+  }
+
+  @Test
+  func `A promoted best link still waits out its failure backoff`() async {
+    let session = MockSignalBarsSession()
+    let clock = TestClock()
+    let engine = makeEngine(session: session, clock: clock)
+    // One probeable repeater and one the app can only hear, so the failed link can still
+    // reach the head of the table.
+    await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+      publicKey: SignalBarsFixtures.publicKey([0x01]),
+      snr: 2,
+      snrIn: 2
+    )))
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0xBB], snr: 10)))
+
+    await engine.runCycle()
+    clock.advance(6)
+    await engine.expireProbes(now: clock.now)
+    let failed = await engine.currentSnapshot().repeaters.first(where: { $0.hexID == "01" })
+    #expect(failed?.failCount == 1)
+
+    // Heard strongly enough to lead the table again, which promotes it.
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x01], snr: 40)))
+    #expect(await engine.currentSnapshot().best?.hexID == "01")
+
+    await engine.runCycle()
+    #expect(await session.traces.count == 1, "the 20-second backoff outranks the promotion")
+
+    clock.advance(15)
+    await engine.runCycle()
+    #expect(await session.traces.count == 2, "and once the backoff is served, the probe goes out")
   }
 
   @Test
