@@ -131,6 +131,47 @@ struct ChatNoRepeatsRetryCardTests {
   }
 
   @Test
+  func `signal bars detaching inside the window offers no card`() async {
+    let (viewModel, coordinator) = makeViewModel()
+    let message = makeChannelMessage()
+    coordinator.replaceAllForTesting([message])
+    viewModel.buildItems()
+    await coordinator.buildItemsTask?.value
+
+    viewModel.noteSendResolved(messageID: message.id, status: .sent)
+    #expect(viewModel.noRepeatsDetector.policy.armedMessageID == message.id)
+
+    // Signal bars go away while the window runs; the verdict now rests on nothing.
+    viewModel.signalDataAvailableProvider = { false }
+    viewModel.noRepeatsDetector.fireWindowForTesting()
+
+    #expect(viewModel.noRepeatsDetector.promptedMessageID == nil)
+    #expect(viewModel.noRepeatsDetector.policy.armedMessageID == nil)
+    #expect(viewModel.items.first?.footer.noRepeatsRetry == nil)
+  }
+
+  @Test
+  func `a card offered before a detach is still retired by Send Again`() async {
+    let (viewModel, coordinator) = makeViewModel()
+    let message = makeChannelMessage()
+    coordinator.replaceAllForTesting([message])
+    viewModel.buildItems()
+    await coordinator.buildItemsTask?.value
+
+    viewModel.noteSendResolved(messageID: message.id, status: .sent)
+    viewModel.noRepeatsDetector.fireWindowForTesting()
+    #expect(viewModel.items.first?.footer.noRepeatsRetry != nil)
+
+    // Retirement must not be gated: with the gate closed the card's own button would be
+    // the last input dropped, leaving it stuck until a conversation switch.
+    viewModel.signalDataAvailableProvider = { false }
+    viewModel.noteResendRequested(messageID: message.id)
+
+    #expect(viewModel.noRepeatsDetector.promptedMessageID == nil)
+    #expect(viewModel.items.first?.footer.noRepeatsRetry == nil)
+  }
+
+  @Test
   func `with signal data a resolved channel send arms the detector`() async {
     let (viewModel, coordinator) = makeViewModel()
     let message = makeChannelMessage()

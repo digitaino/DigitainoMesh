@@ -79,6 +79,36 @@ struct ChatNoRepeatsDetectorTests {
     #expect(recorder.values.isEmpty)
   }
 
+  @Test
+  func `a window firing after signal data went away retires instead of prompting`() async {
+    // The owner's gate only sees the input on the way in; signal bars can detach while the
+    // window runs, and a card offered then could never be retired by the evidence that is
+    // no longer arriving.
+    let (detector, recorder) = makeImmediateDetector()
+    var available = true
+    detector.isPromptAvailable = { available }
+
+    detector.handle(sent(Self.messageA))
+    available = false
+    await detector.awaitWindowForTesting()
+
+    #expect(detector.promptedMessageID == nil)
+    #expect(detector.policy.armedMessageID == nil)
+    #expect(recorder.values.isEmpty)
+  }
+
+  @Test
+  func `an available connection still prompts through the same check`() async {
+    let (detector, recorder) = makeImmediateDetector()
+    detector.isPromptAvailable = { true }
+
+    detector.handle(sent(Self.messageA))
+    await detector.awaitWindowForTesting()
+
+    #expect(detector.promptedMessageID == Self.messageA)
+    #expect(recorder.values == [Self.messageA])
+  }
+
   // MARK: - Window ownership
 
   @Test

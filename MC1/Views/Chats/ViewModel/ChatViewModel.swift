@@ -400,6 +400,11 @@ final class ChatViewModel {
     noRepeatsDetector.onPromptChange = { [weak self] messageID in
       self?.applyNoRepeatsPrompt(messageID)
     }
+    // Re-checked when the window fires: signal bars can detach while it runs, and a card
+    // offered then would have no evidence behind it.
+    noRepeatsDetector.isPromptAvailable = { [weak self] in
+      self?.signalDataAvailableProvider() ?? false
+    }
   }
 
   /// Forwards a map-thumbnail tap to the same navigation sink the coordinate

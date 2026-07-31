@@ -11,16 +11,20 @@ import MC1Services
 extension ChatViewModel {
   // MARK: - Feeding the detector
 
-  /// Routes one observation to the detector, dropping it when the connection has no
-  /// repeater signal data.
+  /// Routes one observation to the detector, dropping an *arming* observation when the
+  /// connection has no repeater signal data.
   ///
   /// The gate is `AppState.repeaterSignals.isAttached`, which is true exactly when the
   /// signal-bars engine is running for this connection — engine mode or viewer mode, per
   /// `SyncRegistryProbe.signalBarsMode()`. When it is false (signal bars switched off for
-  /// the device, or no connection) nothing is fed, so no window task is ever created and
-  /// no card can appear: inert at zero cost, not merely hidden.
+  /// the device, or no connection) no send arms the detector, so no window task is ever
+  /// created and no card can appear: inert at zero cost, not merely hidden.
+  ///
+  /// Retirement inputs pass regardless. Gating those too would strand a card offered while
+  /// signal bars were still attached — including the card's own Send Again button, whose
+  /// `.resendRequested` is what retires it.
   func noteNoRepeatsInput(_ input: ChatNoRepeatsInput) {
-    guard signalDataAvailableProvider() else { return }
+    guard input.isRetirement || signalDataAvailableProvider() else { return }
     noRepeatsDetector.handle(input)
   }
 
