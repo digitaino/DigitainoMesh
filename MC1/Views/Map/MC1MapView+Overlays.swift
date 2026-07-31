@@ -21,9 +21,13 @@ enum MapOverlayID {
     "overlay-\(overlay)-circle"
   }
 
+  static func fillLayer(_ overlay: String) -> String {
+    "overlay-\(overlay)-fill"
+  }
+
   /// Every layer an overlay may own, casing first so teardown order matches build order.
   static func layers(_ overlay: String) -> [String] {
-    [casingLayer(overlay), lineLayer(overlay), circleLayer(overlay)]
+    [casingLayer(overlay), lineLayer(overlay), circleLayer(overlay), fillLayer(overlay)]
   }
 }
 
@@ -143,6 +147,15 @@ extension MC1MapView.Coordinator {
       layer.circleStrokeColor = NSExpression(forConstantValue: paint.strokeColor)
       layer.circleStrokeWidth = NSExpression(forConstantValue: paint.strokeWidth)
       insert(layer, into: style, below: anchor)
+
+    case let .weightedFill(paint):
+      let layer = MLNFillStyleLayer(identifier: MapOverlayID.fillLayer(overlay.id), source: source)
+      layer.fillColor = NSExpression(forConstantValue: paint.color)
+      layer.fillOpacity = ramp(weight, from: paint.opacity.lowerBound, to: paint.opacity.upperBound)
+      if let outlineColor = paint.outlineColor {
+        layer.fillOutlineColor = NSExpression(forConstantValue: outlineColor)
+      }
+      insert(layer, into: style, below: anchor)
     }
   }
 
@@ -179,6 +192,10 @@ extension MC1MapView.Coordinator {
       let point = MLNPointFeature()
       point.coordinate = coordinate
       shape = point
+    case let .polygon(coordinates):
+      guard coordinates.count >= 3 else { return nil }
+      var coords = coordinates
+      shape = MLNPolygonFeature(coordinates: &coords, count: UInt(coords.count))
     }
     shape.attributes = [
       "overlayFeatureID": feature.id,

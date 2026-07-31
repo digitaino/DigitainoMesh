@@ -303,6 +303,19 @@ final class AppState {
   /// the wiring path so a `listSync` timeout can't stall connection setup.
   var signalBarsStartTask: Task<Void, Never>?
 
+  /// The per-connection signal-mapper capture engine, or nil while capture is off (which
+  /// is the default, and the only state a release build reaches today). Rebuilt per
+  /// connection because its RX source is.
+  var signalMapperEngine: SignalMapperCaptureEngine?
+
+  /// The cached-fix layer feeding the engine above. Held so teardown can clear it and a
+  /// stale fix cannot tag the first packet of the next session.
+  var signalMapperFixCache: MapperFixCache?
+
+  /// Serializes signal-mapper start/stop transitions, the same way
+  /// `signalBarsStartTask` does for the bars engine.
+  var signalMapperStartTask: Task<Void, Never>?
+
   #if DEBUG
     /// Optional test-only hooks for deterministic lifecycle ordering tests.
     var bleEnterBackgroundOverride: (@MainActor () async -> Void)?
@@ -541,6 +554,7 @@ final class AppState {
     rxLogEventsTask?.cancel()
     rxLogEventsTask = nil
     tearDownSignalBars()
+    tearDownSignalMapper()
     messageEventDispatcher.cancelAll()
     chatCoordinatorRegistry?.tearDown()
     chatCoordinatorRegistry = nil
@@ -619,6 +633,7 @@ final class AppState {
     wireSyncDataEvents(services: services)
     configureAdaptivePower(services: services)
     wireSignalBars(services: services)
+    wireSignalMapper(services: services)
     await wireSettingsEventStream(services: services)
     await wireDeviceUpdateCallbacks(services: services)
     wireMessageEvents(services: services)

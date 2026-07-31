@@ -16,6 +16,11 @@ struct SettingsListContent: View {
   let isSidebar: Bool
   private let liveActivityTip = LiveActivityTip()
 
+  #if DEBUG
+    /// Presentation of the debug-only signal mapper panel.
+    @State private var showingSignalMapperDebug = false
+  #endif
+
   /// Drives the iPad split's selected settings page. The compact stack leaves it nil — inside a
   /// `NavigationStack` a value-based `NavigationLink` drives the stack path (via `SettingsView`'s
   /// `navigationDestination`), not the list selection — so persistent selection stays iPad-only.
@@ -134,10 +139,29 @@ struct SettingsListContent: View {
         } label: {
           TintedLabel("Reset Onboarding", systemImage: "arrow.counterclockwise")
         }
+
+        // Sheet rather than a push: this list is hosted by both the compact stack and the
+        // iPad sidebar's selection-driven split, and a debug leaf is not worth a
+        // `SettingsDetail` case in both.
+        Button {
+          showingSignalMapperDebug = true
+        } label: {
+          TintedLabel("Signal Mapper (debug)", systemImage: "hexagon")
+        }
       } header: {
         Text("Debug")
       }
       .themedRowBackground(theme, flatten: isSidebar)
+      .sheet(isPresented: $showingSignalMapperDebug) {
+        NavigationStack {
+          SignalMapperDebugView()
+            .toolbar {
+              ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { showingSignalMapperDebug = false }
+              }
+            }
+        }
+      }
     #endif
 
     Section {} footer: {

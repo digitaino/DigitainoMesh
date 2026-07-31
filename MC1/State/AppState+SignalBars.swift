@@ -59,7 +59,12 @@ extension AppState {
     let previousTransition = signalBarsStartTask
     previousTransition?.cancel()
     signalBarsStartTask = nil
-    movementHintMonitor.stop()
+    // The motion monitor is shared, so it stops only when *no* consumer wants it. Signal
+    // bars used to be the only one and could stop it unilaterally; the signal mapper reads
+    // the same hints now, and switching bars off must not silently blind it.
+    if !signalMapperNeedsMovementHints {
+      movementHintMonitor.stop()
+    }
     repeaterSignals.detach()
 
     // Detaching the façade only stops the *display*: the engine's own loops keep broadcasting
@@ -79,7 +84,8 @@ extension AppState {
   /// Connecting a radio is not consent to a Motion & Fitness prompt, and on an auto-reconnect
   /// it would land over the launch screen. So the connect path starts the monitor only when
   /// permission already exists; when it does not, the hint stays stationary — which merely
-  /// means probes run at their base cadence — until the user opens the signal table.
+  /// means probes run at their base cadence — until the user opens the signal table, or
+  /// turns the signal mapper's capture on (`requestMapperMovementHintsIfNeeded()`).
   func startMovementHintsIfAlreadyPermitted() {
     guard MovementHintMonitor.authorization == .authorized else { return }
     guard let services, !movementHintMonitor.isRunning else { return }
@@ -108,7 +114,11 @@ extension AppState {
   /// de-duplicate: `MotionHintService` is inert unless the radio advertises the slot, and
   /// the relay is free to update. That is simpler — and less fragile across a mode change —
   /// than legacy's either/or routing.
-  private func startMovementHints(services: ServiceContainer) {
+  ///
+  /// Not private: the signal mapper starts the same monitor for its own reasons, and both
+  /// features route through this one implementation so there is a single place that decides
+  /// what a movement reading is worth.
+  func startMovementHints(services: ServiceContainer) {
     // Capture the two actors rather than the container, so the monitor's callback does not
     // pin the whole per-connection service graph until it is torn down.
     let relay = services.movementHintRelay

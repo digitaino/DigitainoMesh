@@ -77,6 +77,7 @@ public actor PersistenceStore: PersistenceStoreProtocol {
     NodeStatusSnapshot.self,
     BlockedChannelSender.self,
     PendingSend.self,
+    MapperCellObservation.self,
     // Dormant, data-preservation only — no UI, no services, no queries. Build 40
     // stores carry these tables; omitting them from the schema would let lightweight
     // migration drop the rows on the in-place update. See the model doc comments.
@@ -111,6 +112,10 @@ public actor PersistenceStore: PersistenceStoreProtocol {
   ///          the ingest pipeline stamps them on live deliveries and the path map
   ///          reads them (no schema change; see Message.swift). The rest stay
   ///          dormant — nothing reads them.
+  /// - v7→v8: Added MapperCellObservation (new table for the signal mapper's per-cell,
+  ///          per-UTC-day observations — docs/SIGNAL_MAPPER_V2.md §2.1). Purely additive;
+  ///          no existing row or column is touched, least of all the dormant Build 40
+  ///          survey tables, which the mapper never reads.
   public static func createContainer(inMemory: Bool = false) throws -> ModelContainer {
     if !inMemory {
       let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

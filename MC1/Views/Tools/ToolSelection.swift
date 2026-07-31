@@ -9,6 +9,7 @@ enum ToolSelection: Hashable, CaseIterable {
   case lineOfSight
   case rxLog
   case trafficHeatmap
+  case signalMapper
   case noiseFloor
   case nodeDiscovery
   case cli
@@ -20,6 +21,7 @@ enum ToolSelection: Hashable, CaseIterable {
     case .lineOfSight: L10n.Tools.Tools.lineOfSight
     case .rxLog: L10n.Tools.Tools.rxLog
     case .trafficHeatmap: L10n.Tools.Tools.trafficMap
+    case .signalMapper: L10n.Tools.Tools.signalMapper
     case .noiseFloor: L10n.Tools.Tools.noiseFloor
     case .nodeDiscovery: L10n.Tools.Tools.nodeDiscovery
     case .cli: L10n.Tools.Tools.cli
@@ -33,15 +35,18 @@ enum ToolSelection: Hashable, CaseIterable {
     case .lineOfSight: "eye"
     case .rxLog: "waveform.badge.magnifyingglass"
     case .trafficHeatmap: "point.3.filled.connected.trianglepath.dotted"
+    case .signalMapper: "hexagon.righthalf.filled"
     case .noiseFloor: "waveform"
     case .nodeDiscovery: "dot.radiowaves.left.and.right"
     case .cli: "terminal"
     }
   }
 
-  /// Line of Sight runs its analysis offline; every other tool needs a connected radio.
+  /// Line of Sight runs its analysis offline, and the Signal Mapper reads coverage that was
+  /// captured on earlier walks — cells belong to places, not to whichever radio was paired
+  /// at the time. Every other tool needs a connected radio.
   var requiresRadio: Bool {
-    self != .lineOfSight
+    self != .lineOfSight && self != .signalMapper
   }
 
   /// Tools that collapse the iPad section's sidebar when open, reclaiming its width. Line of Sight
