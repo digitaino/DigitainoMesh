@@ -10,15 +10,16 @@ extension AppState {
   /// Called from two places, because the check needs both halves and either can land first:
   /// `onDeviceSynced` (the radio reached ready and its `SelfInfo` location is mirrored into
   /// the Device row) and `ContentView`'s observation of `locationService.currentLocation`.
-  /// When the radio has a location but the phone has no fix yet, this also asks for one, so
-  /// the second half actually arrives instead of waiting for some other screen to request it.
+  /// When the radio has a location but the phone's fix is missing or too old to write, this
+  /// also asks for one, so the second half actually arrives instead of waiting for some other
+  /// screen to request it.
   func evaluateNodeLocationStaleness() {
-    nodeLocationPrompt.evaluate(
+    let needsFreshFix = nodeLocationPrompt.evaluate(
       device: connectedDevice,
       phoneLocation: locationService.currentLocation
     )
 
-    if locationService.currentLocation == nil, connectedDevice?.hasLocation == true {
+    if needsFreshFix {
       locationService.requestLocation()
     }
   }
@@ -27,8 +28,16 @@ extension AppState {
   /// path the Settings location editor uses, so the Device row refreshes from the returned
   /// `SelfInfo` via the settings event stream. Failure is non-fatal — an error haptic, and
   /// the offer returns on the next connect because no snooze is recorded.
-  func applyPendingNodeLocation() async {
-    guard let pending = nodeLocationPrompt.pending else { return }
+  ///
+  /// The prompt comes in as an argument rather than off `nodeLocationPrompt`: dismissal runs
+  /// the alert binding's setter, which clears `pending`, and SwiftUI does that before this task
+  /// body starts — so `pending` is always nil by the time the write would read it.
+  func applyPendingNodeLocation(_ pending: PendingNodeLocationPrompt) async {
+    guard NodeLocationStalenessPolicy.isFixFresh(pending.fixDate, now: Date()) else {
+      logger.warning("Node location update skipped — the captured phone fix aged out")
+      nodeLocationPrompt.markUpdateFailed()
+      return
+    }
     guard let settingsService = services?.settingsService else {
       logger.warning("Node location update skipped — no settings service")
       nodeLocationPrompt.markUpdateFailed()

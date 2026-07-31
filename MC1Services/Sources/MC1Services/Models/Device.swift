@@ -350,11 +350,10 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable, Codable {
   }
 
   /// Hash size per hop in trace packets (1, 2, or 3 bytes), derived from ``pathHashMode``.
-  /// Same `mode + 1` encoding as ``hashSize``; clamped to `1...3` so a reserved mode 3
-  /// never produces an oversized prefix. (Previously used `1 << pathHashMode`, which built
-  /// a 4-byte prefix for 3-byte mode and broke traces.)
+  /// The trace parser and the Trace Path tool read the same derivation, so a probe's hop
+  /// width and the width its reply is split at can never disagree.
   public var traceHashSize: Int {
-    min(3, Int(pathHashMode) + 1)
+    PathEncoding.hashSize(forMode: pathHashMode)
   }
 
   public var hasLocation: Bool {

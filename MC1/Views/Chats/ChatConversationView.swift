@@ -39,6 +39,11 @@ struct ChatConversationView: View {
   /// views' worth of work driven by one piece of state.
   @State private var messageSearch = ConversationMessageSearchState()
 
+  /// The one in-flight jump. Held so stepping to the next match cancels the previous jump:
+  /// two unmanaged jumps race to write `scrollToTargetID`, and the slower (older) one wins
+  /// the scroll because it lands last.
+  @State private var jumpTask: Task<Void, Never>?
+
   /// Pending debounced draft persist; cancelled and restarted on each keystroke,
   /// cancelled-then-flushed synchronously on view teardown and app suspension.
   @State private var draftSaveTask: Task<Void, Never>?
@@ -255,7 +260,15 @@ struct ChatConversationView: View {
     }
     .onChange(of: messageSearch.currentMatchID) { _, match in
       guard let match else { return }
-      Task { await jumpToMessage(match) }
+      startJump(to: match)
+    }
+    // A result tapped for the conversation already on screen (iPad split view) re-selects a
+    // value-equal `ChatRoute`, so nothing re-navigates and `performInitialLoad` never re-runs.
+    // The target arrives here instead.
+    .onChange(of: appState.navigation.pendingMessageScroll) { _, pending in
+      guard let pending, pending.conversationID == conversationType.conversationID else { return }
+      appState.navigation.clearPendingMessageScroll()
+      startJump(to: pending.messageID)
     }
     // Info sheet — type-specific
     .sheet(isPresented: $showingInfo, onDismiss: {
@@ -407,6 +420,13 @@ struct ChatConversationView: View {
 
   // MARK: - Jump to a Message
 
+  /// Starts a jump, retiring whichever one was still running. Paging can take seconds, and
+  /// only the newest target may claim the scroll.
+  private func startJump(to messageID: UUID) {
+    jumpTask?.cancel()
+    jumpTask = Task { await jumpToMessage(messageID) }
+  }
+
   /// Pages the message into the loaded window, scrolls the list to it, and flashes it.
   ///
   /// The order matters: `TiledScrollPosition.scrollTo(id:)` no-ops for an id the list does
@@ -414,6 +434,8 @@ struct ChatConversationView: View {
   /// tap did nothing at all.
   private func jumpToMessage(_ messageID: UUID) async {
     guard await ChatMessageSearchNavigator.loadUntilVisible(messageID, in: chatViewModel) == .loaded else { return }
+    // Paging suspends; a newer jump may have claimed the scroll while this one waited.
+    guard !Task.isCancelled else { return }
     scrollToTargetID = messageID
     scrollToTargetRequest += 1
     await ChatMessageSearchNavigator.flash(messageID, in: chatViewModel)
@@ -422,10 +444,14 @@ struct ChatConversationView: View {
   // MARK: - Initial Load (.task)
 
   private func performInitialLoad() async {
-    // Capture pending scroll target before loading
-    let pendingTarget = appState.navigation.pendingScrollToMessageID
+    // Capture pending scroll target before loading, but only when it was armed for *this*
+    // conversation: an id from another conversation is not in this history, so consuming it
+    // here would page the whole conversation and then fail to scroll — and would rob the
+    // conversation it was meant for.
+    let pending = appState.navigation.pendingMessageScroll
+    let pendingTarget = pending?.conversationID == conversationType.conversationID ? pending?.messageID : nil
     if pendingTarget != nil {
-      appState.navigation.clearPendingScrollToMessage()
+      appState.navigation.clearPendingMessageScroll()
     }
 
     chatViewModel.configure(
@@ -460,7 +486,7 @@ struct ChatConversationView: View {
     // global search result). Paging is needed for the search case: a result can be far
     // older than the first page this open just fetched.
     if let targetID = pendingTarget {
-      Task { await jumpToMessage(targetID) }
+      startJump(to: targetID)
     }
 
     // Clear any notifications for this conversation still sitting in the tray
@@ -732,7 +758,11 @@ struct ChatConversationView: View {
       message.senderNodeName ?? L10n.Chats.Chats.Message.Sender.unknown
     }
     if replyWithQuote {
-      chatViewModel.composingText = MentionUtilities.buildReplyText(mentionName: mentionName, messageText: message.text)
+      chatViewModel.composingText = MentionUtilities.buildReplyText(
+        mentionName: mentionName,
+        messageText: message.text,
+        draft: chatViewModel.composingText
+      )
     } else {
       chatViewModel.composingText = MentionUtilities.appendMention(
         for: mentionName,

@@ -113,9 +113,11 @@ struct ContentView: View {
         set: { if !$0 { appState.nodeLocationPrompt.clearPending() } }
       ),
       presenting: appState.nodeLocationPrompt.pending
-    ) { _ in
+    ) { prompt in
+      // The write takes the presented value, not `pending`: dismissal runs the binding's
+      // setter — which clears `pending` — before the task below starts.
       Button(L10n.Localizable.Alert.NodeLocationStale.update) {
-        Task { await appState.applyPendingNodeLocation() }
+        Task { await appState.applyPendingNodeLocation(prompt) }
       }
       Button(L10n.Localizable.Alert.NodeLocationStale.notNow, role: .cancel) {
         appState.nodeLocationPrompt.snoozeCurrent()

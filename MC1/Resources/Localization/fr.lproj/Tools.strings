@@ -1126,3 +1126,122 @@
 
 /* Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others */
 "tools.trafficMap.callout.neverHeardDirectly" = "Jamais entendu directement";
+
+// MARK: - Signal Mapper
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.signalMapper" = "Cartographe de signal";
+
+/* Location: SignalMapperCoverageView.swift - Empty state title before anything has been captured */
+"tools.signalMapper.empty" = "Aucune couverture enregistrée";
+
+/* Location: SignalMapperCoverageView.swift - Empty state description explaining how to start capturing */
+"tools.signalMapper.emptyDescription" = "Activez la capture ci-dessous et emportez l'app avec vous. Les paquets entendus par votre radio, les échos de vos propres messages relayés par les répéteurs et les accusés de réception sont rattachés à l'hexagone où vous vous trouviez.";
+
+/* Location: SignalMapperCoverageView.swift - Toggle switching passive coverage capture on and off */
+"tools.signalMapper.captureToggle" = "Enregistrer la couverture pendant l'utilisation";
+
+/* Location: SignalMapperCoverageView.swift - Explains what capture does, under the toggle */
+"tools.signalMapper.captureExplainer" = "Ne fonctionne que lorsque l'app est ouverte et n'émet jamais rien sur le maillage. Elle cartographie le trafic que votre radio allait traiter de toute façon.";
+
+/* Location: SignalMapperCoverageView.swift - Privacy note under the capture toggle */
+"tools.signalMapper.privacyNote" = "Tout reste sur cet appareil. Ta position exacte n’est jamais enregistrée — seulement l’hexagone où tu te trouvais. Rien n’est jamais envoyé sans te demander d’abord.";
+
+/* Location: SignalMapperCoverageView.swift - Explains that frequently-visited areas are excluded from the map */
+"tools.signalMapper.anchorNote" = "Les lieux où tu passes beaucoup de temps sont volontairement exclus de la carte.";
+
+/* Location: SignalMapperCoverageView.swift - Banner counting what the map is showing; %1$lld is cells, %2$lld observations, %3$lld days */
+"tools.signalMapper.summary" = "%1$lld cellules · %2$lld observations · %3$lld jours";
+
+/* Location: SignalMapperCoverageView.swift - Map control that frames every captured cell */
+"tools.signalMapper.centerOnCoverage" = "Centrer sur la couverture";
+
+/* Location: SignalMapperCoverageView.swift - Toolbar menu holding the tool's options */
+"tools.signalMapper.options" = "Options";
+
+/* Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell */
+"tools.signalMapper.delete.action" = "Supprimer la couverture enregistrée";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert title before deleting captured cells */
+"tools.signalMapper.delete.title" = "Supprimer la couverture enregistrée ?";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells */
+"tools.signalMapper.delete.message" = "Supprime tous les hexagones enregistrés sur cet appareil. Action irréversible.";
+
+/* Location: SignalMapperLegend.swift - Legend title */
+"tools.signalMapper.legend.title" = "Légende";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity */
+"tools.signalMapper.legend.density" = "Les hexagones les plus opaques ont été observés plus souvent que les pâles.";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon color */
+"tools.signalMapper.legend.signal" = "La couleur indique le signal moyen avec lequel le maillage a atteint cet hexagone.";
+
+/* Location: SignalQuality+Color.swift - Signal quality below the poor threshold */
+"tools.signalMapper.quality.veryPoor" = "Très faible";
+
+/* Location: SignalMapperCellDetailSheet.swift - Title of the tapped-cell sheet */
+"tools.signalMapper.detail.title" = "Détail de la cellule";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade */
+"tools.signalMapper.detail.quality" = "Qualité du signal";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell */
+"tools.signalMapper.detail.observations" = "Observations";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for the days this cell was seen on */
+"tools.signalMapper.detail.days" = "Jours";
+
+/* Location: SignalMapperCellDetailSheet.swift - First and last day a cell was observed; %1$@ and %2$@ are dates */
+"tools.signalMapper.detail.dayRange" = "du %1$@ au %2$@";
+
+/* Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index */
+"tools.signalMapper.detail.cellFooter" = "Cellule H3 %@";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction */
+"tools.signalMapper.detail.direction" = "Par direction";
+
+/* Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell */
+"tools.signalMapper.detail.received" = "Paquets reçus";
+
+/* Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater */
+"tools.signalMapper.detail.txHeard" = "Vos paquets réentendus";
+
+/* Location: SignalMapperCellDetailSheet.swift - Messages sent from this cell that were acknowledged */
+"tools.signalMapper.detail.acknowledged" = "Envois acquittés";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean round-trip time of acknowledged sends */
+"tools.signalMapper.detail.roundTrip" = "Aller-retour moyen";
+
+/* Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number */
+"tools.signalMapper.detail.milliseconds" = "%lldms";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header for radio measurements */
+"tools.signalMapper.detail.signal" = "Signal";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell */
+"tools.signalMapper.detail.averageSnr" = "SNR moyen";
+
+/* Location: SignalMapperCellDetailSheet.swift - Best and worst signal-to-noise ratio in this cell */
+"tools.signalMapper.detail.snrRange" = "Plage de SNR";
+
+/* Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts */
+"tools.signalMapper.detail.noPacketsHeard" = "Aucun paquet entendu";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean received signal strength in this cell */
+"tools.signalMapper.detail.averageRssi" = "RSSI moyen";
+
+/* Location: SignalMapperCellDetailSheet.swift - How packets in this cell were routed */
+"tools.signalMapper.detail.routeMix" = "Répartition des routes";
+
+/* Location: SignalMapperCellDetailSheet.swift - Direct versus flood packet split; %1$lld is direct, %2$lld flood */
+"tools.signalMapper.detail.routeSplit" = "%1$lld direct · %2$lld flood";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header listing the repeaters heard in this cell */
+"tools.signalMapper.detail.repeaters" = "Répéteurs entendus";
+
+/* Location: SignalMapperCellDetailSheet.swift - Packets a repeater carried; %lld is the count */
+"tools.signalMapper.detail.packets" = "%lld paquets";
+
+/* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
+"tools.signalMapper.detail.ambiguousName" = "Plusieurs nœuds correspondent à cette empreinte";

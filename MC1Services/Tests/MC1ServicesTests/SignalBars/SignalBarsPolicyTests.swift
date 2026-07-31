@@ -106,6 +106,25 @@ struct SignalBarsPolicyTests {
     #expect(policy.nextProbeTarget(among: table, now: start, movement: .fast)?.hexID == "01")
   }
 
+  @Test
+  func `Urgency answers only for a row that is due, whatever the caller's own preference`() throws {
+    let due = try repeater("01", lastProbeAt: start.addingTimeInterval(-50))
+    let waiting = try repeater("01", lastProbeAt: start.addingTimeInterval(-5))
+    let backedOff = try repeater(
+      "01",
+      txState: .failed,
+      failCount: 1,
+      lastProbeAt: start.addingTimeInterval(-5)
+    )
+
+    #expect(policy.probeUrgency(for: due, isBest: true, now: start, movement: .stationary) == -5)
+    #expect(policy.probeUrgency(for: waiting, isBest: true, now: start, movement: .stationary) == nil)
+    #expect(
+      policy.probeUrgency(for: backedOff, isBest: true, now: start, movement: .stationary) == nil,
+      "the failure ladder holds a row back even when its caller wants it next"
+    )
+  }
+
   // MARK: - Reactive triggers
 
   @Test

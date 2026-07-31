@@ -28,6 +28,9 @@ struct ErrorDispatchCoverageTests {
       + "produces bespoke auth-failure vs generic-failure alerts, not a plain message.",
     "DevicePairingError": "Control-flow signal (cancelled / alreadyInProgress); "
       + "caught at every call site before the error reaches .errorAlert.",
+    "StoreRecoveryError": "Raised only while the store is unopenable, where no AppState "
+      + "and therefore no .errorAlert exists; StoreRecoveryView shows it verbatim in its "
+      + "technical-details disclosure.",
   ]
 
   // MARK: - Test

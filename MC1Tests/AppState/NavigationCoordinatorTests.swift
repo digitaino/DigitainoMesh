@@ -229,7 +229,7 @@ struct NavigationCoordinatorNotificationTests {
     await notificationService.onReactionNotificationTapped?(contact.id, nil, nil, messageID)
 
     #expect(coordinator.pendingChatContact?.id == contact.id)
-    #expect(coordinator.pendingScrollToMessageID == messageID)
+    #expect(coordinator.pendingMessageScroll == .init(conversationID: contact.id, messageID: messageID))
     #expect(coordinator.selectedTab == 0)
   }
 
@@ -256,7 +256,7 @@ struct NavigationCoordinatorNotificationTests {
     await notificationService.onReactionNotificationTapped?(nil, channelIndex, radioID, messageID)
 
     #expect(coordinator.pendingChannel?.id == channel.id)
-    #expect(coordinator.pendingScrollToMessageID == messageID)
+    #expect(coordinator.pendingMessageScroll == .init(conversationID: channel.id, messageID: messageID))
     #expect(coordinator.selectedTab == 0)
   }
 }

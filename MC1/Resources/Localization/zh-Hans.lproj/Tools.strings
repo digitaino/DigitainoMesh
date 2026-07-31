@@ -1126,3 +1126,122 @@
 
 /* Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others */
 "tools.trafficMap.callout.neverHeardDirectly" = "从未直接听到";
+
+// MARK: - Signal Mapper
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.signalMapper" = "信号覆盖图";
+
+/* Location: SignalMapperCoverageView.swift - Empty state title before anything has been captured */
+"tools.signalMapper.empty" = "尚未记录覆盖数据";
+
+/* Location: SignalMapperCoverageView.swift - Empty state description explaining how to start capturing */
+"tools.signalMapper.emptyDescription" = "在下方开启记录，然后随身携带 App。设备收到的数据包、你自己的消息经中继回传的回声，以及送达回执，都会记录到你当时所在的六边形格子里。";
+
+/* Location: SignalMapperCoverageView.swift - Toggle switching passive coverage capture on and off */
+"tools.signalMapper.captureToggle" = "使用 App 时记录覆盖情况";
+
+/* Location: SignalMapperCoverageView.swift - Explains what capture does, under the toggle */
+"tools.signalMapper.captureExplainer" = "仅在 App 打开时运行，绝不会向网络发送任何内容。它只是把设备本来就会处理的流量画到地图上。";
+
+/* Location: SignalMapperCoverageView.swift - Privacy note under the capture toggle */
+"tools.signalMapper.privacyNote" = "所有数据都留在本设备上。绝不会保存你的精确位置，只记录你所在的六边形。未经你同意，绝不会上传任何内容。";
+
+/* Location: SignalMapperCoverageView.swift - Explains that frequently-visited areas are excluded from the map */
+"tools.signalMapper.anchorNote" = "你经常停留的地点会被有意排除在地图之外。";
+
+/* Location: SignalMapperCoverageView.swift - Banner counting what the map is showing; %1$lld is cells, %2$lld observations, %3$lld days */
+"tools.signalMapper.summary" = "%1$lld 个格子 · %2$lld 条记录 · %3$lld 天";
+
+/* Location: SignalMapperCoverageView.swift - Map control that frames every captured cell */
+"tools.signalMapper.centerOnCoverage" = "显示全部覆盖";
+
+/* Location: SignalMapperCoverageView.swift - Toolbar menu holding the tool's options */
+"tools.signalMapper.options" = "选项";
+
+/* Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell */
+"tools.signalMapper.delete.action" = "删除已记录的覆盖数据";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert title before deleting captured cells */
+"tools.signalMapper.delete.title" = "删除已记录的覆盖数据？";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells */
+"tools.signalMapper.delete.message" = "将删除本机记录的所有六边形格子，且无法撤销。";
+
+/* Location: SignalMapperLegend.swift - Legend title */
+"tools.signalMapper.legend.title" = "图例";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity */
+"tools.signalMapper.legend.density" = "颜色越实的格子，记录次数越多。";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon color */
+"tools.signalMapper.legend.signal" = "颜色表示网络到达该格子的平均信号强度。";
+
+/* Location: SignalQuality+Color.swift - Signal quality below the poor threshold */
+"tools.signalMapper.quality.veryPoor" = "极差";
+
+/* Location: SignalMapperCellDetailSheet.swift - Title of the tapped-cell sheet */
+"tools.signalMapper.detail.title" = "格子详情";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade */
+"tools.signalMapper.detail.quality" = "信号质量";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell */
+"tools.signalMapper.detail.observations" = "记录条数";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for the days this cell was seen on */
+"tools.signalMapper.detail.days" = "天数";
+
+/* Location: SignalMapperCellDetailSheet.swift - First and last day a cell was observed; %1$@ and %2$@ are dates */
+"tools.signalMapper.detail.dayRange" = "%1$@ 至 %2$@";
+
+/* Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index */
+"tools.signalMapper.detail.cellFooter" = "H3 格子 %@";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction */
+"tools.signalMapper.detail.direction" = "按方向";
+
+/* Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell */
+"tools.signalMapper.detail.received" = "收到的数据包";
+
+/* Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater */
+"tools.signalMapper.detail.txHeard" = "听到自己数据包回传";
+
+/* Location: SignalMapperCellDetailSheet.swift - Messages sent from this cell that were acknowledged */
+"tools.signalMapper.detail.acknowledged" = "已确认的发送";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean round-trip time of acknowledged sends */
+"tools.signalMapper.detail.roundTrip" = "平均往返时间";
+
+/* Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number */
+"tools.signalMapper.detail.milliseconds" = "%lld 毫秒";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header for radio measurements */
+"tools.signalMapper.detail.signal" = "信号";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell */
+"tools.signalMapper.detail.averageSnr" = "平均信噪比";
+
+/* Location: SignalMapperCellDetailSheet.swift - Best and worst signal-to-noise ratio in this cell */
+"tools.signalMapper.detail.snrRange" = "信噪比范围";
+
+/* Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts */
+"tools.signalMapper.detail.noPacketsHeard" = "未收到数据包";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean received signal strength in this cell */
+"tools.signalMapper.detail.averageRssi" = "平均 RSSI";
+
+/* Location: SignalMapperCellDetailSheet.swift - How packets in this cell were routed */
+"tools.signalMapper.detail.routeMix" = "路由构成";
+
+/* Location: SignalMapperCellDetailSheet.swift - Direct versus flood packet split; %1$lld is direct, %2$lld flood */
+"tools.signalMapper.detail.routeSplit" = "直连 %1$lld · 泛洪 %2$lld";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header listing the repeaters heard in this cell */
+"tools.signalMapper.detail.repeaters" = "听到的中继";
+
+/* Location: SignalMapperCellDetailSheet.swift - Packets a repeater carried; %lld is the count */
+"tools.signalMapper.detail.packets" = "%lld 个数据包";
+
+/* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
+"tools.signalMapper.detail.ambiguousName" = "有多个节点匹配该哈希";

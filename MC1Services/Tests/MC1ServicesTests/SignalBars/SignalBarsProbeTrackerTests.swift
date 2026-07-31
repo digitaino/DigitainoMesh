@@ -70,6 +70,31 @@ struct SignalBarsProbeTrackerTests {
   }
 
   @Test
+  func `Retiming an outstanding probe takes the new timeout and keeps the send time`() {
+    var tracker = SignalBarsProbeTracker()
+    tracker.register(tag: 1, target: nodeID("01"), now: start, timeoutMs: 5000)
+
+    tracker.retime(tag: 1, timeoutMs: 12000)
+
+    #expect(tracker.expired(now: start.addingTimeInterval(11)).isEmpty)
+    #expect(tracker.expired(now: start.addingTimeInterval(12)).map(\.sentAt) == [start])
+  }
+
+  @Test
+  func `Retiming a probe that is no longer outstanding does not resurrect it`() {
+    var tracker = SignalBarsProbeTracker()
+    tracker.register(tag: 1, target: nodeID("01"), now: start, timeoutMs: 5000)
+    _ = tracker.claim(tag: 1)
+
+    tracker.retime(tag: 1, timeoutMs: 12000)
+
+    #expect(
+      tracker.isEmpty,
+      "the reply already claimed it; re-registering would hand the next sweep an answered probe"
+    )
+  }
+
+  @Test
   func `In-flight checks and cancellation match nodes across hash widths`() {
     var tracker = SignalBarsProbeTracker()
     tracker.register(tag: 1, target: nodeID("0C13"), now: start, timeoutMs: 5000)

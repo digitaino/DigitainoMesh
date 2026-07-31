@@ -14,6 +14,10 @@ public protocol ReactionPersisting: Actor {
   /// Update a message's reaction summary cache
   func updateMessageReactionSummary(messageID: UUID, summary: String?) async throws
 
+  /// Delete one reaction, returning the target's refreshed summary (nil when none remain)
+  @discardableResult
+  func deleteReaction(messageID: UUID, senderName: String, emoji: String) async throws -> String?
+
   /// Delete all reactions for a message
   func deleteReactionsForMessage(messageID: UUID) async throws
 }

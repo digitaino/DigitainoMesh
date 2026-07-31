@@ -21,9 +21,13 @@ enum MapOverlayID {
     "overlay-\(overlay)-circle"
   }
 
+  static func fillLayer(_ overlay: String) -> String {
+    "overlay-\(overlay)-fill"
+  }
+
   /// Every layer an overlay may own, casing first so teardown order matches build order.
   static func layers(_ overlay: String) -> [String] {
-    [casingLayer(overlay), lineLayer(overlay), circleLayer(overlay)]
+    [casingLayer(overlay), lineLayer(overlay), circleLayer(overlay), fillLayer(overlay)]
   }
 }
 
@@ -38,9 +42,12 @@ extension MC1MapView.Coordinator {
   /// Overlays are matched by id: one that vanished has its layers and source torn out, one
   /// that changed shape has its source's features replaced in place, and one whose paint
   /// changed has its layers rebuilt (the ramps are baked into the style layer, not the data).
-  /// Sources are created on first data arrival rather than at style load, the same deferred
-  /// creation the point sources use for the MapLibre bug where a source initialized empty
-  /// ignores later `.shape` updates.
+  ///
+  /// A declared overlay is sourced and layered on the *first* apply whether or not it has any
+  /// features yet, because layers are inserted below one fixed anchor: creation order is stack
+  /// order, so an overlay whose data only arrives on a later update would otherwise jump above
+  /// the ones already drawn (links over the node bubbles standing on them). Empty initialization
+  /// is what the line source does too — created at style load, fed by `.shape` afterwards.
   func updateOverlays(mapView: MLNMapView) {
     guard let style = mapView.style else { return }
 
@@ -74,7 +81,6 @@ extension MC1MapView.Coordinator {
       source.shape = MLNShapeCollectionFeature(shapes: features)
       return
     }
-    guard !features.isEmpty else { return }
 
     let source = MLNShapeSource(
       identifier: MapOverlayID.source(overlay.id),
@@ -141,6 +147,15 @@ extension MC1MapView.Coordinator {
       layer.circleStrokeColor = NSExpression(forConstantValue: paint.strokeColor)
       layer.circleStrokeWidth = NSExpression(forConstantValue: paint.strokeWidth)
       insert(layer, into: style, below: anchor)
+
+    case let .weightedFill(paint):
+      let layer = MLNFillStyleLayer(identifier: MapOverlayID.fillLayer(overlay.id), source: source)
+      layer.fillColor = NSExpression(forConstantValue: paint.color)
+      layer.fillOpacity = ramp(weight, from: paint.opacity.lowerBound, to: paint.opacity.upperBound)
+      if let outlineColor = paint.outlineColor {
+        layer.fillOutlineColor = NSExpression(forConstantValue: outlineColor)
+      }
+      insert(layer, into: style, below: anchor)
     }
   }
 
@@ -177,6 +192,10 @@ extension MC1MapView.Coordinator {
       let point = MLNPointFeature()
       point.coordinate = coordinate
       shape = point
+    case let .polygon(coordinates):
+      guard coordinates.count >= 3 else { return nil }
+      var coords = coordinates
+      shape = MLNPolygonFeature(coordinates: &coords, count: UInt(coords.count))
     }
     shape.attributes = [
       "overlayFeatureID": feature.id,

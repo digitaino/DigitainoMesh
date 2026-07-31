@@ -84,9 +84,19 @@ enum ChatSearchRevealEvent {
 /// (a search jump, an unread divider) never reveals uninvited, and each reveal requires
 /// having visited the bottom since the last one. `settledAtBottom` is edge-triggered the same
 /// way, firing once per return rather than once per frame.
+///
+/// A crossing also has to be *travel back into history*, because distance from the bottom
+/// grows on its own: appending a message taller than the reveal distance pushes the newest
+/// content below a reader who is resting at the bottom, and the scroll-to-bottom that follows
+/// reports its animation frames through the same callback (`TiledScrollGeometry` carries no
+/// is-dragging flag to ask instead — the library publishes geometry for programmatic scrolls
+/// deliberately). Those frames all move *toward* the newest message, so requiring the content
+/// offset to have decreased since the previous frame is what separates a finger scrolling back
+/// through the backlog from the list catching up with an append.
 struct ChatSearchRevealLatch {
   private var isArmed = false
   private var wasAtBottom = false
+  private var lastContentOffsetY: CGFloat?
 
   init() {}
 
@@ -94,6 +104,8 @@ struct ChatSearchRevealLatch {
   ///
   /// - Parameters:
   ///   - pointsFromBottom: the scroll surface's clamped distance from the newest message.
+  ///   - contentOffsetY: the frame's raw vertical offset, compared against the previous
+  ///     frame's to tell travel into history from the list moving under the reader.
   ///   - overscroll: raw rubber-band distance from `overscrollPastBottom`.
   ///   - contentFits: whether the whole conversation fits on screen (no upward travel
   ///     exists, so the pull is the only possible reveal gesture).
@@ -101,13 +113,18 @@ struct ChatSearchRevealLatch {
   ///     so the next reveal requires returning to the bottom first.
   mutating func event(
     pointsFromBottom: CGFloat,
+    contentOffsetY: CGFloat,
     overscroll: CGFloat,
     contentFits: Bool,
     isSearchActive: Bool
   ) -> ChatSearchRevealEvent {
+    let movedIntoHistory = lastContentOffsetY.map { contentOffsetY < $0 } ?? false
     let atRest = pointsFromBottom < ChatSearchRevealPolicy.atBottomSlack
       && overscroll <= ChatSearchRevealPolicy.settledSlack
-    defer { wasAtBottom = atRest }
+    defer {
+      wasAtBottom = atRest
+      lastContentOffsetY = contentOffsetY
+    }
 
     if atRest {
       isArmed = true
@@ -115,12 +132,24 @@ struct ChatSearchRevealLatch {
     }
 
     guard isArmed else { return .none }
+    // The pull needs no direction gate: stretching the band past the end is movement only a
+    // finger produces, and it is the same direction an append's catch-up travels.
     let crossed = contentFits
       ? overscroll >= ChatSearchRevealPolicy.shortContentPullThreshold
-      : pointsFromBottom >= ChatSearchRevealPolicy.revealDistance
+      : pointsFromBottom >= ChatSearchRevealPolicy.revealDistance && movedIntoHistory
     guard crossed else { return .none }
 
     isArmed = false
     return isSearchActive ? .none : .reveal
+  }
+
+  /// Drops the arming ahead of a scroll the owner is about to perform itself.
+  ///
+  /// A jump to a message — a reply quote, a mention, a deeplink, a search hit — travels back
+  /// into history exactly the way a finger does, so the direction gate above cannot tell them
+  /// apart and the owner has to say so. Landing somewhere deep is not a reveal, and re-arming
+  /// still waits for a visit to the bottom; a jump *to* the bottom re-arms on arrival.
+  mutating func noteProgrammaticScroll() {
+    isArmed = false
   }
 }

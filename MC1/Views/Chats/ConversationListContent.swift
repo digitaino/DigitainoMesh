@@ -138,11 +138,15 @@ struct ConversationListContent: View {
   /// Opens the conversation a result belongs to, handing the message id to
   /// `ChatConversationView` through the same pending-scroll channel a reaction
   /// notification uses. `ChatRoute` hashes on the conversation alone, so the target cannot
-  /// ride along inside the route.
+  /// ride along inside the route — and when the route is the one already selected, that
+  /// channel is the only thing that moves the open conversation at all.
   private func openMessageResult(_ result: MessageSearchResult) {
     guard let conversation = conversation(for: result.conversation) else { return }
-    appState.navigation.pendingScrollToMessageID = result.id
     let route = ChatRoute(conversation: conversation)
+    appState.navigation.pendingMessageScroll = .init(
+      conversationID: route.conversationID,
+      messageID: result.id
+    )
     switch mode {
     case let .selection(selection):
       selection.wrappedValue = route

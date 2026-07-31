@@ -101,7 +101,6 @@ public actor MotionHintService {
   }
 
   private func isRejection(_ error: MeshCoreError) -> Bool {
-    if case .deviceError = error { return true }
-    return false
+    error.deviceErrorCode == .unsupportedCommand
   }
 }

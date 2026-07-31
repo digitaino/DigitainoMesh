@@ -76,7 +76,11 @@ public actor HeardRepeatsService {
 
     // Parse "NodeName: MessageText" format using shared utility
     guard let (senderName, messageText) = ChannelMessageFormat.parse(decodedText) else {
-      logger.info("Failed to parse channel message text: \(decodedText.prefix(50))")
+      // The text itself is deliberately absent: this is decrypted message content, and
+      // `PersistentLogger` formats eagerly into OSLog *and* into the exportable in-app
+      // debug log, with no `privacy:` annotation available to redact it. The length is
+      // what actually distinguishes the failure modes ("empty" vs "no name separator").
+      logger.info("Failed to parse channel message text (\(decodedText.count) chars)")
       return nil
     }
 
@@ -118,7 +122,12 @@ public actor HeardRepeatsService {
 
       logger.info("Recorded repeat #\(newCount) for message \(message.id)")
 
-      eventBroadcaster.yield(HeardRepeatEvent(messageID: message.id, count: newCount))
+      eventBroadcaster.yield(HeardRepeatEvent(
+        messageID: message.id,
+        count: newCount,
+        detail: repeatDTO,
+        isFlood: entry.isFlood
+      ))
 
       return newCount
 

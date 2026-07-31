@@ -31,7 +31,12 @@ public extension SettingsService {
 
     // log when attempting to clear location
     let isClearingLocation = scaledLatSent == 0 && scaledLonSent == 0
-    logger.debug("[Location] setLocationVerified called - lat: \(latitude), lon: \(longitude), isClearing: \(isClearingLocation)")
+    // The coordinates themselves are deliberately absent. `PersistentLogger` takes a plain
+    // `String`, so there is no `privacy:` annotation to reach for — it formats eagerly into
+    // OSLog *and* into the exportable in-app debug log. Everything this line is actually
+    // used for (did we call it, was it a clear, did the readback match) survives without
+    // them; the diffs below carry the precision when verification fails.
+    logger.debug("[Location] setLocationVerified called - isClearing: \(isClearingLocation)")
 
     try await setLocation(latitude: latitude, longitude: longitude)
 
@@ -47,7 +52,10 @@ public extension SettingsService {
     let tolerance: Int32 = 2
 
     guard latDiff <= tolerance, lonDiff <= tolerance else {
-      logger.error("[Location] Verification failed - sent: (\(scaledLatSent), \(scaledLonSent)), received: (\(scaledLatReceived), \(scaledLonReceived)), diff: (lat=\(latDiff), lon=\(lonDiff))")
+      // Diffs only, for the same reason: a "sent (x, y) received (x', y')" line is two
+      // coordinates at ~0.1 m precision written into a log the user can export, and the
+      // diagnostic value is entirely in how far apart they are.
+      logger.error("[Location] Verification failed - diff: (lat=\(latDiff), lon=\(lonDiff)), isClearing: \(isClearingLocation)")
 
       if isClearingLocation {
         logger.warning("[Location] Clear location failed - device reports non-zero coordinates. Device may have active GPS or firmware doesn't support (0,0).")

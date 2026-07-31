@@ -20,10 +20,12 @@ import UIKit
 /// SNR-tinted node bubbles); a tool colouring by magnitude puts the magnitude in `weight` and
 /// lets opacity carry it (the heatmap does this for link traffic).
 ///
-/// **Adding a consumer.** A hex-cell heat layer — the signal mapper's eventual need — is a
-/// third `Geometry` case (`polygon`) and a third `Paint` case (`weightedFill`, an
-/// `MLNFillStyleLayer` with the same weight ramp on `fillOpacity`). Registration, sourcing,
-/// diffing, z-ordering and style-reload recovery are already done and unchanged.
+/// **Adding a consumer.** The hex-cell heat layer the signal mapper draws its own coverage
+/// with was exactly what this note predicted: a `polygon` geometry case and a
+/// `weightedFill` paint case (an `MLNFillStyleLayer` with the same weight ramp on
+/// `fillOpacity`). Registration, sourcing, diffing, z-ordering and style-reload recovery
+/// needed no changes at all. Both are general — any tool with an area to shade uses them,
+/// and a selection ring is a closed `polyline` through the paint that already existed.
 struct MapOverlay: Identifiable, Equatable {
   /// Namespaces this overlay's source and style layers. Must be unique among the overlays
   /// handed to one map, and stable across updates — it is what the diff matches on.
@@ -46,6 +48,9 @@ struct MapOverlay: Identifiable, Equatable {
     /// A run of two or more coordinates. A link between two nodes is the two-coordinate case.
     case polyline([CLLocationCoordinate2D])
     case point(CLLocationCoordinate2D)
+    /// A filled ring of three or more coordinates, given in boundary order. The ring is
+    /// closed for you — repeating the first vertex at the end is allowed but not needed.
+    case polygon([CLLocationCoordinate2D])
 
     static func == (lhs: Geometry, rhs: Geometry) -> Bool {
       switch (lhs, rhs) {
@@ -53,6 +58,8 @@ struct MapOverlay: Identifiable, Equatable {
         a.count == b.count && zip(a, b).allSatisfy(Geometry.sameCoordinate)
       case let (.point(a), .point(b)):
         Geometry.sameCoordinate(a, b)
+      case let (.polygon(a), .polygon(b)):
+        a.count == b.count && zip(a, b).allSatisfy(Geometry.sameCoordinate)
       default:
         false
       }
@@ -73,6 +80,7 @@ struct MapOverlay: Identifiable, Equatable {
   enum Paint: Equatable {
     case weightedLine(WeightedLine)
     case weightedCircle(WeightedCircle)
+    case weightedFill(WeightedFill)
   }
 
   struct WeightedLine: Equatable {
@@ -115,6 +123,26 @@ struct MapOverlay: Identifiable, Equatable {
       self.opacity = opacity
       self.strokeColor = strokeColor
       self.strokeWidth = strokeWidth
+    }
+  }
+
+  /// A shaded area whose weight drives how solid it reads.
+  ///
+  /// The outline is MapLibre's own hairline (`fillOutlineColor`) — enough to keep adjacent
+  /// areas from bleeding into one shape, and deliberately not a styleable stroke: an
+  /// emphasis outline that needs a width is a `polyline` through ``WeightedLine``, drawn as
+  /// its own overlay above the fill.
+  struct WeightedFill: Equatable {
+    var color: UIColor
+    var opacity: ClosedRange<Double>
+    /// The hairline around each area. Nil leaves areas unbounded, which is what a smooth
+    /// heat field wants; a cell grid wants it set.
+    var outlineColor: UIColor?
+
+    init(color: UIColor, opacity: ClosedRange<Double>, outlineColor: UIColor? = nil) {
+      self.color = color
+      self.opacity = opacity
+      self.outlineColor = outlineColor
     }
   }
 

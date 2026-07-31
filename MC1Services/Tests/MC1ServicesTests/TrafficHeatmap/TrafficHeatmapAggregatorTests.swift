@@ -1,6 +1,7 @@
 import Foundation
 @testable import MC1Services
 import MeshCore
+import os
 import Testing
 
 /// Spec source: legacy `TrafficHeatmapViewModel.aggregate` — one test per rule it encoded,
@@ -274,6 +275,43 @@ struct TrafficHeatmapAggregatorTests {
     #expect(aggregate(entries) == aggregate(entries))
   }
 
+  // MARK: - Resolution cache
+
+  @Test
+  func `Identity resolution runs once per distinct hop hash, however long the log`() {
+    let counting = CountingResolver()
+    let counted = TrafficHeatmapAggregator(resolver: counting)
+    let entries = Array(repeating: TrafficFixture.entry(hops: [[0x0A], [0x0B], [0x0C]]), count: 20)
+
+    let snapshot = counted.aggregate(entries: entries, candidates: mesh, now: now)
+
+    // Three hashes across sixty hops, and the same snapshot the uncounted aggregator produces.
+    #expect(counting.callCount == 3)
+    #expect(snapshot == aggregate(entries))
+  }
+
+  @Test
+  func `The cache does not freeze an ambiguous hash: each hop still picks by its own anchor`() {
+    // `0x0A` names two nodes 30 degrees apart. Which one relayed a packet is decided by the hop
+    // beside it, so the same hash resolves differently on two paths — the part of resolution
+    // that must stay out of the cache.
+    let candidates = [
+      TrafficFixture.node([0x0A], fill: 0x11, name: "A-north", latitude: 40, longitude: 10),
+      TrafficFixture.node([0x0A], fill: 0x22, name: "A-south", latitude: 10, longitude: 10),
+      TrafficFixture.node([0x0B], name: "B-north", latitude: 40.1, longitude: 10),
+      TrafficFixture.node([0x0C], name: "C-south", latitude: 10.1, longitude: 10),
+    ]
+    let snapshot = aggregate(
+      [
+        TrafficFixture.entry(hops: [[0x0A], [0x0B]]),
+        TrafficFixture.entry(hops: [[0x0A], [0x0C]]),
+      ],
+      candidates: candidates
+    )
+
+    #expect(snapshot.nodes.map(\.name).sorted() == ["A-north", "A-south", "B-north", "C-south"])
+  }
+
   // MARK: - Source pooling
 
   @Test
@@ -290,5 +328,25 @@ struct TrafficHeatmapAggregatorTests {
       now: now
     )
     #expect(snapshot.nodes.count == 1)
+  }
+}
+
+/// The real resolver with a tally, so a test can pin how much work a log actually costs.
+private final class CountingResolver: NodeIdentityResolving {
+  private let wrapped = NodeIdentityResolver()
+  private let count = OSAllocatedUnfairLock(initialState: 0)
+
+  var callCount: Int {
+    count.withLock { $0 }
+  }
+
+  func resolve<Candidate: RepeaterResolvable>(
+    _ id: NodeHexID,
+    among candidates: [Candidate],
+    now: Date,
+    overrides: NodeIdentityOverrides
+  ) -> NodeResolution<Candidate>? {
+    count.withLock { $0 += 1 }
+    return wrapped.resolve(id, among: candidates, now: now, overrides: overrides)
   }
 }

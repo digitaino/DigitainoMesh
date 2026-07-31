@@ -24,8 +24,26 @@ public enum ChatNoRepeatsInput: Sendable, Equatable {
   /// The detection window for an armed message ran out. Emitted by the driver's timer,
   /// never by a caller — passing it directly is how tests skip the wall clock.
   case windowElapsed(messageID: UUID)
+  /// Repeater signal data went away while the message was armed, so the window's verdict
+  /// rests on nothing. Also emitted by the driver only: the armed slot is dropped and no
+  /// card is offered.
+  case detectionUnavailable(messageID: UUID)
   /// Conversation switch or teardown: forget everything.
   case reset
+
+  /// Whether this observation can only ever retire — never create — an offer.
+  ///
+  /// The owner gates *arming* on repeater signal data being available; a retirement must
+  /// pass that gate unconditionally, or a card offered while data was still flowing could
+  /// never be dismissed once it stopped.
+  public var isRetirement: Bool {
+    switch self {
+    case .repeatHeard, .resendRequested, .sendFailed, .detectionUnavailable, .reset:
+      true
+    case .sendResolved, .windowElapsed:
+      false
+    }
+  }
 }
 
 /// Pure state machine deciding which message, if any, is offered the "no repeats heard"
@@ -99,7 +117,8 @@ public struct ChatNoRepeatsPolicy: Sendable, Equatable {
       guard count > 0 else { break }
       retire(messageID)
 
-    case let .resendRequested(messageID), let .sendFailed(messageID):
+    case let .resendRequested(messageID), let .sendFailed(messageID),
+         let .detectionUnavailable(messageID):
       retire(messageID)
 
     case let .windowElapsed(messageID):

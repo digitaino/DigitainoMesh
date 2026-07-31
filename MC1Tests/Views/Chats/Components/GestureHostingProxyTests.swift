@@ -49,6 +49,30 @@ struct GestureHostingProxyTests {
     #expect(recognizer.view == nil)
   }
 
+  /// The detach hook exists because `removeGestureRecognizer` sends no terminal state: a drag
+  /// interrupted by cell recycling would otherwise leave the conversation-wide reveal offset
+  /// held open with no recognizer left to release it.
+  @Test
+  func `detaching the recognizer announces it first, with the state it was in`() {
+    let recognizer = UIPanGestureRecognizer()
+    let proxy = GestureHostingProxyView(recognizer: recognizer)
+    var announced: [UIGestureRecognizer.State] = []
+    proxy.onWillDetach = { announced.append($0) }
+
+    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
+    let cell = UICollectionViewCell(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
+    cell.contentView.addSubview(proxy)
+    window.addSubview(cell)
+    // Attaching is not a detach.
+    #expect(announced.isEmpty)
+
+    cell.removeFromSuperview()
+    // An untouched recognizer is idle, and the state travels with the callback so the consumer
+    // can tell this ordinary recycle from an interrupted drag.
+    #expect(announced == [.possible])
+    #expect(recognizer.view == nil)
+  }
+
   @Test
   func `moving between cells re-homes the recognizer with the proxy`() {
     let recognizer = UIPanGestureRecognizer()

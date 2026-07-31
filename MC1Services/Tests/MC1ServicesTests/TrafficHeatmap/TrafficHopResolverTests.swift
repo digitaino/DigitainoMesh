@@ -210,6 +210,35 @@ struct TrafficHopResolverTests {
     #expect(hops.map(\.name) == ["fresher"])
   }
 
+  // MARK: - Resolution cache
+
+  @Test
+  func `A cache shared across paths resolves each of them exactly as it would alone`() {
+    // What the cache holds is the identity match; the anchored pick is not cached, so one
+    // ambiguous hash still lands on a different node per path.
+    let candidates = [
+      TrafficFixture.node([0x0B], name: "north", latitude: 20, longitude: 10),
+      TrafficFixture.node([0x0D], name: "south", latitude: 10, longitude: 10),
+      TrafficFixture.node([0x0C], fill: 0x01, name: "byNorth", latitude: 20.01, longitude: 10),
+      TrafficFixture.node([0x0C], fill: 0x02, name: "bySouth", latitude: 10.01, longitude: 10),
+    ]
+    let paths = [
+      [Data([0x0C]), Data([0x0B])],
+      [Data([0x0C]), Data([0x0D])],
+    ]
+
+    var cache = TrafficHopResolver.ResolutionCache()
+    let shared = paths.map {
+      resolver.resolve(hashes: $0, among: candidates, origin: nil, now: now, cache: &cache)
+    }
+    let alone = paths.map {
+      resolver.resolve(hashes: $0, among: candidates, origin: nil, now: now)
+    }
+
+    #expect(shared == alone)
+    #expect(shared.map { $0.map(\.name) } == [["byNorth", "north"], ["bySouth", "south"]])
+  }
+
   @Test
   func `A stale discovered node stays filtered out by the identity resolver, however close it is`() {
     let candidates = [

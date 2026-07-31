@@ -65,8 +65,11 @@ enum BubbleSwipeGesturePolicy {
   /// Absolute ceiling on the revealed offset, including rubber-band overdrag.
   static let revealOverdragCeiling: CGFloat = revealMaxTranslation * 1.2
 
-  /// Distance over which the timestamp labels fade in. Shorter than the full travel so the
-  /// times are readable well before the drag bottoms out.
+  /// Distance over which the timestamp labels fade in. Half the travel, so the labels are at
+  /// full strength while they are still riding in from beyond the rows' trailing edge — they
+  /// are glued to the rows (`ChatTimestampReveal`) and only land fully readable in the vacated
+  /// strip near the end of the drag. Fading them in over the whole travel instead would leave
+  /// them arriving at part opacity.
   static let revealFadeInDistance: CGFloat = 40
 
   /// Converts a raw drag into the shared row offset, rubber-banding past the max. Rightward

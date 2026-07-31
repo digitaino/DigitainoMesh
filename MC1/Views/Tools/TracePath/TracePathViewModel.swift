@@ -259,11 +259,10 @@ final class TracePathViewModel {
     traceHashMode ?? (connectedDevice?.pathHashMode ?? 0)
   }
 
-  /// Trace hash size in bytes per hop (1, 2, or 4), derived from the effective
-  /// mode. Trace uses power-of-2 encoding (`1 << mode`), unlike the linear
-  /// 1/2/3-byte routing hash size.
+  /// Trace hash size in bytes per hop (1, 2, or 3), derived from the effective
+  /// mode by the same shared mapping the trace parser splits replies with.
   var hashSize: Int {
-    1 << Int(effectiveTraceMode)
+    PathEncoding.hashSize(forMode: effectiveTraceMode)
   }
 
   /// Comma-separated path string for display/copy, chunked by hash size
@@ -647,11 +646,11 @@ final class TracePathViewModel {
     let size = savedPath.hashSize
     guard !fullPath.isEmpty else { return }
 
-    // Match the trace hash mode to the saved width (size is 1/2/4 -> code
+    // Match the trace hash mode to the saved width (size is 1/2/3 -> code
     // 0/1/2), but only on a radio that honors the per-trace override;
     // otherwise the trace follows the configured pathHashMode.
     if connectedDevice?.supportsTraceHashSizeOverride == true {
-      traceHashMode = UInt8(size.trailingZeroBitCount)
+      traceHashMode = PathEncoding.mode(forHashSize: size)
     } else {
       traceHashMode = nil
     }
@@ -695,7 +694,11 @@ final class TracePathViewModel {
 
   /// Find a saved path matching the current path bytes
   /// Returns the most recently used match if multiple exist
-  private func findMatchingSavedPath() async -> SavedTracePathDTO? {
+  ///
+  /// Benchmark history lives in the same table and its paths are byte-identical to a
+  /// hand-built `test → target → test` path, so they are excluded: appending a trace run to
+  /// one would silently fold it into a saved benchmark's numbers.
+  func findMatchingSavedPath() async -> SavedTracePathDTO? {
     guard let radioID = connectedDevice?.radioID,
           let dataStore else { return nil }
 
@@ -704,7 +707,9 @@ final class TracePathViewModel {
 
     do {
       let savedPaths = try await dataStore.fetchSavedTracePaths(radioID: radioID)
-      let matches = savedPaths.filter { $0.pathHashBytes == pathBytes }
+      let matches = savedPaths.filter {
+        $0.pathHashBytes == pathBytes && !BenchmarkNaming.isBenchmarkPath($0.name)
+      }
 
       // Return most recently used (by latest run date)
       return matches.max { path1, path2 in
@@ -1236,8 +1241,8 @@ extension TracePathViewModel: HopPickerSource {
     }
   }
 
-  /// Trace hop widths the firmware accepts, in bytes (power-of-2 encoding).
-  private static let validTraceHashSizes = [1, 2, 4]
+  /// Trace hop widths the firmware accepts, in bytes.
+  private static let validTraceHashSizes = [1, 2, 3]
 
   /// When a pasted bulk entry's codes all share one valid trace width that the
   /// radio can honor and differs from the active width, switch to it so the
@@ -1250,9 +1255,9 @@ extension TracePathViewModel: HopPickerSource {
     setTraceHashMode(mode)
   }
 
-  /// The single trace hash mode (0/1/2 for 1/2/4 bytes) implied by a
+  /// The single trace hash mode (0/1/2 for 1/2/3 bytes) implied by a
   /// comma-separated bulk paste, or `nil` when the codes are empty, non-hex,
-  /// odd-length, mixed-width, or not a valid power-of-2 trace width.
+  /// odd-length, mixed-width, or not a valid trace hop width.
   static func inferredTraceHashMode(from input: String) -> UInt8? {
     let tokens = input
       .split(separator: ",")
@@ -1268,7 +1273,7 @@ extension TracePathViewModel: HopPickerSource {
       width = bytes
     }
     guard let width, validTraceHashSizes.contains(width) else { return nil }
-    return UInt8(width.trailingZeroBitCount)
+    return PathEncoding.mode(forHashSize: width)
   }
 
   func recordRecent(_ publicKey: Data) {

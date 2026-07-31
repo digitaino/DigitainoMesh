@@ -48,7 +48,7 @@ struct PathActionsSectionView: View {
             )) {
               Text(L10n.Contacts.Contacts.Trace.List.hashSizeOneByte).tag(UInt8(0))
               Text(L10n.Contacts.Contacts.Trace.List.hashSizeTwoBytes).tag(UInt8(1))
-              Text(L10n.Contacts.Contacts.Trace.List.hashSizeFourBytes).tag(UInt8(2))
+              Text(L10n.Contacts.Contacts.Trace.List.hashSizeThreeBytes).tag(UInt8(2))
             }
             .pickerStyle(.menu)
             .tint(.primary)

@@ -128,7 +128,13 @@ extension ChatViewModel {
       try await enqueueChannel(envelope)
     } catch {
       logger.error("enqueueChannel reaction failed for messageID=\(carrier.id, privacy: .public): \(String(describing: error))")
-      await failReactionCarrier(carrier.id)
+      await rollBackOutgoingReaction(
+        messageID: message.id,
+        emoji: emoji,
+        senderName: localNodeName,
+        dataStore: dataStore
+      )
+      await failReactionCarrier(carrier)
       sendErrorMessage = Self.copyForEnqueueFailure(error)
     }
   }
@@ -185,7 +191,13 @@ extension ChatViewModel {
       try await enqueueDM(DirectMessageEnvelope(messageID: carrier.id, contactID: contact.id))
     } catch {
       logger.error("enqueueDM reaction failed for messageID=\(carrier.id, privacy: .public): \(String(describing: error))")
-      await failReactionCarrier(carrier.id)
+      await rollBackOutgoingReaction(
+        messageID: message.id,
+        emoji: emoji,
+        senderName: localNodeName,
+        dataStore: dataStore
+      )
+      await failReactionCarrier(carrier)
       sendErrorMessage = Self.copyForEnqueueFailure(error)
     }
   }
@@ -206,12 +218,41 @@ extension ChatViewModel {
     }
   }
 
-  /// Marks a reaction's carrier message failed. A failed outgoing reaction is the one
-  /// case `filterOutgoingReactionMessages` lets through to the timeline, so the user
-  /// sees the send that didn't make it and can retry it like any other message.
-  private func failReactionCarrier(_ messageID: UUID) async {
-    _ = try? await dataStore?.updateMessageStatusUnlessDelivered(id: messageID, status: .failed)
-    timeline.applyStatusUpdate(messageID: messageID, status: .failed)
+  /// Undoes the optimistic badge row for a reaction whose carrier never reached the send
+  /// queue. Without it the badge stands for a reaction nobody sent, and the
+  /// `reactionExists` dedup check then refuses the user's next tap on the same emoji
+  /// forever.
+  private func rollBackOutgoingReaction(
+    messageID: UUID,
+    emoji: String,
+    senderName: String,
+    dataStore: DataStore
+  ) async {
+    let summary: String?
+    do {
+      summary = try await dataStore.deleteReaction(
+        messageID: messageID,
+        senderName: senderName,
+        emoji: emoji
+      )
+    } catch {
+      logger.error("Failed to roll back reaction on messageID=\(messageID, privacy: .public): \(String(describing: error))")
+      return
+    }
+    updateReactionSummary(for: messageID, summary: summary ?? "")
+  }
+
+  /// Marks a reaction's carrier message failed and admits it to the live timeline. A failed
+  /// outgoing reaction is the one case `filterOutgoingReactionMessages` lets through, so the
+  /// user sees the send that didn't make it and can retry it like any other message — but
+  /// only if the row is there: the carrier was never appended, and both status-update paths
+  /// no-op on an absent id, so without the admission it surfaces on the next open.
+  private func failReactionCarrier(_ carrier: MessageDTO) async {
+    _ = try? await dataStore?.updateMessageStatusUnlessDelivered(id: carrier.id, status: .failed)
+    var failed = carrier
+    failed.status = .failed
+    appendMessageIfNew(failed)
+    timeline.applyStatusUpdate(messageID: carrier.id, status: .failed)
   }
 
   // MARK: - Reaction Updates

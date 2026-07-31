@@ -40,17 +40,18 @@ struct TraceDataParsingTests {
   }
 
   @Test
-  func `traceData pathSz=2 four byte hashes`() {
-    // path_sz=2: 4-byte hashes, hopCount = pathLength / 4
+  func `traceData pathSz=2 three byte hashes`() {
+    // path_sz=2: 3-byte hashes, hopCount = pathLength / 3. Linear widths, not `1 << path_sz`
+    // — a 4-byte split here never resolved a hop hash the app had sent as 3 bytes.
     var payload = Data()
     payload.append(0x00) // Reserved
-    payload.append(0x08) // pathLength = 8 hash bytes = 2 hops
-    payload.append(0x02) // flags: path_sz = 2 (means 4 bytes per hash)
+    payload.append(0x06) // pathLength = 6 hash bytes = 2 hops
+    payload.append(0x02) // flags: path_sz = 2 (means 3 bytes per hash)
     payload.appendLittleEndian(UInt32(111)) // tag
     payload.appendLittleEndian(UInt32(222)) // authCode
-    // 8 hash bytes (2 hops x 4 bytes)
-    payload.append(contentsOf: [0x11, 0x22, 0x33, 0x44]) // hop 0
-    payload.append(contentsOf: [0x55, 0x66, 0x77, 0x88]) // hop 1
+    // 6 hash bytes (2 hops x 3 bytes)
+    payload.append(contentsOf: [0x11, 0x22, 0x33]) // hop 0
+    payload.append(contentsOf: [0x55, 0x66, 0x77]) // hop 1
     // 2 SNR bytes (one per hop)
     payload.append(contentsOf: [0x28, 0x14]) // SNRs: 10.0, 5.0
     payload.append(0x0C) // final SNR: 3.0
@@ -64,13 +65,38 @@ struct TraceDataParsingTests {
 
     #expect(trace.path.count == 3, "Should have 2 hops + 1 destination")
 
-    // Check 4-byte hashes
-    #expect(trace.path[0].hashBytes == Data([0x11, 0x22, 0x33, 0x44]))
-    #expect(trace.path[1].hashBytes == Data([0x55, 0x66, 0x77, 0x88]))
+    // Check 3-byte hashes
+    #expect(trace.path[0].hashBytes == Data([0x11, 0x22, 0x33]))
+    #expect(trace.path[1].hashBytes == Data([0x55, 0x66, 0x77]))
     #expect(trace.path[2].hashBytes == nil)
 
     // Legacy hash accessor (first byte only)
     #expect(trace.path[0].hash == 0x11)
+  }
+
+  @Test
+  func `traceData pathSz=3 is clamped to three byte hashes`() {
+    // path_sz=3 is reserved. The clamp keeps the split at the protocol maximum rather than
+    // reading an 8-byte width the firmware never sends.
+    var payload = Data()
+    payload.append(0x00) // Reserved
+    payload.append(0x03) // pathLength = 3 hash bytes = 1 hop
+    payload.append(0x03) // flags: path_sz = 3 (reserved)
+    payload.appendLittleEndian(UInt32(7)) // tag
+    payload.appendLittleEndian(UInt32(8)) // authCode
+    payload.append(contentsOf: [0xA1, 0xB2, 0xC3]) // hop 0
+    payload.append(0x28) // SNR: 10.0
+    payload.append(0x0C) // final SNR: 3.0
+
+    let event = Parsers.TraceData.parse(payload)
+
+    guard case let .traceData(trace) = event else {
+      Issue.record("Expected traceData, got \(event)")
+      return
+    }
+
+    #expect(trace.path.count == 2, "Should have 1 hop + 1 destination")
+    #expect(trace.path[0].hashBytes == Data([0xA1, 0xB2, 0xC3]))
   }
 
   @Test

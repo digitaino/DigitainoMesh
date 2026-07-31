@@ -92,7 +92,11 @@ public final class AdaptivePowerService {
 
   // MARK: - Configuration
 
-  /// Configures the service for a connected device and returns it to base power.
+  /// Configures the service for a connected device and returns its state to base power.
+  ///
+  /// Seeds state only. The radio itself is reconciled by ``applyCurrentPower()``, which the
+  /// caller runs once the container is wired — a previous session may have left the firmware
+  /// at an escalated level, and nothing but this service records what it should be.
   ///
   /// - Parameters:
   ///   - paGainDb: External amplifier gain in dB (0 for a bare radio).
@@ -118,38 +122,75 @@ public final class AdaptivePowerService {
     logger.info("Configured: paGain=\(paGainDb)dB, radioMax=\(radioMaxDbm)dBm, base=\(self.baseStepIndex), enabled=\(enabled)")
   }
 
-  /// Updates the base step from the settings UI.
+  /// Updates the base step from the settings UI and moves the radio with it.
   ///
-  /// An active escalation is preserved; only a current step at or below the old base
-  /// follows the base up, so raising the base while escalated cannot lower the radio.
-  public func setBaseStep(_ index: Int) {
+  /// An active escalation is preserved: only a step that was sitting at or below the old
+  /// base follows the new one, so raising the base while escalated cannot lower the radio
+  /// and lowering it cannot strand the user above the level they just picked.
+  public func setBaseStep(_ index: Int) async {
+    let previousBaseStepIndex = baseStepIndex
     baseStepIndex = policy.clampStepIndex(index)
-    if !isUserOverride, currentStepIndex <= baseStepIndex {
-      currentStepIndex = baseStepIndex
-    }
-    logger.info("Base step set to \(self.baseStepIndex) (\(self.currentStep.label))")
+    logger.info("Base step set to \(self.baseStepIndex) (\(self.baseStep.label))")
+
+    guard !isUserOverride, currentStepIndex <= max(previousBaseStepIndex, baseStepIndex),
+          currentStepIndex != baseStepIndex else { return }
+    currentStepIndex = baseStepIndex
+    await applyCurrentPower()
   }
 
   /// Updates the external amplifier gain from the settings UI, re-deriving the policy.
-  public func setPAGain(_ gain: Double) {
+  ///
+  /// The same step maps to a different radio config once an amplifier is in the chain, so
+  /// the radio is rewritten whenever the derived target moves.
+  public func setPAGain(_ gain: Double) async {
+    let previousRadioDbm = currentRadioDbm
     policy = AdaptivePowerPolicy(paGainDb: gain, radioMaxDbm: policy.radioMaxDbm)
     baseStepIndex = policy.clampStepIndex(baseStepIndex)
     currentStepIndex = policy.clampStepIndex(currentStepIndex)
+    // Losing gain can strand a step above what the radio alone reaches; snapping down keeps
+    // the write below `radioMaxDbm` instead of asking the chip for a level it cannot produce.
+    if let highest = policy.availableSteps.last {
+      baseStepIndex = min(baseStepIndex, highest.id)
+      currentStepIndex = min(currentStepIndex, highest.id)
+    }
     logger.info("PA gain set to \(self.policy.paGainDb)dB\(self.policy.paCurve != nil ? " (measured curve)" : "")")
+
+    guard currentRadioDbm != previousRadioDbm else { return }
+    await applyCurrentPower()
   }
 
-  /// Enables or disables adaptive power mode. Disabling returns state to base.
-  public func setEnabled(_ enabled: Bool) {
-    isEnabled = enabled
-    if !enabled {
-      currentStepIndex = baseStepIndex
+  /// Enables or disables adaptive power mode.
+  ///
+  /// Enabling writes the base level, so the radio actually starts where the UI says it
+  /// does. Disabling returns an escalated radio to base *before* clearing state: this
+  /// service is the only record of the escalation, so dropping it first would leave the
+  /// firmware transmitting at the elevated level until the next reconnect.
+  public func setEnabled(_ enabled: Bool) async {
+    guard enabled != isEnabled else { return }
+
+    guard enabled else {
+      if currentStepIndex != baseStepIndex {
+        currentStepIndex = baseStepIndex
+        await applyCurrentPower()
+      }
+      isEnabled = false
       consecutiveSuccesses = 0
       isUserOverride = false
       confirmedRadioDbm = nil
-      lastApplyFailed = false
       lastChangeReason = nil
+      // `lastApplyFailed` deliberately survives: a restore that never landed means the
+      // radio may still be above base, and that is worth keeping on the record.
+      logger.info("Adaptive power disabled")
+      return
     }
-    logger.info("Adaptive power \(enabled ? "enabled" : "disabled")")
+
+    isEnabled = true
+    currentStepIndex = baseStepIndex
+    consecutiveSuccesses = 0
+    isUserOverride = false
+    lastChangeReason = nil
+    logger.info("Adaptive power enabled")
+    await applyCurrentPower()
   }
 
   // MARK: - Derived State

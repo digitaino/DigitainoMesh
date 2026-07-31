@@ -18,11 +18,11 @@ extension Parsers {
     /// - Offset 11+pathLen (hopCount bytes): SNR bytes (one per hop)
     /// - Offset 11+pathLen+hopCount (1 byte): Final SNR at destination
     ///
-    /// path_sz encoding:
+    /// path_sz encoding (``PathEncoding/hashSize(forMode:)``):
     /// - 0: 1-byte hashes (pathLen = hopCount)
     /// - 1: 2-byte hashes (hopCount = pathLen / 2)
-    /// - 2: 4-byte hashes (hopCount = pathLen / 4)
-    /// - 3: 8-byte hashes (hopCount = pathLen / 8)
+    /// - 2: 3-byte hashes (hopCount = pathLen / 3)
+    /// - 3: reserved, clamped to 3-byte hashes
     static func parse(_ data: Data) -> MeshEvent {
       // Minimum: reserved(1) + pathLen(1) + flags(1) + tag(4) + authCode(4) = 11 bytes
       guard data.count >= PacketSize.traceDataMinimum else {
@@ -34,8 +34,8 @@ extension Parsers {
 
       let pathLength = Int(data[1])
       let flags = data[2]
-      let pathSz = Int(flags & 0x03)
-      let hashSize = 1 << pathSz // 1, 2, 4, or 8 bytes per hop
+      let pathSz = flags & 0x03
+      let hashSize = PathEncoding.hashSize(forMode: pathSz)
       let hopCount = pathLength > 0 ? pathLength / hashSize : 0
 
       let tag = data.readUInt32LE(at: 3)

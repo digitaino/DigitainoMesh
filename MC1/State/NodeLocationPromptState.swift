@@ -13,6 +13,9 @@ struct PendingNodeLocationPrompt: Identifiable, Equatable {
   /// has drifted by the time they answer.
   let latitude: Double
   let longitude: Double
+  /// When CoreLocation took the captured fix. Re-checked before the write, so an alert that
+  /// stood through a suspend cannot commit a coordinate that has since aged out.
+  let fixDate: Date
 
   var id: UUID {
     deviceID
@@ -42,6 +45,12 @@ final class NodeLocationPromptState {
   /// immediate re-prompt over the failure.
   private var askedDeviceIDs: Set<UUID> = []
 
+  /// Whether this session has already asked for a fresh phone fix. Unlike "no fix at all",
+  /// "the fix is too old" is a condition a new fix can *keep* satisfying — CoreLocation may
+  /// answer a request with the same cached fix — and every arrival re-enters `evaluate`
+  /// through `ContentView`'s observation. One request per session, so that cannot spin.
+  private var didRequestFreshFix = false
+
   init(store: DevicePreferenceStore = DevicePreferenceStore()) {
     self.store = store
   }
@@ -49,28 +58,40 @@ final class NodeLocationPromptState {
   /// Runs the policy against the current connection and phone fix, presenting the prompt when
   /// it says so. Safe to call repeatedly — it is the connect-ready hook *and* the
   /// location-arrived hook, and whichever lands second is the one that prompts.
-  func evaluate(device: DeviceDTO?, phoneLocation: CLLocation?, now: Date = Date()) {
-    guard pending == nil, let device, !askedDeviceIDs.contains(device.id) else { return }
+  ///
+  /// - Returns: whether the caller should ask for a fresh phone fix: the radio has a location
+  ///   worth checking, but the fix on hand is missing or too old to decide on. Asked at most
+  ///   once per session.
+  @discardableResult
+  func evaluate(device: DeviceDTO?, phoneLocation: CLLocation?, now: Date = Date()) -> Bool {
+    guard pending == nil, let device, !askedDeviceIDs.contains(device.id) else { return false }
 
-    let coordinate = phoneLocation?.coordinate
     let decision = NodeLocationStalenessPolicy.evaluate(
       deviceLatitude: device.latitude,
       deviceLongitude: device.longitude,
       deviceHasLocation: device.hasLocation,
-      phoneCoordinate: coordinate,
+      phoneLocation: phoneLocation,
       lastSnoozedAt: store.nodeLocationPromptSnoozedAt(deviceID: device.id),
       now: now
     )
 
-    guard let distance = decision.promptDistanceMeters, let coordinate else { return }
+    if case .skip(.noPhoneFix) = decision {
+      guard !didRequestFreshFix else { return false }
+      didRequestFreshFix = true
+      return true
+    }
+
+    guard let distance = decision.promptDistanceMeters, let phoneLocation else { return false }
 
     askedDeviceIDs.insert(device.id)
     pending = PendingNodeLocationPrompt(
       deviceID: device.id,
       distanceMeters: distance,
-      latitude: coordinate.latitude,
-      longitude: coordinate.longitude
+      latitude: phoneLocation.coordinate.latitude,
+      longitude: phoneLocation.coordinate.longitude,
+      fixDate: phoneLocation.timestamp
     )
+    return false
   }
 
   /// "Not Now": persists the per-device snooze and dismisses.
@@ -100,6 +121,7 @@ final class NodeLocationPromptState {
   /// Clears per-connection state on disconnect or device switch.
   func endSession() {
     askedDeviceIDs.removeAll()
+    didRequestFreshFix = false
     pending = nil
   }
 }

@@ -69,10 +69,11 @@ public actor SignalBarsEngine {
   private var txFlashTick: UInt = 0
   /// Repeaters that were heard while unmeasured, and when their reactive probe comes due.
   private var reactiveProbeDueAt: [NodeHexID: Date] = [:]
+  /// The repeater promoted to best link that has not been probed since. It goes first among
+  /// the rows that are *already* due; a promotion never makes a row due.
+  private var promotedBest: NodeHexID?
   private var lastDiscoverProbeAt: Date?
   private var lastNameResolveAt: Date?
-  /// The last device table applied, so an unchanged poll result publishes nothing.
-  private var lastAppliedBlob: SignalBarsBlob?
   /// Probe timeout, replaced by whatever the device suggests when a probe is sent.
   private var probeTimeoutMs: Int
   private var lastPublished: SignalBarsSnapshot?
@@ -155,9 +156,9 @@ public actor SignalBarsEngine {
     table = SignalBarsTable(policy: policy)
     tracker.cancelAll()
     reactiveProbeDueAt.removeAll()
+    promotedBest = nil
     lastDiscoverProbeAt = nil
     lastNameResolveAt = nil
-    lastAppliedBlob = nil
     isRefreshing = false
     watched = nil
     probeTimeoutMs = policy.defaultProbeTimeoutMs
@@ -337,8 +338,10 @@ public actor SignalBarsEngine {
     rxFlashTick &+= 1
 
     if change.bestChanged, !isRefreshing, let best = table.best {
-      // A new best link is worth measuring now rather than at its next slot.
-      table.prioritizeNextProbe(for: best.id)
+      // A new best link is worth measuring before the others, but only once its own slot comes
+      // up: a promotion that could make a row due would let two comparably scored repeaters
+      // trading places probe at the loop's floor, past the cadence and the failure backoff.
+      promotedBest = best.id
     }
 
     noteWatchedSighting(
@@ -366,7 +369,7 @@ public actor SignalBarsEngine {
     let bestChanged = table.applyProbeReply(reply, to: probe.target, rttMs: rttMs, now: at)
     rxFlashTick &+= 1
     if bestChanged, !isRefreshing, let best = table.best {
-      table.prioritizeNextProbe(for: best.id)
+      promotedBest = best.id
     }
     noteWatchedSighting(
       id: probe.target,
@@ -379,29 +382,27 @@ public actor SignalBarsEngine {
 
   /// Applies a device table, whether it arrived by push or by poll.
   ///
-  /// An identical table is still merged (it is idempotent) but publishes nothing and
-  /// bumps no counters, so the poll loop cannot make the UI flash every five seconds.
+  /// What counts as a sighting is the table's judgment — which entries the radio *heard* since
+  /// the last blob — not whether the blob's bytes changed. The device sends age rather than
+  /// timestamps, so a poll five seconds later on a silent repeater differs in `ageSeconds`
+  /// alone and is no sighting, while a repeater heard on every poll reports the same age every
+  /// time and is one.
   private func apply(blobData: Data) async {
     guard let blob = SignalBarsBlob(decoding: blobData) else {
       logger.error("Ignoring undecodable signal-bars blob (\(blobData.count) bytes)")
       return
     }
     let at = now()
-    let isUnchanged = blob == lastAppliedBlob
-    lastAppliedBlob = blob
-    table.apply(blob, now: at)
+    let heard = table.apply(blob, now: at)
 
-    if !isUnchanged {
+    if !heard.isEmpty {
       rxFlashTick &+= 1
-      if let watched, let entry = blob.entries.first(where: { entry in
-        NodeHexID(entry.hexID).map { $0.identifiesSameNode(as: watched.id) } ?? false
-      }) {
-        noteWatchedSighting(
-          id: NodeHexID(entry.hexID) ?? watched.id,
-          rxSnr: entry.rxSnr ?? 0,
-          txSnr: entry.txSnr,
-          at: at
-        )
+      if let watched,
+         let id = heard.first(where: { $0.identifiesSameNode(as: watched.id) }),
+         let entry = table[id] {
+        // The device's own age, not the poll's arrival time: mirroring a table is not hearing
+        // the repeater, and "last heard" would otherwise read "now" on every poll.
+        noteWatchedSighting(id: id, rxSnr: entry.rxSnr, txSnr: entry.txSnr, at: entry.lastHeard)
       }
     }
 
@@ -409,11 +410,14 @@ public actor SignalBarsEngine {
     publish()
   }
 
+  /// Records that the watched repeater was heard. A leg the source carries no reading for keeps
+  /// whatever was last measured, and stays unmeasured when nothing ever was — so the watch
+  /// screen shows its no-data state rather than a fabricated 0 dB.
   private func noteWatchedSighting(id: NodeHexID, rxSnr: Double?, txSnr: Double?, at: Date) {
     guard var watched, watched.id.identifiesSameNode(as: id) else { return }
     watched.heardCount += 1
     watched.lastHeardAt = at
-    watched.rxSnr = rxSnr
+    watched.rxSnr = rxSnr ?? watched.rxSnr
     watched.txSnr = txSnr ?? watched.txSnr
     self.watched = watched
   }
@@ -464,7 +468,7 @@ public actor SignalBarsEngine {
     let lost = tracker.expired(now: at)
     guard !lost.isEmpty else { return }
     for probe in lost {
-      table.markProbeFailed(probe.target)
+      table.markProbeFailed(probe.target, sentAt: probe.sentAt)
       logger.debug("Probe timeout for \(probe.target.hex)")
     }
     publish()
@@ -497,7 +501,31 @@ public actor SignalBarsEngine {
     }
 
     let movement = await movementHints.currentMovementHint()
+    // Then the promoted best link, which jumps the queue among the rows that are due without
+    // being able to make itself due.
+    if let promoted = claimPromotedBest(now: at, movement: movement) { return promoted }
+
     return policy.nextProbeTarget(among: table.repeaters, now: at, movement: movement)
+  }
+
+  /// The promoted best link, when it is still the head of the table and its next probe is due.
+  ///
+  /// The claim is one-shot: honouring it spends it, and so does anything else becoming best —
+  /// the promotion belongs to whatever leads the table now.
+  private func claimPromotedBest(now at: Date, movement: MovementHint) -> RepeaterSignal? {
+    guard let promoted = promotedBest else { return nil }
+    guard let repeater = table[promoted], repeater.id == table.best?.id else {
+      promotedBest = nil
+      return nil
+    }
+    guard policy.probeUrgency(
+      for: repeater,
+      isBest: true,
+      now: at,
+      movement: movement
+    ) != nil else { return nil }
+    promotedBest = nil
+    return repeater
   }
 
   // MARK: - Transmission
@@ -522,17 +550,14 @@ public actor SignalBarsEngine {
         path: path
       )
       probeTimeoutMs = Int(sent.suggestedTimeoutMs)
-      // Re-register with the device's own timeout, keeping the original send time.
-      tracker.register(
-        tag: tag,
-        target: repeater.id,
-        now: sentAt,
-        timeoutMs: Int(sent.suggestedTimeoutMs)
-      )
+      // Take the device's own timeout, keeping the original send time. The reply can beat this
+      // line, so only a probe that is still outstanding is retimed — re-registering a claimed
+      // tag would hand the next sweep an answered probe to write off.
+      tracker.retime(tag: tag, timeoutMs: Int(sent.suggestedTimeoutMs))
       txFlashTick &+= 1
     } catch {
       _ = tracker.claim(tag: tag)
-      table.markProbeFailed(repeater.id)
+      table.markProbeFailed(repeater.id, sentAt: sentAt)
       logger.error("Probe to \(repeater.id.hex) failed: \(error.localizedDescription)")
     }
     publish()

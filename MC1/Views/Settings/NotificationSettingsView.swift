@@ -35,6 +35,12 @@ struct NotificationSettingsView: View {
     .task(id: appState.servicesVersion) {
       await refreshDeviceRulesAvailability()
     }
+    // The classification is held by an actor, not observed, so a probe that lands while this
+    // screen is open never reaches the row. Re-checking on every appearance at least catches
+    // a flip that happened behind a pushed subpage.
+    .onAppear {
+      Task { await refreshDeviceRulesAvailability() }
+    }
   }
 
   private func refreshDeviceRulesAvailability() async {

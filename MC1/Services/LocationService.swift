@@ -213,7 +213,13 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     Task { @MainActor in
       self.currentLocation = location
       self.isRequestingLocation = false
-      self.logger.info("Location updated: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+      // `privacy: .private` because OSLog treats interpolated numerics as public by
+      // default, which would put full-precision coordinates in the unified log store for
+      // anyone with a sysdiagnose. Signal-mapper capture makes this fire far more often
+      // than the occasional map-centering request it was written for.
+      self.logger.info(
+        "Location updated: \(location.coordinate.latitude, privacy: .private), \(location.coordinate.longitude, privacy: .private)"
+      )
 
       self.locationTimeoutTask?.cancel()
       self.locationTimeoutTask = nil

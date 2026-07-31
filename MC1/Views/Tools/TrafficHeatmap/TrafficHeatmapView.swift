@@ -48,7 +48,10 @@ struct TrafficHeatmapView: View {
         }
       }
       .task(id: appState.servicesVersion) { await reload() }
-      .onChange(of: model.window) { _, _ in
+      .onChange(of: model.window) { _, window in
+        // A window `load()` is already aggregating needs no reload of its own: this is the
+        // ladder reset it performs when the log no longer reaches the selected window back.
+        guard window != model.loadedWindow else { return }
         hasFramedData = false
         Task { await reload() }
       }
@@ -112,23 +115,26 @@ struct TrafficHeatmapView: View {
         isStyleLoaded: $isStyleLoaded,
         isCenteredOnUser: $isCenteredOnUser
       )
+      // Popover attached before ignoresSafeArea, the ordering NodeLocationMapView documents:
+      // with ignoresSafeArea in between, the anchor rect resolves in safe-area space while the
+      // coordinator reports full-screen coordinates, and the top inset shoves the callout down.
+      .popover(
+        item: $selection,
+        attachmentAnchor: .rect(.rect(CGRect(
+          origin: selectionAnchor ?? .zero,
+          size: CGSize(width: 1, height: 1)
+        ))),
+        arrowEdge: .bottom
+      ) { selection in
+        TrafficNodeCallout(node: selection.node)
+          .presentationCompactAdaptation(.popover)
+      }
       .ignoresSafeArea()
 
       controls
     }
     .overlay(alignment: .top) { summaryPill }
     .overlay(alignment: .bottomLeading) { TrafficHeatmapLegend() }
-    .popover(
-      item: $selection,
-      attachmentAnchor: .rect(.rect(CGRect(
-        origin: selectionAnchor ?? .zero,
-        size: CGSize(width: 1, height: 1)
-      ))),
-      arrowEdge: .bottom
-    ) { selection in
-      TrafficNodeCallout(node: selection.node)
-        .presentationCompactAdaptation(.popover)
-    }
     // The map gates camera moves until its style has loaded, which usually lands after the
     // first aggregation, so the fit is re-issued on that signal rather than left to chance.
     .onChange(of: isStyleLoaded) { _, loaded in

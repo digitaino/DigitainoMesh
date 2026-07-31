@@ -40,7 +40,7 @@ struct MessageSearchResultsSection: View {
       Spacer(minLength: 0)
 
       if search.hasMoreThanLoaded {
-        Text(L10n.Chats.Chats.Search.Messages.showingCount(search.loadedCount, search.totalCount))
+        Text(L10n.Chats.Chats.Search.Messages.showingFirst(search.loadedCount))
           .font(.caption2)
           .foregroundStyle(.secondary)
           .monospacedDigit()

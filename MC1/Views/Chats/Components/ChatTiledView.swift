@@ -140,9 +140,13 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
       .padding(.trailing, 16)
       .padding(.bottom, 8)
     }
-    .onChange(of: scrollToBottomRequest) { scrollPosition.scrollTo(edge: .bottom) }
+    .onChange(of: scrollToBottomRequest) {
+      searchRevealLatch.latch.noteProgrammaticScroll()
+      scrollPosition.scrollTo(edge: .bottom)
+    }
     .onChange(of: scrollToTargetRequest) {
       guard let id = scrollTargetID else { return }
+      searchRevealLatch.latch.noteProgrammaticScroll()
       scrollPosition.scrollTo(id: id)
     }
     .onChange(of: items.last?.id, initial: true) { _, latest in
@@ -169,6 +173,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     )
     let event = searchRevealLatch.latch.event(
       pointsFromBottom: geometry.pointsFromBottom,
+      contentOffsetY: geometry.contentOffset.y,
       overscroll: overscroll,
       contentFits: geometry.contentSize.height <= geometry.visibleSize.height,
       isSearchActive: isSearchBarActive

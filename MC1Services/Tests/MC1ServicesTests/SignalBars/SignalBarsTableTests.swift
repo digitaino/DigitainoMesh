@@ -216,7 +216,7 @@ struct SignalBarsTableTests {
     var table = SignalBarsTable()
     let id = nodeID("0C")
     try table.ingest(sighting("0C", rxSnr: 8, key: [0x0C]), now: start)
-    table.markProbeFailed(id)
+    table.markProbeFailed(id, sentAt: start)
     #expect(table[id]?.failCount == 1)
 
     table.markProbeSent(id, now: start)
@@ -255,11 +255,28 @@ struct SignalBarsTableTests {
   }
 
   @Test
+  func `A timeout leaves a TX measurement that landed after the probe was sent alone`() throws {
+    var table = SignalBarsTable()
+    let id = nodeID("0C")
+    try table.ingest(sighting("0C", rxSnr: 8, key: [0x0C]), now: start)
+    table.markProbeSent(id, now: start)
+    // A discover response can answer the TX leg while the trace is still outstanding.
+    try table.ingest(sighting("0C", rxSnr: 8, txSnr: 5), now: start.addingTimeInterval(1))
+
+    table.markProbeFailed(id, sentAt: start)
+
+    let entry = try #require(table[id])
+    #expect(entry.txState == .measured(SNRQuality(snr: 5)))
+    #expect(entry.txSnr == 5)
+    #expect(entry.failCount == 0, "the link answered; the timeout is stale news about it")
+  }
+
+  @Test
   func `A full refresh resets failures and writes off whatever never answered`() throws {
     var table = SignalBarsTable()
     try table.ingest(sighting("01", key: [0x01]), now: start)
     try table.ingest(sighting("02", txSnr: 5, key: [0x02]), now: start)
-    table.markProbeFailed(nodeID("01"))
+    table.markProbeFailed(nodeID("01"), sentAt: start)
 
     table.beginFullRefresh()
     #expect(table.repeaters.allSatisfy { $0.failCount == 0 })
@@ -305,6 +322,31 @@ struct SignalBarsTableTests {
     #expect(mirrored.rttMs == 900)
     #expect(mirrored.lastHeard == start.addingTimeInterval(-30))
     #expect(table.repeaters[0].isDeviceBest)
+  }
+
+  @Test
+  func `A blob reports the entries the radio heard since the last one, not the bytes that changed`() {
+    var table = SignalBarsTable()
+
+    let first = table.apply(SignalBarsBlob(version: 2, entries: [
+      SignalBarsFixtures.entry(hash: [0x01], ageSeconds: 100),
+      SignalBarsFixtures.entry(hash: [0x02], ageSeconds: 0)
+    ]), now: start)
+    #expect(first.map(\.hex) == ["01", "02"], "a row we did not have is news either way")
+
+    // Five seconds later: 01 has only aged, 02 reports the same age because it keeps being
+    // heard — so the poll where nothing changed in 02's bytes is the one that heard it.
+    let second = table.apply(SignalBarsBlob(version: 2, entries: [
+      SignalBarsFixtures.entry(hash: [0x01], ageSeconds: 105),
+      SignalBarsFixtures.entry(hash: [0x02], ageSeconds: 0)
+    ]), now: start.addingTimeInterval(5))
+    #expect(second.map(\.hex) == ["02"])
+
+    let third = table.apply(SignalBarsBlob(version: 2, entries: [
+      SignalBarsFixtures.entry(hash: [0x01], ageSeconds: 2),
+      SignalBarsFixtures.entry(hash: [0x02], ageSeconds: 15)
+    ]), now: start.addingTimeInterval(10))
+    #expect(third.map(\.hex) == ["01"], "01's age dropped; 02 has gone quiet")
   }
 
   @Test

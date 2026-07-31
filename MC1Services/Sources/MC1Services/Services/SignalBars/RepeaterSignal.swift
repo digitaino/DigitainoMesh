@@ -33,6 +33,10 @@ public struct RepeaterSignal: Sendable, Equatable, Identifiable {
   public var txSnr: Double?
   /// Measurement state of the TX leg.
   public var txState: RepeaterTXState
+  /// When the TX leg was last measured. A probe that resolves later than this — a timeout, or
+  /// a send that failed — is stale news about the link and must leave the reading alone: a
+  /// discover response can answer the TX leg while a trace is still outstanding.
+  public var txMeasuredAt: Date?
   /// Received signal strength of the last packet heard from this repeater, in dBm.
   public var rssi: Int?
   /// Round-trip time of the last successful probe, in milliseconds.
@@ -55,6 +59,7 @@ public struct RepeaterSignal: Sendable, Equatable, Identifiable {
     rxSnr: Double? = nil,
     txSnr: Double? = nil,
     txState: RepeaterTXState = .unknown,
+    txMeasuredAt: Date? = nil,
     rssi: Int? = nil,
     rttMs: Int? = nil,
     lastHeard: Date,
@@ -68,6 +73,7 @@ public struct RepeaterSignal: Sendable, Equatable, Identifiable {
     self.rxSnr = rxSnr
     self.txSnr = txSnr
     self.txState = txState
+    self.txMeasuredAt = txMeasuredAt
     self.rssi = rssi
     self.rttMs = rttMs
     self.lastHeard = lastHeard

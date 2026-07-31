@@ -1126,3 +1126,122 @@
 
 /* Location: TrafficNodeCallout.swift - Shown for a node only ever seen relaying for others */
 "tools.trafficMap.callout.neverHeardDirectly" = "Nooit rechtstreeks gehoord";
+
+// MARK: - Signal Mapper
+
+/* Location: ToolSelection.swift - Tool selection label */
+"tools.signalMapper" = "Signaalkaart";
+
+/* Location: SignalMapperCoverageView.swift - Empty state title before anything has been captured */
+"tools.signalMapper.empty" = "Nog geen dekking vastgelegd";
+
+/* Location: SignalMapperCoverageView.swift - Empty state description explaining how to start capturing */
+"tools.signalMapper.emptyDescription" = "Zet hieronder het vastleggen aan en neem de app mee. Pakketten die je radio hoort, echo's van je eigen berichten via repeaters en bezorgbevestigingen komen terecht op de zeshoek waar je stond.";
+
+/* Location: SignalMapperCoverageView.swift - Toggle switching passive coverage capture on and off */
+"tools.signalMapper.captureToggle" = "Dekking vastleggen tijdens gebruik van de app";
+
+/* Location: SignalMapperCoverageView.swift - Explains what capture does, under the toggle */
+"tools.signalMapper.captureExplainer" = "Werkt alleen als de app open is en zendt nooit iets op het mesh. Het brengt het verkeer in kaart dat je radio toch al zou verwerken.";
+
+/* Location: SignalMapperCoverageView.swift - Privacy note under the capture toggle */
+"tools.signalMapper.privacyNote" = "Alles blijft op dit apparaat. Je exacte positie wordt nooit opgeslagen — alleen de zeshoek waarin je was. Er wordt nooit iets geüpload zonder het eerst te vragen.";
+
+/* Location: SignalMapperCoverageView.swift - Explains that frequently-visited areas are excluded from the map */
+"tools.signalMapper.anchorNote" = "Plekken waar je veel tijd doorbrengt worden bewust van de kaart weggelaten.";
+
+/* Location: SignalMapperCoverageView.swift - Banner counting what the map is showing; %1$lld is cells, %2$lld observations, %3$lld days */
+"tools.signalMapper.summary" = "%1$lld cellen · %2$lld waarnemingen · %3$lld dagen";
+
+/* Location: SignalMapperCoverageView.swift - Map control that frames every captured cell */
+"tools.signalMapper.centerOnCoverage" = "Centreren op dekking";
+
+/* Location: SignalMapperCoverageView.swift - Toolbar menu holding the tool's options */
+"tools.signalMapper.options" = "Opties";
+
+/* Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell */
+"tools.signalMapper.delete.action" = "Vastgelegde dekking verwijderen";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert title before deleting captured cells */
+"tools.signalMapper.delete.title" = "Vastgelegde dekking verwijderen?";
+
+/* Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells */
+"tools.signalMapper.delete.message" = "Verwijdert elke zeshoek die op dit apparaat is vastgelegd. Dit kan niet ongedaan worden gemaakt.";
+
+/* Location: SignalMapperLegend.swift - Legend title */
+"tools.signalMapper.legend.title" = "Legenda";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity */
+"tools.signalMapper.legend.density" = "Vollere zeshoeken zijn vaker waargenomen dan bleke.";
+
+/* Location: SignalMapperLegend.swift - Legend note explaining hexagon color */
+"tools.signalMapper.legend.signal" = "De kleur is het gemiddelde signaal waarmee het mesh die zeshoek bereikte.";
+
+/* Location: SignalQuality+Color.swift - Signal quality below the poor threshold */
+"tools.signalMapper.quality.veryPoor" = "Zeer slecht";
+
+/* Location: SignalMapperCellDetailSheet.swift - Title of the tapped-cell sheet */
+"tools.signalMapper.detail.title" = "Celdetails";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade */
+"tools.signalMapper.detail.quality" = "Signaalkwaliteit";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell */
+"tools.signalMapper.detail.observations" = "Waarnemingen";
+
+/* Location: SignalMapperCellDetailSheet.swift - Row label for the days this cell was seen on */
+"tools.signalMapper.detail.days" = "Dagen";
+
+/* Location: SignalMapperCellDetailSheet.swift - First and last day a cell was observed; %1$@ and %2$@ are dates */
+"tools.signalMapper.detail.dayRange" = "%1$@ tot %2$@";
+
+/* Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index */
+"tools.signalMapper.detail.cellFooter" = "H3-cel %@";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction */
+"tools.signalMapper.detail.direction" = "Per richting";
+
+/* Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell */
+"tools.signalMapper.detail.received" = "Ontvangen pakketten";
+
+/* Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater */
+"tools.signalMapper.detail.txHeard" = "Eigen pakketten teruggehoord";
+
+/* Location: SignalMapperCellDetailSheet.swift - Messages sent from this cell that were acknowledged */
+"tools.signalMapper.detail.acknowledged" = "Bevestigde verzendingen";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean round-trip time of acknowledged sends */
+"tools.signalMapper.detail.roundTrip" = "Gemiddelde retourtijd";
+
+/* Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number */
+"tools.signalMapper.detail.milliseconds" = "%lldms";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header for radio measurements */
+"tools.signalMapper.detail.signal" = "Signaal";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell */
+"tools.signalMapper.detail.averageSnr" = "Gemiddelde SNR";
+
+/* Location: SignalMapperCellDetailSheet.swift - Best and worst signal-to-noise ratio in this cell */
+"tools.signalMapper.detail.snrRange" = "SNR-bereik";
+
+/* Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts */
+"tools.signalMapper.detail.noPacketsHeard" = "Geen pakketten gehoord";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean received signal strength in this cell */
+"tools.signalMapper.detail.averageRssi" = "Gemiddelde RSSI";
+
+/* Location: SignalMapperCellDetailSheet.swift - How packets in this cell were routed */
+"tools.signalMapper.detail.routeMix" = "Routeverdeling";
+
+/* Location: SignalMapperCellDetailSheet.swift - Direct versus flood packet split; %1$lld is direct, %2$lld flood */
+"tools.signalMapper.detail.routeSplit" = "%1$lld direct · %2$lld flood";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section header listing the repeaters heard in this cell */
+"tools.signalMapper.detail.repeaters" = "Gehoorde repeaters";
+
+/* Location: SignalMapperCellDetailSheet.swift - Packets a repeater carried; %lld is the count */
+"tools.signalMapper.detail.packets" = "%lld pakketten";
+
+/* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
+"tools.signalMapper.detail.ambiguousName" = "Meer dan één node past bij deze hash";

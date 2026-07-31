@@ -12,6 +12,21 @@ public enum PathEncoding {
   /// Maximum encoded out-path length in bytes (firmware `MAX_PATH_SIZE`); firmware
   /// `isValidPathLen` rejects `hash_count * hash_size` beyond this.
   public static let maxPathBytes = 64
+
+  /// Bytes per hop for a hash-size mode — the `pathHashMode` config value and a trace's
+  /// `path_sz` flag bits are the same encoding.
+  ///
+  /// The widths are linear (1/2/3 bytes), clamped so the reserved mode 3 cannot ask for an
+  /// oversized hash. Reading `path_sz` as a power of two (`1 << mode`) built 4-byte hops in
+  /// 3-byte mode and broke traces in the field, so do not restore that reading here.
+  public static func hashSize(forMode mode: UInt8) -> Int {
+    min(maxPathHashMode + 1, Int(mode) + 1)
+  }
+
+  /// The mode a stored hop width came from — the inverse of ``hashSize(forMode:)``.
+  public static func mode(forHashSize hashSize: Int) -> UInt8 {
+    UInt8(min(maxPathHashMode, max(0, hashSize - 1)))
+  }
 }
 
 /// Decoded components of a multibyte-encoded path length byte.

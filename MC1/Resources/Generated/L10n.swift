@@ -1010,9 +1010,9 @@ public enum L10n {
           public static let empty = L10n.tr("Chats", "chats.search.messages.empty", fallback: "No messages found")
           /// Location: MessageSearchResultsSection.swift - Header above the message hits in the chats-list search results
           public static let section = L10n.tr("Chats", "chats.search.messages.section", fallback: "Messages")
-          /// Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total
-          public static func showingCount(_ p1: Int, _ p2: Int) -> String {
-            return L10n.tr("Chats", "chats.search.messages.showingCount", p1, p2, fallback: "Showing %1$d of %2$d")
+          /// Location: MessageSearchResultsSection.swift - Header caption when the page is full and older matches may remain - %d is how many are on screen
+          public static func showingFirst(_ p1: Int) -> String {
+            return L10n.tr("Chats", "chats.search.messages.showingFirst", p1, fallback: "Showing first %d")
           }
           /// Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are
           public static func showMore(_ p1: Int) -> String {
@@ -2106,10 +2106,10 @@ public enum L10n {
           public static let hashSize = L10n.tr("Contacts", "contacts.trace.list.hashSize", fallback: "Hash Size")
           /// Location: PathActionsSectionView.swift - Purpose: Caveat shown for multi-byte trace hash sizes
           public static let hashSizeFooter = L10n.tr("Contacts", "contacts.trace.list.hashSizeFooter", fallback: "Repeaters running firmware older than 1.11.0 will not forward traces with a hash size greater than 1 byte.")
-          /// Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 4 bytes per hop
-          public static let hashSizeFourBytes = L10n.tr("Contacts", "contacts.trace.list.hashSizeFourBytes", fallback: "4 Bytes")
           /// Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 1 byte per hop
           public static let hashSizeOneByte = L10n.tr("Contacts", "contacts.trace.list.hashSizeOneByte", fallback: "1 Byte")
+          /// Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 3 bytes per hop
+          public static let hashSizeThreeBytes = L10n.tr("Contacts", "contacts.trace.list.hashSizeThreeBytes", fallback: "3 Bytes")
           /// Location: PathActionsSectionView.swift - Purpose: Trace hash size option, 2 bytes per hop
           public static let hashSizeTwoBytes = L10n.tr("Contacts", "contacts.trace.list.hashSizeTwoBytes", fallback: "2 Bytes")
           /// Location: TracePathListView.swift - Purpose: Hop row accessibility hint
@@ -2858,6 +2858,28 @@ public enum L10n {
     public enum StatusPill {
       /// Status pill message when sync has failed
       public static let syncFailed = L10n.tr("Localizable", "statusPill.syncFailed", fallback: "Sync Failed")
+    }
+    public enum StoreRecovery {
+      /// Location: StoreRecoveryView.swift - Button that moves the current database aside and starts fresh
+      public static let backUpAndReset = L10n.tr("Localizable", "storeRecovery.backUpAndReset", fallback: "Back Up & Reset")
+      /// Location: StoreRecoveryView.swift - Expandable section holding the underlying error text
+      public static let details = L10n.tr("Localizable", "storeRecovery.details", fallback: "Technical Details")
+      /// Location: StoreRecoveryView.swift - Reassurance shown under the title
+      public static let message = L10n.tr("Localizable", "storeRecovery.message", fallback: "DigitainoMesh couldn't open its database. Nothing has been deleted — your messages and contacts are still on this device.")
+      /// Location: StoreRecoveryView.swift - Title of the screen shown when the app's database cannot be opened
+      public static let title = L10n.tr("Localizable", "storeRecovery.title", fallback: "Can't Open Your Data")
+      /// Location: StoreRecoveryView.swift - Shown while a recovery attempt is running
+      public static let working = L10n.tr("Localizable", "storeRecovery.working", fallback: "Working…")
+      public enum BackUpAndReset {
+        /// Location: StoreRecoveryView.swift - Explains what Back Up & Reset does
+        public static let footnote = L10n.tr("Localizable", "storeRecovery.backUpAndReset.footnote", fallback: "Moves your current data into a dated backup folder in the app's storage and starts with an empty database. Nothing is deleted.")
+      }
+      public enum Confirm {
+        /// Location: StoreRecoveryView.swift - Confirmation dialog message before resetting
+        public static let message = L10n.tr("Localizable", "storeRecovery.confirm.message", fallback: "Your current data is moved into a dated backup folder and the app starts with an empty database. The backup stays on this device, but the app won't show it.")
+        /// Location: StoreRecoveryView.swift - Confirmation dialog title before resetting
+        public static let title = L10n.tr("Localizable", "storeRecovery.confirm.title", fallback: "Back Up & Reset?")
+      }
     }
     public enum Tabs {
       /// Tab bar title for the messaging/conversations screen
@@ -4928,6 +4950,10 @@ public enum L10n {
       public static let resynced = L10n.tr("Settings", "deviceNotificationRules.resynced", fallback: "Resynced")
       /// Footer on the row linking to the firmware notification rules screen
       public static let rowFooter = L10n.tr("Settings", "deviceNotificationRules.rowFooter", fallback: "View the per-channel and per-contact notification rules stored on your radio, and force a resync if needed.")
+      /// Shown when the app has more rules than the firmware can store - %1$d fit, %2$d in the app
+      public static func ruleOverflow(_ p1: Int, _ p2: Int) -> String {
+        return L10n.tr("Settings", "deviceNotificationRules.ruleOverflow", p1, p2, fallback: "%1$d of %2$d rules fit on the device. The rest apply on this phone only.")
+      }
       /// Row label for the blob schema version
       public static let schemaVersion = L10n.tr("Settings", "deviceNotificationRules.schemaVersion", fallback: "Schema Version")
       /// Title of the firmware notification rules screen
@@ -5842,6 +5868,8 @@ public enum L10n {
       public static let rxLog = L10n.tr("Tools", "tools.rxLog", fallback: "RX Log")
       /// Location: ToolsView.swift - Empty state when no tool selected
       public static let selectTool = L10n.tr("Tools", "tools.selectTool", fallback: "Select a tool")
+      /// Location: ToolSelection.swift - Tool selection label
+      public static let signalMapper = L10n.tr("Tools", "tools.signalMapper", fallback: "Signal Mapper")
       /// Location: ToolsView.swift - Navigation title
       public static let title = L10n.tr("Tools", "tools.title", fallback: "Tools")
       /// Location: ToolsView.swift - Tool selection label
@@ -6541,6 +6569,104 @@ public enum L10n {
         public static let loadFailed = L10n.tr("Tools", "tools.savedPaths.loadFailed", fallback: "Failed to load saved paths.")
         /// Location: SavedPathsViewModel.swift - Error renaming a saved path
         public static let renameFailed = L10n.tr("Tools", "tools.savedPaths.renameFailed", fallback: "Failed to rename path.")
+      }
+      public enum SignalMapper {
+        /// Location: SignalMapperCoverageView.swift - Explains that frequently-visited areas are excluded from the map
+        public static let anchorNote = L10n.tr("Tools", "tools.signalMapper.anchorNote", fallback: "Places where you spend a lot of time are deliberately left off the map.")
+        /// Location: SignalMapperCoverageView.swift - Explains what capture does, under the toggle
+        public static let captureExplainer = L10n.tr("Tools", "tools.signalMapper.captureExplainer", fallback: "Runs only while the app is open, and never transmits anything on the mesh. It maps the traffic your radio was going to handle anyway.")
+        /// Location: SignalMapperCoverageView.swift - Toggle switching passive coverage capture on and off
+        public static let captureToggle = L10n.tr("Tools", "tools.signalMapper.captureToggle", fallback: "Capture coverage while using the app")
+        /// Location: SignalMapperCoverageView.swift - Map control that frames every captured cell
+        public static let centerOnCoverage = L10n.tr("Tools", "tools.signalMapper.centerOnCoverage", fallback: "Center on Coverage")
+        /// Location: SignalMapperCoverageView.swift - Empty state title before anything has been captured
+        public static let empty = L10n.tr("Tools", "tools.signalMapper.empty", fallback: "No Coverage Captured Yet")
+        /// Location: SignalMapperCoverageView.swift - Empty state description explaining how to start capturing
+        public static let emptyDescription = L10n.tr("Tools", "tools.signalMapper.emptyDescription", fallback: "Turn on capture below, then carry the app with you. Packets your radio hears, echoes of your own messages coming back off repeaters, and delivery receipts all get mapped to the hexagon you were standing in.")
+        /// Location: SignalMapperCoverageView.swift - Toolbar menu holding the tool's options
+        public static let options = L10n.tr("Tools", "tools.signalMapper.options", fallback: "Options")
+        /// Location: SignalMapperCoverageView.swift - Privacy note under the capture toggle
+        public static let privacyNote = L10n.tr("Tools", "tools.signalMapper.privacyNote", fallback: "Everything stays on this device. Your exact position is never stored — only the hexagon you were in. Nothing is ever uploaded without asking you first.")
+        /// Location: SignalMapperCoverageView.swift - Banner counting what the map is showing; %1$lld is cells, %2$lld observations, %3$lld days
+        public static func summary(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
+          return L10n.tr("Tools", "tools.signalMapper.summary", p1, p2, p3, fallback: "%1$lld cells · %2$lld observations · %3$lld days")
+        }
+        public enum Delete {
+          /// Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell
+          public static let action = L10n.tr("Tools", "tools.signalMapper.delete.action", fallback: "Delete Captured Coverage")
+          /// Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells
+          public static let message = L10n.tr("Tools", "tools.signalMapper.delete.message", fallback: "Removes every hexagon captured on this device. This cannot be undone.")
+          /// Location: SignalMapperCoverageView.swift - Confirmation alert title before deleting captured cells
+          public static let title = L10n.tr("Tools", "tools.signalMapper.delete.title", fallback: "Delete Captured Coverage?")
+        }
+        public enum Detail {
+          /// Location: SignalMapperCellDetailSheet.swift - Messages sent from this cell that were acknowledged
+          public static let acknowledged = L10n.tr("Tools", "tools.signalMapper.detail.acknowledged", fallback: "Sends acknowledged")
+          /// Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess
+          public static let ambiguousName = L10n.tr("Tools", "tools.signalMapper.detail.ambiguousName", fallback: "More than one node answers to this hash")
+          /// Location: SignalMapperCellDetailSheet.swift - Mean received signal strength in this cell
+          public static let averageRssi = L10n.tr("Tools", "tools.signalMapper.detail.averageRssi", fallback: "Average RSSI")
+          /// Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell
+          public static let averageSnr = L10n.tr("Tools", "tools.signalMapper.detail.averageSnr", fallback: "Average SNR")
+          /// Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index
+          public static func cellFooter(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.cellFooter", String(describing: p1), fallback: "H3 cell %@")
+          }
+          /// Location: SignalMapperCellDetailSheet.swift - First and last day a cell was observed; %1$@ and %2$@ are dates
+          public static func dayRange(_ p1: Any, _ p2: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.dayRange", String(describing: p1), String(describing: p2), fallback: "%1$@ to %2$@")
+          }
+          /// Location: SignalMapperCellDetailSheet.swift - Row label for the days this cell was seen on
+          public static let days = L10n.tr("Tools", "tools.signalMapper.detail.days", fallback: "Days")
+          /// Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction
+          public static let direction = L10n.tr("Tools", "tools.signalMapper.detail.direction", fallback: "By Direction")
+          /// Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number
+          public static func milliseconds(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.milliseconds", p1, fallback: "%lldms")
+          }
+          /// Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts
+          public static let noPacketsHeard = L10n.tr("Tools", "tools.signalMapper.detail.noPacketsHeard", fallback: "No packets heard")
+          /// Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell
+          public static let observations = L10n.tr("Tools", "tools.signalMapper.detail.observations", fallback: "Observations")
+          /// Location: SignalMapperCellDetailSheet.swift - Packets a repeater carried; %lld is the count
+          public static func packets(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.packets", p1, fallback: "%lld packets")
+          }
+          /// Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade
+          public static let quality = L10n.tr("Tools", "tools.signalMapper.detail.quality", fallback: "Signal quality")
+          /// Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell
+          public static let received = L10n.tr("Tools", "tools.signalMapper.detail.received", fallback: "Packets received")
+          /// Location: SignalMapperCellDetailSheet.swift - Section header listing the repeaters heard in this cell
+          public static let repeaters = L10n.tr("Tools", "tools.signalMapper.detail.repeaters", fallback: "Repeaters Heard")
+          /// Location: SignalMapperCellDetailSheet.swift - Mean round-trip time of acknowledged sends
+          public static let roundTrip = L10n.tr("Tools", "tools.signalMapper.detail.roundTrip", fallback: "Average round trip")
+          /// Location: SignalMapperCellDetailSheet.swift - How packets in this cell were routed
+          public static let routeMix = L10n.tr("Tools", "tools.signalMapper.detail.routeMix", fallback: "Route mix")
+          /// Location: SignalMapperCellDetailSheet.swift - Direct versus flood packet split; %1$lld is direct, %2$lld flood
+          public static func routeSplit(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.routeSplit", p1, p2, fallback: "%1$lld direct · %2$lld flood")
+          }
+          /// Location: SignalMapperCellDetailSheet.swift - Section header for radio measurements
+          public static let signal = L10n.tr("Tools", "tools.signalMapper.detail.signal", fallback: "Signal")
+          /// Location: SignalMapperCellDetailSheet.swift - Best and worst signal-to-noise ratio in this cell
+          public static let snrRange = L10n.tr("Tools", "tools.signalMapper.detail.snrRange", fallback: "SNR range")
+          /// Location: SignalMapperCellDetailSheet.swift - Title of the tapped-cell sheet
+          public static let title = L10n.tr("Tools", "tools.signalMapper.detail.title", fallback: "Cell Detail")
+          /// Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater
+          public static let txHeard = L10n.tr("Tools", "tools.signalMapper.detail.txHeard", fallback: "Your packets heard back")
+        }
+        public enum Legend {
+          /// Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity
+          public static let density = L10n.tr("Tools", "tools.signalMapper.legend.density", fallback: "Solid hexagons were observed more often than faint ones.")
+          /// Location: SignalMapperLegend.swift - Legend note explaining hexagon color
+          public static let signal = L10n.tr("Tools", "tools.signalMapper.legend.signal", fallback: "Color is the average signal the mesh reached that hexagon with.")
+          /// Location: SignalMapperLegend.swift - Legend title
+          public static let title = L10n.tr("Tools", "tools.signalMapper.legend.title", fallback: "Legend")
+        }
+        public enum Quality {
+          /// Location: SignalQuality+Color.swift - Signal quality below the poor threshold
+          public static let veryPoor = L10n.tr("Tools", "tools.signalMapper.quality.veryPoor", fallback: "Very Poor")
+        }
       }
       public enum TrafficMap {
         /// Location: TrafficHeatmapView.swift - Map control that frames every mapped node

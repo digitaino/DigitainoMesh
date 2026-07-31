@@ -29,6 +29,12 @@ final class TrafficHeatmapModel {
 
   var window: TrafficTimeWindow = .all
 
+  /// The window the in-flight or last-finished `load()` is aggregating. `load()` rewrites
+  /// `window` itself when the ladder shrank under the selection, and the view's `onChange`
+  /// reload compares against this so that write does not spawn a second aggregation over the
+  /// fetch this one already has in hand.
+  private(set) var loadedWindow: TrafficTimeWindow?
+
   private let aggregator = TrafficHeatmapAggregator()
 
   var hasPlacedNodes: Bool {
@@ -68,6 +74,7 @@ final class TrafficHeatmapModel {
       let candidates = contacts.map(AnyResolvableNode.init) + discovered.map(AnyResolvableNode.init)
       let aggregator = aggregator
       let selectedWindow = window
+      loadedWindow = selectedWindow
       let anchor = origin.flatMap { TrafficCoordinate($0.coordinate) }
 
       snapshot = await Task.detached(priority: .userInitiated) {

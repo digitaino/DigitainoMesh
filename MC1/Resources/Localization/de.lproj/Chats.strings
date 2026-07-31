@@ -818,6 +818,29 @@
 /* Location: MessagePathSheet.swift - Fallback name when device name unavailable */
 "chats.path.receiver.you" = "Du";
 
+// MARK: - Shared Route Card
+
+/* Location: SharedRouteCard.swift - Title of the card shown under a message containing a shared route */
+"chats.sharedRoute.card.title" = "Geteilter Pfad";
+
+/* Location: SharedRouteCard.swift - Card summary for a single hop - %@ is the hop hex ID list */
+"chats.sharedRoute.card.summaryOneHop" = "1 Sprung über %@";
+
+/* Location: SharedRouteCard.swift - Card summary - %d is hop count, %@ is the hop hex ID list */
+"chats.sharedRoute.card.summary" = "%d Sprünge über %@";
+
+/* Location: SharedRouteCard.swift - Accessibility label - %@ is the card summary */
+"chats.sharedRoute.card.accessibilityLabel" = "Geteilten Pfad anzeigen, %@";
+
+/* Location: SharedRouteCard.swift - Accessibility hint */
+"chats.sharedRoute.card.accessibilityHint" = "Öffnet eine Karte mit dem geteilten Pfad";
+
+/* Location: ActionsDetailsSection.swift - Action that replies with this message's route info */
+"chats.path.replyWithRoute" = "Mit Pfad antworten";
+
+/* Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location */
+"chats.sharedRoute.unavailable.description" = "Keiner der Repeater dieses Pfads hat einen bekannten Standort auf diesem Gerät";
+
 // MARK: - Repeat Details Sheet
 
 /* Location: RepeatDetailsSheet.swift - Empty state title */
@@ -1233,9 +1256,6 @@
 
 /* Location: MessageSearchResultsSection.swift - Shown when a search matched no message text */
 "chats.search.messages.empty" = "Keine Nachrichten gefunden";
-
-/* Location: MessageSearchResultsSection.swift - How many of the total matches are on screen - %1$d is shown, %2$d is the total */
-"chats.search.messages.showingCount" = "%1$d von %2$d werden angezeigt";
 
 /* Location: MessageSearchResultsSection.swift - Expands a conversation's collapsed hits - %d is how many more there are */
 "chats.search.messages.showMore" = "%d weitere anzeigen";

@@ -1,5 +1,6 @@
 import Foundation
 @testable import MC1Services
+import MeshCore
 import Testing
 
 @Suite("DeviceDTO hash sizes")
@@ -18,8 +19,10 @@ struct DeviceDTOHashSizeTests {
       $0.pathHashMode = testCase.mode
     }
     #expect(device.hashSize == testCase.hash)
-    // Regression: `1 << pathHashMode` built a 4-byte prefix in 3-byte mode and broke
-    // traces (legacy fix carried to v2; see the property's doc comment).
+    // Regression: `1 << pathHashMode` built a 4-byte prefix in 3-byte mode and broke traces
+    // (legacy fix carried to v2). The width now comes from `PathEncoding.hashSize(forMode:)`,
+    // which the trace parser splits replies with, so the two cannot drift apart again.
     #expect(device.traceHashSize == testCase.trace)
+    #expect(device.traceHashSize == PathEncoding.hashSize(forMode: testCase.mode))
   }
 }

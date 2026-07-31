@@ -756,6 +756,38 @@ public extension PersistenceStore {
     try modelContext.save()
   }
 
+  /// Deletes one reaction identified by `(messageID, senderName, emoji)` — the same triple
+  /// `reactionExists` deduplicates on — and refreshes the target's summary cache from the
+  /// rows that survive.
+  ///
+  /// The narrow counterpart to `deleteReactionsForMessage`: rolling back one optimistic
+  /// local reaction must not take other senders' reactions with it.
+  /// - Returns: The refreshed summary, or nil when no reactions remain.
+  @discardableResult
+  func deleteReaction(messageID: UUID, senderName: String, emoji: String) throws -> String? {
+    let targetMessageID = messageID
+    let targetSenderName = senderName
+    let targetEmoji = emoji
+    let matches = try modelContext.fetch(FetchDescriptor<Reaction>(predicate: #Predicate {
+      $0.messageID == targetMessageID &&
+        $0.senderName == targetSenderName &&
+        $0.emoji == targetEmoji
+    }))
+    for match in matches {
+      modelContext.delete(match)
+    }
+    try modelContext.save()
+
+    // Recomputed rather than edited in place, so the cached badge string can never outlive
+    // the rows it summarises.
+    let remaining = try modelContext.fetch(FetchDescriptor<Reaction>(
+      predicate: #Predicate { $0.messageID == targetMessageID }
+    )).map { ReactionDTO(from: $0) }
+    let summary = remaining.isEmpty ? nil : ReactionParser.buildSummary(from: remaining)
+    try updateMessageReactionSummary(messageID: messageID, summary: summary)
+    return summary
+  }
+
   /// Deletes all reactions for a message
   func deleteReactionsForMessage(messageID: UUID) throws {
     let targetMessageID = messageID

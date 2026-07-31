@@ -143,7 +143,7 @@ struct ChatTimelineTests {
     )
     _ = await timeline.open(.dm(contact), reactions: nil)
 
-    let older = try await timeline.loadOlder()
+    let older = try #require(try await timeline.loadOlder().loadedMessages)
 
     #expect(older.count == 10)
     #expect(timeline.messages.count == total)
@@ -206,7 +206,7 @@ struct ChatTimelineTests {
     let raced = seeded[2]
     timeline.writer?.append(raced)
 
-    let older = try await timeline.loadOlder()
+    let older = try #require(try await timeline.loadOlder().loadedMessages)
 
     #expect(!older.contains { $0.id == raced.id })
     #expect(timeline.messages.count(where: { $0.id == raced.id }) == 1)
@@ -232,8 +232,35 @@ struct ChatTimelineTests {
     #expect(!timeline.renderState.hasMoreMessages)
 
     let older = try await timeline.loadOlder()
-    #expect(older.isEmpty)
+    #expect(older == .endOfHistory)
     #expect(timeline.messages.count == 3)
+  }
+
+  /// A load that was skipped because another one holds the spinner must not read as a page:
+  /// the search jump pages in a loop and treats every non-`loaded` outcome as a reason to
+  /// stop or yield, where an empty array looked exactly like progress.
+  @Test
+  func `loadOlder reports a skipped load while another page is in flight`() async throws {
+    let dataStore = try makeStore()
+    let radioID = UUID()
+    let contact = makeContact(radioID: radioID)
+    let total = ChatCoordinator.pageSize + 5
+    for offset in 0..<total {
+      try await dataStore.saveMessage(makeDirectMessage(
+        radioID: radioID, contactID: contact.id,
+        timestamp: UInt32(1000 + offset), text: "m\(offset)"
+      ))
+    }
+
+    let timeline = makeBoundTimeline(
+      dataStore: dataStore,
+      conversationID: .dm(radioID: radioID, contactID: contact.id)
+    )
+    _ = await timeline.open(.dm(contact), reactions: nil)
+    timeline.writer?.updateRenderState { $0.with(isLoadingOlder: true) }
+
+    #expect(try await timeline.loadOlder() == .skippedBusy)
+    #expect(timeline.messages.count == ChatCoordinator.pageSize, "A skipped load must not fetch")
   }
 
   // MARK: - Admission

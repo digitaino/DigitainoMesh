@@ -32,7 +32,9 @@ final class RepeaterBenchmarkModel {
   /// The note this run will be saved under.
   var note = ""
   private(set) var isSaved = false
-  /// Notes of the runs picked for comparison; at most two.
+  /// Set while a save is in flight, so a second tap cannot write the run twice.
+  private(set) var isSaving = false
+  /// Keys of the runs picked for comparison; at most two.
   var selectedForComparison: [String] = []
   var errorMessage: String?
 
@@ -67,8 +69,10 @@ final class RepeaterBenchmarkModel {
     let snapshots = engine.snapshots()
     streamTask = Task { [weak self] in
       for await snapshot in snapshots {
-        guard !Task.isCancelled else { break }
-        self?.snapshot = snapshot
+        // Ending the loop once this model is gone drops the stream, which unregisters the
+        // broadcaster's continuation — nothing else cancels this task on dismissal.
+        guard let self, !Task.isCancelled else { break }
+        self.snapshot = snapshot
       }
     }
     snapshot = await engine.currentSnapshot()
@@ -123,12 +127,12 @@ final class RepeaterBenchmarkModel {
   }
 
   var canSave: Bool {
-    snapshot.hasResults && !isRunning && !isSaved
+    snapshot.hasResults && !isRunning && !isSaved && !isSaving
   }
 
   /// The two runs picked for comparison, older first so deltas read "before → after".
   var comparisonPair: (BenchmarkRunGroup, BenchmarkRunGroup)? {
-    let picked = history.filter { selectedForComparison.contains($0.note) }
+    let picked = history.filter { selectedForComparison.contains($0.id) }
     guard picked.count == 2 else { return nil }
     let sorted = picked.sorted { $0.date < $1.date }
     return (sorted[0], sorted[1])
@@ -189,7 +193,7 @@ final class RepeaterBenchmarkModel {
     guard let historyStore else { return }
     do {
       history = try await historyStore.runGroups()
-      selectedForComparison.removeAll { note in !history.contains { $0.note == note } }
+      selectedForComparison.removeAll { key in !history.contains { $0.id == key } }
     } catch {
       Self.logger.error("Benchmark history read failed: \(error.localizedDescription)")
       errorMessage = error.localizedDescription
@@ -197,7 +201,9 @@ final class RepeaterBenchmarkModel {
   }
 
   func saveResults() async {
-    guard let historyStore, let testRepeater = plan.testRepeater else { return }
+    guard !isSaving, let historyStore, let testRepeater = plan.testRepeater else { return }
+    isSaving = true
+    defer { isSaving = false }
     do {
       try await historyStore.save(
         results: results,
@@ -244,10 +250,10 @@ final class RepeaterBenchmarkModel {
 
   /// Picks a run for comparison, keeping at most two and dropping the oldest pick first.
   func toggleComparison(_ group: BenchmarkRunGroup) {
-    if let index = selectedForComparison.firstIndex(of: group.note) {
+    if let index = selectedForComparison.firstIndex(of: group.id) {
       selectedForComparison.remove(at: index)
     } else {
-      selectedForComparison.append(group.note)
+      selectedForComparison.append(group.id)
       if selectedForComparison.count > 2 {
         selectedForComparison.removeFirst()
       }
@@ -255,6 +261,6 @@ final class RepeaterBenchmarkModel {
   }
 
   func isSelectedForComparison(_ group: BenchmarkRunGroup) -> Bool {
-    selectedForComparison.contains(group.note)
+    selectedForComparison.contains(group.id)
   }
 }

@@ -14,10 +14,10 @@ struct StoreValueModelTests {
 
   @Test
   func `PendingPurchase carries productID and displayName`() {
-    let pending = PendingPurchase(productID: "io.pocketmesh.app.theme.marine", displayName: "Marine")
-    #expect(pending.productID == "io.pocketmesh.app.theme.marine")
+    let pending = PendingPurchase(productID: "com.digitaino.PocketMesh.theme.marine", displayName: "Marine")
+    #expect(pending.productID == "com.digitaino.PocketMesh.theme.marine")
     #expect(pending.displayName == "Marine")
-    #expect(pending == PendingPurchase(productID: "io.pocketmesh.app.theme.marine", displayName: "Marine"))
+    #expect(pending == PendingPurchase(productID: "com.digitaino.PocketMesh.theme.marine", displayName: "Marine"))
   }
 }
 

@@ -185,6 +185,38 @@ struct ChatNoRepeatsPolicyTests {
   }
 
   @Test
+  func `losing signal data retires the message without offering a card`() {
+    var policy = ChatNoRepeatsPolicy()
+    policy.handle(sent(Self.messageA))
+    let retired = policy.handle(.detectionUnavailable(messageID: Self.messageA))
+    #expect(retired)
+    #expect(policy.armedMessageID == nil)
+    #expect(policy.promptedMessageID == nil)
+  }
+
+  @Test
+  func `losing signal data also retires a card already showing`() {
+    var policy = ChatNoRepeatsPolicy()
+    policy.handle(sent(Self.messageA))
+    policy.handle(.windowElapsed(messageID: Self.messageA))
+    policy.handle(.detectionUnavailable(messageID: Self.messageA))
+    #expect(policy.promptedMessageID == nil)
+  }
+
+  @Test
+  func `only arming inputs are gated on signal availability`() {
+    // The owner's gate keys on this: an input that can only retire must never be dropped,
+    // or a card offered before a detach could not be dismissed.
+    #expect(!sent(Self.messageA).isRetirement)
+    #expect(!ChatNoRepeatsInput.windowElapsed(messageID: Self.messageA).isRetirement)
+    #expect(ChatNoRepeatsInput.repeatHeard(messageID: Self.messageA, count: 1).isRetirement)
+    #expect(ChatNoRepeatsInput.resendRequested(messageID: Self.messageA).isRetirement)
+    #expect(ChatNoRepeatsInput.sendFailed(messageID: Self.messageA).isRetirement)
+    #expect(ChatNoRepeatsInput.detectionUnavailable(messageID: Self.messageA).isRetirement)
+    #expect(ChatNoRepeatsInput.reset.isRetirement)
+  }
+
+  @Test
   func `reset forgets both slots`() {
     var policy = ChatNoRepeatsPolicy()
     policy.handle(sent(Self.messageA))

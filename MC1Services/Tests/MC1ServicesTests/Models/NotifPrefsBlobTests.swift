@@ -184,6 +184,14 @@ struct NotifPrefsBlobTests {
     #expect(NotifPrefsBlob(decoding: Data([1, 99, 0, 0])) == nil)
   }
 
+  @Test
+  func `Decoding rejects a schema version this build cannot read`() {
+    let current = NotifPrefsBlob.currentVersion
+    #expect(NotifPrefsBlob(decoding: Data([current, FirmwareNotifMode.all.rawValue, 0, 0])) != nil)
+    // A v2 layout parsed as v1 would misreport which conversations the radio mutes.
+    #expect(NotifPrefsBlob(decoding: Data([current + 1, FirmwareNotifMode.all.rawValue, 0, 0])) == nil)
+  }
+
   // MARK: - Equatable
 
   @Test

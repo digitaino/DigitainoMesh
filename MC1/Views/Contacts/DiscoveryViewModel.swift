@@ -189,7 +189,9 @@ final class DiscoveryViewModel {
   ) -> [DiscoveredNodeDTO] {
     var result = discoveredNodes
 
-    guard !searchText.isEmpty else {
+    // Trimmed, like the saved-contacts list: the matcher trims the query itself, so a
+    // whitespace-only field would match every node and silently drop the segment filter.
+    guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       switch segment {
       case .all:
         break

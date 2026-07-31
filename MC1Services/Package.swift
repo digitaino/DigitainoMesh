@@ -8,12 +8,16 @@ let package = Package(
     .library(name: "MC1Services", targets: ["MC1Services"])
   ],
   dependencies: [
-    .package(path: "../MeshCore")
+    .package(path: "../MeshCore"),
+    // Signal mapper logic core: H3 grid math, sampling policy, aggregation, request
+    // signing (docs/SIGNAL_MAPPER_V2.md). MC1Services owns the persistence and capture
+    // layers on top of it; nothing else in the app links SurveyKit directly.
+    .package(path: "../SurveyKit")
   ],
   targets: [
     .target(
       name: "MC1Services",
-      dependencies: ["MeshCore"]
+      dependencies: ["MeshCore", "SurveyKit"]
     ),
     .testTarget(
       name: "MC1ServicesTests",

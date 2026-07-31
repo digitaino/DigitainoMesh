@@ -789,3 +789,29 @@
 
 /* Location: RepeaterWatchTone.swift - Alert tone name */
 "signalBars.watch.tones.tock" = "Tock";
+
+// MARK: - Store Recovery
+
+/* Location: StoreRecoveryView.swift - Title of the screen shown when the app's database cannot be opened */
+"storeRecovery.title" = "No se pueden abrir tus datos";
+
+/* Location: StoreRecoveryView.swift - Reassurance shown under the title */
+"storeRecovery.message" = "DigitainoMesh no pudo abrir su base de datos. No se ha eliminado nada: tus mensajes y contactos siguen en este dispositivo.";
+
+/* Location: StoreRecoveryView.swift - Button that moves the current database aside and starts fresh */
+"storeRecovery.backUpAndReset" = "Copiar y restablecer";
+
+/* Location: StoreRecoveryView.swift - Explains what Back Up & Reset does */
+"storeRecovery.backUpAndReset.footnote" = "Mueve tus datos actuales a una carpeta de copia de seguridad con fecha dentro del almacenamiento de la app y empieza con una base de datos vacía. No se elimina nada.";
+
+/* Location: StoreRecoveryView.swift - Confirmation dialog title before resetting */
+"storeRecovery.confirm.title" = "¿Copiar y restablecer?";
+
+/* Location: StoreRecoveryView.swift - Confirmation dialog message before resetting */
+"storeRecovery.confirm.message" = "Tus datos actuales se mueven a una carpeta de copia de seguridad con fecha y la app empieza con una base de datos vacía. La copia permanece en este dispositivo, pero la app no la mostrará.";
+
+/* Location: StoreRecoveryView.swift - Expandable section holding the underlying error text */
+"storeRecovery.details" = "Detalles técnicos";
+
+/* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
+"storeRecovery.working" = "Trabajando…";

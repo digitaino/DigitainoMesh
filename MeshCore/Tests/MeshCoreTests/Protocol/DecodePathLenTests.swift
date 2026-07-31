@@ -187,3 +187,33 @@ struct DecodePathLenTests {
   // Note: encodePathLen(hashSize: 0) and encodePathLen(hashSize: 4+) will trap
   // via precondition. These cases are not testable without crashing the test runner.
 }
+
+// MARK: - Hash-size mode
+
+@Suite("PathEncoding hash-size modes")
+struct PathEncodingHashSizeTests {
+  @Test(arguments: [
+    (mode: UInt8(0), size: 1),
+    (mode: UInt8(1), size: 2),
+    (mode: UInt8(2), size: 3),
+    // Mode 3 is reserved; the clamp keeps it inside the 3-byte protocol maximum. Reading the
+    // mode as a power of two (4 bytes here) is what broke traces in 3-byte mode.
+    (mode: UInt8(3), size: 3),
+  ])
+  func `hash sizes are linear in the mode, clamped to three bytes`(
+    testCase: (mode: UInt8, size: Int)
+  ) {
+    #expect(PathEncoding.hashSize(forMode: testCase.mode) == testCase.size)
+  }
+
+  @Test(arguments: [1, 2, 3])
+  func `a hop width round-trips through its mode`(size: Int) {
+    #expect(PathEncoding.hashSize(forMode: PathEncoding.mode(forHashSize: size)) == size)
+  }
+
+  @Test
+  func `an out-of-range width clamps to a usable mode`() {
+    #expect(PathEncoding.mode(forHashSize: 0) == 0)
+    #expect(PathEncoding.mode(forHashSize: 8) == 2)
+  }
+}

@@ -52,6 +52,34 @@ struct NotifSyncServiceTests {
     #expect(blob.channelRules == [.init(channelIdx: 1, mode: .silent)])
   }
 
+  @Test
+  func `rules past the firmware cap are dropped before the blob is cached`() async throws {
+    let store = try await makeStore(
+      channels: (0..<20).map {
+        .testChannel(radioID: Self.radioID, index: UInt8($0), notificationLevel: .muted)
+      },
+      contacts: (0..<18).map {
+        .testContact(
+          radioID: Self.radioID,
+          publicKey: Data(repeating: UInt8($0), count: 32),
+          name: "Contact \($0)",
+          isMuted: true
+        )
+      }
+    )
+    let (service, session, _) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    let blob = try await service.buildBlob(radioID: Self.radioID)
+
+    #expect(blob.channelRules.count == NotifPrefsBlob.maxChannelRules)
+    #expect(blob.contactRules.count == NotifPrefsBlob.maxContactRules)
+    // What is cached has to be what the wire carries, or a skipped write is unverifiable.
+    #expect(NotifPrefsBlob(decoding: blob.encode()) == blob)
+    // Channels are capped in store order (by index), not arbitrarily.
+    #expect(blob.channelRules.map(\.channelIdx) == Array(0..<UInt8(NotifPrefsBlob.maxChannelRules)))
+  }
+
   // MARK: - Push
 
   @Test
@@ -71,8 +99,40 @@ struct NotifSyncServiceTests {
     #expect(sent == PacketBuilder.setSync(id: .notifPrefs, payload: expected.encode()))
 
     await transport.simulateOK()
-    try await task.value
+    #expect(try await task.value == .pushed)
     #expect(await service.support == .supported)
+  }
+
+  @Test
+  func `a send failure invalidates the cache so the next sync re-pushes`() async throws {
+    let store = try await makeStore(channels: [], contacts: [])
+    let (service, session, transport) = try await makeService(store: store, timeout: 0.2)
+    defer { Task { await session.stop() } }
+
+    let first = Task { try await service.syncNow(radioID: Self.radioID) }
+    try await waitUntil("first setSync should be sent") { await transport.sentData.count == 2 }
+    await transport.simulateOK()
+    _ = try await first.value
+
+    // A mute the device applies but never acknowledges: the cache can no longer be trusted.
+    let channelID = UUID()
+    try await store.saveChannel(
+      .testChannel(id: channelID, radioID: Self.radioID, index: 1, notificationLevel: .muted)
+    )
+    await #expect(throws: MeshCoreError.self) {
+      try await service.syncNow(radioID: Self.radioID)
+    }
+    #expect(await service.lastPushedBlob == nil)
+    #expect(await service.support == .supported, "A lost acknowledgement is not a rejection")
+
+    // Reverting to the rule set the device last acknowledged must still reach the radio.
+    try await store.saveChannel(
+      .testChannel(id: channelID, radioID: Self.radioID, index: 1, notificationLevel: .all)
+    )
+    let revert = Task { try await service.syncNow(radioID: Self.radioID) }
+    try await waitUntil("the revert should be pushed") { await transport.sentData.count == 4 }
+    await transport.simulateOK()
+    #expect(try await revert.value == .pushed)
   }
 
   @Test
@@ -84,7 +144,7 @@ struct NotifSyncServiceTests {
     let first = Task { try await service.syncNow(radioID: Self.radioID) }
     try await waitUntil("first setSync should be sent") { await transport.sentData.count == 2 }
     await transport.simulateOK()
-    try await first.value
+    _ = try await first.value
 
     try await service.syncNow(radioID: Self.radioID)
     #expect(await transport.sentData.count == 2)
@@ -99,12 +159,12 @@ struct NotifSyncServiceTests {
     let first = Task { try await service.syncNow(radioID: Self.radioID) }
     try await waitUntil("first setSync should be sent") { await transport.sentData.count == 2 }
     await transport.simulateOK()
-    try await first.value
+    _ = try await first.value
 
     let forced = Task { try await service.syncNow(radioID: Self.radioID, force: true) }
     try await waitUntil("forced setSync should be sent") { await transport.sentData.count == 3 }
     await transport.simulateOK()
-    try await forced.value
+    _ = try await forced.value
   }
 
   @Test
@@ -116,14 +176,14 @@ struct NotifSyncServiceTests {
     let first = Task { try await service.syncNow(radioID: Self.radioID) }
     try await waitUntil("first setSync should be sent") { await transport.sentData.count == 2 }
     await transport.simulateOK()
-    try await first.value
+    _ = try await first.value
 
     try await store.saveChannel(.testChannel(radioID: Self.radioID, index: 1, notificationLevel: .muted))
 
     let second = Task { try await service.syncNow(radioID: Self.radioID) }
     try await waitUntil("second setSync should be sent") { await transport.sentData.count == 3 }
     await transport.simulateOK()
-    try await second.value
+    _ = try await second.value
   }
 
   // MARK: - Firmware Gating
@@ -136,17 +196,35 @@ struct NotifSyncServiceTests {
 
     let task = Task { try await service.syncNow(radioID: Self.radioID) }
     try await waitUntil("setSync should be sent") { await transport.sentData.count == 2 }
-    await transport.simulateError(code: 1)
-    try await task.value // swallowed, not thrown
+    await transport.simulateError(code: ErrorCode.unsupportedCommand.rawValue)
+    // Swallowed, not thrown — but the outcome still tells the caller nothing was written.
+    #expect(try await task.value == .unsupported)
 
     #expect(await service.support == .unsupported)
 
     // Every later entry point is a no-op: no further packets leave the app.
     try await store.saveChannel(.testChannel(radioID: Self.radioID, index: 1, notificationLevel: .muted))
-    try await service.syncNow(radioID: Self.radioID)
+    #expect(try await service.syncNow(radioID: Self.radioID) == .unsupported)
     #expect(try await service.deviceBlob() == nil)
     await service.reconcileOnConnect(radioID: Self.radioID)
     #expect(await transport.sentData.count == 2)
+  }
+
+  @Test
+  func `a device error that is not an opcode rejection leaves the feature alone`() async throws {
+    let store = try await makeStore(channels: [], contacts: [])
+    let (service, session, transport) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    // A late error frame from an unrelated command, or a firmware that knows the opcode and
+    // refused this one call: either way the slot is still supported.
+    let task = Task { try await service.syncNow(radioID: Self.radioID) }
+    try await waitUntil("setSync should be sent") { await transport.sentData.count == 2 }
+    await transport.simulateError(code: ErrorCode.tableFull.rawValue)
+
+    await #expect(throws: MeshCoreError.self) { try await task.value }
+    #expect(await service.support != .unsupported)
+    #expect(await service.lastPushedBlob == nil)
   }
 
   @Test
@@ -157,10 +235,25 @@ struct NotifSyncServiceTests {
 
     let task = Task { try await service.deviceBlob() }
     try await waitUntil("getSync should be sent") { await transport.sentData.count == 2 }
-    await transport.simulateError(code: 1)
+    await transport.simulateError(code: ErrorCode.unsupportedCommand.rawValue)
 
     #expect(try await task.value == nil)
     #expect(await service.support == .unsupported)
+  }
+
+  @Test
+  func `a blob from a newer schema reads as unknown device state, not as an empty slot`() async throws {
+    let store = try await makeStore(channels: [], contacts: [])
+    let (service, session, transport) = try await makeService(store: store)
+    defer { Task { await session.stop() } }
+
+    let future = Data([NotifPrefsBlob.currentVersion + 1, FirmwareNotifMode.all.rawValue, 0, 0])
+    let task = Task { try await service.deviceBlob() }
+    try await waitUntil("getSync should be sent") { await transport.sentData.count == 2 }
+    await transport.simulateReceive(makeSyncValuePacket(id: .notifPrefs, blob: future))
+
+    await #expect(throws: MeshCoreError.self) { try await task.value }
+    #expect(await service.support == .supported, "The device answered; it just spoke a newer dialect")
   }
 
   @Test

@@ -12,15 +12,19 @@ extension AppState {
   /// full command timeout, and connection setup must not wait on it. The bars simply appear
   /// once the probe resolves.
   func wireSignalBars(services: ServiceContainer) {
-    signalBarsStartTask?.cancel()
+    // `signalBarsStartTask` holds whichever transition is in flight — a start, or the stop the
+    // disabled path queues. Each one waits the previous out, so a stop cannot land after the
+    // start it was meant to precede and leave the engine down under an attached UI.
+    let previousTransition = signalBarsStartTask
+    previousTransition?.cancel()
 
-    guard let device = connectedDevice,
-          DevicePreferenceStore().isSignalBarsEnabled(deviceID: device.id) else {
+    guard let device = connectedDevice, isSignalBarsEnabled else {
       tearDownSignalBars()
       return
     }
 
     signalBarsStartTask = Task { [weak self] in
+      await previousTransition?.value
       // Viewer when the radio advertises the signal-bars slot (it owns the measurement
       // table and the app only mirrors it, so the OLED and the app always agree); engine
       // otherwise. An inconclusive probe leaves the classification unlatched, so the next
@@ -37,13 +41,37 @@ extension AppState {
     }
   }
 
+  /// Whether the connected radio has repeater tracking turned on — the one source of truth for
+  /// the wiring and for the Motion & Fitness prompt the feature is the only consumer of.
+  var isSignalBarsEnabled: Bool {
+    guard let device = connectedDevice else { return false }
+    return DevicePreferenceStore().isSignalBarsEnabled(deviceID: device.id)
+  }
+
   /// Releases everything `wireSignalBars(services:)` set up. Safe to call when nothing was
   /// started.
   func tearDownSignalBars() {
-    signalBarsStartTask?.cancel()
+    let previousTransition = signalBarsStartTask
+    previousTransition?.cancel()
     signalBarsStartTask = nil
-    movementHintMonitor.stop()
+    // The motion monitor is shared, so it stops only when *no* consumer wants it. Signal
+    // bars used to be the only one and could stop it unilaterally; the signal mapper reads
+    // the same hints now, and switching bars off must not silently blind it.
+    if !signalMapperNeedsMovementHints {
+      movementHintMonitor.stop()
+    }
     repeaterSignals.detach()
+
+    // Detaching the façade only stops the *display*: the engine's own loops keep broadcasting
+    // discovers and probing on stock firmware, which is the airtime this setting exists to
+    // stop. Idempotent — the container's teardown stops it again on disconnect.
+    guard let services else { return }
+    signalBarsStartTask = Task {
+      // A start still waiting on its firmware probe would otherwise start the engine after
+      // this stop. It is cancelled, so it resolves without starting anything.
+      await previousTransition?.value
+      await services.signalBarsEngine.stop()
+    }
   }
 
   /// Starts movement classification only when it costs nothing to ask.
@@ -51,7 +79,8 @@ extension AppState {
   /// Connecting a radio is not consent to a Motion & Fitness prompt, and on an auto-reconnect
   /// it would land over the launch screen. So the connect path starts the monitor only when
   /// permission already exists; when it does not, the hint stays stationary — which merely
-  /// means probes run at their base cadence — until the user opens the signal table.
+  /// means probes run at their base cadence — until the user opens the signal table, or
+  /// turns the signal mapper's capture on (`requestMapperMovementHintsIfNeeded()`).
   func startMovementHintsIfAlreadyPermitted() {
     guard MovementHintMonitor.authorization == .authorized else { return }
     guard let services, !movementHintMonitor.isRunning else { return }
@@ -62,7 +91,12 @@ extension AppState {
   ///
   /// Called when the user opens the repeater signal table: that is a deliberate visit to the
   /// feature the permission serves, which makes it the one moment the prompt is proportionate.
+  ///
+  /// The table is still reachable with the feature switched off, and then the hint has no
+  /// consumer — no app-side probe cadence to shorten, no `motionHint` write the radio wants —
+  /// so asking for Motion & Fitness would be asking for nothing.
   func requestMovementHintsIfNeeded() {
+    guard isSignalBarsEnabled else { return }
     guard MovementHintMonitor.authorization.canDeliverUpdates else { return }
     guard let services, !movementHintMonitor.isRunning else { return }
     startMovementHints(services: services)
@@ -75,7 +109,11 @@ extension AppState {
   /// de-duplicate: `MotionHintService` is inert unless the radio advertises the slot, and
   /// the relay is free to update. That is simpler — and less fragile across a mode change —
   /// than legacy's either/or routing.
-  private func startMovementHints(services: ServiceContainer) {
+  ///
+  /// Not private: the signal mapper starts the same monitor for its own reasons, and both
+  /// features route through this one implementation so there is a single place that decides
+  /// what a movement reading is worth.
+  func startMovementHints(services: ServiceContainer) {
     // Capture the two actors rather than the container, so the monitor's callback does not
     // pin the whole per-connection service graph until it is torn down.
     let relay = services.movementHintRelay

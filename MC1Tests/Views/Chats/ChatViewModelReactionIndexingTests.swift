@@ -1,6 +1,7 @@
 import Foundation
 @testable import MC1
 @testable import MC1Services
+import MeshCore
 import Testing
 
 // MARK: - Fixtures
@@ -271,5 +272,105 @@ struct ChatViewModelReactionIndexingTests {
     // the queued reaction stays pending and nothing is persisted.
     let persisted = try await dataStore.fetchReactions(for: message.id)
     #expect(persisted.isEmpty)
+  }
+}
+
+/// What a reaction leaves behind when its carrier never reaches the send queue: the
+/// optimistic badge must go away (or the dedup check blocks every later tap on that emoji)
+/// and the failed carrier must appear in the live timeline, not only on the next open.
+@Suite("ChatViewModel Reaction Send Failure")
+@MainActor
+struct ChatViewModelReactionSendFailureTests {
+  /// Real store, real message service, no send queue — so `enqueueChannel` /
+  /// `signalDMEnqueued` throw `.notConnected`, which is the failure path under test.
+  private func makeViewModel(
+    dataStore: PersistenceStore,
+    reactionService: ReactionService,
+    messages: [MessageDTO]
+  ) -> ChatViewModel {
+    let messageService = MessageService(
+      session: MeshCoreSession(transport: MockTransport()),
+      dataStore: dataStore,
+      contactService: nil
+    )
+    let viewModel = ChatViewModel()
+    viewModel.configureForTesting(dependencies: .testDefaults(
+      dataStore: { dataStore },
+      messageService: { messageService },
+      reactionService: { reactionService }
+    ))
+    let coordinator = ChatCoordinator.makeForTesting()
+    viewModel.bindCoordinatorForTesting(coordinator)
+    coordinator.replaceAllForTesting(messages)
+    return viewModel
+  }
+
+  @Test
+  func `A channel reaction that never reaches the queue rolls back and shows its failed carrier`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let reactionService = ReactionService()
+
+    let radioID = UUID()
+    let channel = makeChannel(radioID: radioID)
+    let target = makeIncomingMessage(
+      radioID: radioID,
+      channelIndex: channel.index,
+      senderNodeName: "Alice"
+    )
+    try await dataStore.saveMessage(target)
+
+    let viewModel = makeViewModel(
+      dataStore: dataStore,
+      reactionService: reactionService,
+      messages: [target]
+    )
+
+    await viewModel.sendReaction(emoji: "👍", to: target)
+
+    let remaining = try await dataStore.fetchReactions(for: target.id)
+    #expect(remaining.isEmpty, "the optimistic row must not outlive a failed enqueue")
+    #expect((viewModel.messages.first { $0.id == target.id }?.reactionSummary ?? "").isEmpty)
+
+    let carriers = viewModel.messages.filter { ReactionParser.parse($0.text) != nil }
+    #expect(carriers.count == 1, "the carrier belongs in the live timeline, not just the DB")
+    #expect(carriers.first?.status == .failed)
+
+    // With the row rolled back the dedup check lets the same emoji through again.
+    await viewModel.sendReaction(emoji: "👍", to: target)
+    #expect(viewModel.messages.filter { ReactionParser.parse($0.text) != nil }.count == 2)
+  }
+
+  @Test
+  func `A DM reaction that never reaches the queue rolls back and shows its failed carrier`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let contact = Contact(
+      radioID: UUID(),
+      publicKey: Data(repeating: 2, count: ProtocolLimits.publicKeySize),
+      name: "Alice"
+    )
+    container.mainContext.insert(contact)
+    try container.mainContext.save()
+    let dataStore = PersistenceStore(modelContainer: container)
+    let contactDTO = try #require(try await dataStore.fetchContact(id: contact.id))
+    let reactionService = ReactionService()
+
+    let target = makeIncomingMessage(radioID: contactDTO.radioID, contactID: contactDTO.id)
+    try await dataStore.saveMessage(target)
+
+    let viewModel = makeViewModel(
+      dataStore: dataStore,
+      reactionService: reactionService,
+      messages: [target]
+    )
+
+    await viewModel.sendReaction(emoji: "❤️", to: target)
+
+    let remaining = try await dataStore.fetchReactions(for: target.id)
+    #expect(remaining.isEmpty)
+
+    let carriers = viewModel.messages.filter { ReactionParser.parseDM($0.text) != nil }
+    #expect(carriers.count == 1)
+    #expect(carriers.first?.status == .failed)
   }
 }

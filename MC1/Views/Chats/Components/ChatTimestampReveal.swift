@@ -82,6 +82,10 @@ private struct ChatTimestampRevealModifier: ViewModifier {
     case .began, .changed:
       reveal.offset = BubbleSwipeGesturePolicy.revealOffset(forDragX: dragX)
     case .ended, .cancelled, .failed:
+      // `.cancelled` also arrives synthetically when cell recycling takes the recognizer off
+      // its host mid-drag (`GestureHostingProxyView.onWillDetach`): the offset outlives the
+      // row that was dragged, so a drag with no recognizer left to release it would leave the
+      // whole conversation slid aside.
       withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8)) {
         reveal.offset = 0
       }

@@ -85,6 +85,7 @@ struct SignalBarsTable: Sendable, Equatable {
     if let txSnr = sighting.txSnr {
       entry.txSnr = txSnr
       entry.txState = .measured(SNRQuality(snr: txSnr))
+      entry.txMeasuredAt = now
     }
     repeaters[index] = entry
     return Change(id: entry.id, bestChanged: sort(previousBest: previousBest))
@@ -100,6 +101,7 @@ struct SignalBarsTable: Sendable, Equatable {
       rxSnr: sighting.rxSnr,
       txSnr: sighting.txSnr,
       txState: sighting.txSnr.map { .measured(SNRQuality(snr: $0)) } ?? .unknown,
+      txMeasuredAt: sighting.txSnr.map { _ in now },
       rssi: sighting.rssi,
       lastHeard: now,
       publicKey: sighting.publicKey
@@ -115,11 +117,25 @@ struct SignalBarsTable: Sendable, Equatable {
   /// only an *exact* ID match: carrying them across a hash-width change re-attaches an
   /// identity established at a different specificity to a row that may be another node,
   /// which is how a stale name outlives every blob poll in viewer mode.
-  mutating func apply(_ blob: SignalBarsBlob, now: Date) {
+  ///
+  /// Returns the entries the radio heard since the last blob: the ones whose mirrored
+  /// `lastHeard` moved forward, rather than every entry whose bytes differ. The device reports
+  /// whole seconds of age instead of timestamps, so a poll on a *silent* entry differs in
+  /// `ageSeconds` alone and lands its derived `lastHeard` within ``mirroredAgeSlack`` of where
+  /// it already was, while an entry heard between two polls reports the same small age both
+  /// times and lands the poll interval later.
+  @discardableResult
+  mutating func apply(_ blob: SignalBarsBlob, now: Date) -> [NodeHexID] {
+    var heard: [NodeHexID] = []
     repeaters = blob.entries.compactMap { entry -> RepeaterSignal? in
       guard let id = NodeHexID(entry.hexID) else { return nil }
       let existing = self[id]
       let identityCarries = existing?.id == id
+      let lastHeard = now.addingTimeInterval(-Double(entry.ageSeconds))
+      let isFreshSighting = existing.map {
+        lastHeard > $0.lastHeard.addingTimeInterval(Self.mirroredAgeSlack)
+      } ?? true
+      if isFreshSighting { heard.append(id) }
       let txState: RepeaterTXState =
         if entry.hasTx {
           .measured(SNRQuality(snr: entry.txSnr))
@@ -136,13 +152,19 @@ struct SignalBarsTable: Sendable, Equatable {
         txState: txState,
         rssi: existing?.rssi,
         rttMs: entry.rttMs == 0 ? nil : Int(entry.rttMs),
-        lastHeard: now.addingTimeInterval(-Double(entry.ageSeconds)),
+        lastHeard: lastHeard,
         publicKey: identityCarries ? existing?.publicKey : nil,
         lastProbeAt: existing?.lastProbeAt,
         isDeviceBest: entry.isBest
       )
     }
+    return heard
   }
+
+  /// How far a mirrored `lastHeard` may move forward without counting as a fresh sighting.
+  /// The device's age is whole seconds, so an entry it has *not* heard again still lands up to
+  /// a second later on each blob purely from that rounding.
+  private static let mirroredAgeSlack: TimeInterval = 1
 
   // MARK: - Probe bookkeeping
 
@@ -178,6 +200,7 @@ struct SignalBarsTable: Sendable, Equatable {
       if let remoteSnr = reply.remoteSnr {
         entry.txSnr = remoteSnr
         entry.txState = .measured(SNRQuality(snr: remoteSnr))
+        entry.txMeasuredAt = now
         entry.failCount = 0
       } else {
         entry.txState = .failed
@@ -187,13 +210,18 @@ struct SignalBarsTable: Sendable, Equatable {
     return sort(previousBest: previousBest)
   }
 
-  /// Records a probe that never came back.
+  /// Records a probe that never came back, or that the radio refused to send.
+  ///
+  /// `sentAt` is the probe's own send time: a TX measurement that landed after it — a discover
+  /// response answers the TX leg while a trace is still outstanding — is the fresher word on
+  /// the link, so it survives, and the link is not charged a failure it did not earn.
   @discardableResult
-  mutating func markProbeFailed(_ id: NodeHexID) -> Bool {
+  mutating func markProbeFailed(_ id: NodeHexID, sentAt: Date) -> Bool {
     let previousBest = repeaters.first?.id
-    update(id) {
-      $0.txState = .failed
-      $0.failCount += 1
+    update(id) { entry in
+      guard entry.txMeasuredAt.map({ $0 <= sentAt }) ?? true else { return }
+      entry.txState = .failed
+      entry.failCount += 1
     }
     return sort(previousBest: previousBest)
   }
@@ -296,18 +324,13 @@ struct SignalBarsTable: Sendable, Equatable {
   // MARK: - Ordering
 
   /// Re-orders best link first and reports whether the head changed since `previousBest`,
-  /// which the engine uses to bump a newly promoted best link to the front of the probe
+  /// which the engine uses to move a newly promoted best link to the front of the probe
   /// queue. Callers capture the head *before* they mutate, so a first insertion counts as
   /// a change.
   @discardableResult
   private mutating func sort(previousBest: NodeHexID?) -> Bool {
     repeaters.sort(by: RepeaterSignal.isOrderedBefore)
     return repeaters.first?.id != previousBest
-  }
-
-  /// Clears the probe clock so the given repeater is due immediately.
-  mutating func prioritizeNextProbe(for id: NodeHexID) {
-    update(id) { $0.lastProbeAt = nil }
   }
 
   private mutating func update(_ id: NodeHexID, mutate: (inout RepeaterSignal) -> Void) {

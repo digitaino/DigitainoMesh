@@ -233,6 +233,25 @@ struct ChatSendQueueServiceTests {
     #expect(ChatSendQueueService.isTransientChannelMessageError(wrapped) == false)
   }
 
+  /// A reaction carrier must never be indexed as a reactable target: the send path expresses
+  /// that with `localNodeName: nil`, but the retry paths reuse the ordinary resend envelope
+  /// and carry the real node name, so the drain has to recognise the text itself.
+  @Test
+  func `the drain refuses to index a reaction carrier as a reaction target`() {
+    let carrier = ReactionParser.buildChannelReactionText(
+      emoji: "👍",
+      targetSender: "Alpha",
+      targetText: "Hello world",
+      targetTimestamp: 1_704_067_200,
+      localNodeNameByteCount: "Me".utf8.count
+    )
+    #expect(ChatSendQueueService.indexesAsReactionTarget(text: carrier) == false)
+    #expect(ChatSendQueueService.indexesAsReactionTarget(text: "👍@[Alpha]\n7f3a9c12") == false)
+    #expect(ChatSendQueueService.indexesAsReactionTarget(text: "Hello world") == true)
+    // A message that merely mentions the wording is an ordinary send and stays indexable.
+    #expect(ChatSendQueueService.indexesAsReactionTarget(text: "who reacted to [that]?") == true)
+  }
+
   /// Regression: the channel-cap helper recognises the raw
   /// `MeshCoreError.deviceError(2)` shape produced by `withPoolBackoff`'s
   /// re-throw before `MessageService` wraps it.

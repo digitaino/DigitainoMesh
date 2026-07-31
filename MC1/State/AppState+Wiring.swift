@@ -32,13 +32,18 @@ extension AppState {
     }
   }
 
-  /// Seed the adaptive power service from this device's stored preferences.
+  /// Seed the adaptive power service from this device's stored preferences and reconcile
+  /// the radio with it.
   ///
   /// The service lives on `ServiceContainer` and is rebuilt per connection, so it starts
   /// unconfigured (disabled, default base step) and only becomes live once the device
   /// record — which carries `maxTxPower` — and its `DevicePreferenceStore` entries are
   /// available. Re-running this for the same container is harmless: `configure` resets
   /// to base, which is the correct state on any reconnect.
+  ///
+  /// The apply is what makes that true of the firmware as well — a previous session may
+  /// have escalated it and nothing on the radio remembers the base — and is a no-op while
+  /// the feature is off, so a manually chosen TX power is never overwritten.
   func configureAdaptivePower(services: ServiceContainer) {
     guard let device = connectedDevice else { return }
     let preferences = DevicePreferenceStore()
@@ -48,6 +53,7 @@ extension AppState {
       baseStepIndex: preferences.adaptivePowerBaseStep(deviceID: device.id),
       enabled: preferences.isAdaptivePowerEnabled(deviceID: device.id)
     )
+    Task { await services.adaptivePowerService.applyCurrentPower() }
   }
 
   /// Pull the firmware's stored notification rules and push ours if they differ.

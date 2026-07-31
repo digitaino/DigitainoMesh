@@ -22,11 +22,21 @@ public enum NodeLocationStalenessPolicy {
   /// that a user who tapped it away by reflex gets a second chance.
   public static let snoozeInterval: TimeInterval = 7 * 24 * 60 * 60
 
+  /// How old a phone fix may be and still be worth writing to a radio. Five minutes.
+  ///
+  /// This is the other half of the rule. CoreLocation keeps handing back the last fix it took
+  /// — one from before the app was suspended, from before a flight — and the prompt's entire
+  /// premise is that the phone has *moved*, so an aged fix is exactly the input that would
+  /// offer to "correct" a radio's right location back to the city it left. A fix older than
+  /// this counts as no fix at all: ask for a new one and decide on that.
+  public static let maxFixAge: TimeInterval = 5 * 60
+
   /// Why no prompt was offered. Carried so callers can log the reason without re-deriving it.
   public enum SkipReason: Equatable, Sendable {
     /// The radio has no configured location (or a null-island sentinel) — nothing to correct.
     case deviceHasNoLocation
-    /// No usable phone fix yet. The caller should re-evaluate when one arrives.
+    /// No usable phone fix yet — none at all, or one too old to write (see ``maxFixAge``).
+    /// The caller should ask for a fresh one and re-evaluate when it arrives.
     case noPhoneFix
     /// The radio is close enough to where the phone is.
     case withinThreshold(distanceMeters: CLLocationDistance)
@@ -55,31 +65,37 @@ public enum NodeLocationStalenessPolicy {
   ///   - deviceLatitude: The radio's configured latitude.
   ///   - deviceLongitude: The radio's configured longitude.
   ///   - deviceHasLocation: `DeviceDTO.hasLocation` — a non-zero, geographically valid fix.
-  ///   - phoneCoordinate: The phone's current coordinate, or `nil` when no fix is available.
+  ///   - phoneLocation: The phone's current fix, or `nil` when none is available. The fix
+  ///     rather than its coordinate, because a fix without its timestamp cannot be judged.
   ///   - lastSnoozedAt: When the user last chose "Not Now" for this radio, or `nil`.
   ///   - now: The current time, injected for testability.
   ///   - thresholdMeters: Distance at which the radio counts as stale.
   ///   - snoozeInterval: How long a "Not Now" suppresses the prompt.
+  ///   - maxFixAge: How old a phone fix may be and still count as one.
   public static func evaluate(
     deviceLatitude: Double,
     deviceLongitude: Double,
     deviceHasLocation: Bool,
-    phoneCoordinate: CLLocationCoordinate2D?,
+    phoneLocation: CLLocation?,
     lastSnoozedAt: Date?,
     now: Date,
     thresholdMeters: CLLocationDistance = thresholdMeters,
-    snoozeInterval: TimeInterval = snoozeInterval
+    snoozeInterval: TimeInterval = snoozeInterval,
+    maxFixAge: TimeInterval = maxFixAge
   ) -> Decision {
     guard deviceHasLocation else { return .skip(.deviceHasNoLocation) }
 
-    guard let phoneCoordinate, phoneCoordinate.isValidFix else {
+    guard let phoneLocation,
+          phoneLocation.coordinate.isValidFix,
+          isFixFresh(phoneLocation.timestamp, now: now, maxFixAge: maxFixAge)
+    else {
       return .skip(.noPhoneFix)
     }
 
     let distance = distanceMeters(
       deviceLatitude: deviceLatitude,
       deviceLongitude: deviceLongitude,
-      phoneCoordinate: phoneCoordinate
+      phoneCoordinate: phoneLocation.coordinate
     )
     guard distance > thresholdMeters else {
       return .skip(.withinThreshold(distanceMeters: distance))
@@ -91,6 +107,20 @@ public enum NodeLocationStalenessPolicy {
     }
 
     return .prompt(distanceMeters: distance)
+  }
+
+  /// Whether a fix taken at `fixDate` is recent enough to write to a radio.
+  ///
+  /// Checked twice: once when the prompt is offered, and again when the user answers it, since
+  /// an alert can stand through a suspend and the fix behind it goes on aging while it does.
+  /// A fix dated ahead of `now` (a clock correction) is treated as current — only age
+  /// disqualifies one.
+  public static func isFixFresh(
+    _ fixDate: Date,
+    now: Date,
+    maxFixAge: TimeInterval = maxFixAge
+  ) -> Bool {
+    now.timeIntervalSince(fixDate) <= maxFixAge
   }
 
   /// Great-circle distance between the radio's configured location and the phone's fix.

@@ -22,6 +22,11 @@ packages:
     path: MeshCore
   MC1Services:
     path: MC1Services
+  # Linked transitively through MC1Services (see docs/SIGNAL_MAPPER_V2.md §2.6); listed
+  # here for the same reason MeshCore is, so Xcode resolves the local checkout itself
+  # instead of leaning on the nested package reference.
+  SurveyKit:
+    path: SurveyKit
   Emojibase:
     url: https://github.com/matrix-org/emojibase-bindings
     from: 1.5.0

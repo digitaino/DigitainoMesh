@@ -45,15 +45,38 @@ extension ChatTimeline {
 
   // MARK: - Paging
 
+  /// What one `loadOlder` call did.
+  ///
+  /// A loaded page can legitimately be empty — every row in it may have been a hidden
+  /// reaction carrier or a duplicate the live path already landed — so the payload alone
+  /// cannot tell a caller that pages in a loop whether anything moved. Only this
+  /// discriminator can, and a search jump that mistakes "skipped" for "loaded" spins.
+  enum OlderPage: Equatable {
+    /// A page was fetched and prepended. The payload is the newly visible messages
+    /// (reaction-filtered, deduplicated) for caller-side bookkeeping.
+    case loaded([MessageDTO])
+    /// Another load holds the spinner. Nothing changed, and a retry can succeed — but only
+    /// after the holder gets a chance to run.
+    case skippedBusy
+    /// No older history left to fetch.
+    case endOfHistory
+    /// Unbound timeline, no store, or the fetch failed; retrying will not help.
+    case unavailable
+
+    /// The prepended page, or `nil` when nothing was loaded.
+    var loadedMessages: [MessageDTO]? {
+      guard case let .loaded(messages) = self else { return nil }
+      return messages
+    }
+  }
+
   /// Loads the next older page for the open conversation, prepends it, and
-  /// rebakes. Returns the newly loaded messages (reaction-filtered and
-  /// deduplicated) for caller-side bookkeeping such as sender registration
-  /// and reaction indexing; empty when skipped (already loading, end of
-  /// history, unbound). Throws the fetch error after retiring the spinner.
+  /// rebakes. Throws the fetch error after retiring the spinner.
   @discardableResult
-  func loadOlder() async throws -> [MessageDTO] {
-    guard !renderState.isLoadingOlder, renderState.hasMoreMessages else { return [] }
-    guard let writer, let conversation, let dataStore = dataStoreProvider() else { return [] }
+  func loadOlder() async throws -> OlderPage {
+    guard !renderState.isLoadingOlder else { return .skippedBusy }
+    guard renderState.hasMoreMessages else { return .endOfHistory }
+    guard let writer, let conversation, let dataStore = dataStoreProvider() else { return .unavailable }
 
     writer.updateRenderState { $0.with(isLoadingOlder: true) }
 
@@ -113,7 +136,7 @@ extension ChatTimeline {
       writer.updateRenderState { $0.with(isLoadingOlder: false) }
 
       rebakeAll()
-      return olderMessages
+      return .loaded(olderMessages)
     } catch {
       writer.updateRenderState { $0.with(isLoadingOlder: false) }
       throw error

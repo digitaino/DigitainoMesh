@@ -15,7 +15,8 @@ struct RepeaterBenchmarkEngineTests {
     tags: TagSequence,
     clock: TestClock,
     traceHashSize: Int = 1,
-    traceFlags: UInt8 = 0
+    traceFlags: UInt8 = 0,
+    makeTag: (@Sendable () -> UInt32)? = nil
   ) -> RepeaterBenchmarkEngine {
     RepeaterBenchmarkEngine(
       session: session,
@@ -26,7 +27,7 @@ struct RepeaterBenchmarkEngineTests {
       ),
       now: clock.provider,
       sleep: sleeper.provider,
-      makeTag: tags.provider
+      makeTag: makeTag ?? tags.provider
     )
   }
 
@@ -207,20 +208,93 @@ struct RepeaterBenchmarkEngineTests {
     let sleeper = GatedSleeper()
     let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
 
+    // Answered while the send is still in flight, so the reply is buffered before the probe
+    // installs its waiter — the case `earlyReplies` exists for.
+    await session.setOnSend { [weak engine] tag in
+      guard let engine, let tag else { return }
+      await engine.ingest(.traceData(BenchmarkFixtures.reply(
+        tag: tag,
+        hops: [(0x0A, 9.0), (0x0C, 4.0), (0x0A, 6.0)]
+      )))
+    }
+
     await engine.setTestRepeater(tower)
     await engine.setTargets([ridge])
     await engine.setTracesPerTarget(1)
-
-    // Buffered before the run even starts: the engine must find it rather than time out.
-    await engine.ingest(.traceData(BenchmarkFixtures.reply(
-      tag: 1,
-      hops: [(0x0A, 9.0), (0x0C, 4.0), (0x0A, 6.0)]
-    )))
     await engine.run()
 
     let outcome = try #require(await engine.currentSnapshot().results.first?.outcomes.first)
     #expect(outcome.success)
     #expect(outcome.intermediateSNRs == [9, 4, 6])
+
+    await engine.shutdown()
+    await sleeper.releaseAll()
+  }
+
+  @Test
+  func `A reply buffered between runs cannot answer the next run's probe`() async throws {
+    let session = MockBenchmarkSession()
+    let sleeper = GatedSleeper()
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+
+    await engine.setTestRepeater(tower)
+    await engine.setTargets([ridge])
+    await engine.setTracesPerTarget(1)
+
+    // Someone else's trace, arriving while the tool is idle. The first probe of the next run
+    // takes tag 1 too, and must not be credited with this measurement.
+    await engine.ingest(.traceData(BenchmarkFixtures.reply(tag: 1, hops: [(0x0A, 9.0)])))
+
+    let run = Task { await engine.run() }
+    try await waitForBenchmarkCondition("run did not finish") {
+      await sleeper.releaseAll()
+      let sent = await session.traceCount
+      let isRunning = await engine.currentSnapshot().isRunning
+      return sent == 1 && !isRunning
+    }
+    await run.value
+
+    let outcome = try #require(await engine.currentSnapshot().results.first?.outcomes.first)
+    #expect(outcome.failure == .timeout)
+
+    await engine.shutdown()
+    await sleeper.releaseAll()
+  }
+
+  @Test
+  func `A resolved probe leaves no expiry behind for a later probe`() async throws {
+    let session = MockBenchmarkSession()
+    let sleeper = GatedSleeper()
+    // One tag for every probe, so an expiry left over from the first probe's cancelled
+    // deadline would fail the second one before it could be answered.
+    let engine = makeEngine(
+      session: session,
+      sleeper: sleeper,
+      tags: TagSequence(),
+      clock: TestClock(),
+      makeTag: { 7 }
+    )
+
+    await engine.setTestRepeater(tower)
+    await engine.setTargets([ridge])
+    await engine.setTracesPerTarget(3)
+
+    let run = Task { await engine.run() }
+    for probe in 1...3 {
+      try await waitForBenchmarkCondition("probe \(probe) not sent") {
+        await session.traceCount == probe
+      }
+      await engine.ingest(.traceData(BenchmarkFixtures.reply(
+        tag: 7,
+        hops: [(0x0A, 9.0), (0x0C, 4.0), (0x0A, 6.0)]
+      )))
+    }
+    await run.value
+
+    let result = try #require(await engine.currentSnapshot().results.first)
+    let allSucceeded = result.outcomes.allSatisfy(\.success)
+    #expect(result.outcomes.count == 3)
+    #expect(allSucceeded)
 
     await engine.shutdown()
     await sleeper.releaseAll()
@@ -279,21 +353,96 @@ struct RepeaterBenchmarkEngineTests {
     await sleeper.releaseAll()
   }
 
+  @Test
+  func `Cancelling resolves the targets the run never reached`() async throws {
+    let session = MockBenchmarkSession()
+    let sleeper = GatedSleeper()
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+
+    await engine.setTestRepeater(tower)
+    await engine.setTargets([ridge, barn])
+    await engine.setTracesPerTarget(5)
+
+    let run = Task { await engine.run() }
+    try await waitForBenchmarkCondition("first probe not sent") { await session.traceCount == 1 }
+    await engine.ingest(.traceData(BenchmarkFixtures.reply(
+      tag: 1,
+      hops: [(0x0A, 9.0), (0x0C, 4.0), (0x0A, 6.0)]
+    )))
+    await engine.cancel()
+    await run.value
+
+    let snapshot = await engine.currentSnapshot()
+    // Barn was never probed; a row that is not complete spins forever.
+    #expect(snapshot.results.map(\.isComplete) == [true, true])
+    #expect(snapshot.results.last?.outcomes.isEmpty == true)
+
+    await engine.shutdown()
+    await sleeper.releaseAll()
+  }
+
+  // MARK: - Editing the plan
+
+  @Test
+  func `Changing the target set drops the previous run's results`() async throws {
+    let session = MockBenchmarkSession()
+    let sleeper = GatedSleeper()
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+
+    await engine.setTestRepeater(tower)
+    await engine.setTargets([ridge])
+    await engine.setTracesPerTarget(1)
+
+    let run = Task { await engine.run() }
+    try await waitForBenchmarkCondition("run did not finish") {
+      await sleeper.releaseAll()
+      let sent = await session.traceCount
+      let isRunning = await engine.currentSnapshot().isRunning
+      return sent == 1 && !isRunning
+    }
+    await run.value
+    #expect(await engine.currentSnapshot().hasResults)
+
+    // Measurements taken against a different set of targets must not be savable as this one's.
+    await engine.toggleTarget(barn)
+    let afterToggle = await engine.currentSnapshot()
+    #expect(!afterToggle.hasResults)
+
+    await engine.setTargets([ridge, barn])
+    let afterSet = await engine.currentSnapshot()
+    #expect(!afterSet.hasResults)
+    #expect(afterSet.completedAt == nil)
+
+    await engine.shutdown()
+    await sleeper.releaseAll()
+  }
+
   // MARK: - Progress
 
   @Test
   func `Progress counts probes finished over probes planned`() {
     let plan = BenchmarkPlan(testRepeater: tower, targets: [ridge, barn], tracesPerTarget: 5)
+    // Eight of ten probes resolved, the ninth in flight: progress follows the outcomes, not
+    // the index of the probe being sent.
     let midRun = RepeaterBenchmarkSnapshot(
       plan: plan,
-      results: [],
+      results: [
+        BenchmarkTargetResult(target: ridge, outcomes: outcomes(5), isComplete: true),
+        BenchmarkTargetResult(target: barn, outcomes: outcomes(3)),
+      ],
       isRunning: true,
       currentTargetIndex: 2,
-      currentTraceIndex: 3,
+      currentTraceIndex: 4,
       completedAt: nil
     )
 
     #expect(midRun.progressFraction == 0.8)
     #expect(RepeaterBenchmarkSnapshot.idle().progressFraction == 0)
+  }
+
+  private func outcomes(_ count: Int) -> [BenchmarkTraceOutcome] {
+    (1...count).map {
+      BenchmarkFixtures.outcome(sequence: $0, durationMs: 400, intermediateSNRs: [9, 4, 6])
+    }
   }
 }

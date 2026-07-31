@@ -566,7 +566,10 @@ func executeConfigImport(
     try checkCancellation()
     if prefState.map({ locationNeedsWrite(position, current: $0) }) ?? true {
       try await writers.setLocation(position.latitude, position.longitude)
-      logger.info("Set position: \(position.latitude), \(position.longitude)")
+      // Redacted for the reason `LocationService` redacts its own fix log: OSLog publishes
+      // interpolated numerics, and a node's configured position is a coordinate somebody
+      // cares about keeping off a sysdiagnose.
+      logger.info("Set position: \(position.latitude, privacy: .private), \(position.longitude, privacy: .private)")
     } else {
       logger.info("Skipped position (unchanged)")
     }

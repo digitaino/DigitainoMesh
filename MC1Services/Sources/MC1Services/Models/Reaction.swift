@@ -41,6 +41,12 @@ public final class Reaction {
   @Attribute(originalName: "deviceID")
   public var radioID: UUID
 
+  /// Dormant — nothing reads or writes this. Build 40 recorded the outgoing message row
+  /// that carried a reaction here (nil for received reactions); the column is re-declared
+  /// so the in-place update to v2 preserves it. Exact Build 40 name/type/optionality.
+  /// Deliberately not surfaced in `ReactionDTO` — that DTO is the backup wire format.
+  public var sentMessageID: UUID?
+
   public init(
     id: UUID = UUID(),
     messageID: UUID,

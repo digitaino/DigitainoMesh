@@ -42,6 +42,15 @@ extension PersistenceStore {
     }
     try modelContext.save()
 
+    // Persisted before step 2 rather than after it: the mapping is already known here, and
+    // a throw inside the batch loop would otherwise leave the conversation list without a
+    // last-connected radio for one launch.
+    if let mappedRadioID {
+      defaults.set(mappedRadioID.uuidString, forKey: PersistenceKeys.lastConnectedRadioID)
+    } else if lastDeviceID != nil {
+      Self.migrationLogger.warning("lastConnectedDeviceID did not match any stored device; lastConnectedRadioID not backfilled")
+    }
+
     // Step 2: Backfill deduplicationKey on outgoing messages with nil keys.
     // Only outgoing (directionRawValue == 1); incoming messages get keys during re-sync.
     // Chunked with a save per batch: processed rows stop matching the predicate, so an
@@ -68,12 +77,6 @@ extension PersistenceStore {
       }
       try modelContext.save()
       backfilled += batch.count
-    }
-
-    if let mappedRadioID {
-      defaults.set(mappedRadioID.uuidString, forKey: PersistenceKeys.lastConnectedRadioID)
-    } else if lastDeviceID != nil {
-      Self.migrationLogger.warning("lastConnectedDeviceID did not match any stored device; lastConnectedRadioID not backfilled")
     }
 
     defaults.set(true, forKey: Self.migrationKey)
@@ -177,76 +180,64 @@ extension PersistenceStore {
     defaults.removeObject(forKey: Self.repeaterUnreadMigrationKey)
   }
 
-  // MARK: - Message sortDate normalization
+  // MARK: - Message sortDate normalization migration
 
-  /// Normalizes every message's `sortDate` to its `createdAt`, guarded by a one-time flag.
-  /// Shared by the backfill and reset migrations, which differ only in which flag gates
-  /// them and what they log. Returns the row count, or `nil` when the flag was already set
-  /// and the migration was skipped.
-  private func normalizeMessageSortDates(flagKey: String, defaults: UserDefaults) throws -> Int? {
-    guard !defaults.bool(forKey: flagKey) else { return nil }
+  /// Both legacy flags. The backfill (rows persisted before the `sortDate` column existed,
+  /// which come up with the `Date.distantPast` schema default) and the reset (an interim
+  /// build derived `sortDate` from the sender's send time, burying just-synced backlog deep
+  /// in scrollback) assign the same value, so a store owing either one owes exactly one
+  /// rewrite and completing it satisfies both. The keys are kept separate so already-migrated
+  /// stores from both eras stay migrated.
+  private static let sortDateMigrationKeys = ["hasBackfilledMessageSortDate", "hasResetMessageSortDate"]
+  private static let sortDateMigrationLogger = Logger(
+    subsystem: "com.mc1",
+    category: "SortDateNormalizationMigration"
+  )
 
-    let messages = try modelContext.fetch(FetchDescriptor<Message>())
-    for message in messages {
-      message.sortDate = message.createdAt
+  /// One-time normalization: set every message's `sortDate` to its `createdAt` so date-header
+  /// grouping preserves the rows' current display order and block-at-reconnect ordering starts
+  /// from a clean receive-time baseline; subsequent syncs derive a fresh drain anchor per batch.
+  /// Runs once at launch before any sync, so every row present is a pre-feature row.
+  ///
+  /// Chunked with a save per batch: normalized rows stop matching the predicate, so an
+  /// interrupted launch resumes where it left off instead of discarding the whole rewrite.
+  public func performSortDateNormalizationMigration(defaults: UserDefaults = .standard) throws {
+    guard Self.sortDateMigrationKeys.contains(where: { !defaults.bool(forKey: $0) }) else { return }
+
+    let skewedPredicate = #Predicate<Message> { message in
+      message.sortDate != message.createdAt
     }
-    try modelContext.save()
+    // Normalized rows dropping out of the predicate is what advances the loop, so bound it by
+    // the table size: every row needs at most one rewrite, and a stored Date that somehow did
+    // not compare equal after its save must not spin the launch path forever.
+    let rowBudget = try modelContext.fetchCount(FetchDescriptor<Message>())
+    var normalized = 0
+    while normalized < rowBudget {
+      var descriptor = FetchDescriptor(predicate: skewedPredicate)
+      descriptor.fetchLimit = 500
+      let batch = try modelContext.fetch(descriptor)
+      guard !batch.isEmpty else { break }
 
-    defaults.set(true, forKey: flagKey)
-    return messages.count
-  }
+      for message in batch {
+        message.sortDate = message.createdAt
+      }
+      try modelContext.save()
+      normalized += batch.count
+    }
 
-  // MARK: - Message sortDate backfill migration
+    for key in Self.sortDateMigrationKeys {
+      defaults.set(true, forKey: key)
+    }
 
-  private static let sortDateBackfillMigrationKey = "hasBackfilledMessageSortDate"
-  private static let sortDateBackfillMigrationLogger = Logger(
-    subsystem: "com.mc1",
-    category: "SortDateBackfillMigration"
-  )
-
-  /// One-time backfill: pre-existing rows were persisted before the `sortDate`
-  /// column existed and come up with the `Date.distantPast` schema default.
-  /// Set `sortDate` to `createdAt` on every row so the date-header grouping
-  /// preserves their current display order. This runs once at launch before
-  /// any sync, so every row present is a pre-feature row.
-  public func performSortDateBackfillMigration(defaults: UserDefaults = .standard) throws {
-    guard let count = try normalizeMessageSortDates(flagKey: Self.sortDateBackfillMigrationKey, defaults: defaults) else { return }
-
-    Self.sortDateBackfillMigrationLogger.info(
-      "sortDate backfill complete: \(count) messages backfilled"
+    Self.sortDateMigrationLogger.info(
+      "sortDate normalization complete: \(normalized) messages normalized to createdAt"
     )
   }
 
-  /// Resets the migration flag (for testing only).
-  public func resetSortDateBackfillMigrationFlag(defaults: UserDefaults = .standard) {
-    defaults.removeObject(forKey: Self.sortDateBackfillMigrationKey)
-  }
-
-  // MARK: - Message sortDate reset migration
-
-  private static let sortDateResetMigrationKey = "hasResetMessageSortDate"
-  private static let sortDateResetMigrationLogger = Logger(
-    subsystem: "com.mc1",
-    category: "SortDateResetMigration"
-  )
-
-  /// One-time reset: an interim build derived `sortDate` from the sender's send time,
-  /// which buried just-synced backlog deep in scrollback. The original backfill
-  /// (`performSortDateBackfillMigration`) already ran on those installs, so its flag is
-  /// set and it can no longer touch the rows. Re-normalize every row's `sortDate` to
-  /// `createdAt` so block-at-reconnect ordering starts from a clean receive-time baseline;
-  /// subsequent syncs derive a fresh drain anchor per batch. Runs once at launch before
-  /// any sync, so every row present is a pre-feature row.
-  public func performSortDateResetMigration(defaults: UserDefaults = .standard) throws {
-    guard let count = try normalizeMessageSortDates(flagKey: Self.sortDateResetMigrationKey, defaults: defaults) else { return }
-
-    Self.sortDateResetMigrationLogger.info(
-      "sortDate reset complete: \(count) messages re-normalized to createdAt"
-    )
-  }
-
-  /// Resets the migration flag (for testing only).
-  public func resetSortDateResetMigrationFlag(defaults: UserDefaults = .standard) {
-    defaults.removeObject(forKey: Self.sortDateResetMigrationKey)
+  /// Resets the migration flags (for testing only).
+  public func resetSortDateNormalizationMigrationFlags(defaults: UserDefaults = .standard) {
+    for key in Self.sortDateMigrationKeys {
+      defaults.removeObject(forKey: key)
+    }
   }
 }

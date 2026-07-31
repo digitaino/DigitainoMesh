@@ -24,8 +24,8 @@ public struct BenchmarkTarget: Sendable, Hashable, Identifiable {
 
   /// The leading key bytes a trace path addresses this repeater with.
   ///
-  /// Trace hops are `1 << pathHashMode` bytes wide (1, 2 or 4), which is *not* the linear
-  /// 1/2/3-byte routing hash width — see `DeviceDTO.traceHashSize`.
+  /// Trace hops are 1, 2 or 3 bytes wide — see `DeviceDTO.traceHashSize` and
+  /// ``PathEncoding/hashSize(forMode:)``.
   public func pathHash(byteWidth: Int) -> Data {
     Data(publicKey.prefix(max(1, byteWidth)))
   }
@@ -258,10 +258,13 @@ public struct RepeaterBenchmarkSnapshot: Sendable, Equatable {
   }
 
   /// Probes finished over probes planned, `0` when there is nothing to do.
+  ///
+  /// Counted from the outcomes, not from the indices: `currentTraceIndex` names the probe in
+  /// flight, so counting it would reach 100% the moment the last probe was *sent*.
   public var progressFraction: Double {
     let total = totalTargets * plan.tracesPerTarget
     guard total > 0 else { return 0 }
-    let done = max(0, currentTargetIndex - 1) * plan.tracesPerTarget + currentTraceIndex
+    let done = results.reduce(0) { $0 + $1.outcomes.count }
     return min(1, Double(done) / Double(total))
   }
 

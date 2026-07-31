@@ -18,6 +18,7 @@ struct NodeLocationStalenessPolicyTests {
     device: (latitude: Double, longitude: Double) = sanJuan,
     hasLocation: Bool = true,
     phone: CLLocationCoordinate2D? = miami,
+    fixAge: TimeInterval = 0,
     lastSnoozedAt: Date? = nil,
     now: Date = now
   ) -> NodeLocationStalenessPolicy.Decision {
@@ -25,9 +26,21 @@ struct NodeLocationStalenessPolicyTests {
       deviceLatitude: device.latitude,
       deviceLongitude: device.longitude,
       deviceHasLocation: hasLocation,
-      phoneCoordinate: phone,
+      phoneLocation: phone.map { Self.fix($0, takenAt: now.addingTimeInterval(-fixAge)) },
       lastSnoozedAt: lastSnoozedAt,
       now: now
+    )
+  }
+
+  /// A phone fix at `coordinate`, dated `takenAt`. The long initializer is the only one that
+  /// lets a test date a fix — `CLLocation(latitude:longitude:)` stamps it with the wall clock.
+  private static func fix(_ coordinate: CLLocationCoordinate2D, takenAt: Date) -> CLLocation {
+    CLLocation(
+      coordinate: coordinate,
+      altitude: 0,
+      horizontalAccuracy: 10,
+      verticalAccuracy: -1,
+      timestamp: takenAt
     )
   }
 
@@ -104,6 +117,51 @@ struct NodeLocationStalenessPolicyTests {
   func `Device without a location wins over a missing phone fix`() {
     // Reason ordering matters for the log line: nothing to correct beats nothing to correct with.
     #expect(evaluate(hasLocation: false, phone: nil) == .skip(.deviceHasNoLocation))
+  }
+
+  // MARK: - Fix age
+
+  @Test
+  func `A fix older than the age limit counts as no fix at all`() {
+    // The motivating case: a phone suspended through a flight still holds the pre-flight fix,
+    // and writing it would advertise the city the operator left.
+    let decision = evaluate(fixAge: NodeLocationStalenessPolicy.maxFixAge + 1)
+    #expect(decision == .skip(.noPhoneFix))
+  }
+
+  @Test
+  func `A fix at the age limit still counts`() {
+    #expect(evaluate(fixAge: NodeLocationStalenessPolicy.maxFixAge).promptDistanceMeters != nil)
+  }
+
+  @Test
+  func `Age is decided before distance, so an aged fix never reads as withinThreshold`() {
+    // The distinction is what tells the caller to go get a fresh fix rather than conclude
+    // the radio is fine.
+    let decision = evaluate(
+      phone: Self.nearSanJuan,
+      fixAge: NodeLocationStalenessPolicy.maxFixAge + 1
+    )
+    #expect(decision == .skip(.noPhoneFix))
+  }
+
+  @Test
+  func `A fix dated ahead of now counts as current`() {
+    // A clock correction between the fix and the check is not staleness.
+    #expect(evaluate(fixAge: -3600).promptDistanceMeters != nil)
+  }
+
+  @Test
+  func `Fix age limit is five minutes`() {
+    #expect(NodeLocationStalenessPolicy.maxFixAge == 300)
+  }
+
+  @Test
+  func `isFixFresh is the same rule the write path re-checks with`() {
+    let limit = NodeLocationStalenessPolicy.maxFixAge
+    #expect(NodeLocationStalenessPolicy.isFixFresh(Self.now, now: Self.now))
+    #expect(NodeLocationStalenessPolicy.isFixFresh(Self.now.addingTimeInterval(-limit), now: Self.now))
+    #expect(!NodeLocationStalenessPolicy.isFixFresh(Self.now.addingTimeInterval(-limit - 1), now: Self.now))
   }
 
   // MARK: - Snooze

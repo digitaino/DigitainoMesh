@@ -26,6 +26,12 @@ public final class ChatNoRepeatsDetector {
   /// Never fired for a no-op input.
   public var onPromptChange: (@MainActor (UUID?) -> Void)?
 
+  /// Whether repeater signal data is still available for the connection. Consulted when the
+  /// window fires, because the owner's gate on the way in cannot see a detach that happens
+  /// while the window runs: without signal data the "no repeats heard" verdict rests on
+  /// nothing, so the armed slot is retired instead of prompted. Nil means available.
+  public var isPromptAvailable: (@MainActor () -> Bool)?
+
   /// The message currently offered the retry card.
   public var promptedMessageID: UUID? {
     policy.promptedMessageID
@@ -82,6 +88,13 @@ public final class ChatNoRepeatsDetector {
     public func awaitWindowForTesting() async {
       await windowTask?.value
     }
+
+    /// Test-only: delivers the window's verdict now, exactly as the timer would. Lets an
+    /// owner-level test exercise the fire-time availability re-check without a real window.
+    public func fireWindowForTesting() {
+      guard let armed = policy.armedMessageID else { return }
+      fireWindow(for: armed)
+    }
   #endif
 
   private func restartWindow() {
@@ -98,7 +111,15 @@ public final class ChatNoRepeatsDetector {
         return
       }
       guard !Task.isCancelled else { return }
-      self?.handle(.windowElapsed(messageID: armed))
+      self?.fireWindow(for: armed)
     }
+  }
+
+  private func fireWindow(for messageID: UUID) {
+    guard isPromptAvailable?() ?? true else {
+      handle(.detectionUnavailable(messageID: messageID))
+      return
+    }
+    handle(.windowElapsed(messageID: messageID))
   }
 }
