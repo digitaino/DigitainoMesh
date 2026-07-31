@@ -10,10 +10,23 @@ struct NodeLocationPromptStateTests {
   /// San Juan, Puerto Rico — the radio's stale advert location in the motivating bug.
   private static let sanJuanDevice = (latitude: 18.4655, longitude: -66.1057)
   // Miami, FL — ~1,660 km away, far past the 50 mi threshold.
-  private static let miami = CLLocation(latitude: 25.7617, longitude: -80.1918)
-  private static let nearSanJuan = CLLocation(latitude: 18.4780, longitude: -66.1057)
+  private static let miami = CLLocationCoordinate2D(latitude: 25.7617, longitude: -80.1918)
+  private static let nearSanJuan = CLLocationCoordinate2D(latitude: 18.4780, longitude: -66.1057)
 
   private static let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+
+  /// A phone fix at `coordinate`, dated `takenAt`. Fixes are dated explicitly because a fix
+  /// older than ``NodeLocationStalenessPolicy/maxFixAge`` counts as no fix at all, and
+  /// `CLLocation(latitude:longitude:)` would stamp the wall clock instead of this clock.
+  private static func fix(_ coordinate: CLLocationCoordinate2D, takenAt: Date = now) -> CLLocation {
+    CLLocation(
+      coordinate: coordinate,
+      altitude: 0,
+      horizontalAccuracy: 10,
+      verticalAccuracy: -1,
+      timestamp: takenAt
+    )
+  }
 
   // MARK: - Presentation
 
@@ -23,12 +36,12 @@ struct NodeLocationPromptStateTests {
     defer { harness.tearDown() }
     let device = Self.makeDevice()
 
-    harness.state.evaluate(device: device, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: device, phoneLocation: Self.fix(Self.miami), now: Self.now)
 
     let pending = try #require(harness.state.pending)
     #expect(pending.deviceID == device.id)
-    #expect(pending.latitude == Self.miami.coordinate.latitude)
-    #expect(pending.longitude == Self.miami.coordinate.longitude)
+    #expect(pending.latitude == Self.miami.latitude)
+    #expect(pending.longitude == Self.miami.longitude)
     #expect(pending.distanceMeters > NodeLocationStalenessPolicy.thresholdMeters)
   }
 
@@ -37,7 +50,7 @@ struct NodeLocationPromptStateTests {
     let harness = try Harness()
     defer { harness.tearDown() }
 
-    harness.state.evaluate(device: Self.makeDevice(), phoneLocation: Self.nearSanJuan, now: Self.now)
+    harness.state.evaluate(device: Self.makeDevice(), phoneLocation: Self.fix(Self.nearSanJuan), now: Self.now)
 
     #expect(harness.state.pending == nil)
   }
@@ -57,9 +70,101 @@ struct NodeLocationPromptStateTests {
     let harness = try Harness()
     defer { harness.tearDown() }
 
-    harness.state.evaluate(device: nil, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: nil, phoneLocation: Self.fix(Self.miami), now: Self.now)
 
     #expect(harness.state.pending == nil)
+  }
+
+  @Test
+  func `A prompt carries the date of the fix behind it`() throws {
+    let harness = try Harness()
+    defer { harness.tearDown() }
+    let takenAt = Self.now.addingTimeInterval(-60)
+
+    harness.state.evaluate(
+      device: Self.makeDevice(),
+      phoneLocation: Self.fix(Self.miami, takenAt: takenAt),
+      now: Self.now
+    )
+
+    #expect(try #require(harness.state.pending).fixDate == takenAt)
+  }
+
+  // MARK: - Fix age
+
+  @Test
+  func `A fix too old to write produces no prompt and asks for a fresh one`() throws {
+    let harness = try Harness()
+    defer { harness.tearDown() }
+    let aged = Self.fix(
+      Self.miami,
+      takenAt: Self.now.addingTimeInterval(-NodeLocationStalenessPolicy.maxFixAge - 1)
+    )
+
+    let needsFreshFix = harness.state.evaluate(
+      device: Self.makeDevice(),
+      phoneLocation: aged,
+      now: Self.now
+    )
+
+    #expect(needsFreshFix)
+    #expect(harness.state.pending == nil)
+  }
+
+  @Test
+  func `The fresh-fix request is made once per session`() throws {
+    // Every arriving fix re-enters `evaluate`, and an aged one leaves the condition true, so
+    // the request has to be one-shot or a phone answering with the same cached fix spins.
+    let harness = try Harness()
+    defer { harness.tearDown() }
+    let device = Self.makeDevice()
+    let aged = Self.fix(
+      Self.miami,
+      takenAt: Self.now.addingTimeInterval(-NodeLocationStalenessPolicy.maxFixAge - 1)
+    )
+
+    #expect(harness.state.evaluate(device: device, phoneLocation: aged, now: Self.now))
+    #expect(!harness.state.evaluate(device: device, phoneLocation: aged, now: Self.now))
+
+    harness.state.endSession()
+
+    #expect(harness.state.evaluate(device: device, phoneLocation: aged, now: Self.now))
+  }
+
+  @Test
+  func `A fresh fix arriving after an aged one prompts`() throws {
+    let harness = try Harness()
+    defer { harness.tearDown() }
+    let device = Self.makeDevice()
+
+    harness.state.evaluate(
+      device: device,
+      phoneLocation: Self.fix(Self.miami, takenAt: Self.now.addingTimeInterval(-3600)),
+      now: Self.now
+    )
+    let needsFreshFix = harness.state.evaluate(
+      device: device,
+      phoneLocation: Self.fix(Self.miami),
+      now: Self.now
+    )
+
+    #expect(!needsFreshFix)
+    #expect(harness.state.pending != nil)
+  }
+
+  @Test
+  func `A radio with no configured location never asks for a fix`() throws {
+    let harness = try Harness()
+    defer { harness.tearDown() }
+
+    // Null island is `hasLocation == false`: nothing to correct, so nothing to correct it with.
+    let needsFreshFix = harness.state.evaluate(
+      device: Self.makeDevice(latitude: 0, longitude: 0),
+      phoneLocation: nil,
+      now: Self.now
+    )
+
+    #expect(!needsFreshFix)
   }
 
   // MARK: - Session guard
@@ -70,9 +175,9 @@ struct NodeLocationPromptStateTests {
     defer { harness.tearDown() }
     let device = Self.makeDevice()
 
-    harness.state.evaluate(device: device, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: device, phoneLocation: Self.fix(Self.miami), now: Self.now)
     harness.state.clearPending()
-    harness.state.evaluate(device: device, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: device, phoneLocation: Self.fix(Self.miami), now: Self.now)
 
     #expect(harness.state.pending == nil)
   }
@@ -83,13 +188,13 @@ struct NodeLocationPromptStateTests {
     defer { harness.tearDown() }
     let device = Self.makeDevice()
 
-    harness.state.evaluate(device: device, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: device, phoneLocation: Self.fix(Self.miami), now: Self.now)
     harness.state.markUpdateFailed()
     #expect(harness.state.failureTrigger == 1)
     #expect(harness.store.nodeLocationPromptSnoozedAt(deviceID: device.id) == nil)
 
     harness.state.endSession()
-    harness.state.evaluate(device: device, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: device, phoneLocation: Self.fix(Self.miami), now: Self.now)
 
     #expect(harness.state.pending != nil)
   }
@@ -99,7 +204,7 @@ struct NodeLocationPromptStateTests {
     let harness = try Harness()
     defer { harness.tearDown() }
 
-    harness.state.evaluate(device: Self.makeDevice(), phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: Self.makeDevice(), phoneLocation: Self.fix(Self.miami), now: Self.now)
     harness.state.markUpdateSucceeded()
 
     #expect(harness.state.successTrigger == 1)
@@ -114,17 +219,18 @@ struct NodeLocationPromptStateTests {
     defer { harness.tearDown() }
     let device = Self.makeDevice()
 
-    harness.state.evaluate(device: device, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: device, phoneLocation: Self.fix(Self.miami), now: Self.now)
     harness.state.snoozeCurrent(now: Self.now)
 
     #expect(harness.state.pending == nil)
     #expect(harness.store.nodeLocationPromptSnoozedAt(deviceID: device.id) == Self.now)
 
     harness.state.endSession()
+    let threeDaysOn = Self.now.addingTimeInterval(3 * 24 * 60 * 60)
     harness.state.evaluate(
       device: device,
-      phoneLocation: Self.miami,
-      now: Self.now.addingTimeInterval(3 * 24 * 60 * 60)
+      phoneLocation: Self.fix(Self.miami, takenAt: threeDaysOn),
+      now: threeDaysOn
     )
 
     #expect(harness.state.pending == nil)
@@ -136,14 +242,15 @@ struct NodeLocationPromptStateTests {
     defer { harness.tearDown() }
     let device = Self.makeDevice()
 
-    harness.state.evaluate(device: device, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: device, phoneLocation: Self.fix(Self.miami), now: Self.now)
     harness.state.snoozeCurrent(now: Self.now)
     harness.state.endSession()
 
+    let weekOn = Self.now.addingTimeInterval(NodeLocationStalenessPolicy.snoozeInterval + 1)
     harness.state.evaluate(
       device: device,
-      phoneLocation: Self.miami,
-      now: Self.now.addingTimeInterval(NodeLocationStalenessPolicy.snoozeInterval + 1)
+      phoneLocation: Self.fix(Self.miami, takenAt: weekOn),
+      now: weekOn
     )
 
     #expect(harness.state.pending != nil)
@@ -156,10 +263,10 @@ struct NodeLocationPromptStateTests {
     let snoozed = Self.makeDevice()
     let other = Self.makeDevice()
 
-    harness.state.evaluate(device: snoozed, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: snoozed, phoneLocation: Self.fix(Self.miami), now: Self.now)
     harness.state.snoozeCurrent(now: Self.now)
 
-    harness.state.evaluate(device: other, phoneLocation: Self.miami, now: Self.now)
+    harness.state.evaluate(device: other, phoneLocation: Self.fix(Self.miami), now: Self.now)
 
     #expect(harness.state.pending?.deviceID == other.id)
   }
