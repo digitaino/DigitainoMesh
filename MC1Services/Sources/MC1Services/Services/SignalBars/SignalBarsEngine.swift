@@ -52,6 +52,7 @@ public actor SignalBarsEngine {
   private let directory: (any SignalBarsNodeDirectory)?
   private let resolver: any NodeIdentityResolving
   private let movementHints: any MovementHintProvider
+  private let referenceLocation: any ReferenceLocationProvider
   private let now: @Sendable () -> Date
   private let sleep: @Sendable (Duration) async -> Void
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "SignalBarsEngine")
@@ -90,6 +91,9 @@ public actor SignalBarsEngine {
   ///   - resolver: Hash → node resolution. Defaults to the app's standard resolver.
   ///   - movementHints: Phone motion, which shortens probe cadence when moving. Defaults to
   ///     "always stationary"; the CoreMotion-backed provider lives in the app target.
+  ///   - referenceLocation: Where distances are measured from when a hash collision is
+  ///     broken by proximity. Defaults to "no location", which keeps ranking recency-based;
+  ///     the CoreLocation-backed relay is fed by the app target.
   ///   - configuration: Mode, path hash mode and policy.
   ///   - now: The clock. Injected so nothing in the engine calls `Date()`.
   ///   - sleep: How the engine waits between cycles. Injected so tests run instantly.
@@ -98,6 +102,7 @@ public actor SignalBarsEngine {
     directory: (any SignalBarsNodeDirectory)? = nil,
     resolver: any NodeIdentityResolving = NodeIdentityResolver(),
     movementHints: any MovementHintProvider = StationaryMovementHintProvider(),
+    referenceLocation: any ReferenceLocationProvider = NoReferenceLocationProvider(),
     configuration: Configuration = Configuration(),
     now: @escaping @Sendable () -> Date = { Date() },
     sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
@@ -106,6 +111,7 @@ public actor SignalBarsEngine {
     self.directory = directory
     self.resolver = resolver
     self.movementHints = movementHints
+    self.referenceLocation = referenceLocation
     self.now = now
     self.sleep = sleep
     mode = configuration.mode
@@ -603,6 +609,7 @@ public actor SignalBarsEngine {
 
     let candidates = await directory.resolvableNodes()
     guard !candidates.isEmpty else { return }
+    let reference = await referenceLocation.currentReferenceCoordinate()
     for repeater in table.repeaters where repeater.name == nil {
       // A row that holds the full public key (discover responses store it) is exactly
       // identified — name it from the key and never fall back to hash guessing, which
@@ -612,11 +619,41 @@ public actor SignalBarsEngine {
         table.setName(exact.resolvableName, for: repeater.id)
         continue
       }
-      guard let match = resolver.bestMatch(for: repeater.id, among: candidates, now: at) else {
+      guard let resolution = resolver.resolve(repeater.id, among: candidates, now: at) else {
         continue
       }
-      table.setName(match.resolvableName, for: repeater.id)
+      table.setName(
+        nearestName(for: repeater.id, in: resolution, reference: reference),
+        for: repeater.id
+      )
     }
+  }
+
+  /// The name proximity picks from a resolution — the geographic layer
+  /// ``NodeResolution/candidates`` exists to carry.
+  ///
+  /// A longer agreed prefix stays a stronger identity claim than any distance, so only the
+  /// candidates tied with the winner on match depth are re-ranked; they form the head of
+  /// the ranking because the engine resolves without override pins and depth is then the
+  /// resolver's primary key. Among that tie the nearest located candidate wins — the last
+  /// hop we heard is overwhelmingly the nearby one, however recently a distant collision
+  /// advertised. With no reference location, or no located candidate in the tie, the
+  /// resolver's recency choice stands.
+  private func nearestName(
+    for id: NodeHexID,
+    in resolution: NodeResolution<AnyResolvableNode>,
+    reference: ReferenceCoordinate?
+  ) -> String {
+    guard let reference, resolution.isAmbiguous else { return resolution.best.resolvableName }
+    let bestDepth = id.matchedByteCount(againstPublicKey: resolution.best.publicKey)
+    let tied = resolution.candidates.prefix {
+      id.matchedByteCount(againstPublicKey: $0.publicKey) == bestDepth
+    }
+    let nearest = tied.filter(\.hasLocation).min { lhs, rhs in
+      reference.distanceMeters(toLatitude: lhs.latitude, longitude: lhs.longitude)
+        < reference.distanceMeters(toLatitude: rhs.latitude, longitude: rhs.longitude)
+    }
+    return (nearest ?? resolution.best).resolvableName
   }
 
   /// The node pool changed (contact added, renamed, removed): every resolved name is a
@@ -627,6 +664,12 @@ public actor SignalBarsEngine {
     lastNameResolveAt = nil
     await resolveNames(now: now())
     publish()
+  }
+
+  /// The reference location moved enough that proximity may break collisions differently:
+  /// treat it exactly like a pool change — drop every resolved name and re-resolve now.
+  public func referenceLocationDidChange() async {
+    await nodePoolDidChange()
   }
 
   // MARK: - Publishing

@@ -17,12 +17,14 @@ struct SignalBarsEngineTests {
     mode: SignalBarsMode = .engine,
     pathHashMode: UInt8 = 0,
     directory: (any SignalBarsNodeDirectory)? = nil,
-    movement: MovementHint = .stationary
+    movement: MovementHint = .stationary,
+    referenceLocation: (any ReferenceLocationProvider)? = nil
   ) -> SignalBarsEngine {
     SignalBarsEngine(
       session: session,
       directory: directory,
       movementHints: FixedMovementHintProvider(movement),
+      referenceLocation: referenceLocation ?? NoReferenceLocationProvider(),
       configuration: SignalBarsEngine.Configuration(mode: mode, pathHashMode: pathHashMode),
       now: clock.provider,
       sleep: { _ in }
@@ -843,6 +845,164 @@ struct SignalBarsEngineTests {
     ])
     await engine.nodePoolDidChange()
     #expect(await engine.currentSnapshot().repeaters.first?.name == "New Name")
+  }
+
+  @Test
+  func `On a hash collision the nearest candidate beats the most recently advertised`() async {
+    // Chestnut is a mile from the reference; the collision advertised more recently from
+    // a hundred miles out. Proximity, not recency, names the row.
+    let directory = StubNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x11]),
+        latitude: 31.70, longitude: -97.74, hasLocation: true,
+        lastAdvertTimestamp: 2_000,
+        resolvableName: "WRVP672-CBS-Repeater"
+      )),
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x22]),
+        latitude: 30.28, longitude: -97.74, hasLocation: true,
+        lastAdvertTimestamp: 1_000,
+        resolvableName: "Digitaino Chestnut"
+      ))
+    ])
+    let engine = makeEngine(
+      session: MockSignalBarsSession(),
+      clock: TestClock(),
+      directory: directory,
+      referenceLocation: FixedReferenceLocationProvider(
+        ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
+      )
+    )
+
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x80])))
+
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Digitaino Chestnut")
+  }
+
+  @Test
+  func `Proximity never overrides a longer agreed prefix`() async {
+    // The truncated record agrees on one byte and sits next door; the full key agrees on
+    // both ID bytes from far away. Identity outranks geography.
+    let directory = StubNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: Data([0x80]),
+        latitude: 30.28, longitude: -97.74, hasLocation: true,
+        lastAdvertTimestamp: 2_000,
+        resolvableName: "Next Door, Shallow Match"
+      )),
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x3C]),
+        latitude: 31.70, longitude: -97.74, hasLocation: true,
+        lastAdvertTimestamp: 1_000,
+        resolvableName: "Far Away, Deep Match"
+      ))
+    ])
+    let engine = makeEngine(
+      session: MockSignalBarsSession(),
+      clock: TestClock(),
+      directory: directory,
+      referenceLocation: FixedReferenceLocationProvider(
+        ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
+      )
+    )
+
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x80, 0x3C], hashSize: 2)))
+
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Far Away, Deep Match")
+  }
+
+  @Test
+  func `A collision among unlocated candidates falls back to recency even with a fix`() async {
+    let directory = StubNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x11]),
+        lastAdvertTimestamp: 2_000,
+        resolvableName: "Recent"
+      )),
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x22]),
+        lastAdvertTimestamp: 1_000,
+        resolvableName: "Older"
+      ))
+    ])
+    let engine = makeEngine(
+      session: MockSignalBarsSession(),
+      clock: TestClock(),
+      directory: directory,
+      referenceLocation: FixedReferenceLocationProvider(
+        ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
+      )
+    )
+
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x80])))
+
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Recent")
+  }
+
+  @Test
+  func `A located candidate beats an unlocated, more recent one on a collision`() async {
+    // Mirrors RepeaterResolver's rule on the path screens: a candidate we can place wins
+    // over one we cannot, so the two resolution paths agree on collisions.
+    let directory = StubNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x11]),
+        lastAdvertTimestamp: 2_000,
+        resolvableName: "Recent But Unlocated"
+      )),
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x22]),
+        latitude: 30.28, longitude: -97.74, hasLocation: true,
+        lastAdvertTimestamp: 1_000,
+        resolvableName: "Located"
+      ))
+    ])
+    let engine = makeEngine(
+      session: MockSignalBarsSession(),
+      clock: TestClock(),
+      directory: directory,
+      referenceLocation: FixedReferenceLocationProvider(
+        ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
+      )
+    )
+
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x80])))
+
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Located")
+  }
+
+  @Test
+  func `referenceLocationDidChange re-resolves a collision with the new fix`() async {
+    let clock = TestClock()
+    let relay = ReferenceLocationRelay()
+    let directory = StubNodeDirectory(nodes: [
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x11]),
+        latitude: 31.70, longitude: -97.74, hasLocation: true,
+        lastAdvertTimestamp: 2_000,
+        resolvableName: "Far But Recent"
+      )),
+      AnyResolvableNode(StubResolvableNode(
+        publicKey: SignalBarsFixtures.publicKey([0x80, 0x22]),
+        latitude: 30.28, longitude: -97.74, hasLocation: true,
+        lastAdvertTimestamp: 1_000,
+        resolvableName: "Near But Older"
+      ))
+    ])
+    let engine = makeEngine(
+      session: MockSignalBarsSession(),
+      clock: clock,
+      directory: directory,
+      referenceLocation: relay
+    )
+
+    // No fix yet: recency is all there is.
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x80])))
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Far But Recent")
+
+    // The first fix lands; the row must flip to the nearby repeater.
+    await relay.update(ReferenceCoordinate(latitude: 30.27, longitude: -97.74))
+    await engine.referenceLocationDidChange()
+    #expect(await engine.currentSnapshot().repeaters.first?.name == "Near But Older")
   }
 
   @Test

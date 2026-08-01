@@ -63,6 +63,20 @@ struct FixedMovementHintProvider: MovementHintProvider {
   }
 }
 
+// MARK: - Reference location
+
+struct FixedReferenceLocationProvider: ReferenceLocationProvider {
+  let coordinate: ReferenceCoordinate?
+
+  init(_ coordinate: ReferenceCoordinate?) {
+    self.coordinate = coordinate
+  }
+
+  func currentReferenceCoordinate() async -> ReferenceCoordinate? {
+    coordinate
+  }
+}
+
 // MARK: - Node directory
 
 /// A literal pool of resolvable nodes, standing in for contacts + discovered nodes.

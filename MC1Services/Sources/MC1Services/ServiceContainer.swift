@@ -159,6 +159,12 @@ public final class ServiceContainer {
   /// MC1Services must not import CoreMotion.
   public let movementHintRelay: MovementHintRelay
 
+  /// The phone's (or radio's) latest position, written by the app target and read by
+  /// `signalBarsEngine` to break repeater hash collisions by proximity. Same shape as
+  /// `movementHintRelay`, for the same reason: the engine needs it at construction and the
+  /// location frameworks stay in the app target.
+  public let referenceLocationRelay: ReferenceLocationRelay
+
   /// Tracks how well this radio and the repeaters around it hear each other. Started by
   /// `AppState` once `syncRegistryProbe` has decided between viewer and engine mode; stopped
   /// and finished in `tearDown()`.
@@ -338,6 +344,7 @@ public final class ServiceContainer {
     syncRegistryProbe = SyncRegistryProbe(session: session)
     motionHintService = MotionHintService(session: session, registry: syncRegistryProbe)
     movementHintRelay = MovementHintRelay()
+    referenceLocationRelay = ReferenceLocationRelay()
     signalBarsNodeDirectory = PersistedSignalBarsNodeDirectory(
       dataStore: dataStore,
       radioID: radioID
@@ -345,7 +352,8 @@ public final class ServiceContainer {
     signalBarsEngine = SignalBarsEngine(
       session: session,
       directory: signalBarsNodeDirectory,
-      movementHints: movementHintRelay
+      movementHints: movementHintRelay,
+      referenceLocation: referenceLocationRelay
     )
 
     // The benchmark's trace geometry comes from the device record, which the app applies

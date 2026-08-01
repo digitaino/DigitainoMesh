@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import MC1Services
 
@@ -38,6 +39,10 @@ extension AppState {
       await services.signalBarsEngine.start(mode: mode, pathHashMode: device.pathHashMode)
       await repeaterSignals.attach(to: services.signalBarsEngine)
       startMovementHintsIfAlreadyPermitted()
+      // Seed the engine's reference location with whatever is already known, so names
+      // resolved in the background rank by proximity from the start. Nothing is requested
+      // here — a connect (often an auto-reconnect at launch) is not a reason to run GPS.
+      await refreshSignalBarsReferenceLocation()
     }
   }
 
@@ -121,6 +126,49 @@ extension AppState {
   func applyPathHashModeToSignalBars(_ mode: UInt8) {
     Task { [weak self] in
       await self?.repeaterSignals.setPathHashMode(mode)
+    }
+  }
+
+  /// Pushes the freshest known location into the signal-bars engine, so a hash collision
+  /// resolves to the nearest matching repeater rather than merely the most recently
+  /// advertised one. When the reference moved enough that proximity could rank
+  /// differently, already-resolved names are dropped and re-resolved.
+  ///
+  /// The phone fix is judged by age (``NodeLocationStalenessPolicy``), not presence:
+  /// CoreLocation keeps handing back the last fix it took — one from before a suspend,
+  /// from before a flight — and ranking against a place the user left would invert the
+  /// very bug proximity fixes, with full geographic confidence. An aged fix is never
+  /// pushed: the radio's own position stands in, and with neither the engine keeps
+  /// ranking by recency until a fresh fix lands.
+  ///
+  /// Never prompts: a one-shot fix is requested only when the repeater table asks for it
+  /// (`requestingFixIfMissing`) and location permission already exists.
+  func refreshSignalBarsReferenceLocation(requestingFixIfMissing: Bool = false) async {
+    guard let services, isSignalBarsEnabled else { return }
+    let freshPhoneFix = locationService.currentLocation.flatMap { fix in
+      NodeLocationStalenessPolicy.isFixFresh(fix.timestamp, now: Date()) ? fix : nil
+    }
+    if requestingFixIfMissing, freshPhoneFix == nil, locationService.isAuthorized {
+      // One-shot request (de-duplicated while in flight); the repeater table re-pushes
+      // when the fix lands.
+      locationService.requestLocation()
+    }
+
+    let reference: CLLocationCoordinate2D? = if let freshPhoneFix {
+      freshPhoneFix.coordinate
+    } else if let device = connectedDevice, device.hasLocation {
+      CLLocationCoordinate2D(latitude: device.latitude, longitude: device.longitude)
+    } else {
+      nil
+    }
+    guard let reference else { return }
+
+    let moved = await services.referenceLocationRelay.update(ReferenceCoordinate(
+      latitude: reference.latitude,
+      longitude: reference.longitude
+    ))
+    if moved {
+      await services.signalBarsEngine.referenceLocationDidChange()
     }
   }
 }

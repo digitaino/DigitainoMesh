@@ -19,6 +19,29 @@ struct RepeaterSignalPopover: View {
     appState.repeaterSignals
   }
 
+  /// Value-typed sample of the reference the refresh would push, so `task(id:)` compares
+  /// coordinates rather than `CLLocation` object identity. Carries the phone fix's
+  /// timestamp too: a fresh fix at an unchanged spot must still re-run the refresh, or a
+  /// fix aging past the staleness window would never be replaced while the table is open.
+  private struct LocationSample: Equatable {
+    let latitude: Double
+    let longitude: Double
+    let fixTimestamp: Date?
+  }
+
+  private var referenceLocationSample: LocationSample? {
+    // Mirrors `AppState.bestAvailableLocation`'s priority: phone fix, else radio.
+    if let fix = appState.locationService.currentLocation {
+      return LocationSample(
+        latitude: fix.coordinate.latitude,
+        longitude: fix.coordinate.longitude,
+        fixTimestamp: fix.timestamp
+      )
+    }
+    guard let device = appState.connectedDevice, device.hasLocation else { return nil }
+    return LocationSample(latitude: device.latitude, longitude: device.longitude, fixTimestamp: nil)
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       header
@@ -53,6 +76,15 @@ struct RepeaterSignalPopover: View {
     // Motion & Fitness prompt belongs — never on the connect path, which can fire during an
     // auto-reconnect at launch.
     .task { appState.requestMovementHintsIfNeeded() }
+    // Proximity disambiguation wants the freshest fix while the table is visible: push at
+    // open, and again when a new fix lands. Keyed on a value sample, not the CLLocation —
+    // `bestAvailableLocation`'s radio-fallback branch allocates a fresh object on every
+    // read, and object-identity comparison would restart the task (and its one-shot
+    // request) on every render. Only ever a one-shot under existing permission — never a
+    // prompt.
+    .task(id: referenceLocationSample) {
+      await appState.refreshSignalBarsReferenceLocation(requestingFixIfMissing: true)
+    }
   }
 
   // MARK: - Header
