@@ -13,27 +13,25 @@ struct ActionsDetailsSection: View {
   /// dismisses like any other action row. Defaulted for previews.
   var onSelectAction: ((MessageAction) -> Void)?
 
-  @Environment(\.appState) private var appState
-  @State private var showPathMap = false
+  @State private var showPathDetail = false
+  /// Route text picked on `MessagePathDetailView`, dispatched from the sheet's
+  /// `onDismiss`. The dispatch also dismisses the actions sheet, and dismissing the
+  /// parent while the child is still presented can strand the actions sheet open —
+  /// same deferral as `ActionsEmojiSection`.
+  @State private var pendingRouteInfo: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       if availability.canViewPath {
-        pathMapButton
-        if let onSelectAction, let routeInfo = routeInfoText {
-          replyWithRouteButton(routeInfo: routeInfo, onSelectAction: onSelectAction)
-        }
+        viewPathButton
       }
 
-      if availability.canShowRepeatDetails || availability.canViewPath {
+      if availability.canShowRepeatDetails {
         ActionsExpandableDetailRow(
-          message: message,
-          availability: availability,
           isDetailExpanded: $isDetailExpanded,
           repeats: repeats,
           contacts: contacts,
-          discoveredNodes: discoveredNodes,
-          pathViewModel: pathViewModel
+          discoveredNodes: discoveredNodes
         )
       }
 
@@ -50,85 +48,60 @@ struct ActionsDetailsSection: View {
         ActionsIncomingDetailsRows(message: message)
       }
     }
-    .sheet(isPresented: $showPathMap) {
-      MessagePathMapView(source: .message(message), pathViewModel: pathViewModel)
+    // A cover, not a sheet: the path screen is a full-bleed map, and a sheet's
+    // swipe-down would fight every downward pan on it. It closes with Done.
+    .fullScreenCover(isPresented: $showPathDetail, onDismiss: {
+      if let routeInfo = pendingRouteInfo {
+        pendingRouteInfo = nil
+        onSelectAction?(.replyWithRoute(routeInfo))
+      }
+    }) {
+      MessagePathDetailView(
+        message: message,
+        pathViewModel: pathViewModel,
+        onReplyWithRoute: onSelectAction == nil ? nil : { routeInfo in
+          pendingRouteInfo = routeInfo
+          showPathDetail = false
+        }
+      )
     }
   }
 
-  private var pathMapButton: some View {
+  /// The one entry point to the path: map, hop list and Reply with Route live
+  /// together on `MessagePathDetailView`, not as three sibling rows here.
+  private var viewPathButton: some View {
     Button {
-      showPathMap = true
+      showPathDetail = true
     } label: {
       HStack {
-        Label(L10n.Chats.Chats.Path.map, systemImage: "map")
+        Label(
+          L10n.Chats.Chats.Message.Action.viewPath,
+          systemImage: "point.topleft.down.to.point.bottomright.curvepath"
+        )
         Spacer()
+        Image(systemName: "chevron.right")
+          .foregroundStyle(.secondary)
+          .font(.caption)
+          .accessibilityHidden(true)
       }
       .padding()
       .contentShape(.rect)
     }
     .foregroundStyle(.primary)
-  }
-
-  private func replyWithRouteButton(
-    routeInfo: String,
-    onSelectAction: @escaping (MessageAction) -> Void
-  ) -> some View {
-    Button {
-      onSelectAction(.replyWithRoute(routeInfo))
-    } label: {
-      HStack {
-        Label(L10n.Chats.Chats.Path.replyWithRoute, systemImage: "arrowshape.turn.up.left")
-        Spacer()
-      }
-      .padding()
-      .contentShape(.rect)
-    }
-    .foregroundStyle(.primary)
-  }
-
-  /// The "RX via ..." line a route reply carries. Deliberately not localized:
-  /// it is a wire format other clients parse back into a shared-route card
-  /// (`SharedRouteParser`), so the shape must stay stable across locales.
-  private var routeInfoText: String? {
-    let hopCount = message.hopCount
-    guard hopCount > 0 else { return nil }
-    let pathHex = message.pathNodesHex.joined(separator: ",")
-    guard !pathHex.isEmpty else { return nil }
-    let hopWord = hopCount == 1 ? "hop" : "hops"
-    let distancePart = routeDistanceText.map { " \($0)" } ?? ""
-    return "RX via \(pathHex). \(hopCount) \(hopWord)\(distancePart)"
-  }
-
-  /// Distance over the same nodes the path map plots, so the shared figure
-  /// matches the pill the recipient would see. Prefixed "≥" when some hops
-  /// could not be located — the drawn path is then a lower bound.
-  private var routeDistanceText: String? {
-    let nodes = MessagePathMapView.locatedNodes(
-      for: .message(message),
-      contacts: pathViewModel.contacts,
-      repeaters: pathViewModel.repeaters,
-      discoveredRepeaters: pathViewModel.discoveredRepeaters,
-      userLocation: appState.bestAvailableLocation,
-      receiverName: appState.connectedDevice?.nodeName
-    )
-    guard let distance = nodes.map(\.coordinate).totalDistance() else { return nil }
-    let formatted = Measurement(value: distance, unit: UnitLength.meters)
-      .formatted(.measurement(width: .abbreviated, usage: .road))
-    let locatedHops = nodes.count(where: { $0.point.pinStyle == .repeaterHop })
-    return locatedHops < message.hopCount ? "≥ \(formatted)" : formatted
   }
 }
 
+/// The Repeat Details disclosure for an outgoing message that was heard again.
+/// Repeats are a handful of metadata rows, not a destination — they expand in
+/// place rather than earning a screen the way the path does.
 private struct ActionsExpandableDetailRow: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.appState) private var appState
 
-  let message: MessageDTO
-  let availability: MessageActionAvailability
   @Binding var isDetailExpanded: Bool
   let repeats: [MessageRepeatDTO]?
   let contacts: [ContactDTO]
   let discoveredNodes: [DiscoveredNodeDTO]
-  let pathViewModel: MessagePathViewModel
 
   var body: some View {
     VStack(spacing: 0) {
@@ -139,12 +112,8 @@ private struct ActionsExpandableDetailRow: View {
       } label: {
         HStack {
           Label(
-            availability.canShowRepeatDetails
-              ? L10n.Chats.Chats.Message.Action.repeatDetails
-              : L10n.Chats.Chats.Message.Action.viewPath,
-            systemImage: availability.canShowRepeatDetails
-              ? "arrow.triangle.branch"
-              : "point.topleft.down.to.point.bottomright.curvepath"
+            L10n.Chats.Chats.Message.Action.repeatDetails,
+            systemImage: "arrow.triangle.branch"
           )
           Spacer()
           Image(systemName: "chevron.right")
@@ -166,47 +135,16 @@ private struct ActionsExpandableDetailRow: View {
       if isDetailExpanded {
         Divider()
           .padding(.horizontal)
-        ActionsExpandedContent(
-          message: message,
-          availability: availability,
+        RepeatDetailsContent(
           repeats: repeats,
           contacts: contacts,
           discoveredNodes: discoveredNodes,
-          pathViewModel: pathViewModel
+          userLocation: appState.bestAvailableLocation
         )
         .padding(.horizontal)
         .padding(.bottom)
         .id("expandedContent")
       }
-    }
-  }
-}
-
-private struct ActionsExpandedContent: View {
-  @Environment(\.appState) private var appState
-
-  let message: MessageDTO
-  let availability: MessageActionAvailability
-  let repeats: [MessageRepeatDTO]?
-  let contacts: [ContactDTO]
-  let discoveredNodes: [DiscoveredNodeDTO]
-  let pathViewModel: MessagePathViewModel
-
-  var body: some View {
-    if availability.canShowRepeatDetails {
-      RepeatDetailsContent(
-        repeats: repeats,
-        contacts: contacts,
-        discoveredNodes: discoveredNodes,
-        userLocation: appState.bestAvailableLocation
-      )
-    } else if availability.canViewPath {
-      MessagePathContent(
-        message: message,
-        viewModel: pathViewModel,
-        receiverName: appState.connectedDevice?.nodeName ?? L10n.Chats.Chats.Path.Receiver.you,
-        userLocation: appState.bestAvailableLocation
-      )
     }
   }
 }

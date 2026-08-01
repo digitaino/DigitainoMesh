@@ -43,57 +43,19 @@ enum MessagePathMapSource {
   }
 }
 
+/// The full-screen path map: `MessagePathMapCanvas` under its own navigation
+/// chrome. This is the whole path experience for a shared route, whose hops
+/// are all the text claims; a message's own path gets the combined
+/// `MessagePathDetailView` instead, where this canvas fills the screen under a
+/// floating hop panel.
 struct MessagePathMapView: View {
-  /// Span used when the path resolves to a single node, with no bounding box to fit.
-  private static let singleNodeSpanDelta: CLLocationDegrees = 0.05
-  /// A small breathing margin around the multi-node bounding box. The fit passes
-  /// `cameraBottomSheetFraction: 0`, so `setVisibleCoordinateBounds` already
-  /// insets by the safe-area padding that clears the nav bar and controls;
-  /// anything much above 1 double-margins that and leaves the path filling a
-  /// fraction of the screen (matching `NodeLocationMapView`'s rationale).
-  private static let pathBoundingPaddingMultiplier: Double = 1.3
-  /// How long after the style loads before the one settle re-fit. A fit issued
-  /// while the sheet is still animating in measures inflated map bounds and
-  /// frames far too wide; by now the presentation has settled.
-  private static let settleRefitDelay: Duration = .milliseconds(600)
-
   @Environment(\.appState) private var appState
   @Environment(\.dismiss) private var dismiss
-  @Environment(\.colorScheme) private var colorScheme
 
   let source: MessagePathMapSource
   let pathViewModel: MessagePathViewModel
 
-  @State private var cameraRegion: MKCoordinateRegion?
-  @State private var cameraRegionVersion = 0
-  @State private var mapStyle: MapStyleSelection = .standard
-  @AppStorage(AppStorageKey.mapNorthLocked.rawValue) private var isNorthLocked = AppStorageKey.defaultMapNorthLocked
-  @State private var showLabels = true
-  @State private var isStyleLoaded = false
-  @State private var isCenteredOnUser = false
-  @State private var hasInitiallyFit = false
   @State private var locatedNodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)] = []
-
-  private var mapPoints: [MapPoint] {
-    locatedNodes.map(\.point)
-  }
-
-  private var mapLines: [MapLine] {
-    let coords = locatedNodes.map(\.coordinate)
-    guard coords.count >= 2 else { return [] }
-    return [MapLine(id: "message-path", coordinates: coords, style: .messagePath, opacity: 1.0)]
-  }
-
-  /// Length of the drawn path, over only the nodes we could place. Nil until at
-  /// least two nodes resolve to coordinates, so the pill's distance always
-  /// matches the polyline in `mapLines`.
-  private var totalPathDistance: CLLocationDistance? {
-    locatedNodes.map(\.coordinate).totalDistance()
-  }
-
-  private var hopCount: Int {
-    source.totalHopCount
-  }
 
   /// Why the map is empty. A message with no path data and a shared route whose
   /// repeaters this device doesn't know are different failures — the second one
@@ -118,59 +80,15 @@ struct MessagePathMapView: View {
             description: Text(emptyStateDescription)
           )
         } else {
-          ZStack(alignment: .bottomTrailing) {
-            MC1MapView(
-              points: mapPoints,
-              lines: mapLines,
-              mapStyle: mapStyle,
-              isDarkMode: colorScheme == .dark,
-              showLabels: showLabels,
-              showsUserLocation: false,
-              isInteractive: true,
-              showsScale: true,
-              isNorthLocked: isNorthLocked,
-              cameraRegion: $cameraRegion,
-              cameraRegionVersion: cameraRegionVersion,
-              cameraBottomSheetFraction: 0,
-              onPointTap: nil,
-              onMapTap: nil,
-              onCameraRegionChange: { cameraRegion = $0 },
-              isStyleLoaded: $isStyleLoaded,
-              isCenteredOnUser: $isCenteredOnUser
-            )
-            .ignoresSafeArea()
-
-            VStack {
-              Spacer()
-              HStack {
-                Spacer()
-                MapControlsToolbar(
-                  onLocationTap: centerOnUserLocation,
-                  isCenteredOnUser: isCenteredOnUser,
-                  isNorthLocked: $isNorthLocked,
-                  showLabels: $showLabels,
-                  mapStyleSelection: $mapStyle,
-                  viewportBounds: cameraRegion?.toMLNCoordinateBounds()
-                ) {
-                  if !locatedNodes.isEmpty {
-                    Button(L10n.Chats.Chats.Path.centerOnPath, systemImage: "arrow.up.left.and.arrow.down.right") {
-                      isCenteredOnUser = false
-                      fitCameraToPath()
-                    }
-                    .mapControlButton(tint: .primary)
-                  }
-                }
-              }
-            }
-          }
+          MessagePathMapCanvas(locatedNodes: locatedNodes)
         }
       }
       .toolbar {
         if !locatedNodes.isEmpty {
           ToolbarItem(placement: .principal) {
             PathDistanceBanner(
-              hopCount: hopCount,
-              totalPathDistance: totalPathDistance
+              hopCount: source.totalHopCount,
+              totalPathDistance: locatedNodes.map(\.coordinate).totalDistance()
             )
           }
         }
@@ -181,64 +99,14 @@ struct MessagePathMapView: View {
       .onAppear {
         locatedNodes = buildLocatedNodes()
       }
-      // The actions sheet preloads the view model before this map appears, but the
-      // shared-route card presents it with the contacts fetch still in flight — the
-      // `onAppear` build then runs against an empty pool and would stick on the empty
-      // state forever. Rebuild when the load lands, and refit if the map beat it here.
+      // The shared-route card presents this with the contacts fetch still in
+      // flight — the `onAppear` build then runs against an empty pool and would
+      // stick on the empty state forever. Rebuild when the load lands.
       .onChange(of: pathViewModel.isLoading) { _, isLoading in
         guard !isLoading else { return }
         locatedNodes = buildLocatedNodes()
-        if isStyleLoaded {
-          fitCameraToPath()
-        }
-      }
-      .onChange(of: isStyleLoaded) { _, loaded in
-        guard loaded, !hasInitiallyFit else { return }
-        hasInitiallyFit = true
-        fitCameraToPath()
-        // One settle re-fit: this sheet's style can finish loading while the
-        // presentation is still inflating the map's bounds, and a fit measured
-        // then frames far wider than the path. Skipped if the user has already
-        // taken the camera somewhere themselves.
-        Task {
-          try? await Task.sleep(for: Self.settleRefitDelay)
-          guard !isCenteredOnUser else { return }
-          fitCameraToPath()
-        }
       }
     }
-  }
-
-  private func fitCameraToPath() {
-    let coords = locatedNodes.map(\.coordinate)
-    if coords.count == 1 {
-      cameraRegion = MKCoordinateRegion(
-        center: coords[0],
-        span: MKCoordinateSpan(
-          latitudeDelta: Self.singleNodeSpanDelta,
-          longitudeDelta: Self.singleNodeSpanDelta
-        )
-      )
-    } else if let region = coords.boundingRegion(paddingMultiplier: Self.pathBoundingPaddingMultiplier) {
-      cameraRegion = region
-    }
-    cameraRegionVersion += 1
-  }
-
-  private func centerOnUserLocation() {
-    guard let location = appState.bestAvailableLocation else {
-      appState.locationService.requestLocation()
-      return
-    }
-    isCenteredOnUser = true
-    cameraRegion = MKCoordinateRegion(
-      center: location.coordinate,
-      span: MKCoordinateSpan(
-        latitudeDelta: Self.singleNodeSpanDelta,
-        longitudeDelta: Self.singleNodeSpanDelta
-      )
-    )
-    cameraRegionVersion += 1
   }
 
   private func buildLocatedNodes() -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
@@ -329,5 +197,155 @@ struct MessagePathMapView: View {
     }
 
     return nodes
+  }
+}
+
+/// The path map itself — pins, polyline, camera and map controls — with no
+/// navigation chrome, so it embeds identically full-screen (shared routes) and
+/// above the hop list on `MessagePathDetailView`. The caller owns building
+/// `locatedNodes` and keeping the array's identity stable across body
+/// evaluations; the canvas re-fits its camera when the node count changes.
+struct MessagePathMapCanvas: View {
+  /// Span used when the path resolves to a single node, with no bounding box to fit.
+  private static let singleNodeSpanDelta: CLLocationDegrees = 0.05
+  /// A small breathing margin around the multi-node bounding box. With no host
+  /// panel the fit passes `cameraBottomSheetFraction: 0`, so
+  /// `setVisibleCoordinateBounds` already insets by the safe-area padding that
+  /// clears the nav bar and controls;
+  /// anything much above 1 double-margins that and leaves the path filling a
+  /// fraction of the screen (matching `NodeLocationMapView`'s rationale).
+  private static let pathBoundingPaddingMultiplier: Double = 1.3
+  /// How long after the style loads before the one settle re-fit. A fit issued
+  /// while the sheet is still animating in measures inflated map bounds and
+  /// frames far too wide; by now the presentation has settled.
+  private static let settleRefitDelay: Duration = .milliseconds(600)
+
+  @Environment(\.appState) private var appState
+  @Environment(\.colorScheme) private var colorScheme
+
+  let locatedNodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)]
+  /// Share of the screen a panel covers at the bottom, so a camera fit frames
+  /// the path in the space left above it. The map ignores the safe area, so its
+  /// own `safeAreaInsets` can't report a SwiftUI inset — the host states it.
+  /// 0 (the default) is a canvas with nothing on top of it.
+  var cameraBottomSheetFraction: CGFloat = 0
+
+  @State private var cameraRegion: MKCoordinateRegion?
+  @State private var cameraRegionVersion = 0
+  @State private var mapStyle: MapStyleSelection = .standard
+  @AppStorage(AppStorageKey.mapNorthLocked.rawValue) private var isNorthLocked = AppStorageKey.defaultMapNorthLocked
+  @State private var showLabels = true
+  @State private var isStyleLoaded = false
+  @State private var isCenteredOnUser = false
+  @State private var hasInitiallyFit = false
+
+  private var mapPoints: [MapPoint] {
+    locatedNodes.map(\.point)
+  }
+
+  private var mapLines: [MapLine] {
+    let coords = locatedNodes.map(\.coordinate)
+    guard coords.count >= 2 else { return [] }
+    return [MapLine(id: "message-path", coordinates: coords, style: .messagePath, opacity: 1.0)]
+  }
+
+  var body: some View {
+    ZStack(alignment: .bottomTrailing) {
+      MC1MapView(
+        points: mapPoints,
+        lines: mapLines,
+        mapStyle: mapStyle,
+        isDarkMode: colorScheme == .dark,
+        showLabels: showLabels,
+        showsUserLocation: false,
+        isInteractive: true,
+        showsScale: true,
+        isNorthLocked: isNorthLocked,
+        cameraRegion: $cameraRegion,
+        cameraRegionVersion: cameraRegionVersion,
+        cameraBottomSheetFraction: cameraBottomSheetFraction,
+        onPointTap: nil,
+        onMapTap: nil,
+        onCameraRegionChange: { cameraRegion = $0 },
+        isStyleLoaded: $isStyleLoaded,
+        isCenteredOnUser: $isCenteredOnUser
+      )
+      .ignoresSafeArea()
+
+      VStack {
+        Spacer()
+        HStack {
+          Spacer()
+          MapControlsToolbar(
+            onLocationTap: centerOnUserLocation,
+            isCenteredOnUser: isCenteredOnUser,
+            isNorthLocked: $isNorthLocked,
+            showLabels: $showLabels,
+            mapStyleSelection: $mapStyle,
+            viewportBounds: cameraRegion?.toMLNCoordinateBounds()
+          ) {
+            if !locatedNodes.isEmpty {
+              Button(L10n.Chats.Chats.Path.centerOnPath, systemImage: "arrow.up.left.and.arrow.down.right") {
+                isCenteredOnUser = false
+                fitCameraToPath()
+              }
+              .mapControlButton(tint: .primary)
+            }
+          }
+        }
+      }
+    }
+    // The nodes changed under a live map (the contacts load landed after
+    // presentation). Re-fit unless the user has taken the camera somewhere.
+    .onChange(of: locatedNodes.count) {
+      guard isStyleLoaded, !isCenteredOnUser else { return }
+      fitCameraToPath()
+    }
+    .onChange(of: isStyleLoaded) { _, loaded in
+      guard loaded, !hasInitiallyFit else { return }
+      hasInitiallyFit = true
+      fitCameraToPath()
+      // One settle re-fit: the style can finish loading while the presentation
+      // is still inflating the map's bounds, and a fit measured then frames far
+      // wider than the path. Skipped if the user has already taken the camera
+      // somewhere themselves.
+      Task {
+        try? await Task.sleep(for: Self.settleRefitDelay)
+        guard !isCenteredOnUser else { return }
+        fitCameraToPath()
+      }
+    }
+  }
+
+  private func fitCameraToPath() {
+    let coords = locatedNodes.map(\.coordinate)
+    if coords.count == 1 {
+      cameraRegion = MKCoordinateRegion(
+        center: coords[0],
+        span: MKCoordinateSpan(
+          latitudeDelta: Self.singleNodeSpanDelta,
+          longitudeDelta: Self.singleNodeSpanDelta
+        )
+      )
+    } else if let region = coords.boundingRegion(paddingMultiplier: Self.pathBoundingPaddingMultiplier) {
+      cameraRegion = region
+    }
+    cameraRegionVersion += 1
+  }
+
+  private func centerOnUserLocation() {
+    guard let location = appState.bestAvailableLocation else {
+      appState.locationService.requestLocation()
+      return
+    }
+    isCenteredOnUser = true
+    cameraRegion = MKCoordinateRegion(
+      center: location.coordinate,
+      span: MKCoordinateSpan(
+        latitudeDelta: Self.singleNodeSpanDelta,
+        longitudeDelta: Self.singleNodeSpanDelta
+      )
+    )
+    cameraRegionVersion += 1
   }
 }

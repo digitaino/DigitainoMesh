@@ -4,14 +4,14 @@ import MC1Services
 import SwiftUI
 
 /// Inline content for message path visualization, extracted from MessagePathSheet.
-/// Shows sender, intermediate hops, receiver, raw path hex, and a copy button.
+/// Shows sender, intermediate hops and receiver. The raw path hex and its copy
+/// control live in the host screen's header row, beside Reply with Route, so
+/// the hop rows stay a single uninterrupted list.
 struct MessagePathContent: View {
   let message: MessageDTO
   let viewModel: MessagePathViewModel
   let receiverName: String
   let userLocation: CLLocation?
-
-  @State private var copyHapticTrigger = 0
 
   var body: some View {
     if viewModel.isLoading {
@@ -59,28 +59,6 @@ struct MessagePathContent: View {
         nodeID: nil,
         snr: message.snr
       )
-
-      // Raw path hex + copy button
-      if !pathHops.isEmpty {
-        HStack {
-          Button(L10n.Chats.Chats.Path.copyButton, systemImage: "doc.on.doc") {
-            copyHapticTrigger += 1
-            UIPasteboard.general.string = message.pathStringForClipboard
-          }
-          .labelStyle(.iconOnly)
-          .buttonStyle(.borderless)
-          .accessibilityLabel(L10n.Chats.Chats.Path.copyAccessibility)
-          .accessibilityHint(L10n.Chats.Chats.Path.copyHint)
-
-          Text(message.pathString)
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-
-          Spacer()
-        }
-        .padding(.top, 8)
-        .sensoryFeedback(.success, trigger: copyHapticTrigger)
-      }
     }
   }
 }
