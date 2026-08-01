@@ -20,6 +20,8 @@ struct MessageBubbleCallbacks {
   /// gesture itself is applied outside the bubble by `ChatCellContentFactory`.
   var onReply: (() -> Void)?
   var onImageTap: (() -> Void)?
+  /// Duplicate-run badge tap: toggle the run between collapsed and expanded.
+  var onToggleDuplicateRun: (() -> Void)?
   var onRetryInlineImage: (() -> Void)?
   var onRequestPreviewFetch: (() -> Void)?
   var onManualPreviewFetch: (() -> Void)?

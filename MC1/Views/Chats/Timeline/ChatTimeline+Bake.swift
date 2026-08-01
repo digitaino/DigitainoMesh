@@ -19,21 +19,57 @@ extension ChatTimeline {
   }
 
   /// Rebuilds a single row's `MessageItem` with current preview, image, and
-  /// message state. No-ops when the message is no longer present.
+  /// message state. No-ops when the message is no longer present, or when it
+  /// is a collapsed duplicate with no row of its own (a reaction or preview
+  /// landing on a hidden copy surfaces when the run expands and rebakes).
   func rebakeRow(_ messageID: UUID) {
     guard let coordinator, let writer else { return }
     guard let message = coordinator.messagesByID[messageID] else {
       logger.warning("rebake requested for missing message id \(messageID)")
       return
     }
+    guard !bake.duplicatePlan.hiddenIDs.contains(messageID) else { return }
+    // Previous *visible* message, matching `bakeAll`: grouping flags computed
+    // against a collapsed copy would disagree with the full pass.
     let previous: MessageDTO? = {
-      guard let index = coordinator.messages.firstIndex(where: { $0.id == messageID }),
-            index > 0 else { return nil }
-      return coordinator.messages[index - 1]
+      guard var index = coordinator.messages.firstIndex(where: { $0.id == messageID }) else { return nil }
+      while index > 0 {
+        index -= 1
+        let candidate = coordinator.messages[index]
+        if !bake.duplicatePlan.hiddenIDs.contains(candidate.id) { return candidate }
+      }
+      return nil
     }()
     writer.updateRenderItem(id: messageID) { _ in
       makeItem(for: message, previous: previous)
     }
+  }
+
+  // MARK: - Duplicate runs
+
+  /// Toggles the duplicate run containing `messageID` between collapsed and
+  /// expanded, rebaking so the row set changes in the same call. No-ops for
+  /// messages outside any run.
+  func toggleDuplicateRun(containing messageID: UUID) {
+    guard let leaderID = bake.duplicatePlan.leaderIDByMemberID[messageID] else { return }
+    if bake.expandedDuplicateRuns.remove(leaderID) == nil {
+      bake.expandedDuplicateRuns.insert(leaderID)
+    }
+    rebakeAll()
+  }
+
+  /// Expands the run hiding `messageID`, if any, so the row exists to scroll
+  /// to. Returns true when it expanded (and rebaked); false when the message
+  /// already has a row or is not loaded. Search jumps call this before
+  /// paging: a collapsed copy is loaded but absent from `itemIndexByID`, and
+  /// paging alone would walk to end-of-history without ever finding it.
+  @discardableResult
+  func revealHiddenDuplicate(_ messageID: UUID) -> Bool {
+    guard bake.duplicatePlan.hiddenIDs.contains(messageID),
+          let leaderID = bake.duplicatePlan.leaderIDByMemberID[messageID] else { return false }
+    bake.expandedDuplicateRuns.insert(leaderID)
+    rebakeAll()
+    return true
   }
 
   /// Builds one `MessageItem` from current bake and env state. URL detection

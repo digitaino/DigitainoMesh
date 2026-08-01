@@ -770,10 +770,6 @@
 /* Location: MessagePathSheet.swift - Accessibility hint for copy button */
 "chats.path.copyHint" = "Копирует идентификаторы узлов в шестнадцатеричном формате";
 
-/* Location: MessagePathSheet.swift - Section header for path */
-/* Location: MessagePathMapView.swift - Path map button and sheet navigation title */
-"chats.path.map" = "Карта пути";
-
 /* Location: MessagePathMapView.swift - Center on path map control accessibility label */
 "chats.path.centerOnPath" = "Центрировать по маршруту";
 
@@ -829,7 +825,7 @@
 /* Location: SharedRouteCard.swift - Accessibility hint */
 "chats.sharedRoute.card.accessibilityHint" = "Открывает карту с присланным путём";
 
-/* Location: ActionsDetailsSection.swift - Action that replies with this message's route info */
+/* Location: MessagePathDetailView.swift - Button that replies with this message's route info */
 "chats.path.replyWithRoute" = "Ответить с путём";
 
 /* Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location */

@@ -859,10 +859,6 @@
 /* Location: MessagePathSheet.swift - Accessibility hint for copy button */
 "chats.path.copyHint" = "Copia gli ID dei nodi come valori esadecimali";
 
-/* Location: MessagePathSheet.swift - Section header for path */
-/* Location: MessagePathMapView.swift - Path map button and sheet navigation title */
-"chats.path.map" = "Mappa del percorso";
-
 /* Location: MessagePathMapView.swift - Center on path map control accessibility label */
 "chats.path.centerOnPath" = "Centra sul percorso";
 
@@ -918,7 +914,7 @@
 /* Location: SharedRouteCard.swift - Accessibility hint */
 "chats.sharedRoute.card.accessibilityHint" = "Apre una mappa con il percorso condiviso";
 
-/* Location: ActionsDetailsSection.swift - Action that replies with this message's route info */
+/* Location: MessagePathDetailView.swift - Button that replies with this message's route info */
 "chats.path.replyWithRoute" = "Rispondi con il percorso";
 
 /* Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location */

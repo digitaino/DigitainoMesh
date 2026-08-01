@@ -204,6 +204,10 @@ extension MockDataProvider {
         ackCode: 23460,
         pathLength: direct
       ),
+      // Retry storm: Bob's client re-sent "Yeah, I'm here!" twice more, each
+      // with a fresh timestamp (a reused one dies in repeater dedup rings) and
+      // a different route. The chat collapses the run to one bubble with a ×3
+      // badge; the collapsed representative is the newest copy (flood, 2-hop).
       MockMessageFactory.message(
         id: UUID(uuidString: "20000000-0000-0000-0000-000000000006")!,
         createdAt: now.addingTimeInterval(-600),
@@ -214,6 +218,29 @@ extension MockDataProvider {
         snr: 12.3, // strong, direct
         pathNodes: Data([0x20]),
         senderKeyPrefix: key
+      ),
+      MockMessageFactory.message(
+        id: UUID(uuidString: "20000000-0000-0000-0000-000000000007")!,
+        createdAt: now.addingTimeInterval(-580),
+        text: "Yeah, I'm here!",
+        direction: .incoming,
+        contactID: bobMartinezID,
+        pathLength: direct,
+        snr: 9.8,
+        pathNodes: Data([0x20]),
+        senderKeyPrefix: key
+      ),
+      MockMessageFactory.message(
+        id: UUID(uuidString: "20000000-0000-0000-0000-000000000008")!,
+        createdAt: now.addingTimeInterval(-555),
+        text: "Yeah, I'm here!",
+        direction: .incoming,
+        contactID: bobMartinezID,
+        pathLength: encodePathLen(hashSize: 1, hopCount: 2),
+        snr: 4.2, // weak flood echo
+        pathNodes: Data([0x20, 0xA3]),
+        senderKeyPrefix: key,
+        routeType: .flood
       )
     ]
   }

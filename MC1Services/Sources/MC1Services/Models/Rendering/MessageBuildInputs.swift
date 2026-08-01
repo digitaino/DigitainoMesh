@@ -54,6 +54,10 @@ public struct MessageBuildInputs: Sendable, Hashable {
   /// rebake for any unrelated reason — theme switch, pagination, preview resolution —
   /// re-emits the card instead of silently dropping it.
   public let noRepeatsRetry: NoRepeatsRetryPrompt?
+  /// Duplicate-run size for the badge-bearing row; 1 everywhere else. See
+  /// `GroupingFlags.duplicateCount`.
+  public let duplicateCount: Int
+  public let isDuplicateRunExpanded: Bool
 
   public init(
     messageID: UUID,
@@ -79,7 +83,9 @@ public struct MessageBuildInputs: Sendable, Hashable {
     showSenderName: Bool,
     showNewMessagesDivider: Bool,
     showDayDivider: Bool = false,
-    noRepeatsRetry: NoRepeatsRetryPrompt? = nil
+    noRepeatsRetry: NoRepeatsRetryPrompt? = nil,
+    duplicateCount: Int = 1,
+    isDuplicateRunExpanded: Bool = false
   ) {
     self.messageID = messageID
     self.previewState = previewState
@@ -105,5 +111,7 @@ public struct MessageBuildInputs: Sendable, Hashable {
     self.showNewMessagesDivider = showNewMessagesDivider
     self.showDayDivider = showDayDivider
     self.noRepeatsRetry = noRepeatsRetry
+    self.duplicateCount = duplicateCount
+    self.isDuplicateRunExpanded = isDuplicateRunExpanded
   }
 }

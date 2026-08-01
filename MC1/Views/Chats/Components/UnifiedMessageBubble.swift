@@ -126,6 +126,17 @@ struct UnifiedMessageBubble: View, Equatable {
             siblingFragmentView(fragment)
           }
 
+          // Duplicate-run badge: this row fronts N mesh-retry copies of one
+          // logical message. An affordance, not content, so it sits outside
+          // the fragment list like the retry card below.
+          if item.grouping.duplicateCount > 1 {
+            DuplicateCountBadge(
+              count: item.grouping.duplicateCount,
+              isExpanded: item.grouping.isDuplicateRunExpanded,
+              onTap: { callbacks.onToggleDuplicateRun?() }
+            )
+          }
+
           // Retry offer for a send no repeater was heard relaying. Rendered after the
           // sibling fragments so it always reads as the last thing about this message,
           // and outside the fragment list because it is an affordance, not content.
@@ -161,6 +172,15 @@ struct UnifiedMessageBubble: View, Equatable {
                 onResendAtNextPower()
               }
             }
+          }
+          // The combined element swallows the duplicate badge's button, so the
+          // toggle surfaces as a custom action, like the cards above.
+          if item.grouping.duplicateCount > 1, let onToggle = callbacks.onToggleDuplicateRun {
+            Button(
+              item.grouping.isDuplicateRunExpanded
+                ? L10n.Chats.Chats.Message.Duplicates.collapse
+                : L10n.Chats.Chats.Message.Duplicates.expand
+            ) { onToggle() }
           }
           // VoiceOver equivalent of swipe-right-to-reply, which a gesture-free navigation
           // cannot reach. Mirrors `MessageActionAvailability.canReply`.
@@ -354,6 +374,9 @@ struct UnifiedMessageBubble: View, Equatable {
       }
     }
     label += message.text
+    if item.grouping.duplicateCount > 1 {
+      label += ", \(L10n.Chats.Chats.Message.Duplicates.accessibilityLabel(item.grouping.duplicateCount))"
+    }
     if item.envelope.isOutgoing {
       label += ", \(MessageStatusText.text(for: item.footer))"
       if item.footer.noRepeatsRetry != nil {

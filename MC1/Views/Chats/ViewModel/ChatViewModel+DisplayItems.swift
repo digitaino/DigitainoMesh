@@ -27,6 +27,18 @@ extension ChatViewModel {
     timeline.rebakeAll()
   }
 
+  /// Toggle the duplicate run containing `messageID` (badge tap).
+  func toggleDuplicateRun(containing messageID: UUID) {
+    timeline.toggleDuplicateRun(containing: messageID)
+  }
+
+  /// Expand the run hiding `messageID` so it has a row to scroll to.
+  /// Returns true when an expansion happened.
+  @discardableResult
+  func revealHiddenDuplicate(_ messageID: UUID) -> Bool {
+    timeline.revealHiddenDuplicate(messageID)
+  }
+
   /// Get full message DTO for a MessageItem.
   /// Logs a warning if lookup fails (indicates data inconsistency).
   func message(for item: MessageItem) -> MessageDTO? {

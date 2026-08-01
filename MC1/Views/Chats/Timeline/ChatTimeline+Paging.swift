@@ -150,12 +150,21 @@ extension ChatTimeline {
   /// frame, so the row lands already carrying its preview fragment. Returns
   /// false when the message was already present or the timeline is unbound
   /// (a stale writer drops the append at the coordinator).
+  ///
+  /// A message that extends a duplicate run (a mesh retry of the copy above
+  /// it) rebakes the timeline instead of appending a row: collapsed, the run's
+  /// representative must move to this newest copy and its badge count bump;
+  /// expanded, the leader's badge count must bump alongside the new row.
   @discardableResult
   func admit(_ message: MessageDTO) -> Bool {
     guard coordinator != nil, let writer else { return false }
     let previous = messages.last
     guard writer.append(message) else { return false }
-    writer.appendRenderItem(makeItem(for: message, previous: previous))
+    if let previous, DuplicateMessageGrouping.isDuplicateOfPrevious(message, previous: previous) {
+      rebakeAll()
+    } else {
+      writer.appendRenderItem(makeItem(for: message, previous: previous))
+    }
     return true
   }
 

@@ -606,6 +606,18 @@
 /* Location: UnifiedMessageBubble.swift - Plural form of repeats */
 "chats.message.repeat.plural" = "repeats";
 
+/* Location: DuplicateCountBadge.swift - Badge text on a collapsed run of duplicate copies - %d is the copy count */
+"chats.message.duplicates.badge" = "×%d";
+
+/* Location: DuplicateCountBadge.swift - VoiceOver label for the duplicate-run badge - %d is the copy count */
+"chats.message.duplicates.accessibilityLabel" = "%d duplicate copies";
+
+/* Location: DuplicateCountBadge.swift - VoiceOver action/hint that expands a collapsed duplicate run */
+"chats.message.duplicates.expand" = "Show all copies";
+
+/* Location: DuplicateCountBadge.swift - VoiceOver action/hint that collapses an expanded duplicate run */
+"chats.message.duplicates.collapse" = "Collapse duplicate copies";
+
 /* Location: UnifiedMessageBubble.swift - Context menu text showing sent time - %@ is formatted date */
 "chats.message.info.sent" = "Sent: %@";
 
@@ -859,9 +871,8 @@
 /* Location: MessagePathSheet.swift - Accessibility hint for copy button */
 "chats.path.copyHint" = "Copies node IDs as hexadecimal values";
 
-/* Location: MessagePathSheet.swift - Section header for path */
-/* Location: MessagePathMapView.swift - Path map button and sheet navigation title */
-"chats.path.map" = "Path Map";
+/* Location: MessagePathDetailView.swift - Navigation title for the combined path screen */
+"chats.path.title" = "Path";
 
 /* Location: MessagePathMapView.swift - Center on path map control accessibility label */
 "chats.path.centerOnPath" = "Center on path";
@@ -918,7 +929,7 @@
 /* Location: SharedRouteCard.swift - Accessibility hint */
 "chats.sharedRoute.card.accessibilityHint" = "Opens a map showing the shared route";
 
-/* Location: ActionsDetailsSection.swift - Action that replies with this message's route info */
+/* Location: MessagePathDetailView.swift - Button that replies with this message's route info */
 "chats.path.replyWithRoute" = "Reply with Route";
 
 /* Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location */

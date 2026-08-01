@@ -121,6 +121,8 @@ extension ChatTimeline {
     bake.imageIsGIF.removeAll()
     bake.noRepeatsRetryMessageID = nil
     bake.noRepeatsRetryPrompt = nil
+    bake.expandedDuplicateRuns.removeAll()
+    bake.duplicatePlan = .empty
   }
 
   /// Drops one message's bake state (message deletion), including its

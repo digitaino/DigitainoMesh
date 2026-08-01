@@ -49,6 +49,20 @@ enum ChatMessageSearchNavigator {
       guard !Task.isCancelled else { return .cancelled }
       guard ContinuousClock.now < deadline else { return .timedOut }
 
+      // A collapsed duplicate is loaded but has no row, so paging would never
+      // surface it: expand its run instead. Checked every iteration because
+      // the target can also page in *as* a hidden copy. The expansion's
+      // rebake applies asynchronously (off-main item build), so wait for the
+      // row rather than fetching more history it cannot be in.
+      if viewModel.revealHiddenDuplicate(messageID) {
+        while viewModel.itemIndexByID[messageID] == nil {
+          guard !Task.isCancelled else { return .cancelled }
+          guard ContinuousClock.now < deadline else { return .timedOut }
+          try? await Task.sleep(for: .milliseconds(10))
+        }
+        return .loaded
+      }
+
       switch await viewModel.loadOlderMessages() {
       case .loaded:
         continue

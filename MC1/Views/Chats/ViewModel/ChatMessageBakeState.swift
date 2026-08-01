@@ -71,6 +71,14 @@ final class ChatMessageBakeState {
   /// Whether the divider position has been computed for the current conversation
   var dividerComputed = false
 
+  /// Leaders of duplicate runs the user has expanded. Keyed by run leader
+  /// (oldest member), which stays stable as new copies extend the run.
+  var expandedDuplicateRuns: Set<UUID> = []
+
+  /// Last bake's duplicate-run plan, so single-row rebakes and reveal/toggle
+  /// lookups agree with what the full pass rendered. Refreshed by `bakeAll`.
+  var duplicatePlan = DuplicateMessageGrouping.Plan.empty
+
   /// Message currently offered the "no repeats heard" retry card, or nil when none is.
   /// Single-slot by design, matching the detector: only the most recent unheard send is
   /// worth resending.

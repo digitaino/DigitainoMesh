@@ -647,6 +647,20 @@ public enum L10n {
           /// Location: UnifiedMessageBubble.swift - VoiceOver action to open the reactions detail sheet
           public static let viewReactions = L10n.tr("Chats", "chats.message.action.viewReactions", fallback: "View Reactions")
         }
+        public enum Duplicates {
+          /// Location: DuplicateCountBadge.swift - VoiceOver label for the duplicate-run badge - %d is the copy count
+          public static func accessibilityLabel(_ p1: Int) -> String {
+            return L10n.tr("Chats", "chats.message.duplicates.accessibilityLabel", p1, fallback: "%d duplicate copies")
+          }
+          /// Location: DuplicateCountBadge.swift - Badge text on a collapsed run of duplicate copies - %d is the copy count
+          public static func badge(_ p1: Int) -> String {
+            return L10n.tr("Chats", "chats.message.duplicates.badge", p1, fallback: "×%d")
+          }
+          /// Location: DuplicateCountBadge.swift - VoiceOver action/hint that collapses an expanded duplicate run
+          public static let collapse = L10n.tr("Chats", "chats.message.duplicates.collapse", fallback: "Collapse duplicate copies")
+          /// Location: DuplicateCountBadge.swift - VoiceOver action/hint that expands a collapsed duplicate run
+          public static let expand = L10n.tr("Chats", "chats.message.duplicates.expand", fallback: "Show all copies")
+        }
         public enum HopCount {
           /// Location: UnifiedMessageBubble.swift - Accessibility label for hop count display - %d is count
           public static func accessibilityLabel(_ p1: Int) -> String {
@@ -831,10 +845,10 @@ public enum L10n {
         public static let copyButton = L10n.tr("Chats", "chats.path.copyButton", fallback: "Copy Path")
         /// Location: MessagePathSheet.swift - Accessibility hint for copy button
         public static let copyHint = L10n.tr("Chats", "chats.path.copyHint", fallback: "Copies node IDs as hexadecimal values")
-        /// Location: MessagePathMapView.swift - Path map button and sheet navigation title
-        public static let map = L10n.tr("Chats", "chats.path.map", fallback: "Path Map")
-        /// Location: ActionsDetailsSection.swift - Action that replies with this message's route info
+        /// Location: MessagePathDetailView.swift - Button that replies with this message's route info
         public static let replyWithRoute = L10n.tr("Chats", "chats.path.replyWithRoute", fallback: "Reply with Route")
+        /// Location: MessagePathDetailView.swift - Navigation title for the combined path screen
+        public static let title = L10n.tr("Chats", "chats.path.title", fallback: "Path")
         public enum Hop {
           /// Location: PathHopRowView.swift - Accessibility value format for non-last hops - %@ is hex ID
           public static func nodeId(_ p1: Any) -> String {

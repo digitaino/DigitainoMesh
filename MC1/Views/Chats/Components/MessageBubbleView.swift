@@ -37,6 +37,7 @@ struct MessageBubbleView: View, Equatable {
           onLongPress: { actions.onLongPress(message) },
           onReply: { actions.onReply(message) },
           onImageTap: { actions.onImageTap(message) },
+          onToggleDuplicateRun: { actions.onToggleDuplicateRun(message.id) },
           onRetryInlineImage: { actions.onRetryInlineImage(message.id) },
           onRequestPreviewFetch: { actions.onRequestPreviewFetch(message.id) },
           onManualPreviewFetch: { actions.onManualPreviewFetch(message.id) },

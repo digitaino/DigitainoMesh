@@ -29,6 +29,8 @@ struct BubbleActions {
   /// so the swipe is a shortcut to that action rather than a second implementation.
   let onReply: (MessageDTO) -> Void
   let onImageTap: (MessageDTO) -> Void
+  /// Duplicate-run badge tap: toggle the run containing this message.
+  let onToggleDuplicateRun: (UUID) -> Void
   let onRetryInlineImage: (UUID) -> Void
   let onRequestPreviewFetch: (UUID) -> Void
   let onManualPreviewFetch: (UUID) -> Void

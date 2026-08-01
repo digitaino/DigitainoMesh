@@ -138,6 +138,9 @@ struct ChatConversationMessagesContent: View {
             )
           }
         },
+        onToggleDuplicateRun: { messageID in
+          viewModel.toggleDuplicateRun(containing: messageID)
+        },
         onRetryInlineImage: { messageID in
           Task { await viewModel.retryImageFetch(for: messageID) }
         },

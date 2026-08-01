@@ -331,11 +331,14 @@ struct ChatViewModelDisplayItemsPaginationTests {
     let radioID = UUID()
     let contactID = UUID()
 
+    // Distinct texts: identical consecutive copies would collapse into a
+    // duplicate run and undercount the rows this test is counting.
     let messages = (0..<5).map { index in
       createTestMessage(
         contactID: contactID,
         radioID: radioID,
-        timestamp: UInt32(1000 + index)
+        timestamp: UInt32(1000 + index),
+        text: "Message \(index)"
       )
     }
 
@@ -350,7 +353,8 @@ struct ChatViewModelDisplayItemsPaginationTests {
       createTestMessage(
         contactID: contactID,
         radioID: radioID,
-        timestamp: UInt32(900 + index)
+        timestamp: UInt32(900 + index),
+        text: "Older \(index)"
       )
     }
 
@@ -415,8 +419,10 @@ struct ChatViewModelDisplayItemsPaginationTests {
     let radioID = UUID()
     let contactID = UUID()
 
+    // Distinct texts: a collapsed duplicate run only formats its visible
+    // representative, which would leave the cache short of one-per-message.
     let messages = (0..<5).map { index in
-      createTestMessage(contactID: contactID, radioID: radioID, timestamp: UInt32(1000 + index))
+      createTestMessage(contactID: contactID, radioID: radioID, timestamp: UInt32(1000 + index), text: "Message \(index)")
     }
     coordinator.replaceAllForTesting(messages)
     viewModel.buildItems()
@@ -440,8 +446,8 @@ struct ChatViewModelDisplayItemsPaginationTests {
     let radioID = UUID()
     let contactID = UUID()
 
-    let message1 = createTestMessage(contactID: contactID, radioID: radioID, timestamp: 1000)
-    let message2 = createTestMessage(contactID: contactID, radioID: radioID, timestamp: 1001)
+    let message1 = createTestMessage(contactID: contactID, radioID: radioID, timestamp: 1000, text: "first")
+    let message2 = createTestMessage(contactID: contactID, radioID: radioID, timestamp: 1001, text: "second")
 
     coordinator.replaceAllForTesting([message1, message2])
     viewModel.buildItems()

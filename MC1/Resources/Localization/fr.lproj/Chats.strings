@@ -776,10 +776,6 @@
 /* Location: MessagePathSheet.swift - Accessibility hint for copy button */
 "chats.path.copyHint" = "Copie les identifiants de nœuds en valeurs hexadécimales";
 
-/* Location: MessagePathSheet.swift - Section header for path */
-/* Location: MessagePathMapView.swift - Path map button and sheet navigation title */
-"chats.path.map" = "Carte du trajet";
-
 /* Location: MessagePathMapView.swift - Center on path map control accessibility label */
 "chats.path.centerOnPath" = "Centrer sur le chemin";
 
@@ -835,7 +831,7 @@
 /* Location: SharedRouteCard.swift - Accessibility hint */
 "chats.sharedRoute.card.accessibilityHint" = "Ouvre une carte affichant le chemin partagé";
 
-/* Location: ActionsDetailsSection.swift - Action that replies with this message's route info */
+/* Location: MessagePathDetailView.swift - Button that replies with this message's route info */
 "chats.path.replyWithRoute" = "Répondre avec le chemin";
 
 /* Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location */

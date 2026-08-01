@@ -202,6 +202,8 @@ final class ChatTimeline {
     initialLoadSettled = false
     bake.newMessagesDividerMessageID = nil
     bake.dividerComputed = false
+    bake.expandedDuplicateRuns.removeAll()
+    bake.duplicatePlan = .empty
   }
 
   /// First-snapshot decision for the staged open; see

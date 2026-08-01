@@ -771,10 +771,6 @@
 /* Location: MessagePathSheet.swift - Accessibility hint for copy button */
 "chats.path.copyHint" = "Kopiuje identyfikatory węzłów jako wartości szesnastkowe";
 
-/* Location: MessagePathSheet.swift - Section header for path */
-/* Location: MessagePathMapView.swift - Path map button and sheet navigation title */
-"chats.path.map" = "Mapa trasy";
-
 /* Location: MessagePathMapView.swift - Center on path map control accessibility label */
 "chats.path.centerOnPath" = "Wyśrodkuj na trasie";
 
@@ -830,7 +826,7 @@
 /* Location: SharedRouteCard.swift - Accessibility hint */
 "chats.sharedRoute.card.accessibilityHint" = "Otwiera mapę z udostępnioną ścieżką";
 
-/* Location: ActionsDetailsSection.swift - Action that replies with this message's route info */
+/* Location: MessagePathDetailView.swift - Button that replies with this message's route info */
 "chats.path.replyWithRoute" = "Odpowiedz ze ścieżką";
 
 /* Location: MessagePathMapView.swift - Empty state when no repeater in a shared route has a known location */

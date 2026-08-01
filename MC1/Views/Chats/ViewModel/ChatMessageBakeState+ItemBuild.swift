@@ -164,7 +164,10 @@ extension ChatMessageBakeState {
       showSenderName: flags.showSenderName,
       showNewMessagesDivider: message.id == newMessagesDividerMessageID,
       showDayDivider: flags.showDayDivider,
-      noRepeatsRetry: message.id == noRepeatsRetryMessageID ? noRepeatsRetryPrompt : nil
+      noRepeatsRetry: message.id == noRepeatsRetryMessageID ? noRepeatsRetryPrompt : nil,
+      duplicateCount: duplicatePlan.badgeCountByID[message.id] ?? 1,
+      isDuplicateRunExpanded: duplicatePlan.leaderIDByMemberID[message.id]
+        .map { expandedDuplicateRuns.contains($0) } ?? false
     )
   }
 
@@ -289,11 +292,32 @@ extension ChatMessageBakeState {
       formattedTextCache = formattedTextCache.filter { liveIDs.contains($0.key) }
     }
 
+    // Collapse duplicate runs before building. A run holding the New Messages
+    // divider auto-expands: the divider must land on its exact row, and hiding
+    // unread copies behind a badge would silently shrink the unread block.
+    let runs = DuplicateMessageGrouping.runs(in: messages)
+    if let dividerID = newMessagesDividerMessageID {
+      for run in runs where run.count > 1 && run.memberIDs.contains(dividerID) {
+        expandedDuplicateRuns.insert(run.leaderID)
+      }
+    }
+    // Drop expansion state for runs that no longer exist (deletion, switch),
+    // so a stale leader can't pin a future unrelated run open.
+    let liveLeaders = Set(runs.filter { $0.count > 1 }.map(\.leaderID))
+    expandedDuplicateRuns.formIntersection(liveLeaders)
+    duplicatePlan = DuplicateMessageGrouping.plan(
+      messages: messages,
+      expandedLeaders: expandedDuplicateRuns
+    )
+
     // URL detection and decoded-cache rehydration run synchronously inside
     // `makeBuildInputs` (see `seedPreviewStateIfNeeded`), so every row leaves
     // this loop already carrying its preview fragment at a stable height.
-    let inputs: [(MessageDTO, MessageBuildInputs)] = messages.enumerated().map { index, message in
-      let previous: MessageDTO? = index > 0 ? messages[index - 1] : nil
+    // Grouping flags key on the previous *visible* message, so a collapsed
+    // run reads as one row to the timestamp/sender-name cadence.
+    let visibleMessages = duplicatePlan.visibleMessages
+    let inputs: [(MessageDTO, MessageBuildInputs)] = visibleMessages.enumerated().map { index, message in
+      let previous: MessageDTO? = index > 0 ? visibleMessages[index - 1] : nil
       return (
         message,
         makeBuildInputs(
