@@ -5,6 +5,13 @@ import Foundation
 // MARK: - Message & Discovery Handler Wiring
 
 extension SyncCoordinator {
+  /// Longest believable sender→phone transit for a receive-time location
+  /// stamp. A message older than this on arrival (by the sender's own clock)
+  /// spent time queued somewhere — on a flooding retry path or, the common
+  /// case, on the radio while the phone was suspended — and "where the phone
+  /// is now" stops describing the reception. Generous enough for slow
+  /// multi-hop flood delivery, far under a backgrounded-overnight queue.
+  static let maxStampTransitInterval: TimeInterval = 15 * 60
   // MARK: - Message Handler Wiring
 
   func wireMessageHandlers(dependencies: SyncDependencies, radioID: UUID) async {
@@ -130,6 +137,27 @@ extension SyncCoordinator {
 
     let sortDate = Self.sortDate(for: context, receiveTime: receiveTime)
 
+    // Where the user was when this message reached the phone, for the path
+    // map's receiver pin. No stamp is recorded rather than a doubtful one —
+    // readers fall back — so every gate here is about refusing to assert
+    // geography the reception can't vouch for:
+    // - Live deliveries only: a backlog drain replays messages the radio took
+    //   in earlier — possibly hours ago, possibly far away.
+    // - Bounded sender→phone transit: `.live` also covers radio-queued
+    //   messages pushed on resume (a radio that took messages in overnight
+    //   delivers them "live" at the airport the next morning). A corrected
+    //   sender clock makes transit unknowable, so it fails this gate too.
+    // - Fresh, valid fix only (`stampableFix`): the app caches its last
+    //   one-shot fix indefinitely, and an aged one describes where the phone
+    //   *used* to be — the exact claim this stamp exists to avoid.
+    var userFix: PhoneLocationFix?
+    if case .live = context,
+       !timestampCorrected,
+       abs(receiveTime.timeIntervalSince(senderTimestampDate)) <= Self.maxStampTransitInterval,
+       let fix = await dependencies.phoneLocationProvider?.stampableFix(now: receiveTime) {
+      userFix = fix
+    }
+
     // Look up path data from RxLogEntry using the sender timestamp stored
     // during decryption (for direct messages, channelIndex is nil)
     let rxResult = await lookupRxLogEntry(
@@ -205,7 +233,9 @@ extension SyncCoordinator {
       timestampCorrected: timestampCorrected,
       senderTimestamp: timestampCorrected ? timestamp : nil,
       routeType: rxResult.routeType,
-      regionScope: rxResult.regionScope
+      regionScope: rxResult.regionScope,
+      userLatitude: userFix?.latitude,
+      userLongitude: userFix?.longitude
     )
 
     // Check for duplicate before saving

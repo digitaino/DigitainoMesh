@@ -109,6 +109,11 @@ public protocol MessagePersisting: Actor {
   /// Update heard repeats count
   func updateMessageHeardRepeats(id: UUID, heardRepeats: Int) async throws
 
+  /// Update the send/receive-time location stamp (`userLatitude`/`userLongitude`).
+  /// nil clears it — a retransmit with no trustworthy fix must not keep an old
+  /// location's claim.
+  func updateMessageUserFix(id: UUID, latitude: Double?, longitude: Double?) async throws
+
   /// Mark a message as read
   func markMessageAsRead(id: UUID) async throws
 

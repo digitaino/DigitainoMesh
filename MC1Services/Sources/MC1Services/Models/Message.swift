@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import MeshCore
 import SwiftData
@@ -146,19 +147,26 @@ public final class Message {
   /// Format: "👍:3,❤️:2,😂:1" (emoji:count pairs, ordered by count desc)
   public var reactionSummary: String?
 
-  /// Dormant — nothing reads or writes these three. Build 40 stamped the sender's own
-  /// GPS fix and TX power onto every message row; the columns are re-declared here so
-  /// the in-place update to v2 keeps that data instead of having lightweight migration
-  /// drop it. Exact Build 40 names/types/optionality. Deliberately not surfaced in
-  /// `MessageDTO` — the DTO is the backup wire format, and these carry no behaviour.
-  ///
-  /// User's latitude when the message was sent or received.
+  /// User's latitude when the message was sent or received. A Build 40 column revived
+  /// in v2: originally preserved through the in-place migration purely as data, it is
+  /// now written again — the ingest pipeline stamps the phone's GPS fix onto *live*
+  /// deliveries (fresh, valid fix only; backlog drains, aged fixes, and unbounded
+  /// sender→phone transit go unstamped, see `SyncCoordinator.handleIncomingMessage`)
+  /// so the path map can pin the receiver where the message actually arrived.
+  /// Name/type/optionality stay exactly Build 40's so rows stamped by either build
+  /// read identically — but note Build 40 stamped without v2's freshness gate and on
+  /// outgoing sends too, so legacy values are best-effort, not gated. Surfaced in
+  /// `MessageDTO`.
   public var userLatitude: Double?
 
-  /// Dormant (see `userLatitude`). User's longitude when the message was sent or received.
+  /// User's longitude when the message was received (see `userLatitude`).
   public var userLongitude: Double?
 
-  /// Dormant (see `userLatitude`). TX power level in dBm used when sending (outgoing only).
+  /// Dormant — nothing reads or writes this. Build 40 stamped the TX power level in
+  /// dBm used when sending (outgoing only); the column is re-declared so the in-place
+  /// update to v2 keeps that data instead of having lightweight migration drop it.
+  /// Deliberately not surfaced in `MessageDTO` — the DTO is the backup wire format,
+  /// and this carries no behaviour.
   public var txPowerDbm: Int8?
 
   /// Route type from RxLog correlation (-1 = unknown/uncorrelated)
@@ -296,6 +304,11 @@ public final class Message {
       routeTypeRawValue: dto.routeType.map { Int($0.rawValue) } ?? -1,
       regionScope: dto.regionScope
     )
+    // Assigned post-init rather than threaded through the 30-argument
+    // designated initializer: these two ride only the DTO paths (ingest,
+    // backup restore), so the designated init keeps its Build 40 shape.
+    userLatitude = dto.userLatitude
+    userLongitude = dto.userLongitude
   }
 }
 
@@ -380,6 +393,10 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
   public var reactionSummary: String?
   public var routeType: RouteType?
   public var regionScope: String?
+  /// The user's GPS fix when the message was received live, or nil for
+  /// backlog-drained rows, receptions with no fresh fix, and legacy rows.
+  public var userLatitude: Double?
+  public var userLongitude: Double?
 
   /// Explicit Codable so backups predating ``sortDate`` decode cleanly.
   /// Legacy envelopes have no `sortDate` key; it falls back to `createdAt`,
@@ -392,7 +409,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
          roundTripTime, heardRepeats, sendCount, retryAttempt, maxRetryAttempts,
          deduplicationKey, linkPreviewURL, linkPreviewTitle, linkPreviewImageData,
          linkPreviewIconData, linkPreviewFetched, containsSelfMention, mentionSeen,
-         timestampCorrected, senderTimestamp, reactionSummary, routeType, regionScope
+         timestampCorrected, senderTimestamp, reactionSummary, routeType, regionScope,
+         userLatitude, userLongitude
   }
 
   public init(from decoder: Decoder) throws {
@@ -435,6 +453,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     reactionSummary = try container.decodeIfPresent(String.self, forKey: .reactionSummary)
     routeType = try container.decodeIfPresent(RouteType.self, forKey: .routeType)
     regionScope = try container.decodeIfPresent(String.self, forKey: .regionScope)
+    userLatitude = try container.decodeIfPresent(Double.self, forKey: .userLatitude)
+    userLongitude = try container.decodeIfPresent(Double.self, forKey: .userLongitude)
   }
 
   public init(from message: Message, includeLinkPreviewBlobs: Bool = true) {
@@ -485,6 +505,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     routeType = UInt8(exactly: message.routeTypeRawValue)
       .flatMap(RouteType.init(rawValue:))
     regionScope = message.regionScope
+    userLatitude = message.userLatitude
+    userLongitude = message.userLongitude
   }
 
   /// Memberwise initializer for creating DTOs directly
@@ -525,7 +547,9 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     senderTimestamp: UInt32? = nil,
     reactionSummary: String? = nil,
     routeType: RouteType? = nil,
-    regionScope: String? = nil
+    regionScope: String? = nil,
+    userLatitude: Double? = nil,
+    userLongitude: Double? = nil
   ) {
     self.id = id
     self.radioID = radioID
@@ -564,6 +588,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     self.reactionSummary = reactionSummary
     self.routeType = routeType
     self.regionScope = regionScope
+    self.userLatitude = userLatitude
+    self.userLongitude = userLongitude
   }
 
   public var isOutgoing: Bool {
@@ -662,6 +688,16 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
   /// Path as comma-separated string for clipboard (e.g., "A3,7F,42")
   public var pathStringForClipboard: String {
     pathNodesHex.joined(separator: ",")
+  }
+
+  /// The receiver's position when this message was received live, or nil when
+  /// no trustworthy stamp exists (backlog-drained rows, receptions with no
+  /// fresh fix, legacy rows, and any junk coordinates a Build 40 store may
+  /// carry — `isValidFix` filters those).
+  public var userFixCoordinate: CLLocationCoordinate2D? {
+    guard let userLatitude, let userLongitude else { return nil }
+    let coordinate = CLLocationCoordinate2D(latitude: userLatitude, longitude: userLongitude)
+    return coordinate.isValidFix ? coordinate : nil
   }
 
   // MARK: - Same-Sender Reordering

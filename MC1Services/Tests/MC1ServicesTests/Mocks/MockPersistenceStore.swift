@@ -370,6 +370,15 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     }
   }
 
+  public func updateMessageUserFix(id: UUID, latitude: Double?, longitude: Double?) async throws {
+    if let message = messages[id] {
+      messages[id] = message.copy {
+        $0.userLatitude = latitude
+        $0.userLongitude = longitude
+      }
+    }
+  }
+
   public func updateMessageHeardRepeats(id: UUID, heardRepeats: Int) async throws {
     if let message = messages[id] {
       messages[id] = MessageDTO(

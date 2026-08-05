@@ -209,6 +209,11 @@ public final class ConnectionManager {
   /// Installed by `AppState` during initialization.
   public var appStateProvider: AppStateProvider?
 
+  /// Read-only source of the phone's cached GPS fix, for stamping receive-time
+  /// location onto live-delivered messages. Installed by `AppState` during
+  /// initialization; nil (e.g. in tests) simply leaves messages unstamped.
+  public var phoneLocationProvider: PhoneLocationProvider?
+
   /// Number of devices registered with the system pairing registry (for troubleshooting UI).
   /// iOS reports AccessorySetupKit accessories; macOS reports 0 (no system registry).
   public var pairedAccessoriesCount: Int {
@@ -866,6 +871,7 @@ public final class ConnectionManager {
       modelContainer: modelContainer,
       radioID: resolvedRadioID,
       appStateProvider: appStateProvider,
+      phoneLocationProvider: phoneLocationProvider,
       connectionStateEvents: connectionStateEvents,
       initialConnectionState: connectionState
     )

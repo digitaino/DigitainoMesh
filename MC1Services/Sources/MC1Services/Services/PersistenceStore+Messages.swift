@@ -453,6 +453,22 @@ public extension PersistenceStore {
     }
   }
 
+  /// Updates the send/receive-time location stamp for a message
+  func updateMessageUserFix(id: UUID, latitude: Double?, longitude: Double?) throws {
+    let targetID = id
+    let predicate = #Predicate<Message> { message in
+      message.id == targetID
+    }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    if let message = try modelContext.fetch(descriptor).first {
+      message.userLatitude = latitude
+      message.userLongitude = longitude
+      try modelContext.save()
+    }
+  }
+
   /// Update link preview data for a message
   func updateMessageLinkPreview(
     id: UUID,

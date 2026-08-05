@@ -839,6 +839,9 @@
 /* Location: RepeatDetailsSheet.swift - Empty state description */
 "chats.repeats.emptyState.description" = "Повтори з'являться тут, коли твоє повідомлення поширюватиметься через мережу mesh";
 
+/* Location: ActionsDetailsSection.swift - Opens the heard-repeats map from the Repeat Details section */
+"chats.repeats.viewOnMap" = "Показати на карті";
+
 /* Location: RepeatDetailsSheet.swift - Navigation title */
 // MARK: - Repeat Row View
 

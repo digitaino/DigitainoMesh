@@ -155,6 +155,14 @@ public struct MessageRepeatDTO: Sendable, Identifiable, Equatable, Hashable, Cod
     pathNodes.pathHops(hashSize: hashSize).map(\.hex)
   }
 
+  /// Per-hop hash bytes in path order (first hop → the repeater we heard the
+  /// echo from), chunked by the advertised hash width. Raw bytes rather than
+  /// hex, for resolving hops against known repeaters the same way a message's
+  /// own path is (`MessagePathMapSource.hopHashes`).
+  public var hopHashes: [Data] {
+    pathNodes.pathHops(hashSize: hashSize).map(\.data)
+  }
+
   /// Classified signal quality based on SNR thresholds.
   public var snrQuality: SNRQuality {
     SNRQuality(snr: snr)

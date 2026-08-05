@@ -81,16 +81,35 @@ public actor MessageService {
   ///   - dataStore: The persistence store for saving messages
   ///   - contactService: Contact service for path management during retry
   ///   - config: Configuration for retry and routing behavior (defaults to `.default`)
+  ///   - phoneLocationProvider: Optional read-only source of the phone's cached
+  ///     GPS fix, for stamping send-time location onto outgoing rows. nil
+  ///     (e.g. in tests) simply leaves sends unstamped.
   init(
     session: any MeshCoreSessionProtocol,
     dataStore: any PersistenceStoreProtocol,
     contactService: ContactService?,
-    config: MessageServiceConfig = .default
+    config: MessageServiceConfig = .default,
+    phoneLocationProvider: PhoneLocationProvider? = nil
   ) {
     self.session = session
     self.dataStore = dataStore
     self.contactService = contactService
     self.config = config
+    self.phoneLocationProvider = phoneLocationProvider
+  }
+
+  /// See `init(phoneLocationProvider:)`. Sends stamp the same columns ingest
+  /// does (`Message.userLatitude`/`userLongitude`) through the same
+  /// `stampableFix` gate, so "where was I when this message left" is exactly
+  /// as trustworthy as "where was I when it arrived".
+  let phoneLocationProvider: PhoneLocationProvider?
+
+  /// The send-time location stamp for an outgoing row being created right
+  /// now, or nil when no trustworthy fix exists. Sends are inherently live —
+  /// the row is created the moment the user acts — so unlike ingest there is
+  /// no delivery-context or transit gate, only fix quality.
+  func currentSendFix() async -> PhoneLocationFix? {
+    await phoneLocationProvider?.stampableFix(now: Date())
   }
 
   /// Whether a contact service was injected at construction.

@@ -46,6 +46,11 @@ struct SyncDependencies {
   /// defaults to foreground behavior (channels sync).
   let appStateProvider: AppStateProvider?
 
+  /// Optional read-only source of the phone's cached GPS fix, for stamping
+  /// receive-time location onto live-delivered messages. When nil, messages
+  /// simply go unstamped.
+  let phoneLocationProvider: PhoneLocationProvider?
+
   /// Starts service event monitoring for the connected radio.
   let startEventMonitoring: @Sendable (_ radioID: UUID, _ enableAutoFetch: Bool) async -> Void
 
@@ -65,6 +70,7 @@ struct SyncDependencies {
     roomAdminService: RoomAdminService,
     repeaterAdminService: RepeaterAdminService,
     appStateProvider: AppStateProvider? = nil,
+    phoneLocationProvider: PhoneLocationProvider? = nil,
     startEventMonitoring: @escaping @Sendable (_ radioID: UUID, _ enableAutoFetch: Bool) async -> Void,
     exportPrivateKey: @escaping @Sendable () async throws -> Data
   ) {
@@ -80,6 +86,7 @@ struct SyncDependencies {
     self.roomAdminService = roomAdminService
     self.repeaterAdminService = repeaterAdminService
     self.appStateProvider = appStateProvider
+    self.phoneLocationProvider = phoneLocationProvider
     self.startEventMonitoring = startEventMonitoring
     self.exportPrivateKey = exportPrivateKey
   }
@@ -105,6 +112,7 @@ extension ServiceContainer {
       roomAdminService: roomAdminService,
       repeaterAdminService: repeaterAdminService,
       appStateProvider: appStateProvider,
+      phoneLocationProvider: phoneLocationProvider,
       startEventMonitoring: { [weak self] radioID, enableAutoFetch in
         await self?.startEventMonitoring(radioID: radioID, enableAutoFetch: enableAutoFetch)
       },

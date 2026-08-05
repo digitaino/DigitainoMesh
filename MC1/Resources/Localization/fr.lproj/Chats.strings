@@ -845,6 +845,9 @@
 /* Location: RepeatDetailsSheet.swift - Empty state description */
 "chats.repeats.emptyState.description" = "Les répétitions apparaîtront ici au fur et à mesure que votre message se propage dans le réseau mesh";
 
+/* Location: ActionsDetailsSection.swift - Opens the heard-repeats map from the Repeat Details section */
+"chats.repeats.viewOnMap" = "Voir sur la carte";
+
 /* Location: RepeatDetailsSheet.swift - Navigation title */
 // MARK: - Repeat Row View
 

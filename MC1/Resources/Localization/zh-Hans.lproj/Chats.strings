@@ -924,6 +924,9 @@
 /* Location: RepeatDetailsSheet.swift - Empty state description */
 "chats.repeats.emptyState.description" = "转发节点将在您的消息通过Mesh网络传播时显示在此处";
 
+/* Location: ActionsDetailsSection.swift - Opens the heard-repeats map from the Repeat Details section */
+"chats.repeats.viewOnMap" = "在地图上查看";
+
 /* Location: RepeatDetailsSheet.swift - Navigation title */
 // MARK: - Repeat Row View
 

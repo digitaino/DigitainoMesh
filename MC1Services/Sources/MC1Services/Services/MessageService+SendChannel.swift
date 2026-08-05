@@ -48,7 +48,7 @@ public extension MessageService {
     let timestamp = UInt32(Date().timeIntervalSince1970)
 
     // Save message to store as pending first
-    let messageDTO = createOutgoingChannelMessage(
+    let messageDTO = await createOutgoingChannelMessage(
       id: messageID,
       radioID: radioID,
       channelIndex: channelIndex,
@@ -117,7 +117,7 @@ public extension MessageService {
     let messageID = UUID()
     let timestamp = UInt32(Date().timeIntervalSince1970)
 
-    let messageDTO = createOutgoingChannelMessage(
+    let messageDTO = await createOutgoingChannelMessage(
       id: messageID,
       radioID: radioID,
       channelIndex: channelIndex,
@@ -174,6 +174,17 @@ public extension MessageService {
     // bookkeeping (channel last-message timestamp, sent event) is
     // best-effort metadata that next-load or next-ack will reconverge.
     do {
+      // The stamp claims "where was I when this went out": a queued row is
+      // stamped at compose time, and the drain can run later from somewhere
+      // else entirely. Re-stamp at transmit through the same freshness gate —
+      // the common immediate drain re-reads the same cached fix and writes
+      // the same values, so only the genuinely-deferred case changes.
+      let transmitFix = await currentSendFix()
+      try await dataStore.updateMessageUserFix(
+        id: messageID,
+        latitude: transmitFix?.latitude,
+        longitude: transmitFix?.longitude
+      )
       statusEventBroadcaster.yield(.statusResolved(messageID: messageID, status: .sent, roundTripTime: nil))
       if let channel = try await dataStore.fetchChannel(radioID: radioID, index: channelIndex) {
         try await dataStore.updateChannelLastMessage(channelID: channel.id, date: Date())
@@ -258,6 +269,16 @@ public extension MessageService {
       _ = try await dataStore.incrementMessageSendCount(id: messageID)
       try await dataStore.updateMessageHeardRepeats(id: messageID, heardRepeats: 0)
       try await dataStore.deleteMessageRepeats(messageID: messageID)
+      // The repeat set just reset, and the fresh echoes will be mapped as
+      // loops from wherever *this* retransmit happened — re-stamp the origin
+      // to match. nil when no trustworthy fix exists: better no origin than
+      // the previous send's location claiming these echoes.
+      let resendFix = await currentSendFix()
+      try await dataStore.updateMessageUserFix(
+        id: messageID,
+        latitude: resendFix?.latitude,
+        longitude: resendFix?.longitude
+      )
     } catch {
       logger.warning("Resend post-status bookkeeping failed messageID=\(messageID) status=.sent already committed: \(String(describing: error))")
     }
@@ -276,7 +297,7 @@ public extension MessageService {
     text: String,
     timestamp: UInt32,
     textType: TextType
-  ) -> MessageDTO {
+  ) async -> MessageDTO {
     let message = Message(
       id: id,
       radioID: radioID,
@@ -287,6 +308,11 @@ public extension MessageService {
       statusRawValue: MessageStatus.pending.rawValue,
       textTypeRawValue: textType.rawValue
     )
+    // Where the user was when the message left (see `currentSendFix`). This
+    // is also the origin pin the heard-repeats map anchors its echo loops to.
+    let sendFix = await currentSendFix()
+    message.userLatitude = sendFix?.latitude
+    message.userLongitude = sendFix?.longitude
     return MessageDTO(from: message)
   }
 }

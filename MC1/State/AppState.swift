@@ -46,6 +46,24 @@ final class AppState {
     return CLLocation(latitude: device.latitude, longitude: device.longitude)
   }
 
+  /// Requests a one-shot phone fix when the cached one is missing or aged
+  /// (``NodeLocationStalenessPolicy/maxFixAge``), so a screen that is about to
+  /// place the user can have a real position land while it is up. The age
+  /// check gates only the *request* — what to display meanwhile stays the
+  /// caller's `bestAvailableLocation`, because an aged phone fix is still a
+  /// better guess than the radio's manually-configured advert coordinate.
+  /// Never prompts: screens call this on appear, where a permission dialog
+  /// would be unearned — an explicit locate tap does its own prompting.
+  func requestPhoneFixIfStale() {
+    guard locationService.isAuthorized else { return }
+    let hasFreshFix = locationService.currentLocation.map {
+      NodeLocationStalenessPolicy.isFixFresh($0.timestamp, now: Date())
+    } ?? false
+    if !hasFreshFix {
+      locationService.requestLocation()
+    }
+  }
+
   /// Centers the map on the best available location if one is known, otherwise requests one.
   /// Returns whether the camera was moved, so callers can drive their `isCenteredOnUser` flag.
   @discardableResult
@@ -405,6 +423,10 @@ final class AppState {
 
     // Wire app state provider for incremental sync support
     connectionManager.appStateProvider = AppStateProviderImpl()
+
+    // Wire the phone-fix bridge so ingestion can stamp receive-time location
+    // onto live messages (the path map's receiver pin).
+    connectionManager.phoneLocationProvider = PhoneLocationProviderImpl(locationService: locationService)
 
     // Wire connection ready callback - automatically updates UI when connection completes
     connectionManager.onConnectionReady = { [weak self] in

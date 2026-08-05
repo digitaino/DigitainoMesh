@@ -676,6 +676,7 @@ public extension ConnectionManager {
         modelContainer: modelContainer,
         radioID: MockDataProvider.simulatorDeviceID,
         appStateProvider: appStateProvider,
+        phoneLocationProvider: phoneLocationProvider,
         connectionStateEvents: connectionStateEvents,
         initialConnectionState: connectionState
       )

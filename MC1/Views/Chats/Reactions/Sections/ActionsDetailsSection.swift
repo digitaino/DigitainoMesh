@@ -1,7 +1,10 @@
+import CoreLocation
 import MC1Services
 import SwiftUI
 
 struct ActionsDetailsSection: View {
+  @Environment(\.appState) private var appState
+
   let message: MessageDTO
   let availability: MessageActionAvailability
   @Binding var isDetailExpanded: Bool
@@ -14,6 +17,7 @@ struct ActionsDetailsSection: View {
   var onSelectAction: ((MessageAction) -> Void)?
 
   @State private var showPathDetail = false
+  @State private var showRepeatsMap = false
   /// Route text picked on `MessagePathDetailView`, dispatched from the sheet's
   /// `onDismiss`. The dispatch also dismisses the actions sheet, and dismissing the
   /// parent while the child is still presented can strand the actions sheet open —
@@ -31,7 +35,14 @@ struct ActionsDetailsSection: View {
           isDetailExpanded: $isDetailExpanded,
           repeats: repeats,
           contacts: contacts,
-          discoveredNodes: discoveredNodes
+          discoveredNodes: discoveredNodes,
+          // The stamp-first reference the repeats map resolves against, so an
+          // ambiguous repeater isn't named one thing here and another there.
+          userLocation: MessagePathMapView.receiverReference(
+            for: .message(message),
+            userLocation: appState.bestAvailableLocation
+          ),
+          onViewMap: { showRepeatsMap = true }
         )
       }
 
@@ -65,6 +76,15 @@ struct ActionsDetailsSection: View {
         }
       )
     }
+    // Same cover treatment as the path screen, and no onDismiss dispatch:
+    // the repeats map takes no action back to the sheet.
+    .fullScreenCover(isPresented: $showRepeatsMap) {
+      HeardRepeatsMapView(
+        message: message,
+        repeats: repeats ?? [],
+        pathViewModel: pathViewModel
+      )
+    }
   }
 
   /// The one entry point to the path: map, hop list and Reply with Route live
@@ -96,12 +116,18 @@ struct ActionsDetailsSection: View {
 /// place rather than earning a screen the way the path does.
 private struct ActionsExpandableDetailRow: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.appState) private var appState
 
   @Binding var isDetailExpanded: Bool
   let repeats: [MessageRepeatDTO]?
   let contacts: [ContactDTO]
   let discoveredNodes: [DiscoveredNodeDTO]
+  /// Reference for name disambiguation in the rows — the host passes the
+  /// stamp-first reference shared with the heard-repeats map.
+  let userLocation: CLLocation?
+  /// Opens the heard-repeats map. Rendered as the first row of the expanded
+  /// content — the map is a destination the way the path screen is, but it
+  /// stays subordinate to the disclosure so collapsed state costs no height.
+  var onViewMap: (() -> Void)?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -135,11 +161,27 @@ private struct ActionsExpandableDetailRow: View {
       if isDetailExpanded {
         Divider()
           .padding(.horizontal)
+        if let onViewMap, repeats?.isEmpty == false {
+          Button(action: onViewMap) {
+            HStack {
+              Label(L10n.Chats.Chats.Repeats.viewOnMap, systemImage: "map")
+              Spacer()
+              Image(systemName: "chevron.right")
+                .foregroundStyle(.secondary)
+                .font(.caption)
+                .accessibilityHidden(true)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .contentShape(.rect)
+          }
+          .foregroundStyle(.primary)
+        }
         RepeatDetailsContent(
           repeats: repeats,
           contacts: contacts,
           discoveredNodes: discoveredNodes,
-          userLocation: appState.bestAvailableLocation
+          userLocation: userLocation
         )
         .padding(.horizontal)
         .padding(.bottom)

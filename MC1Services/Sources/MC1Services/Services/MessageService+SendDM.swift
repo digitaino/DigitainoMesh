@@ -42,7 +42,7 @@ extension MessageService {
     let messageID = UUID()
     let timestamp = UInt32(Date().timeIntervalSince1970)
 
-    let messageDTO = createOutgoingMessage(
+    let messageDTO = await createOutgoingMessage(
       id: messageID,
       radioID: contact.radioID,
       contactID: contact.id,
@@ -192,7 +192,7 @@ extension MessageService {
     let timestamp = UInt32(Date().timeIntervalSince1970)
 
     // Save message to store as pending first
-    let messageDTO = createOutgoingMessage(
+    let messageDTO = await createOutgoingMessage(
       id: messageID,
       radioID: contact.radioID,
       contactID: contact.id,
@@ -259,7 +259,7 @@ extension MessageService {
     let messageID = UUID()
     let timestamp = UInt32(Date().timeIntervalSince1970)
 
-    let messageDTO = createOutgoingMessage(
+    let messageDTO = await createOutgoingMessage(
       id: messageID,
       radioID: contact.radioID,
       contactID: contact.id,
@@ -719,7 +719,7 @@ extension MessageService {
     timestamp: UInt32,
     textType: TextType,
     replyToID: UUID?
-  ) -> MessageDTO {
+  ) async -> MessageDTO {
     let message = Message(
       id: id,
       radioID: radioID,
@@ -731,6 +731,10 @@ extension MessageService {
       textTypeRawValue: textType.rawValue,
       replyToID: replyToID
     )
+    // Where the user was when the message left (see `currentSendFix`).
+    let sendFix = await currentSendFix()
+    message.userLatitude = sendFix?.latitude
+    message.userLongitude = sendFix?.longitude
     return MessageDTO(from: message)
   }
 }

@@ -909,6 +909,8 @@ public enum L10n {
       public enum Repeats {
         /// Location: RepeatRowView.swift - Unknown repeater name
         public static let unknownRepeater = L10n.tr("Chats", "chats.repeats.unknownRepeater", fallback: "<unknown repeater>")
+        /// Location: ActionsDetailsSection.swift - Opens the heard-repeats map from the Repeat Details section
+        public static let viewOnMap = L10n.tr("Chats", "chats.repeats.viewOnMap", fallback: "View on Map")
         public enum EmptyState {
           /// Location: RepeatDetailsSheet.swift - Empty state description
           public static let description = L10n.tr("Chats", "chats.repeats.emptyState.description", fallback: "Repeats will appear here as your message propagates through the mesh")

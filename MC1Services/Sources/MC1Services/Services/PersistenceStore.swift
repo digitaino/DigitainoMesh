@@ -101,12 +101,16 @@ public actor PersistenceStore: PersistenceStoreProtocol {
   ///          index.
   /// - v5→v6: Added Contact.avatarImageData (Data?, default nil) storing a
   ///          user-picked profile picture as a compressed JPEG blob.
-  /// - v6→v7: Build 40 data preservation (all dormant — nothing reads these):
-  ///          re-registered SurveySession and SignalSurveyPoint, and re-added the
-  ///          fork-only columns Message.userLatitude/userLongitude/txPowerDbm,
-  ///          Reaction.sentMessageID and TracePathRun.note. Fresh v2 stores get
-  ///          empty tables and NULL columns; Build 40 stores keep their rows
-  ///          instead of having them dropped by lightweight migration.
+  /// - v6→v7: Build 40 data preservation: re-registered SurveySession and
+  ///          SignalSurveyPoint, and re-added the fork-only columns
+  ///          Message.userLatitude/userLongitude/txPowerDbm, Reaction.sentMessageID
+  ///          and TracePathRun.note. Fresh v2 stores get empty tables and NULL
+  ///          columns; Build 40 stores keep their rows instead of having them
+  ///          dropped by lightweight migration. Preserved as dormant data at the
+  ///          time; Message.userLatitude/userLongitude have since been revived —
+  ///          the ingest pipeline stamps them on live deliveries and the path map
+  ///          reads them (no schema change; see Message.swift). The rest stay
+  ///          dormant — nothing reads them.
   public static func createContainer(inMemory: Bool = false) throws -> ModelContainer {
     if !inMemory {
       let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

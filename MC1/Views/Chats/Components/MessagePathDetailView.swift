@@ -59,6 +59,14 @@ struct MessagePathDetailView: View {
         }
         .sensoryFeedback(.success, trigger: copyHapticTrigger)
         .onAppear {
+          // A stamped message pins the receiver from its own recorded fix and
+          // needs no GPS. Only the unstamped fallback pin is as honest as the
+          // phone fix behind it — and the cached one can predate a suspend —
+          // so ask for a live fix then; the sample onChange below moves the
+          // pin when it lands.
+          if message.userFixCoordinate == nil {
+            appState.requestPhoneFixIfStale()
+          }
           locatedNodes = buildLocatedNodes()
         }
         // The actions sheet preloads the view model, but a fast tap can land
@@ -66,6 +74,14 @@ struct MessagePathDetailView: View {
         // so the map doesn't stay empty forever.
         .onChange(of: pathViewModel.isLoading) { _, isLoading in
           guard !isLoading else { return }
+          locatedNodes = buildLocatedNodes()
+        }
+        // A fresh fix landed: the unstamped fallback pin and the hop-list
+        // disambiguation are built from it, so rebuild. A stamped message is
+        // anchored to its recorded fix — rebuilding would only churn the map's
+        // point source for identical pins.
+        .onChange(of: locationSample) { _, _ in
+          guard message.userFixCoordinate == nil else { return }
           locatedNodes = buildLocatedNodes()
         }
     }
@@ -165,7 +181,7 @@ struct MessagePathDetailView: View {
           message: message,
           viewModel: pathViewModel,
           receiverName: appState.connectedDevice?.nodeName ?? L10n.Chats.Chats.Path.Receiver.you,
-          userLocation: appState.bestAvailableLocation
+          userLocation: hopReferenceLocation
         )
       }
       .padding(.horizontal, 16)
@@ -200,6 +216,27 @@ struct MessagePathDetailView: View {
     return locatedHops < message.hopCount ? "≥ \(formatted)" : formatted
   }
 
+  /// Reference for disambiguating hop hashes in the list — the same rule the
+  /// map builder resolves against (`MessagePathMapView.receiverReference`), so
+  /// an ambiguous hop is never named differently here than it is pinned there.
+  private var hopReferenceLocation: CLLocation? {
+    MessagePathMapView.receiverReference(
+      for: .message(message),
+      userLocation: appState.bestAvailableLocation
+    )
+  }
+
+  /// Value-typed projection of `bestAvailableLocation`, so `onChange` compares
+  /// coordinates, not `CLLocation` identity (the radio-GPS fallback allocates a
+  /// fresh object on every read).
+  private var locationSample: LocationSample? {
+    guard let location = appState.bestAvailableLocation else { return nil }
+    return LocationSample(
+      latitude: location.coordinate.latitude,
+      longitude: location.coordinate.longitude
+    )
+  }
+
   private func buildLocatedNodes() -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
     MessagePathMapView.locatedNodes(
       for: .message(message),
@@ -210,4 +247,9 @@ struct MessagePathDetailView: View {
       receiverName: appState.connectedDevice?.nodeName
     )
   }
+}
+
+private struct LocationSample: Equatable {
+  let latitude: Double
+  let longitude: Double
 }

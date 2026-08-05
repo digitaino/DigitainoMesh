@@ -146,15 +146,63 @@ struct Build40DataPreservationTests {
   }
 
   @Test
-  func `Fork-only columns are absent from the backup DTOs`() throws {
-    // The DTOs are the backup wire format. These columns carry no behaviour, so they
-    // deliberately stay out of them — adding a field would change every exported archive.
+  func `Dormant txPowerDbm stays absent from the backup DTOs`() throws {
+    // The DTOs are the backup wire format. txPowerDbm still carries no behaviour, so
+    // it deliberately stays out — adding a field would change every exported archive.
+    // (userLatitude/userLongitude were revived for receive-time stamping and now ride
+    // the DTO on purpose; see the round-trip test below.)
     let message = Message(radioID: UUID(), text: "hi")
-    message.userLatitude = 1
+    message.txPowerDbm = -3
     let dto = MessageDTO(from: message)
     let encoded = try JSONEncoder().encode(dto)
     let json = try #require(String(data: encoded, encoding: .utf8))
-    #expect(!json.contains("userLatitude"))
     #expect(!json.contains("txPowerDbm"))
+  }
+
+  @Test
+  func `Revived location stamp rides the backup DTO and legacy envelopes decode nil`() throws {
+    // Stamped rows: the fix must survive export → import, or a restore would strip
+    // every receiver pin the path map has learned.
+    let stamped = Message(radioID: UUID(), text: "hi")
+    stamped.userLatitude = 30.2672
+    stamped.userLongitude = -97.7431
+    let stampedDTO = MessageDTO(from: stamped)
+    #expect(stampedDTO.userLatitude == 30.2672)
+    #expect(stampedDTO.userLongitude == -97.7431)
+    let roundTripped = try JSONDecoder().decode(MessageDTO.self, from: JSONEncoder().encode(stampedDTO))
+    #expect(roundTripped.userLatitude == 30.2672)
+    #expect(roundTripped.userLongitude == -97.7431)
+
+    // Unstamped rows encode without the keys (synthesized encoding omits nil),
+    // which doubles as the legacy-envelope shape: decoding it must yield nil,
+    // not a decode failure — archives predating the stamp have no such keys.
+    let legacy = Message(radioID: UUID(), text: "hi")
+    let legacyData = try JSONEncoder().encode(MessageDTO(from: legacy))
+    let legacyJSON = try #require(String(data: legacyData, encoding: .utf8))
+    #expect(!legacyJSON.contains("userLatitude"))
+    let decoded = try JSONDecoder().decode(MessageDTO.self, from: legacyData)
+    #expect(decoded.userLatitude == nil)
+    #expect(decoded.userLongitude == nil)
+  }
+
+  @Test
+  func `userFixCoordinate rejects null-island and partial stamps`() {
+    // Build 40 stamped without v2's gates, so a migrated store can hold junk;
+    // the read-side helper is the last line of defence for the receiver pin.
+    let stamped = Message(radioID: UUID(), text: "hi")
+    stamped.userLatitude = 30.2672
+    stamped.userLongitude = -97.7431
+    #expect(MessageDTO(from: stamped).userFixCoordinate?.latitude == 30.2672)
+
+    let nullIsland = Message(radioID: UUID(), text: "hi")
+    nullIsland.userLatitude = 0
+    nullIsland.userLongitude = 0
+    #expect(MessageDTO(from: nullIsland).userFixCoordinate == nil)
+
+    let partial = Message(radioID: UUID(), text: "hi")
+    partial.userLatitude = 30.2672
+    #expect(MessageDTO(from: partial).userFixCoordinate == nil)
+
+    #expect(MessageDTO(from: Message(radioID: UUID(), text: "hi")).userFixCoordinate == nil)
   }
 }

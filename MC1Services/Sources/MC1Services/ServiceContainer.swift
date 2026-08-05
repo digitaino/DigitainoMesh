@@ -227,6 +227,7 @@ public final class ServiceContainer {
   /// Provider for checking app foreground/background state
   /// Used to determine sync behavior (full vs incremental)
   let appStateProvider: AppStateProvider?
+  let phoneLocationProvider: PhoneLocationProvider?
 
   // MARK: - State
 
@@ -259,6 +260,8 @@ public final class ServiceContainer {
   ///     chat send queue's pending-send rows so two radios cannot share
   ///     drain state across reconnects.
   ///   - appStateProvider: Optional provider for app foreground/background state
+  ///   - phoneLocationProvider: Optional read-only source of the phone's cached
+  ///     GPS fix, for stamping receive-time location onto live messages
   ///   - connectionStateEvents: Optional broadcaster of connection-state
   ///     changes. When provided, the chat send queue observes it to wake
   ///     parked drains on each disconnected-to-connected edge.
@@ -271,11 +274,13 @@ public final class ServiceContainer {
     modelContainer: ModelContainer,
     radioID: UUID,
     appStateProvider: AppStateProvider? = nil,
+    phoneLocationProvider: PhoneLocationProvider? = nil,
     connectionStateEvents: EventBroadcaster<DeviceConnectionState>? = nil,
     initialConnectionState: DeviceConnectionState = .disconnected
   ) {
     self.session = session
     self.appStateProvider = appStateProvider
+    self.phoneLocationProvider = phoneLocationProvider
     dataStore = PersistenceStore(modelContainer: modelContainer)
     inlineImageDimensionsStore = InlineImageDimensionsStore()
 
@@ -311,7 +316,8 @@ public final class ServiceContainer {
     messageService = MessageService(
       session: session,
       dataStore: dataStore,
-      contactService: contactService
+      contactService: contactService,
+      phoneLocationProvider: phoneLocationProvider
     )
     channelService = ChannelService(
       session: session,

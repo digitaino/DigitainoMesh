@@ -121,4 +121,25 @@ struct ServiceContainerWiringTests {
     await container.stopEventMonitoring()
     #expect(await container.messageService.isAckExpiryCheckingActive == false)
   }
+
+  @Test
+  @MainActor
+  func `phoneLocationProvider flows through to syncDependencies`() async throws {
+    // Both passthroughs (ServiceContainer.init and syncDependencies) land in
+    // parameters that default to nil, so deleting either compiles clean and
+    // silently disables receive-time stamping app-wide. This is the tripwire.
+    struct StubProvider: PhoneLocationProvider {
+      func currentFix() async -> PhoneLocationFix? { nil }
+    }
+    let transport = SimulatorMockTransport()
+    let session = MeshCoreSession(transport: transport)
+    let modelContainer = try PersistenceStore.createContainer(inMemory: true)
+    let container = ServiceContainer(
+      session: session,
+      modelContainer: modelContainer,
+      radioID: UUID(),
+      phoneLocationProvider: StubProvider()
+    )
+    #expect(container.syncDependencies.phoneLocationProvider != nil)
+  }
 }

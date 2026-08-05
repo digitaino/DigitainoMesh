@@ -1,6 +1,8 @@
 import Foundation
 @testable import MC1Services
+import MeshCore
 import MeshCoreTestSupport
+import SwiftData
 import Testing
 
 @Suite("SyncCoordinator Message Handler Tests")
@@ -233,5 +235,145 @@ struct SyncCoordinatorMessageHandlerTests {
       floodScope: .inherit
     )
     #expect(SyncCoordinator.shouldPostChannelNotification(forResolvedChannel: channel) == true)
+  }
+
+  // MARK: - Receive-Time Location Stamping
+
+  private struct FixedPhoneLocationProvider: PhoneLocationProvider {
+    let fix: PhoneLocationFix?
+    func currentFix() async -> PhoneLocationFix? { fix }
+  }
+
+  /// Wires the real ingest pipeline over a fresh in-memory store with the
+  /// captured-handler mock, so tests can push one wire message through and
+  /// inspect the saved row. `contact: nil` on invocation keeps every
+  /// post-save side effect (reactions, unreads, notifications) inert.
+  private func makeStampingHarness(
+    provider: PhoneLocationProvider?
+  ) async throws -> (
+    handler: @Sendable (ContactMessage, ContactDTO?, DeliveryContext) async -> Void,
+    container: ModelContainer,
+    coordinator: SyncCoordinator
+  ) {
+    let (_, services) = try await createTestServices()
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let store = PersistenceStore(modelContainer: container)
+    let polling = MockMessagePollingService()
+    let deps = SyncDependencies(
+      dataStore: store,
+      contactService: services.contactService,
+      channelService: services.channelService,
+      messagePollingService: polling,
+      notificationService: services.notificationService,
+      reactionService: services.reactionService,
+      advertisementService: services.advertisementService,
+      rxLogService: services.rxLogService,
+      roomServerService: services.roomServerService,
+      roomAdminService: services.roomAdminService,
+      repeaterAdminService: services.repeaterAdminService,
+      appStateProvider: nil,
+      phoneLocationProvider: provider,
+      startEventMonitoring: { _, _ in },
+      exportPrivateKey: { Data() }
+    )
+    let coordinator = SyncCoordinator()
+    await coordinator.wireMessageHandlers(dependencies: deps, radioID: UUID())
+    let handler = try #require(await polling.capturedContactMessageHandler)
+    return (handler, container, coordinator)
+  }
+
+  private func makeWireMessage(text: String = "hello", senderTimestamp: Date = Date()) -> ContactMessage {
+    ContactMessage(
+      senderPublicKeyPrefix: Data([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
+      pathLength: 0,
+      textType: TextType.plain.rawValue,
+      senderTimestamp: senderTimestamp,
+      signature: nil,
+      text: text,
+      snr: nil
+    )
+  }
+
+  private func savedMessages(in container: ModelContainer) throws -> [Message] {
+    try ModelContext(container).fetch(FetchDescriptor<Message>())
+  }
+
+  @Test
+  func `Live delivery with a fresh fix stamps the message`() async throws {
+    let fix = PhoneLocationFix(latitude: 30.2672, longitude: -97.7431, timestamp: Date())
+    let harness = try await makeStampingHarness(provider: FixedPhoneLocationProvider(fix: fix))
+
+    await harness.handler(makeWireMessage(), nil, .live)
+
+    let saved = try savedMessages(in: harness.container)
+    #expect(saved.count == 1)
+    #expect(saved.first?.userLatitude == 30.2672)
+    #expect(saved.first?.userLongitude == -97.7431)
+  }
+
+  @Test
+  func `Backlog drain never stamps — drain-time GPS is not reception geography`() async throws {
+    let fix = PhoneLocationFix(latitude: 30.2672, longitude: -97.7431, timestamp: Date())
+    let harness = try await makeStampingHarness(provider: FixedPhoneLocationProvider(fix: fix))
+
+    await harness.handler(makeWireMessage(), nil, .initialSync(anchor: Date()))
+
+    let saved = try savedMessages(in: harness.container)
+    #expect(saved.count == 1)
+    #expect(saved.first?.userLatitude == nil)
+    #expect(saved.first?.userLongitude == nil)
+  }
+
+  @Test
+  func `An aged fix never stamps — it describes where the phone used to be`() async throws {
+    let agedTimestamp = Date().addingTimeInterval(-(NodeLocationStalenessPolicy.maxFixAge + 60))
+    let fix = PhoneLocationFix(latitude: 30.2672, longitude: -97.7431, timestamp: agedTimestamp)
+    let harness = try await makeStampingHarness(provider: FixedPhoneLocationProvider(fix: fix))
+
+    await harness.handler(makeWireMessage(), nil, .live)
+
+    let saved = try savedMessages(in: harness.container)
+    #expect(saved.count == 1)
+    #expect(saved.first?.userLatitude == nil)
+    #expect(saved.first?.userLongitude == nil)
+  }
+
+  @Test
+  func `No provider leaves the message unstamped`() async throws {
+    let harness = try await makeStampingHarness(provider: nil)
+
+    await harness.handler(makeWireMessage(), nil, .live)
+
+    let saved = try savedMessages(in: harness.container)
+    #expect(saved.count == 1)
+    #expect(saved.first?.userLatitude == nil)
+    #expect(saved.first?.userLongitude == nil)
+  }
+
+  @Test
+  func `A fresh null-island fix never stamps`() async throws {
+    let fix = PhoneLocationFix(latitude: 0, longitude: 0, timestamp: Date())
+    let harness = try await makeStampingHarness(provider: FixedPhoneLocationProvider(fix: fix))
+
+    await harness.handler(makeWireMessage(), nil, .live)
+
+    let saved = try savedMessages(in: harness.container)
+    #expect(saved.count == 1)
+    #expect(saved.first?.userLatitude == nil)
+    #expect(saved.first?.userLongitude == nil)
+  }
+
+  @Test
+  func `Unbounded sender-to-phone transit never stamps — a radio-queued message delivered live on resume is not a fresh arrival`() async throws {
+    let fix = PhoneLocationFix(latitude: 30.2672, longitude: -97.7431, timestamp: Date())
+    let harness = try await makeStampingHarness(provider: FixedPhoneLocationProvider(fix: fix))
+
+    let queuedOvernight = Date().addingTimeInterval(-(SyncCoordinator.maxStampTransitInterval + 60))
+    await harness.handler(makeWireMessage(senderTimestamp: queuedOvernight), nil, .live)
+
+    let saved = try savedMessages(in: harness.container)
+    #expect(saved.count == 1)
+    #expect(saved.first?.userLatitude == nil)
+    #expect(saved.first?.userLongitude == nil)
   }
 }

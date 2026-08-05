@@ -101,9 +101,18 @@ struct MessageActionsSheet: View {
     .task {
       if availability.canShowRepeatDetails {
         guard let services = appState.services else { return }
-        // The three loads share no data, so run them concurrently rather
-        // than stacking three actor round-trips while the detail rows are blank.
+        // Four loads that share no data, so run them concurrently rather
+        // than stacking actor round-trips while the detail rows are blank.
+        // The path view model is loaded here too: the heard-repeats map
+        // (reached through Repeat Details → View on Map) resolves hop pins
+        // from it, and without this preload it would spin forever —
+        // `canShowRepeatDetails` and `canViewPath` are mutually exclusive,
+        // so the branch below never runs for an outgoing message.
         async let fetchedRepeats = services.heardRepeatsService.refreshRepeats(for: message.id)
+        async let pathLoad: Void = pathViewModel.loadContacts(
+          dataStore: appState.offlineDataStore,
+          radioID: message.radioID
+        )
         do {
           async let fetchedContacts = services.dataStore.fetchContacts(radioID: message.radioID)
           async let fetchedNodes = services.dataStore.fetchDiscoveredNodes(radioID: message.radioID)
@@ -114,6 +123,7 @@ struct MessageActionsSheet: View {
           discoveredNodes = []
         }
         repeats = await fetchedRepeats
+        await pathLoad
       } else if availability.canViewPath {
         await pathViewModel.loadContacts(dataStore: appState.offlineDataStore, radioID: message.radioID)
       }

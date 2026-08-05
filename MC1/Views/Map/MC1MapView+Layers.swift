@@ -219,6 +219,31 @@ extension MC1MapView.Coordinator {
     let roundJoin = NSExpression(forConstantValue: "round")
     let roundCap = NSExpression(forConstantValue: "round")
 
+    // Message path: solid blue with a white casing (no dashes) — a direct
+    // node-to-node route, visually distinct from the dashed LOS line. Added
+    // BELOW the trace family: the heard-repeats map is the one screen mixing
+    // the two, drawing neutral message-path bodies alongside SNR-styled
+    // reception legs that can share geometry (one echo's first hop is another
+    // echo's tail) — the measured, colored leg must win the overdraw. No
+    // other screen draws both families, so their relative order is invisible
+    // elsewhere.
+    let messagePathCasing = MLNLineStyleLayer(identifier: MapLayerID.lineMessagePathCasing, source: source)
+    messagePathCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.messagePath.rawValue)
+    messagePathCasing.lineColor = white
+    messagePathCasing.lineOpacity = casingOpacity
+    messagePathCasing.lineWidth = NSExpression(forConstantValue: 6)
+    messagePathCasing.lineJoin = roundJoin
+    messagePathCasing.lineCap = roundCap
+    style.addLayer(messagePathCasing)
+
+    let messagePathLayer = MLNLineStyleLayer(identifier: MapLayerID.lineMessagePath, source: source)
+    messagePathLayer.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.messagePath.rawValue)
+    messagePathLayer.lineColor = NSExpression(forConstantValue: UIColor.systemBlue)
+    messagePathLayer.lineWidth = NSExpression(forConstantValue: 3)
+    messagePathLayer.lineJoin = roundJoin
+    messagePathLayer.lineCap = roundCap
+    style.addLayer(messagePathLayer)
+
     let untracedCasing = MLNLineStyleLayer(identifier: MapLayerID.lineTraceUntracedCasing, source: source)
     untracedCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.traceUntraced.rawValue)
     untracedCasing.lineColor = white
@@ -292,24 +317,6 @@ extension MC1MapView.Coordinator {
     goodLayer.lineWidth = NSExpression(forConstantValue: 4)
     style.addLayer(goodLayer)
 
-    // Message path: solid blue with a white casing (no dashes) — a direct
-    // node-to-node route, visually distinct from the dashed LOS line.
-    let messagePathCasing = MLNLineStyleLayer(identifier: MapLayerID.lineMessagePathCasing, source: source)
-    messagePathCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.messagePath.rawValue)
-    messagePathCasing.lineColor = white
-    messagePathCasing.lineOpacity = casingOpacity
-    messagePathCasing.lineWidth = NSExpression(forConstantValue: 6)
-    messagePathCasing.lineJoin = roundJoin
-    messagePathCasing.lineCap = roundCap
-    style.addLayer(messagePathCasing)
-
-    let messagePathLayer = MLNLineStyleLayer(identifier: MapLayerID.lineMessagePath, source: source)
-    messagePathLayer.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.messagePath.rawValue)
-    messagePathLayer.lineColor = NSExpression(forConstantValue: UIColor.systemBlue)
-    messagePathLayer.lineWidth = NSExpression(forConstantValue: 3)
-    messagePathLayer.lineJoin = roundJoin
-    messagePathLayer.lineCap = roundCap
-    style.addLayer(messagePathLayer)
 
     // Location trail: a faint dashed connector threading location reports in time
     // order, neutral and de-emphasized, since it is not a proven route. A long
