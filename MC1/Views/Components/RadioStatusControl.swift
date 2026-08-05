@@ -29,6 +29,8 @@ struct RadioStatusControl: View {
   @State private var showingDeviceSelection = false
   @State private var showingAdvancedSettings = false
   @State private var showingSignalDetail = false
+  @State private var showingWatchScreen = false
+  @State private var pendingMovementHintsPrompt = false
   @State private var isSendingAdvert = false
   @State private var successFeedbackTrigger = false
   @State private var errorFeedbackTrigger = false
@@ -42,6 +44,11 @@ struct RadioStatusControl: View {
   /// Matches the system menu-open hold on `Menu(primaryAction:)` closely enough
   /// that the thump lands as the menu unfolds.
   private static let menuHapticHoldDuration: Double = 0.5
+
+  /// How long after the signal popover closes before the Motion & Fitness prompt may fire —
+  /// comfortably past the popover's dismissal morph, so the system alert never lands while
+  /// a popover transition is in flight.
+  private static let movementPromptSettleDelay: Duration = .milliseconds(600)
 
   private let deviceMenuTip = DeviceMenuTip()
 
@@ -70,7 +77,7 @@ struct RadioStatusControl: View {
       LongPressGesture(minimumDuration: Self.menuHapticHoldDuration)
         .onEnded { _ in menuHapticTrigger += 1 }
     )
-    .popoverTip(deviceMenuTip)
+    .deviceMenuTipPopover(deviceMenuTip)
     .dynamicTypeSize(...DynamicTypeSize.xLarge)
     .sensoryFeedback(.impact(flexibility: .solid), trigger: menuHapticTrigger)
     .sensoryFeedback(.success, trigger: successFeedbackTrigger)
@@ -88,8 +95,35 @@ struct RadioStatusControl: View {
       flash(tick, last: &lastTxTick, binding: $isTxFlashing)
     }
     .popover(isPresented: $showingSignalDetail) {
-      RepeaterSignalPopover()
+      RepeaterSignalPopover(showWatchScreen: $showingWatchScreen)
         .presentationCompactAdaptation(.popover)
+    }
+    // Terminal link loss closes the table rather than leaving it up hollow: session
+    // teardown strips the popover's rows and controls, and dismissing a popover over that
+    // torn-down state is the working theory for the iOS 26 zoom-morph trap in TestFlight
+    // crash B8A782EC (`_UIZoomTransitionController.startInteractiveTransition`, not
+    // reproduced locally). Keyed on `connectedDevice` — which survives the auto-reconnect
+    // window — so a sub-second BLE blip cannot yank the table while a user is watching a
+    // marginal link. Skipped while the watch sheet is up: yanking its presenter would
+    // start a second teardown mid-presentation, the same transition-conflict family.
+    .onChange(of: appState.connectedDevice == nil) { _, isGone in
+      if isGone && !showingWatchScreen {
+        showingSignalDetail = false
+      }
+    }
+    // The Motion & Fitness prompt belongs to the repeater table — the one deliberate visit
+    // to this feature, never the connect path, which can fire during an auto-reconnect at
+    // launch. But the system alert must not land while a popover transition is in flight
+    // (suspected aggravator in crash B8A782EC), so it fires only after a visit *ends*,
+    // once the dismissal morph has settled and no popover exists to collide with. The
+    // binding flips at dismissal start, so reopening inside the settle window cancels this
+    // task and the still-pending flag re-arms it for the next close. A no-op once
+    // authorization is determined.
+    .task(id: showingSignalDetail) {
+      guard !showingSignalDetail, pendingMovementHintsPrompt else { return }
+      do { try await Task.sleep(for: Self.movementPromptSettleDelay) } catch { return }
+      pendingMovementHintsPrompt = false
+      appState.requestMovementHintsIfNeeded()
     }
     .sheet(isPresented: $showingDeviceSelection) {
       DeviceSelectionSheet()
@@ -105,6 +139,7 @@ struct RadioStatusControl: View {
   /// connection to mean anything; without one, the tap goes straight to connecting.
   private func handlePrimaryAction() {
     if appState.connectionState.isConnected {
+      pendingMovementHintsPrompt = true
       showingSignalDetail = true
     } else {
       showingDeviceSelection = true
@@ -360,6 +395,31 @@ struct RadioStatusControl: View {
         errorFeedbackTrigger.toggle()
       }
       isSendingAdvert = false
+    }
+  }
+}
+
+// MARK: - Tip gating
+
+private extension View {
+  /// Anchors the device-menu tip on iOS 18 only. On iOS 26 popovers dismiss through the
+  /// Liquid Glass zoom morph, which trapped on a nil transition source in TestFlight
+  /// crash B8A782EC — and a tip is the one popover here that presents with no
+  /// interaction, so it can be mid-transition during the connection-state updates that
+  /// reshape this control (suspected, not reproduced: the crash recurred ~4s into fresh
+  /// launches, which fits an auto-presenting tip whose display count was never persisted
+  /// because the process died first). The availability branch is constant for the life of
+  /// the process, so the toolbar item's structural identity never changes at runtime —
+  /// the invariant this control's docs require.
+  ///
+  /// TODO: temporary suppression — re-home the tip off the popover-presenting toolbar
+  /// item (e.g. an inline `TipView`) once the crash is confirmed fixed on TestFlight.
+  @ViewBuilder
+  func deviceMenuTipPopover(_ tip: DeviceMenuTip) -> some View {
+    if #unavailable(iOS 26.0) {
+      popoverTip(tip)
+    } else {
+      self
     }
   }
 }

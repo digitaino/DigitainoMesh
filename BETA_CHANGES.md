@@ -1,3 +1,11 @@
+Beta Changes -- v0.11.0 (Build 5)
+
+Repeater Popover Crash Fix
+
+Fixed the Build 4 crash loop around the top-left radio control — thanks NBDY for the crash report, it made this one findable. On iOS 26, dismissing a popover while the radio link was being torn down could trap inside the system's dismissal animation and then keep crashing on every relaunch. The repeater table now closes itself when the connection is truly lost, the first-run device-menu tip no longer auto-presents on iOS 26, and the Motion & Fitness permission prompt waits until the popover has fully closed instead of landing mid-animation. If you still see a crash right after launch or when the radio drops, please send the report.
+
+---
+
 v2 rebuild (upstream 1.3.0)
 
 DigitainoMesh has been rebuilt from scratch on top of upstream PocketMesh v1.3.0. The old fork line diverged far enough that keeping up with upstream had become the main cost of the project, so this release starts again from the current upstream code and re-applies the fork's work on top of it.

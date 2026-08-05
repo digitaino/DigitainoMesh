@@ -13,7 +13,9 @@ struct RepeaterSignalPopover: View {
 
   /// Presents the full range-testing screen. The compact row below is only an entry point —
   /// heard counts, alert tones and target switching live on `RepeaterWatchView`.
-  @State private var showWatchScreen = false
+  /// Owned by `RadioStatusControl` so its link-loss dismissal can see an active watch
+  /// sheet and leave the popover alone rather than yank a presenter mid-presentation.
+  @Binding var showWatchScreen: Bool
 
   private var model: RepeaterSignalModel {
     appState.repeaterSignals
@@ -72,10 +74,10 @@ struct RepeaterSignalPopover: View {
         RepeaterWatchView()
       }
     }
-    // Opening the table is the one deliberate visit to this feature, so it is where a
-    // Motion & Fitness prompt belongs — never on the connect path, which can fire during an
-    // auto-reconnect at launch.
-    .task { appState.requestMovementHintsIfNeeded() }
+    // The Motion & Fitness prompt this table used to fire at open now lives in
+    // `RadioStatusControl`, deferred until after the popover has fully dismissed — a
+    // system alert must never land while a popover transition is in flight (suspected
+    // aggravator in TestFlight crash B8A782EC).
     // Proximity disambiguation wants the freshest fix while the table is visible: push at
     // open, and again when a new fix lands. Keyed on a value sample, not the CLLocation —
     // `bestAvailableLocation`'s radio-fallback branch allocates a fresh object on every
@@ -111,11 +113,16 @@ struct RepeaterSignalPopover: View {
       Button {
         Task { await model.startProbe() }
       } label: {
-        if model.isRefreshing {
-          ProgressView().controlSize(.mini)
-        } else {
-          Image(systemName: "arrow.clockwise")
+        // Fixed footprint: the spinner and the glyph differ in intrinsic size, and the
+        // swap must not reshape a presented popover's header mid-render.
+        Group {
+          if model.isRefreshing {
+            ProgressView().controlSize(.mini)
+          } else {
+            Image(systemName: "arrow.clockwise")
+          }
         }
+        .frame(width: 20, height: 20)
       }
       .buttonStyle(.plain)
       .disabled(model.isRefreshing)
