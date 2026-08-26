@@ -1245,3 +1245,35 @@
 
 /* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
 "tools.signalMapper.detail.ambiguousName" = "More than one node answers to this hash";
+
+// MARK: - Signal Mapper Survey (M3)
+
+/* Location: SignalMapperCoverageView.swift - Menu/button starting a manual survey session */
+"tools.signalMapper.survey.start" = "Start Survey";
+
+/* Location: SignalMapperCoverageView.swift - Menu/button ending the running survey session */
+"tools.signalMapper.survey.stop" = "End Survey";
+
+/* Location: SignalMapperCoverageView.swift - One-tap probe of the cell the user stands in */
+"tools.signalMapper.survey.spotCheck" = "Spot Check";
+
+/* Location: SignalMapperCoverageView.swift - Live session pill; %1$lld probes sent, %2$lld replies heard */
+"tools.signalMapper.survey.hud" = "Surveying · %1$lld probes · %2$lld replies";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Completion sheet title */
+"tools.signalMapper.survey.summary.title" = "Survey Complete";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Distinct hexagons that triggered a probe */
+"tools.signalMapper.survey.summary.cellsProbed" = "Hexagons probed";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Probe cycles the session transmitted */
+"tools.signalMapper.survey.summary.probes" = "Probe cycles sent";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Trace and discover replies heard back */
+"tools.signalMapper.survey.summary.replies" = "Replies heard";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Probes whose reply never arrived */
+"tools.signalMapper.survey.summary.noReply" = "Probes with no reply";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Footer: results never leave the device */
+"tools.signalMapper.survey.summary.localNote" = "Survey results are stored on this device only.";

@@ -2,8 +2,11 @@
 
 Agreed with Rafael 2026-07-30. This is the "fresh design doc" that MIGRATION_PLAN.md
 reserved space for (§3, "Signal mapper (future)"); it supersedes that section's hold on
-re-importing SurveyKit/H3. Status: **M0 + M1 built (local capture and own-coverage map);
-M2+ redesigned 2026-07-30 after the adversarial review in §10.**
+re-importing SurveyKit/H3. Status: **M0 + M1 + M1.5 built (local capture, own-coverage
+map, privacy hardening); M2+ redesigned 2026-07-30 after the adversarial review in §10.
+2026-08-26: manual mode pulled forward — the build order is now M3 before M2 (§7) — and
+the flood-discover exception is removed: survey sessions never transmit flood-routed,
+full stop (§2.4).**
 
 Guiding idea: one capture core, two thin modes. Automatic mode is purely passive — it
 maps the packets the app already sends and receives. Manual mode is a deliberate,
@@ -49,6 +52,13 @@ Added after the §10 review (2026-07-30):
 | Public schema | Presence tiers only — no counts, no min/max SNR, no float ratios, no repeater ID sets (§5.4). |
 | Storage granularity | Persist **month**, not day, server-side; validate at day resolution in memory (§3 rule 4). |
 | Receipts | Never in a URL path; server stores SHA-256(receipt) only (§4). |
+
+Added 2026-08-26 (Rafael):
+
+| Topic | Decision |
+|---|---|
+| Flood | The §2.4 flood-discover exception is removed. Survey sessions never transmit flood-routed — the probe engine pins the policy's flood quota to zero, and there is deliberately no tuning knob that can raise it. |
+| Build order | M3 (manual mode) lands before M2 (server). Local-first: active surveying fills the user's own map with zero server; the completion sheet ships without its upload leg until M2. |
 
 The constants in §2.5 are beta-tunable defaults, not decisions.
 
@@ -135,9 +145,10 @@ Purely passive: never transmits anything on the mesh. Uploads batch automaticall
 A session layer wrapping `SignalBarsEngine`'s probe plumbing (B1), exactly as
 MIGRATION_PLAN §3 anticipated. Probe discipline (the "don't stress the mesh" rules):
 
-- Directed traces to known repeaters (zero-hop ping for the direct link) — never
-  flood, with one exception: a flood discover is allowed for a cell with no known
-  repeaters, capped per §2.5.
+- Directed traces to known repeaters (zero-hop ping for the direct link) — **never
+  flood, no exceptions** (2026-08-26; the earlier one-flood-discover-per-unknown-cell
+  allowance is withdrawn). A cell with no known repeaters gets a zero-hop discover
+  and otherwise waits for passive capture to find one.
 - `SamplingPolicy` skips cells that already have fresh local or community data —
   the network cost of surveying shrinks as the map fills in. **The community half of
   that test reads month-granularity freshness only** (`current | aging | stale`), never
@@ -162,7 +173,6 @@ table updated) before public deploy — see also §9 on post-beta remote tuning.
 | Probe rate in a session | 1 per 10 s sustained, burst of 3 |
 | Samples per cell per session | 5 |
 | Community-freshness skip | month-granularity tier (§2.4), not a day count |
-| Flood discover | ≤ 1 per unknown cell per session |
 | Fix max age / max inaccuracy | 120 s / 100 m |
 | Fix max displacement (speed × age) | 150 m |
 | Anchor: min distinct days | 5 |
@@ -567,13 +577,17 @@ values removed from logs · privacy-invariant tests. All client-side; no server 
 SurveyKit gained spherical helpers (`distanceMeters`, `coordinate(from:bearing:distance:)`,
 `cells(within:of:)`) for the discs — add them to §2.7's keep-list.
 
+**M3 — manual mode.** *(Pulled ahead of M2 on 2026-08-26 — local-first: a survey
+session fills the user's own map with zero server.)* Session engine + spot check +
+completion sheet; the sheet's upload-consent leg stays out until M2 exists to receive
+it. Probe results fold through the capture engine (`MapperActiveSampleSink`), so the
+fix gate and anchor discs govern active samples identically.
+
 **M2 — server MVP.** Compose stack + tested logging config · wire v3 upload/delete
 (bucketed, timestamp-free, body-receipt) · ingest + publication pipeline with the
 corroboration gate, density ladder and weekly cadence · closed-schema public map ·
 app gains upload, Keychain receipt vault, spread delete-all, "your public footprint"
-preview (§10) before first upload.
-
-**M3 — manual mode.** Session engine + spot check + completion/upload sheet.
+preview (§10) before first upload · completion sheet gains its upload leg.
 
 **M4 — admin + repeater layer** (§5.5, §5.6).
 

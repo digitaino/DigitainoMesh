@@ -1245,3 +1245,16 @@
 
 /* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
 "tools.signalMapper.detail.ambiguousName" = "Этому хешу соответствует несколько узлов";
+
+// MARK: - Signal Mapper Survey (M3)
+
+"tools.signalMapper.survey.start" = "Начать замеры";
+"tools.signalMapper.survey.stop" = "Завершить замеры";
+"tools.signalMapper.survey.spotCheck" = "Точечный замер";
+"tools.signalMapper.survey.hud" = "Замеры · %1$lld зондов · %2$lld ответов";
+"tools.signalMapper.survey.summary.title" = "Замеры завершены";
+"tools.signalMapper.survey.summary.cellsProbed" = "Обследовано шестиугольников";
+"tools.signalMapper.survey.summary.probes" = "Отправлено циклов зондирования";
+"tools.signalMapper.survey.summary.replies" = "Получено ответов";
+"tools.signalMapper.survey.summary.noReply" = "Зонды без ответа";
+"tools.signalMapper.survey.summary.localNote" = "Результаты замеров остаются только на этом устройстве.";

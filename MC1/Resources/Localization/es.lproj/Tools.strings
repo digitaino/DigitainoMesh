@@ -1245,3 +1245,16 @@
 
 /* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
 "tools.signalMapper.detail.ambiguousName" = "Más de un nodo responde a este hash";
+
+// MARK: - Signal Mapper Survey (M3)
+
+"tools.signalMapper.survey.start" = "Iniciar medición";
+"tools.signalMapper.survey.stop" = "Finalizar medición";
+"tools.signalMapper.survey.spotCheck" = "Comprobación puntual";
+"tools.signalMapper.survey.hud" = "Midiendo · %1$lld sondas · %2$lld respuestas";
+"tools.signalMapper.survey.summary.title" = "Medición completada";
+"tools.signalMapper.survey.summary.cellsProbed" = "Hexágonos sondeados";
+"tools.signalMapper.survey.summary.probes" = "Ciclos de sondeo enviados";
+"tools.signalMapper.survey.summary.replies" = "Respuestas recibidas";
+"tools.signalMapper.survey.summary.noReply" = "Sondas sin respuesta";
+"tools.signalMapper.survey.summary.localNote" = "Los resultados se guardan solo en este dispositivo.";

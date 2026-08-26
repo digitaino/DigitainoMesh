@@ -51,6 +51,11 @@ struct SignalMapperCoverageView: View {
       .task(id: appState.servicesVersion) { await reload() }
       .onAppear { model.loadCaptureSetting() }
       .sheet(item: $selection) { SignalMapperCellDetailSheet(cell: $0) }
+      .sheet(isPresented: surveySummaryBinding) {
+        if let summary = model.surveySummary {
+          SignalMapperSessionSummarySheet(summary: summary)
+        }
+      }
       .alert(
         L10n.Tools.Tools.SignalMapper.Delete.title,
         isPresented: $showingDeleteConfirmation
@@ -98,6 +103,22 @@ struct SignalMapperCoverageView: View {
 
         captureCard
           .padding(.horizontal)
+
+        // A survey is the fastest way out of the empty state: one walk, first hexagons.
+        // The map takes over as soon as the first cell folds; until it does, the pill
+        // below is the proof something is happening.
+        if model.isSurveying {
+          surveyPill
+          Button(L10n.Tools.Tools.SignalMapper.Survey.stop, systemImage: "stop.circle") {
+            Task { await model.stopSurvey(appState: appState) }
+          }
+          .buttonStyle(.bordered)
+        } else if canSurvey {
+          Button(L10n.Tools.Tools.SignalMapper.Survey.start, systemImage: "dot.radiowaves.left.and.right") {
+            Task { await model.startSurvey(appState: appState) }
+          }
+          .buttonStyle(.borderedProminent)
+        }
       }
       .padding(.vertical)
     }
@@ -148,6 +169,18 @@ struct SignalMapperCoverageView: View {
     )
   }
 
+  private var surveySummaryBinding: Binding<Bool> {
+    Binding(
+      get: { model.surveySummary != nil },
+      set: { if !$0 { model.surveySummary = nil } }
+    )
+  }
+
+  /// Whether a survey can start: probes need a connected radio to transmit through.
+  private var canSurvey: Bool {
+    appState.services != nil
+  }
+
   private var map: some View {
     ZStack(alignment: .bottom) {
       MC1MapView(
@@ -180,7 +213,14 @@ struct SignalMapperCoverageView: View {
 
       controls
     }
-    .overlay(alignment: .top) { summaryPill }
+    .overlay(alignment: .top) {
+      VStack(spacing: 8) {
+        summaryPill
+        if model.isSurveying {
+          surveyPill
+        }
+      }
+    }
     .overlay(alignment: .bottomLeading) { SignalMapperLegend() }
     // The map gates camera moves until its style has loaded, which usually lands after the
     // first build, so the fit is re-issued on that signal rather than left to chance.
@@ -212,6 +252,28 @@ struct SignalMapperCoverageView: View {
     .accessibilityElement(children: .combine)
   }
 
+  /// The live session readout: proof the survey is doing something, at a glance.
+  private var surveyPill: some View {
+    Label {
+      Text(L10n.Tools.Tools.SignalMapper.Survey.hud(
+        model.surveySnapshot?.probesSent ?? 0,
+        (model.surveySnapshot?.traceRepliesHeard ?? 0)
+          + (model.surveySnapshot?.discoverResponsesHeard ?? 0)
+      ))
+    } icon: {
+      Image(systemName: "dot.radiowaves.left.and.right")
+        .symbolEffect(.variableColor.iterative, options: .repeating)
+    }
+    .font(.subheadline.weight(.medium))
+    .lineLimit(1)
+    .minimumScaleFactor(0.7)
+    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 10)
+    .liquidGlass(in: .capsule)
+    .accessibilityElement(children: .combine)
+  }
+
   private var controls: some View {
     HStack {
       Spacer()
@@ -239,6 +301,22 @@ struct SignalMapperCoverageView: View {
   private var optionsMenu: some View {
     Menu {
       Toggle(L10n.Tools.Tools.SignalMapper.captureToggle, isOn: captureBinding)
+
+      Section {
+        if model.isSurveying {
+          Button(L10n.Tools.Tools.SignalMapper.Survey.spotCheck, systemImage: "scope") {
+            Task { await model.spotCheck(appState: appState) }
+          }
+          Button(L10n.Tools.Tools.SignalMapper.Survey.stop, systemImage: "stop.circle") {
+            Task { await model.stopSurvey(appState: appState) }
+          }
+        } else {
+          Button(L10n.Tools.Tools.SignalMapper.Survey.start, systemImage: "dot.radiowaves.left.and.right") {
+            Task { await model.startSurvey(appState: appState) }
+          }
+          .disabled(!canSurvey)
+        }
+      }
 
       if model.hasCoverage {
         Section {

@@ -1245,3 +1245,16 @@
 
 /* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
 "tools.signalMapper.detail.ambiguousName" = "有多个节点匹配该哈希";
+
+// MARK: - Signal Mapper Survey (M3)
+
+"tools.signalMapper.survey.start" = "开始测绘";
+"tools.signalMapper.survey.stop" = "结束测绘";
+"tools.signalMapper.survey.spotCheck" = "定点检测";
+"tools.signalMapper.survey.hud" = "测绘中 · %1$lld 次探测 · %2$lld 次回复";
+"tools.signalMapper.survey.summary.title" = "测绘完成";
+"tools.signalMapper.survey.summary.cellsProbed" = "已探测六边形";
+"tools.signalMapper.survey.summary.probes" = "已发送探测周期";
+"tools.signalMapper.survey.summary.replies" = "收到的回复";
+"tools.signalMapper.survey.summary.noReply" = "无回复的探测";
+"tools.signalMapper.survey.summary.localNote" = "测绘结果仅保存在本设备上。";

@@ -60,6 +60,9 @@ public actor SignalMapperCaptureEngine {
     public var rxSampleCount: Int
     public var txHeardSampleCount: Int
     public var ackSampleCount: Int
+    /// Probe results folded via ``ingestProbeResult(_:)`` — a subset of the whole, not a
+    /// fourth direction: an active sample also counts as `rx` when it carries a reply.
+    public var activeSampleCount: Int
     /// Rows in the store as of the last successful flush.
     public var storedCellCount: Int
     /// Packets seen but not folded, split by why.
@@ -95,6 +98,7 @@ public actor SignalMapperCaptureEngine {
       rxSampleCount: Int = 0,
       txHeardSampleCount: Int = 0,
       ackSampleCount: Int = 0,
+      activeSampleCount: Int = 0,
       storedCellCount: Int = 0,
       droppedNoFixCount: Int = 0,
       droppedStaleFixCount: Int = 0,
@@ -114,6 +118,7 @@ public actor SignalMapperCaptureEngine {
       self.rxSampleCount = rxSampleCount
       self.txHeardSampleCount = txHeardSampleCount
       self.ackSampleCount = ackSampleCount
+      self.activeSampleCount = activeSampleCount
       self.storedCellCount = storedCellCount
       self.droppedNoFixCount = droppedNoFixCount
       self.droppedStaleFixCount = droppedStaleFixCount
@@ -368,6 +373,13 @@ public actor SignalMapperCaptureEngine {
   private func ingest(_ entry: RxLogEntryDTO) async {
     guard state.isRunning else { return }
 
+    // Trace packets never fold on the passive path. Their path bytes are per-hop SNR
+    // readings, not hop hashes — splitting them like a route would mint repeater IDs out
+    // of signal levels (the same reason `SignalBarsObservation.passiveSighting` excludes
+    // them). Our own probe replies lose nothing: the probe engine folds them through
+    // ``ingestProbeResult(_:)`` with the real repeater identity and both link legs.
+    guard entry.payloadType != .trace else { return }
+
     // Dedup first: a packet we have already folded carries no new coverage information,
     // whatever the fix situation is now.
     guard dedup.admit(entry.packetHash) else {
@@ -438,6 +450,52 @@ public actor SignalMapperCaptureEngine {
     pending[key] = slot
 
     state.ackSampleCount += 1
+    await recordSample(at: placed.at)
+  }
+
+  /// Folds one probe result from the manual-mode engine (M3).
+  ///
+  /// The same gates apply as to a passive packet — fix policy, anchor discs — because an
+  /// active sample is not entitled to a laxer placement than a passive one. What differs
+  /// is the content: `isActiveProbe` marks it, and the TX leg (`txSnr`, the SNR the
+  /// repeater reported for our probe) is populated, which no passive fold can do.
+  ///
+  /// No dedup: probe replies are correlated one-to-one by trace tag or discover tag in
+  /// the probe engine before they get here, and the passive path never folds trace
+  /// packets (see ``ingest(_:)``), so a reply cannot arrive twice.
+  public func ingestProbeResult(_ result: MapperProbeResult) async {
+    guard state.isRunning else { return }
+    guard let placed = await place() else { return }
+
+    let sighting = result.repeaterID.map { id in
+      SurveySample.RepeaterSighting(
+        id: id.hex,
+        rxSnr: result.rxSnr,
+        txSnr: result.txSnr,
+        rssi: result.rssi.map(Double.init)
+      )
+    }
+    let sample = SurveySample(
+      timestamp: result.at,
+      coordinate: placed.coordinate,
+      snr: result.rxSnr,
+      txSnr: result.txSnr,
+      rssi: result.rssi.map(Double.init),
+      route: .direct,
+      isActiveProbe: true,
+      hopCount: result.hopCount,
+      repeaters: sighting.map { [$0] } ?? []
+    )
+
+    let key = CellDay(cell: placed.cell, day: MapperDayKey.key(for: result.at))
+    var slot = pending[key] ?? PendingCell(cell: placed.cell)
+    CellAggregator.fold(sample, into: &slot.aggregate)
+    slot.rxCount += 1
+    if placed.isStationary { slot.stationaryCount += 1 }
+    pending[key] = slot
+
+    state.rxSampleCount += 1
+    state.activeSampleCount += 1
     await recordSample(at: placed.at)
   }
 
@@ -767,3 +825,7 @@ public protocol MapperAckSource: Sendable {
 }
 
 extension MessageService: MapperAckSource {}
+
+// MARK: - Active sample sink
+
+extension SignalMapperCaptureEngine: MapperActiveSampleSink {}

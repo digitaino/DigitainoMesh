@@ -6683,6 +6683,32 @@ public enum L10n {
           /// Location: SignalQuality+Color.swift - Signal quality below the poor threshold
           public static let veryPoor = L10n.tr("Tools", "tools.signalMapper.quality.veryPoor", fallback: "Very Poor")
         }
+        public enum Survey {
+          /// Location: SignalMapperCoverageView.swift - Live session pill; %1$lld probes sent, %2$lld replies heard
+          public static func hud(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.survey.hud", p1, p2, fallback: "Surveying · %1$lld probes · %2$lld replies")
+          }
+          /// Location: SignalMapperCoverageView.swift - One-tap probe of the cell the user stands in
+          public static let spotCheck = L10n.tr("Tools", "tools.signalMapper.survey.spotCheck", fallback: "Spot Check")
+          /// Location: SignalMapperCoverageView.swift - Menu/button starting a manual survey session
+          public static let start = L10n.tr("Tools", "tools.signalMapper.survey.start", fallback: "Start Survey")
+          /// Location: SignalMapperCoverageView.swift - Menu/button ending the running survey session
+          public static let stop = L10n.tr("Tools", "tools.signalMapper.survey.stop", fallback: "End Survey")
+          public enum Summary {
+            /// Location: SignalMapperSessionSummarySheet.swift - Distinct hexagons that triggered a probe
+            public static let cellsProbed = L10n.tr("Tools", "tools.signalMapper.survey.summary.cellsProbed", fallback: "Hexagons probed")
+            /// Location: SignalMapperSessionSummarySheet.swift - Footer: results never leave the device
+            public static let localNote = L10n.tr("Tools", "tools.signalMapper.survey.summary.localNote", fallback: "Survey results are stored on this device only.")
+            /// Location: SignalMapperSessionSummarySheet.swift - Probes whose reply never arrived
+            public static let noReply = L10n.tr("Tools", "tools.signalMapper.survey.summary.noReply", fallback: "Probes with no reply")
+            /// Location: SignalMapperSessionSummarySheet.swift - Probe cycles the session transmitted
+            public static let probes = L10n.tr("Tools", "tools.signalMapper.survey.summary.probes", fallback: "Probe cycles sent")
+            /// Location: SignalMapperSessionSummarySheet.swift - Trace and discover replies heard back
+            public static let replies = L10n.tr("Tools", "tools.signalMapper.survey.summary.replies", fallback: "Replies heard")
+            /// Location: SignalMapperSessionSummarySheet.swift - Completion sheet title
+            public static let title = L10n.tr("Tools", "tools.signalMapper.survey.summary.title", fallback: "Survey Complete")
+          }
+        }
       }
       public enum TrafficMap {
         /// Location: TrafficHeatmapView.swift - Map control that frames every mapped node

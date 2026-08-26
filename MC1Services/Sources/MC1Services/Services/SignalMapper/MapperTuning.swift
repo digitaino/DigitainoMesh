@@ -23,11 +23,14 @@ public struct MapperTuning: Sendable, Equatable, Codable {
   /// Samples collected for one cell before a session stops probing it. §2.5: 5.
   public var samplesPerCellPerSession: Int
 
-  /// A cell with community data newer than this is skipped entirely. §2.5: 7 days.
+  /// A cell with coverage newer than this is skipped by a survey session. §2.5: 7 days.
+  ///
+  /// M3 applies it to *local* rows at exact-day precision (they never leave the device);
+  /// M2 extends the same test to community freshness, read as month-granularity tiers
+  /// only (§2.4). There is deliberately no flood constant here: the flood-discover
+  /// exception was removed 2026-08-26 — survey sessions never transmit flood-routed,
+  /// and a knob that could turn that back on is not a tuning, it is a design change.
   public var communityFreshnessDays: Int
-
-  /// Channel floods allowed per unknown cell per session. §2.5: 1.
-  public var floodsPerUnknownCell: Int
 
   // MARK: - Fix policy (consumed in M0)
 
@@ -102,7 +105,6 @@ public struct MapperTuning: Sendable, Equatable, Codable {
     probeBurst: Int = 3,
     samplesPerCellPerSession: Int = 5,
     communityFreshnessDays: Int = 7,
-    floodsPerUnknownCell: Int = 1,
     fixMaxAgeSeconds: TimeInterval = 120,
     fixMaxAccuracyMeters: Double = 100,
     fixMaxDisplacementMeters: Double = 150,
@@ -124,7 +126,6 @@ public struct MapperTuning: Sendable, Equatable, Codable {
     self.probeBurst = probeBurst
     self.samplesPerCellPerSession = samplesPerCellPerSession
     self.communityFreshnessDays = communityFreshnessDays
-    self.floodsPerUnknownCell = floodsPerUnknownCell
     self.fixMaxAgeSeconds = fixMaxAgeSeconds
     self.fixMaxAccuracyMeters = fixMaxAccuracyMeters
     self.fixMaxDisplacementMeters = fixMaxDisplacementMeters
@@ -229,7 +230,6 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
       probeBurst: int(Key.probeBurst, defaultValue.probeBurst),
       samplesPerCellPerSession: int(Key.samplesPerCell, defaultValue.samplesPerCellPerSession),
       communityFreshnessDays: int(Key.communityFreshnessDays, defaultValue.communityFreshnessDays),
-      floodsPerUnknownCell: int(Key.floodsPerUnknownCell, defaultValue.floodsPerUnknownCell),
       fixMaxAgeSeconds: double(Key.fixMaxAge, defaultValue.fixMaxAgeSeconds),
       fixMaxAccuracyMeters: double(Key.fixMaxAccuracy, defaultValue.fixMaxAccuracyMeters),
       fixMaxDisplacementMeters: double(Key.fixMaxDisplacement, defaultValue.fixMaxDisplacementMeters),
@@ -254,7 +254,6 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
     defaults.set(tuning.probeBurst, forKey: Key.probeBurst)
     defaults.set(tuning.samplesPerCellPerSession, forKey: Key.samplesPerCell)
     defaults.set(tuning.communityFreshnessDays, forKey: Key.communityFreshnessDays)
-    defaults.set(tuning.floodsPerUnknownCell, forKey: Key.floodsPerUnknownCell)
     defaults.set(tuning.fixMaxAgeSeconds, forKey: Key.fixMaxAge)
     defaults.set(tuning.fixMaxAccuracyMeters, forKey: Key.fixMaxAccuracy)
     defaults.set(tuning.fixMaxDisplacementMeters, forKey: Key.fixMaxDisplacement)
@@ -298,7 +297,6 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
     static let probeBurst = "com.pocketmesh.signalMapper.probeBurst"
     static let samplesPerCell = "com.pocketmesh.signalMapper.samplesPerCellPerSession"
     static let communityFreshnessDays = "com.pocketmesh.signalMapper.communityFreshnessDays"
-    static let floodsPerUnknownCell = "com.pocketmesh.signalMapper.floodsPerUnknownCell"
     static let fixMaxAge = "com.pocketmesh.signalMapper.fixMaxAgeSeconds"
     static let fixMaxAccuracy = "com.pocketmesh.signalMapper.fixMaxAccuracyMeters"
     static let fixMaxDisplacement = "com.pocketmesh.signalMapper.fixMaxDisplacementMeters"
@@ -317,7 +315,7 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
     static let uploadJitter = "com.pocketmesh.signalMapper.uploadJitterSeconds"
 
     static let tuningKeys = [
-      probeInterval, probeBurst, samplesPerCell, communityFreshnessDays, floodsPerUnknownCell,
+      probeInterval, probeBurst, samplesPerCell, communityFreshnessDays,
       fixMaxAge, fixMaxAccuracy, fixMaxDisplacement,
       anchorMinDistinctDays, anchorStationaryShare, anchorObservationCount,
       anchorOffsetMin, anchorOffsetMax, anchorRadiusMin, anchorRadiusMax,

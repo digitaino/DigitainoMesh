@@ -23,11 +23,74 @@ final class SignalMapperCoverageModel {
   /// read and write ``MapperTuningStore``, so neither can drift from the other.
   var isCaptureEnabled = false
 
+  /// Live counters of the running survey session, polled while one is active.
+  private(set) var surveySnapshot: SignalMapperProbeEngine.SessionSnapshot?
+
+  /// The finished session the completion sheet shows, set when a survey ends.
+  var surveySummary: SignalMapperProbeEngine.SessionSnapshot?
+
+  private var surveyPollTask: Task<Void, Never>?
+
   private let builder = SignalMapperCoverageBuilder()
   private let tuningStore = MapperTuningStore()
 
   var hasCoverage: Bool {
     !snapshot.isEmpty
+  }
+
+  var isSurveying: Bool {
+    surveySnapshot != nil
+  }
+
+  // MARK: - Survey session
+
+  /// Starts a survey session and begins mirroring its counters into ``surveySnapshot``.
+  func startSurvey(appState: AppState) async {
+    guard await appState.startSignalMapperSurvey() else { return }
+    surveySnapshot = await appState.signalMapperProbeEngine?.snapshot()
+
+    surveyPollTask?.cancel()
+    surveyPollTask = Task { [weak self] in
+      var ticks = 0
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(1))
+        guard let self, !Task.isCancelled else { return }
+        guard let probe = appState.signalMapperProbeEngine else {
+          // The session died underneath us — a disconnect, or a capture re-wire. There
+          // is no summary worth a sheet in that case; just stop showing a HUD.
+          self.surveySnapshot = nil
+          self.surveyPollTask = nil
+          return
+        }
+        self.surveySnapshot = await probe.snapshot()
+
+        // The walk should paint the map as it happens, not on session end: re-read the
+        // store on a slow cadence so freshly probed cells surface behind the HUD.
+        ticks += 1
+        if ticks.isMultiple(of: 10) {
+          await self.load(dataStore: appState.services?.dataStore, radioID: appState.currentRadioID)
+        }
+      }
+    }
+  }
+
+  /// Ends the session, hands its counters to the completion sheet, and refreshes the map
+  /// so the cells it just filled are on screen behind the sheet.
+  func stopSurvey(appState: AppState) async {
+    surveyPollTask?.cancel()
+    surveyPollTask = nil
+    let summary = await appState.stopSignalMapperSurvey()
+    surveySnapshot = nil
+    surveySummary = summary
+    await load(dataStore: appState.services?.dataStore, radioID: appState.currentRadioID)
+  }
+
+  /// One probe cycle for the cell the user is standing in, HUD refreshed right after so
+  /// the spent budget is visible immediately.
+  func spotCheck(appState: AppState) async {
+    guard let probe = appState.signalMapperProbeEngine else { return }
+    await probe.spotCheck()
+    surveySnapshot = await probe.snapshot()
   }
 
   // MARK: - Capture

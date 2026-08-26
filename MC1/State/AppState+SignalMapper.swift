@@ -17,6 +17,15 @@ extension AppState {
   /// so the wiring below is live code on every build, not a debug affordance. Nothing here
   /// transmits on the mesh in any case; automatic mode is purely passive.
   func wireSignalMapper(services: ServiceContainer) {
+    // Re-wiring replaces the capture stack a running survey folds into, so the survey
+    // ends here whichever branch follows — folding into a replaced engine would silently
+    // lose its tail. (The teardown branch repeats this for the paths that skip us.)
+    if let probe = signalMapperProbeEngine {
+      signalMapperProbeEngine = nil
+      Task { await probe.stopSession() }
+    }
+    surveySessionOwnsCaptureStack = false
+
     let previousTransition = signalMapperStartTask
     previousTransition?.cancel()
 
@@ -66,6 +75,15 @@ extension AppState {
   /// Releases everything ``wireSignalMapper(services:)`` set up, flushing whatever the
   /// session had buffered. Safe to call when nothing was started.
   func tearDownSignalMapper() {
+    // A survey session cannot outlive the capture stack it folds into — and on a
+    // disconnect its radio surface is already dead, so this is a write-off, not a stop
+    // the user chose. The completion sheet's numbers are lost; the observations are not.
+    if let probe = signalMapperProbeEngine {
+      signalMapperProbeEngine = nil
+      Task { await probe.stopSession() }
+    }
+    surveySessionOwnsCaptureStack = false
+
     let previousTransition = signalMapperStartTask
     previousTransition?.cancel()
     signalMapperStartTask = nil
@@ -122,8 +140,96 @@ extension AppState {
   /// Whether the mapper still wants movement classification running.
   ///
   /// Read by signal bars' teardown, which shares the one monitor: switching bars off must
-  /// not silently take the mapper's hints away with it.
+  /// not silently take the mapper's hints away with it. A running survey session counts
+  /// the same as the capture toggle — its fix gate reads the same hints.
   var signalMapperNeedsMovementHints: Bool {
-    MapperTuningStore().isCaptureEnabled
+    MapperTuningStore().isCaptureEnabled || signalMapperProbeEngine != nil
+  }
+
+  // MARK: - Manual survey sessions (M3)
+
+  /// Starts a manual survey session (docs/SIGNAL_MAPPER_V2.md §2.4, §7 "M3").
+  ///
+  /// A session probes deliberately, so it needs the whole capture stack to fold results
+  /// into. With the passive-capture toggle off, the stack is built session-scoped and
+  /// torn down again at session end — surveying is not consent to ambient capture, and
+  /// ambient capture is not a prerequisite for surveying.
+  ///
+  /// Returns false when no radio is connected: probes need a session to transmit through.
+  @discardableResult
+  func startSignalMapperSurvey() async -> Bool {
+    guard let services else { return false }
+    guard signalMapperProbeEngine == nil else { return true }
+
+    // The prompts belong to this moment: the user just asked to survey, which is exactly
+    // when a location or Motion & Fitness dialog is proportionate.
+    locationService.requestPermissionIfNeeded()
+    requestSurveyMovementHints()
+
+    if signalMapperEngine == nil {
+      let tuning = MapperTuningStore()
+      let fixes = MapperFixCache.live(
+        locationService: locationService,
+        movementHints: services.movementHintRelay,
+        tuning: tuning
+      )
+      let engine = SignalMapperCaptureEngine(
+        source: services.rxLogService,
+        txHeardSource: services.heardRepeatsService,
+        ackSource: services.messageService,
+        store: services.dataStore,
+        fixProvider: fixes,
+        movementHints: MovementHintMonitor.authorization == .authorized ? services.movementHintRelay : nil,
+        tuningProvider: tuning,
+        anchorSeedProvider: tuning
+      )
+      signalMapperFixCache = fixes
+      signalMapperEngine = engine
+      surveySessionOwnsCaptureStack = true
+      await engine.start()
+    }
+
+    guard let engine = signalMapperEngine, let fixes = signalMapperFixCache else { return false }
+
+    let probe = SignalMapperProbeEngine(
+      session: services.session,
+      sink: engine,
+      warmTargets: services.signalBarsEngine,
+      store: services.dataStore,
+      fixProvider: fixes,
+      tuningProvider: MapperTuningStore()
+    )
+    signalMapperProbeEngine = probe
+    await probe.startSession(pathHashMode: connectedDevice?.pathHashMode ?? 0)
+    return true
+  }
+
+  /// Ends the running survey session, returning its counters for the completion sheet —
+  /// or nil when nothing was running.
+  func stopSignalMapperSurvey() async -> SignalMapperProbeEngine.SessionSnapshot? {
+    guard let probe = signalMapperProbeEngine else { return nil }
+    signalMapperProbeEngine = nil
+    let summary = await probe.stopSession()
+
+    if surveySessionOwnsCaptureStack {
+      surveySessionOwnsCaptureStack = false
+      // The toggle is still off; the stack existed only for this session. `tearDown`
+      // flushes the buffered tail before stopping, so the session's last cells land.
+      tearDownSignalMapper()
+    } else {
+      // Ambient capture keeps running, but the completion sheet reloads the map *now* —
+      // without this, the session's last half-minute sits in the buffer until the next
+      // scheduled flush and the sheet appears over a map missing its own ending.
+      await signalMapperEngine?.flushNow()
+    }
+    return summary
+  }
+
+  /// The session-scoped twin of ``requestMapperMovementHintsIfNeeded()`` — same prompt,
+  /// same fallback story, gated on the session rather than the capture toggle.
+  private func requestSurveyMovementHints() {
+    guard MovementHintMonitor.authorization.canDeliverUpdates else { return }
+    guard let services, !movementHintMonitor.isRunning else { return }
+    startMovementHints(services: services)
   }
 }

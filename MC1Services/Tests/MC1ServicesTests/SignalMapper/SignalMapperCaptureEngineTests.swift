@@ -714,4 +714,89 @@ struct SignalMapperCaptureEngineTests {
     #expect(snapshot.sampleCount == 0)
     #expect(try await store.countMapperCellObservations() == 0)
   }
+
+  // MARK: - Active samples (M3)
+
+  @Test
+  func `Trace packets do not fold on the passive path`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    // A trace reply's path bytes are per-hop SNR readings; folded as a route they would
+    // mint repeater IDs out of signal levels. The engine must refuse the whole entry.
+    let trace = SignalBarsFixtures.traceReply(tag: 0xBEEF, localSnr: 5.0, remoteSnrX4: 12)
+    source.send(RxLogEntryDTO(radioID: UUID(), receivedAt: clock.now, from: trace))
+    // A normal packet behind it proves the stream itself is being consumed.
+    source.send(mapperRxEntry(payload: Data([0x01]), receivedAt: clock.now))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let rows = try await store.fetchMapperCellObservations()
+    #expect(rows.count == 1)
+    #expect(rows.first?.packetCount == 1)
+    #expect(rows.first?.activePacketCount == 0)
+    #expect(rows.first?.repeaters.keys.contains("42") == true)
+    #expect(rows.first?.repeaters.count == 1)
+  }
+
+  @Test
+  func `A probe result folds as an active rx sample with the TX leg attached`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    let repeater = try #require(NodeHexID(data: Data([0xAB])))
+    await engine.ingestProbeResult(MapperProbeResult(
+      repeaterID: repeater,
+      rxSnr: 5.0,
+      txSnr: 3.0,
+      rssi: -75,
+      hopCount: 1,
+      at: clock.now
+    ))
+    await engine.flushNow()
+    await engine.stop()
+
+    let snapshot = await engine.snapshot()
+    #expect(snapshot.activeSampleCount == 1)
+    #expect(snapshot.rxSampleCount == 1)
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(row.activePacketCount == 1)
+    #expect(row.rxCount == 1)
+    #expect(row.txSnrSum == 3.0)
+    #expect(row.txSnrCount == 1)
+    let stats = try #require(row.repeaters["AB"])
+    #expect(stats.txSnrSum == 3.0)
+    #expect(stats.txSnrCount == 1)
+  }
+
+  @Test
+  func `A probe result is gated by the fix policy like any packet`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(nil)
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    await engine.ingestProbeResult(MapperProbeResult(
+      repeaterID: nil, rxSnr: 5.0, txSnr: nil, rssi: nil, hopCount: 1, at: clock.now
+    ))
+    await engine.flushNow()
+    await engine.stop()
+
+    let snapshot = await engine.snapshot()
+    #expect(snapshot.activeSampleCount == 0)
+    #expect(snapshot.droppedNoFixCount == 1)
+    #expect(try await store.countMapperCellObservations() == 0)
+  }
 }

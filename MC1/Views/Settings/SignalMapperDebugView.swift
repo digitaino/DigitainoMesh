@@ -177,11 +177,10 @@
         stepper("Probe burst", value: $tuning.probeBurst, step: 1, range: 1...10, unit: "")
         stepper("Samples per cell", value: $tuning.samplesPerCellPerSession, step: 1, range: 1...50, unit: "")
         stepper("Community-fresh window", value: $tuning.communityFreshnessDays, step: 1, range: 1...90, unit: " d")
-        stepper("Floods per unknown cell", value: $tuning.floodsPerUnknownCell, step: 1, range: 0...5, unit: "")
       } header: {
         Text("Probe discipline (M3)")
       } footer: {
-        Text("Defined now, consumed by manual mode. Nothing here transmits in M0.")
+        Text("Survey sessions never send flood-routed packets — that is a design rule, not a knob here.")
       }
       .themedRowBackground(theme)
     }

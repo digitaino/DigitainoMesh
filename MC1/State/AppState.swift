@@ -316,6 +316,15 @@ final class AppState {
   /// `signalBarsStartTask` does for the bars engine.
   var signalMapperStartTask: Task<Void, Never>?
 
+  /// The manual-mode survey engine (M3), alive only while a session runs. Per-connection
+  /// by construction: its radio surface and event stream die with the `ServiceContainer`.
+  var signalMapperProbeEngine: SignalMapperProbeEngine?
+
+  /// Whether the running survey session built the capture stack itself because the
+  /// passive-capture toggle was off — in which case ending the session tears it down
+  /// again, leaving the toggle's meaning untouched.
+  var surveySessionOwnsCaptureStack = false
+
   #if DEBUG
     /// Optional test-only hooks for deterministic lifecycle ordering tests.
     var bleEnterBackgroundOverride: (@MainActor () async -> Void)?

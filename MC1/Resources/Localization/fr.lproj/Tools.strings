@@ -1245,3 +1245,16 @@
 
 /* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
 "tools.signalMapper.detail.ambiguousName" = "Plusieurs nœuds correspondent à cette empreinte";
+
+// MARK: - Signal Mapper Survey (M3)
+
+"tools.signalMapper.survey.start" = "Démarrer le relevé";
+"tools.signalMapper.survey.stop" = "Terminer le relevé";
+"tools.signalMapper.survey.spotCheck" = "Mesure ponctuelle";
+"tools.signalMapper.survey.hud" = "Relevé en cours · %1$lld sondes · %2$lld réponses";
+"tools.signalMapper.survey.summary.title" = "Relevé terminé";
+"tools.signalMapper.survey.summary.cellsProbed" = "Hexagones sondés";
+"tools.signalMapper.survey.summary.probes" = "Cycles de sonde envoyés";
+"tools.signalMapper.survey.summary.replies" = "Réponses reçues";
+"tools.signalMapper.survey.summary.noReply" = "Sondes sans réponse";
+"tools.signalMapper.survey.summary.localNote" = "Les résultats restent uniquement sur cet appareil.";

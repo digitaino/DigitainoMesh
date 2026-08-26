@@ -23,7 +23,6 @@ struct MapperTuningStoreTests {
     #expect(store.tuning.probeBurst == 3)
     #expect(store.tuning.samplesPerCellPerSession == 5)
     #expect(store.tuning.communityFreshnessDays == 7)
-    #expect(store.tuning.floodsPerUnknownCell == 1)
     #expect(store.tuning.uploadBatchMinCells == 25)
   }
 
