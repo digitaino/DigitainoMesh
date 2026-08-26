@@ -34,6 +34,47 @@ struct ResolvedPathHop: Identifiable {
 enum RepeaterResolver {
   private static let exactPrefixLength = 6
 
+  /// Whether a candidate opted into expiry (`expiresWhenStale`) and has outlived
+  /// the shared stale window — `NodeIdentityResolver`'s exact rule: rows that
+  /// never advertised are exempt, and the cutoff saturates at zero so a clock
+  /// near the epoch (tests) cannot expire everything.
+  static func isExpiredCandidate(_ node: some RepeaterResolvable, now: Date = .now) -> Bool {
+    guard node.expiresWhenStale, node.lastAdvertTimestamp != 0 else { return false }
+    let nowSeconds = now.timeIntervalSince1970
+    guard nowSeconds > NodeIdentityResolver.defaultStaleInterval else { return false }
+    return node.lastAdvertTimestamp <= UInt32(nowSeconds - NodeIdentityResolver.defaultStaleInterval)
+  }
+
+  /// Drops expired candidates from one hop's matches — but only while a live
+  /// candidate answers the same hash. A dead advert row left behind by a
+  /// re-key (or a node that moved away) must not veto or outrank the living
+  /// node, yet when every candidate is stale the quiet ones are still the
+  /// best answer there is, so an all-stale pool is kept whole. Relative, not
+  /// absolute, on purpose: an absolute cutoff would go dark on every
+  /// discovered-only repeater the moment its region falls quiet.
+  static func pruneExpiredRivals<T: RepeaterResolvable>(_ nodes: [T], now: Date = .now) -> [T] {
+    let live = nodes.filter { !isExpiredCandidate($0, now: now) }
+    return live.isEmpty ? nodes : live
+  }
+
+  /// The cross-table form of `pruneExpiredRivals`: liveness is judged over the
+  /// contact and discovered pools *jointly*, because the live rival that
+  /// disqualifies a stale discovered row is usually the saved contact holding
+  /// the node's current key (the re-key case).
+  static func pruneExpiredRivals<C: RepeaterResolvable, D: RepeaterResolvable>(
+    contacts: [C],
+    discoveredNodes: [D],
+    now: Date = .now
+  ) -> (contacts: [C], discoveredNodes: [D]) {
+    let anyLive = contacts.contains { !isExpiredCandidate($0, now: now) }
+      || discoveredNodes.contains { !isExpiredCandidate($0, now: now) }
+    guard anyLive else { return (contacts, discoveredNodes) }
+    return (
+      contacts.filter { !isExpiredCandidate($0, now: now) },
+      discoveredNodes.filter { !isExpiredCandidate($0, now: now) }
+    )
+  }
+
   /// Match using a PathHop: exact public key match first, then hash bytes fallback.
   static func bestMatch<T: RepeaterResolvable>(
     for hop: PathHop,
@@ -72,9 +113,8 @@ enum RepeaterResolver {
     guard !hashBytes.isEmpty else { return nil }
 
     let prefixLen = hashBytes.count
-    let candidates = nodes.compactMap { node -> (T, Double?)? in
-      guard node.publicKey.prefix(prefixLen) == hashBytes else { return nil }
-
+    let matched = pruneExpiredRivals(nodes.filter { $0.publicKey.prefix(prefixLen) == hashBytes })
+    let candidates = matched.map { node -> (T, Double?) in
       let distance: Double?
       if let userLocation, node.hasLocation {
         let nodeLocation = CLLocation(latitude: node.latitude, longitude: node.longitude)
@@ -160,11 +200,25 @@ enum NeighborNameResolver {
     contacts: [ContactDTO],
     discoveredNodes: [DiscoveredNodeDTO]
   ) -> ResolvedNeighbor {
-    ResolvedNeighbor(
+    // The two tables describe one physical node per key: a row that never
+    // recorded a fix must not hide the located row behind the same full key
+    // on the other table, or the SNR map loses a neighbor the app can place.
+    var coordinate: (latitude: Double, longitude: Double)?
+    if node.hasLocation {
+      coordinate = (node.latitude, node.longitude)
+    } else if let twin = contacts.first(where: { $0.publicKey == node.publicKey && $0.hasLocation }) {
+      coordinate = (twin.latitude, twin.longitude)
+    } else if let twin = discoveredNodes.first(where: {
+      $0.publicKey == node.publicKey
+        && CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude).isValidFix
+    }) {
+      coordinate = (twin.latitude, twin.longitude)
+    }
+    return ResolvedNeighbor(
       displayName: node.resolvableName,
       matchKind: matchKind(for: prefix, resolvedMatchKind: resolvedMatchKind, contacts: contacts, discoveredNodes: discoveredNodes),
-      latitude: node.hasLocation ? node.latitude : nil,
-      longitude: node.hasLocation ? node.longitude : nil
+      latitude: coordinate?.latitude,
+      longitude: coordinate?.longitude
     )
   }
 
@@ -194,14 +248,19 @@ enum NeighborNameResolver {
       return resolvedMatchKind
     }
 
-    let matchingContactKeys = contacts
-      .filter { $0.publicKey.prefix(prefix.count) == prefix }
-      .map(\.publicKey)
-    let matchingDiscoveredKeys = discoveredNodes
-      .filter { $0.publicKey.prefix(prefix.count) == prefix }
-      .map(\.publicKey)
+    // Ambiguity is judged among the candidates that could still BE the hop:
+    // an expired advert row (a re-keyed repeater's old identity, a node that
+    // moved away) must not turn its own living successor into a "guess" —
+    // the same pruning the map's plottability rule applies, so a hop can
+    // never be named a fallback in the list while the map pins it as exact.
+    let (matchingContacts, matchingDiscovered) = RepeaterResolver.pruneExpiredRivals(
+      contacts: contacts.filter { $0.publicKey.prefix(prefix.count) == prefix },
+      discoveredNodes: discoveredNodes.filter { $0.publicKey.prefix(prefix.count) == prefix }
+    )
 
-    return Set(matchingContactKeys + matchingDiscoveredKeys).count > 1 ? .fallback : .exact
+    return Set(matchingContacts.map(\.publicKey) + matchingDiscovered.map(\.publicKey)).count > 1
+      ? .fallback
+      : .exact
   }
 
   static func resolveName(

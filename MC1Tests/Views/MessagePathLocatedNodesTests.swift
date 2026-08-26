@@ -447,6 +447,177 @@ struct HeardRepeatNodesTests {
   }
 }
 
+/// The hop-plottability rule under identity churn: a re-keyed repeater's dead
+/// advert row must not veto its living key, an unlocated contact must not
+/// shadow its located same-key discovered row, and an all-stale pool still
+/// pins. Mirrors the field failure where hop "ABBA" (one downtown repeater,
+/// old key lingering as a stale discovered node) vanished from every path map.
+@Suite("Plottable repeater resolution")
+@MainActor
+struct PlottableRepeaterResolutionTests {
+  private static let staleAdvert = UInt32(Date().timeIntervalSince1970 - 100 * 24 * 3600)
+  private static let freshAdvert = UInt32(Date().timeIntervalSince1970 - 3600)
+
+  private func makeContact(
+    keyBytes: [UInt8],
+    name: String,
+    latitude: Double,
+    longitude: Double
+  ) -> ContactDTO {
+    ContactDTO(
+      id: UUID(),
+      radioID: UUID(),
+      publicKey: Data(keyBytes + Array(repeating: UInt8(0), count: 32 - keyBytes.count)),
+      name: name,
+      typeRawValue: ContactType.repeater.rawValue,
+      flags: 0,
+      outPathLength: 0,
+      outPath: Data(),
+      lastAdvertTimestamp: Self.freshAdvert,
+      latitude: latitude,
+      longitude: longitude,
+      lastModified: 0,
+      nickname: nil,
+      isBlocked: false,
+      isMuted: false,
+      isFavorite: false,
+      lastMessageDate: nil,
+      unreadCount: 0
+    )
+  }
+
+  private func makeDiscovered(
+    keyBytes: [UInt8],
+    name: String,
+    lastAdvertTimestamp: UInt32,
+    latitude: Double,
+    longitude: Double
+  ) -> DiscoveredNodeDTO {
+    DiscoveredNodeDTO(
+      id: UUID(),
+      radioID: UUID(),
+      publicKey: Data(keyBytes + Array(repeating: UInt8(0), count: 32 - keyBytes.count)),
+      name: name,
+      typeRawValue: ContactType.repeater.rawValue,
+      lastHeard: Date(),
+      lastAdvertTimestamp: lastAdvertTimestamp,
+      latitude: latitude,
+      longitude: longitude,
+      outPathLength: 0,
+      outPath: Data(),
+      inboundHopCount: nil,
+      inboundHopAdvertTimestamp: nil
+    )
+  }
+
+  @Test
+  func `a re-keyed repeater's stale old identity does not veto the living key`() {
+    // The field case: hop hash AB BA, current key saved as a located contact,
+    // old key still in the discovered table with a months-old advert ~6 m
+    // away. The hop must pin at the living contact, not drop as "ambiguous".
+    let living = makeContact(
+      keyBytes: [0xAB, 0xBA, 0x4A, 0x13],
+      name: "Digitaino Central",
+      latitude: 30.27111,
+      longitude: -97.73012
+    )
+    let deadTwin = makeDiscovered(
+      keyBytes: [0xAB, 0xBA, 0x4A, 0x5B],
+      name: "Digitaino Central ",
+      lastAdvertTimestamp: Self.staleAdvert,
+      latitude: 30.27115,
+      longitude: -97.73008
+    )
+
+    let resolved = MessagePathMapView.resolvePlottableRepeater(
+      hashBytes: Data([0xAB, 0xBA]),
+      repeaters: [living],
+      discoveredRepeaters: [deadTwin],
+      referenceLocation: nil
+    )
+
+    #expect(resolved?.resolvableName == "Digitaino Central")
+    #expect(resolved?.latitude == 30.27111)
+  }
+
+  @Test
+  func `two live identities behind one hash still drop the hop`() {
+    // Both keys advertising: the hash genuinely names two repeaters, so the
+    // original ambiguity rule holds and the hop stays unpinned.
+    let living = makeContact(
+      keyBytes: [0xAB, 0xBA, 0x4A, 0x13],
+      name: "Central A",
+      latitude: 30.27111,
+      longitude: -97.73012
+    )
+    let liveRival = makeDiscovered(
+      keyBytes: [0xAB, 0xBA, 0x4A, 0x5B],
+      name: "Central B",
+      lastAdvertTimestamp: Self.freshAdvert,
+      latitude: 30.4,
+      longitude: -97.9
+    )
+
+    let resolved = MessagePathMapView.resolvePlottableRepeater(
+      hashBytes: Data([0xAB, 0xBA]),
+      repeaters: [living],
+      discoveredRepeaters: [liveRival],
+      referenceLocation: nil
+    )
+
+    #expect(resolved == nil)
+  }
+
+  @Test
+  func `an unlocated contact does not shadow the located discovered row for the same key`() {
+    let unlocatedContact = makeContact(
+      keyBytes: [0xA2, 0x00, 0x11],
+      name: "Spring Condos - Roof",
+      latitude: 0,
+      longitude: 0
+    )
+    let locatedTwin = makeDiscovered(
+      keyBytes: [0xA2, 0x00, 0x11],
+      name: "Spring Condos - Roof",
+      lastAdvertTimestamp: Self.freshAdvert,
+      latitude: 30.2695,
+      longitude: -97.7525
+    )
+
+    let resolved = MessagePathMapView.resolvePlottableRepeater(
+      hashBytes: Data([0xA2, 0x00]),
+      repeaters: [unlocatedContact],
+      discoveredRepeaters: [locatedTwin],
+      referenceLocation: nil
+    )
+
+    #expect(resolved?.latitude == 30.2695)
+    #expect(resolved?.longitude == -97.7525)
+  }
+
+  @Test
+  func `an all-stale sole candidate still pins`() {
+    // A discovered-only repeater in a region that fell quiet: staleness is
+    // relative, so with no live rival the quiet row remains the answer.
+    let quiet = makeDiscovered(
+      keyBytes: [0x81, 0xBB, 0x07],
+      name: "BCW RAK 4631",
+      lastAdvertTimestamp: Self.staleAdvert,
+      latitude: 30.31,
+      longitude: -97.93
+    )
+
+    let resolved = MessagePathMapView.resolvePlottableRepeater(
+      hashBytes: Data([0x81, 0xBB]),
+      repeaters: [],
+      discoveredRepeaters: [quiet],
+      referenceLocation: nil
+    )
+
+    #expect(resolved?.resolvableName == "BCW RAK 4631")
+  }
+}
+
 private extension ContactDTO {
   var coordinate2D: CLLocationCoordinate2D {
     CLLocationCoordinate2D(latitude: latitude, longitude: longitude)

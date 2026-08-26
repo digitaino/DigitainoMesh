@@ -389,6 +389,9 @@ struct RepeaterResolverTests {
       latitude: 0,
       longitude: 0
     )
+    // A LIVE discovered rival — fresh advert — so the hash genuinely names
+    // two possible repeaters. (A stale rival no longer counts; see the
+    // re-key test below.)
     let node = DiscoveredNodeDTO(
       id: UUID(),
       radioID: UUID(),
@@ -396,7 +399,7 @@ struct RepeaterResolverTests {
       name: "Advert Repeater",
       typeRawValue: ContactType.repeater.rawValue,
       lastHeard: Date(),
-      lastAdvertTimestamp: 200,
+      lastAdvertTimestamp: UInt32(Date().timeIntervalSince1970 - 3600),
       latitude: 0,
       longitude: 0,
       outPathLength: 0,
@@ -414,6 +417,138 @@ struct RepeaterResolverTests {
 
     #expect(result?.displayName == "Saved Repeater")
     #expect(result?.matchKind == .fallback)
+  }
+
+  @Test
+  func `a stale discovered rival does not make a live contact a fallback guess`() {
+    // The re-key scenario: the node's current key is a saved contact; its old
+    // key lingers as a discovered row whose advert went quiet months ago. The
+    // dead identity must not turn the living one into a "guess".
+    let contact = createRepeater(
+      prefix: 0xAB,
+      secondByte: 0xCD,
+      name: "Saved Repeater",
+      lastAdvertTimestamp: 10,
+      latitude: 0,
+      longitude: 0
+    )
+    let staleTwin = DiscoveredNodeDTO(
+      id: UUID(),
+      radioID: UUID(),
+      publicKey: Data([0xAB, 0xEF] + Array(repeating: UInt8(0), count: 30)),
+      name: "Saved Repeater (old key)",
+      typeRawValue: ContactType.repeater.rawValue,
+      lastHeard: Date(timeIntervalSinceNow: -100 * 24 * 3600),
+      lastAdvertTimestamp: UInt32(Date().timeIntervalSince1970 - 100 * 24 * 3600),
+      latitude: 0,
+      longitude: 0,
+      outPathLength: 0,
+      outPath: Data(),
+      inboundHopCount: nil,
+      inboundHopAdvertTimestamp: nil
+    )
+
+    let result = NeighborNameResolver.resolve(
+      for: Data([0xAB]),
+      contacts: [contact],
+      discoveredNodes: [staleTwin],
+      userLocation: nil
+    )
+
+    #expect(result?.displayName == "Saved Repeater")
+    #expect(result?.matchKind == .exact)
+  }
+
+  @Test
+  func `a stale discovered node is outranked by a live one sharing its hash`() {
+    let stale = createDiscoveredNode(
+      prefix: 0x3F,
+      secondByte: 0x01,
+      name: "Gone Dark",
+      lastAdvertTimestamp: UInt32(Date().timeIntervalSince1970 - 100 * 24 * 3600),
+      latitude: 37.0,
+      longitude: -122.0
+    )
+    let fresh = createDiscoveredNode(
+      prefix: 0x3F,
+      secondByte: 0x02,
+      name: "Still Advertising",
+      lastAdvertTimestamp: UInt32(Date().timeIntervalSince1970 - 3600),
+      latitude: 38.0,
+      longitude: -123.0
+    )
+
+    // The stale row sits right next to the user, but proximity must not let a
+    // dead identity outrank the living one — and with the dead rival pruned,
+    // the surviving unique match reads exact.
+    let userLocation = CLLocation(latitude: 37.0005, longitude: -122.0005)
+    let resolved = RepeaterResolver.resolve(
+      for: Data([0x3F]),
+      in: [stale, fresh],
+      userLocation: userLocation
+    )
+
+    #expect(resolved?.node.name == "Still Advertising")
+    #expect(resolved?.matchKind == .exact)
+  }
+
+  @Test
+  func `an all-stale pool still resolves — quiet is better than nothing`() {
+    let stale = createDiscoveredNode(
+      prefix: 0x3F,
+      secondByte: 0x01,
+      name: "Quiet Ridge",
+      lastAdvertTimestamp: UInt32(Date().timeIntervalSince1970 - 100 * 24 * 3600),
+      latitude: 37.0,
+      longitude: -122.0
+    )
+
+    let resolved = RepeaterResolver.resolve(for: Data([0x3F]), in: [stale], userLocation: nil)
+
+    #expect(resolved?.node.name == "Quiet Ridge")
+    #expect(resolved?.matchKind == .exact)
+  }
+
+  @Test
+  func `an unlocated resolved row borrows its located twin's coordinates`() {
+    // Same full key in both tables: the contact wins the name, but it never
+    // recorded a fix — the discovered row's advert coordinates must not be
+    // hidden by it.
+    let contact = createRepeater(
+      prefix: 0xAB,
+      secondByte: 0xCD,
+      name: "Saved Repeater",
+      lastAdvertTimestamp: 10,
+      latitude: 0,
+      longitude: 0
+    )
+    let locatedTwin = DiscoveredNodeDTO(
+      id: UUID(),
+      radioID: UUID(),
+      publicKey: contact.publicKey,
+      name: "Advert Repeater",
+      typeRawValue: ContactType.repeater.rawValue,
+      lastHeard: Date(),
+      lastAdvertTimestamp: UInt32(Date().timeIntervalSince1970 - 3600),
+      latitude: 30.2672,
+      longitude: -97.7431,
+      outPathLength: 0,
+      outPath: Data(),
+      inboundHopCount: nil,
+      inboundHopAdvertTimestamp: nil
+    )
+
+    let result = NeighborNameResolver.resolveLocated(
+      for: Data([0xAB, 0xCD]),
+      contacts: [contact],
+      discoveredNodes: [locatedTwin],
+      userLocation: nil
+    )
+
+    #expect(result?.displayName == "Saved Repeater")
+    #expect(result?.matchKind == .exact)
+    #expect(result?.latitude == 30.2672)
+    #expect(result?.longitude == -97.7431)
   }
 
   @Test

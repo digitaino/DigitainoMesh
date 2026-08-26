@@ -279,20 +279,35 @@ struct MessagePathMapView: View {
     // full keys would each read `.exact` in isolation. A short hash matching
     // more than one distinct key across BOTH tables is just as ambiguous as
     // within one (`NeighborNameResolver` applies the same refinement for
-    // names); 6+ bytes of hash is a full prefix and can't collide.
+    // names); 6+ bytes of hash is a full prefix and can't collide. Ambiguity
+    // is judged among the candidates that could still BE the hop: an expired
+    // advert row — the old identity a re-keyed repeater left behind, a node
+    // that moved away — must not veto its own living successor, but when
+    // every candidate is stale they all stay in play (the pruning is
+    // relative, shared with `RepeaterResolver.resolve`).
+    let (matchedContacts, matchedNodes) = RepeaterResolver.pruneExpiredRivals(
+      contacts: repeaters.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes },
+      discoveredNodes: discoveredRepeaters.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes }
+    )
     if hashBytes.count < 6 {
-      let matchingKeys = Set(
-        repeaters.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes }.map(\.publicKey)
-          + discoveredRepeaters.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes }.map(\.publicKey)
-      )
+      let matchingKeys = Set(matchedContacts.map(\.publicKey) + matchedNodes.map(\.publicKey))
       guard matchingKeys.count <= 1 else { return nil }
     }
-    let resolvedContact = RepeaterResolver.resolve(for: hashBytes, in: repeaters, userLocation: referenceLocation)
-    let resolvedNode = RepeaterResolver.resolve(for: hashBytes, in: discoveredRepeaters, userLocation: referenceLocation)
-    let resolved: (node: any RepeaterResolvable, matchKind: NodeNameMatchKind)? =
-      resolvedContact.map { ($0.node, $0.matchKind) } ?? resolvedNode.map { ($0.node, $0.matchKind) }
-    guard let resolved, resolved.matchKind == .exact, resolved.node.hasLocation else { return nil }
-    return resolved.node
+    let resolvedContact = RepeaterResolver.resolve(for: hashBytes, in: matchedContacts, userLocation: referenceLocation)
+    let resolvedNode = RepeaterResolver.resolve(for: hashBytes, in: matchedNodes, userLocation: referenceLocation)
+    // Both tables describe one node per key, so pick the first candidate
+    // that can actually be plotted, contact first: a contact row that never
+    // recorded a fix must not shadow the located discovered row behind the
+    // same key. Discovered rows get the full `isValidFix` check — their
+    // `hasLocation` skips the coordinate-range validation contacts do.
+    let candidates: [(node: any RepeaterResolvable, matchKind: NodeNameMatchKind)] = [
+      resolvedContact.map { ($0.node as any RepeaterResolvable, $0.matchKind) },
+      resolvedNode.map { ($0.node as any RepeaterResolvable, $0.matchKind) },
+    ].compactMap { $0 }
+    return candidates.first {
+      $0.matchKind == .exact
+        && CLLocationCoordinate2D(latitude: $0.node.latitude, longitude: $0.node.longitude).isValidFix
+    }?.node
   }
 
   /// Builds the plottable pins and per-repeat polylines for an outgoing
