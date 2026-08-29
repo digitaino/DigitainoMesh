@@ -36,6 +36,7 @@ struct ChatMessageSearchNavigatorTests {
       latitude: 0,
       longitude: 0,
       lastModified: 0,
+      lastHeardTimestamp: nil,
       nickname: nil,
       isBlocked: false,
       isMuted: false,
@@ -87,7 +88,10 @@ struct ChatMessageSearchNavigatorTests {
     let viewModel = ChatViewModel()
     viewModel.configureForTesting(dependencies: .testDefaults(dataStore: { dataStore }))
     viewModel.bindCoordinatorForTesting(ChatCoordinator.makeForTesting())
-    #expect(await viewModel.primeInitialMessages(for: contact), "Initial open must succeed")
+    #expect(
+      await viewModel.primeInitialMessages(for: contact, populateMode: .replace),
+      "Initial open must succeed"
+    )
     return viewModel
   }
 

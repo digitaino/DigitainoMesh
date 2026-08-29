@@ -27,7 +27,6 @@ struct RadioStatusControl: View {
   @Environment(\.appTheme) private var theme
 
   @State private var showingDeviceSelection = false
-  @State private var showingAdvancedSettings = false
   @State private var showingSignalDetail = false
   @State private var showingWatchScreen = false
   @State private var pendingMovementHintsPrompt = false
@@ -129,9 +128,6 @@ struct RadioStatusControl: View {
       DeviceSelectionSheet()
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
-    }
-    .navigationDestination(isPresented: $showingAdvancedSettings) {
-      AdvancedSettingsView()
     }
   }
 
@@ -295,7 +291,7 @@ struct RadioStatusControl: View {
 
       Section {
         Button {
-          showingAdvancedSettings = true
+          appState.navigation.navigateToSetting(.advanced)
         } label: {
           Label(L10n.Settings.AdvancedSettings.title, systemImage: "gearshape")
         }

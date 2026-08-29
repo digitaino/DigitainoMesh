@@ -58,6 +58,11 @@ public struct MessageBuildInputs: Sendable, Hashable {
   /// `GroupingFlags.duplicateCount`.
   public let duplicateCount: Int
   public let isDuplicateRunExpanded: Bool
+  /// Present only on channel incoming cluster-end rows. Never a JPEG.
+  public let incomingAvatar: IncomingAvatarIdentity?
+  /// Already-decided Translation chrome. The builder copies this onto the
+  /// text payload and never calls the detector.
+  public let translation: MessageTranslationChrome?
 
   public init(
     messageID: UUID,
@@ -85,7 +90,9 @@ public struct MessageBuildInputs: Sendable, Hashable {
     showDayDivider: Bool = false,
     noRepeatsRetry: NoRepeatsRetryPrompt? = nil,
     duplicateCount: Int = 1,
-    isDuplicateRunExpanded: Bool = false
+    isDuplicateRunExpanded: Bool = false,
+    incomingAvatar: IncomingAvatarIdentity? = nil,
+    translation: MessageTranslationChrome? = nil
   ) {
     self.messageID = messageID
     self.previewState = previewState
@@ -113,5 +120,7 @@ public struct MessageBuildInputs: Sendable, Hashable {
     self.noRepeatsRetry = noRepeatsRetry
     self.duplicateCount = duplicateCount
     self.isDuplicateRunExpanded = isDuplicateRunExpanded
+    self.incomingAvatar = incomingAvatar
+    self.translation = translation
   }
 }

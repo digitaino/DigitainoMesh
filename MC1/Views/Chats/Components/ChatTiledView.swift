@@ -19,8 +19,12 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
   @Binding var isAtBottom: Bool
   @Binding var unreadCount: Int
 
-  /// Bumped by callers to scroll to the visual bottom (e.g. on send).
+  /// Bumped by callers to pin the visual bottom. Honored only while `isAtBottom`
+  /// is already true; `ScrollToBottomButton` calls `scrollPosition.scrollTo` itself.
   var scrollToBottomRequest: Int = 0
+
+  /// Returns whether an appended row raises the unread badge while scrolled up.
+  var countsTowardUnread: (Item) -> Bool = { _ in true }
 
   /// Bumped by callers to jump to `scrollTargetID` (mention / reply / deeplink / divider).
   var scrollToTargetRequest: Int = 0
@@ -68,6 +72,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     isAtBottom: Binding<Bool>,
     unreadCount: Binding<Int>,
     scrollToBottomRequest: Int = 0,
+    countsTowardUnread: @escaping (Item) -> Bool = { _ in true },
     scrollToTargetRequest: Int = 0,
     scrollTargetID: Item.ID? = nil,
     initialScrollTargetID: Item.ID? = nil,
@@ -82,6 +87,7 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
     _isAtBottom = isAtBottom
     _unreadCount = unreadCount
     self.scrollToBottomRequest = scrollToBottomRequest
+    self.countsTowardUnread = countsTowardUnread
     self.scrollToTargetRequest = scrollToTargetRequest
     self.scrollTargetID = scrollTargetID
     self.initialScrollTargetID = initialScrollTargetID
@@ -141,8 +147,9 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
       .padding(.bottom, 8)
     }
     .onChange(of: scrollToBottomRequest) {
+      guard isAtBottom else { return }
       searchRevealLatch.latch.noteProgrammaticScroll()
-      scrollPosition.scrollTo(edge: .bottom)
+      scrollPosition.scrollTo(edge: .bottom, animated: false)
     }
     .onChange(of: scrollToTargetRequest) {
       guard let id = scrollTargetID else { return }
@@ -153,8 +160,8 @@ struct ChatTiledView<Item: Identifiable & Hashable & Sendable, Content: View>: V
       defer { newestID = latest }
       guard !isAtBottom, let previous = newestID,
             let previousIndex = items.firstIndex(where: { $0.id == previous }) else { return }
-      let appended = items.count - 1 - previousIndex
-      if appended > 0 { unreadCount += appended }
+      let incoming = items.suffix(from: previousIndex + 1).filter(countsTowardUnread).count
+      if incoming > 0 { unreadCount += incoming }
     }
   }
 

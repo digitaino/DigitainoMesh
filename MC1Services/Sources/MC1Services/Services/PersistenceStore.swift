@@ -87,8 +87,9 @@ public actor PersistenceStore: PersistenceStoreProtocol {
   /// Creates a ModelContainer for the app.
   ///
   /// Schema evolution (no VersionedSchema — handled via lightweight migration):
-  /// - v1→v2: Contact.outPathLength, DiscoveredNode.outPathLength changed Int8→UInt8
-  ///          (SQLite INTEGER is identical for both; bit pattern -1 == 0xFF).
+  /// - v1→v2: Contact.outPathLength, DiscoveredNode.outPathLength changed Int8→UInt8.
+  ///          SQLite INTEGER is identical; leftover Int8 flood sentinels (-1)
+  ///          still trap UInt8 fetch (SwiftData value-preserves, not bit-cast).
   ///          Added MessageRepeat.pathLength (UInt8, default 0).
   ///          Added SavedTracePath.hashSize (Int, default 1).
   /// - v2→v3: Added PendingSend (new table; no migration impact on existing rows).
@@ -101,7 +102,13 @@ public actor PersistenceStore: PersistenceStoreProtocol {
   ///          index.
   /// - v5→v6: Added Contact.avatarImageData (Data?, default nil) storing a
   ///          user-picked profile picture as a compressed JPEG blob.
-  /// - v6→v7: Build 40 data preservation: re-registered SurveySession and
+  /// - v6→v7: the fork and upstream each numbered a v7 independently, and the
+  ///          1.4.0 merge brings both into one store. The numbering here is
+  ///          narrative only — there is no VersionedSchema, so lightweight
+  ///          migration reconciles any predecessor against the current `schema`
+  ///          regardless of which v7 a store came through. Both are listed
+  ///          rather than renumbered, so neither lineage loses its history:
+  ///   - (fork) Build 40 data preservation: re-registered SurveySession and
   ///          SignalSurveyPoint, and re-added the fork-only columns
   ///          Message.userLatitude/userLongitude/txPowerDbm, Reaction.sentMessageID
   ///          and TracePathRun.note. Fresh v2 stores get empty tables and NULL
@@ -111,6 +118,14 @@ public actor PersistenceStore: PersistenceStoreProtocol {
   ///          the ingest pipeline stamps them on live deliveries and the path map
   ///          reads them (no schema change; see Message.swift). The rest stay
   ///          dormant — nothing reads them.
+  ///   - (upstream) DiscoveredNode.outPathLength changed UInt8→Int so leftover -1
+  ///          rows fetch. DTO still exposes UInt8 via truncatingIfNeeded.
+  /// - v7→v8: (upstream) Contact.outPathLength changed UInt8→Int for the same
+  ///          leftover Int8 flood sentinel. DTO still exposes UInt8 via
+  ///          truncatingIfNeeded.
+  /// - v8→v9: (upstream, 1.4.0) Added Message.regionScopeMatches ([String],
+  ///          default []). Existing rows decode to [] — matches are never
+  ///          inferred from regionScope.
   public static func createContainer(inMemory: Bool = false) throws -> ModelContainer {
     if !inMemory {
       let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -195,7 +210,7 @@ public actor PersistenceStore: PersistenceStoreProtocol {
       existingNode.lastAdvertTimestamp = frame.lastAdvertTimestamp
       existingNode.latitude = frame.latitude
       existingNode.longitude = frame.longitude
-      existingNode.outPathLength = frame.outPathLength
+      existingNode.outPathLength = Int(frame.outPathLength)
       existingNode.outPath = frame.outPath
       node = existingNode
       isNew = false

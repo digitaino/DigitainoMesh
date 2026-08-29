@@ -125,15 +125,14 @@ public extension ConnectionManager {
     """)
 
     // Reset stale room session connections from previous app launch
-    let resetStore = createStandalonePersistenceStore()
     logger.info("Activation: resetting stale room session connections")
-    try? await resetStore.resetAllRemoteNodeSessionConnections()
+    try? await persistenceStore.resetAllRemoteNodeSessionConnections()
     logger.info("Activation: room session reset done")
 
     // Populate radioID on existing devices and backfill deduplication keys (one-time migration)
     do {
       logger.info("Activation: running one-time store migrations")
-      try await resetStore.performRadioIDMigration()
+      try await persistenceStore.performRadioIDMigration()
     } catch {
       logger.error("radioID migration failed: \(error)")
     }
@@ -141,7 +140,7 @@ public extension ConnectionManager {
     // Promote legacy per-channel region overrides to `.specific` mode so the
     // corrective flood-scope semantics don't reinterpret them as `.inherit`.
     do {
-      try await resetStore.performChannelFloodScopeMigration()
+      try await persistenceStore.performChannelFloodScopeMigration()
     } catch {
       logger.error("channel flood-scope migration failed: \(error)")
     }
@@ -149,7 +148,7 @@ public extension ConnectionManager {
     // Zero accumulated unread counts on repeater-type contacts and repeater-role
     // sessions so the badge stops including invisible records.
     do {
-      try await resetStore.performRepeaterUnreadCountMigration()
+      try await persistenceStore.performRepeaterUnreadCountMigration()
     } catch {
       logger.error("repeater unread-count migration failed: \(error)")
     }
@@ -159,7 +158,7 @@ public extension ConnectionManager {
     // are un-buried. Must run before stateMachine.activate() so no restoration-driven sync
     // writes a fresh anchor before this resets the baseline.
     do {
-      try await resetStore.performSortDateNormalizationMigration()
+      try await persistenceStore.performSortDateNormalizationMigration()
     } catch {
       logger.error("sortDate normalization migration failed: \(error)")
     }
@@ -208,7 +207,7 @@ public extension ConnectionManager {
         connectionIntent = .wantsConnection()
 
         // Check if last device was WiFi - try WiFi first
-        let dataStore = PersistenceStore(modelContainer: modelContainer)
+        let dataStore = persistenceStore
         if let device = try? await dataStore.fetchDevice(id: lastDeviceID),
            let wifiMethod = device.connectionMethods.first(where: { $0.isWiFi }) {
           if case let .wifi(host, port, _) = wifiMethod {
@@ -673,7 +672,7 @@ public extension ConnectionManager {
       // Create services
       let newServices = ServiceContainer(
         session: session,
-        modelContainer: modelContainer,
+        dataStore: persistenceStore,
         radioID: MockDataProvider.simulatorDeviceID,
         appStateProvider: appStateProvider,
         phoneLocationProvider: phoneLocationProvider,
