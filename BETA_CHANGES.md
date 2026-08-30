@@ -1,3 +1,23 @@
+Beta Changes -- v1.3.0
+
+Signal Mapper: Active Survey & Ride Mode
+
+The Signal Mapper could only ever map what your radio *heard*. It can now also measure the other direction -- how well repeaters hear **you** -- by sending them small, directed, non-flood probes and reading back the signal level they report for your transmission. That is the half of coverage no amount of listening can measure, and it is the half that decides whether your messages actually get out.
+
+Two maps. A new layer switch on the map (the arrow button in the right-hand column) toggles between **Heard** -- what you hear, the map as it was -- and **Reach** -- how well repeaters hear you from each hexagon, with grey cells marking the places you transmitted from and nobody ever answered. Tap any hexagon for a new Uplink section: probes sent, replies, and the signal they reported.
+
+Lock on. Start a survey, then pick up to three repeaters to track live. Each gets a large colour block: green when you are heard both ways, amber when you can hear them but they are not answering, red once the link is gone. A tone plays when a target drops out or comes back, so you can keep your eyes on the road -- it comes through earbuds over music, even with the mute switch on. Everything else keeps logging in the background while you watch your three.
+
+Built for moving. A survey now keeps the screen awake, follows you on the map, draws your track, and survives the radio dropping out and reconnecting -- the session no longer dies with the Bluetooth link, and it records the gap so a dead radio cannot be mistaken for a dead zone later. Probes speed up right at the edge of coverage, where the interesting answer is, and back off once a repeater is well and truly out of range.
+
+The full log. Every probe, reply, loss and position is kept on your phone at full detail so the data can be re-examined later, in its own database that is excluded from backups. From the survey summary you can export a ride -- and the shared file is deliberately scrubbed: positions coarsened, the first and last 500 m trimmed off, repeater keys shortened. Your front door is not in the file you share.
+
+One thing to check before a long ride: Settings -> Privacy -> Location Services -> DigitainoMesh must be set to **Precise**. Without it, every sample fails the accuracy check and the ride records nothing -- the app now warns you when you press Start, rather than letting you find out afterwards.
+
+Nothing is uploaded anywhere. All of this is on your device.
+
+---
+
 Beta Changes -- v0.11.0 (Build 5)
 
 Repeater Popover Crash Fix
