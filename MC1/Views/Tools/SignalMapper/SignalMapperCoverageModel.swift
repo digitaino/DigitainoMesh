@@ -70,10 +70,13 @@ final class SignalMapperCoverageModel {
 
     if reloadTask == nil {
       // The ride should paint the map as it happens — but a full store rebuild every
-      // 10 s grows monotonically all ride and cooks the phone (review 5b). 60 s.
+      // 10 s grows monotonically all ride and cooks the phone (review 5b). 20 s is the
+      // compromise the live cell card forced: the capture engine flushes every 30 s, so
+      // a 60 s rebuild left the card the rider is watching up to a minute and a half
+      // stale, which reads as "nothing is being recorded".
       reloadTask = Task { [weak self] in
         while !Task.isCancelled {
-          try? await Task.sleep(for: .seconds(60))
+          try? await Task.sleep(for: .seconds(20))
           guard let self, !Task.isCancelled else { return }
           await self.load(dataStore: appState.services?.dataStore, radioID: appState.currentRadioID)
         }

@@ -6678,14 +6678,72 @@ public enum L10n {
           return L10n.tr("Tools", "tools.signalMapper.summary", p1, p2, p3, fallback: "%1$lld cells · %2$lld observations · %3$lld days")
         }
         public enum Card {
+          /// Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s"
+          public static func ago(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.ago", String(describing: p1), fallback: "%@ ago")
+          }
+          /// Location: SignalMapperCellCard.swift - Mean reading under the best one; %@ is decibels
+          public static func average(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.average", String(describing: p1), fallback: "avg %@")
+          }
+          /// Location: SignalMapperCellCard.swift - Strongest repeater in the cell
+          public static let bestRepeater = L10n.tr("Tools", "tools.signalMapper.card.bestRepeater", fallback: "Best Repeater")
+          /// Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip
+          public static let chipHint = L10n.tr("Tools", "tools.signalMapper.card.chipHint", fallback: "Shows this repeater's own readings for the cell")
+          /// Location: SignalMapperCellCard.swift - Clears the repeater filter
+          public static let clear = L10n.tr("Tools", "tools.signalMapper.card.clear", fallback: "Clear")
+          /// Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link
+          public static let connected = L10n.tr("Tools", "tools.signalMapper.card.connected", fallback: "Connected (2-way)")
+          /// Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at
+          public static func downlinkAccessibility(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.downlinkAccessibility", p1, fallback: "you hear them at %lld decibels")
+          }
+          /// Location: SignalMapperCellCard.swift - Group of repeaters we only hear
+          public static let heardOnly = L10n.tr("Tools", "tools.signalMapper.card.heardOnly", fallback: "Heard (1-way)")
+          /// Location: SignalMapperCellCard.swift - Uplink is blank because this repeater has never reported hearing us
+          public static let heardOnlyReason = L10n.tr("Tools", "tools.signalMapper.card.heardOnlyReason", fallback: "Heard only — never reported hearing you")
           /// Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s"
           public static func lastHeard(_ p1: Any) -> String {
             return L10n.tr("Tools", "tools.signalMapper.card.lastHeard", String(describing: p1), fallback: "Last heard %@ ago")
+          }
+          /// Location: SignalMapperCellCard.swift - Label of the live last-heard clock
+          public static let lastHeardLabel = L10n.tr("Tools", "tools.signalMapper.card.lastHeardLabel", fallback: "Last Heard")
+          /// Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon
+          public static let myCell = L10n.tr("Tools", "tools.signalMapper.card.myCell", fallback: "My Cell")
+          /// Location: SignalMapperCellCard.swift - Header when probes from this hexagon were never answered
+          public static let noResponse = L10n.tr("Tools", "tools.signalMapper.card.noResponse", fallback: "No Response")
+          /// Location: SignalMapperCellCard.swift - Subtitle of the no-response header
+          public static let noResponseDetail = L10n.tr("Tools", "tools.signalMapper.card.noResponseDetail", fallback: "Probe sent, no response")
+          /// Location: SignalMapperCellCard.swift - Packets split by direction for one repeater
+          public static let packetSplit = L10n.tr("Tools", "tools.signalMapper.card.packetSplit", fallback: "Packets")
+          /// Location: SignalMapperCellCard.swift - Packet split; %1$lld heard from them, %2$lld carrying their reading of us
+          public static func packetSplitValue(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.packetSplitValue", p1, p2, fallback: "%1$lld heard · %2$lld reported")
+          }
+          /// Location: SignalMapperCellCard.swift - Packet count under the quality headline
+          public static func packetsReceived(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.packetsReceived", p1, fallback: "%lld packets received")
           }
           /// Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent
           public static func probeSuccess(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.card.probeSuccess", p1, p2, p3, fallback: "%1$lld/%2$lld replies (%3$lld%%)")
           }
+          /// Location: SignalMapperCellCard.swift - Share of probes that were answered
+          public static let probeSuccessLabel = L10n.tr("Tools", "tools.signalMapper.card.probeSuccessLabel", fallback: "Probe Success")
+          /// Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent
+          public static func probeSuccessValue(_ p1: Int, _ p2: Int, _ p3: Int, _ p4: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.probeSuccessValue", p1, p2, p3, p4, fallback: "%1$lld%% (%2$lld/%3$lld) · %4$lld replies")
+          }
+          /// Location: SignalMapperCellCard.swift - Downlink column label
+          public static let rxSignal = L10n.tr("Tools", "tools.signalMapper.card.rxSignal", fallback: "RX Signal")
+          /// Location: SignalMapperCellCard.swift - Uplink column label
+          public static let txSignal = L10n.tr("Tools", "tools.signalMapper.card.txSignal", fallback: "TX Signal")
+          /// Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name
+          public static func via(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.via", String(describing: p1), fallback: "via %@")
+          }
+          /// Location: SignalMapperCellCard.swift - Uplink is blank because no probe has been answered yet
+          public static let waitingUplink = L10n.tr("Tools", "tools.signalMapper.card.waitingUplink", fallback: "Waiting for a discover response")
         }
         public enum Delete {
           /// Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell
@@ -6842,6 +6900,8 @@ public enum L10n {
           public static let hearingNow = L10n.tr("Tools", "tools.signalMapper.ride.hearingNow", fallback: "Hearing now")
           /// Location: SignalMapperFocusBlocks.swift - Empty auto row before any repeater has replied
           public static let listening = L10n.tr("Tools", "tools.signalMapper.ride.listening", fallback: "Listening for repeaters…")
+          /// Location: SignalMapperFocusBlocks.swift - Caption above the locked-on rows
+          public static let lockedOn = L10n.tr("Tools", "tools.signalMapper.ride.lockedOn", fallback: "Locked On")
           /// Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker
           public static let lockOn = L10n.tr("Tools", "tools.signalMapper.ride.lockOn", fallback: "Lock On Repeaters")
           /// Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name

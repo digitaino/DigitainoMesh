@@ -2,22 +2,25 @@ import CoreLocation
 import MC1Services
 import SwiftUI
 
-/// The ride readout, pinned as a bottom safe-area inset.
+/// The live half of the ride HUD: one line per repeater, above the cell card.
 ///
-/// Two modes, one rule learned from v1 and re-learned from the second field test: **a
-/// survey screen always shows who it is hearing, without being configured first.**
+/// It was three tall tiles with a lone "▲–" in them until the third field test called it
+/// "a huge card with a triangle and wasted space" — correctly. The card below holds the
+/// *stored* picture of the hexagon; these rows hold what is happening this second, and a
+/// range test needs exactly one line each: who, both legs, how long ago, how far.
 ///
-/// - **Locked on**: one block per chosen target, with the 4-state color, tones on
-///   lost/regained, and the loss-streak machinery — the deliberate range-test mode.
-/// - **Unconfigured**: the same blocks, auto-populated with the repeaters that answered
-///   most recently (`heardStates` from the engine), under a "Hearing now" caption with a
-///   lock-on button beside it. Before anything replies, a quiet "Listening…" row.
+/// Unlocked it shows whoever answered most recently. That matters because the card is
+/// built from the store — flushed every 30 s, rebuilt every 20 s — so on a hexagon the
+/// rider has just entered there is nothing to draw yet, and these rows are the only thing
+/// on screen saying the ride is working.
 ///
-/// Blocks are near-opaque with the state carried by a 6 pt bar and a soft tint, numerals
-/// in `.primary` at a scaling text style — glass and white-on-green both failed the
-/// sunlight test (UI review S2).
+/// Tones and haptics stay: entering `.lost`, regaining a two-way link, and losing the
+/// radio itself are the events a rider cannot watch the screen for.
 struct SignalMapperFocusBlocks: View {
   let session: SignalMapperRideSession
+  /// Whether the cell card is on screen underneath. Only decides whether the quiet
+  /// "listening…" placeholder is worth its line.
+  var hasCellCard = false
   let onLockOn: () -> Void
 
   @Environment(\.appState) private var appState
@@ -25,10 +28,8 @@ struct SignalMapperFocusBlocks: View {
   @State private var lastLinkStates: [String: FocusLinkState] = [:]
   @State private var hapticTrigger = 0
   @State private var hapticIsPositive = false
+  @State private var wasRadioConnected = true
 
-  /// The one-bit-per-target answer, derived from the engine's per-target state and the
-  /// clock. Auto blocks use only the recency half (no probes are aimed at them, so
-  /// `lossStreak`/`lastReplyAt` cadence semantics don't apply).
   enum FocusLinkState: Equatable {
     case heardBothWays
     case downlinkOnly
@@ -58,180 +59,210 @@ struct SignalMapperFocusBlocks: View {
     !session.focusTargets.isEmpty
   }
 
+  /// Who is answering right now, straight off the engine's live snapshot. Two rows: the
+  /// live half must never cost the map more than it is worth.
+  private var heardStates: [SignalMapperProbeEngine.FocusTargetState] {
+    Array((session.liveSnapshot?.heardStates ?? []).prefix(2))
+  }
+
   var body: some View {
     TimelineView(.periodic(from: .now, by: 1)) { context in
-      VStack(spacing: 6) {
-        if !isLockedOn {
-          autoCaption
+      VStack(alignment: .leading, spacing: 3) {
+        caption
+        if isLockedOn {
+          ForEach(session.focusTargets, id: \.id) { target in
+            row(
+              id: target.id,
+              state: focusLinkState(for: target.id, now: context.date),
+              activity: activity(for: target.id),
+              now: context.date
+            )
+          }
+        } else if !heardStates.isEmpty {
+          ForEach(heardStates) { activity in
+            row(
+              id: activity.id,
+              state: recencyState(for: activity, now: context.date),
+              activity: activity,
+              now: context.date
+            )
+          }
+        } else if !hasCellCard {
+          listeningRow
         }
-        content(now: context.date)
       }
+      .padding(.horizontal, 14)
+      .padding(.top, 4)
+      .padding(.bottom, 8)
+      .background(Color(.secondarySystemBackground).opacity(0.96), in: .rect(cornerRadius: 16))
       .padding(.horizontal, 12)
       .padding(.top, 8)
-      .padding(.bottom, 12)
       .onChange(of: focusLinkStates(now: context.date)) { _, newStates in
         playEdges(newStates)
       }
       .sensoryFeedback(hapticIsPositive ? .success : .warning, trigger: hapticTrigger)
     }
+    .onChange(of: session.isRadioConnected) { _, connected in
+      // The radio dropping is what makes a whole ride worthless, and the only other cue
+      // for it is a glyph on a strip the rider is not looking at.
+      defer { wasRadioConnected = connected }
+      guard wasRadioConnected, !connected else { return }
+      tonePlayer.play(.tock)
+      hapticIsPositive = false
+      hapticTrigger += 1
+    }
     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
   }
 
-  @ViewBuilder
-  private func content(now: Date) -> some View {
-    if isLockedOn {
-      HStack(spacing: 8) {
-        ForEach(session.focusTargets, id: \.id) { target in
-          block(
-            id: target.id,
-            state: focusLinkState(for: target.id, now: now),
-            activity: activity(for: target.id),
-            now: now
-          )
-        }
-      }
-    } else {
-      let heard = session.liveSnapshot?.heardStates ?? []
-      if heard.isEmpty {
-        listeningRow
-      } else {
-        HStack(spacing: 8) {
-          ForEach(heard.prefix(3)) { activity in
-            block(
-              id: activity.id,
-              state: recencyState(for: activity, now: now),
-              activity: activity,
-              now: now
-            )
-          }
-        }
-      }
-    }
-  }
-
-  /// "Hearing now" + the lock-on affordance, side by side — locking on is a refinement
-  /// of what the screen already shows, not the price of seeing anything at all.
-  private var autoCaption: some View {
+  private var caption: some View {
     HStack {
-      Text(L10n.Tools.Tools.SignalMapper.Ride.hearingNow)
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .textCase(.uppercase)
+      Text(
+        isLockedOn
+          ? L10n.Tools.Tools.SignalMapper.Ride.lockedOn
+          : L10n.Tools.Tools.SignalMapper.Ride.hearingNow
+      )
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(.secondary)
+      .textCase(.uppercase)
+
       Spacer()
+
       Button(action: onLockOn) {
-        Label(L10n.Tools.Tools.SignalMapper.Ride.lockOn, systemImage: "scope")
-          .font(.caption.weight(.semibold))
+        Label(
+          isLockedOn
+            ? L10n.Localizable.Common.edit
+            : L10n.Tools.Tools.SignalMapper.Focus.apply,
+          systemImage: "scope"
+        )
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 10)
+        .frame(minHeight: 44)
+        .contentShape(.rect)
       }
-      .buttonStyle(.bordered)
-      .controlSize(.small)
+      .buttonStyle(.plain)
+      .foregroundStyle(.tint)
     }
   }
 
+  /// Nothing has answered yet and there is no card underneath: say so rather than
+  /// leaving the bottom of the screen blank.
   private var listeningRow: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: 6) {
       Image(systemName: "ear.badge.waveform")
+        .font(.caption2)
         .foregroundStyle(.secondary)
       Text(L10n.Tools.Tools.SignalMapper.Ride.listening)
-        .font(.subheadline)
+        .font(.caption)
         .foregroundStyle(.secondary)
       Spacer()
     }
-    .padding(.vertical, 14)
-    .padding(.horizontal, 14)
-    .background(Color(.secondarySystemBackground).opacity(0.95), in: .rect(cornerRadius: 14))
+    .padding(.bottom, 4)
     .accessibilityElement(children: .combine)
   }
 
-  // MARK: - One block
+  // MARK: - One row
 
-  private func block(
+  private func row(
     id: NodeHexID,
     state: FocusLinkState,
     activity: SignalMapperProbeEngine.FocusTargetState?,
     now: Date
   ) -> some View {
     let name = session.meta(for: id)?.name ?? id.hex
+    let hasReading = activity?.lastTxSnr != nil || activity?.lastRxSnr != nil
 
-    return VStack(spacing: 2) {
+    return HStack(spacing: 7) {
+      Circle()
+        .fill(state.color)
+        .frame(width: 7, height: 7)
+
       Text(name)
-        .font(.caption.weight(.semibold))
+        .font(.caption.weight(.medium))
         .lineLimit(1)
-        .foregroundStyle(.primary)
 
-      Text(uplinkText(for: activity))
-        .font(.system(.largeTitle, design: .rounded, weight: .bold))
-        .monospacedDigit()
-        .lineLimit(1)
-        .foregroundStyle(.primary)
-        .contentTransition(.numericText())
+      Spacer(minLength: 4)
 
-      Text(secondaryText(for: id, activity: activity, now: now))
-        .font(.caption)
-        .monospacedDigit()
-        .lineLimit(1)
-        .foregroundStyle(.secondary)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(.vertical, 10)
-    .padding(.horizontal, 6)
-    .background {
-      RoundedRectangle(cornerRadius: 16)
-        .fill(Color(.secondarySystemBackground).opacity(0.95))
-        .overlay {
-          RoundedRectangle(cornerRadius: 16)
-            .fill(state.color.opacity(0.14))
-        }
-        .overlay(alignment: .top) {
-          Capsule()
-            .fill(state.color)
-            .frame(height: 6)
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-        }
+      if hasReading {
+        Text(uplinkText(for: activity))
+          .font(.system(.subheadline, design: .rounded, weight: .bold))
+          .monospacedDigit()
+          .foregroundStyle(activity?.lastTxSnr == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+          .contentTransition(.numericText())
+
+        Text(downlinkText(for: activity))
+          .font(.system(.subheadline, design: .rounded, weight: .semibold))
+          .monospacedDigit()
+          .foregroundStyle(.secondary)
+          .contentTransition(.numericText())
+      } else {
+        // No reading yet is a sentence, not a pair of dashes after a triangle.
+        Text(L10n.Tools.Tools.SignalMapper.Ride.noReplyYet)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      let trailing = trailingText(for: id, activity: activity, now: now)
+      if !trailing.isEmpty {
+        Text(trailing)
+          .font(.caption)
+          .monospacedDigit()
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
     }
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(accessibilityLabel(name: name, state: state, activity: activity))
+    .accessibilityLabel(accessibilityLabel(name: name, state: state, activity: activity, now: now, id: id))
   }
 
-  /// The big number is the uplink — "how well do they hear me" is the ride's question.
+  /// The loud half of the row is the uplink — "how well do they hear me" is the ride's
+  /// question.
   private func uplinkText(for activity: SignalMapperProbeEngine.FocusTargetState?) -> String {
-    if let txSnr = activity?.lastTxSnr {
-      return String(format: "▲%.0f", txSnr)
-    }
-    return "▲–"
+    guard let txSnr = activity?.lastTxSnr else { return "▲–" }
+    return "▲" + Self.decibels(txSnr)
   }
 
-  private func secondaryText(
+  private func downlinkText(for activity: SignalMapperProbeEngine.FocusTargetState?) -> String {
+    guard let rxSnr = activity?.lastRxSnr else { return "▼–" }
+    return "▼" + Self.decibels(rxSnr)
+  }
+
+  private func trailingText(
     for id: NodeHexID,
     activity: SignalMapperProbeEngine.FocusTargetState?,
     now: Date
   ) -> String {
     var parts: [String] = []
-    if let rxSnr = activity?.lastRxSnr {
-      parts.append(String(format: "▼%.0f", rxSnr))
-    }
     if let heard = activity?.lastHeardAt {
       parts.append(L10n.Tools.Tools.SignalMapper.Ride.age(Int(now.timeIntervalSince(heard))))
     }
     if let distance = currentDistanceMeters(to: id) {
       parts.append(distanceText(distance))
     }
-    return parts.isEmpty ? " " : parts.joined(separator: "  ")
+    return parts.joined(separator: " ")
   }
 
   private func accessibilityLabel(
     name: String,
     state: FocusLinkState,
-    activity: SignalMapperProbeEngine.FocusTargetState?
+    activity: SignalMapperProbeEngine.FocusTargetState?,
+    now: Date,
+    id: NodeHexID
   ) -> String {
     var label = "\(name), \(state.localizedLabel)"
     if let txSnr = activity?.lastTxSnr {
       label += ", " + L10n.Tools.Tools.SignalMapper.Focus.uplinkAccessibility(Int(txSnr.rounded()))
     }
+    if let rxSnr = activity?.lastRxSnr {
+      label += ", " + L10n.Tools.Tools.SignalMapper.Card.downlinkAccessibility(Int(rxSnr.rounded()))
+    }
+    // Distance is the point of a range test; it cannot be sighted-only.
+    if let distance = currentDistanceMeters(to: id) {
+      label += ", " + distanceText(distance)
+    }
     return label
   }
 
-  // MARK: - State machines
+  // MARK: - State machine
 
   private func activity(for id: NodeHexID) -> SignalMapperProbeEngine.FocusTargetState? {
     session.liveSnapshot?.focusStates.first { $0.id == id }
@@ -250,8 +281,8 @@ struct SignalMapperFocusBlocks: View {
     return .unknown
   }
 
-  /// Auto blocks aren't probed on a cadence, so their state is recency alone: replied
-  /// in the last 30 s → green; heard within 90 s → amber; older → gray.
+  /// Auto rows aren't probed on a cadence, so their state is recency alone: replied in
+  /// the last 30 s → green; heard within 90 s → amber; older → grey.
   private func recencyState(
     for activity: SignalMapperProbeEngine.FocusTargetState,
     now: Date
@@ -271,23 +302,25 @@ struct SignalMapperFocusBlocks: View {
     return states
   }
 
-  /// Edge-triggered audio for LOCKED-ON targets only: entering `.lost` plays a tock,
-  /// regaining a two-way link plays a note. Auto blocks churn as the neighbourhood
-  /// changes and must stay silent.
+  /// Edge-triggered audio for locked-on targets: entering `.lost` plays a tock, regaining
+  /// a two-way link plays a note. A negative edge wins the tick, so two targets flipping
+  /// opposite ways in the same second cannot report the bad news as good.
   private func playEdges(_ newStates: [String: FocusLinkState]) {
     defer { lastLinkStates = newStates }
+    var lostAny = false
+    var regainedAny = false
     for (id, state) in newStates {
       guard let previous = lastLinkStates[id], previous != state else { continue }
       if state == .lost, previous != .unknown {
-        tonePlayer.play(.tock)
-        hapticIsPositive = false
-        hapticTrigger += 1
+        lostAny = true
       } else if state == .heardBothWays, previous == .lost {
-        tonePlayer.play(.note)
-        hapticIsPositive = true
-        hapticTrigger += 1
+        regainedAny = true
       }
     }
+    guard lostAny || regainedAny else { return }
+    tonePlayer.play(lostAny ? .tock : .note)
+    hapticIsPositive = !lostAny
+    hapticTrigger += 1
   }
 
   // MARK: - Distance
@@ -301,7 +334,13 @@ struct SignalMapperFocusBlocks: View {
 
   private func distanceText(_ meters: Double) -> String {
     meters >= 1000
-      ? String(format: "%.1f km", meters / 1000)
-      : String(format: "%.0f m", meters)
+      ? String(format: "%.1fkm", meters / 1000)
+      : String(format: "%.0fm", meters)
+  }
+
+  /// Rounded decibels without the `-0` that `%.0f` produces for anything in (−0.5, 0).
+  private static func decibels(_ value: Double) -> String {
+    let rounded = value.rounded()
+    return String(format: "%.0f", rounded == 0 ? 0 : rounded)
   }
 }

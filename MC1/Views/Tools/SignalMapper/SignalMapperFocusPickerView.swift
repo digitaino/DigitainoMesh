@@ -16,6 +16,9 @@ struct SignalMapperFocusPickerView: View {
   /// True when this picker IS the start flow: confirming starts the run with the
   /// selection (possibly empty), and the confirm button says so.
   var startsSurvey = false
+  /// Pre-fills the search field — set when the picker is opened from a repeater chip on
+  /// the cell card, so the repeater the rider just tapped is the row in front of them.
+  var initialSearch = ""
   let onApply: ([MapperProbeTarget], [NodeHexID: SignalMapperRideSession.FocusMeta]) -> Void
 
   @Environment(\.appState) private var appState
@@ -93,7 +96,10 @@ struct SignalMapperFocusPickerView: View {
           .fontWeight(.semibold)
         }
       }
-      .task { await loadCandidates() }
+      .task {
+        searchText = initialSearch
+        await loadCandidates()
+      }
     }
     .presentationDetents([.medium, .large])
     .presentationDragIndicator(.visible)

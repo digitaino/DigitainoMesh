@@ -21,6 +21,14 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
   /// Mean SNR this repeater reported for *our* transmissions — the uplink leg, populated
   /// only by trace/discover replies. Nil when it never told us.
   public let averageTxSnr: Double?
+  /// Best and worst reading on each leg — the spread the average hides, and the reason
+  /// a single strong echo does not read as a solid link.
+  public let bestSnr: Double?
+  public let worstSnr: Double?
+  public let bestTxSnr: Double?
+  public let worstTxSnr: Double?
+  /// Mean RSSI of the packets heard directly from this repeater.
+  public let averageRssi: Double?
   /// The packet count split by which side transmitted.
   public let rxPacketCount: Int
   public let txPacketCount: Int
@@ -38,6 +46,11 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
     packetCount: Int,
     averageSnr: Double?,
     averageTxSnr: Double? = nil,
+    bestSnr: Double? = nil,
+    worstSnr: Double? = nil,
+    bestTxSnr: Double? = nil,
+    worstTxSnr: Double? = nil,
+    averageRssi: Double? = nil,
     rxPacketCount: Int = 0,
     txPacketCount: Int = 0,
     firstHeard: Date,
@@ -49,6 +62,11 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
     self.packetCount = packetCount
     self.averageSnr = averageSnr
     self.averageTxSnr = averageTxSnr
+    self.bestSnr = bestSnr
+    self.worstSnr = worstSnr
+    self.bestTxSnr = bestTxSnr
+    self.worstTxSnr = worstTxSnr
+    self.averageRssi = averageRssi
     self.rxPacketCount = rxPacketCount
     self.txPacketCount = txPacketCount
     self.firstHeard = firstHeard
@@ -92,6 +110,12 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
   public let passivePacketCount: Int
   /// Probe transmissions attributed to this cell — the denominator "no reach" divides by.
   public let probesSent: Int
+  /// How many of those transmissions drew at least one reply.
+  ///
+  /// The only honest numerator for a success rate. ``activePacketCount`` counts reply
+  /// *packets*, and one discover broadcast is answered by every repeater in range, so
+  /// that ratio can exceed 100% several times over (field report, 2026-08-30).
+  public let probesAnswered: Int
   /// Mean uplink SNR (repeaters' readings of us) and how many readings back it.
   public let averageTxSnr: Double?
   /// Best uplink reading — what the Reach layer colors by (best usable link).
@@ -135,6 +159,16 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     probesSent > 0 && txSnrCount == 0
   }
 
+  /// Share of probes sent from this cell that were answered, 0...1.
+  ///
+  /// Clamped, because a reply whose probe was placed before a store flush can be counted
+  /// against a fresh pending row: a rounding artefact of at most one probe should read as
+  /// "all of them", never as more than all of them.
+  public var probeSuccessRate: Double? {
+    guard probesSent > 0 else { return nil }
+    return Swift.min(1.0, Double(probesAnswered) / Double(probesSent))
+  }
+
   public init(
     cell: H3Cell,
     boundary: [GeoCoordinate],
@@ -154,6 +188,7 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     activePacketCount: Int = 0,
     passivePacketCount: Int = 0,
     probesSent: Int = 0,
+    probesAnswered: Int = 0,
     averageTxSnr: Double? = nil,
     bestTxSnr: Double? = nil,
     txSnrCount: Int = 0,
@@ -184,6 +219,7 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     self.activePacketCount = activePacketCount
     self.passivePacketCount = passivePacketCount
     self.probesSent = probesSent
+    self.probesAnswered = probesAnswered
     self.averageTxSnr = averageTxSnr
     self.bestTxSnr = bestTxSnr
     self.txSnrCount = txSnrCount

@@ -81,6 +81,12 @@ public struct AggregatedCell: Sendable {
     public var txSnrCount: Int = 0
     public var rssiSum: Double = 0
     public var rssiCount: Int = 0
+    /// Best/worst readings for each leg, so a per-repeater view can show a range
+    /// rather than a single averaged number (the v1 card's `snrRange`).
+    public var minRxSnr: Double?
+    public var maxRxSnr: Double?
+    public var minTxSnr: Double?
+    public var maxTxSnr: Double?
     public var firstHeard: Date
     public var lastHeard: Date
 
@@ -98,6 +104,10 @@ public struct AggregatedCell: Sendable {
       txSnrCount: Int = 0,
       rssiSum: Double = 0,
       rssiCount: Int = 0,
+      minRxSnr: Double? = nil,
+      maxRxSnr: Double? = nil,
+      minTxSnr: Double? = nil,
+      maxTxSnr: Double? = nil,
       firstHeard: Date,
       lastHeard: Date
     ) {
@@ -110,6 +120,10 @@ public struct AggregatedCell: Sendable {
       self.txSnrCount = txSnrCount
       self.rssiSum = rssiSum
       self.rssiCount = rssiCount
+      self.minRxSnr = minRxSnr
+      self.maxRxSnr = maxRxSnr
+      self.minTxSnr = minTxSnr
+      self.maxTxSnr = maxTxSnr
       self.firstHeard = firstHeard
       self.lastHeard = lastHeard
     }
@@ -136,6 +150,14 @@ public struct AggregatedCell: Sendable {
   public var activePacketCount: Int = 0
   public var passivePacketCount: Int = 0
   public var probesSent: Int = 0
+  /// Probe *transmissions* that drew at least one reply — the honest numerator for
+  /// `probesSent`.
+  ///
+  /// Not `activePacketCount`: one discover broadcast is answered by every repeater in
+  /// range, so replies routinely outnumber probes several times over and dividing the
+  /// two produces nonsense like "400% success" (field report, 2026-08-30). The capture
+  /// engine counts distinct answered transmissions instead.
+  public var probesAnswered: Int = 0
   public var snrSum: Double = 0
   public var snrCount: Int = 0
   public var minSnr: Double?
@@ -237,11 +259,15 @@ public enum CellAggregator {
       if let rxSnr = sighting.rxSnr {
         stats.rxSnrSum += rxSnr
         stats.rxSnrCount += 1
+        stats.minRxSnr = Swift.min(stats.minRxSnr ?? rxSnr, rxSnr)
+        stats.maxRxSnr = Swift.max(stats.maxRxSnr ?? rxSnr, rxSnr)
       }
       if let txSnr = sighting.txSnr {
         stats.txSnrSum += txSnr
         stats.txSnrCount += 1
         stats.txPacketCount += 1
+        stats.minTxSnr = Swift.min(stats.minTxSnr ?? txSnr, txSnr)
+        stats.maxTxSnr = Swift.max(stats.maxTxSnr ?? txSnr, txSnr)
       } else {
         stats.rxPacketCount += 1
       }

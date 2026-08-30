@@ -33,6 +33,13 @@ final class MapperCellObservation {
   var activePacketCount: Int
   var passivePacketCount: Int
   var probesSent: Int
+  /// Probe transmissions from this cell-day that drew at least one reply.
+  ///
+  /// The numerator `probesSent` is the denominator of. `activePacketCount` cannot play
+  /// that role: a single discover broadcast is answered by every repeater in range, so
+  /// reply packets outnumber probes routinely. Inline default so rows written before
+  /// this column existed read back as zero.
+  var probesAnswered: Int = 0
 
   // MARK: - Direction counters
 
@@ -112,6 +119,7 @@ final class MapperCellObservation {
     activePacketCount: Int = 0,
     passivePacketCount: Int = 0,
     probesSent: Int = 0,
+    probesAnswered: Int = 0,
     rxCount: Int = 0,
     txHeardCount: Int = 0,
     ackCount: Int = 0,
@@ -142,6 +150,7 @@ final class MapperCellObservation {
     self.activePacketCount = activePacketCount
     self.passivePacketCount = passivePacketCount
     self.probesSent = probesSent
+    self.probesAnswered = probesAnswered
     self.rxCount = rxCount
     self.txHeardCount = txHeardCount
     self.ackCount = ackCount
@@ -181,6 +190,7 @@ final class MapperCellObservation {
     activePacketCount = dto.activePacketCount
     passivePacketCount = dto.passivePacketCount
     probesSent = dto.probesSent
+    probesAnswered = dto.probesAnswered
     rxCount = dto.rxCount
     txHeardCount = dto.txHeardCount
     ackCount = dto.ackCount
@@ -231,6 +241,13 @@ public struct MapperRepeaterStats: Sendable, Equatable {
   public var txSnrCount: Int
   public var rssiSum: Double
   public var rssiCount: Int
+  /// Best/worst reading on each leg, so a single repeater's row can show the spread
+  /// its average hides. Optional because a repeater that has only ever been an
+  /// upstream hop has no direct reading at all.
+  public var minRxSnr: Double?
+  public var maxRxSnr: Double?
+  public var minTxSnr: Double?
+  public var maxTxSnr: Double?
   public var firstHeard: Date
   public var lastHeard: Date
 
@@ -244,6 +261,10 @@ public struct MapperRepeaterStats: Sendable, Equatable {
     txSnrCount: Int = 0,
     rssiSum: Double = 0,
     rssiCount: Int = 0,
+    minRxSnr: Double? = nil,
+    maxRxSnr: Double? = nil,
+    minTxSnr: Double? = nil,
+    maxTxSnr: Double? = nil,
     firstHeard: Date,
     lastHeard: Date
   ) {
@@ -256,6 +277,10 @@ public struct MapperRepeaterStats: Sendable, Equatable {
     self.txSnrCount = txSnrCount
     self.rssiSum = rssiSum
     self.rssiCount = rssiCount
+    self.minRxSnr = minRxSnr
+    self.maxRxSnr = maxRxSnr
+    self.minTxSnr = minTxSnr
+    self.maxTxSnr = maxTxSnr
     self.firstHeard = firstHeard
     self.lastHeard = lastHeard
   }
@@ -271,6 +296,10 @@ public struct MapperRepeaterStats: Sendable, Equatable {
       txSnrCount: stats.txSnrCount,
       rssiSum: stats.rssiSum,
       rssiCount: stats.rssiCount,
+      minRxSnr: stats.minRxSnr,
+      maxRxSnr: stats.maxRxSnr,
+      minTxSnr: stats.minTxSnr,
+      maxTxSnr: stats.maxTxSnr,
       firstHeard: stats.firstHeard,
       lastHeard: stats.lastHeard
     )
@@ -312,6 +341,10 @@ public struct MapperRepeaterStats: Sendable, Equatable {
       txSnrCount: txSnrCount + other.txSnrCount,
       rssiSum: rssiSum + other.rssiSum,
       rssiCount: rssiCount + other.rssiCount,
+      minRxSnr: [minRxSnr, other.minRxSnr].compactMap(\.self).min(),
+      maxRxSnr: [maxRxSnr, other.maxRxSnr].compactMap(\.self).max(),
+      minTxSnr: [minTxSnr, other.minTxSnr].compactMap(\.self).min(),
+      maxTxSnr: [maxTxSnr, other.maxTxSnr].compactMap(\.self).max(),
       firstHeard: Swift.min(firstHeard, other.firstHeard),
       lastHeard: Swift.max(lastHeard, other.lastHeard)
     )
@@ -340,6 +373,8 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
   public var activePacketCount: Int
   public var passivePacketCount: Int
   public var probesSent: Int
+  /// Probe transmissions that drew at least one reply — see the model's column.
+  public var probesAnswered: Int
 
   /// Packets received here (docs/SIGNAL_MAPPER_V2.md §2.1, direction `rx`).
   public var rxCount: Int
@@ -390,6 +425,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     activePacketCount: Int = 0,
     passivePacketCount: Int = 0,
     probesSent: Int = 0,
+    probesAnswered: Int = 0,
     rxCount: Int = 0,
     txHeardCount: Int = 0,
     ackCount: Int = 0,
@@ -420,6 +456,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     self.activePacketCount = activePacketCount
     self.passivePacketCount = passivePacketCount
     self.probesSent = probesSent
+    self.probesAnswered = probesAnswered
     self.rxCount = rxCount
     self.txHeardCount = txHeardCount
     self.ackCount = ackCount
@@ -473,6 +510,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       activePacketCount: aggregate.activePacketCount,
       passivePacketCount: aggregate.passivePacketCount,
       probesSent: aggregate.probesSent,
+      probesAnswered: aggregate.probesAnswered,
       rxCount: rxCount ?? aggregate.packetCount,
       txHeardCount: txHeardCount,
       ackCount: ackCount,
@@ -515,6 +553,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       activePacketCount: model.activePacketCount,
       passivePacketCount: model.passivePacketCount,
       probesSent: model.probesSent,
+      probesAnswered: model.probesAnswered,
       rxCount: hasDirection ? model.rxCount : model.packetCount,
       txHeardCount: model.txHeardCount,
       ackCount: model.ackCount,
@@ -589,6 +628,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     result.activePacketCount = activePacketCount
     result.passivePacketCount = passivePacketCount
     result.probesSent = probesSent
+    result.probesAnswered = probesAnswered
     result.snrSum = snrSum
     result.snrCount = snrCount
     result.minSnr = minSnr
@@ -614,6 +654,10 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
         txSnrCount: stats.txSnrCount,
         rssiSum: stats.rssiSum,
         rssiCount: stats.rssiCount,
+        minRxSnr: stats.minRxSnr,
+        maxRxSnr: stats.maxRxSnr,
+        minTxSnr: stats.minTxSnr,
+        maxTxSnr: stats.maxTxSnr,
         firstHeard: stats.firstHeard,
         lastHeard: stats.lastHeard
       )
@@ -635,6 +679,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     merged.activePacketCount += other.activePacketCount
     merged.passivePacketCount += other.passivePacketCount
     merged.probesSent += other.probesSent
+    merged.probesAnswered += other.probesAnswered
     merged.rxCount += other.rxCount
     merged.txHeardCount += other.txHeardCount
     merged.ackCount += other.ackCount
@@ -698,6 +743,12 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     var txSnrCount: Int
     var rssiSum: Double
     var rssiCount: Int
+    /// Added after the first rows were written: `Double?` decodes as nil when the key
+    /// is absent, so an older row reads back with no range rather than failing.
+    var minRxSnr: Double?
+    var maxRxSnr: Double?
+    var minTxSnr: Double?
+    var maxTxSnr: Double?
     var firstHeard: Date
     var lastHeard: Date
 
@@ -711,6 +762,10 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       txSnrCount = stats.txSnrCount
       rssiSum = stats.rssiSum
       rssiCount = stats.rssiCount
+      minRxSnr = stats.minRxSnr
+      maxRxSnr = stats.maxRxSnr
+      minTxSnr = stats.minTxSnr
+      maxTxSnr = stats.maxTxSnr
       firstHeard = stats.firstHeard
       lastHeard = stats.lastHeard
     }
@@ -726,6 +781,10 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
         txSnrCount: txSnrCount,
         rssiSum: rssiSum,
         rssiCount: rssiCount,
+        minRxSnr: minRxSnr,
+        maxRxSnr: maxRxSnr,
+        minTxSnr: minTxSnr,
+        maxTxSnr: maxTxSnr,
         firstHeard: firstHeard,
         lastHeard: lastHeard
       )

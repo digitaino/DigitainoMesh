@@ -132,6 +132,11 @@ public struct SignalMapperCoverageBuilder: Sendable {
           packetCount: stats.packetCount,
           averageSnr: stats.avgRxSnr,
           averageTxSnr: stats.avgTxSnr,
+          bestSnr: stats.maxRxSnr,
+          worstSnr: stats.minRxSnr,
+          bestTxSnr: stats.maxTxSnr,
+          worstTxSnr: stats.minTxSnr,
+          averageRssi: stats.avgRssi,
           rxPacketCount: stats.rxPacketCount,
           txPacketCount: stats.txPacketCount,
           firstHeard: stats.firstHeard,
@@ -165,6 +170,7 @@ public struct SignalMapperCoverageBuilder: Sendable {
       activePacketCount: row.activePacketCount,
       passivePacketCount: row.passivePacketCount,
       probesSent: row.probesSent,
+      probesAnswered: row.probesAnswered,
       averageTxSnr: row.avgTxSnr,
       bestTxSnr: row.maxTxSnr,
       txSnrCount: row.txSnrCount,
@@ -226,6 +232,7 @@ private extension MapperCellObservationDTO {
     copy.activePacketCount = activePacketCount
     copy.passivePacketCount = passivePacketCount
     copy.probesSent = probesSent
+    copy.probesAnswered = probesAnswered
     copy.rxCount = rxCount
     copy.txHeardCount = txHeardCount
     copy.ackCount = ackCount

@@ -239,6 +239,10 @@ public actor SignalMapperCaptureEngine {
   // MARK: - State
 
   private var pending: [CellDay: PendingCell] = [:]
+  /// Send instants of probe transmissions already counted as answered. Survives flushes;
+  /// see ``noteAnsweredProbe(at:)``.
+  private var answeredProbeSends: Set<Date> = []
+  private static let answeredProbeLedgerLimit = 512
   private var pendingEntryCount = 0
   private var dedup = MapperPacketDedup()
   private var state = Snapshot()
@@ -309,6 +313,7 @@ public actor SignalMapperCaptureEngine {
 
     dedup.reset()
     pending.removeAll()
+    answeredProbeSends.removeAll()
     pendingEntryCount = 0
     flushesSinceAnchorRecompute = 0
     state = Snapshot(isRunning: true, lastFlushAt: now())
@@ -589,6 +594,14 @@ public actor SignalMapperCaptureEngine {
     CellAggregator.fold(sample, into: &slot.aggregate)
     slot.rxCount += 1
     if placed.isStationary { slot.stationaryCount += 1 }
+    // One discover is answered by every repeater in range, and all of those replies
+    // carry the same send-time placement: the cell learns that *one* probe was answered,
+    // not six (field report, 2026-08-30). The ledger lives on the engine rather than the
+    // pending slot because a flush between two replies to the same probe would otherwise
+    // book the transmission twice.
+    if let sendPlacement = result.placement, noteAnsweredProbe(at: sendPlacement.at) {
+      slot.aggregate.probesAnswered += 1
+    }
     if let rttMs = result.rttMs {
       slot.probeRttMsSum += Double(rttMs)
       slot.probeRttSampleCount += 1
@@ -598,6 +611,21 @@ public actor SignalMapperCaptureEngine {
     state.rxSampleCount += 1
     state.activeSampleCount += 1
     await recordSample(at: placed.at)
+  }
+
+  /// Records that the probe transmitted at `sendTime` has been answered, returning true
+  /// the first time only.
+  ///
+  /// Bounded: a long ride sends thousands of probes and the ledger only has to outlive
+  /// the window in which replies to one transmission can straddle a store flush, which is
+  /// seconds. The oldest half goes when it fills.
+  private func noteAnsweredProbe(at sendTime: Date) -> Bool {
+    guard answeredProbeSends.insert(sendTime).inserted else { return false }
+    if answeredProbeSends.count > Self.answeredProbeLedgerLimit {
+      let keep = answeredProbeSends.sorted().suffix(Self.answeredProbeLedgerLimit / 2)
+      answeredProbeSends = Set(keep)
+    }
+    return true
   }
 
   /// Places a probe transmission at the current fix (data-quality gate only) and books

@@ -427,3 +427,99 @@ two-way vs heard-only) where v2 had a modal sheet and disabled taps mid-ride.
   number, two-way links first. A true mesh-reach qualifier stays an M2 concern.
 - `safeAreaInset` gotcha for the record: its ViewBuilder Z-stacks loose siblings —
   the idle Start row rendered on top of the card until wrapped in an explicit VStack.
+
+## §7.2 Fourth UI pass — the v1 card, properly (2026-08-30, field report 4)
+
+Rafael, on the third build, with the v1 screen open beside it:
+
+> "you have to check the code that was used before to build the old signal mapping
+> interface, there are so many things you are missing from this. like being able to click
+> on the different repeater 'buttons' to see the details for each one on the current cell.
+> also why do I see 52/13 replies at 400% … also why do we still have that huge card at
+> the bottom with the triangle and all the wasted space … we need to have a proper ui
+> where we can see all the data at once."
+
+This pass was written with `git show personal:MC1/Views/Tools/SignalSurvey/SignalSurveyView.swift`
+open — `cellDetailCard`, `signalColumn`, `relayNodeSection`, `bottomOverlay` — rather than
+from a description of it.
+
+### The 400% was two different units
+
+`activePacketCount` counts reply *packets*; `probesSent` counts *transmissions*. One
+zero-hop discover is answered by every repeater in range, so 13 probes drawing 52 replies
+is the system working. v1 hid this with `min(activePacketCount, probes)` — a clamp, not an
+answer.
+
+New counter, all the way through SurveyKit → store → coverage cell:
+`AggregatedCell.probesAnswered` — transmissions that drew **at least one** reply. The
+capture engine keys it on the send-time placement instant, and the ledger
+(`answeredProbeSends`) lives on the **engine**, not the pending cell: replies to one probe
+either side of a 30 s store flush would otherwise book that probe twice, and the display
+clamp would round the lie up to a tidy 100%. Two regression tests pin both halves.
+
+The card now reads `"85% (11/13) · 52 replies"` — the ratio and the packet count on one
+line, so they can never look like a contradiction again.
+
+### One statistic per number
+
+The third pass shipped a defect in the same family as the 400%: the quality *word* was
+graded on the cell's best reading while the *number* beside it printed the mean, so an
+11 dB best with a 4.2 dB mean read "Excellent 4.2". Every leg now grades and prints the
+same value — the best — with `avg 4.2` and the `1–11` spread on the context lines beneath.
+A filtered leg never falls back to the cell's numbers (v1's rule: mixing one repeater's
+label with every repeater's data is worse than showing nothing).
+
+### Repeater chips are buttons
+
+The piece three passes were missing. Tapping a chip sets `repeaterFilter` and the whole
+card recomputes from that repeater's observations — v1's `selectedRelayFilter` /
+`filteredCellStats`, with a "via <name>" bar carrying **Lock On** and **Clear**. Backed by
+new per-repeater columns: `minRxSnr`/`maxRxSnr`/`minTxSnr`/`maxTxSnr` (the range v1 showed)
+and `averageRssi`. Groups are v1's: Connected (2-way) then Heard (1-way), locked-on first,
+strongest link first inside each — not chattiest.
+
+Lock-on is a **visible** button in the filter bar, not a context menu: a 0.5 s stationary
+press inside a horizontal scroll view is not an input a rider has at 25 km/h.
+
+### The card follows the rider
+
+`liveCell` tracks the H3 cell under the current fix, and its card is on screen during a run
+without anyone tapping anything. Crossing a boundary clears a dismissal and re-identifies
+the card (`.id(displayed.cell)`) so digits do not roll from the old cell's values into the
+new one's. `cameraEdgePadding.bottom` is the **measured** inset height, so the rider's dot
+is never centred behind the card.
+
+Store cadence had to follow: the capture engine flushes every 30 s, so the ride's rebuild
+went 60 s → 20 s. Even so the card is up to ~50 s behind, which is why the live rows above
+it survive (below).
+
+### The tall tiles are one line each
+
+Three ~100 pt tiles containing a lone "▲–" became one row per repeater: state dot, name,
+▲ uplink, ▼ downlink, age, distance. Unlocked, the rows show `heardStates` — whoever
+answered most recently, straight off the engine's live snapshot. Deleting that in favour of
+"Listening…" would have re-created the original complaint through a different door: a
+hexagon just entered has no flushed rows, so the card cannot render and the live rows are
+the only thing on screen saying the ride works. A target with no reading yet says "No reply
+yet" instead of "▲– ▼–".
+
+### Also, from the adversarial review
+
+Dead-zone header restored (slashed antenna, "No Response", "Probe sent, no response") and
+the headline now grades whichever leg the **map layer** is painting, so card and hexagon
+never disagree. Card content scrolls above 320 pt rather than growing off-screen at
+accessibility sizes. 44 pt targets on close / clear / details / lock-on. Route mix
+(direct · flood) and per-repeater RSSI added. Radio-loss now has its own tone. Chips carry
+the ambiguity marker, go monospaced when the hash is unresolved, and expose selection to
+VoiceOver. `-0 dB` is gone. The detail sheet re-resolves against each rebuild instead of
+freezing at open. The lock-on picker's search seed is cleared everywhere it is opened.
+
+### Verification note
+
+The simulator MCP panel crashed and would not re-attach this round, and synthetic clicks
+were not accepted by Simulator.app, so this pass is verified by build (device + simulator),
+157 passing tests, and a full adversarial review against the v1 source — **not** by driving
+the ride screen in-simulator as the previous three passes were. The vertical budget is
+arithmetic, not a measurement: at default type on a 852 pt screen the inset is ~86 pt of
+live rows plus ≤328 pt of card, leaving ~240 pt of map with the camera padded to keep the
+rider inside it.

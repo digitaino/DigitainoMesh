@@ -871,6 +871,75 @@ struct SignalMapperCaptureEngineTests {
     #expect(row.rttMsSum == 0, "trace RTT never pollutes the ACK RTT ledger (M6)")
   }
 
+  /// The 400% bug: a single discover broadcast is answered by every repeater in range, so
+  /// reply *packets* can never be the numerator for probes *sent* (field report,
+  /// 2026-08-30). `probesAnswered` counts answered transmissions instead.
+  @Test
+  func `Six replies to one probe count as one answered probe, not six`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    let first = try #require(await engine.placeProbeAttempt())
+    for hex in ["AB", "CD", "EF", "01", "02", "03"] {
+      await engine.ingestProbeResult(MapperProbeResult(
+        repeaterID: NodeHexID(hex),
+        rxSnr: 5,
+        txSnr: 3,
+        rssi: -70,
+        hopCount: 1,
+        at: clock.now,
+        placement: first
+      ))
+    }
+
+    // A second transmission from the same cell that nobody answers.
+    _ = try #require(await engine.placeProbeAttempt())
+
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(row.probesSent == 2)
+    #expect(row.probesAnswered == 1)
+    #expect(row.activePacketCount == 6, "every reply still folds as its own observation")
+  }
+
+  /// The ledger has to outlive a flush: two replies to the same transmission either side
+  /// of one would otherwise book the probe twice, and the display clamp would quietly
+  /// round the lie up to 100%.
+  @Test
+  func `Replies straddling a flush still count as one answered probe`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    let placement = try #require(await engine.placeProbeAttempt())
+    _ = try #require(await engine.placeProbeAttempt())
+
+    await engine.ingestProbeResult(MapperProbeResult(
+      repeaterID: NodeHexID("AB"), rxSnr: 5, txSnr: 3, rssi: -70, hopCount: 1,
+      at: clock.now, placement: placement
+    ))
+    await engine.flushNow()
+    await engine.ingestProbeResult(MapperProbeResult(
+      repeaterID: NodeHexID("CD"), rxSnr: 4, txSnr: 2, rssi: -75, hopCount: 1,
+      at: clock.now, placement: placement
+    ))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(row.probesSent == 2)
+    #expect(row.probesAnswered == 1, "one transmission answered, however its replies land")
+  }
+
   @Test
   func `The raw recorder hears a dropped sample with its reason while aggregates stay clean`() async throws {
     let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))

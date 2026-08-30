@@ -1414,3 +1414,72 @@
 
 /* Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s" */
 "tools.signalMapper.card.lastHeard" = "Ultimo ascolto %@ fa";
+
+/* Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon */
+"tools.signalMapper.card.myCell" = "La mia cella";
+
+/* Location: SignalMapperCellCard.swift - Packet count under the quality headline */
+"tools.signalMapper.card.packetsReceived" = "%lld pacchetti ricevuti";
+
+/* Location: SignalMapperCellCard.swift - Downlink column label */
+"tools.signalMapper.card.rxSignal" = "Segnale RX";
+
+/* Location: SignalMapperCellCard.swift - Uplink column label */
+"tools.signalMapper.card.txSignal" = "Segnale TX";
+
+/* Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name */
+"tools.signalMapper.card.via" = "via %@";
+
+/* Location: SignalMapperCellCard.swift - Clears the repeater filter */
+"tools.signalMapper.card.clear" = "Rimuovi";
+
+/* Location: SignalMapperCellCard.swift - Uplink is blank because this repeater has never reported hearing us */
+"tools.signalMapper.card.heardOnlyReason" = "Solo sentito — non ha mai segnalato di sentirti";
+
+/* Location: SignalMapperCellCard.swift - Uplink is blank because no probe has been answered yet */
+"tools.signalMapper.card.waitingUplink" = "In attesa di una risposta di scoperta";
+
+/* Location: SignalMapperCellCard.swift - Strongest repeater in the cell */
+"tools.signalMapper.card.bestRepeater" = "Miglior ripetitore";
+
+/* Location: SignalMapperCellCard.swift - Label of the live last-heard clock */
+"tools.signalMapper.card.lastHeardLabel" = "Ultimo ascolto";
+
+/* Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s" */
+"tools.signalMapper.card.ago" = "%@ fa";
+
+/* Location: SignalMapperCellCard.swift - Share of probes that were answered */
+"tools.signalMapper.card.probeSuccessLabel" = "Sonde riuscite";
+
+/* Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent */
+"tools.signalMapper.card.probeSuccessValue" = "%1$lld%% (%2$lld/%3$lld) · %4$lld risposte";
+
+/* Location: SignalMapperCellCard.swift - Packets split by direction for one repeater */
+"tools.signalMapper.card.packetSplit" = "Pacchetti";
+
+/* Location: SignalMapperCellCard.swift - Packet split; %1$lld heard from them, %2$lld carrying their reading of us */
+"tools.signalMapper.card.packetSplitValue" = "%1$lld sentiti · %2$lld segnalati";
+
+/* Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link */
+"tools.signalMapper.card.connected" = "Connessi (2 vie)";
+
+/* Location: SignalMapperCellCard.swift - Group of repeaters we only hear */
+"tools.signalMapper.card.heardOnly" = "Sentiti (1 via)";
+
+/* Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at */
+"tools.signalMapper.card.downlinkAccessibility" = "li senti a %lld decibel";
+
+/* Location: SignalMapperFocusBlocks.swift - Caption above the locked-on rows */
+"tools.signalMapper.ride.lockedOn" = "Agganciati";
+
+/* Location: SignalMapperCellCard.swift - Header when probes from this hexagon were never answered */
+"tools.signalMapper.card.noResponse" = "Nessuna risposta";
+
+/* Location: SignalMapperCellCard.swift - Subtitle of the no-response header */
+"tools.signalMapper.card.noResponseDetail" = "Sonda inviata, nessuna risposta";
+
+/* Location: SignalMapperCellCard.swift - Mean reading under the best one; %@ is decibels */
+"tools.signalMapper.card.average" = "med. %@";
+
+/* Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip */
+"tools.signalMapper.card.chipHint" = "Mostra le letture di questo ripetitore per la cella";

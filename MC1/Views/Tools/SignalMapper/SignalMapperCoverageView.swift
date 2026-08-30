@@ -1,6 +1,7 @@
 import CoreLocation
 import MapLibre
 import MC1Services
+import SurveyKit
 import SwiftUI
 
 /// The Signal Mapper: where *your* mesh actually reaches.
@@ -25,6 +26,15 @@ struct SignalMapperCoverageView: View {
   @State private var isCenteredOnUser = false
   @State private var hasFramedData = false
   @State private var selection: SignalMapperCoverageCell?
+  /// The hexagon the rider is standing in. During a run its card is on screen without
+  /// anyone tapping anything — the third field test's "I still don't see any data".
+  @State private var liveCell: H3Cell?
+  /// Set when the rider dismisses the live cell's card, cleared the moment they cross
+  /// into a different hexagon, so the ✕ means what it says without hiding the ride.
+  @State private var dismissedLiveCell: H3Cell?
+  /// Which repeater the cell card is filtered to (v1's `selectedRelayFilter`): tapping a
+  /// chip re-computes the card from that repeater's observations alone.
+  @State private var repeaterFilter: String?
   @State private var detailCell: SignalMapperCoverageCell?
   @State private var showingDeleteConfirmation = false
   @State private var mapLayer: SignalMapperMapLayer = .heard
@@ -33,12 +43,18 @@ struct SignalMapperCoverageView: View {
   /// arms a `.task(id:)` that waits out the dismissal (RadioStatusControl precedent).
   @State private var pendingFocusPicker = false
   @State private var showingFocusPicker = false
+  /// Seeds the lock-on picker's search field when it is opened from a repeater chip.
+  @State private var focusPickerSeed = ""
   @State private var showingPrecisePrompt = false
   @State private var showingRunDetail = false
   @State private var breadcrumb: [CLLocationCoordinate2D] = []
   /// Rendered overlays, rebuilt only when their inputs change — never inline in `body`,
   /// which the follow-me loop re-evaluates every 2 s all ride (UI review S3, thermal).
   @State private var mapOverlays: [MapOverlay] = []
+  /// Height of the bottom inset, measured rather than guessed: the camera has to keep the
+  /// rider above it, or a ride centres the map on a dot hidden behind the cell card
+  /// (UI review P0-1).
+  @State private var bottomInsetHeight: CGFloat = 0
 
   @AppStorage(AppStorageKey.mapStyleSelection.rawValue)
   private var mapStyleSelection: MapStyleSelection = .standard
@@ -85,7 +101,10 @@ struct SignalMapperCoverageView: View {
           SignalMapperRunDetailSheet(
             session: session,
             onSpotCheck: { Task { await model.spotCheck(appState: appState) } },
-            onEditLockOn: { showingFocusPicker = true },
+            onEditLockOn: {
+              focusPickerSeed = ""
+              showingFocusPicker = true
+            },
             onStop: { Task { await model.stopSurvey(appState: appState) } }
           )
         }
@@ -94,7 +113,7 @@ struct SignalMapperCoverageView: View {
         // One picker, two jobs: mid-ride it edits the lock-on set; before a ride it IS
         // the start flow (review S1 — starting should lead into lock-on, not hide it
         // behind a button discovered later).
-        SignalMapperFocusPickerView(startsSurvey: !isSurveying) { targets, meta in
+        SignalMapperFocusPickerView(startsSurvey: !isSurveying, initialSearch: focusPickerSeed) { targets, meta in
           Task {
             if isSurveying {
               appState.signalMapperRideSession?.focusMeta = meta
@@ -275,16 +294,14 @@ struct SignalMapperCoverageView: View {
         cameraRegion: .constant(nil),
         cameraBounds: cameraBounds,
         cameraRegionVersion: cameraVersion,
+        cameraEdgePadding: UIEdgeInsets(
+          top: isSurveying ? 76 : 0,
+          left: 0,
+          bottom: bottomInsetHeight,
+          right: 0
+        ),
         onPointTap: { _, _ in },
-        onMapTap: { coordinate in
-          // Live during rides too (v1's rule): the card is inline and dismissible, so a
-          // stray touch costs one ✕, while the data stays one tap away at a stop.
-          withAnimation(.snappy(duration: 0.25)) {
-            selection = SignalMapperCoverageRenderer.cell(
-              at: coordinate, in: model.snapshot, layer: mapLayer
-            )
-          }
-        },
+        onMapTap: { coordinate in mapTapped(at: coordinate) },
         onCameraRegionChange: { viewportBounds = $0.toMLNCoordinateBounds() },
         isStyleLoaded: $isStyleLoaded,
         isCenteredOnUser: $isCenteredOnUser
@@ -315,6 +332,7 @@ struct SignalMapperCoverageView: View {
       VStack(spacing: 0) {
         bottomInset
       }
+      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomInsetHeight = $0 }
     }
     .toolbar(isSurveying ? .hidden : .visible, for: .tabBar)
     // The map gates camera moves until its style has loaded, which usually lands after the
@@ -330,29 +348,82 @@ struct SignalMapperCoverageView: View {
       if let selected = selection {
         selection = snapshot.cells.first { $0.cell == selected.cell }
       }
+      // The detail sheet is a value copy; without this its numbers freeze the moment it
+      // opens, which during a ride is the one place they should not (UI review P2-33).
+      if let open = detailCell {
+        detailCell = snapshot.cells.first { $0.cell == open.cell }
+      }
+      if let repeaterFilter,
+         displayedCell?.repeaters.contains(where: { $0.hexID == repeaterFilter }) != true {
+        self.repeaterFilter = nil
+      }
       guard !hasFramedData, !isSurveying else { return }
       frameData()
+    }
+    // The map only re-applies its camera when the version moves, so a card appearing
+    // (or growing) has to ask for the re-frame that keeps the rider clear of it.
+    .onChange(of: bottomInsetHeight) { _, _ in
+      guard isSurveying, isCenteredOnUser, cameraBounds != nil else { return }
+      cameraVersion += 1
     }
     .onChange(of: mapLayer) { _, _ in rebuildOverlays() }
     .onChange(of: selection) { _, _ in rebuildOverlays() }
     .onAppear { rebuildOverlays() }
   }
 
-  /// The bottom inset: focus blocks (or the lock-on hint) while riding; the v1-style
+  /// The cell whose card is on screen: the tapped one, else — while riding — the one the
+  /// rider is standing in. The ride shows its own data without being asked (field report,
+  /// 2026-08-30).
+  private var displayedCell: SignalMapperCoverageCell? {
+    if let selection { return selection }
+    guard isSurveying, let liveCell, dismissedLiveCell != liveCell else { return nil }
+    return model.snapshot.cells.first { $0.cell == liveCell }
+  }
+
+  private var focusHexIDs: Set<String> {
+    Set(appState.signalMapperRideSession?.focusTargets.map(\.id.hex) ?? [])
+  }
+
+  /// The bottom inset: the lock-on rows and the cell card while riding; the v1-style
   /// control row with a labelled, self-explaining start button while idle.
   @ViewBuilder
   private var bottomInset: some View {
-    if let selected = selection {
+    if isSurveying, let session = appState.signalMapperRideSession {
+      SignalMapperFocusBlocks(session: session, hasCellCard: displayedCell != nil) {
+        focusPickerSeed = ""
+        showingFocusPicker = true
+      }
+    }
+    if let displayed = displayedCell {
       SignalMapperCellCard(
-        cell: selected,
-        onDetails: { detailCell = selected },
-        onClose: { withAnimation(.snappy(duration: 0.25)) { selection = nil } }
+        cell: displayed,
+        layer: mapLayer,
+        focusHexIDs: focusHexIDs,
+        isLiveCell: selection == nil,
+        repeaterFilter: $repeaterFilter,
+        onDetails: { detailCell = displayed },
+        onLockOn: { repeater in
+          focusPickerSeed = repeater.name ?? repeater.hexID
+          showingFocusPicker = true
+        },
+        onClose: {
+          withAnimation(.snappy(duration: 0.25)) {
+            if selection != nil {
+              selection = nil
+            } else {
+              dismissedLiveCell = liveCell
+            }
+            repeaterFilter = nil
+          }
+        }
       )
+      // A new hexagon is a new card, not the old one's digits rolling into new values:
+      // `contentTransition(.numericText())` would otherwise animate "you moved" as
+      // "this number changed" (UI review P2-12).
+      .id(displayed.cell)
       .transition(.move(edge: .bottom).combined(with: .opacity))
     }
-    if isSurveying, let session = appState.signalMapperRideSession {
-      SignalMapperFocusBlocks(session: session) { showingFocusPicker = true }
-    } else if model.hasCoverage {
+    if !isSurveying, model.hasCoverage {
       HStack {
         Button {
           startSurveyTapped()
@@ -414,6 +485,7 @@ struct SignalMapperCoverageView: View {
   /// pre-flight, starting leads into the lock-on picker — its confirm button starts the
   /// run with the chosen targets, or without any.
   private func startSurveyTapped() {
+    focusPickerSeed = ""
     if appState.locationService.isAuthorized,
        !appState.locationService.isPreciseLocationAuthorized {
       showingPrecisePrompt = true
@@ -428,12 +500,27 @@ struct SignalMapperCoverageView: View {
   private func followRider() async {
     guard isSurveying else {
       breadcrumb = []
+      liveCell = nil
+      dismissedLiveCell = nil
       return
     }
     isCenteredOnUser = true
     while !Task.isCancelled, isSurveying {
       if let location = appState.locationService.currentLocation {
         let coordinate = location.coordinate
+        // Which hexagon the card follows. Cheap enough to re-derive every tick, and it
+        // has to be: crossing a boundary while stopped at a light still changes the cell.
+        let here = SurveyGrid.cell(
+          containing: GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        )
+        if here != liveCell {
+          withAnimation(.snappy(duration: 0.25)) {
+            liveCell = here
+            // A new hexagon is new data: a card dismissed in the last one does not carry.
+            dismissedLiveCell = nil
+            repeaterFilter = nil
+          }
+        }
         let last = breadcrumb.last
         let movedEnough = last.map {
           CLLocation(latitude: $0.latitude, longitude: $0.longitude)
@@ -499,6 +586,7 @@ struct SignalMapperCoverageView: View {
       Section {
         if isSurveying {
           Button(L10n.Tools.Tools.SignalMapper.Ride.lockOn, systemImage: "scope") {
+            focusPickerSeed = ""
             pendingFocusPicker = true
           }
           Button(L10n.Tools.Tools.SignalMapper.Survey.stop, systemImage: "stop.circle") {
@@ -555,6 +643,24 @@ struct SignalMapperCoverageView: View {
     hasFramedData = true
     cameraBounds = bounds
     cameraVersion += 1
+  }
+
+  /// A tap on the map picks that hexagon's card. Live during rides too (v1's rule): the
+  /// card is inline and dismissible, so a stray touch costs one ✕, while the data stays
+  /// one tap away at a stop. Tapping the hexagon you are already in returns to following
+  /// it rather than pinning a second, identical card.
+  private func mapTapped(at coordinate: CLLocationCoordinate2D) {
+    let tapped = SignalMapperCoverageRenderer.cell(
+      at: coordinate, in: model.snapshot, layer: mapLayer
+    )
+    let isLive: Bool = if let tapped { tapped.cell == liveCell } else { false }
+    withAnimation(.snappy(duration: 0.25)) {
+      selection = isLive ? nil : tapped
+      if isLive {
+        dismissedLiveCell = nil
+      }
+      repeaterFilter = nil
+    }
   }
 
   private func centerOnUser() {
