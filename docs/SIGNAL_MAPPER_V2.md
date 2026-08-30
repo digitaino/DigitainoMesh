@@ -6,7 +6,10 @@ re-importing SurveyKit/H3. Status: **M0 + M1 + M1.5 built (local capture, own-co
 map, privacy hardening); M2+ redesigned 2026-07-30 after the adversarial review in §10.
 2026-08-26: manual mode pulled forward — the build order is now M3 before M2 (§7) — and
 the flood-discover exception is removed: survey sessions never transmit flood-routed,
-full stop (§2.4).**
+full stop (§2.4). 2026-08-29: M3.5 (active survey / ride mode — lock-on focus probing,
+two map layers, the raw ride log, continuous-fix sessions) designed, adversarially
+reviewed and built — see docs/ACTIVE_SURVEY_M3_5.md; its §6 review log amends several
+constants in §2.5's table (probe interval 4 s, freshness 0, fix gate 30 s/50 m/60 m).**
 
 Guiding idea: one capture core, two thin modes. Automatic mode is purely passive — it
 maps the packets the app already sends and receives. Manual mode is a deliberate,

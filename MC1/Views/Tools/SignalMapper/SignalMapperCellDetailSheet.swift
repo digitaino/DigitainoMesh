@@ -24,6 +24,7 @@ struct SignalMapperCellDetailSheet: View {
       List {
         summarySection
         directionSection
+        uplinkSection
         signalSection
         if !cell.repeaters.isEmpty {
           repeaterSection
@@ -85,6 +86,45 @@ struct SignalMapperCellDetailSheet: View {
           title: L10n.Tools.Tools.SignalMapper.Detail.roundTrip,
           value: L10n.Tools.Tools.SignalMapper.Detail.milliseconds(Int(rtt.rounded()))
         )
+      }
+    }
+  }
+
+  /// The active-survey half of the ledger (M3.5): what probing from this cell proved.
+  @ViewBuilder
+  private var uplinkSection: some View {
+    if cell.probesSent > 0 || cell.txSnrCount > 0 {
+      Section(L10n.Tools.Tools.SignalMapper.Detail.uplink) {
+        row(
+          systemImage: "dot.radiowaves.left.and.right",
+          title: L10n.Tools.Tools.SignalMapper.Detail.probesSent,
+          value: cell.probesSent.formatted()
+        )
+        row(
+          systemImage: "arrow.turn.up.left",
+          title: L10n.Tools.Tools.SignalMapper.Detail.probeReplies,
+          value: cell.activePacketCount.formatted()
+        )
+        if let txSnr = cell.averageTxSnr {
+          row(
+            systemImage: "arrow.up.right.circle",
+            title: L10n.Tools.Tools.SignalMapper.Detail.averageTxSnr,
+            value: decibels(txSnr)
+          )
+        } else if cell.isUnreachedProbed {
+          row(
+            systemImage: "speaker.slash",
+            title: L10n.Tools.Tools.SignalMapper.Detail.averageTxSnr,
+            value: L10n.Tools.Tools.SignalMapper.Detail.neverHeardBack
+          )
+        }
+        if let rtt = cell.averageProbeRttMs {
+          row(
+            systemImage: "timer",
+            title: L10n.Tools.Tools.SignalMapper.Detail.probeRoundTrip,
+            value: L10n.Tools.Tools.SignalMapper.Detail.milliseconds(Int(rtt.rounded()))
+          )
+        }
       }
     }
   }

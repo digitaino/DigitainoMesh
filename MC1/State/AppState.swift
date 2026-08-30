@@ -1,5 +1,6 @@
 import CoreLocation
 import MapKit
+import MapperRawLog
 import MC1Services
 import MeshCore
 import OSLog
@@ -309,6 +310,21 @@ final class AppState {
   /// passive-capture toggle was off — in which case ending the session tears it down
   /// again, leaving the toggle's meaning untouched.
   var surveySessionOwnsCaptureStack = false
+
+  /// The one fix provider both mapper engines are wired with, for the whole app
+  /// lifetime — it routes between the live ride stream and the per-connection cache
+  /// (M3.5 review M1: engines are built at two sites and never re-read their provider,
+  /// so the router must be the thing injected, constructed exactly once).
+  var signalMapperFixRouter: MapperFixRouter?
+
+  /// The active survey *run* — the identity that survives BLE rewires. Engine instances
+  /// come and go with connections; this is what the HUD, screen-awake and continuous
+  /// location key off. Nil when no run is active.
+  var signalMapperRideSession: SignalMapperRideSession?
+
+  /// The raw ride-log store (own container, backup-excluded). Created lazily at first
+  /// run; launch maintenance (orphan reconciliation, retention purge) runs then too.
+  var mapperRawLogStore: MapperRawLogStore?
 
   #if DEBUG
     /// Optional test-only hooks for deterministic lifecycle ordering tests.

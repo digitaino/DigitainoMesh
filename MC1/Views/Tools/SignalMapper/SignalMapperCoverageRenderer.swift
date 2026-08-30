@@ -15,6 +15,24 @@ import UIKit
 /// This is the second consumer of the overlay API (§2.3), and the one it was designed for:
 /// the fill paint and polygon geometry it uses were written into ``MapOverlay``'s notes as
 /// "what the signal mapper will need" before either existed.
+/// Which of the two coverage questions the map is currently answering.
+///
+/// One capture store, two reads of it (docs/ACTIVE_SURVEY_M3_5.md §2.5): what the mesh
+/// sounds like from here, and what *hears us* from here — the second being the whole
+/// point of active surveying, and invisible until M3.5 because the builder used to
+/// discard the uplink aggregates.
+enum SignalMapperMapLayer: String, CaseIterable, Identifiable {
+  /// Downlink: cells coloured by the mean SNR of everything we received there.
+  case heard
+  /// Uplink: cells coloured by the mean SNR repeaters reported for our transmissions,
+  /// with a distinct "no reach" tint where we probed and nobody ever heard us.
+  case reach
+
+  var id: String {
+    rawValue
+  }
+}
+
 enum SignalMapperCoverageRenderer {
   // MARK: - Overlay ids
 
@@ -25,25 +43,40 @@ enum SignalMapperCoverageRenderer {
   }
 
   static let selectionOverlayID = "mapper-selection"
+  /// The reach layer's "probed, never heard" cells. Declared on both layers (empty on
+  /// Heard) so toggling swaps *features*, never the overlay set — `MapOverlay.id` is the
+  /// diff key, and an id change would tear down and rebuild every `MLNShapeSource` on
+  /// each toggle (M3.5 review M13).
+  static let noReachOverlayID = "mapper-cells-noreach"
 
   // MARK: - Overlays
 
   static func overlays(
     for snapshot: SignalMapperCoverageSnapshot,
-    selected: SignalMapperCoverageCell?
+    selected: SignalMapperCoverageCell?,
+    layer: SignalMapperMapLayer = .heard
   ) -> [MapOverlay] {
     // Fills first, ring last: overlays stack in the order they are listed.
-    cellOverlays(for: snapshot) + [selectionOverlay(for: selected)]
+    cellOverlays(for: snapshot, layer: layer) + [selectionOverlay(for: selected)]
   }
 
-  /// One translucent hexagon per captured cell, tinted by how well the mesh reaches it and
-  /// solidified by how much was observed there.
+  /// One translucent hexagon per captured cell, tinted by how well the mesh reaches it
+  /// (Heard) or how well it hears us (Reach), and solidified by how much was observed.
   ///
-  /// Every quality is declared whether or not it has members, so the stack order is settled
-  /// by the map's first apply rather than by which tint happened to show up first.
-  private static func cellOverlays(for snapshot: SignalMapperCoverageSnapshot) -> [MapOverlay] {
-    SignalQuality.coverageOrder.map { quality in
-      let members = snapshot.cells.filter { $0.quality == quality }
+  /// Every overlay is declared on every layer, empty or not: the stack order is settled by
+  /// the map's first apply, and a layer toggle must change feature sets only — stable ids
+  /// keep the diff on its cheap in-place path.
+  private static func cellOverlays(
+    for snapshot: SignalMapperCoverageSnapshot,
+    layer: SignalMapperMapLayer
+  ) -> [MapOverlay] {
+    let qualityOverlays = SignalQuality.coverageOrder.map { quality in
+      let members = snapshot.cells.filter { cell in
+        switch layer {
+        case .heard: cell.quality == quality
+        case .reach: cell.reachQuality == quality
+        }
+      }
       return MapOverlay(
         id: cellOverlayID(quality),
         features: members.map { cell in
@@ -62,6 +95,26 @@ enum SignalMapperCoverageRenderer {
         ).asPaint
       )
     }
+
+    // "We shouted from here and nobody heard": the reach layer's most important cells,
+    // drawn in a flat neutral so they read as absence rather than as a sixth quality.
+    let noReachMembers = layer == .reach ? snapshot.cells.filter(\.isUnreachedProbed) : []
+    let noReach = MapOverlay(
+      id: noReachOverlayID,
+      features: noReachMembers.map { cell in
+        MapOverlay.Feature(
+          id: cell.cell.stringValue,
+          geometry: .polygon(cell.boundary.map(\.locationCoordinate)),
+          weight: max(0.4, cell.normalizedWeight)
+        )
+      },
+      paint: MapOverlay.WeightedFill(
+        color: .systemGray,
+        opacity: 0.25...0.45,
+        outlineColor: UIColor.systemGray.withAlphaComponent(0.8)
+      ).asPaint
+    )
+    return qualityOverlays + [noReach]
   }
 
   /// A ring around the tapped cell, drawn as a closed polyline through the paint the
@@ -95,13 +148,20 @@ enum SignalMapperCoverageRenderer {
   /// there is no proximity tolerance to tune and no feature query to run.
   static func cell(
     at coordinate: CLLocationCoordinate2D,
-    in snapshot: SignalMapperCoverageSnapshot
+    in snapshot: SignalMapperCoverageSnapshot,
+    layer: SignalMapperMapLayer = .heard
   ) -> SignalMapperCoverageCell? {
     guard let tapped = SurveyGrid.cell(containing: GeoCoordinate(
       latitude: coordinate.latitude,
       longitude: coordinate.longitude
     )) else { return nil }
-    return snapshot.cells.first { $0.cell == tapped }
+    guard let hit = snapshot.cells.first(where: { $0.cell == tapped }) else { return nil }
+    // The reach layer omits cells with neither uplink evidence nor probes; a tap on one
+    // of those is a tap on bare map there.
+    if layer == .reach, hit.reachQuality == nil, !hit.isUnreachedProbed {
+      return nil
+    }
+    return hit
   }
 
   // MARK: - Camera

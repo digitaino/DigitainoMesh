@@ -1258,3 +1258,90 @@
 "tools.signalMapper.survey.summary.replies" = "Получено ответов";
 "tools.signalMapper.survey.summary.noReply" = "Зонды без ответа";
 "tools.signalMapper.survey.summary.localNote" = "Результаты замеров остаются только на этом устройстве.";
+
+/* Location: SignalMapperRideHUD.swift - Banner while the BLE link to the radio is down mid-ride */
+"tools.signalMapper.ride.radioDisconnected" = "Рация отключена — позиция всё ещё записывается";
+
+/* Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker */
+"tools.signalMapper.ride.lockOn" = "Захват ретрансляторов";
+
+/* Location: SignalMapperRideHUD.swift - Seconds since a focus repeater was last heard; %lld seconds */
+"tools.signalMapper.ride.age" = "%lldс";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: probes sent · replies · lost */
+"tools.signalMapper.ride.probes" = "Зонды · ответы · потери";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: hexagons probed this run */
+"tools.signalMapper.ride.cells" = "Обследовано шестиугольников";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: samples skipped for lack of a GPS fix (loud when Precise Location is off) */
+"tools.signalMapper.ride.noFixDrops" = "Пропущено: нет пригодных координат";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name */
+"tools.signalMapper.ride.maxRange" = "Макс. дальность · %@";
+
+/* Location: SignalMapperFocusPickerView.swift - Empty state when no repeater with a known key exists */
+"tools.signalMapper.focus.empty" = "Пока нет ретрансляторов с известными ключами. Проедьте немного — ответы на запросы обнаружения их найдут.";
+
+/* Location: SignalMapperFocusPickerView.swift - Footer; %lld is the selection cap */
+"tools.signalMapper.focus.footer" = "Выберите до %lld ретрансляторов для отслеживания в реальном времени. Всё остальное продолжает записываться в фоне.";
+
+/* Location: SignalMapperFocusPickerView.swift - Confirm button applying the lock-on selection */
+"tools.signalMapper.focus.apply" = "Захватить";
+
+/* Location: SignalMapperCoverageView.swift - Alert title when Precise Location is off before a ride */
+"tools.signalMapper.precise.title" = "Точная геопозиция выключена";
+
+/* Location: SignalMapperCoverageView.swift - Alert body explaining why the ride would record nothing */
+"tools.signalMapper.precise.message" = "Без точной геопозиции каждый замер не проходит проверку точности, и поездка ничего не записывает. Разрешите точную геопозицию для этого сеанса или включите её в Настройки → Конфиденциальность → Службы геолокации.";
+
+/* Location: SignalMapperCoverageView.swift - Alert button requesting temporary full accuracy */
+"tools.signalMapper.precise.enable" = "Разрешить точную геопозицию";
+
+/* Location: SignalMapperCoverageView.swift - Alert button starting the ride regardless */
+"tools.signalMapper.precise.startAnyway" = "Всё равно начать";
+
+/* Location: SignalMapperCoverageView.swift - Map layer picker title */
+"tools.signalMapper.layer.title" = "Слой карты";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink) */
+"tools.signalMapper.layer.heard" = "Слышу — что слышу я";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink) */
+"tools.signalMapper.layer.reach" = "Дальность — кто слышит меня";
+
+/* Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale */
+"tools.signalMapper.legend.reachSignal" = "Цвет показывает, насколько хорошо ретрансляторы слышали ваши передачи из этого шестиугольника.";
+
+/* Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells */
+"tools.signalMapper.legend.noReach" = "Обследовано, никто вас не услышал";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted */
+"tools.signalMapper.survey.summary.duration" = "Длительность";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Button generating the shareable ride log */
+"tools.signalMapper.survey.summary.export" = "Экспорт журнала поездки";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Share button once the export file is ready */
+"tools.signalMapper.survey.summary.share" = "Поделиться журналом поездки";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing */
+"tools.signalMapper.survey.summary.exportNote" = "Общие файлы очищаются: позиции огрубляются, первые и последние 500 м обрезаются, ключи ретрансляторов сокращаются. Полный журнал остаётся на этом устройстве.";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section: what active probing from this cell proved */
+"tools.signalMapper.detail.uplink" = "Восходящий канал";
+
+/* Location: SignalMapperCellDetailSheet.swift - Probe transmissions sent from this cell */
+"tools.signalMapper.detail.probesSent" = "Отправлено зондов";
+
+/* Location: SignalMapperCellDetailSheet.swift - Probe replies that came back */
+"tools.signalMapper.detail.probeReplies" = "Ответы на зонды";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean SNR repeaters reported for our transmissions */
+"tools.signalMapper.detail.averageTxSnr" = "Вас услышали с";
+
+/* Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered */
+"tools.signalMapper.detail.neverHeardBack" = "Ответа так и не было";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip */
+"tools.signalMapper.detail.probeRoundTrip" = "Оборот зонда";

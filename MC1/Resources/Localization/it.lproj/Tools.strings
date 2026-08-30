@@ -1258,3 +1258,90 @@
 "tools.signalMapper.survey.summary.replies" = "Risposte ricevute";
 "tools.signalMapper.survey.summary.noReply" = "Sonde senza risposta";
 "tools.signalMapper.survey.summary.localNote" = "I risultati restano solo su questo dispositivo.";
+
+/* Location: SignalMapperRideHUD.swift - Banner while the BLE link to the radio is down mid-ride */
+"tools.signalMapper.ride.radioDisconnected" = "Radio disconnessa — la posizione viene ancora registrata";
+
+/* Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker */
+"tools.signalMapper.ride.lockOn" = "Aggancia i ripetitori";
+
+/* Location: SignalMapperRideHUD.swift - Seconds since a focus repeater was last heard; %lld seconds */
+"tools.signalMapper.ride.age" = "%llds";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: probes sent · replies · lost */
+"tools.signalMapper.ride.probes" = "Sonde · risposte · perse";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: hexagons probed this run */
+"tools.signalMapper.ride.cells" = "Esagoni sondati";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: samples skipped for lack of a GPS fix (loud when Precise Location is off) */
+"tools.signalMapper.ride.noFixDrops" = "Saltato: nessuna posizione utilizzabile";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name */
+"tools.signalMapper.ride.maxRange" = "Portata max · %@";
+
+/* Location: SignalMapperFocusPickerView.swift - Empty state when no repeater with a known key exists */
+"tools.signalMapper.focus.empty" = "Nessun ripetitore con chiave nota per ora. Muoviti un po': le risposte di scoperta li troveranno.";
+
+/* Location: SignalMapperFocusPickerView.swift - Footer; %lld is the selection cap */
+"tools.signalMapper.focus.footer" = "Scegli fino a %lld ripetitori da seguire in tempo reale. Tutto il resto continua a essere registrato in background.";
+
+/* Location: SignalMapperFocusPickerView.swift - Confirm button applying the lock-on selection */
+"tools.signalMapper.focus.apply" = "Aggancia";
+
+/* Location: SignalMapperCoverageView.swift - Alert title when Precise Location is off before a ride */
+"tools.signalMapper.precise.title" = "La posizione esatta è disattivata";
+
+/* Location: SignalMapperCoverageView.swift - Alert body explaining why the ride would record nothing */
+"tools.signalMapper.precise.message" = "Senza posizione esatta ogni campione non supera il controllo di precisione e il percorso non registra nulla. Consenti la posizione esatta per questa sessione oppure attivala in Impostazioni → Privacy → Localizzazione.";
+
+/* Location: SignalMapperCoverageView.swift - Alert button requesting temporary full accuracy */
+"tools.signalMapper.precise.enable" = "Consenti posizione esatta";
+
+/* Location: SignalMapperCoverageView.swift - Alert button starting the ride regardless */
+"tools.signalMapper.precise.startAnyway" = "Avvia comunque";
+
+/* Location: SignalMapperCoverageView.swift - Map layer picker title */
+"tools.signalMapper.layer.title" = "Livello della mappa";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink) */
+"tools.signalMapper.layer.heard" = "Sentito — ciò che sento";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink) */
+"tools.signalMapper.layer.reach" = "Portata — chi mi sente";
+
+/* Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale */
+"tools.signalMapper.legend.reachSignal" = "Il colore indica quanto bene i ripetitori hanno sentito le tue trasmissioni da quell'esagono.";
+
+/* Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells */
+"tools.signalMapper.legend.noReach" = "Sondato, nessuno ti ha sentito";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted */
+"tools.signalMapper.survey.summary.duration" = "Durata";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Button generating the shareable ride log */
+"tools.signalMapper.survey.summary.export" = "Esporta il registro del percorso";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Share button once the export file is ready */
+"tools.signalMapper.survey.summary.share" = "Condividi il registro del percorso";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing */
+"tools.signalMapper.survey.summary.exportNote" = "I file condivisi vengono ripuliti: posizioni approssimate, primi e ultimi 500 m rimossi, chiavi dei ripetitori accorciate. Il registro completo resta su questo dispositivo.";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section: what active probing from this cell proved */
+"tools.signalMapper.detail.uplink" = "Uplink";
+
+/* Location: SignalMapperCellDetailSheet.swift - Probe transmissions sent from this cell */
+"tools.signalMapper.detail.probesSent" = "Sonde inviate";
+
+/* Location: SignalMapperCellDetailSheet.swift - Probe replies that came back */
+"tools.signalMapper.detail.probeReplies" = "Risposte alle sonde";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean SNR repeaters reported for our transmissions */
+"tools.signalMapper.detail.averageTxSnr" = "Ti hanno sentito a";
+
+/* Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered */
+"tools.signalMapper.detail.neverHeardBack" = "Nessuna risposta";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip */
+"tools.signalMapper.detail.probeRoundTrip" = "Andata e ritorno delle sonde";

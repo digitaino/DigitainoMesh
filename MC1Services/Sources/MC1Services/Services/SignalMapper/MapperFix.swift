@@ -21,6 +21,10 @@ public struct MapperFix: Sendable, Equatable {
   /// same fix it reports the coordinate with — which is what makes it the mechanism that
   /// still works when Motion & Fitness was declined.
   public var speedMetersPerSecond: Double?
+  /// Course over ground in degrees (0 = north), nil when the platform reports none.
+  /// Only the live ride stream populates it; the one-shot cache never does. It exists
+  /// for the raw ride log's later analysis and no gate reads it.
+  public var courseDegrees: Double?
   /// When the fix was captured — not when it was handed over. The staleness rule is about
   /// the former.
   public var timestamp: Date
@@ -41,6 +45,7 @@ public struct MapperFix: Sendable, Equatable {
     longitude: Double,
     horizontalAccuracyMeters: Double,
     speedMetersPerSecond: Double? = nil,
+    courseDegrees: Double? = nil,
     timestamp: Date,
     movedSinceCapture: Bool = false
   ) {
@@ -48,6 +53,7 @@ public struct MapperFix: Sendable, Equatable {
     self.longitude = longitude
     self.horizontalAccuracyMeters = horizontalAccuracyMeters
     self.speedMetersPerSecond = speedMetersPerSecond
+    self.courseDegrees = courseDegrees
     self.timestamp = timestamp
     self.movedSinceCapture = movedSinceCapture
   }

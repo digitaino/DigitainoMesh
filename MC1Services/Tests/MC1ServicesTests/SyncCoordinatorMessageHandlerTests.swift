@@ -241,7 +241,9 @@ struct SyncCoordinatorMessageHandlerTests {
 
   private struct FixedPhoneLocationProvider: PhoneLocationProvider {
     let fix: PhoneLocationFix?
-    func currentFix() async -> PhoneLocationFix? { fix }
+    func currentFix() async -> PhoneLocationFix? {
+      fix
+    }
   }
 
   /// Wires the real ingest pipeline over a fresh in-memory store with the

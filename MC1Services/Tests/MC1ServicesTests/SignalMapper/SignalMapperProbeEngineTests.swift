@@ -19,9 +19,22 @@ struct SignalMapperProbeEngineTests {
   /// A sink that records what folds, standing in for the capture engine.
   private actor RecordingSink: MapperActiveSampleSink {
     private(set) var results: [MapperProbeResult] = []
+    private(set) var attemptCount = 0
+    /// What ``placeProbeAttempt()`` hands back; nil (the default) exercises the
+    /// engine's no-placement fallback path.
+    var placement: MapperProbePlacement?
+
+    func setPlacement(_ placement: MapperProbePlacement?) {
+      self.placement = placement
+    }
 
     func ingestProbeResult(_ result: MapperProbeResult) async {
       results.append(result)
+    }
+
+    func placeProbeAttempt() async -> MapperProbePlacement? {
+      attemptCount += 1
+      return placement
     }
   }
 
@@ -36,12 +49,16 @@ struct SignalMapperProbeEngineTests {
   private func makeTuning(
     probeInterval: TimeInterval = 10,
     probeBurst: Int = 3,
-    freshnessDays: Int = 7
+    samplesPerCell: Int = 1,
+    freshnessDays: Int = 7,
+    focusInterval: TimeInterval = 20
   ) -> MapperTuning {
     MapperTuning(
       probeIntervalSeconds: probeInterval,
       probeBurst: probeBurst,
-      communityFreshnessDays: freshnessDays
+      samplesPerCellPerSession: samplesPerCell,
+      communityFreshnessDays: freshnessDays,
+      focusProbeIntervalSeconds: focusInterval
     )
   }
 
@@ -201,6 +218,12 @@ struct SignalMapperProbeEngineTests {
       tag: tag, localSnr: 5.0, remoteSnrX4: 12
     )))
 
+    // Half a reply stages rather than folding: the trace event may still arrive with
+    // the per-hop array. Once the staging window lapses, the next tick settles it.
+    #expect(await sink.results.isEmpty)
+    clock.advance(2)
+    await engine.tick()
+
     let results = await sink.results
     #expect(results.count == 1)
     #expect(results.first?.repeaterID == target.id)
@@ -289,7 +312,10 @@ struct SignalMapperProbeEngineTests {
     await engine.ingest(.rxLogData(SignalBarsFixtures.traceReply(tag: tag)))
 
     // Sampled now: hours of standing here trigger nothing further automatically.
+    // (The fix is refreshed — under the M3.5 30 s age gate a two-minute-old fix would
+    // be rejected outright, which is a different test.)
     clock.advance(120)
+    fixes.set(mapperFix(at: clock.now))
     await engine.tick()
     #expect(await engine.snapshot().probesSent == 1)
 
@@ -381,12 +407,222 @@ struct SignalMapperProbeEngineTests {
     let summary = await engine.stopSession()
     #expect(summary.isRunning == false)
     #expect(summary.probesSent == 1)
-    #expect(summary.probesLost == 1)
+    // Written off, not lost: teardown must never manufacture dead-zone evidence.
+    #expect(summary.probesLost == 0)
+    #expect(summary.probesAbandoned == 1)
 
     // A stopped session ignores stragglers.
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0xEF])
     )))
     #expect(await sink.results.isEmpty)
+  }
+
+  // MARK: - Lock-on (M3.5)
+
+  @Test
+  func `Focus probes run beside the novelty cycle without suppressing it`() async throws {
+    // The C1 regression: focus probes routed through the policy reset `lastProbeAt`
+    // and hold the novelty gate closed forever. With the separate focus scheduler,
+    // one tick fires both — the focus trace AND the full novelty cycle.
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let focusTarget = try makeTarget(prefix: [0xAA])
+    let otherTarget = try makeTarget(prefix: [0xBB])
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [focusTarget, otherTarget], fixes: fixes,
+      clock: clock, tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    await engine.setFocusTargets([focusTarget])
+    await engine.tick()
+
+    // One focus trace to AA, one novelty discover, one novelty trace to BB (round-robin
+    // excludes the focus target).
+    let traces = await session.traces
+    #expect(traces.count == 2)
+    #expect(traces.contains { $0.path == focusTarget.publicKey.prefix(1) })
+    #expect(traces.contains { $0.path == otherTarget.publicKey.prefix(1) })
+    #expect(await session.discoverRequests.count == 1)
+    await engine.stopSession()
+  }
+
+  @Test
+  func `A lost focus probe raises the loss streak and a reply resets it`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let focusTarget = try makeTarget(prefix: [0xAA])
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [focusTarget], fixes: fixes, clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    await engine.setFocusTargets([focusTarget])
+    await engine.tick()
+    #expect(await session.traces.count == 1)
+
+    // Past the deadline with no reply: streak 1.
+    clock.advance(30)
+    fixes.set(mapperFix(at: clock.now))
+    await engine.tick()
+    var states = await engine.snapshot().focusStates
+    #expect(states.first?.lossStreak == 1)
+    #expect(await engine.snapshot().probesLost == 1)
+
+    // The streak shortens the ladder interval; the next probe goes out and its reply
+    // resets the streak.
+    clock.advance(10)
+    fixes.set(mapperFix(at: clock.now))
+    await engine.tick()
+    let tag = try #require(await session.traces.last?.tag)
+    await engine.ingest(.rxLogData(SignalBarsFixtures.traceReply(tag: tag, localSnr: 4.0, remoteSnrX4: 8)))
+    clock.advance(2)
+    await engine.tick()
+
+    states = await engine.snapshot().focusStates
+    #expect(states.first?.lossStreak == 0)
+    #expect(states.first?.lastTxSnr == 2.0)
+    #expect(states.first?.repliesHeard == 1)
+    await engine.stopSession()
+  }
+
+  @Test
+  func `The loss-streak ladder is fast at the edge and slow once the link is gone`() {
+    #expect(SignalMapperProbeEngine.ladderInterval(base: 20, lossStreak: 0) == 20)
+    #expect(SignalMapperProbeEngine.ladderInterval(base: 20, lossStreak: 1) == 8)
+    #expect(SignalMapperProbeEngine.ladderInterval(base: 20, lossStreak: 4) == 8)
+    #expect(SignalMapperProbeEngine.ladderInterval(base: 20, lossStreak: 5) == 60)
+  }
+
+  @Test
+  func `A passive sighting refreshes a focus target's downlink state`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let focusTarget = try makeTarget(prefix: [0xAA])
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [focusTarget], fixes: fixes, clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    await engine.setFocusTargets([focusTarget])
+
+    await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0xAA], snr: 9.5)))
+    let states = await engine.snapshot().focusStates
+    #expect(states.first?.lastRxSnr == 9.5)
+    #expect(states.first?.lastHeardAt != nil)
+    await engine.stopSession()
+  }
+
+  // MARK: - Trace staging (M3.5)
+
+  @Test
+  func `Both halves of a trace reply fold once, with the trace's uplink authoritative`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let target = try makeTarget(prefix: [0xAB])
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [target], fixes: fixes, clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    await engine.tick()
+    let tag = try #require(await session.traces.first?.tag)
+
+    // traceData first: per-hop uplink (7.5 at the repeater) + our quantized downlink.
+    await engine.ingest(.traceData(TraceInfo(
+      tag: tag, authCode: 0, flags: 0, pathLength: 1,
+      path: [TraceNode(hashBytes: Data([0xAB]), snr: 7.5), TraceNode(hashBytes: nil, snr: 4.75)]
+    )))
+    #expect(await sink.results.isEmpty)
+
+    // The RX-log half completes the pair: folds immediately, exactly once, preferring
+    // the trace's target-hop uplink over the RX-log last-byte fallback and the RX log's
+    // unquantized downlink over the trace's final node.
+    await engine.ingest(.rxLogData(SignalBarsFixtures.traceReply(tag: tag, localSnr: 5.1, remoteSnrX4: 99)))
+    let results = await sink.results
+    #expect(results.count == 1)
+    #expect(results.first?.txSnr == 7.5)
+    #expect(results.first?.rxSnr == 5.1)
+    #expect(results.first?.rttMs != nil)
+    #expect(await engine.snapshot().traceRepliesHeard == 1)
+    #expect(await engine.snapshot().probesLost == 0)
+    await engine.stopSession()
+  }
+
+  @Test
+  func `A trace event alone still folds a complete result`() async throws {
+    // The robustness leg: a radio that never pushes an RX log still measures both legs
+    // (review M9 — `.traceData` is the ordinary trace reply, the RX log is optional).
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let target = try makeTarget(prefix: [0xAB])
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [target], fixes: fixes, clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    await engine.tick()
+    let tag = try #require(await session.traces.first?.tag)
+
+    await engine.ingest(.traceData(TraceInfo(
+      tag: tag, authCode: 0, flags: 0, pathLength: 1,
+      path: [TraceNode(hashBytes: Data([0xAB]), snr: 6.25), TraceNode(hashBytes: nil, snr: 3.5)]
+    )))
+    clock.advance(2)
+    await engine.tick()
+
+    let results = await sink.results
+    #expect(results.count == 1)
+    #expect(results.first?.txSnr == 6.25)
+    #expect(results.first?.rxSnr == 3.5)
+    await engine.stopSession()
+  }
+
+  @Test
+  func `The RX-log uplink byte is trusted only at one-byte hash width`() async throws {
+    // Review M9: `pathNodes.last` is one byte regardless of hash mode. At mode 1 the
+    // trace path packs two-byte hops, so the byte is not an SNR and must be ignored.
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let key = SignalBarsFixtures.publicKey([0xAB, 0xCD])
+    let id = try #require(NodeHexID(data: key.prefix(2)))
+    let target = MapperProbeTarget(id: id, publicKey: key, lastHeard: nil)
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [target], fixes: fixes, clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 1)
+    await engine.tick()
+    let tag = try #require(await session.traces.first?.tag)
+
+    // Only the RX-log half arrives; its trailing byte would decode to 3.0 dB if the
+    // one-byte fallback were (wrongly) applied at this width.
+    await engine.ingest(.rxLogData(SignalBarsFixtures.traceReply(tag: tag, localSnr: 5.0, remoteSnrX4: 12)))
+    clock.advance(2)
+    await engine.tick()
+
+    let results = await sink.results
+    #expect(results.count == 1)
+    #expect(results.first?.txSnr == nil)
+    #expect(results.first?.rxSnr == 5.0)
+    await engine.stopSession()
   }
 }

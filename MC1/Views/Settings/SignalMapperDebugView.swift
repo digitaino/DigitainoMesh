@@ -1,5 +1,6 @@
 #if DEBUG
-  import MC1Services
+  import MapperRawLog
+import MC1Services
   import SwiftUI
 
   /// Debug-only control panel for the signal mapper's capture core
@@ -34,6 +35,7 @@
         anchorTuningSection
         flushSection
         probeSection
+        rawRideLogSection
         uploadSection
         maintenanceSection
       }
@@ -177,10 +179,54 @@
         stepper("Probe burst", value: $tuning.probeBurst, step: 1, range: 1...10, unit: "")
         stepper("Samples per cell", value: $tuning.samplesPerCellPerSession, step: 1, range: 1...50, unit: "")
         stepper("Community-fresh window", value: $tuning.communityFreshnessDays, step: 1, range: 1...90, unit: " d")
+        stepper("Focus probe interval", value: $tuning.focusProbeIntervalSeconds, step: 2, range: 4...120, unit: "s")
       } header: {
         Text("Probe discipline (M3)")
       } footer: {
-        Text("Survey sessions never send flood-routed packets — that is a design rule, not a knob here.")
+        Text("Survey sessions never send flood-routed packets — that is a design rule, not a knob here. ")
+          + Text("Focus probe interval is the healthy-link cadence for a locked-on target; the engine's loss-streak ladder shortens it at the coverage edge and stretches it once a link is gone, and focus traces spend their own budget, never the novelty one.")
+      }
+      .themedRowBackground(theme)
+    }
+
+    private var rawRideLogSection: some View {
+      Section {
+        stepper("Sample cap per ride", value: $tuning.rawSampleCapPerSession, step: 10_000, range: 10_000...200_000, unit: "")
+        stepper("Retention", value: $tuning.rawRetentionDays, step: 5, range: 0...365, unit: " d")
+        Toggle("Keep screen awake", isOn: $tuning.rideKeepsScreenAwake)
+          .onChange(of: tuning.rideKeepsScreenAwake) { _, _ in persist() }
+        // The FULL-fidelity export lives here and only here (ACTIVE_SURVEY_M3_5.md §2.8):
+        // exact coordinates, full repeater keys, radio config, gate outcomes. The share
+        // sheet in the completion summary gets the scrubbed tier; this file's name says
+        // what it is.
+        if let exportURL = rawExportURL {
+          ShareLink(item: exportURL) {
+            Label("Share RAW-PRIVATE ride file", systemImage: "square.and.arrow.up.trianglebadge.exclamationmark")
+          }
+        } else {
+          Button {
+            confirmingRawExport = true
+          } label: {
+            Label("Export latest run (full raw)", systemImage: "doc.badge.arrow.up")
+          }
+          .disabled(isExportingRaw)
+          .confirmationDialog(
+            "Export the full raw log?",
+            isPresented: $confirmingRawExport,
+            titleVisibility: .visible
+          ) {
+            Button("Export exact positions, keys and radio config", role: .destructive) {
+              exportLatestRunRaw()
+            }
+          } message: {
+            Text("The file contains your exact GPS track (including home), full repeater public keys, your radio configuration, and timestamps. Share it with nobody you would not hand your location history to.")
+          }
+        }
+      } header: {
+        Text("Raw ride log")
+      } footer: {
+        Text("Every probe, reply, loss and breadcrumb of a survey run, kept at full detail in its own backup-excluded store. Retention 0 means keep forever — an explicit choice, not the default: a precise movement log's value decays in weeks while its exposure does not. ")
+          + Text("Screen awake applies while a run is active and the app is foreground; a bar-mounted phone that sleeps mid-ride ends the ride.")
       }
       .themedRowBackground(theme)
     }
@@ -196,6 +242,28 @@
         Text("Defined now, consumed by the wire v3 uploader.")
       }
       .themedRowBackground(theme)
+    }
+
+    @State private var rawExportURL: URL?
+    @State private var isExportingRaw = false
+    @State private var confirmingRawExport = false
+
+    private func exportLatestRunRaw() {
+      isExportingRaw = true
+      Task {
+        defer { isExportingRaw = false }
+        guard let store = try? await resolveRawLogStore(),
+              let run = try? await store.fetchRuns().first else { return }
+        rawExportURL = try? await MapperRideExport.fullExport(run: run, store: store)
+      }
+    }
+
+    /// The app-lifetime store when a run already opened it, else a direct open.
+    private func resolveRawLogStore() async throws -> MapperRawLogStore {
+      if let store = appState.mapperRawLogStore { return store }
+      let store = try MapperRawLogStore.live()
+      appState.mapperRawLogStore = store
+      return store
     }
 
     private var maintenanceSection: some View {

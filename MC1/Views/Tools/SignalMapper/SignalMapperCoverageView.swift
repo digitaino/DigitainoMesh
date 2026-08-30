@@ -26,6 +26,14 @@ struct SignalMapperCoverageView: View {
   @State private var hasFramedData = false
   @State private var selection: SignalMapperCoverageCell?
   @State private var showingDeleteConfirmation = false
+  @State private var mapLayer: SignalMapperMapLayer = .heard
+  /// Menu actions never present a sheet inline: on iPad the toolbar menu is a popover
+  /// and tearing it down mid-dismissal is the iOS 26 zoom-morph crash family. The flag
+  /// arms a `.task(id:)` that waits out the dismissal (RadioStatusControl precedent).
+  @State private var pendingFocusPicker = false
+  @State private var showingFocusPicker = false
+  @State private var showingPrecisePrompt = false
+  @State private var breadcrumb: [CLLocationCoordinate2D] = []
 
   @AppStorage(AppStorageKey.mapStyleSelection.rawValue)
   private var mapStyleSelection: MapStyleSelection = .standard
@@ -49,12 +57,54 @@ struct SignalMapperCoverageView: View {
         ToolbarItem(placement: .topBarTrailing) { optionsMenu }
       }
       .task(id: appState.servicesVersion) { await reload() }
+      // Re-subscribes the HUD to each new engine generation: the run outlives BLE
+      // rewires, the engines (and their snapshot streams) do not.
+      .task(id: appState.signalMapperRideSession?.engineGeneration ?? -1) {
+        await model.attachSurveyStream(appState: appState)
+      }
+      .task(id: isSurveying) { await followRider() }
+      .task(id: pendingFocusPicker) {
+        guard pendingFocusPicker else { return }
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled else { return }
+        pendingFocusPicker = false
+        showingFocusPicker = true
+      }
       .onAppear { model.loadCaptureSetting() }
       .sheet(item: $selection) { SignalMapperCellDetailSheet(cell: $0) }
+      .sheet(isPresented: $showingFocusPicker) {
+        SignalMapperFocusPickerView { targets, meta in
+          Task {
+            appState.signalMapperRideSession?.focusMeta = meta
+            await appState.setSurveyFocusTargets(targets)
+          }
+        }
+      }
       .sheet(isPresented: surveySummaryBinding) {
         if let summary = model.surveySummary {
-          SignalMapperSessionSummarySheet(summary: summary)
+          SignalMapperSessionSummarySheet(
+            summary: summary,
+            runID: model.lastCompletedRunID,
+            rawLogStore: appState.mapperRawLogStore
+          )
         }
+      }
+      .alert(
+        L10n.Tools.Tools.SignalMapper.Precise.title,
+        isPresented: $showingPrecisePrompt
+      ) {
+        Button(L10n.Tools.Tools.SignalMapper.Precise.enable) {
+          Task {
+            await appState.locationService.requestTemporaryFullAccuracy(purposeKey: "RideSurvey")
+            await model.startSurvey(appState: appState)
+          }
+        }
+        Button(L10n.Tools.Tools.SignalMapper.Precise.startAnyway) {
+          Task { await model.startSurvey(appState: appState) }
+        }
+        Button(L10n.Localizable.Common.cancel, role: .cancel) {}
+      } message: {
+        Text(L10n.Tools.Tools.SignalMapper.Precise.message)
       }
       .alert(
         L10n.Tools.Tools.SignalMapper.Delete.title,
@@ -77,9 +127,17 @@ struct SignalMapperCoverageView: View {
 
   // MARK: - Content
 
+  private var isSurveying: Bool {
+    appState.signalMapperRideSession != nil
+  }
+
   @ViewBuilder
   private var content: some View {
-    if model.isLoading, model.snapshot.isEmpty {
+    if isSurveying {
+      // A running ride always shows the map + HUD, even before the first cell folds —
+      // the empty state has no live readout and the rider cannot navigate back to one.
+      map
+    } else if model.isLoading, model.snapshot.isEmpty {
       ProgressView()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if !model.hasCoverage {
@@ -104,18 +162,11 @@ struct SignalMapperCoverageView: View {
         captureCard
           .padding(.horizontal)
 
-        // A survey is the fastest way out of the empty state: one walk, first hexagons.
-        // The map takes over as soon as the first cell folds; until it does, the pill
-        // below is the proof something is happening.
-        if model.isSurveying {
-          surveyPill
-          Button(L10n.Tools.Tools.SignalMapper.Survey.stop, systemImage: "stop.circle") {
-            Task { await model.stopSurvey(appState: appState) }
-          }
-          .buttonStyle(.bordered)
-        } else if canSurvey {
+        // A survey is the fastest way out of the empty state: one ride, first hexagons.
+        // The map (with the ride HUD) takes over the moment a session starts.
+        if canSurvey {
           Button(L10n.Tools.Tools.SignalMapper.Survey.start, systemImage: "dot.radiowaves.left.and.right") {
-            Task { await model.startSurvey(appState: appState) }
+            startSurveyTapped()
           }
           .buttonStyle(.borderedProminent)
         }
@@ -185,10 +236,11 @@ struct SignalMapperCoverageView: View {
     ZStack(alignment: .bottom) {
       MC1MapView(
         points: [],
-        lines: [],
+        lines: breadcrumbLines,
         overlays: SignalMapperCoverageRenderer.overlays(
           for: model.snapshot,
-          selected: selection
+          selected: selection,
+          layer: mapLayer
         ),
         mapStyle: mapStyleSelection,
         isDarkMode: mapIsDark,
@@ -203,7 +255,12 @@ struct SignalMapperCoverageView: View {
         cameraRegionVersion: cameraVersion,
         onPointTap: { _, _ in },
         onMapTap: { coordinate in
-          selection = SignalMapperCoverageRenderer.cell(at: coordinate, in: model.snapshot)
+          // While riding, the map is a display, not a control surface: capacitive
+          // touches through a jersey pocket must not cover the HUD with a sheet.
+          guard !isSurveying else { return }
+          selection = SignalMapperCoverageRenderer.cell(
+            at: coordinate, in: model.snapshot, layer: mapLayer
+          )
         },
         onCameraRegionChange: { viewportBounds = $0.toMLNCoordinateBounds() },
         isStyleLoaded: $isStyleLoaded,
@@ -211,17 +268,28 @@ struct SignalMapperCoverageView: View {
       )
       .ignoresSafeArea()
 
-      controls
-    }
-    .overlay(alignment: .top) {
       VStack(spacing: 8) {
-        summaryPill
-        if model.isSurveying {
-          surveyPill
+        if isSurveying, let session = appState.signalMapperRideSession {
+          SignalMapperRideHUD(
+            session: session,
+            onSpotCheck: { Task { await model.spotCheck(appState: appState) } },
+            onLockOn: { showingFocusPicker = true }
+          )
+          .padding(.horizontal, 12)
         }
+        controls
       }
     }
-    .overlay(alignment: .bottomLeading) { SignalMapperLegend() }
+    .overlay(alignment: .top) {
+      if !isSurveying {
+        summaryPill
+      }
+    }
+    .overlay(alignment: .bottomLeading) {
+      if !isSurveying {
+        SignalMapperLegend(layer: mapLayer)
+      }
+    }
     // The map gates camera moves until its style has loaded, which usually lands after the
     // first build, so the fit is re-issued on that signal rather than left to chance.
     .onChange(of: isStyleLoaded) { _, loaded in
@@ -252,26 +320,60 @@ struct SignalMapperCoverageView: View {
     .accessibilityElement(children: .combine)
   }
 
-  /// The live session readout: proof the survey is doing something, at a glance.
-  private var surveyPill: some View {
-    Label {
-      Text(L10n.Tools.Tools.SignalMapper.Survey.hud(
-        model.surveySnapshot?.probesSent ?? 0,
-        (model.surveySnapshot?.traceRepliesHeard ?? 0)
-          + (model.surveySnapshot?.discoverResponsesHeard ?? 0)
-      ))
-    } icon: {
-      Image(systemName: "dot.radiowaves.left.and.right")
-        .symbolEffect(.variableColor.iterative, options: .repeating)
+  /// The ride's own track, threading the live fixes in time order — where you have
+  /// actually been, even where the mesh was silent.
+  private var breadcrumbLines: [MapLine] {
+    guard isSurveying, breadcrumb.count >= 2 else { return [] }
+    return [MapLine(
+      id: "mapper-ride-breadcrumb",
+      coordinates: breadcrumb,
+      style: .locationTrail,
+      opacity: 0.8
+    )]
+  }
+
+  /// The Precise Location pre-flight (review 7b): with it off, every fix fails the 50 m
+  /// accuracy gate and the whole ride records nothing, silently. Surfacing it *before*
+  /// the ride is the difference between a fixed setting and a wasted evening.
+  private func startSurveyTapped() {
+    if appState.locationService.isAuthorized,
+       !appState.locationService.isPreciseLocationAuthorized {
+      showingPrecisePrompt = true
+      return
     }
-    .font(.subheadline.weight(.medium))
-    .lineLimit(1)
-    .minimumScaleFactor(0.7)
-    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-    .padding(.horizontal, 16)
-    .padding(.vertical, 10)
-    .liquidGlass(in: .capsule)
-    .accessibilityElement(children: .combine)
+    Task { await model.startSurvey(appState: appState) }
+  }
+
+  /// Follow-me + breadcrumbs while riding: every 2 s, thread the live fix onto the trail
+  /// and keep the camera on the rider (review 7a: without this, the map shows the
+  /// neighbourhood you left two minutes ago, at full render cost, all night).
+  private func followRider() async {
+    guard isSurveying else {
+      breadcrumb = []
+      return
+    }
+    isCenteredOnUser = true
+    while !Task.isCancelled, isSurveying {
+      if let location = appState.locationService.currentLocation {
+        let coordinate = location.coordinate
+        let last = breadcrumb.last
+        let movedEnough = last.map {
+          CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+            .distance(from: location) >= 5
+        } ?? true
+        if movedEnough {
+          breadcrumb.append(coordinate)
+          if breadcrumb.count > 5400 {
+            breadcrumb.removeFirst(breadcrumb.count - 5400)
+          }
+        }
+        if isCenteredOnUser {
+          cameraBounds = SignalMapperCoverageRenderer.cameraBounds(around: coordinate)
+          cameraVersion += 1
+        }
+      }
+      try? await Task.sleep(for: .seconds(2))
+    }
   }
 
   private var controls: some View {
@@ -285,6 +387,22 @@ struct SignalMapperCoverageView: View {
         mapStyleSelection: $mapStyleSelection,
         viewportBounds: viewportBounds
       ) {
+        // A Picker inside a Menu is the map-control column's idiom for a choice
+        // (MapControlsToolbar's own style menu); a segmented control fits neither the
+        // 44-point column nor the iOS 26 toolbar rules.
+        Menu {
+          Picker(L10n.Tools.Tools.SignalMapper.Layer.title, selection: $mapLayer) {
+            Label(L10n.Tools.Tools.SignalMapper.Layer.heard, systemImage: "arrow.down.left")
+              .tag(SignalMapperMapLayer.heard)
+            Label(L10n.Tools.Tools.SignalMapper.Layer.reach, systemImage: "arrow.up.right")
+              .tag(SignalMapperMapLayer.reach)
+          }
+        } label: {
+          Image(systemName: mapLayer == .heard ? "arrow.down.left.square" : "arrow.up.right.square")
+        }
+        .mapControlButton(tint: .primary)
+        .accessibilityLabel(L10n.Tools.Tools.SignalMapper.Layer.title)
+
         Button(
           L10n.Tools.Tools.SignalMapper.centerOnCoverage,
           systemImage: "arrow.up.left.and.arrow.down.right"
@@ -303,22 +421,24 @@ struct SignalMapperCoverageView: View {
       Toggle(L10n.Tools.Tools.SignalMapper.captureToggle, isOn: captureBinding)
 
       Section {
-        if model.isSurveying {
-          Button(L10n.Tools.Tools.SignalMapper.Survey.spotCheck, systemImage: "scope") {
-            Task { await model.spotCheck(appState: appState) }
+        if isSurveying {
+          Button(L10n.Tools.Tools.SignalMapper.Ride.lockOn, systemImage: "scope") {
+            pendingFocusPicker = true
           }
           Button(L10n.Tools.Tools.SignalMapper.Survey.stop, systemImage: "stop.circle") {
             Task { await model.stopSurvey(appState: appState) }
           }
         } else {
           Button(L10n.Tools.Tools.SignalMapper.Survey.start, systemImage: "dot.radiowaves.left.and.right") {
-            Task { await model.startSurvey(appState: appState) }
+            startSurveyTapped()
           }
           .disabled(!canSurvey)
         }
       }
 
-      if model.hasCoverage {
+      // Delete-all sits one mis-tap from Stop; it disappears entirely while a run is
+      // recording (review 6b).
+      if model.hasCoverage, !isSurveying {
         Section {
           Button(L10n.Tools.Tools.SignalMapper.Delete.action, systemImage: "trash", role: .destructive) {
             showingDeleteConfirmation = true

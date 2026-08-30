@@ -799,4 +799,104 @@ struct SignalMapperCaptureEngineTests {
     #expect(snapshot.droppedNoFixCount == 1)
     #expect(try await store.countMapperCellObservations() == 0)
   }
+
+  // MARK: - M3.5: probe attempts, send-time placement, raw taps
+
+  /// A fake ride-log recorder standing in for the MapperRawLog module's real one.
+  private actor RecordingRawRecorder: MapperRawSampleRecording {
+    private(set) var events: [MapperRawSampleEvent] = []
+
+    func record(_ event: MapperRawSampleEvent) async {
+      events.append(event)
+    }
+  }
+
+  @Test
+  func `A probe attempt books probesSent into the current cell and returns the placement`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    let placement = try #require(await engine.placeProbeAttempt())
+    let expectedCell = try #require(MapperFixtureLocation.cell(MapperFixtureLocation.plaza))
+    #expect(placement.cell == expectedCell)
+    await engine.flushNow()
+    await engine.stop()
+
+    let rows = try await store.fetchMapperCellObservations()
+    let row = try #require(rows.first)
+    #expect(row.probesSent == 1)
+    #expect(row.packetCount == 0, "an attempt is a transmission, not a received packet")
+  }
+
+  @Test
+  func `A probe result folds into its send-time placement, not the current fix`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    let placement = try #require(await engine.placeProbeAttempt())
+
+    // The rider crosses a boundary before the reply lands: the current fix is now a
+    // different cell, but the fold must land where the probe was transmitted (M4).
+    fixes.set(mapperFix(MapperFixtureLocation.acrossTown, at: clock.now))
+    await engine.ingestProbeResult(MapperProbeResult(
+      repeaterID: NodeHexID("AB"),
+      rxSnr: 5,
+      txSnr: 3,
+      rssi: -70,
+      hopCount: 1,
+      rttMs: 420,
+      at: clock.now,
+      placement: placement
+    ))
+    await engine.flushNow()
+    await engine.stop()
+
+    let rows = try await store.fetchMapperCellObservations()
+    #expect(rows.count == 1, "attempt and reply share one cell — no boundary straddle")
+    let row = try #require(rows.first)
+    #expect(row.cellRaw == placement.cell.rawValue)
+    #expect(row.probesSent == 1)
+    #expect(row.activePacketCount == 1)
+    #expect(row.txSnrSum == 3)
+    #expect(row.probeRttMsSum == 420)
+    #expect(row.probeRttSampleCount == 1)
+    #expect(row.rttMsSum == 0, "trace RTT never pollutes the ACK RTT ledger (M6)")
+  }
+
+  @Test
+  func `The raw recorder hears a dropped sample with its reason while aggregates stay clean`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    // An accuracy the gate refuses: the aggregate path drops it, the raw log keeps it.
+    let badFix = mapperFix(accuracy: 500, at: clock.now)
+    let fixes = StubMapperFixProvider(badFix)
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+    let recorder = RecordingRawRecorder()
+
+    await engine.start()
+    await engine.setRawRecorder(recorder)
+    source.send(mapperRxEntry(payload: Data([0x01]), receivedAt: clock.now, snr: 6, rssi: -80))
+    try await waitForCondition { await !recorder.events.isEmpty }
+    await engine.flushNow()
+    await engine.stop()
+
+    let events = await recorder.events
+    let event = try #require(events.first)
+    #expect(event.kind == .passiveRx)
+    #expect(event.gateOutcome == .inaccurateFix)
+    #expect(event.rxSnr == 6)
+    #expect(event.latitude != nil, "the raw log records what the rejected fix knew")
+
+    let rows = try await store.fetchMapperCellObservations()
+    #expect(rows.isEmpty, "a rejected sample must still be rejected from aggregates")
+  }
 }

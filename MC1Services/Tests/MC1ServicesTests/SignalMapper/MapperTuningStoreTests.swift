@@ -17,12 +17,17 @@ struct MapperTuningStoreTests {
     let store = try MapperTuningStore(defaults: makeDefaults())
 
     #expect(store.tuning == MapperTuning.defaults)
-    #expect(store.tuning.fixMaxAgeSeconds == 120)
-    #expect(store.tuning.fixMaxAccuracyMeters == 100)
-    #expect(store.tuning.probeIntervalSeconds == 10)
-    #expect(store.tuning.probeBurst == 3)
-    #expect(store.tuning.samplesPerCellPerSession == 5)
-    #expect(store.tuning.communityFreshnessDays == 7)
+    // The M3.5 ride-review defaults (docs/ACTIVE_SURVEY_M3_5.md §2.9).
+    #expect(store.tuning.fixMaxAgeSeconds == 30)
+    #expect(store.tuning.fixMaxAccuracyMeters == 50)
+    #expect(store.tuning.probeIntervalSeconds == 4)
+    #expect(store.tuning.probeBurst == 4)
+    #expect(store.tuning.samplesPerCellPerSession == 3)
+    #expect(store.tuning.communityFreshnessDays == 0)
+    #expect(store.tuning.focusProbeIntervalSeconds == 20)
+    #expect(store.tuning.rawSampleCapPerSession == 50000)
+    #expect(store.tuning.rawRetentionDays == 30)
+    #expect(store.tuning.rideKeepsScreenAwake == true)
     #expect(store.tuning.uploadBatchMinCells == 25)
   }
 

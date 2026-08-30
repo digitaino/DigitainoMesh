@@ -106,6 +106,71 @@ struct SamplingPolicyTests {
         #expect(awayPlan != nil)
     }
 
+    @Test func samplesPerCellAllowsASeriesThenStops() throws {
+        var config = SamplingPolicy.Config()
+        config.bucketCapacity = 100
+        config.samplesPerCell = 3
+        config.minProbeInterval = 1
+        config.stationaryRetryInterval = 5
+        var policy = SamplingPolicy(config: config, at: 0)
+        let home = GeoCoordinate(latitude: 30.2672, longitude: -97.7431)
+
+        var planned = 0
+        var now: TimeInterval = 10
+        for _ in 0..<10 {
+            if let plan = policy.locationUpdate(coordinate: home, speed: 1.2, at: now) {
+                planned += 1
+                policy.recordSample(in: plan.baseCell)
+            }
+            now += 6 // clears both the min interval and the stationary retry
+        }
+        // Exactly samplesPerCell probes, then the cell stops being novel.
+        #expect(planned == 3)
+    }
+
+    @Test func markCoveredSaturatesRegardlessOfQuota() throws {
+        var config = SamplingPolicy.Config()
+        config.bucketCapacity = 100
+        config.samplesPerCell = 5
+        var policy = SamplingPolicy(config: config, at: 0)
+        let home = GeoCoordinate(latitude: 30.2672, longitude: -97.7431)
+        let baseCell = try #require(SurveyGrid.cell(containing: home))
+
+        policy.markCovered(baseCell)
+        // Despite a quota of 5 and zero recorded samples, the warm-passed cell
+        // never probes again this session.
+        let plan = policy.locationUpdate(coordinate: home, speed: 1.2, at: 100)
+        #expect(plan == nil)
+    }
+
+    @Test func fineSamplesExhaustTheCoarserParents() throws {
+        // Deliberate cross-tier semantics: quota filled at fine tier also fills the
+        // medium/coarse parents, so a tier flip doesn't re-survey the same ground.
+        var config = SamplingPolicy.Config()
+        config.bucketCapacity = 100
+        config.samplesPerCell = 2
+        config.minProbeInterval = 1
+        config.stationaryRetryInterval = 2
+        var policy = SamplingPolicy(config: config, at: 0)
+        let home = GeoCoordinate(latitude: 30.2672, longitude: -97.7431)
+
+        var now: TimeInterval = 10
+        var planned = 0
+        for _ in 0..<6 {
+            if let plan = policy.locationUpdate(coordinate: home, speed: 1.2, at: now) {
+                planned += 1
+                policy.recordSample(in: plan.baseCell)
+            }
+            now += 3
+        }
+        #expect(planned == 2)
+
+        // Force the coarse tier at the same spot: parents are already at quota.
+        policy.tierOverride = .coarse
+        let coarsePlan = policy.locationUpdate(coordinate: home, speed: 1.2, at: now + 10)
+        #expect(coarsePlan == nil)
+    }
+
     @Test func minIntervalGatesEvenNovelCells() {
         // Big bucket so only the cadence gate is under test here.
         var config = SamplingPolicy.Config()

@@ -1258,3 +1258,90 @@
 "tools.signalMapper.survey.summary.replies" = "收到的回复";
 "tools.signalMapper.survey.summary.noReply" = "无回复的探测";
 "tools.signalMapper.survey.summary.localNote" = "测绘结果仅保存在本设备上。";
+
+/* Location: SignalMapperRideHUD.swift - Banner while the BLE link to the radio is down mid-ride */
+"tools.signalMapper.ride.radioDisconnected" = "电台已断开连接，仍在记录位置";
+
+/* Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker */
+"tools.signalMapper.ride.lockOn" = "锁定中继";
+
+/* Location: SignalMapperRideHUD.swift - Seconds since a focus repeater was last heard; %lld seconds */
+"tools.signalMapper.ride.age" = "%lld 秒";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: probes sent · replies · lost */
+"tools.signalMapper.ride.probes" = "探测 · 回复 · 丢失";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: hexagons probed this run */
+"tools.signalMapper.ride.cells" = "已探测六边形";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: samples skipped for lack of a GPS fix (loud when Precise Location is off) */
+"tools.signalMapper.ride.noFixDrops" = "已跳过：无可用定位";
+
+/* Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name */
+"tools.signalMapper.ride.maxRange" = "最远距离 · %@";
+
+/* Location: SignalMapperFocusPickerView.swift - Empty state when no repeater with a known key exists */
+"tools.signalMapper.focus.empty" = "还没有已知密钥的中继。多走一段路，发现回复就会找到它们。";
+
+/* Location: SignalMapperFocusPickerView.swift - Footer; %lld is the selection cap */
+"tools.signalMapper.focus.footer" = "最多选择 %lld 个中继进行实时跟踪。其余的仍会在后台记录。";
+
+/* Location: SignalMapperFocusPickerView.swift - Confirm button applying the lock-on selection */
+"tools.signalMapper.focus.apply" = "锁定";
+
+/* Location: SignalMapperCoverageView.swift - Alert title when Precise Location is off before a ride */
+"tools.signalMapper.precise.title" = "精确位置已关闭";
+
+/* Location: SignalMapperCoverageView.swift - Alert body explaining why the ride would record nothing */
+"tools.signalMapper.precise.message" = "没有精确位置，每个采样都无法通过精度检查，行程将不会记录任何内容。请在本次会话中允许精确位置，或在设置 → 隐私 → 定位服务中开启。";
+
+/* Location: SignalMapperCoverageView.swift - Alert button requesting temporary full accuracy */
+"tools.signalMapper.precise.enable" = "允许精确位置";
+
+/* Location: SignalMapperCoverageView.swift - Alert button starting the ride regardless */
+"tools.signalMapper.precise.startAnyway" = "仍然开始";
+
+/* Location: SignalMapperCoverageView.swift - Map layer picker title */
+"tools.signalMapper.layer.title" = "地图图层";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink) */
+"tools.signalMapper.layer.heard" = "听到 — 我能听到的";
+
+/* Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink) */
+"tools.signalMapper.layer.reach" = "可达 — 能听到我的";
+
+/* Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale */
+"tools.signalMapper.legend.reachSignal" = "颜色表示中继从该六边形听到你发射信号的质量。";
+
+/* Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells */
+"tools.signalMapper.legend.noReach" = "已探测，无人听到你";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted */
+"tools.signalMapper.survey.summary.duration" = "时长";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Button generating the shareable ride log */
+"tools.signalMapper.survey.summary.export" = "导出行程日志";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Share button once the export file is ready */
+"tools.signalMapper.survey.summary.share" = "分享行程日志";
+
+/* Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing */
+"tools.signalMapper.survey.summary.exportNote" = "分享的文件会经过清理：位置精度降低，首尾各 500 米被裁剪，中继密钥被缩短。完整日志仅保留在本设备上。";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section: what active probing from this cell proved */
+"tools.signalMapper.detail.uplink" = "上行链路";
+
+/* Location: SignalMapperCellDetailSheet.swift - Probe transmissions sent from this cell */
+"tools.signalMapper.detail.probesSent" = "已发送探测";
+
+/* Location: SignalMapperCellDetailSheet.swift - Probe replies that came back */
+"tools.signalMapper.detail.probeReplies" = "探测回复";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean SNR repeaters reported for our transmissions */
+"tools.signalMapper.detail.averageTxSnr" = "对方听到你的信噪比";
+
+/* Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered */
+"tools.signalMapper.detail.neverHeardBack" = "从未收到回复";
+
+/* Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip */
+"tools.signalMapper.detail.probeRoundTrip" = "探测往返时间";

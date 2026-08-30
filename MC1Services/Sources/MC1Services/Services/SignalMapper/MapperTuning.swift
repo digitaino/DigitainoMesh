@@ -14,16 +14,20 @@ import Foundation
 public struct MapperTuning: Sendable, Equatable, Codable {
   // MARK: - Probe discipline (consumed in M3)
 
-  /// Sustained seconds between probe cycles in a manual session. §2.5: 1 per 10 s.
+  /// Sustained seconds between probe cycles in a manual session. §2.5 shipped 10;
+  /// M3.5's field review cut it to 4 — at ride speed the novelty refill must leave
+  /// headroom beside the focus scheduler (ACTIVE_SURVEY_M3_5.md §2.9).
   public var probeIntervalSeconds: TimeInterval
 
-  /// How many probes may go out back to back before the sustained rate applies. §2.5: 3.
+  /// How many probes may go out back to back before the sustained rate applies. M3.5: 4.
   public var probeBurst: Int
 
-  /// Samples collected for one cell before a session stops probing it. §2.5: 5.
+  /// Samples collected for one cell before a session stops probing it. M3.5: 3 (live via SamplingPolicy counts).
   public var samplesPerCellPerSession: Int
 
-  /// A cell with coverage newer than this is skipped by a survey session. §2.5: 7 days.
+  /// A cell with coverage newer than this is skipped by a survey session.
+  /// M3.5: default 0 (warm pass off) — one week-old res-9 row used to mark its 920 m
+  /// and 2.4 km tier parents as sampled, blanking the near field of a range ride.
   ///
   /// M3 applies it to *local* rows at exact-day precision (they never leave the device);
   /// M2 extends the same test to community freshness, read as month-granularity tiers
@@ -32,12 +36,40 @@ public struct MapperTuning: Sendable, Equatable, Codable {
   /// and a knob that could turn that back on is not a tuning, it is a design change.
   public var communityFreshnessDays: Int
 
+  // MARK: - Focus probing (consumed in M3.5)
+
+  /// Base seconds between directed traces to a locked-on focus target. The engine's
+  /// loss-streak ladder scales this (×0.4 while a target is dropping probes at the
+  /// coverage edge, ×3 once it is well and truly gone), so this is the healthy-link
+  /// cadence, not a fixed rate. ACTIVE_SURVEY_M3_5.md §2.2: 20 s ≈ 3 replies/min
+  /// forced out of one repeater — inside the app's own signal-bars discipline.
+  public var focusProbeIntervalSeconds: TimeInterval
+
+  // MARK: - Raw ride log (consumed in M3.5)
+
+  /// Hard cap on raw rows one survey run may write. A 2 h ride writes ~6–16 k;
+  /// the cap is a runaway backstop, not a target.
+  public var rawSampleCapPerSession: Int
+
+  /// Whether an active survey run keeps the screen awake (`isIdleTimerDisabled`).
+  /// User-visible behaviour, not just a debug knob: a bar-mounted phone that sleeps
+  /// mid-ride ends the ride (foreground-only capture).
+  public var rideKeepsScreenAwake: Bool
+
+  /// Days raw ride-log rows are kept before the launch purge removes them.
+  /// 0 means keep forever — an explicit choice, deliberately **not** the default:
+  /// a precise movement diary's analytic value decays in weeks while its exposure
+  /// accrues forever (ACTIVE_SURVEY_M3_5.md §3.1). Unlike ``MapperTuningStore``'s
+  /// anchor seed, this key IS reset by `resetToDefaults()` — the reset must restore
+  /// the safe value, not preserve an override.
+  public var rawRetentionDays: Int
+
   // MARK: - Fix policy (consumed in M0)
 
-  /// Oldest a fix may be and still tag an observation, in seconds. §2.5: 120 s.
+  /// Oldest a fix may be and still tag an observation, in seconds. M3.5: 30 s (live fixes are ~1 s old; 120 only masked a stalled stream).
   public var fixMaxAgeSeconds: TimeInterval
 
-  /// Worst horizontal accuracy that still tags an observation, in meters. §2.5: 100 m.
+  /// Worst horizontal accuracy that still tags an observation, in meters. M3.5: 50 m.
   public var fixMaxAccuracyMeters: Double
 
   /// How far the phone may have travelled since a fix was captured before that fix stops
@@ -101,13 +133,17 @@ public struct MapperTuning: Sendable, Equatable, Codable {
   public var uploadJitterSeconds: TimeInterval
 
   public init(
-    probeIntervalSeconds: TimeInterval = 10,
-    probeBurst: Int = 3,
-    samplesPerCellPerSession: Int = 5,
-    communityFreshnessDays: Int = 7,
-    fixMaxAgeSeconds: TimeInterval = 120,
-    fixMaxAccuracyMeters: Double = 100,
-    fixMaxDisplacementMeters: Double = 150,
+    probeIntervalSeconds: TimeInterval = 4,
+    probeBurst: Int = 4,
+    samplesPerCellPerSession: Int = 3,
+    communityFreshnessDays: Int = 0,
+    focusProbeIntervalSeconds: TimeInterval = 20,
+    rawSampleCapPerSession: Int = 50000,
+    rawRetentionDays: Int = 30,
+    rideKeepsScreenAwake: Bool = true,
+    fixMaxAgeSeconds: TimeInterval = 30,
+    fixMaxAccuracyMeters: Double = 50,
+    fixMaxDisplacementMeters: Double = 60,
     anchorMinDistinctDays: Int = 5,
     anchorStationaryShare: Double = 0.6,
     anchorObservationCount: Int = 2000,
@@ -126,6 +162,10 @@ public struct MapperTuning: Sendable, Equatable, Codable {
     self.probeBurst = probeBurst
     self.samplesPerCellPerSession = samplesPerCellPerSession
     self.communityFreshnessDays = communityFreshnessDays
+    self.focusProbeIntervalSeconds = focusProbeIntervalSeconds
+    self.rawSampleCapPerSession = rawSampleCapPerSession
+    self.rawRetentionDays = rawRetentionDays
+    self.rideKeepsScreenAwake = rideKeepsScreenAwake
     self.fixMaxAgeSeconds = fixMaxAgeSeconds
     self.fixMaxAccuracyMeters = fixMaxAccuracyMeters
     self.fixMaxDisplacementMeters = fixMaxDisplacementMeters
@@ -230,6 +270,10 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
       probeBurst: int(Key.probeBurst, defaultValue.probeBurst),
       samplesPerCellPerSession: int(Key.samplesPerCell, defaultValue.samplesPerCellPerSession),
       communityFreshnessDays: int(Key.communityFreshnessDays, defaultValue.communityFreshnessDays),
+      focusProbeIntervalSeconds: double(Key.focusProbeInterval, defaultValue.focusProbeIntervalSeconds),
+      rawSampleCapPerSession: int(Key.rawSampleCap, defaultValue.rawSampleCapPerSession),
+      rawRetentionDays: int(Key.rawRetentionDays, defaultValue.rawRetentionDays),
+      rideKeepsScreenAwake: bool(Key.rideKeepsScreenAwake, defaultValue.rideKeepsScreenAwake),
       fixMaxAgeSeconds: double(Key.fixMaxAge, defaultValue.fixMaxAgeSeconds),
       fixMaxAccuracyMeters: double(Key.fixMaxAccuracy, defaultValue.fixMaxAccuracyMeters),
       fixMaxDisplacementMeters: double(Key.fixMaxDisplacement, defaultValue.fixMaxDisplacementMeters),
@@ -254,6 +298,10 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
     defaults.set(tuning.probeBurst, forKey: Key.probeBurst)
     defaults.set(tuning.samplesPerCellPerSession, forKey: Key.samplesPerCell)
     defaults.set(tuning.communityFreshnessDays, forKey: Key.communityFreshnessDays)
+    defaults.set(tuning.focusProbeIntervalSeconds, forKey: Key.focusProbeInterval)
+    defaults.set(tuning.rawSampleCapPerSession, forKey: Key.rawSampleCap)
+    defaults.set(tuning.rawRetentionDays, forKey: Key.rawRetentionDays)
+    defaults.set(tuning.rideKeepsScreenAwake, forKey: Key.rideKeepsScreenAwake)
     defaults.set(tuning.fixMaxAgeSeconds, forKey: Key.fixMaxAge)
     defaults.set(tuning.fixMaxAccuracyMeters, forKey: Key.fixMaxAccuracy)
     defaults.set(tuning.fixMaxDisplacementMeters, forKey: Key.fixMaxDisplacement)
@@ -290,6 +338,10 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
     defaults.object(forKey: key) as? Int ?? fallback
   }
 
+  private func bool(_ key: String, _ fallback: Bool) -> Bool {
+    defaults.object(forKey: key) as? Bool ?? fallback
+  }
+
   private enum Key {
     static let captureEnabled = "com.pocketmesh.signalMapper.captureEnabled"
     static let anchorSeed = "com.pocketmesh.signalMapper.anchorSeed"
@@ -297,6 +349,10 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
     static let probeBurst = "com.pocketmesh.signalMapper.probeBurst"
     static let samplesPerCell = "com.pocketmesh.signalMapper.samplesPerCellPerSession"
     static let communityFreshnessDays = "com.pocketmesh.signalMapper.communityFreshnessDays"
+    static let focusProbeInterval = "com.pocketmesh.signalMapper.focusProbeIntervalSeconds"
+    static let rawSampleCap = "com.pocketmesh.signalMapper.rawSampleCapPerSession"
+    static let rawRetentionDays = "com.pocketmesh.signalMapper.rawRetentionDays"
+    static let rideKeepsScreenAwake = "com.pocketmesh.signalMapper.rideKeepsScreenAwake"
     static let fixMaxAge = "com.pocketmesh.signalMapper.fixMaxAgeSeconds"
     static let fixMaxAccuracy = "com.pocketmesh.signalMapper.fixMaxAccuracyMeters"
     static let fixMaxDisplacement = "com.pocketmesh.signalMapper.fixMaxDisplacementMeters"
@@ -316,6 +372,7 @@ public struct MapperTuningStore: MapperTuningProviding, MapperAnchorSeedProvidin
 
     static let tuningKeys = [
       probeInterval, probeBurst, samplesPerCell, communityFreshnessDays,
+      focusProbeInterval, rawSampleCap, rawRetentionDays, rideKeepsScreenAwake,
       fixMaxAge, fixMaxAccuracy, fixMaxDisplacement,
       anchorMinDistinctDays, anchorStationaryShare, anchorObservationCount,
       anchorOffsetMin, anchorOffsetMax, anchorRadiusMin, anchorRadiusMax,

@@ -33,6 +33,10 @@ public struct SamplingPolicy: Sendable {
         public var stationaryRetryInterval: TimeInterval = 60
         /// Max channel floods per tier-cell per session.
         public var floodsPerTierCell: Int = 1
+        /// Samples a tier-cell may accumulate before novelty gating stops probing it.
+        /// 1 preserves the original one-probe-per-cell behaviour; a moving survey
+        /// raises it so a cell crossed slowly yields a small series, not a single point.
+        public var samplesPerCell: Int = 1
         public var tier = TierController.Config()
 
         public init() {}
@@ -54,8 +58,10 @@ public struct SamplingPolicy: Sendable {
     public var tierOverride: SamplingTier?
     private var config: Config
     private var bucket: TokenBucket
-    /// Tier-cells (any resolution) that already have at least one sample this session.
-    private var sampledTierCells: Set<H3Cell> = []
+    /// Samples accumulated per tier-cell (any resolution) this session. A cell is
+    /// novel until its count reaches `config.samplesPerCell`; `markCovered` saturates
+    /// the count so warm-passed cells never re-probe regardless of that setting.
+    private var sampleCounts: [H3Cell: Int] = [:]
     /// Tier-cells whose flood quota is spent.
     private var floodedTierCells: [H3Cell: Int] = [:]
     private var lastProbeAt: TimeInterval = -.infinity
@@ -98,10 +104,10 @@ public struct SamplingPolicy: Sendable {
               let baseCell = SurveyGrid.cell(containing: coordinate)
         else { return nil }
 
-        // Novelty: only unsampled tier-cells trigger automatic probes. A cell we've
-        // already probed (successfully or not) only re-triggers on the slow
-        // stationary-retry cadence, and only while it remains sample-free.
-        let isNovel = !sampledTierCells.contains(tierCell)
+        // Novelty: only under-sampled tier-cells trigger automatic probes. A cell
+        // that reached its per-session quota only re-triggers on the slow
+        // stationary-retry cadence, and only while it remains under quota.
+        let isNovel = sampleCounts[tierCell, default: 0] < config.samplesPerCell
         guard isNovel else { return nil }
 
         let sinceLast = now - lastProbeAt
@@ -141,12 +147,26 @@ public struct SamplingPolicy: Sendable {
     }
 
     /// Record that a sample landed in `baseCell` (from any source — probe responses or
-    /// passive RX). Marks the containing cell at every tier resolution so novelty
-    /// gating sees it no matter which tier is active later.
+    /// passive RX). Increments the containing cell's count at every tier resolution so
+    /// novelty gating sees it no matter which tier is active later. Deliberate
+    /// consequence: samples taken at fine tier also count against the coarser parents,
+    /// so a tier flip mid-session lands in an already-part-sampled cell rather than
+    /// treating the same ground as brand new.
     public mutating func recordSample(in baseCell: H3Cell) {
         for tier in SamplingTier.allCases {
             if let cell = SurveyGrid.parent(of: baseCell, resolution: tier.resolution) {
-                sampledTierCells.insert(cell)
+                sampleCounts[cell, default: 0] += 1
+            }
+        }
+    }
+
+    /// Mark `baseCell` fully covered at every tier resolution, regardless of
+    /// `samplesPerCell`. For warm passes over ground that already holds data from a
+    /// previous session: `recordSample` would count 1-of-N and leave the cell novel.
+    public mutating func markCovered(_ baseCell: H3Cell) {
+        for tier in SamplingTier.allCases {
+            if let cell = SurveyGrid.parent(of: baseCell, resolution: tier.resolution) {
+                sampleCounts[cell] = max(sampleCounts[cell, default: 0], config.samplesPerCell)
             }
         }
     }

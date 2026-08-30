@@ -64,6 +64,12 @@ final class MapperCellObservation {
   var rttMsSum: Double = 0
   var rttSampleCount: Int = 0
 
+  /// Round trips of trace probes, client-measured (M3.5). A separate ledger from the
+  /// ACK pair above: an end-to-end delivery and a zero-hop trace differ by an order of
+  /// magnitude, and one average over both would describe neither.
+  var probeRttMsSum: Double = 0
+  var probeRttSampleCount: Int = 0
+
   // MARK: - Signal aggregates
 
   var snrSum: Double
@@ -109,6 +115,8 @@ final class MapperCellObservation {
     stationaryObservationCount: Int = 0,
     rttMsSum: Double = 0,
     rttSampleCount: Int = 0,
+    probeRttMsSum: Double = 0,
+    probeRttSampleCount: Int = 0,
     snrSum: Double = 0,
     snrCount: Int = 0,
     minSnr: Double? = nil,
@@ -136,6 +144,8 @@ final class MapperCellObservation {
     self.stationaryObservationCount = stationaryObservationCount
     self.rttMsSum = rttMsSum
     self.rttSampleCount = rttSampleCount
+    self.probeRttMsSum = probeRttMsSum
+    self.probeRttSampleCount = probeRttSampleCount
     self.snrSum = snrSum
     self.snrCount = snrCount
     self.minSnr = minSnr
@@ -172,6 +182,8 @@ final class MapperCellObservation {
     stationaryObservationCount = dto.stationaryObservationCount
     rttMsSum = dto.rttMsSum
     rttSampleCount = dto.rttSampleCount
+    probeRttMsSum = dto.probeRttMsSum
+    probeRttSampleCount = dto.probeRttSampleCount
     snrSum = dto.snrSum
     snrCount = dto.snrCount
     minSnr = dto.minSnr
@@ -340,6 +352,9 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
   /// Round-trip time of acknowledged sends, in milliseconds.
   public var rttMsSum: Double
   public var rttSampleCount: Int
+  /// Trace-probe round trips (M3.5) — never mixed into the ACK pair above.
+  public var probeRttMsSum: Double
+  public var probeRttSampleCount: Int
 
   public var snrSum: Double
   public var snrCount: Int
@@ -374,6 +389,8 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     stationaryObservationCount: Int = 0,
     rttMsSum: Double = 0,
     rttSampleCount: Int = 0,
+    probeRttMsSum: Double = 0,
+    probeRttSampleCount: Int = 0,
     snrSum: Double = 0,
     snrCount: Int = 0,
     minSnr: Double? = nil,
@@ -401,6 +418,8 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     self.stationaryObservationCount = stationaryObservationCount
     self.rttMsSum = rttMsSum
     self.rttSampleCount = rttSampleCount
+    self.probeRttMsSum = probeRttMsSum
+    self.probeRttSampleCount = probeRttSampleCount
     self.snrSum = snrSum
     self.snrCount = snrCount
     self.minSnr = minSnr
@@ -434,7 +453,9 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     ackCount: Int = 0,
     stationaryObservationCount: Int = 0,
     rttMsSum: Double = 0,
-    rttSampleCount: Int = 0
+    rttSampleCount: Int = 0,
+    probeRttMsSum: Double = 0,
+    probeRttSampleCount: Int = 0
   ) {
     self.init(
       cellRaw: aggregate.cell.rawValue,
@@ -449,6 +470,8 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       stationaryObservationCount: stationaryObservationCount,
       rttMsSum: rttMsSum,
       rttSampleCount: rttSampleCount,
+      probeRttMsSum: probeRttMsSum,
+      probeRttSampleCount: probeRttSampleCount,
       snrSum: aggregate.snrSum,
       snrCount: aggregate.snrCount,
       minSnr: aggregate.minSnr,
@@ -488,6 +511,8 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       stationaryObservationCount: model.stationaryObservationCount,
       rttMsSum: model.rttMsSum,
       rttSampleCount: model.rttSampleCount,
+      probeRttMsSum: model.probeRttMsSum,
+      probeRttSampleCount: model.probeRttSampleCount,
       snrSum: model.snrSum,
       snrCount: model.snrCount,
       minSnr: model.minSnr,
@@ -527,6 +552,11 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
   /// Mean round-trip time of acknowledged sends, in milliseconds.
   public var avgRttMs: Double? {
     rttSampleCount > 0 ? rttMsSum / Double(rttSampleCount) : nil
+  }
+
+  /// Mean trace-probe round trip, ms.
+  public var avgProbeRttMs: Double? {
+    probeRttSampleCount > 0 ? probeRttMsSum / Double(probeRttSampleCount) : nil
   }
 
   /// Every observation folded into this row, whatever direction it came from. Larger than
@@ -600,6 +630,8 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     merged.stationaryObservationCount += other.stationaryObservationCount
     merged.rttMsSum += other.rttMsSum
     merged.rttSampleCount += other.rttSampleCount
+    merged.probeRttMsSum += other.probeRttMsSum
+    merged.probeRttSampleCount += other.probeRttSampleCount
     merged.snrSum += other.snrSum
     merged.snrCount += other.snrCount
     merged.minSnr = Self.lower(minSnr, other.minSnr)

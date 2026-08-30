@@ -160,6 +160,11 @@ public actor SignalMapperCaptureEngine {
     var stationaryCount = 0
     var rttMsSum = 0.0
     var rttSampleCount = 0
+    /// Round trips of *trace probes*, client-measured — a separate ledger from
+    /// `rttMsSum`, which holds end-to-end delivery ACKs an order of magnitude slower.
+    /// Averaging the two together would mean nothing (M3.5 review M6).
+    var probeRttMsSum = 0.0
+    var probeRttSampleCount = 0
 
     init(cell: H3Cell) {
       aggregate = AggregatedCell(cell: cell)
@@ -181,7 +186,9 @@ public actor SignalMapperCaptureEngine {
         ackCount: ackCount,
         stationaryObservationCount: stationaryCount,
         rttMsSum: rttMsSum,
-        rttSampleCount: rttSampleCount
+        rttSampleCount: rttSampleCount,
+        probeRttMsSum: probeRttMsSum,
+        probeRttSampleCount: probeRttSampleCount
       )
     }
   }
@@ -219,6 +226,12 @@ public actor SignalMapperCaptureEngine {
   private let movementHints: (any MovementHintProvider)?
   private let tuningProvider: any MapperTuningProviding
   private let anchorSeedProvider: any MapperAnchorSeedProviding
+  /// Raw ride-log recorder, session-scoped: set while a recorded survey run is active,
+  /// nil otherwise — ambient capture never writes raw rows. Fed *before* anchor policy
+  /// and with data-quality outcomes only (docs/ACTIVE_SURVEY_M3_5.md §2.4): dropped
+  /// samples are recorded with the reason, because "why a sample was rejected" is
+  /// itself ride-analysis data, but disc membership is never expressible.
+  private var rawRecorder: (any MapperRawSampleRecording)?
   private let now: @Sendable () -> Date
   private let sleep: @Sendable (Duration) async -> Void
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "SignalMapperCapture")
@@ -368,6 +381,12 @@ public actor SignalMapperCaptureEngine {
     await flush()
   }
 
+  /// Attaches the raw ride-log recorder (nil detaches). Session-scoped; see the stored
+  /// property for the rules.
+  public func setRawRecorder(_ recorder: (any MapperRawSampleRecording)?) {
+    rawRecorder = recorder
+  }
+
   // MARK: - Ingest
 
   private func ingest(_ entry: RxLogEntryDTO) async {
@@ -387,7 +406,25 @@ public actor SignalMapperCaptureEngine {
       return
     }
 
-    guard let placed = await place() else { return }
+    let gate = await qualityGate()
+    await recordRaw(
+      MapperRawSampleEvent(
+        timestamp: entry.receivedAt,
+        kind: .passiveRx,
+        rxSnr: entry.snr,
+        rssi: entry.rssi,
+        hopCount: entry.hopCount,
+        routeTypeRaw: entry.routeType.rawValue,
+        payloadTypeRaw: entry.payloadType.rawValue,
+        repeaterHexID: Self.repeaterSightings(from: entry).last?.id
+      ),
+      gate: gate
+    )
+    guard let placed = gate.placement else { return }
+    guard !anchors.contains(cell: placed.cell) else {
+      state.droppedAnchorCount += 1
+      return
+    }
 
     let sample = Self.sample(from: entry, at: placed.coordinate)
     let key = CellDay(cell: placed.cell, day: MapperDayKey.key(for: entry.receivedAt))
@@ -408,7 +445,30 @@ public actor SignalMapperCaptureEngine {
   /// distinct echo.
   private func ingestHeardRepeat(_ event: HeardRepeatEvent) async {
     guard state.isRunning else { return }
-    guard let placed = await place() else { return }
+    let gate = await qualityGate()
+    let detail = event.detail
+    let echoHops = Self.sightings(
+      pathNodes: detail.pathNodes,
+      hashSize: detail.hashSize,
+      snr: detail.snr,
+      rssi: detail.rssi
+    )
+    await recordRaw(
+      MapperRawSampleEvent(
+        timestamp: detail.receivedAt,
+        kind: .txHeard,
+        rxSnr: detail.snr,
+        rssi: detail.rssi,
+        hopCount: detail.hopCount,
+        repeaterHexID: echoHops.last?.id
+      ),
+      gate: gate
+    )
+    guard let placed = gate.placement else { return }
+    guard !anchors.contains(cell: placed.cell) else {
+      state.droppedAnchorCount += 1
+      return
+    }
 
     let sample = Self.sample(from: event, at: placed.coordinate)
     let key = CellDay(cell: placed.cell, day: MapperDayKey.key(for: event.detail.receivedAt))
@@ -433,7 +493,20 @@ public actor SignalMapperCaptureEngine {
     guard case let .statusResolved(_, status, roundTripTime) = event, status == .delivered else {
       return
     }
-    guard let placed = await place() else { return }
+    let gate = await qualityGate()
+    await recordRaw(
+      MapperRawSampleEvent(
+        timestamp: now(),
+        kind: .ackResolved,
+        rttMs: roundTripTime.map(Int.init)
+      ),
+      gate: gate
+    )
+    guard let placed = gate.placement else { return }
+    guard !anchors.contains(cell: placed.cell) else {
+      state.droppedAnchorCount += 1
+      return
+    }
 
     let key = CellDay(cell: placed.cell, day: MapperDayKey.key(for: placed.at))
     var slot = pending[key] ?? PendingCell(cell: placed.cell)
@@ -465,7 +538,31 @@ public actor SignalMapperCaptureEngine {
   /// packets (see ``ingest(_:)``), so a reply cannot arrive twice.
   public func ingestProbeResult(_ result: MapperProbeResult) async {
     guard state.isRunning else { return }
-    guard let placed = await place() else { return }
+
+    // Fold against the send-time placement when the probe engine supplied one — at
+    // ride speed a reply lands a boundary-straddling couple of seconds downrange of
+    // the transmission it answers (M3.5 review M4). The current fix is only a
+    // fallback. Anchor policy applies either way: a placement carries no disc verdict.
+    let placed: Placement
+    if let sendPlacement = result.placement {
+      placed = Placement(
+        cell: sendPlacement.cell,
+        coordinate: GeoCoordinate(
+          latitude: sendPlacement.fix.latitude,
+          longitude: sendPlacement.fix.longitude
+        ),
+        at: sendPlacement.at,
+        isStationary: sendPlacement.isStationary
+      )
+    } else if let fallback = await place() {
+      placed = fallback
+    } else {
+      return
+    }
+    if result.placement != nil, anchors.contains(cell: placed.cell) {
+      state.droppedAnchorCount += 1
+      return
+    }
 
     let sighting = result.repeaterID.map { id in
       SurveySample.RepeaterSighting(
@@ -492,11 +589,41 @@ public actor SignalMapperCaptureEngine {
     CellAggregator.fold(sample, into: &slot.aggregate)
     slot.rxCount += 1
     if placed.isStationary { slot.stationaryCount += 1 }
+    if let rttMs = result.rttMs {
+      slot.probeRttMsSum += Double(rttMs)
+      slot.probeRttSampleCount += 1
+    }
     pending[key] = slot
 
     state.rxSampleCount += 1
     state.activeSampleCount += 1
     await recordSample(at: placed.at)
+  }
+
+  /// Places a probe transmission at the current fix (data-quality gate only) and books
+  /// the attempt into the cell's `probesSent` — the denominator dead-zone rendering
+  /// divides by. The aggregate booking respects anchor discs; the returned placement is
+  /// handed back regardless, because the raw log and the reply fold both need it and
+  /// neither may learn the disc verdict from it.
+  public func placeProbeAttempt() async -> MapperProbePlacement? {
+    guard state.isRunning else { return nil }
+    let gate = await qualityGate()
+    guard let placed = gate.placement, let fix = gate.fix else { return nil }
+
+    if !anchors.contains(cell: placed.cell) {
+      let key = CellDay(cell: placed.cell, day: MapperDayKey.key(for: placed.at))
+      var slot = pending[key] ?? PendingCell(cell: placed.cell)
+      slot.note(placed.at)
+      slot.aggregate.probesSent += 1
+      pending[key] = slot
+    }
+
+    return MapperProbePlacement(
+      cell: placed.cell,
+      fix: fix,
+      at: placed.at,
+      isStationary: placed.isStationary
+    )
   }
 
   // MARK: - Fix gate
@@ -516,47 +643,76 @@ public actor SignalMapperCaptureEngine {
   /// 4. **It is too vague.** Accuracy worse than the tuning allows, or CoreLocation's
   ///    negative sentinel for "not a real fix".
   private func place() async -> Placement? {
+    let gate = await qualityGate()
+    guard let placed = gate.placement else { return nil }
+    // Before the fold, not at upload: an excluded observation must never exist on disk.
+    guard !anchors.contains(cell: placed.cell) else {
+      state.droppedAnchorCount += 1
+      return nil
+    }
+    return placed
+  }
+
+  /// The data-quality half of the gate — everything except anchor policy, which is an
+  /// aggregate-path concern and deliberately invisible to the raw recorder
+  /// (docs/ACTIVE_SURVEY_M3_5.md §3.2: a per-point in/out label is a solvable oracle
+  /// for the disc geometry). Returns the fix it examined either way, so a raw row can
+  /// carry the position knowledge that existed even for a rejected sample.
+  private func qualityGate() async -> (placement: Placement?, fix: MapperFix?, outcome: MapperGateOutcome) {
     let tuning = tuningProvider.tuning
     guard let fix = await fixProvider.latestFix() else {
       state.droppedNoFixCount += 1
-      return nil
+      return (nil, nil, .noFix)
     }
 
     guard !fix.movedSinceCapture else {
       state.droppedMovedSinceFixCount += 1
-      return nil
+      return (nil, fix, .movedSinceCapture)
     }
 
     let at = now()
     guard at.timeIntervalSince(fix.timestamp) <= Self.toleratedAgeSeconds(for: fix, tuning: tuning) else {
       state.droppedStaleFixCount += 1
-      return nil
+      return (nil, fix, .staleFix)
     }
     // A negative accuracy is CoreLocation's "this is not a real fix" sentinel, so it fails
     // the same test as an accuracy that is merely too poor.
     guard fix.horizontalAccuracyMeters >= 0,
           fix.horizontalAccuracyMeters <= tuning.fixMaxAccuracyMeters else {
       state.droppedInaccurateFixCount += 1
-      return nil
+      return (nil, fix, .inaccurateFix)
     }
 
     let coordinate = GeoCoordinate(latitude: fix.latitude, longitude: fix.longitude)
     guard let cell = SurveyGrid.cell(containing: coordinate) else {
       state.droppedNoFixCount += 1
-      return nil
-    }
-    // Before the fold, not at upload: an excluded observation must never exist on disk.
-    guard !anchors.contains(cell: cell) else {
-      state.droppedAnchorCount += 1
-      return nil
+      return (nil, fix, .noFix)
     }
 
-    return await Placement(
+    let placement = await Placement(
       cell: cell,
       coordinate: coordinate,
       at: at,
       isStationary: movementHints?.currentMovementHint() == .stationary
     )
+    return (placement, fix, .accepted)
+  }
+
+  /// Populates a raw event's position block from a gate result and hands it to the
+  /// session recorder, when one is attached. A rejected fix still contributes what it
+  /// knew — the drop reason is analysis data too.
+  private func recordRaw(
+    _ event: MapperRawSampleEvent,
+    gate: (placement: Placement?, fix: MapperFix?, outcome: MapperGateOutcome)
+  ) async {
+    guard let rawRecorder else { return }
+    var event = event
+    if let fix = gate.fix {
+      event.setFix(fix, at: event.timestamp)
+    }
+    event.cellRaw = gate.placement?.cell.rawValue
+    event.gateOutcome = gate.outcome
+    await rawRecorder.record(event)
   }
 
   /// How old a fix may be before it stops describing where the phone is.

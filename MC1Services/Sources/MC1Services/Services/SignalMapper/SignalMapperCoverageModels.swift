@@ -18,6 +18,12 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
   /// Mean SNR of the packets we heard *from* this repeater directly. Nil when it was only
   /// ever an upstream hop, whose signal somebody else measured.
   public let averageSnr: Double?
+  /// Mean SNR this repeater reported for *our* transmissions — the uplink leg, populated
+  /// only by trace/discover replies. Nil when it never told us.
+  public let averageTxSnr: Double?
+  /// The packet count split by which side transmitted.
+  public let rxPacketCount: Int
+  public let txPacketCount: Int
   public let firstHeard: Date
   public let lastHeard: Date
 
@@ -31,6 +37,9 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
     isAmbiguous: Bool = false,
     packetCount: Int,
     averageSnr: Double?,
+    averageTxSnr: Double? = nil,
+    rxPacketCount: Int = 0,
+    txPacketCount: Int = 0,
     firstHeard: Date,
     lastHeard: Date
   ) {
@@ -39,6 +48,9 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
     self.isAmbiguous = isAmbiguous
     self.packetCount = packetCount
     self.averageSnr = averageSnr
+    self.averageTxSnr = averageTxSnr
+    self.rxPacketCount = rxPacketCount
+    self.txPacketCount = txPacketCount
     self.firstHeard = firstHeard
     self.lastHeard = lastHeard
   }
@@ -72,6 +84,17 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
   public let averageRssi: Double?
   /// Mean round-trip time of acknowledged sends from here, in milliseconds.
   public let averageRttMs: Double?
+  /// Mean round-trip time of trace probes from here, in milliseconds (M3.5).
+  public let averageProbeRttMs: Double?
+
+  /// Packets that answered our probes vs. everything passively heard (M3.5).
+  public let activePacketCount: Int
+  public let passivePacketCount: Int
+  /// Probe transmissions attributed to this cell — the denominator "no reach" divides by.
+  public let probesSent: Int
+  /// Mean uplink SNR (repeaters' readings of us) and how many readings back it.
+  public let averageTxSnr: Double?
+  public let txSnrCount: Int
 
   public let floodCount: Int
   public let directCount: Int
@@ -92,6 +115,19 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     cell.rawValue
   }
 
+  /// The uplink ("Reach") layer's colour, when this cell has uplink evidence.
+  public var reachQuality: SignalQuality? {
+    txSnrCount > 0 ? SignalQuality(snr: averageTxSnr) : nil
+  }
+
+  /// We shouted from this cell and nobody ever reported hearing us. Deliberately not
+  /// `AggregatedCell.isDeadZone` (whose `packetCount == 0` test is defeated by any
+  /// passively heard packet — M3.5 review M5): the reach question is about the uplink
+  /// leg specifically.
+  public var isUnreachedProbed: Bool {
+    probesSent > 0 && txSnrCount == 0
+  }
+
   public init(
     cell: H3Cell,
     boundary: [GeoCoordinate],
@@ -107,6 +143,12 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     worstSnr: Double?,
     averageRssi: Double?,
     averageRttMs: Double?,
+    averageProbeRttMs: Double? = nil,
+    activePacketCount: Int = 0,
+    passivePacketCount: Int = 0,
+    probesSent: Int = 0,
+    averageTxSnr: Double? = nil,
+    txSnrCount: Int = 0,
     floodCount: Int,
     directCount: Int,
     dayCount: Int,
@@ -129,6 +171,12 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     self.worstSnr = worstSnr
     self.averageRssi = averageRssi
     self.averageRttMs = averageRttMs
+    self.averageProbeRttMs = averageProbeRttMs
+    self.activePacketCount = activePacketCount
+    self.passivePacketCount = passivePacketCount
+    self.probesSent = probesSent
+    self.averageTxSnr = averageTxSnr
+    self.txSnrCount = txSnrCount
     self.floodCount = floodCount
     self.directCount = directCount
     self.dayCount = dayCount

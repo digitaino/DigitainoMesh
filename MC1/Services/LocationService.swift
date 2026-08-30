@@ -56,6 +56,10 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
   /// Whether a location request is in progress
   private(set) var isRequestingLocation = false
 
+  /// Whether the continuous ride-survey stream is running (``startContinuousUpdates()``).
+  private(set) var isContinuousActive = false
+  private var savedDesiredAccuracy: CLLocationAccuracy?
+
   /// Whether location services are authorized for use
   var isAuthorized: Bool {
     authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways
@@ -96,6 +100,59 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     locationManager.requestWhenInUseAuthorization()
   }
 
+  /// Whether the app currently receives full-accuracy fixes. With Precise Location off,
+  /// CoreLocation degrades to ~1–3 km accuracy and the signal mapper's 50 m gate rejects
+  /// every sample — a silent total loss the ride pre-flight must surface.
+  var isPreciseLocationAuthorized: Bool {
+    locationManager.accuracyAuthorization == .fullAccuracy
+  }
+
+  /// Asks for temporary full accuracy under the given plist purpose key (project.yml's
+  /// `NSLocationTemporaryUsageDescriptionDictionary`). No-op when already precise.
+  func requestTemporaryFullAccuracy(purposeKey: String) async {
+    guard !isPreciseLocationAuthorized else { return }
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      locationManager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: purposeKey) { _ in
+        continuation.resume()
+      }
+    }
+  }
+
+  /// Starts the continuous ride-survey stream: best accuracy, every fix delivered.
+  ///
+  /// `kCLDistanceFilterNone` is deliberate — a distance filter starves a stopped rider of
+  /// callbacks, and the mapper's fix gate then rejects on age alone even though the
+  /// position never changed (M3.5 review M2). While the stream runs, one-shot requests
+  /// are served from it (see ``requestCurrentLocation(timeout:)``) — mixing
+  /// `requestLocation()` with `startUpdatingLocation()` is unsupported by CoreLocation.
+  /// The previous `desiredAccuracy` is restored on stop so the rest of the app keeps its
+  /// battery-friendly hundred-meter default.
+  func startContinuousUpdates() {
+    guard isAuthorized else {
+      requestPermissionIfNeeded()
+      return
+    }
+    guard !isContinuousActive else { return }
+    isContinuousActive = true
+    savedDesiredAccuracy = locationManager.desiredAccuracy
+    locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    locationManager.distanceFilter = kCLDistanceFilterNone
+    locationManager.startUpdatingLocation()
+    logger.info("Continuous location updates started")
+  }
+
+  /// Stops the continuous stream and restores the one-shot configuration.
+  func stopContinuousUpdates() {
+    guard isContinuousActive else { return }
+    isContinuousActive = false
+    locationManager.stopUpdatingLocation()
+    if let saved = savedDesiredAccuracy {
+      locationManager.desiredAccuracy = saved
+      savedDesiredAccuracy = nil
+    }
+    logger.info("Continuous location updates stopped")
+  }
+
   /// Request a one-shot location update.
   /// Call this when you need the current location (e.g., for distance sorting).
   func requestLocation() {
@@ -107,6 +164,12 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
 
     guard !isRequestingLocation else {
       logger.debug("Location request already in progress")
+      return
+    }
+
+    guard !isContinuousActive else {
+      // The stream keeps `currentLocation` fresh every second; issuing a one-shot
+      // alongside `startUpdatingLocation()` is unsupported.
       return
     }
 
@@ -133,11 +196,21 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
       }
     }
 
+    if isContinuousActive {
+      // Served from the stream: return the freshest streamed fix, or park the
+      // continuation for the next delegate callback — never a competing one-shot.
+      if let current = currentLocation, Date().timeIntervalSince(current.timestamp) < 5 {
+        return current
+      }
+    }
+
     isRequestingLocation = true
 
     return try await withCheckedThrowingContinuation { continuation in
       requestContinuation = continuation
-      locationManager.requestLocation()
+      if !isContinuousActive {
+        locationManager.requestLocation()
+      }
 
       locationTimeoutTask?.cancel()
       locationTimeoutTask = Task { @MainActor [weak self] in

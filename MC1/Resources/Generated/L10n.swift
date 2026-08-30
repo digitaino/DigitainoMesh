@@ -6692,6 +6692,8 @@ public enum L10n {
           public static let averageRssi = L10n.tr("Tools", "tools.signalMapper.detail.averageRssi", fallback: "Average RSSI")
           /// Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell
           public static let averageSnr = L10n.tr("Tools", "tools.signalMapper.detail.averageSnr", fallback: "Average SNR")
+          /// Location: SignalMapperCellDetailSheet.swift - Mean SNR repeaters reported for our transmissions
+          public static let averageTxSnr = L10n.tr("Tools", "tools.signalMapper.detail.averageTxSnr", fallback: "They heard you at")
           /// Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index
           public static func cellFooter(_ p1: Any) -> String {
             return L10n.tr("Tools", "tools.signalMapper.detail.cellFooter", String(describing: p1), fallback: "H3 cell %@")
@@ -6708,6 +6710,8 @@ public enum L10n {
           public static func milliseconds(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.detail.milliseconds", p1, fallback: "%lldms")
           }
+          /// Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered
+          public static let neverHeardBack = L10n.tr("Tools", "tools.signalMapper.detail.neverHeardBack", fallback: "Never heard back")
           /// Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts
           public static let noPacketsHeard = L10n.tr("Tools", "tools.signalMapper.detail.noPacketsHeard", fallback: "No packets heard")
           /// Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell
@@ -6716,6 +6720,12 @@ public enum L10n {
           public static func packets(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.detail.packets", p1, fallback: "%lld packets")
           }
+          /// Location: SignalMapperCellDetailSheet.swift - Probe replies that came back
+          public static let probeReplies = L10n.tr("Tools", "tools.signalMapper.detail.probeReplies", fallback: "Probe replies")
+          /// Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip
+          public static let probeRoundTrip = L10n.tr("Tools", "tools.signalMapper.detail.probeRoundTrip", fallback: "Probe round trip")
+          /// Location: SignalMapperCellDetailSheet.swift - Probe transmissions sent from this cell
+          public static let probesSent = L10n.tr("Tools", "tools.signalMapper.detail.probesSent", fallback: "Probes sent")
           /// Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade
           public static let quality = L10n.tr("Tools", "tools.signalMapper.detail.quality", fallback: "Signal quality")
           /// Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell
@@ -6738,18 +6748,72 @@ public enum L10n {
           public static let title = L10n.tr("Tools", "tools.signalMapper.detail.title", fallback: "Cell Detail")
           /// Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater
           public static let txHeard = L10n.tr("Tools", "tools.signalMapper.detail.txHeard", fallback: "Your packets heard back")
+          /// Location: SignalMapperCellDetailSheet.swift - Section: what active probing from this cell proved
+          public static let uplink = L10n.tr("Tools", "tools.signalMapper.detail.uplink", fallback: "Uplink")
+        }
+        public enum Focus {
+          /// Location: SignalMapperFocusPickerView.swift - Confirm button applying the lock-on selection
+          public static let apply = L10n.tr("Tools", "tools.signalMapper.focus.apply", fallback: "Lock On")
+          /// Location: SignalMapperFocusPickerView.swift - Empty state when no repeater with a known key exists
+          public static let empty = L10n.tr("Tools", "tools.signalMapper.focus.empty", fallback: "No repeaters with known keys yet. Ride a little — discover replies will find them.")
+          /// Location: SignalMapperFocusPickerView.swift - Footer; %lld is the selection cap
+          public static func footer(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.focus.footer", p1, fallback: "Pick up to %lld repeaters to track live. Everything else keeps logging in the background.")
+          }
+        }
+        public enum Layer {
+          /// Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink)
+          public static let heard = L10n.tr("Tools", "tools.signalMapper.layer.heard", fallback: "Heard — what I hear")
+          /// Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink)
+          public static let reach = L10n.tr("Tools", "tools.signalMapper.layer.reach", fallback: "Reach — what hears me")
+          /// Location: SignalMapperCoverageView.swift - Map layer picker title
+          public static let title = L10n.tr("Tools", "tools.signalMapper.layer.title", fallback: "Map Layer")
         }
         public enum Legend {
           /// Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity
           public static let density = L10n.tr("Tools", "tools.signalMapper.legend.density", fallback: "Solid hexagons were observed more often than faint ones.")
+          /// Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells
+          public static let noReach = L10n.tr("Tools", "tools.signalMapper.legend.noReach", fallback: "Probed, nobody heard you")
+          /// Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale
+          public static let reachSignal = L10n.tr("Tools", "tools.signalMapper.legend.reachSignal", fallback: "Color is how well repeaters heard your transmissions from that hexagon.")
           /// Location: SignalMapperLegend.swift - Legend note explaining hexagon color
           public static let signal = L10n.tr("Tools", "tools.signalMapper.legend.signal", fallback: "Color is the average signal the mesh reached that hexagon with.")
           /// Location: SignalMapperLegend.swift - Legend title
           public static let title = L10n.tr("Tools", "tools.signalMapper.legend.title", fallback: "Legend")
         }
+        public enum Precise {
+          /// Location: SignalMapperCoverageView.swift - Alert button requesting temporary full accuracy
+          public static let enable = L10n.tr("Tools", "tools.signalMapper.precise.enable", fallback: "Allow Precise Location")
+          /// Location: SignalMapperCoverageView.swift - Alert body explaining why the ride would record nothing
+          public static let message = L10n.tr("Tools", "tools.signalMapper.precise.message", fallback: "Without precise location, every sample fails the accuracy gate and the ride records nothing. Allow precise location for this session, or turn it on in Settings → Privacy → Location Services.")
+          /// Location: SignalMapperCoverageView.swift - Alert button starting the ride regardless
+          public static let startAnyway = L10n.tr("Tools", "tools.signalMapper.precise.startAnyway", fallback: "Start Anyway")
+          /// Location: SignalMapperCoverageView.swift - Alert title when Precise Location is off before a ride
+          public static let title = L10n.tr("Tools", "tools.signalMapper.precise.title", fallback: "Precise Location Is Off")
+        }
         public enum Quality {
           /// Location: SignalQuality+Color.swift - Signal quality below the poor threshold
           public static let veryPoor = L10n.tr("Tools", "tools.signalMapper.quality.veryPoor", fallback: "Very Poor")
+        }
+        public enum Ride {
+          /// Location: SignalMapperRideHUD.swift - Seconds since a focus repeater was last heard; %lld seconds
+          public static func age(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.ride.age", p1, fallback: "%llds")
+          }
+          /// Location: SignalMapperRideHUD.swift - Expanded HUD row: hexagons probed this run
+          public static let cells = L10n.tr("Tools", "tools.signalMapper.ride.cells", fallback: "Hexagons probed")
+          /// Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker
+          public static let lockOn = L10n.tr("Tools", "tools.signalMapper.ride.lockOn", fallback: "Lock On Repeaters")
+          /// Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name
+          public static func maxRange(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.ride.maxRange", String(describing: p1), fallback: "Max range · %@")
+          }
+          /// Location: SignalMapperRideHUD.swift - Expanded HUD row: samples skipped for lack of a GPS fix (loud when Precise Location is off)
+          public static let noFixDrops = L10n.tr("Tools", "tools.signalMapper.ride.noFixDrops", fallback: "Skipped: no usable fix")
+          /// Location: SignalMapperRideHUD.swift - Expanded HUD row: probes sent · replies · lost
+          public static let probes = L10n.tr("Tools", "tools.signalMapper.ride.probes", fallback: "Probes · replies · lost")
+          /// Location: SignalMapperRideHUD.swift - Banner while the BLE link to the radio is down mid-ride
+          public static let radioDisconnected = L10n.tr("Tools", "tools.signalMapper.ride.radioDisconnected", fallback: "Radio disconnected — still recording position")
         }
         public enum Survey {
           /// Location: SignalMapperCoverageView.swift - Live session pill; %1$lld probes sent, %2$lld replies heard
@@ -6765,6 +6829,12 @@ public enum L10n {
           public enum Summary {
             /// Location: SignalMapperSessionSummarySheet.swift - Distinct hexagons that triggered a probe
             public static let cellsProbed = L10n.tr("Tools", "tools.signalMapper.survey.summary.cellsProbed", fallback: "Hexagons probed")
+            /// Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted
+            public static let duration = L10n.tr("Tools", "tools.signalMapper.survey.summary.duration", fallback: "Duration")
+            /// Location: SignalMapperSessionSummarySheet.swift - Button generating the shareable ride log
+            public static let export = L10n.tr("Tools", "tools.signalMapper.survey.summary.export", fallback: "Export Ride Log")
+            /// Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing
+            public static let exportNote = L10n.tr("Tools", "tools.signalMapper.survey.summary.exportNote", fallback: "Shared files are scrubbed: positions coarsened, the first and last 500 m trimmed, repeater keys shortened. The full log stays on this device.")
             /// Location: SignalMapperSessionSummarySheet.swift - Footer: results never leave the device
             public static let localNote = L10n.tr("Tools", "tools.signalMapper.survey.summary.localNote", fallback: "Survey results are stored on this device only.")
             /// Location: SignalMapperSessionSummarySheet.swift - Probes whose reply never arrived
@@ -6773,6 +6843,8 @@ public enum L10n {
             public static let probes = L10n.tr("Tools", "tools.signalMapper.survey.summary.probes", fallback: "Probe cycles sent")
             /// Location: SignalMapperSessionSummarySheet.swift - Trace and discover replies heard back
             public static let replies = L10n.tr("Tools", "tools.signalMapper.survey.summary.replies", fallback: "Replies heard")
+            /// Location: SignalMapperSessionSummarySheet.swift - Share button once the export file is ready
+            public static let share = L10n.tr("Tools", "tools.signalMapper.survey.summary.share", fallback: "Share Ride Log")
             /// Location: SignalMapperSessionSummarySheet.swift - Completion sheet title
             public static let title = L10n.tr("Tools", "tools.signalMapper.survey.summary.title", fallback: "Survey Complete")
           }

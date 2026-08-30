@@ -9,6 +9,9 @@ import SwiftUI
 /// Same shape and same idiom as ``TrafficHeatmapLegend`` — a tool's legend should not be a
 /// new invention every time — with the quality scale swapped for SurveyKit's six-step one.
 struct SignalMapperLegend: View {
+  /// Which layer the map is showing; the Reach layer adds its "probed, never heard" row.
+  var layer: SignalMapperMapLayer = .heard
+
   @State private var isExpanded = false
 
   var body: some View {
@@ -64,10 +67,14 @@ struct SignalMapperLegend: View {
 
       Divider()
 
-      Text(L10n.Tools.Tools.SignalMapper.Legend.signal)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+      Text(
+        layer == .heard
+          ? L10n.Tools.Tools.SignalMapper.Legend.signal
+          : L10n.Tools.Tools.SignalMapper.Legend.reachSignal
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
 
       ForEach(SignalQuality.coverageOrder, id: \.overlayToken) { quality in
         HStack(spacing: 8) {
@@ -76,6 +83,18 @@ struct SignalMapperLegend: View {
             .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(quality.color, lineWidth: 1))
             .frame(width: 12, height: 12)
           Text(quality.localizedLabel)
+            .font(.caption)
+        }
+        .accessibilityElement(children: .combine)
+      }
+
+      if layer == .reach {
+        HStack(spacing: 8) {
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Color.gray.opacity(0.45))
+            .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color.gray, lineWidth: 1))
+            .frame(width: 12, height: 12)
+          Text(L10n.Tools.Tools.SignalMapper.Legend.noReach)
             .font(.caption)
         }
         .accessibilityElement(children: .combine)

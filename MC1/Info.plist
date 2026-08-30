@@ -4,28 +4,36 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>DigitainoMesh</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<key>CFBundleDisplayName</key>
-	<string>DigitainoMesh</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>meshcore</string>
+				<string>meshcoreone</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSAccessorySetupBluetoothServices</key>
-	<array>
-		<string>6E400001-B5A3-F393-E0A9-E50E24DCCA9E</string>
-	</array>
 	<key>NSAccessorySetupBluetoothNames</key>
 	<array>
 		<string>MeshCore-</string>
@@ -44,11 +52,15 @@
 		<string>NRF52 DK</string>
 		<string>T-Impulse</string>
 	</array>
-	<key>NSAccessorySetupSupports</key>
+	<key>NSAccessorySetupBluetoothServices</key>
+	<array>
+		<string>6E400001-B5A3-F393-E0A9-E50E24DCCA9E</string>
+	</array>
+	<key>NSAccessorySetupKitSupports</key>
 	<array>
 		<string>Bluetooth</string>
 	</array>
-	<key>NSAccessorySetupKitSupports</key>
+	<key>NSAccessorySetupSupports</key>
 	<array>
 		<string>Bluetooth</string>
 	</array>
@@ -58,10 +70,17 @@
 	<string>DigitainoMesh uses Bluetooth to connect to MeshCore radio devices for mesh messaging.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>DigitainoMesh needs camera access to scan channel QR codes.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>RideSurvey</key>
+		<string>A signal survey ride maps how far your radio reaches. Without precise location, samples cannot be placed accurately and the ride records nothing.</string>
+	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>DigitainoMesh uses your location to suggest a recommended radio preset for your area, show your position on maps, and sort contacts by distance. When you enable location sharing, DigitainoMesh also advertises your location to your mesh contacts.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>DigitainoMesh uses motion activity to sense when you're moving so signal strength refreshes more often — without GPS, to save battery.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -89,20 +108,6 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>meshcore</string>
-				<string>meshcoreone</string>
-			</array>
-		</dict>
 	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>

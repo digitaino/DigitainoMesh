@@ -131,6 +131,9 @@ public struct SignalMapperCoverageBuilder: Sendable {
           isAmbiguous: resolved.isAmbiguous,
           packetCount: stats.packetCount,
           averageSnr: stats.avgRxSnr,
+          averageTxSnr: stats.avgTxSnr,
+          rxPacketCount: stats.rxPacketCount,
+          txPacketCount: stats.txPacketCount,
           firstHeard: stats.firstHeard,
           lastHeard: stats.lastHeard
         )
@@ -155,6 +158,12 @@ public struct SignalMapperCoverageBuilder: Sendable {
       worstSnr: row.minSnr,
       averageRssi: row.avgRssi,
       averageRttMs: row.avgRttMs,
+      averageProbeRttMs: row.avgProbeRttMs,
+      activePacketCount: row.activePacketCount,
+      passivePacketCount: row.passivePacketCount,
+      probesSent: row.probesSent,
+      averageTxSnr: row.avgTxSnr,
+      txSnrCount: row.txSnrCount,
       floodCount: row.floodCount,
       directCount: row.directCount,
       dayCount: days.count,
@@ -218,6 +227,8 @@ private extension MapperCellObservationDTO {
     copy.stationaryObservationCount = stationaryObservationCount
     copy.rttMsSum = rttMsSum
     copy.rttSampleCount = rttSampleCount
+    copy.probeRttMsSum = probeRttMsSum
+    copy.probeRttSampleCount = probeRttSampleCount
     copy.snrSum = snrSum
     copy.snrCount = snrCount
     copy.minSnr = minSnr
