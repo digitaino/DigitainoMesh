@@ -20,6 +20,7 @@ private func makeContact(radioID: UUID, name: String = "Alice") -> ContactDTO {
     latitude: 0,
     longitude: 0,
     lastModified: 0,
+    lastHeardTimestamp: nil,
     nickname: nil,
     isBlocked: false,
     isMuted: false,
@@ -347,7 +348,8 @@ struct ChatViewModelReactionSendFailureTests {
     let contact = Contact(
       radioID: UUID(),
       publicKey: Data(repeating: 2, count: ProtocolLimits.publicKeySize),
-      name: "Alice"
+      name: "Alice",
+      lastHeardTimestamp: 0
     )
     container.mainContext.insert(contact)
     try container.mainContext.save()

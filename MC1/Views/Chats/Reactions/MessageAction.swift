@@ -7,6 +7,7 @@ enum MessageAction: Equatable {
   /// the details section where the resolved path and its distance are at hand.
   case replyWithRoute(String)
   case copy
+  case translate
   case sendAgain
   case sendDM
   case blockSender

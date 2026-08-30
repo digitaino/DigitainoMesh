@@ -45,7 +45,8 @@ struct MessageBubbleView: View, Equatable {
           onShowSharedRoute: { route in actions.onShowSharedRoute(route, message) },
           snapshotResolver: actions.snapshotResolver,
           requestSnapshot: actions.requestSnapshot,
-          retrySnapshot: actions.retrySnapshot
+          retrySnapshot: actions.retrySnapshot,
+          onTranslationAction: { actions.onTranslationAction(message.id) }
         )
       )
     } else {

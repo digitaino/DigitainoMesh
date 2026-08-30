@@ -136,7 +136,7 @@ struct ServiceContainerWiringTests {
     let modelContainer = try PersistenceStore.createContainer(inMemory: true)
     let container = ServiceContainer(
       session: session,
-      modelContainer: modelContainer,
+      dataStore: PersistenceStore(modelContainer: modelContainer),
       radioID: UUID(),
       phoneLocationProvider: StubProvider()
     )

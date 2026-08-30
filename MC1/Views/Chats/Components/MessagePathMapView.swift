@@ -96,6 +96,7 @@ struct MessagePathMapView: View {
           Button(L10n.Localizable.Common.done) { dismiss() }
         }
       }
+      .navigationBarTitleDisplayMode(.inline)
       .onAppear {
         // Only a message's own path with no recorded fix plots anything from
         // the live location (the fallback receiver pin) — a stamped message is
@@ -198,10 +199,10 @@ struct MessagePathMapView: View {
     let referenceLocation = receiverReference(for: source, userLocation: userLocation)
 
     // Sender. Only a message's own path has endpoints (see MessagePathMapSource).
+    // Resolution is the shared rule: key prefix for DMs, unique sender name for
+    // channel rows.
     if case .message(let message) = source,
-       let keyPrefix = message.senderKeyPrefix,
-       let sender = contacts.first(where: { $0.publicKeyPrefix == keyPrefix }),
-       sender.hasLocation {
+       let sender = MessagePathViewModel.locatedSender(for: message, contacts: contacts) {
       let coord = CLLocationCoordinate2D(latitude: sender.latitude, longitude: sender.longitude)
       nodes.append((MapPoint(
         id: sender.id,

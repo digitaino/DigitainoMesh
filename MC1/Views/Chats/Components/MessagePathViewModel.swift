@@ -70,6 +70,35 @@ final class MessagePathViewModel {
     return String(format: "%02X", firstByte)
   }
 
+  /// Pin A contact from a non-empty `senderKeyPrefix`, or a unique `senderNodeName` on a channel row.
+  func locatedSender(for message: MessageDTO) -> ContactDTO? {
+    Self.locatedSender(for: message, contacts: contacts)
+  }
+
+  /// The sender-pin rule with its contact pool injected, so the static map
+  /// builder and the Reply-with-Route composer resolve pin A exactly as this
+  /// screen does — a channel row can't be pinned here and dropped there.
+  static func locatedSender(for message: MessageDTO, contacts: [ContactDTO]) -> ContactDTO? {
+    if let keyPrefix = message.senderKeyPrefix, !keyPrefix.isEmpty {
+      guard let sender = contacts.first(where: { $0.publicKeyPrefix == keyPrefix }),
+            sender.hasLocation else {
+        return nil
+      }
+      return sender
+    }
+
+    guard message.isChannelMessage,
+          let senderName = message.senderNodeName, !senderName.isEmpty else {
+      return nil
+    }
+
+    let matches = SenderContactMatcher.filter(contacts: contacts, senderName: senderName)
+    guard matches.count == 1, let sender = matches.first, sender.hasLocation else {
+      return nil
+    }
+    return sender
+  }
+
   func repeaterResolution(for hashBytes: Data, userLocation: CLLocation?) -> NodeNameResolution {
     NeighborNameResolver.resolve(
       for: hashBytes,

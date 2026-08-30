@@ -24,24 +24,36 @@ extension ChatTimeline {
   /// landing on a hidden copy surfaces when the run expands and rebakes).
   func rebakeRow(_ messageID: UUID) {
     guard let coordinator, let writer else { return }
-    guard let message = coordinator.messagesByID[messageID] else {
+    let messages = coordinator.messages
+    guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
       logger.warning("rebake requested for missing message id \(messageID)")
       return
     }
+    let message = messages[index]
     guard !bake.duplicatePlan.hiddenIDs.contains(messageID) else { return }
-    // Previous *visible* message, matching `bakeAll`: grouping flags computed
-    // against a collapsed copy would disagree with the full pass.
+    // Previous/next *visible* message, matching `bakeAll`: grouping flags and
+    // cluster ends computed against a collapsed copy would disagree with the
+    // full pass.
     let previous: MessageDTO? = {
-      guard var index = coordinator.messages.firstIndex(where: { $0.id == messageID }) else { return nil }
-      while index > 0 {
-        index -= 1
-        let candidate = coordinator.messages[index]
+      var cursor = index
+      while cursor > 0 {
+        cursor -= 1
+        let candidate = messages[cursor]
+        if !bake.duplicatePlan.hiddenIDs.contains(candidate.id) { return candidate }
+      }
+      return nil
+    }()
+    let next: MessageDTO? = {
+      var cursor = index
+      while cursor + 1 < messages.count {
+        cursor += 1
+        let candidate = messages[cursor]
         if !bake.duplicatePlan.hiddenIDs.contains(candidate.id) { return candidate }
       }
       return nil
     }()
     writer.updateRenderItem(id: messageID) { _ in
-      makeItem(for: message, previous: previous)
+      makeItem(for: message, previous: previous, next: next)
     }
   }
 
@@ -76,12 +88,13 @@ extension ChatTimeline {
   /// and decoded-cache rehydration run synchronously inside
   /// `makeBuildInputs`, so the returned item already carries its preview
   /// fragment at a stable height.
-  func makeItem(for message: MessageDTO, previous: MessageDTO?) -> MessageItem {
+  func makeItem(for message: MessageDTO, previous: MessageDTO?, next: MessageDTO?) -> MessageItem {
     MessageFragmentBuilder.makeItem(
       for: message,
       inputs: bake.makeBuildInputs(
         for: message,
         previous: previous,
+        next: next,
         envInputs: envInputs,
         senderTables: senderTablesProvider()
       ),

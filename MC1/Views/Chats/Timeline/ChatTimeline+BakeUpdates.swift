@@ -114,6 +114,9 @@ extension ChatTimeline {
     bake.decodedPreviewAssets.removeAll()
     bake.legacyPreviewDecodeInFlight.removeAll()
     bake.cachedURLs.removeAll()
+    bake.detectedLanguages.removeAll()
+    bake.translationPhases.removeAll()
+    bake.translationCache.removeAll()
     bake.imageURLsServingPages.removeAll()
     bake.mapPreviewRequestIndex.removeAll()
     bake.loadedImageData.removeAllObjects()
@@ -134,6 +137,9 @@ extension ChatTimeline {
       bake.noRepeatsRetryPrompt = nil
     }
     bake.previewStates.removeValue(forKey: messageID)
+    bake.detectedLanguages.removeValue(forKey: messageID)
+    bake.translationPhases.removeValue(forKey: messageID)
+    bake.translationCache.removeValue(forKey: messageID)
     bake.loadedPreviews.removeValue(forKey: messageID)
     bake.decodedPreviewAssets.removeValue(forKey: messageID)
     bake.loadedImageData.removeObject(forKey: messageID as NSUUID)

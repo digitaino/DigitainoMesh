@@ -135,6 +135,10 @@ public final class Message {
   /// Whether the user has scrolled to see this mention (for tracking unread mentions)
   public var mentionSeen: Bool = false
 
+  /// Whether the user has opened the conversation after this outgoing send failed.
+  /// The conversation-list badge shows only unseen `.failed` rows.
+  public var failureSeen: Bool = false
+
   /// Whether the timestamp was corrected due to sender clock being invalid
   public var timestampCorrected: Bool = false
 
@@ -172,11 +176,14 @@ public final class Message {
   /// Route type from RxLog correlation (-1 = unknown/uncorrelated)
   public var routeTypeRawValue: Int = -1
 
-  /// Resolved flood region the sender transmitted under, derived from
-  /// `transport_codes[0]` at receive time via the RxLog correlation. Incoming
-  /// messages only; nil when the sender's region was not in the local
-  /// known-regions list at receive time (back-filled by `updateKnownRegions`).
+  /// Confident single flood-region name from RxLog correlation, or nil when
+  /// unresolved or ambiguous. Read through `RegionScopeSemantics.coalesce`
+  /// with `regionScopeMatches` — nil alone is not "Unknown."
   public var regionScope: String?
+
+  /// Sorted known public regions that verify this packet's transport code.
+  /// Empty, one name, or two-plus for multi-match. Defaults to `[]`.
+  public var regionScopeMatches: [String] = []
 
   /// Heard repeats for this message (cascade delete)
   @Relationship(deleteRule: .cascade, inverse: \MessageRepeat.message)
@@ -215,11 +222,13 @@ public final class Message {
     linkPreviewFetched: Bool = false,
     containsSelfMention: Bool = false,
     mentionSeen: Bool = false,
+    failureSeen: Bool = false,
     timestampCorrected: Bool = false,
     senderTimestamp: UInt32? = nil,
     reactionSummary: String? = nil,
     routeTypeRawValue: Int = -1,
-    regionScope: String? = nil
+    regionScope: String? = nil,
+    regionScopeMatches: [String] = []
   ) {
     self.id = id
     self.radioID = radioID
@@ -253,11 +262,13 @@ public final class Message {
     self.linkPreviewFetched = linkPreviewFetched
     self.containsSelfMention = containsSelfMention
     self.mentionSeen = mentionSeen
+    self.failureSeen = failureSeen
     self.timestampCorrected = timestampCorrected
     self.senderTimestamp = senderTimestamp
     self.reactionSummary = reactionSummary
     self.routeTypeRawValue = routeTypeRawValue
     self.regionScope = regionScope
+    self.regionScopeMatches = regionScopeMatches
   }
 
   /// Builds a model instance directly from a DTO. Shared by backup batch-insert
@@ -298,11 +309,13 @@ public final class Message {
       linkPreviewFetched: false,
       containsSelfMention: dto.containsSelfMention,
       mentionSeen: dto.mentionSeen,
+      failureSeen: dto.failureSeen,
       timestampCorrected: dto.timestampCorrected,
       senderTimestamp: dto.senderTimestamp,
       reactionSummary: dto.reactionSummary,
       routeTypeRawValue: dto.routeType.map { Int($0.rawValue) } ?? -1,
-      regionScope: dto.regionScope
+      regionScope: dto.regionScope,
+      regionScopeMatches: dto.regionScopeMatches
     )
     // Assigned post-init rather than threaded through the 30-argument
     // designated initializer: these two ride only the DTO paths (ingest,
@@ -388,11 +401,14 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
   public var linkPreviewFetched: Bool
   public var containsSelfMention: Bool
   public var mentionSeen: Bool
+  public var failureSeen: Bool
   public var timestampCorrected: Bool
   public var senderTimestamp: UInt32?
   public var reactionSummary: String?
   public var routeType: RouteType?
   public var regionScope: String?
+  /// Sorted multi-match set. Empty when the backup key is missing.
+  public var regionScopeMatches: [String]
   /// The user's GPS fix when the message was received live, or nil for
   /// backlog-drained rows, receptions with no fresh fix, and legacy rows.
   public var userLatitude: Double?
@@ -409,8 +425,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
          roundTripTime, heardRepeats, sendCount, retryAttempt, maxRetryAttempts,
          deduplicationKey, linkPreviewURL, linkPreviewTitle, linkPreviewImageData,
          linkPreviewIconData, linkPreviewFetched, containsSelfMention, mentionSeen,
-         timestampCorrected, senderTimestamp, reactionSummary, routeType, regionScope,
-         userLatitude, userLongitude
+         failureSeen, timestampCorrected, senderTimestamp, reactionSummary, routeType,
+         regionScope, regionScopeMatches, userLatitude, userLongitude
   }
 
   public init(from decoder: Decoder) throws {
@@ -448,11 +464,14 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     linkPreviewFetched = try container.decode(Bool.self, forKey: .linkPreviewFetched)
     containsSelfMention = try container.decode(Bool.self, forKey: .containsSelfMention)
     mentionSeen = try container.decode(Bool.self, forKey: .mentionSeen)
+    failureSeen = try container.decodeIfPresent(Bool.self, forKey: .failureSeen) ?? false
     timestampCorrected = try container.decode(Bool.self, forKey: .timestampCorrected)
     senderTimestamp = try container.decodeIfPresent(UInt32.self, forKey: .senderTimestamp)
     reactionSummary = try container.decodeIfPresent(String.self, forKey: .reactionSummary)
     routeType = try container.decodeIfPresent(RouteType.self, forKey: .routeType)
     regionScope = try container.decodeIfPresent(String.self, forKey: .regionScope)
+    // Missing key → []; do not invent matches from regionScope.
+    regionScopeMatches = try container.decodeIfPresent([String].self, forKey: .regionScopeMatches) ?? []
     userLatitude = try container.decodeIfPresent(Double.self, forKey: .userLatitude)
     userLongitude = try container.decodeIfPresent(Double.self, forKey: .userLongitude)
   }
@@ -499,12 +518,14 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     }
     containsSelfMention = message.containsSelfMention
     mentionSeen = message.mentionSeen
+    failureSeen = message.failureSeen
     timestampCorrected = message.timestampCorrected
     senderTimestamp = message.senderTimestamp
     reactionSummary = message.reactionSummary
     routeType = UInt8(exactly: message.routeTypeRawValue)
       .flatMap(RouteType.init(rawValue:))
     regionScope = message.regionScope
+    regionScopeMatches = message.regionScopeMatches
     userLatitude = message.userLatitude
     userLongitude = message.userLongitude
   }
@@ -543,11 +564,13 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     linkPreviewFetched: Bool = false,
     containsSelfMention: Bool = false,
     mentionSeen: Bool = false,
+    failureSeen: Bool = false,
     timestampCorrected: Bool = false,
     senderTimestamp: UInt32? = nil,
     reactionSummary: String? = nil,
     routeType: RouteType? = nil,
     regionScope: String? = nil,
+    regionScopeMatches: [String] = [],
     userLatitude: Double? = nil,
     userLongitude: Double? = nil
   ) {
@@ -583,11 +606,13 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     self.linkPreviewFetched = linkPreviewFetched
     self.containsSelfMention = containsSelfMention
     self.mentionSeen = mentionSeen
+    self.failureSeen = failureSeen
     self.timestampCorrected = timestampCorrected
     self.senderTimestamp = senderTimestamp
     self.reactionSummary = reactionSummary
     self.routeType = routeType
     self.regionScope = regionScope
+    self.regionScopeMatches = regionScopeMatches
     self.userLatitude = userLatitude
     self.userLongitude = userLongitude
   }
