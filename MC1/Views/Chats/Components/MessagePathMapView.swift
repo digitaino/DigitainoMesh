@@ -200,7 +200,14 @@ struct MessagePathMapView: View {
 
     // Sender. Only a message's own path has endpoints (see MessagePathMapSource).
     // Resolution is the shared rule: key prefix for DMs, unique sender name for
-    // channel rows.
+    // channel rows. The name branch is a weaker identity than a key prefix, and it
+    // reaches the wire: `MessagePathDetailView.routeInfoText` derives its distance
+    // from these nodes, and other clients parse that string back through
+    // `SharedRouteParser`. Kept deliberately (decided 2026-08-29) so one rule serves
+    // the map, the hop list, and the shared route alike — the invariant this builder
+    // exists to hold is that a shared distance never disagrees with the drawn
+    // polyline. `locatedSender` only accepts a name when exactly one contact matches,
+    // which is the same never-guess-when-ambiguous discipline the hop resolution uses.
     if case .message(let message) = source,
        let sender = MessagePathViewModel.locatedSender(for: message, contacts: contacts) {
       let coord = CLLocationCoordinate2D(latitude: sender.latitude, longitude: sender.longitude)

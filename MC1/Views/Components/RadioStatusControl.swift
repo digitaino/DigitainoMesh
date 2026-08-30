@@ -30,6 +30,7 @@ struct RadioStatusControl: View {
   @State private var showingSignalDetail = false
   @State private var showingWatchScreen = false
   @State private var pendingMovementHintsPrompt = false
+  @State private var pendingAdvancedSettings = false
   @State private var isSendingAdvert = false
   @State private var successFeedbackTrigger = false
   @State private var errorFeedbackTrigger = false
@@ -48,6 +49,13 @@ struct RadioStatusControl: View {
   /// comfortably past the popover's dismissal morph, so the system alert never lands while
   /// a popover transition is in flight.
   private static let movementPromptSettleDelay: Duration = .milliseconds(600)
+
+  /// How long after the Advanced Settings tap before the tab actually switches. Switching
+  /// tabs deallocates this control and every popover it owns; doing that synchronously from
+  /// a menu action runs the teardown straight into the menu's own dismissal morph — on iPad
+  /// the menu *is* a popover — which is the transition-conflict family behind crash
+  /// B8A782EC. One dismissal morph, same budget as the movement prompt.
+  private static let menuDismissSettleDelay: Duration = .milliseconds(600)
 
   private let deviceMenuTip = DeviceMenuTip()
 
@@ -118,6 +126,16 @@ struct RadioStatusControl: View {
     // binding flips at dismissal start, so reopening inside the settle window cancels this
     // task and the still-pending flag re-arms it for the next close. A no-op once
     // authorization is determined.
+    // Deferred for the reason on `menuDismissSettleDelay`: the tab switch tears this
+    // control down, so it must not land while the menu is still dismissing. Cancellation
+    // (the control going away first) simply drops the navigation, which is correct — there
+    // is nothing to navigate away from.
+    .task(id: pendingAdvancedSettings) {
+      guard pendingAdvancedSettings else { return }
+      do { try await Task.sleep(for: Self.menuDismissSettleDelay) } catch { return }
+      pendingAdvancedSettings = false
+      appState.navigation.navigateToSetting(.advanced)
+    }
     .task(id: showingSignalDetail) {
       guard !showingSignalDetail, pendingMovementHintsPrompt else { return }
       do { try await Task.sleep(for: Self.movementPromptSettleDelay) } catch { return }
@@ -291,7 +309,7 @@ struct RadioStatusControl: View {
 
       Section {
         Button {
-          appState.navigation.navigateToSetting(.advanced)
+          pendingAdvancedSettings = true
         } label: {
           Label(L10n.Settings.AdvancedSettings.title, systemImage: "gearshape")
         }
