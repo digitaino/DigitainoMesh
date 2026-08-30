@@ -25,6 +25,7 @@ struct SignalMapperCoverageView: View {
   @State private var isCenteredOnUser = false
   @State private var hasFramedData = false
   @State private var selection: SignalMapperCoverageCell?
+  @State private var detailCell: SignalMapperCoverageCell?
   @State private var showingDeleteConfirmation = false
   @State private var mapLayer: SignalMapperMapLayer = .heard
   /// Menu actions never present a sheet inline: on iPad the toolbar menu is a popover
@@ -78,7 +79,7 @@ struct SignalMapperCoverageView: View {
         showingFocusPicker = true
       }
       .onAppear { model.loadCaptureSetting() }
-      .sheet(item: $selection) { SignalMapperCellDetailSheet(cell: $0) }
+      .sheet(item: $detailCell) { SignalMapperCellDetailSheet(cell: $0) }
       .sheet(isPresented: $showingRunDetail) {
         if let session = appState.signalMapperRideSession {
           SignalMapperRunDetailSheet(
@@ -276,12 +277,13 @@ struct SignalMapperCoverageView: View {
         cameraRegionVersion: cameraVersion,
         onPointTap: { _, _ in },
         onMapTap: { coordinate in
-          // While riding, the map is a display, not a control surface: capacitive
-          // touches through a jersey pocket must not cover the HUD with a sheet.
-          guard !isSurveying else { return }
-          selection = SignalMapperCoverageRenderer.cell(
-            at: coordinate, in: model.snapshot, layer: mapLayer
-          )
+          // Live during rides too (v1's rule): the card is inline and dismissible, so a
+          // stray touch costs one ✕, while the data stays one tap away at a stop.
+          withAnimation(.snappy(duration: 0.25)) {
+            selection = SignalMapperCoverageRenderer.cell(
+              at: coordinate, in: model.snapshot, layer: mapLayer
+            )
+          }
         },
         onCameraRegionChange: { viewportBounds = $0.toMLNCoordinateBounds() },
         isStyleLoaded: $isStyleLoaded,
@@ -308,7 +310,11 @@ struct SignalMapperCoverageView: View {
       }
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
-      bottomInset
+      // Explicit VStack: safeAreaInset's builder Z-stacks loose siblings, and the idle
+      // Start row rendered on top of the cell card (caught in-sim).
+      VStack(spacing: 0) {
+        bottomInset
+      }
     }
     .toolbar(isSurveying ? .hidden : .visible, for: .tabBar)
     // The map gates camera moves until its style has loaded, which usually lands after the
@@ -319,8 +325,11 @@ struct SignalMapperCoverageView: View {
       guard !isSurveying else { return }
       if loaded { frameData() }
     }
-    .onChange(of: model.snapshot) { _, _ in
+    .onChange(of: model.snapshot) { _, snapshot in
       rebuildOverlays()
+      if let selected = selection {
+        selection = snapshot.cells.first { $0.cell == selected.cell }
+      }
       guard !hasFramedData, !isSurveying else { return }
       frameData()
     }
@@ -333,6 +342,14 @@ struct SignalMapperCoverageView: View {
   /// control row with a labelled, self-explaining start button while idle.
   @ViewBuilder
   private var bottomInset: some View {
+    if let selected = selection {
+      SignalMapperCellCard(
+        cell: selected,
+        onDetails: { detailCell = selected },
+        onClose: { withAnimation(.snappy(duration: 0.25)) { selection = nil } }
+      )
+      .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
     if isSurveying, let session = appState.signalMapperRideSession {
       SignalMapperFocusBlocks(session: session) { showingFocusPicker = true }
     } else if model.hasCoverage {

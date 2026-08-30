@@ -94,7 +94,12 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
   public let probesSent: Int
   /// Mean uplink SNR (repeaters' readings of us) and how many readings back it.
   public let averageTxSnr: Double?
+  /// Best uplink reading — what the Reach layer colors by (best usable link).
+  public let bestTxSnr: Double?
   public let txSnrCount: Int
+  /// When anything was last observed here, at full local fidelity, for the cell card's
+  /// live "last heard" row. Never uploaded — display only.
+  public let lastSeen: Date?
 
   public let floodCount: Int
   public let directCount: Int
@@ -115,9 +120,11 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     cell.rawValue
   }
 
-  /// The uplink ("Reach") layer's colour, when this cell has uplink evidence.
+  /// The uplink ("Reach") layer's colour, when this cell has uplink evidence — from the
+  /// BEST uplink reading: "can I get out of this cell" is a property of the best usable
+  /// link, not the average of every faint response (Rafael, 2026-08-30).
   public var reachQuality: SignalQuality? {
-    txSnrCount > 0 ? SignalQuality(snr: averageTxSnr) : nil
+    txSnrCount > 0 ? SignalQuality(snr: bestTxSnr ?? averageTxSnr) : nil
   }
 
   /// We shouted from this cell and nobody ever reported hearing us. Deliberately not
@@ -148,7 +155,9 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     passivePacketCount: Int = 0,
     probesSent: Int = 0,
     averageTxSnr: Double? = nil,
+    bestTxSnr: Double? = nil,
     txSnrCount: Int = 0,
+    lastSeen: Date? = nil,
     floodCount: Int,
     directCount: Int,
     dayCount: Int,
@@ -176,7 +185,9 @@ public struct SignalMapperCoverageCell: Sendable, Hashable, Identifiable {
     self.passivePacketCount = passivePacketCount
     self.probesSent = probesSent
     self.averageTxSnr = averageTxSnr
+    self.bestTxSnr = bestTxSnr
     self.txSnrCount = txSnrCount
+    self.lastSeen = lastSeen
     self.floodCount = floodCount
     self.directCount = directCount
     self.dayCount = dayCount

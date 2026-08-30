@@ -147,7 +147,10 @@ public struct SignalMapperCoverageBuilder: Sendable {
       cell: cell,
       boundary: SurveyGrid.boundary(of: cell),
       center: SurveyGrid.center(of: cell),
-      quality: row.quality,
+      // Best-link coloring: a cell you can reach the mesh from at +12 dB is excellent
+      // coverage no matter how many distant repeaters were faintly overheard there.
+      // The DTO's own `quality` stays average-based for any future wire use.
+      quality: SignalQuality(snr: row.maxSnr ?? row.avgSnr),
       packetCount: row.packetCount,
       observationCount: row.observationCount,
       rxCount: row.rxCount,
@@ -163,7 +166,9 @@ public struct SignalMapperCoverageBuilder: Sendable {
       passivePacketCount: row.passivePacketCount,
       probesSent: row.probesSent,
       averageTxSnr: row.avgTxSnr,
+      bestTxSnr: row.maxTxSnr,
       txSnrCount: row.txSnrCount,
+      lastSeen: row.latest,
       floodCount: row.floodCount,
       directCount: row.directCount,
       dayCount: days.count,
@@ -235,6 +240,7 @@ private extension MapperCellObservationDTO {
     copy.maxSnr = maxSnr
     copy.txSnrSum = txSnrSum
     copy.txSnrCount = txSnrCount
+    copy.maxTxSnr = maxTxSnr
     copy.rssiSum = rssiSum
     copy.rssiCount = rssiCount
     copy.floodCount = floodCount

@@ -78,6 +78,9 @@ final class MapperCellObservation {
   var maxSnr: Double?
   var txSnrSum: Double
   var txSnrCount: Int
+  /// Best uplink reading — the coverage-coloring number (M3.5: quality follows the best
+  /// usable link, not the pooled average). Additive optional, lightweight-safe.
+  var maxTxSnr: Double?
   var rssiSum: Double
   var rssiCount: Int
 
@@ -123,6 +126,7 @@ final class MapperCellObservation {
     maxSnr: Double? = nil,
     txSnrSum: Double = 0,
     txSnrCount: Int = 0,
+    maxTxSnr: Double? = nil,
     rssiSum: Double = 0,
     rssiCount: Int = 0,
     floodCount: Int = 0,
@@ -152,6 +156,7 @@ final class MapperCellObservation {
     self.maxSnr = maxSnr
     self.txSnrSum = txSnrSum
     self.txSnrCount = txSnrCount
+    self.maxTxSnr = maxTxSnr
     self.rssiSum = rssiSum
     self.rssiCount = rssiCount
     self.floodCount = floodCount
@@ -190,6 +195,7 @@ final class MapperCellObservation {
     maxSnr = dto.maxSnr
     txSnrSum = dto.txSnrSum
     txSnrCount = dto.txSnrCount
+    maxTxSnr = dto.maxTxSnr
     rssiSum = dto.rssiSum
     rssiCount = dto.rssiCount
     floodCount = dto.floodCount
@@ -362,6 +368,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
   public var maxSnr: Double?
   public var txSnrSum: Double
   public var txSnrCount: Int
+  public var maxTxSnr: Double?
   public var rssiSum: Double
   public var rssiCount: Int
 
@@ -397,6 +404,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     maxSnr: Double? = nil,
     txSnrSum: Double = 0,
     txSnrCount: Int = 0,
+    maxTxSnr: Double? = nil,
     rssiSum: Double = 0,
     rssiCount: Int = 0,
     floodCount: Int = 0,
@@ -426,6 +434,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     self.maxSnr = maxSnr
     self.txSnrSum = txSnrSum
     self.txSnrCount = txSnrCount
+    self.maxTxSnr = maxTxSnr
     self.rssiSum = rssiSum
     self.rssiCount = rssiCount
     self.floodCount = floodCount
@@ -478,6 +487,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       maxSnr: aggregate.maxSnr,
       txSnrSum: aggregate.txSnrSum,
       txSnrCount: aggregate.txSnrCount,
+      maxTxSnr: aggregate.maxTxSnr,
       rssiSum: aggregate.rssiSum,
       rssiCount: aggregate.rssiCount,
       floodCount: aggregate.floodCount,
@@ -519,6 +529,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       maxSnr: model.maxSnr,
       txSnrSum: model.txSnrSum,
       txSnrCount: model.txSnrCount,
+      maxTxSnr: model.maxTxSnr,
       rssiSum: model.rssiSum,
       rssiCount: model.rssiCount,
       floodCount: model.floodCount,
@@ -638,6 +649,7 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     merged.maxSnr = Self.upper(maxSnr, other.maxSnr)
     merged.txSnrSum += other.txSnrSum
     merged.txSnrCount += other.txSnrCount
+    merged.maxTxSnr = [merged.maxTxSnr, other.maxTxSnr].compactMap(\.self).max()
     merged.rssiSum += other.rssiSum
     merged.rssiCount += other.rssiCount
     merged.floodCount += other.floodCount

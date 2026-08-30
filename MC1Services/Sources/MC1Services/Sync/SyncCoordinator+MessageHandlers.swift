@@ -12,6 +12,7 @@ extension SyncCoordinator {
   /// is now" stops describing the reception. Generous enough for slow
   /// multi-hop flood delivery, far under a backgrounded-overnight queue.
   static let maxStampTransitInterval: TimeInterval = 15 * 60
+
   // MARK: - Message Handler Wiring
 
   func wireMessageHandlers(dependencies: SyncDependencies, radioID: UUID) async {

@@ -119,7 +119,10 @@ struct SignalMapperCoverageBuilderTests {
     #expect(mapped.averageRssi == -64)
     #expect(mapped.bestSnr == 10)
     #expect(mapped.worstSnr == 0)
-    #expect(mapped.quality == .good, "SurveyKit's scale: 9 dB is good, not excellent")
+    // Colour follows the BEST link since M3.5's second field pass: reaching the mesh
+    // at 10 dB from this cell is excellent coverage even though the pooled average
+    // (9 dB, still asserted above) sits in "good". Rafael, 2026-08-30.
+    #expect(mapped.quality == .excellent, "quality is best-link (10 dB), not the 9 dB average")
   }
 
   @Test

@@ -17,7 +17,9 @@ public struct SharedRoute: Sendable, Hashable, Identifiable {
   /// recomputed locally: the sender resolved hops we may not know about.
   public let distanceText: String?
 
-  public var id: String { hexIDs.joined(separator: ",") }
+  public var id: String {
+    hexIDs.joined(separator: ",")
+  }
 
   public init(hexIDs: [String], hopCount: Int, distanceText: String?) {
     self.hexIDs = hexIDs
@@ -53,7 +55,6 @@ public struct SharedRoute: Sendable, Hashable, Identifiable {
 /// shared routes must route through this so they never disagree on what counts
 /// as one.
 public enum SharedRouteParser {
-
   // swiftlint:disable force_try
   /// Matches "RX via {hex},{hex},...  {N} hop(s){optional distance tail}".
   /// Hex IDs are whole bytes — 2, 4, or 6 hex digits each (1–3 byte hash) — so

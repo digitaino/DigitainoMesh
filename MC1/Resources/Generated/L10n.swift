@@ -6677,6 +6677,16 @@ public enum L10n {
         public static func summary(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
           return L10n.tr("Tools", "tools.signalMapper.summary", p1, p2, p3, fallback: "%1$lld cells · %2$lld observations · %3$lld days")
         }
+        public enum Card {
+          /// Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s"
+          public static func lastHeard(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.lastHeard", String(describing: p1), fallback: "Last heard %@ ago")
+          }
+          /// Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent
+          public static func probeSuccess(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.probeSuccess", p1, p2, p3, fallback: "%1$lld/%2$lld replies (%3$lld%%)")
+          }
+        }
         public enum Delete {
           /// Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell
           public static let action = L10n.tr("Tools", "tools.signalMapper.delete.action", fallback: "Delete Captured Coverage")

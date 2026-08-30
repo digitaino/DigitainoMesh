@@ -1408,3 +1408,9 @@
 
 /* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
 "tools.signalMapper.focus.search" = "Repeater suchen";
+
+/* Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent */
+"tools.signalMapper.card.probeSuccess" = "%1$lld/%2$lld Antworten (%3$lld%%)";
+
+/* Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s" */
+"tools.signalMapper.card.lastHeard" = "Zuletzt vor %@ gehört";

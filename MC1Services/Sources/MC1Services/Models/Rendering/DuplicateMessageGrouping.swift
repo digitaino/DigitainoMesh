@@ -17,8 +17,13 @@ public enum DuplicateMessageGrouping {
     public let leaderID: UUID
     public let messages: [MessageDTO]
 
-    public var count: Int { messages.count }
-    public var memberIDs: [UUID] { messages.map(\.id) }
+    public var count: Int {
+      messages.count
+    }
+
+    public var memberIDs: [UUID] {
+      messages.map(\.id)
+    }
   }
 
   /// Render decisions for one baked timeline pass.

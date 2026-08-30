@@ -400,3 +400,30 @@ user-facing Survey Options sheet.
 Verified end-to-end in the simulator against the mock radio: onboarding → start-into-
 lock-on → live strip counting → "No fix" chip firing when the static sim location went
 stale → run-detail sheet → End Survey → completion sheet with scrubbed export.
+
+### 7.1 Third field pass (2026-08-30, later): the v1 cell card and best-link colour
+
+Rafael put the v1 Signal Survey screenshot next to v2 and the remaining gap was the
+**cell card**: v1 told a cell's whole story in place (quality verdict, RX *and* TX with
+bars and ranges, live last-heard, probe success ratio, per-repeater chips split
+two-way vs heard-only) where v2 had a modal sheet and disabled taps mid-ride.
+
+- `SignalMapperCellCard` restores that anatomy inline at the bottom of the map, live
+  during rides (the pocket-touch tap guard is gone — v1's rule wins: data is one tap
+  away, and a stray touch costs one ✕). Probe success (`replies/probes sent`) is now a
+  first-class per-cell stat, possible only because M3.5 plumbed `probesSent`. The full
+  sheet remains behind the card's "Cell Detail" link. The selected card re-resolves on
+  every snapshot reload so its numbers tick instead of freezing at tap time.
+- **Cell colour follows the best usable link, not the pooled average** (his call, and
+  right: "can I get out of this cell" is a property of the best link — the average
+  punishes a cell for every faint distant repeater it overhears). Heard layer colours
+  by `maxSnr`; Reach by a new additive `maxTxSnr` column (aggregate → model → DTO →
+  merge/relabel). The DTO's own average-based `quality` is untouched for any future
+  wire use. His home cell: v1 showed "Good 5.7" *on the average too* — but v1's 3-tier
+  palette painted good green, which is why v2's teal read as a regression. Best-link
+  colouring makes a +12 dB home cell excellent/green under the 6-tier scale.
+- The lone-repeater caveat he raised (one isolated repeater propping up a green cell)
+  is answered the v1 way: the card's chips show exactly which repeaters back the
+  number, two-way links first. A true mesh-reach qualifier stays an M2 concern.
+- `safeAreaInset` gotcha for the record: its ViewBuilder Z-stacks loose siblings —
+  the idle Start row rendered on top of the card until wrapped in an explicit VStack.
