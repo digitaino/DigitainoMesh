@@ -9,10 +9,19 @@ import SwiftUI
 /// Spot Check lives here rather than as a permanent map button (UI review S2): it is a
 /// stopped-at-a-junction action, and it was costing 40 pt of map on every ride.
 struct SignalMapperRunDetailSheet: View {
+  /// What this sheet asked for on its way out. Presenting a sibling sheet (the lock-on
+  /// picker) or one that a state change triggers (the run summary) from inside a button
+  /// that is *also* dismissing this sheet tears down a presentation host mid-dismissal —
+  /// the iOS 26 zoom-morph family the toolbar path already defers around. The action is
+  /// recorded here and run by the presenter's `onDismiss` instead (UI review P0-4).
+  enum PendingAction {
+    case editLockOn
+    case stop
+  }
+
   let session: SignalMapperRideSession
   let onSpotCheck: () -> Void
-  let onEditLockOn: () -> Void
-  let onStop: () -> Void
+  @Binding var pendingAction: PendingAction?
 
   @Environment(\.dismiss) private var dismiss
   @State private var rawRecorded: Int?
@@ -100,14 +109,14 @@ struct SignalMapperRunDetailSheet: View {
         Label(L10n.Tools.Tools.SignalMapper.Survey.spotCheck, systemImage: "scope")
       }
       Button {
+        pendingAction = .editLockOn
         dismiss()
-        onEditLockOn()
       } label: {
         Label(L10n.Tools.Tools.SignalMapper.Ride.lockOn, systemImage: "person.crop.circle.badge.plus")
       }
       Button(role: .destructive) {
+        pendingAction = .stop
         dismiss()
-        onStop()
       } label: {
         Label(L10n.Tools.Tools.SignalMapper.Survey.stop, systemImage: "stop.circle")
       }

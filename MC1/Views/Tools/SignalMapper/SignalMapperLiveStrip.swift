@@ -17,6 +17,9 @@ struct SignalMapperLiveStrip: View {
   let onStop: () -> Void
 
   @State private var pulse = false
+  @State private var tonePlayer = RepeaterWatchTonePlayer()
+  @State private var wasRadioConnected = true
+  @State private var lostRadioTrigger = 0
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -59,13 +62,24 @@ struct SignalMapperLiveStrip: View {
       .padding(.leading, 14)
       .padding(.trailing, 2)
       .padding(.vertical, 2)
-      .liquidGlass(in: .capsule)
+      .mapperHUDSurface(in: .capsule)
       .padding(.horizontal, 16)
       .padding(.top, 4)
       .padding(.bottom, 8)
       .dynamicTypeSize(...DynamicTypeSize.accessibility2)
     }
     .onAppear { pulse = true }
+    // The radio dropping mid-ride is what makes a whole ride worthless, and the only
+    // other cue for it is this strip's glyph — which is exactly what a rider looking at
+    // the road is not reading. The alarm belongs to the one view that is on screen for
+    // the entire run (UI review P1-6).
+    .onChange(of: session.isRadioConnected) { _, connected in
+      defer { wasRadioConnected = connected }
+      guard wasRadioConnected, !connected else { return }
+      tonePlayer.play(.tock)
+      lostRadioTrigger += 1
+    }
+    .sensoryFeedback(.warning, trigger: lostRadioTrigger)
   }
 
   private var totals: SignalMapperProbeEngine.SessionSnapshot {

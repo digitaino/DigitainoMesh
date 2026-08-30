@@ -9,26 +9,30 @@ import SwiftUI
 /// *stored* picture of the hexagon; these rows hold what is happening this second, and a
 /// range test needs exactly one line each: who, both legs, how long ago, how far.
 ///
-/// Unlocked it shows whoever answered most recently. That matters because the card is
-/// built from the store — flushed every 30 s, rebuilt every 20 s — so on a hexagon the
-/// rider has just entered there is nothing to draw yet, and these rows are the only thing
-/// on screen saying the ride is working.
+/// Unlocked it shows whoever answered most recently — **but only when there is no cell
+/// card underneath**, because the card's repeater chips already list the same repeaters
+/// and two answers to one question read as clutter (field report, 2026-08-30). It earns
+/// its place on a hexagon the rider has just entered, where the store has nothing flushed
+/// yet and these rows are the only thing on screen saying the ride is working.
 ///
-/// Tones and haptics stay: entering `.lost`, regaining a two-way link, and losing the
-/// radio itself are the events a rider cannot watch the screen for.
+/// Tones and haptics for the locked-on targets stay here: entering `.lost` and regaining
+/// a two-way link are events a rider cannot watch the screen for. The radio-drop alarm
+/// lives on ``SignalMapperLiveStrip`` instead, because this view is conditional and that
+/// one is on screen for the whole run (UI review P1-6).
 struct SignalMapperFocusBlocks: View {
   let session: SignalMapperRideSession
   /// Whether the cell card is on screen underneath. Only decides whether the quiet
   /// "listening…" placeholder is worth its line.
-  var hasCellCard = false
   let onLockOn: () -> Void
+  /// Drop one repeater from the lock-on set. Locking on must be reversible from the same
+  /// place it is visible, not only from inside the picker.
+  var onUnlock: ((NodeHexID) -> Void)?
 
   @Environment(\.appState) private var appState
   @State private var tonePlayer = RepeaterWatchTonePlayer()
   @State private var lastLinkStates: [String: FocusLinkState] = [:]
   @State private var hapticTrigger = 0
   @State private var hapticIsPositive = false
-  @State private var wasRadioConnected = true
 
   enum FocusLinkState: Equatable {
     case heardBothWays
@@ -75,7 +79,8 @@ struct SignalMapperFocusBlocks: View {
               id: target.id,
               state: focusLinkState(for: target.id, now: context.date),
               activity: activity(for: target.id),
-              now: context.date
+              now: context.date,
+              isLocked: true
             )
           }
         } else if !heardStates.isEmpty {
@@ -84,32 +89,21 @@ struct SignalMapperFocusBlocks: View {
               id: activity.id,
               state: recencyState(for: activity, now: context.date),
               activity: activity,
-              now: context.date
+              now: context.date,
+              isLocked: false
             )
           }
-        } else if !hasCellCard {
+        } else {
           listeningRow
         }
       }
       .padding(.horizontal, 14)
       .padding(.top, 4)
       .padding(.bottom, 8)
-      .background(Color(.secondarySystemBackground).opacity(0.96), in: .rect(cornerRadius: 16))
-      .padding(.horizontal, 12)
-      .padding(.top, 8)
       .onChange(of: focusLinkStates(now: context.date)) { _, newStates in
         playEdges(newStates)
       }
       .sensoryFeedback(hapticIsPositive ? .success : .warning, trigger: hapticTrigger)
-    }
-    .onChange(of: session.isRadioConnected) { _, connected in
-      // The radio dropping is what makes a whole ride worthless, and the only other cue
-      // for it is a glyph on a strip the rider is not looking at.
-      defer { wasRadioConnected = connected }
-      guard wasRadioConnected, !connected else { return }
-      tonePlayer.play(.tock)
-      hapticIsPositive = false
-      hapticTrigger += 1
     }
     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
   }
@@ -166,7 +160,8 @@ struct SignalMapperFocusBlocks: View {
     id: NodeHexID,
     state: FocusLinkState,
     activity: SignalMapperProbeEngine.FocusTargetState?,
-    now: Date
+    now: Date,
+    isLocked: Bool
   ) -> some View {
     let name = session.meta(for: id)?.name ?? id.hex
     let hasReading = activity?.lastTxSnr != nil || activity?.lastRxSnr != nil
@@ -209,8 +204,23 @@ struct SignalMapperFocusBlocks: View {
           .foregroundStyle(.secondary)
           .lineLimit(1)
       }
+
+      if isLocked, let onUnlock {
+        Button {
+          onUnlock(id)
+        } label: {
+          Image(systemName: "xmark.circle.fill")
+            .font(.footnote)
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.secondary)
+            .frame(width: 44, height: 32)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.Tools.Tools.SignalMapper.Focus.unlock)
+      }
     }
-    .accessibilityElement(children: .ignore)
+    .accessibilityElement(children: .contain)
     .accessibilityLabel(accessibilityLabel(name: name, state: state, activity: activity, now: now, id: id))
   }
 

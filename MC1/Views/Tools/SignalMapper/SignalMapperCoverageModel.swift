@@ -29,7 +29,6 @@ final class SignalMapperCoverageModel {
   /// The run behind ``surveySummary`` — what the completion sheet exports.
   var lastCompletedRunID: UUID?
 
-  private var reloadTask: Task<Void, Never>?
 
   private let builder = SignalMapperCoverageBuilder()
   private let tuningStore = MapperTuningStore()
@@ -58,29 +57,10 @@ final class SignalMapperCoverageModel {
   /// `.task(id: engineGeneration)`, so a rewire re-subscribes to the *new* engine's
   /// stream instead of parking on a finished one forever (M3.5 review C4c).
   func attachSurveyStream(appState: AppState) async {
-    guard let session = appState.signalMapperRideSession else {
-      reloadTask?.cancel()
-      reloadTask = nil
-      return
-    }
+    guard let session = appState.signalMapperRideSession else { return }
 
     if session.repeaterDirectory.isEmpty {
       session.repeaterDirectory = await loadRepeaterDirectory(appState: appState)
-    }
-
-    if reloadTask == nil {
-      // The ride should paint the map as it happens — but a full store rebuild every
-      // 10 s grows monotonically all ride and cooks the phone (review 5b). 20 s is the
-      // compromise the live cell card forced: the capture engine flushes every 30 s, so
-      // a 60 s rebuild left the card the rider is watching up to a minute and a half
-      // stale, which reads as "nothing is being recorded".
-      reloadTask = Task { [weak self] in
-        while !Task.isCancelled {
-          try? await Task.sleep(for: .seconds(20))
-          guard let self, !Task.isCancelled else { return }
-          await self.load(dataStore: appState.services?.dataStore, radioID: appState.currentRadioID)
-        }
-      }
     }
 
     guard let probe = appState.signalMapperProbeEngine else { return }
@@ -89,6 +69,22 @@ final class SignalMapperCoverageModel {
       guard !Task.isCancelled else { return }
       session.liveSnapshot = snapshot
       foldMaxRange(snapshot: snapshot, session: session, appState: appState)
+    }
+  }
+
+  /// Keeps the on-screen snapshot honest for as long as the view is up.
+  ///
+  /// Passive capture folds packets whether or not a survey is running, and the store
+  /// flushes every 30 s, so a screen that loads once shows a cell card whose "Last Heard"
+  /// drifts minutes behind the repeater list in the radio pill (field report, 2026-08-30).
+  /// Riding gets the tighter cadence because the card is following the rider; idle gets a
+  /// slower one because nothing on screen is moving.
+  func autoRefresh(appState: AppState) async {
+    while !Task.isCancelled {
+      let riding = appState.signalMapperRideSession != nil
+      try? await Task.sleep(for: .seconds(riding ? 20 : 45))
+      guard !Task.isCancelled else { return }
+      await load(dataStore: appState.services?.dataStore, radioID: appState.currentRadioID)
     }
   }
 
@@ -147,8 +143,6 @@ final class SignalMapperCoverageModel {
   /// Ends the run, hands its cumulative counters to the completion sheet, and refreshes
   /// the map so the cells it just filled are on screen behind the sheet.
   func stopSurvey(appState: AppState) async {
-    reloadTask?.cancel()
-    reloadTask = nil
     let runID = appState.signalMapperRideSession?.runID
     let summary = await appState.stopSignalMapperSurvey()
     surveySummary = summary

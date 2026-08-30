@@ -19,6 +19,8 @@ struct SignalMapperCellDetailSheet: View {
   /// Enough to name the busiest neighbours without turning the sheet into a list screen.
   private static let repeaterLimit = 5
 
+  @Environment(\.dismiss) private var dismiss
+
   var body: some View {
     NavigationStack {
       List {
@@ -32,6 +34,13 @@ struct SignalMapperCellDetailSheet: View {
       }
       .navigationTitle(L10n.Tools.Tools.SignalMapper.Detail.title)
       .navigationBarTitleDisplayMode(.inline)
+      // Every sibling sheet on this screen has an explicit dismissal; a drag indicator
+      // on its own made this the odd one out (UI review P2-15).
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button(L10n.Localizable.Common.done) { dismiss() }
+        }
+      }
     }
     .presentationDetents([.medium, .large])
     .presentationDragIndicator(.visible)

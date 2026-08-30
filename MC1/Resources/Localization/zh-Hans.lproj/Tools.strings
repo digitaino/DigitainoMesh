@@ -1483,3 +1483,6 @@
 
 /* Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip */
 "tools.signalMapper.card.chipHint" = "显示该中继自己对此格子的读数";
+
+/* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
+"tools.signalMapper.focus.unlock" = "取消锁定";

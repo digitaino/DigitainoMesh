@@ -47,6 +47,7 @@ struct SignalMapperCoverageView: View {
   @State private var focusPickerSeed = ""
   @State private var showingPrecisePrompt = false
   @State private var showingRunDetail = false
+  @State private var pendingRunDetailAction: SignalMapperRunDetailSheet.PendingAction?
   @State private var breadcrumb: [CLLocationCoordinate2D] = []
   /// Rendered overlays, rebuilt only when their inputs change — never inline in `body`,
   /// which the follow-me loop re-evaluates every 2 s all ride (UI review S3, thermal).
@@ -55,6 +56,9 @@ struct SignalMapperCoverageView: View {
   /// rider above it, or a ride centres the map on a dot hidden behind the cell card
   /// (UI review P0-1).
   @State private var bottomInsetHeight: CGFloat = 0
+  /// Same measurement for the live strip, so the camera's top padding is not a constant
+  /// that drifts with Dynamic Type (UI review P2-11).
+  @State private var topInsetHeight: CGFloat = 0
 
   @AppStorage(AppStorageKey.mapStyleSelection.rawValue)
   private var mapStyleSelection: MapStyleSelection = .standard
@@ -81,6 +85,9 @@ struct SignalMapperCoverageView: View {
         ToolbarItem(placement: .topBarTrailing) { optionsMenu }
       }
       .task(id: appState.servicesVersion) { await reload() }
+      // Passive capture keeps folding while this screen is open; without a refresh the
+      // card's "Last Heard" drifts minutes behind the radio pill's repeater list.
+      .task(id: appState.servicesVersion) { await model.autoRefresh(appState: appState) }
       // Re-subscribes the HUD to each new engine generation: the run outlives BLE
       // rewires, the engines (and their snapshot streams) do not.
       .task(id: appState.signalMapperRideSession?.engineGeneration ?? -1) {
@@ -96,16 +103,14 @@ struct SignalMapperCoverageView: View {
       }
       .onAppear { model.loadCaptureSetting() }
       .sheet(item: $detailCell) { SignalMapperCellDetailSheet(cell: $0) }
-      .sheet(isPresented: $showingRunDetail) {
+      // The run sheet's actions run on *its* dismissal, never from inside it: both of
+      // them present another sheet (UI review P0-4).
+      .sheet(isPresented: $showingRunDetail, onDismiss: runPendingRunDetailAction) {
         if let session = appState.signalMapperRideSession {
           SignalMapperRunDetailSheet(
             session: session,
             onSpotCheck: { Task { await model.spotCheck(appState: appState) } },
-            onEditLockOn: {
-              focusPickerSeed = ""
-              showingFocusPicker = true
-            },
-            onStop: { Task { await model.stopSurvey(appState: appState) } }
+            pendingAction: $pendingRunDetailAction
           )
         }
       }
@@ -294,12 +299,7 @@ struct SignalMapperCoverageView: View {
         cameraRegion: .constant(nil),
         cameraBounds: cameraBounds,
         cameraRegionVersion: cameraVersion,
-        cameraEdgePadding: UIEdgeInsets(
-          top: isSurveying ? 76 : 0,
-          left: 0,
-          bottom: bottomInsetHeight,
-          right: 0
-        ),
+        cameraEdgePadding: cameraPadding,
         onPointTap: { _, _ in },
         onMapTap: { coordinate in mapTapped(at: coordinate) },
         onCameraRegionChange: { viewportBounds = $0.toMLNCoordinateBounds() },
@@ -310,12 +310,12 @@ struct SignalMapperCoverageView: View {
 
       // Chrome respects the safe area (which the insets below extend), so nothing can
       // land mid-map: controls hug the top-trailing corner exactly as the v1 survey
-      // screen did, and the legend keeps its bottom-leading home — visible during runs
-      // too, because the Reach layer's grey cells need their key most while riding.
+      // screen did. The legend used to live bottom-leading in here and shared that band
+      // with nothing but the map — until the bottom inset grew and squeezed the band to
+      // 138 pt, at which point the legend and the controls column overlapped by 34 pt
+      // (UI review P0-3). It is part of the bottom stack now.
       controls
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-      SignalMapperLegend(layer: mapLayer, summary: legendSummary)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
     .safeAreaInset(edge: .top, spacing: 0) {
       if isSurveying, let session = appState.signalMapperRideSession {
@@ -324,15 +324,26 @@ struct SignalMapperCoverageView: View {
           onDetail: { showingRunDetail = true },
           onStop: { Task { await model.stopSurvey(appState: appState) } }
         )
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topInsetHeight = $0 }
       }
     }
+    // One container owns the gutter, the spacing and the clock. Four surfaces with their
+    // own margins, radii and animations is what read as "disjointed" and as things
+    // sitting on top of each other (UI review P0-2, P2-12).
     .safeAreaInset(edge: .bottom, spacing: 0) {
-      // Explicit VStack: safeAreaInset's builder Z-stacks loose siblings, and the idle
-      // Start row rendered on top of the cell card (caught in-sim).
-      VStack(spacing: 0) {
+      VStack(alignment: .leading, spacing: 8) {
         bottomInset
       }
-      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomInsetHeight = $0 }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 16)
+      .padding(.bottom, 8)
+      // The gutters either side of the panel are live map: without this, reaching for the
+      // leftmost repeater chip lands on the map and swaps the whole card for another
+      // hexagon's (UI review P2-13).
+      .background(Color.clear.contentShape(.rect).onTapGesture {})
+      .animation(.snappy(duration: 0.25), value: displayedCell?.cell)
+      .animation(.snappy(duration: 0.25), value: showsFocusStrip)
+      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { noteBottomInset($0) }
     }
     .toolbar(isSurveying ? .hidden : .visible, for: .tabBar)
     // The map gates camera moves until its style has loaded, which usually lands after the
@@ -384,14 +395,51 @@ struct SignalMapperCoverageView: View {
     Set(appState.signalMapperRideSession?.focusTargets.map(\.id.hex) ?? [])
   }
 
-  /// The bottom inset: the lock-on rows and the cell card while riding; the v1-style
-  /// control row with a labelled, self-explaining start button while idle.
+  /// The live lock-on strip earns its place when it says something the card does not:
+  /// a locked-on target's probe state, or — with no card yet on a hexagon the rider has
+  /// just entered — who is answering at all. Otherwise it repeats the card's chips
+  /// (field report, 2026-08-30).
+  private var showsFocusStrip: Bool {
+    guard isSurveying else { return false }
+    return !focusHexIDs.isEmpty || displayedCell == nil
+  }
+
+  /// The bottom inset: **one** panel holding the live lock-on rows and the cell card,
+  /// with the idle start button below it. Three separately backgrounded, separately
+  /// padded blocks stacked in a column read as floating cards colliding with each other
+  /// rather than as one readout (field report, 2026-08-30).
   @ViewBuilder
   private var bottomInset: some View {
-    if isSurveying, let session = appState.signalMapperRideSession {
-      SignalMapperFocusBlocks(session: session, hasCellCard: displayedCell != nil) {
-        focusPickerSeed = ""
-        showingFocusPicker = true
+    if showsFocusStrip || displayedCell != nil {
+      VStack(spacing: 0) {
+        panelContent
+      }
+      .background(Color(.secondarySystemBackground).opacity(0.96))
+      .clipShape(.rect(cornerRadius: 18))
+      .padding(.horizontal, 12)
+      .padding(.top, 8)
+    }
+    if !isSurveying, model.hasCoverage {
+      startRow
+    }
+  }
+
+  @ViewBuilder
+  private var panelContent: some View {
+    if showsFocusStrip, let session = appState.signalMapperRideSession {
+      SignalMapperFocusBlocks(
+        session: session,
+        onLockOn: {
+          focusPickerSeed = ""
+          showingFocusPicker = true
+        },
+        onUnlock: { id in
+          let remaining = session.focusTargets.filter { $0.id != id }
+          Task { await appState.setSurveyFocusTargets(remaining) }
+        }
+      )
+      if displayedCell != nil {
+        Divider().padding(.leading, 14)
       }
     }
     if let displayed = displayedCell {
@@ -423,29 +471,31 @@ struct SignalMapperCoverageView: View {
       .id(displayed.cell)
       .transition(.move(edge: .bottom).combined(with: .opacity))
     }
-    if !isSurveying, model.hasCoverage {
-      HStack {
-        Button {
-          startSurveyTapped()
-        } label: {
-          Label(
-            canSurvey
-              ? L10n.Tools.Tools.SignalMapper.Survey.start
-              : L10n.Tools.Tools.SignalMapper.Survey.connectToStart,
-            systemImage: canSurvey
-              ? "dot.radiowaves.left.and.right"
-              : "antenna.radiowaves.left.and.right.slash"
-          )
-          .fontWeight(.semibold)
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(!canSurvey)
-        Spacer(minLength: 0)
+  }
+
+  private var startRow: some View {
+    HStack {
+      Button {
+        startSurveyTapped()
+      } label: {
+        Label(
+          canSurvey
+            ? L10n.Tools.Tools.SignalMapper.Survey.start
+            : L10n.Tools.Tools.SignalMapper.Survey.connectToStart,
+          systemImage: canSurvey
+            ? "dot.radiowaves.left.and.right"
+            : "antenna.radiowaves.left.and.right.slash"
+        )
+        .fontWeight(.semibold)
       }
-      .padding(.horizontal, 16)
-      .padding(.bottom, 8)
-      .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+      .buttonStyle(.borderedProminent)
+      .disabled(!canSurvey)
+      Spacer(minLength: 0)
     }
+    .padding(.horizontal, 16)
+    .padding(.top, 8)
+    .padding(.bottom, 8)
+    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
   }
 
   private var legendSummary: String? {
@@ -649,6 +699,32 @@ struct SignalMapperCoverageView: View {
   /// card is inline and dismissible, so a stray touch costs one ✕, while the data stays
   /// one tap away at a stop. Tapping the hexagon you are already in returns to following
   /// it rather than pinning a second, identical card.
+  /// Keeps the rider clear of the chrome: the camera is padded by what the HUD actually
+  /// measures, top and bottom.
+  private var cameraPadding: UIEdgeInsets {
+    UIEdgeInsets(top: topInsetHeight, left: 0, bottom: bottomInsetHeight, right: 0)
+  }
+
+  /// Quantized to 8 pt: the inset breathes by a point or two as rows swap text, and every
+  /// change re-animates the camera to the same bounds (UI review P2-10).
+  private func noteBottomInset(_ height: CGFloat) {
+    let stepped = (height / 8).rounded() * 8
+    guard stepped != bottomInsetHeight else { return }
+    bottomInsetHeight = stepped
+  }
+
+  private func runPendingRunDetailAction() {
+    guard let action = pendingRunDetailAction else { return }
+    pendingRunDetailAction = nil
+    switch action {
+    case .editLockOn:
+      focusPickerSeed = ""
+      pendingFocusPicker = true
+    case .stop:
+      Task { await model.stopSurvey(appState: appState) }
+    }
+  }
+
   private func mapTapped(at coordinate: CLLocationCoordinate2D) {
     let tapped = SignalMapperCoverageRenderer.cell(
       at: coordinate, in: model.snapshot, layer: mapLayer

@@ -33,38 +33,74 @@ struct SignalMapperCellCard: View {
   var onLockOn: ((SignalMapperCoverageRepeater) -> Void)?
   let onClose: () -> Void
 
-  /// Ceiling for the card's own height. Beyond it the content scrolls rather than
-  /// growing past the top of the screen, which is what large Dynamic Type did to the
-  /// first draft of this layout.
-  private static let maxHeight: CGFloat = 300
+  /// Ceiling for the scrolling middle. Only what is between the header and the footer
+  /// can ever scroll, and only when it does not fit.
+  private static let maxScrollHeight: CGFloat = 260
+
+  @State private var contentHeight: CGFloat = 0
 
   var body: some View {
+    VStack(alignment: .leading, spacing: 7) {
+      // Header and footer are pinned. The headline is the first thing to read and the
+      // footer is the only route to the detail sheet; neither may be the part that
+      // scrolls out of sight (field report, 2026-08-30, and UI review P1-5).
+      header
+      scrollingMiddle
+      footerRow
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 10)
+    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+  }
+
+  /// `ScrollView` is greedy along its axis: given a concrete proposal it returns the
+  /// proposal, so a plain `.frame(maxHeight:)` renders every card at exactly that height
+  /// — a short card as a slab of dead space, a tall one clipped mid-row with the next
+  /// control flush against it. Measuring the content and taking the *minimum* is the
+  /// pattern `HeardRepeatsMapView` already uses for the same configuration (UI review
+  /// P0-1).
+  private var scrollingMiddle: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 7) {
-        header
         if filtered != nil {
           filterBar
         }
         signalRows
         detailRows
         repeaterSections
-        footerRow
       }
-      .padding(.horizontal, 14)
-      .padding(.vertical, 10)
+      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
     }
     .scrollBounceBehavior(.basedOnSize)
-    .frame(maxHeight: Self.maxHeight)
-    .background(Color(.secondarySystemBackground).opacity(0.96), in: .rect(cornerRadius: 16))
-    .padding(.horizontal, 12)
-    .padding(.top, 8)
-    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    .defaultScrollAnchor(.top)
+    .frame(height: min(contentHeight, Self.maxScrollHeight))
   }
 
   /// The repeater the card is currently filtered to.
   private var filtered: SignalMapperCoverageRepeater? {
     guard let repeaterFilter else { return nil }
     return cell.repeaters.first { $0.hexID == repeaterFilter }
+  }
+
+  /// Display names that more than one repeater in this cell answers to.
+  ///
+  /// A cell routinely holds several distinct path hashes whose best-guess resolution is
+  /// the same node, which renders as "Digitaino Chestnut" three times with three
+  /// different SNRs and reads like a bug (field report, 2026-08-30). It isn't one — but
+  /// a name that cannot tell two rows apart has to carry the hash that can.
+  private var collidingNames: Set<String> {
+    var seen: Set<String> = []
+    var collisions: Set<String> = []
+    for repeater in cell.repeaters {
+      guard let name = repeater.name else { continue }
+      if !seen.insert(name).inserted { collisions.insert(name) }
+    }
+    return collisions
+  }
+
+  private func label(for repeater: SignalMapperCoverageRepeater) -> String {
+    guard let name = repeater.name else { return repeater.hexID }
+    return collidingNames.contains(name) ? "\(name) \(repeater.hexID)" : name
   }
 
   /// Probed from here, and nobody ever reported hearing us — v1's dead-zone state, which
@@ -154,7 +190,7 @@ struct SignalMapperCellCard: View {
     HStack(spacing: 4) {
       Image(systemName: "line.3.horizontal.decrease.circle.fill")
         .font(.caption2)
-      Text(L10n.Tools.Tools.SignalMapper.Card.via(filtered?.name ?? repeaterFilter ?? ""))
+      Text(L10n.Tools.Tools.SignalMapper.Card.via(filtered.map(label(for:)) ?? repeaterFilter ?? ""))
         .font(.caption)
         .lineLimit(1)
 
@@ -302,7 +338,7 @@ struct SignalMapperCellCard: View {
 
       VStack(alignment: .leading, spacing: 1) {
         Text(label)
-          .font(.system(size: 9, weight: .medium, design: .default))
+          .font(.caption2.weight(.medium))
           .foregroundStyle(.secondary)
 
         if let best = leg.best {
@@ -317,17 +353,17 @@ struct SignalMapperCellCard: View {
           }
           if let context = contextLine(leg) {
             Text(context)
-              .font(.system(size: 9, design: .monospaced))
+              .font(.system(.caption2, design: .monospaced))
               .foregroundStyle(.secondary)
           }
           if let range = rangeLine(leg) {
             Text(range)
-              .font(.system(size: 9, design: .monospaced))
+              .font(.system(.caption2, design: .monospaced))
               .foregroundStyle(.secondary)
           }
         } else if let unknownReason {
           Text(unknownReason)
-            .font(.system(size: 9))
+            .font(.caption2)
             .foregroundStyle(.secondary)
             .lineLimit(3)
             .fixedSize(horizontal: false, vertical: true)
@@ -378,7 +414,7 @@ struct SignalMapperCellCard: View {
         if let best = bestRepeater, let snr = best.bestSnr ?? best.averageSnr {
           detailRow(
             label: L10n.Tools.Tools.SignalMapper.Card.bestRepeater,
-            value: Self.decibels(snr, places: 1) + " dB (\(best.name ?? best.hexID))",
+            value: Self.decibels(snr, places: 1) + " dB (\(label(for: best)))",
             valueColor: SignalQuality(snr: snr).color
           )
         }
@@ -455,16 +491,17 @@ struct SignalMapperCellCard: View {
 
   // MARK: - Repeaters
 
-  /// Every repeater in the cell, as buttons, split by whether the link is two-way.
-  /// Two-way first and strongest-uplink first inside it: "who is actually carrying this
-  /// cell" is a question about the best link, not the chattiest one.
+  /// Every repeater in the cell, as buttons, split by whether the link is two-way, and
+  /// **most recently heard first** inside each group — the left end of the row is where
+  /// the eye lands, so it holds what is happening now rather than a season's champion
+  /// (Rafael, 2026-08-30).
   @ViewBuilder
   private var repeaterSections: some View {
     if !cell.repeaters.isEmpty {
       Divider()
       VStack(alignment: .leading, spacing: 5) {
-        let twoWay = orderedTwoWay(cell.repeaters.filter { $0.averageTxSnr != nil })
-        let heardOnly = orderedHeard(cell.repeaters.filter { $0.averageTxSnr == nil })
+        let twoWay = byRecency(cell.repeaters.filter { $0.averageTxSnr != nil })
+        let heardOnly = byRecency(cell.repeaters.filter { $0.averageTxSnr == nil })
         if !twoWay.isEmpty {
           repeaterRow(
             label: L10n.Tools.Tools.SignalMapper.Card.connected,
@@ -485,32 +522,11 @@ struct SignalMapperCellCard: View {
     }
   }
 
-  /// Locked-on repeaters lead every group — during a range test they are what the rider
-  /// is looking for.
-  private func orderedTwoWay(
+  private func byRecency(
     _ repeaters: [SignalMapperCoverageRepeater]
   ) -> [SignalMapperCoverageRepeater] {
     repeaters.sorted { lhs, rhs in
-      let lhsFocus = focusHexIDs.contains(lhs.hexID)
-      let rhsFocus = focusHexIDs.contains(rhs.hexID)
-      if lhsFocus != rhsFocus { return lhsFocus }
-      let lhsTx = lhs.bestTxSnr ?? lhs.averageTxSnr ?? -100
-      let rhsTx = rhs.bestTxSnr ?? rhs.averageTxSnr ?? -100
-      if lhsTx != rhsTx { return lhsTx > rhsTx }
-      return lhs.hexID < rhs.hexID
-    }
-  }
-
-  private func orderedHeard(
-    _ repeaters: [SignalMapperCoverageRepeater]
-  ) -> [SignalMapperCoverageRepeater] {
-    repeaters.sorted { lhs, rhs in
-      let lhsFocus = focusHexIDs.contains(lhs.hexID)
-      let rhsFocus = focusHexIDs.contains(rhs.hexID)
-      if lhsFocus != rhsFocus { return lhsFocus }
-      let lhsRx = lhs.bestSnr ?? lhs.averageSnr ?? -100
-      let rhsRx = rhs.bestSnr ?? rhs.averageSnr ?? -100
-      if lhsRx != rhsRx { return lhsRx > rhsRx }
+      if lhs.lastHeard != rhs.lastHeard { return lhs.lastHeard > rhs.lastHeard }
       return lhs.hexID < rhs.hexID
     }
   }
@@ -553,16 +569,16 @@ struct SignalMapperCellCard: View {
       HStack(spacing: 4) {
         if isFocused {
           Image(systemName: "scope")
-            .font(.system(size: 9, weight: .bold))
+            .font(.caption2.weight(.bold))
             .foregroundStyle(.tint)
         }
         // An unresolved hash goes monospaced: 0/O and 1/l have to stay apart.
-        Text(repeater.name ?? repeater.hexID)
+        Text(label(for: repeater))
           .font(repeater.name == nil ? .system(.caption, design: .monospaced) : .caption)
           .lineLimit(1)
         if repeater.isAmbiguous {
           Image(systemName: "questionmark.circle")
-            .font(.system(size: 9, weight: .bold))
+            .font(.caption2.weight(.bold))
             .foregroundStyle(.secondary)
         }
         if let tx = repeater.bestTxSnr ?? repeater.averageTxSnr {
@@ -577,13 +593,21 @@ struct SignalMapperCellCard: View {
         }
       }
       .padding(.horizontal, 10)
-      .frame(minHeight: 44)
+      // 36 pt rather than 44: two rows of 44 pt chips cost more of the map than the
+      // 8 pt buys back, and a capsule in a horizontal row is the one control class
+      // Apple itself ships below the full target (filter chips, ~34 pt).
+      .padding(.vertical, 8)
       .background(isFiltered ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.quaternary.opacity(0.6)))
       .clipShape(.capsule)
       .overlay {
         Capsule().strokeBorder(isFiltered ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 1)
       }
-      .contentShape(.capsule)
+      // 36 pt pill, 44 pt target: the visual stays dense enough for two groups of chips,
+      // and the touch area still clears the guideline in the one configuration where a
+      // mis-tap is most likely — nested scroll views over a pannable map (UI review
+      // P2-14).
+      .padding(.vertical, 4)
+      .contentShape(.rect)
     }
     .buttonStyle(.plain)
     .accessibilityLabel(chipAccessibilityLabel(repeater))
@@ -592,7 +616,7 @@ struct SignalMapperCellCard: View {
   }
 
   private func chipAccessibilityLabel(_ repeater: SignalMapperCoverageRepeater) -> String {
-    var parts = [repeater.name ?? repeater.hexID]
+    var parts = [label(for: repeater)]
     if repeater.isAmbiguous {
       parts.append(L10n.Tools.Tools.SignalMapper.Detail.ambiguousName)
     }

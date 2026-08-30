@@ -6848,6 +6848,8 @@ public enum L10n {
           public static let stateLost = L10n.tr("Tools", "tools.signalMapper.focus.stateLost", fallback: "Out of reach")
           /// Location: SignalMapperFocusBlocks.swift - Link state: nothing heard recently
           public static let stateUnknown = L10n.tr("Tools", "tools.signalMapper.focus.stateUnknown", fallback: "No signal yet")
+          /// Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set
+          public static let unlock = L10n.tr("Tools", "tools.signalMapper.focus.unlock", fallback: "Unlock")
           /// Location: SignalMapperFocusBlocks.swift - Accessibility fragment; %lld is the uplink SNR in dB
           public static func uplinkAccessibility(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.focus.uplinkAccessibility", p1, fallback: "they hear you at %lld decibels")

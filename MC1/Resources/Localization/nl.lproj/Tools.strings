@@ -1483,3 +1483,6 @@
 
 /* Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip */
 "tools.signalMapper.card.chipHint" = "Toont de metingen van deze repeater voor de cel";
+
+/* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
+"tools.signalMapper.focus.unlock" = "Ontgrendelen";

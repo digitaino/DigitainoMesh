@@ -16,6 +16,7 @@ struct SignalMapperLegend: View {
   var summary: String?
 
   @State private var isExpanded = false
+  @State private var bodyHeight: CGFloat = 0
 
   var body: some View {
     Group {
@@ -25,9 +26,7 @@ struct SignalMapperLegend: View {
         collapsed
       }
     }
-    .liquidGlass(in: .rect(cornerRadius: 12))
-    .padding(.leading)
-    .padding(.bottom, 8)
+    .mapperHUDSurface(in: .rect(cornerRadius: 16))
     .animation(.snappy(duration: 0.2), value: isExpanded)
   }
 
@@ -45,6 +44,9 @@ struct SignalMapperLegend: View {
     .accessibilityLabel(L10n.Tools.Tools.SignalMapper.Legend.title)
   }
 
+  /// Title row pinned, body scrolling under a ceiling: unbounded, this grew past the top
+  /// of the screen at large Dynamic Type and carried its own close button off with it,
+  /// and tapping outside selects a hexagon rather than dismissing (UI review P1-8).
   private var expanded: some View {
     VStack(alignment: .leading, spacing: 8) {
       Button {
@@ -63,6 +65,20 @@ struct SignalMapperLegend: View {
       .buttonStyle(.plain)
       .accessibilityLabel(L10n.Localizable.Common.done)
 
+      ScrollView {
+        expandedBody
+          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bodyHeight = $0 }
+      }
+      .scrollBounceBehavior(.basedOnSize)
+      .frame(height: min(bodyHeight, 300))
+    }
+    .padding(12)
+    .frame(maxWidth: 220, alignment: .leading)
+    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+  }
+
+  private var expandedBody: some View {
+    VStack(alignment: .leading, spacing: 8) {
       if let summary {
         Text(summary)
           .font(.caption.weight(.medium))
@@ -121,8 +137,5 @@ struct SignalMapperLegend: View {
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
     }
-    .padding(12)
-    .frame(maxWidth: 220, alignment: .leading)
-    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
   }
 }

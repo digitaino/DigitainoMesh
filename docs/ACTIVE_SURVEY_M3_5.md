@@ -523,3 +523,105 @@ the ride screen in-simulator as the previous three passes were. The vertical bud
 arithmetic, not a measurement: at default type on a 852 pt screen the inset is ~86 pt of
 live rows plus ≤328 pt of card, leaving ~240 pt of map with the camera padded to keep the
 rider inside it.
+
+## §7.3 Fifth pass — four field bugs from the ride screen (2026-08-30)
+
+Reported against the §7.2 build, with screenshots.
+
+### "Last Heard 5m ago" while the radio pill said 38 s
+
+The periodic store rebuild lived inside `attachSurveyStream`, so it only existed **during
+a survey**. Passive capture folds packets whenever the app is open, the store flushes
+every 30 s, and an idle Signal Mapper screen loaded its snapshot exactly once — so a card
+left open drifted arbitrarily far behind the repeater list in the toolbar pill, which is
+driven live by `SignalBarsEngine`.
+
+The refresh is now `SignalMapperCoverageModel.autoRefresh(appState:)`, owned by the
+view's own `.task`, running for as long as the screen is up: 20 s riding, 45 s idle.
+
+(The other half of the discrepancy is legitimate and stays: the pill ages every repeater
+the radio has heard *anywhere*, while the card ages one *hexagon*. A cell you are not
+standing in can honestly be minutes stale.)
+
+### The same repeater name three times in one cell
+
+Not a duplicate-key bug: `cell.repeaters` is keyed by path hash, and several distinct
+hashes in a cell can resolve to the same node name — which renders as "Digitaino Chestnut
+▼13 / ▼13 / ▼12" and reads like the list is broken. A name that cannot tell two rows
+apart now carries the hash that can: `collidingNames` finds display names claimed by more
+than one repeater in the cell, and those chips render as `Name 805D`. The ambiguity marker
+stays for the separate case of one hash that several known nodes answer to.
+
+### Redundant blocks, and recency ordering
+
+The "HEARING NOW" rows and the card's repeater chips were listing the same repeaters,
+one above the other. The strip now renders **only when it has something the card does
+not**: locked on (live probe state, distance, unlock), or no card at all (a hexagon just
+entered, nothing flushed). Chips are ordered **most recently heard first** — Rafael's
+call, and the correct one: the left end of a horizontal row is where the eye lands, so it
+holds what is happening now, not a season's champion.
+
+### No way to unlock
+
+Lock-on was reachable from three places and reversible only inside the picker. Each
+locked-on row now carries its own ✕ (`onUnlock`), which drops that one target through
+`setSurveyFocusTargets`.
+
+### Card top scrolled away
+
+The card's `ScrollView` had no anchor, and inside a bottom safe-area inset it settled on
+the bottom edge — so the quality headline and packet count, the first things to read, were
+the first things hidden. `.defaultScrollAnchor(.top)` pins them. Chips went from 44 pt to
+36 pt (the one control class Apple itself ships short, ~34 pt for filter chips) and the
+ceiling rose to 340 pt, so at default Dynamic Type the card no longer scrolls at all.
+
+### §7.3b Second adversarial review of the same screen
+
+Run after the fixes above, aimed at the "disjointed / on top of each other" complaint.
+What it found, and what changed:
+
+**The card was always exactly 340 pt.** `ScrollView` is greedy along its axis: given a
+concrete proposal it returns the proposal, so `.frame(maxHeight:)` on one renders *every*
+card at the ceiling — a short card as a slab of dead space, a tall one clipped mid-chip-row
+with the next control flush against it. That is the mechanism behind both the cut-off card
+top and the Start pill sitting on the chips, and `bottomInsetHeight` was measuring a
+constant, so the camera padding was wrong in both directions too. Fixed with the pattern
+`HeardRepeatsMapView` already uses: measure the content, take `min(measured, ceiling)`.
+Header and footer are now outside the scroller entirely — the headline is the first thing
+to read and the footer is the only route to the detail sheet, so neither may be the part
+that scrolls away.
+
+**Four surfaces, three materials, three margins, four radii, three animation clocks.**
+That is what "disjointed" was, stated as numbers. Now: one container owns the gutter, the
+spacing and the clock; every floating surface goes through `mapperHUDSurface` (opaque —
+glass over a moving map failed the sunlight test in an earlier round, so coherence was
+bought by making the strip and legend opaque, not by making the card glass).
+
+**The legend and the map-controls column shared a band the bottom inset could squeeze to
+nothing** — 34 pt of hard overlap while surveying with three lock-on targets, and on a
+667 pt phone the band collapsed entirely. The legend moved out of the map ZStack into the
+bottom stack, where it participates in the layout that is already being measured. Its
+expanded card is now a bounded scroller with a pinned title row; unbounded, it grew off
+the top of the screen and took its own close button with it.
+
+**The run-detail sheet presented siblings from inside its own dismissal** — both "Lock On"
+and "End Survey", the latter on every single ride. That is the iOS 26 presentation-teardown
+family this project defers around everywhere else. Actions are recorded and run from the
+presenter's `onDismiss` now.
+
+**The de-clutter fix had silently disabled the radio-drop alarm.** The tone lived inside
+the focus strip, which is now conditional; the alarm moved to `SignalMapperLiveStrip`,
+which is on screen for the whole run.
+
+Also: 9 pt `.system(size:)` text never scaled with Dynamic Type at all (now `caption2`);
+chips keep a 36 pt pill inside a 44 pt target; the 12 pt gutters beside the panel were live
+map taps that swapped the card for another hexagon's; camera re-framing is quantized to
+8 pt so the inset breathing does not lurch the map at a red light; the camera's top padding
+is measured rather than a magic 76; the cell detail sheet has a Done button like its
+siblings.
+
+**Known and deferred:** the repeater filter recolours the card but not the hexagon under
+it, so "Excellent, via Chestnut" can sit over a yellow cell — the map renderer takes no
+filter yet. And the map's OSM/MapTiler attribution button sits behind the tab bar on every
+screen that hosts `MC1MapView` with `.ignoresSafeArea()`; that is shared map code and an
+attribution obligation, tracked separately.

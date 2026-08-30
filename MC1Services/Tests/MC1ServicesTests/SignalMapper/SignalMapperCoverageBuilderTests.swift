@@ -326,6 +326,48 @@ struct SignalMapperCoverageBuilderTests {
     #expect(repeater.lastHeard == tuesday)
   }
 
+  /// The per-repeater spread and RSSI the cell card's "via <repeater>" view runs on.
+  /// Widening extremes across days is the part a sum-and-count fold gets wrong if the
+  /// columns are merged like counters.
+  @Test
+  func `A repeater's best and worst readings widen across the days of one cell`() throws {
+    let plaza = try cell(MapperFixtureLocation.plaza)
+    let monday = Date(timeIntervalSince1970: 1_753_000_000)
+    let tuesday = monday.addingTimeInterval(86400)
+
+    let snapshot = builder.build(
+      rows: [
+        row(cell: plaza, day: "2025-07-20", rx: 1, repeaters: [
+          "42": MapperRepeaterStats(
+            id: "42", rxPacketCount: 1, txPacketCount: 1,
+            rxSnrSum: 4, rxSnrCount: 1, txSnrSum: 2, txSnrCount: 1,
+            rssiSum: -80, rssiCount: 1,
+            minRxSnr: 4, maxRxSnr: 4, minTxSnr: 2, maxTxSnr: 2,
+            firstHeard: monday, lastHeard: monday
+          )
+        ]),
+        row(cell: plaza, day: "2025-07-21", rx: 1, repeaters: [
+          "42": MapperRepeaterStats(
+            id: "42", rxPacketCount: 1, txPacketCount: 1,
+            rxSnrSum: 12, rxSnrCount: 1, txSnrSum: 10, txSnrCount: 1,
+            rssiSum: -60, rssiCount: 1,
+            minRxSnr: 12, maxRxSnr: 12, minTxSnr: 10, maxTxSnr: 10,
+            firstHeard: tuesday, lastHeard: tuesday
+          )
+        ])
+      ],
+      now: now
+    )
+
+    let repeater = try #require(snapshot.cells.first?.repeaters.first)
+    #expect(repeater.worstSnr == 4)
+    #expect(repeater.bestSnr == 12)
+    #expect(repeater.worstTxSnr == 2)
+    #expect(repeater.bestTxSnr == 10)
+    #expect(repeater.averageSnr == 8)
+    #expect(repeater.averageRssi == -70)
+  }
+
   // MARK: - Degenerate input
 
   @Test
