@@ -64,6 +64,10 @@ final class SignalMapperCoverageModel {
       return
     }
 
+    if session.repeaterDirectory.isEmpty {
+      session.repeaterDirectory = await loadRepeaterDirectory(appState: appState)
+    }
+
     if reloadTask == nil {
       // The ride should paint the map as it happens — but a full store rebuild every
       // 10 s grows monotonically all ride and cooks the phone (review 5b). 60 s.
@@ -83,6 +87,39 @@ final class SignalMapperCoverageModel {
       session.liveSnapshot = snapshot
       foldMaxRange(snapshot: snapshot, session: session, appState: appState)
     }
+  }
+
+  /// Builds the hexID → (name, position) lookup the auto "hearing now" blocks resolve
+  /// against, at the device's path-hash width — the same derivation the picker uses.
+  private func loadRepeaterDirectory(
+    appState: AppState
+  ) async -> [String: SignalMapperRideSession.FocusMeta] {
+    guard let dataStore = appState.services?.dataStore,
+          let radioID = appState.currentRadioID else { return [:] }
+    let width = min(3, Int(appState.connectedDevice?.pathHashMode ?? 0) + 1)
+    var directory: [String: SignalMapperRideSession.FocusMeta] = [:]
+    if let contacts = try? await dataStore.fetchContacts(radioID: radioID) {
+      for contact in contacts where contact.type == .repeater {
+        guard let id = NodeHexID(data: contact.publicKey.prefix(width)) else { continue }
+        directory[id.hex] = SignalMapperRideSession.FocusMeta(
+          name: contact.name,
+          latitude: contact.hasLocation ? contact.latitude : nil,
+          longitude: contact.hasLocation ? contact.longitude : nil
+        )
+      }
+    }
+    if let discovered = try? await dataStore.fetchDiscoveredNodes(radioID: radioID) {
+      for node in discovered where node.nodeType == .repeater {
+        guard let id = NodeHexID(data: node.publicKey.prefix(width)),
+              directory[id.hex] == nil else { continue }
+        directory[id.hex] = SignalMapperRideSession.FocusMeta(
+          name: node.name,
+          latitude: node.hasLocation ? node.latitude : nil,
+          longitude: node.hasLocation ? node.longitude : nil
+        )
+      }
+    }
+    return directory
   }
 
   /// The ride's actual answer, computed where positions live: each fresh reply's distance

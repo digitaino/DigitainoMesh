@@ -49,6 +49,15 @@ final class SignalMapperRideSession {
 
   var focusMeta: [NodeHexID: FocusMeta] = [:]
 
+  /// Name/position lookup for EVERY known repeater at the session's hash width, keyed
+  /// by `NodeHexID.hex`. Loaded once per session from the contact/discovered pools so
+  /// the automatic "hearing now" blocks can name responders the user never picked.
+  var repeaterDirectory: [String: FocusMeta] = [:]
+
+  func meta(for id: NodeHexID) -> FocusMeta? {
+    focusMeta[id] ?? repeaterDirectory[id.hex]
+  }
+
   /// The focus cadence captured once at session start, so the HUD never touches
   /// `UserDefaults` from its render path (UI review S3: the old per-render
   /// `MapperTuningStore()` materialised 22 defaults keys at 1 Hz for hours).

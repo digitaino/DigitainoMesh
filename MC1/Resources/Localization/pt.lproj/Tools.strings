@@ -993,3 +993,24 @@
 
 /* Location: SignalMapperFocusBlocks.swift - Accessibility fragment; %lld is the uplink SNR in dB */
 "tools.signalMapper.focus.uplinkAccessibility" = "ouvem-no a %lld decibéis";
+
+/* Location: SignalMapperLiveStrip.swift - Live counts; %1$lld probes, %2$lld replies, %3$lld lost */
+"tools.signalMapper.strip.counts" = "%1$lld sondas · %2$lld respostas · %3$lld perdidas";
+
+/* Location: SignalMapperFocusBlocks.swift - Caption over the automatic repeater blocks when nothing is locked on */
+"tools.signalMapper.ride.hearingNow" = "Ouvidos agora";
+
+/* Location: SignalMapperFocusBlocks.swift - Empty auto row before any repeater has replied */
+"tools.signalMapper.ride.listening" = "À escuta de repetidores…";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: repeaters that answered during this survey */
+"tools.signalMapper.focus.sectionHeard" = "Ouvidos neste levantamento";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: repeaters with known positions, nearest first */
+"tools.signalMapper.focus.sectionNearby" = "Nas proximidades";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: everything else */
+"tools.signalMapper.focus.sectionOther" = "Outros repetidores";
+
+/* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
+"tools.signalMapper.focus.search" = "Procurar repetidores";

@@ -113,6 +113,11 @@ public actor SignalMapperProbeEngine {
     public var skippedNoFixCount: Int
     /// Live lock-on state, in the order the targets were selected.
     public var focusStates: [FocusTargetState]
+    /// Live state for repeaters heard this session that are NOT locked on — most
+    /// recently heard first, capped. The ride surface shows these automatically when
+    /// nothing is locked on: v1's rule, re-learned the hard way, is that a survey
+    /// screen always shows who it is hearing without being configured first.
+    public var heardStates: [FocusTargetState]
 
     public init(
       isRunning: Bool = false,
@@ -131,7 +136,8 @@ public actor SignalMapperProbeEngine {
       focusBudgetAvailable: Double = 0,
       tier: SamplingTier = .fine,
       skippedNoFixCount: Int = 0,
-      focusStates: [FocusTargetState] = []
+      focusStates: [FocusTargetState] = [],
+      heardStates: [FocusTargetState] = []
     ) {
       self.isRunning = isRunning
       self.startedAt = startedAt
@@ -150,6 +156,7 @@ public actor SignalMapperProbeEngine {
       self.tier = tier
       self.skippedNoFixCount = skippedNoFixCount
       self.focusStates = focusStates
+      self.heardStates = heardStates
     }
   }
 
@@ -219,7 +226,10 @@ public actor SignalMapperProbeEngine {
 
   /// Lock-on: ordered focus selection, its live state, and its dedicated budget.
   private var focusOrder: [NodeHexID] = []
-  private var focusStates: [NodeHexID: FocusTargetState] = [:]
+  /// Live per-target state for EVERY repeater that produced evidence this session —
+  /// focus targets are just the pinned subset. Bounded by the neighbourhood's repeater
+  /// count (the same bound `targets` has).
+  private var targetStates: [NodeHexID: FocusTargetState] = [:]
   private var focusBucket: TokenBucket?
 
   private var probedTierCells: Set<H3Cell> = []
@@ -351,7 +361,8 @@ public actor SignalMapperProbeEngine {
     // report zero hexagons for a session that probed plenty.
     state.cellsProbed = probedTierCells.count
     state.targetCount = targets.count
-    state.focusStates = focusOrder.compactMap { focusStates[$0] }
+    state.focusStates = focusOrder.compactMap { targetStates[$0] }
+    state.heardStates = heardStatesSnapshot()
     logger.info(
       "Signal mapper survey session ended: \(self.state.probesSent) probes, \(self.state.traceRepliesHeard + self.state.discoverResponsesHeard) replies"
     )
@@ -390,12 +401,12 @@ public actor SignalMapperProbeEngine {
   public func setFocusTargets(_ selection: [MapperProbeTarget]) {
     let capped = Array(selection.prefix(Self.maxFocusTargets))
     focusOrder = capped.map(\.id)
-    var newStates: [NodeHexID: FocusTargetState] = [:]
     for target in capped {
       targets[target.id] = targets[target.id] ?? target
-      newStates[target.id] = focusStates[target.id] ?? FocusTargetState(id: target.id, publicKey: target.publicKey)
+      if targetStates[target.id] == nil {
+        targetStates[target.id] = FocusTargetState(id: target.id, publicKey: target.publicKey)
+      }
     }
-    focusStates = newStates
     rebuildFocusBucket(at: now())
     yieldSnapshot()
   }
@@ -428,7 +439,8 @@ public actor SignalMapperProbeEngine {
     }
     current.targetCount = targets.count
     current.cellsProbed = probedTierCells.count
-    current.focusStates = focusOrder.compactMap { focusStates[$0] }
+    current.focusStates = focusOrder.compactMap { targetStates[$0] }
+    current.heardStates = heardStatesSnapshot()
     return current
   }
 
@@ -543,8 +555,8 @@ public actor SignalMapperProbeEngine {
       tracker.retime(tag: tag, timeoutMs: probeTimeoutMs)
       state.tracesSent += 1
       if isFocus {
-        focusStates[target.id]?.probesSent += 1
-        focusStates[target.id]?.lastProbeAt = at
+        targetStates[target.id]?.probesSent += 1
+        targetStates[target.id]?.lastProbeAt = at
       }
       await recordAttempt(target: target, placement: placement, isFocus: isFocus, at: at)
     } catch {
@@ -565,7 +577,7 @@ public actor SignalMapperProbeEngine {
     let baseInterval = max(4, tuningProvider.tuning.focusProbeIntervalSeconds)
 
     for id in focusOrder {
-      guard let target = targets[id], let focus = focusStates[id] else { continue }
+      guard let target = targets[id], let focus = targetStates[id] else { continue }
       // One probe in flight per target: a second trace before the first resolves
       // would make loss attribution ambiguous.
       guard !tracker.hasProbe(for: id) else { continue }
@@ -633,7 +645,7 @@ public actor SignalMapperProbeEngine {
       let plan = planned.removeValue(forKey: probe.tag)
       let wasFocused = focusTags.remove(probe.tag) != nil
       if wasFocused {
-        focusStates[probe.target]?.lossStreak += 1
+        targetStates[probe.target]?.lossStreak += 1
       }
       var event = MapperRawSampleEvent(
         timestamp: at,
@@ -688,13 +700,16 @@ public actor SignalMapperProbeEngine {
     targets[id] = MapperProbeTarget(id: id, publicKey: response.publicKey, lastHeard: at)
     state.discoverResponsesHeard += 1
 
-    if var focus = focusStates[id] {
-      focus.lastRxSnr = response.snr
-      focus.lastTxSnr = response.snrIn
-      focus.lastRssi = response.rssi
-      focus.lastHeardAt = at
-      focusStates[id] = focus
-    }
+    var activity = targetStates[id]
+      ?? FocusTargetState(id: id, publicKey: response.publicKey)
+    activity.lastRxSnr = response.snr
+    activity.lastTxSnr = response.snrIn
+    activity.lastRssi = response.rssi
+    activity.lastHeardAt = at
+    activity.lastReplyAt = at
+    activity.repliesHeard += 1
+    activity.lossStreak = 0
+    targetStates[id] = activity
 
     // The response echoes the request's tag as four little-endian bytes.
     let tag = response.tag.readUInt32LE(at: 0)
@@ -806,16 +821,21 @@ public actor SignalMapperProbeEngine {
     let rttMs = Int((reply.firstHalfAt.timeIntervalSince(reply.probe.sentAt) * 1000).rounded())
     let perHop = reply.trace.map { $0.path.map(\.snr) }
 
-    if reply.wasFocused, var focus = focusStates[reply.probe.target] {
-      focus.lastRxSnr = rxSnr ?? focus.lastRxSnr
-      focus.lastTxSnr = txSnr ?? focus.lastTxSnr
-      focus.lastRssi = reply.rssi ?? focus.lastRssi
-      focus.lastRttMs = rttMs
-      focus.lastHeardAt = at
-      focus.lastReplyAt = at
-      focus.repliesHeard += 1
-      focus.lossStreak = 0
-      focusStates[reply.probe.target] = focus
+    if true {
+      var activity = targetStates[reply.probe.target]
+        ?? FocusTargetState(
+          id: reply.probe.target,
+          publicKey: targets[reply.probe.target]?.publicKey ?? Data()
+        )
+      activity.lastRxSnr = rxSnr ?? activity.lastRxSnr
+      activity.lastTxSnr = txSnr ?? activity.lastTxSnr
+      activity.lastRssi = reply.rssi ?? activity.lastRssi
+      activity.lastRttMs = rttMs
+      activity.lastHeardAt = at
+      activity.lastReplyAt = at
+      activity.repliesHeard += 1
+      activity.lossStreak = 0
+      targetStates[reply.probe.target] = activity
     }
 
     await sink.ingestProbeResult(MapperProbeResult(
@@ -848,18 +868,30 @@ public actor SignalMapperProbeEngine {
     yieldSnapshot()
   }
 
-  /// A passively heard packet relayed by a focus target refreshes its downlink state —
-  /// hearing them costs nothing. Matching is by node identity at whatever hash width the
-  /// packet carried.
+  /// A passively heard packet relayed by any known repeater refreshes its downlink
+  /// state — hearing them costs nothing. Matching is by node identity at whatever hash
+  /// width the packet carried.
   private func noteFocusSighting(_ sighting: RepeaterSighting) {
     guard state.isRunning else { return }
-    for id in focusOrder where id.identifiesSameNode(as: sighting.id) {
-      guard var focus = focusStates[id] else { continue }
-      focus.lastRxSnr = sighting.rxSnr
-      focus.lastRssi = sighting.rssi ?? focus.lastRssi
-      focus.lastHeardAt = now()
-      focusStates[id] = focus
+    let at = now()
+    for id in targets.keys where id.identifiesSameNode(as: sighting.id) {
+      var activity = targetStates[id]
+        ?? FocusTargetState(id: id, publicKey: targets[id]?.publicKey ?? Data())
+      activity.lastRxSnr = sighting.rxSnr
+      activity.lastRssi = sighting.rssi ?? activity.lastRssi
+      activity.lastHeardAt = at
+      targetStates[id] = activity
     }
+  }
+
+  /// The non-focus repeaters heard this session, most recent first. What the ride
+  /// surface shows unconfigured; capped so a dense mesh cannot flood the snapshot.
+  private func heardStatesSnapshot() -> [FocusTargetState] {
+    targetStates.values
+      .filter { $0.lastHeardAt != nil && !focusOrder.contains($0.id) }
+      .sorted { ($0.lastHeardAt ?? .distantPast) > ($1.lastHeardAt ?? .distantPast) }
+      .prefix(4)
+      .map(\.self)
   }
 
   // MARK: - Bookkeeping

@@ -269,7 +269,7 @@ struct SignalMapperCoverageView: View {
         showLabels: showLabels,
         showsUserLocation: true,
         isInteractive: true,
-        showsScale: true,
+        showsScale: !isSurveying,
         isNorthLocked: isNorthLocked,
         cameraRegion: .constant(nil),
         cameraBounds: cameraBounds,
@@ -334,11 +334,7 @@ struct SignalMapperCoverageView: View {
   @ViewBuilder
   private var bottomInset: some View {
     if isSurveying, let session = appState.signalMapperRideSession {
-      if session.focusTargets.isEmpty {
-        SignalMapperLockOnHint { showingFocusPicker = true }
-      } else {
-        SignalMapperFocusBlocks(session: session)
-      }
+      SignalMapperFocusBlocks(session: session) { showingFocusPicker = true }
     } else if model.hasCoverage {
       HStack {
         Button {

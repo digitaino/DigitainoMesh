@@ -1387,3 +1387,24 @@
 
 /* Location: SignalMapperFocusBlocks.swift - Accessibility fragment; %lld is the uplink SNR in dB */
 "tools.signalMapper.focus.uplinkAccessibility" = "对方以 %lld 分贝听到你";
+
+/* Location: SignalMapperLiveStrip.swift - Live counts; %1$lld probes, %2$lld replies, %3$lld lost */
+"tools.signalMapper.strip.counts" = "%1$lld 次探测 · %2$lld 次回复 · %3$lld 次丢失";
+
+/* Location: SignalMapperFocusBlocks.swift - Caption over the automatic repeater blocks when nothing is locked on */
+"tools.signalMapper.ride.hearingNow" = "当前可听到";
+
+/* Location: SignalMapperFocusBlocks.swift - Empty auto row before any repeater has replied */
+"tools.signalMapper.ride.listening" = "正在监听中继…";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: repeaters that answered during this survey */
+"tools.signalMapper.focus.sectionHeard" = "本次测绘听到的";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: repeaters with known positions, nearest first */
+"tools.signalMapper.focus.sectionNearby" = "附近";
+
+/* Location: SignalMapperFocusPickerView.swift - Section: everything else */
+"tools.signalMapper.focus.sectionOther" = "其他中继";
+
+/* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
+"tools.signalMapper.focus.search" = "搜索中继";

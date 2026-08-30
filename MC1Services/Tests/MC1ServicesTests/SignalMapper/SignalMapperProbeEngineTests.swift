@@ -522,6 +522,32 @@ struct SignalMapperProbeEngineTests {
     await engine.stopSession()
   }
 
+  @Test
+  func `A discover responder appears in heardStates without being locked on`() async {
+    // The unconfigured ride surface shows who is being heard (v1's rule): every
+    // responder's live state is tracked, focus or not.
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, fixes: fixes, clock: clock, tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
+      publicKey: SignalBarsFixtures.publicKey([0xCD]), snr: 6.0, snrIn: 3.5, rssi: -70
+    )))
+
+    let snapshot = await engine.snapshot()
+    #expect(snapshot.focusStates.isEmpty)
+    #expect(snapshot.heardStates.count == 1)
+    #expect(snapshot.heardStates.first?.id.hex == "CD")
+    #expect(snapshot.heardStates.first?.lastTxSnr == 3.5)
+    #expect(snapshot.heardStates.first?.lastRxSnr == 6.0)
+    await engine.stopSession()
+  }
+
   // MARK: - Trace staging (M3.5)
 
   @Test

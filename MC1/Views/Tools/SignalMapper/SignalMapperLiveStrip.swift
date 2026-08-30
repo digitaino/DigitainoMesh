@@ -94,12 +94,15 @@ struct SignalMapperLiveStrip: View {
     }
   }
 
-  /// `48·31·4` — probes sent, replies heard, probes lost. The dot separators keep it
-  /// scannable at arm's length without three captions of label text.
+  /// Labelled counts — "2 probes · 6 replies · 0 lost". The first field test proved
+  /// that bare dot-separated numbers read as noise, not data: nobody carries the
+  /// legend in their head at 25 km/h.
   private var countsText: some View {
-    Text(
-      "\(totals.probesSent)·\(totals.traceRepliesHeard + totals.discoverResponsesHeard)·\(totals.probesLost)"
-    )
+    Text(L10n.Tools.Tools.SignalMapper.Strip.counts(
+      totals.probesSent,
+      totals.traceRepliesHeard + totals.discoverResponsesHeard,
+      totals.probesLost
+    ))
     .contentTransition(.numericText())
     .animation(.snappy(duration: 0.3), value: totals.probesSent)
   }

@@ -6762,6 +6762,14 @@ public enum L10n {
           public static func footer(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.focus.footer", p1, fallback: "Pick up to %lld repeaters to track live. Everything else keeps logging in the background.")
           }
+          /// Location: SignalMapperFocusPickerView.swift - Search field placeholder
+          public static let search = L10n.tr("Tools", "tools.signalMapper.focus.search", fallback: "Search repeaters")
+          /// Location: SignalMapperFocusPickerView.swift - Section: repeaters that answered during this survey
+          public static let sectionHeard = L10n.tr("Tools", "tools.signalMapper.focus.sectionHeard", fallback: "Heard This Session")
+          /// Location: SignalMapperFocusPickerView.swift - Section: repeaters with known positions, nearest first
+          public static let sectionNearby = L10n.tr("Tools", "tools.signalMapper.focus.sectionNearby", fallback: "Nearby")
+          /// Location: SignalMapperFocusPickerView.swift - Section: everything else
+          public static let sectionOther = L10n.tr("Tools", "tools.signalMapper.focus.sectionOther", fallback: "Other Repeaters")
           /// Location: SignalMapperFocusPickerView.swift - Start the run with no lock-on selection
           public static let startWithout = L10n.tr("Tools", "tools.signalMapper.focus.startWithout", fallback: "Start Without Lock-On")
           /// Location: SignalMapperFocusBlocks.swift - Link state: we hear them, they are not answering
@@ -6820,6 +6828,10 @@ public enum L10n {
           public static let cells = L10n.tr("Tools", "tools.signalMapper.ride.cells", fallback: "Hexagons probed")
           /// Location: SignalMapperRunDetailSheet.swift - Sheet title
           public static let detailTitle = L10n.tr("Tools", "tools.signalMapper.ride.detailTitle", fallback: "Survey Details")
+          /// Location: SignalMapperFocusBlocks.swift - Caption over the automatic repeater blocks when nothing is locked on
+          public static let hearingNow = L10n.tr("Tools", "tools.signalMapper.ride.hearingNow", fallback: "Hearing now")
+          /// Location: SignalMapperFocusBlocks.swift - Empty auto row before any repeater has replied
+          public static let listening = L10n.tr("Tools", "tools.signalMapper.ride.listening", fallback: "Listening for repeaters…")
           /// Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker
           public static let lockOn = L10n.tr("Tools", "tools.signalMapper.ride.lockOn", fallback: "Lock On Repeaters")
           /// Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name
@@ -6843,6 +6855,10 @@ public enum L10n {
           /// Location: SignalMapperLiveStrip.swift - Accessibility summary; %1$@ elapsed, %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons
           public static func accessibility(_ p1: Any, _ p2: Int, _ p3: Int, _ p4: Int, _ p5: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.strip.accessibility", String(describing: p1), p2, p3, p4, p5, fallback: "Surveying for %1$@. %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons.")
+          }
+          /// Location: SignalMapperLiveStrip.swift - Live counts; %1$lld probes, %2$lld replies, %3$lld lost
+          public static func counts(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.strip.counts", p1, p2, p3, fallback: "%1$lld probes · %2$lld replies · %3$lld lost")
           }
           /// Location: SignalMapperLiveStrip.swift - Accessibility hint on the live strip (opens run details)
           public static let detailHint = L10n.tr("Tools", "tools.signalMapper.strip.detailHint", fallback: "Shows survey details")
