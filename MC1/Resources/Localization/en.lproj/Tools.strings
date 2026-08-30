@@ -1505,3 +1505,57 @@
 
 /* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
 "tools.signalMapper.focus.unlock" = "Unlock";
+
+/* Location: SignalMapperTransmitSheet.swift - Title of the manual transmission sheet */
+"tools.signalMapper.transmit.title" = "Transmit";
+
+/* Location: SignalMapperTransmitSheet.swift - Section header for directed probes */
+"tools.signalMapper.transmit.probesHeader" = "Probes";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends one zero-hop discover broadcast */
+"tools.signalMapper.transmit.discover" = "Send Discover";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends one directed trace */
+"tools.signalMapper.transmit.trace" = "Send Trace";
+
+/* Location: SignalMapperTransmitSheet.swift - Picker label for the trace destination */
+"tools.signalMapper.transmit.traceTarget" = "Repeater";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer explaining what the probes do */
+"tools.signalMapper.transmit.probesFooter" = "A discover asks every repeater in direct range to answer. A trace goes to one repeater and comes back. Neither is relayed onward, so neither reaches anyone else's radio.";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer when no survey is running */
+"tools.signalMapper.transmit.needsSurvey" = "Start a survey first. Replies are recorded against the hexagon you send from, and without a run there is nothing to record them in.";
+
+/* Location: SignalMapperTransmitSheet.swift - Section header for the flood test */
+"tools.signalMapper.transmit.floodHeader" = "Flood Test";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends a real relayed message */
+"tools.signalMapper.transmit.flood" = "Send Flood Message";
+
+/* Location: SignalMapperTransmitSheet.swift - Picker label for the flood channel */
+"tools.signalMapper.transmit.channel" = "Channel";
+
+/* Location: SignalMapperTransmitSheet.swift - Creates a private channel for flood tests */
+"tools.signalMapper.transmit.createChannel" = "Create Survey Channel";
+
+/* Location: SignalMapperTransmitSheet.swift - Name given to the created survey channel */
+"tools.signalMapper.transmit.channelName" = "Survey";
+
+/* Location: SignalMapperTransmitSheet.swift - Body of the flood test message */
+"tools.signalMapper.transmit.floodText" = "signal survey";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer explaining the flood test */
+"tools.signalMapper.transmit.floodFooter" = "This one is relayed by the whole mesh — that is the point, because repeaters rebroadcasting your own packet is the only proof your signal got out. Pick a private channel nobody else uses, or make a survey channel: the message travels the mesh but is readable only by holders of that key, and it appears in that channel's conversation. The automatic survey never floods.";
+
+/* Location: SignalMapperTransmitSheet.swift - A transmission went out */
+"tools.signalMapper.transmit.sent" = "Sent";
+
+/* Location: SignalMapperTransmitSheet.swift - A transmission was refused (no fix, no budget, no radio) */
+"tools.signalMapper.transmit.refused" = "Not sent — no usable fix, no transmit budget left, or no radio";
+
+/* Location: SignalMapperTransmitSheet.swift - Picker entry meaning no flood channel is chosen */
+"tools.signalMapper.transmit.noChannel" = "None selected";
+
+/* Location: SignalMapperTransmitSheet.swift - Flood footer when no survey is running */
+"tools.signalMapper.transmit.floodFooterIdle" = "Relayed by the whole mesh, on the private channel you pick — choose one nobody else uses, or make a survey channel. The message appears in that channel's conversation. With no survey running the echoes are still captured, but nothing records which hexagon you sent from.";

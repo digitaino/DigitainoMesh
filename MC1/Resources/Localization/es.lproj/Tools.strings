@@ -1486,3 +1486,51 @@
 
 /* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
 "tools.signalMapper.focus.unlock" = "Dejar de fijar";
+
+/* Location: SignalMapperTransmitSheet.swift - Title of the manual transmission sheet */
+"tools.signalMapper.transmit.title" = "Transmitir";
+
+/* Location: SignalMapperTransmitSheet.swift - Section header for directed probes */
+"tools.signalMapper.transmit.probesHeader" = "Sondas";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends one zero-hop discover broadcast */
+"tools.signalMapper.transmit.discover" = "Enviar descubrimiento";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends one directed trace */
+"tools.signalMapper.transmit.trace" = "Enviar traza";
+
+/* Location: SignalMapperTransmitSheet.swift - Picker label for the trace destination */
+"tools.signalMapper.transmit.traceTarget" = "Repetidor";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer explaining what the probes do */
+"tools.signalMapper.transmit.probesFooter" = "Un descubrimiento pide que respondan todos los repetidores a tiro directo. Una traza va a un solo repetidor y vuelve. Ninguna de las dos se retransmite más allá, así que no llegan a la radio de nadie más.";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer when no survey is running */
+"tools.signalMapper.transmit.needsSurvey" = "Inicia primero una medición. Las respuestas se registran en el hexágono desde el que envías y, sin un recorrido en marcha, no hay dónde anotarlas.";
+
+/* Location: SignalMapperTransmitSheet.swift - Section header for the flood test */
+"tools.signalMapper.transmit.floodHeader" = "Prueba de flood";
+
+/* Location: SignalMapperTransmitSheet.swift - Sends a real relayed message */
+"tools.signalMapper.transmit.flood" = "Enviar mensaje flood";
+
+/* Location: SignalMapperTransmitSheet.swift - Picker label for the flood channel */
+"tools.signalMapper.transmit.channel" = "Canal";
+
+/* Location: SignalMapperTransmitSheet.swift - Creates a private channel for flood tests */
+"tools.signalMapper.transmit.createChannel" = "Crear canal de medición";
+
+/* Location: SignalMapperTransmitSheet.swift - Name given to the created survey channel */
+"tools.signalMapper.transmit.channelName" = "Medición";
+
+/* Location: SignalMapperTransmitSheet.swift - Body of the flood test message */
+"tools.signalMapper.transmit.floodText" = "medición de señal";
+
+/* Location: SignalMapperTransmitSheet.swift - Footer explaining the flood test */
+"tools.signalMapper.transmit.floodFooter" = "Este sí lo retransmite toda la malla — de eso se trata: que los repetidores reemitan tu propio paquete es la única prueba de que tu señal salió. Va por un canal privado, así que viaja sin que nadie pueda leerlo. La medición automática nunca hace flood.";
+
+/* Location: SignalMapperTransmitSheet.swift - A transmission went out */
+"tools.signalMapper.transmit.sent" = "Enviado";
+
+/* Location: SignalMapperTransmitSheet.swift - A transmission was refused (no fix, no budget, no radio) */
+"tools.signalMapper.transmit.refused" = "No enviado — sin ubicación fiable, sin presupuesto de transmisión o sin radio";

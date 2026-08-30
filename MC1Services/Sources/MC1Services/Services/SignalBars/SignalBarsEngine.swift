@@ -202,6 +202,15 @@ public actor SignalBarsEngine {
     pathHashMode = mode
   }
 
+  /// Tells the engine a signal-mapper survey is running, so it stretches its cadences
+  /// instead of being stopped. See ``SignalBarsPolicy/isSurveyActive`` for why.
+  public func setSurveyActive(_ active: Bool) {
+    guard policy.isSurveyActive != active else { return }
+    policy.isSurveyActive = active
+    table.policy = policy
+    logger.info("Signal bars: survey backoff \(active ? "on" : "off")")
+  }
+
   /// Sets the age past which rows are hidden from the display list, or `nil` to show
   /// everything. This is a display filter only — the device's table is untouched.
   public func setStaleHideThreshold(_ threshold: TimeInterval?) {
@@ -361,7 +370,7 @@ public actor SignalBarsEngine {
        policy.shouldProbeReactively(repeater, now: at),
        !tracker.hasProbe(for: repeater.id),
        reactiveProbeDueAt[repeater.id] == nil {
-      reactiveProbeDueAt[repeater.id] = at.addingTimeInterval(policy.reactiveTriggerDelay)
+      reactiveProbeDueAt[repeater.id] = at.addingTimeInterval(policy.effectiveReactiveTriggerDelay)
     }
 
     await resolveNames(now: at)
@@ -453,7 +462,7 @@ public actor SignalBarsEngine {
         logger.info("Pruned \(removed.count) stale repeater(s)")
       }
 
-      if lastDiscoverProbeAt.map({ at.timeIntervalSince($0) >= policy.discoverProbeInterval }) ?? true {
+      if lastDiscoverProbeAt.map({ at.timeIntervalSince($0) >= policy.effectiveDiscoverProbeInterval }) ?? true {
         await sendDiscoverProbe()
       }
 

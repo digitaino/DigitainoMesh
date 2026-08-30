@@ -53,6 +53,69 @@ struct SignalBarsPolicyTests {
     }
   }
 
+  /// A survey stretches this engine's cadence instead of stopping it. Stopping emptied
+  /// the table the toolbar pill mirrors — which shrank the pill's label, and a toolbar
+  /// item's tap target is its label's rect — and threw away the warm target set the
+  /// survey itself starts from (Rafael, 2026-08-30).
+  @Test
+  func `A running survey stretches every cadence instead of stopping the engine`() throws {
+    let entry = try repeater("01")
+    var surveying = policy
+    surveying.isSurveyActive = true
+
+    #expect(policy.cadenceScale == 1)
+    #expect(surveying.cadenceScale == 4)
+    #expect(surveying.probeInterval(for: entry, isBest: true, movement: .stationary) == 180)
+    #expect(surveying.probeInterval(for: entry, isBest: false, movement: .stationary) == 480)
+    #expect(surveying.effectiveDiscoverProbeInterval == 120)
+    // Still a cadence, not a stop: every interval stays finite and the failure ceiling
+    // is the only thing that ends probing.
+    #expect(surveying.probeInterval(for: entry, isBest: true, movement: .fast) != nil)
+  }
+
+  /// The backoff multiplies the movement divisor rather than replacing it — a rider is
+  /// moving *and* surveying, and both facts have to survive.
+  @Test
+  func `Survey backoff and movement compose`() throws {
+    let entry = try repeater("01")
+    var surveying = policy
+    surveying.isSurveyActive = true
+    let stationary = surveying.probeInterval(for: entry, isBest: true, movement: .stationary)
+    let moving = surveying.probeInterval(for: entry, isBest: true, movement: .slow)
+    #expect(stationary == 180)
+    #expect(moving == 90)
+    // The case the feature actually runs in: riding. `.fast` divides by 4, so the
+    // backoff's ×4 lands the interval back on the unscaled stationary figure.
+    #expect(surveying.probeInterval(for: entry, isBest: true, movement: .fast) == 45)
+    #expect(surveying.probeInterval(for: entry, isBest: false, movement: .fast) == 120)
+  }
+
+  /// Both paths that used to sit outside the cadence — a never-measured TX leg jumping the
+  /// queue outright, and the reactive probe a fresh sighting schedules — are inside it
+  /// under a survey. The survey's own discovers create exactly those rows, so leaving them
+  /// exempt had this engine feeding off the traffic the backoff exists to sit beneath.
+  @Test
+  func `Under a survey an unknown TX leg waits its turn instead of jumping the queue`() throws {
+    let unknown = try repeater("01", txState: .unknown)
+    var surveying = policy
+    surveying.isSurveyActive = true
+
+    #expect(
+      policy.probeUrgency(for: unknown, isBest: false, now: start, movement: .stationary)
+        == -TimeInterval.infinity
+    )
+    // Freshly seen, never probed: still due under backoff, but as an ordinary overdue row.
+    let urgency = surveying.probeUrgency(for: unknown, isBest: false, now: start, movement: .stationary)
+    #expect(urgency != -TimeInterval.infinity)
+
+    // The reactive cooldown scales too, so a just-probed unknown row is not re-probed.
+    let justProbed = try repeater("02", txState: .unknown, lastProbeAt: start.addingTimeInterval(-40))
+    #expect(policy.shouldProbeReactively(justProbed, now: start))
+    #expect(!surveying.shouldProbeReactively(justProbed, now: start))
+    #expect(surveying.effectiveReactiveFailedCooldown == 120)
+    #expect(surveying.effectiveStaleThreshold == 1200)
+  }
+
   @Test
   func `Movement shortens the cadence the way the firmware scales its own`() throws {
     let entry = try repeater("01")

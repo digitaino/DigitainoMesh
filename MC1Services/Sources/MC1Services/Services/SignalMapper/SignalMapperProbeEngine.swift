@@ -378,19 +378,82 @@ public actor SignalMapperProbeEngine {
   /// through the same budget — it may spend the reserve automatic cycles cannot touch,
   /// and nothing else (§2.4: "no separate code path").
   public func spotCheck() async {
-    guard state.isRunning, var policy else { return }
+    guard let plan = await manualPlan() else { return }
+    await execute(plan, at: now())
+  }
+
+  /// A user-initiated discover on its own: one zero-hop broadcast, no trace.
+  ///
+  /// Separated from ``spotCheck()`` because the two halves answer different questions —
+  /// "who is out there right now" versus "what does *this* repeater hear of me" — and a
+  /// rider stopped at a viewpoint wants to be able to ask either one (Rafael,
+  /// 2026-08-30). Same budget path as every other manual transmission: §2.4's rule is
+  /// that there is no separate code path for a user-initiated probe, only a reserve it
+  /// may spend.
+  ///
+  /// Returns whether anything was transmitted.
+  @discardableResult
+  public func manualDiscover() async -> Bool {
+    guard let plan = await manualPlan() else { return false }
+    let at = now()
+    let placement = await sink.placeProbeAttempt()
+    // Counted only once the radio has taken it. A failed send that still incremented the
+    // strip would put a probe in the ride's totals that never left the antenna.
+    guard await sendDiscover(creditCell: plan.baseCell, placement: placement, at: at) else {
+      yieldSnapshot()
+      return false
+    }
+    state.probesSent += 1
+    probedTierCells.insert(plan.tierCell)
+    yieldSnapshot()
+    return true
+  }
+
+  /// A user-initiated directed trace at one repeater.
+  @discardableResult
+  public func manualTrace(to target: MapperProbeTarget) async -> Bool {
+    // One probe in flight per target, the same invariant the focus scheduler holds and
+    // for the same reason: a second trace before the first resolves makes loss
+    // attribution ambiguous, and a fast finger can queue three in a couple of seconds.
+    guard !tracker.hasProbe(for: target.id) else { return false }
+    guard let plan = await manualPlan() else { return false }
+    let at = now()
+    let placement = await sink.placeProbeAttempt()
+    guard await sendTrace(
+      to: target, creditCell: plan.baseCell, placement: placement, isFocus: false, at: at
+    ) else {
+      yieldSnapshot()
+      return false
+    }
+    state.probesSent += 1
+    probedTierCells.insert(plan.tierCell)
+    yieldSnapshot()
+    return true
+  }
+
+  /// The one gate every manual transmission passes: a running session, a usable fix, and
+  /// the token bucket — which a manual probe may dip into the reserve for, and automatic
+  /// ones may not.
+  private func manualPlan() async -> SamplingPolicy.ProbePlan? {
+    guard state.isRunning, var policy else { return nil }
     guard let fix = await usableFix() else {
       state.skippedNoFixCount += 1
-      return
+      yieldSnapshot()
+      return nil
     }
-    let at = now()
     let plan = policy.manualProbe(
       coordinate: GeoCoordinate(latitude: fix.latitude, longitude: fix.longitude),
-      at: at.timeIntervalSinceReferenceDate
+      at: now().timeIntervalSinceReferenceDate
     )
     self.policy = policy
-    guard let plan else { return }
-    await execute(plan, at: at)
+    return plan
+  }
+
+  /// Every repeater the engine can address, for the manual trace picker: the round-robin
+  /// pool plus the focus targets, named by nothing — the engine deliberately knows no
+  /// names or positions (§2.7).
+  public func addressableTargets() -> [MapperProbeTarget] {
+    Array(targets.values).sorted { $0.id.hex < $1.id.hex }
   }
 
   // MARK: - Lock-on
@@ -518,7 +581,8 @@ public actor SignalMapperProbeEngine {
     }
   }
 
-  private func sendDiscover(creditCell: H3Cell?, placement: MapperProbePlacement?, at: Date) async {
+  @discardableResult
+  private func sendDiscover(creditCell: H3Cell?, placement: MapperProbePlacement?, at: Date) async -> Bool {
     do {
       let tag = try await session.sendNodeDiscoverRequest(
         filter: SignalBarsPolicy().discoverFilter,
@@ -529,18 +593,21 @@ public actor SignalMapperProbeEngine {
       planned[tag] = PlannedProbe(placement: placement, creditCell: creditCell, createdAt: at)
       state.discoversSent += 1
       await recordAttempt(target: nil, placement: placement, isFocus: false, at: at)
+      return true
     } catch {
       logger.error("Survey discover failed: \(error.localizedDescription)")
+      return false
     }
   }
 
+  @discardableResult
   private func sendTrace(
     to target: MapperProbeTarget,
     creditCell: H3Cell?,
     placement: MapperProbePlacement?,
     isFocus: Bool,
     at: Date
-  ) async {
+  ) async -> Bool {
     let tag = UInt32.random(in: 0..<UInt32.max)
     let path = SignalBarsObservation.probePath(forPublicKey: target.publicKey, pathHashMode: pathHashMode)
 
@@ -559,11 +626,13 @@ public actor SignalMapperProbeEngine {
         targetStates[target.id]?.lastProbeAt = at
       }
       await recordAttempt(target: target, placement: placement, isFocus: isFocus, at: at)
+      return true
     } catch {
       _ = tracker.claim(tag: tag)
       planned.removeValue(forKey: tag)
       focusTags.remove(tag)
       logger.error("Survey trace to \(target.id.hex) failed: \(error.localizedDescription)")
+      return false
     }
   }
 

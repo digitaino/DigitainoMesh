@@ -115,14 +115,42 @@ struct ToolbarActionMenu<Content: View, LabelView: View>: View {
 
   var body: some View {
     if #available(iOS 26, *) {
+      // The interactive `Menu` lives in an `.overlay`, which contributes nothing to
+      // layout: the toolbar item's size — and therefore its hit rect, since UIKit clips
+      // hit-testing to the hosting view's bounds — is the *base* label's. A label that
+      // shrinks (a signal cluster collapsing to a single glyph) takes the tap target down
+      // with it, to well under the 44 pt minimum, and the control reads as dead
+      // (field report, 2026-08-30: "now it won't open at all").
+      //
+      // The floor has to go on **both**: on the base, or the bounds clip whatever the
+      // overlay does; and inside the `Menu`'s own label, because an overlay is *centred*
+      // at its ideal size rather than filled, so a floor applied outside the `Menu`
+      // enlarges the box without enlarging the only view that has a gesture attached.
       label
         .accessibilityHidden(true)
+        .frame(minWidth: 44, minHeight: 44)
         .overlay {
-          Menu { content } label: { label } primaryAction: { primaryAction() }
-            .colorMultiply(.clear)
+          Menu {
+            content
+          } label: {
+            label
+              .frame(minWidth: 44, minHeight: 44)
+              .contentShape(.rect)
+          } primaryAction: {
+            primaryAction()
+          }
+          .colorMultiply(.clear)
         }
     } else {
-      Menu { content } label: { label } primaryAction: { primaryAction() }
+      Menu {
+        content
+      } label: {
+        label
+          .frame(minWidth: 44, minHeight: 44)
+          .contentShape(.rect)
+      } primaryAction: {
+        primaryAction()
+      }
     }
   }
 }

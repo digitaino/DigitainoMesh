@@ -37,6 +37,10 @@ extension AppState {
         "Signal bars: \(String(describing: mode)) mode, pathHashMode=\(device.pathHashMode)"
       )
       await services.signalBarsEngine.start(mode: mode, pathHashMode: device.pathHashMode)
+      // A reconnect mid-ride, or the per-device toggle being switched on mid-ride, would
+      // otherwise restart this engine at full cadence underneath a running survey and
+      // quietly defeat the airtime rule (analysis 6.4).
+      await services.signalBarsEngine.setSurveyActive(signalMapperRideSession != nil)
       await repeaterSignals.attach(to: services.signalBarsEngine)
       startMovementHintsIfAlreadyPermitted()
       // Seed the engine's reference location with whatever is already known, so names

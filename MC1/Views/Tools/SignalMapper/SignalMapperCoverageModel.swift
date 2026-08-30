@@ -2,6 +2,7 @@ import CoreLocation
 import Foundation
 import MC1Services
 import OSLog
+import Security
 import SwiftUI
 
 private let logger = Logger(subsystem: "com.mc1", category: "SignalMapperCoverage")
@@ -155,6 +156,91 @@ final class SignalMapperCoverageModel {
   func spotCheck(appState: AppState) async {
     guard let probe = appState.signalMapperProbeEngine else { return }
     await probe.spotCheck()
+  }
+
+  // MARK: - Manual transmissions
+
+  /// One zero-hop discover, on demand.
+  func manualDiscover(appState: AppState) async -> Bool {
+    guard let probe = appState.signalMapperProbeEngine else { return false }
+    return await probe.manualDiscover()
+  }
+
+  /// One directed trace at a chosen repeater, on demand.
+  func manualTrace(appState: AppState, target: MapperProbeTarget) async -> Bool {
+    guard let probe = appState.signalMapperProbeEngine else { return false }
+    return await probe.manualTrace(to: target)
+  }
+
+  /// Sends a real flood-routed packet: a short message on a private channel.
+  ///
+  /// This is the one transmission the mapper makes that the whole mesh relays, which is
+  /// why the automatic engine will never make it (`floodsPerTierCell = 0`, Rafael
+  /// 2026-08-26) and why this is a button with a channel picker in front of it. Its value
+  /// is the echo: repeaters rebroadcasting your own packet is the uplink evidence no
+  /// amount of listening can produce, and passive capture already folds those echoes as
+  /// `txHeard` for the cell you sent from.
+  ///
+  /// A public-channel send would put survey noise in front of every stranger on the mesh,
+  /// so the picker offers private channels only, and this refuses index 0 outright.
+  func sendFloodProbe(appState: AppState, channelIndex: UInt8, text: String) async -> Bool {
+    guard channelIndex != 0,
+          let messageService = appState.services?.messageService,
+          let radioID = appState.currentRadioID else { return false }
+    do {
+      _ = try await messageService.sendChannelMessage(
+        text: text,
+        channelIndex: channelIndex,
+        radioID: radioID
+      )
+      return true
+    } catch {
+      logger.error("Survey flood probe failed: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  /// The private channels a flood probe may be sent on. Never the public channel.
+  func floodChannels(appState: AppState) async -> [ChannelDTO] {
+    guard let dataStore = appState.services?.dataStore,
+          let radioID = appState.currentRadioID,
+          let channels = try? await dataStore.fetchChannels(radioID: radioID) else { return [] }
+    return channels.filter { !$0.isPublicChannel }
+  }
+
+  /// Creates a dedicated encrypted survey channel on the first free slot, with a random
+  /// secret — v1's `createSurveyChannel`. Nobody else has the key, so flood probes on it
+  /// traverse the mesh (which is the point) without being readable by anyone (which is
+  /// what "so we don't bother anyone" asks for).
+  func createSurveyChannel(appState: AppState, name: String) async -> UInt8? {
+    guard let channelService = appState.services?.channelService,
+          let radioID = appState.currentRadioID,
+          let device = appState.connectedDevice,
+          // Slot 0 is the public channel, so a radio reporting one channel (or none) has
+          // nowhere to put a private one — inventing slot 1 there would write past what
+          // the device advertises.
+          device.maxChannels > 1 else { return nil }
+    let existing = await floodChannels(appState: appState)
+    let used = Set(existing.map(\.index))
+    guard let slot = (UInt8(1)..<device.maxChannels).first(where: { !used.contains($0) })
+    else { return nil }
+
+    var bytes = [UInt8](repeating: 0, count: 16)
+    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+      return nil
+    }
+    do {
+      try await channelService.setChannelWithSecret(
+        radioID: radioID,
+        index: slot,
+        name: name,
+        secret: Data(bytes)
+      )
+      return slot
+    } catch {
+      logger.error("Survey channel creation failed: \(error.localizedDescription)")
+      return nil
+    }
   }
 
   // MARK: - Capture

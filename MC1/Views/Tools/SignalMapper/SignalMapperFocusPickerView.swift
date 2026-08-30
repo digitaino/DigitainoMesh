@@ -25,10 +25,25 @@ struct SignalMapperFocusPickerView: View {
   @Environment(\.dismiss) private var dismiss
 
   @State private var candidates: [Candidate] = []
-  @State private var heardHexIDs: [String: SignalMapperProbeEngine.FocusTargetState] = [:]
+  @State private var liveSignals: [String: LiveSignal] = [:]
   @State private var selectedHexIDs: Set<String> = []
   @State private var searchText = ""
   @State private var isLoading = true
+
+  /// What "we can hear this one right now" looks like, from whichever system knows.
+  ///
+  /// Before a run there is no probe engine, and this section used to be empty on the one
+  /// screen whose entire question is "who can I hear from here" — while the signal-bars
+  /// table, which had the answer, was never asked. The two systems already share every
+  /// wire-parsing rule; this is the other half of sharing them (Rafael, 2026-08-30).
+  struct LiveSignal {
+    var rxSnr: Double?
+    var txSnr: Double?
+    var lastHeard: Date?
+  }
+
+  /// How recently a repeater must have been heard to count as "heard now".
+  private static let liveHeardWindow: TimeInterval = 300
 
   struct Candidate: Identifiable {
     let id: NodeHexID
@@ -111,11 +126,11 @@ struct SignalMapperFocusPickerView: View {
   /// in the best section it qualifies for.
   @ViewBuilder
   private var sections: some View {
-    let heard = candidates.filter { heardHexIDs[$0.id.hex] != nil }
+    let heard = candidates.filter { liveSignals[$0.id.hex] != nil }
       .sorted { heardAt($0) > heardAt($1) }
-    let nearby = candidates.filter { heardHexIDs[$0.id.hex] == nil && $0.distanceMeters != nil }
+    let nearby = candidates.filter { liveSignals[$0.id.hex] == nil && $0.distanceMeters != nil }
       .sorted { ($0.distanceMeters ?? .infinity) < ($1.distanceMeters ?? .infinity) }
-    let other = candidates.filter { heardHexIDs[$0.id.hex] == nil && $0.distanceMeters == nil }
+    let other = candidates.filter { liveSignals[$0.id.hex] == nil && $0.distanceMeters == nil }
       .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
 
     if !heard.isEmpty {
@@ -156,7 +171,7 @@ struct SignalMapperFocusPickerView: View {
   }
 
   private func heardAt(_ candidate: Candidate) -> Date {
-    heardHexIDs[candidate.id.hex]?.lastHeardAt ?? .distantPast
+    liveSignals[candidate.id.hex]?.lastHeard ?? .distantPast
   }
 
   // MARK: - Row
@@ -175,7 +190,7 @@ struct SignalMapperFocusPickerView: View {
             .lineLimit(1)
         }
         Spacer()
-        if let live = heardHexIDs[candidate.id.hex] {
+        if let live = liveSignals[candidate.id.hex] {
           liveSignal(live)
         }
         Image(
@@ -202,7 +217,7 @@ struct SignalMapperFocusPickerView: View {
           : String(format: "%.0f m", distance)
       )
     }
-    if let live = heardHexIDs[candidate.id.hex], let heard = live.lastHeardAt {
+    if let live = liveSignals[candidate.id.hex], let heard = live.lastHeard {
       parts.append(heard.formatted(.relative(presentation: .named)))
     } else if let lastHeard = candidate.lastHeard {
       parts.append(lastHeard.formatted(.relative(presentation: .named)))
@@ -212,12 +227,12 @@ struct SignalMapperFocusPickerView: View {
 
   /// The live two-leg readout for a repeater this session has heard: ▲ their reading
   /// of us, ▼ ours of them — the same glyph language the ride blocks use.
-  private func liveSignal(_ live: SignalMapperProbeEngine.FocusTargetState) -> some View {
+  private func liveSignal(_ live: LiveSignal) -> some View {
     VStack(alignment: .trailing, spacing: 0) {
-      if let txSnr = live.lastTxSnr {
+      if let txSnr = live.txSnr {
         Text(String(format: "▲%.0f", txSnr))
       }
-      if let rxSnr = live.lastRxSnr {
+      if let rxSnr = live.rxSnr {
         Text(String(format: "▼%.0f", rxSnr))
       }
     }
@@ -304,15 +319,45 @@ struct SignalMapperFocusPickerView: View {
       }
     }
 
-    // What the running session has actually heard, with live signal for the rows.
+    // Who we can hear right now. During a run the probe engine is authoritative — it is
+    // the thing actually sending the probes. Outside one, the signal-bars table already
+    // knows, and asking it is what makes this section useful in the start flow.
+    // The bars table hides rows only at 15 minutes, and "Heard This Session" has to mean
+    // heard, not "seen this quarter hour" — a stale row would outrank a genuinely nearby
+    // candidate and show a stale SNR next to it.
+    let heardCutoff = Date().addingTimeInterval(-Self.liveHeardWindow)
+    var live: [String: LiveSignal] = [:]
+    for repeater in appState.repeaterSignals.displayRepeaters
+    where repeater.lastHeard >= heardCutoff {
+      live[repeater.id.hex] = LiveSignal(
+        rxSnr: repeater.rxSnr,
+        txSnr: repeater.txSnr,
+        lastHeard: repeater.lastHeard
+      )
+      // A repeater the bars table has a key for but the stores do not is still a valid
+      // lock-on target — a directed trace only needs the leading key bytes.
+      if byHex[repeater.id.hex] == nil, let key = repeater.publicKey {
+        byHex[repeater.id.hex] = Candidate(
+          id: repeater.id,
+          publicKey: key,
+          name: repeater.name,
+          lastHeard: repeater.lastHeard,
+          latitude: nil,
+          longitude: nil
+        )
+      }
+    }
     if let probe = appState.signalMapperProbeEngine {
       let snapshot = await probe.snapshot()
-      var heard: [String: SignalMapperProbeEngine.FocusTargetState] = [:]
       for activity in snapshot.focusStates + snapshot.heardStates where activity.lastHeardAt != nil {
-        heard[activity.id.hex] = activity
+        live[activity.id.hex] = LiveSignal(
+          rxSnr: activity.lastRxSnr,
+          txSnr: activity.lastTxSnr,
+          lastHeard: activity.lastHeardAt
+        )
       }
-      heardHexIDs = heard
     }
+    liveSignals = live
 
     candidates = Array(byHex.values)
     // Pre-select what the running session already focuses.

@@ -625,3 +625,138 @@ it, so "Excellent, via Chestnut" can sit over a yellow cell — the map renderer
 filter yet. And the map's OSM/MapTiler attribution button sits behind the tab bar on every
 screen that hosts `MC1MapView` with `.ignoresSafeArea()`; that is shared map code and an
 attribution obligation, tracked separately.
+
+## §8 Signals and survey: joined where it counts (2026-08-30)
+
+Rafael: *"for the signals system can't we join it with the survey system? it should be
+'compatible' in the sense that they are doing the same thing already, no?"*
+
+He is right about the observation layer, and it is **already joined**. The mapper's probe
+engine parses the wire through signal-bars code: `SignalBarsPolicy().discoverFilter`,
+`SignalBarsObservation.probePath/probeReply/passiveSighting/hashID`,
+`SignalBarsProbeTracker`, and `SignalBarsEngine` itself conforms to
+`MapperProbeTargetSource`. One CoreMotion monitor feeds both. There is nothing left to
+merge at that layer.
+
+What must **not** merge is storage and transmit discipline:
+
+- Signal bars stores nothing and holds full public keys, resolved display names and
+  second-resolution timestamps, because a toolbar table needs them. The mapper is a
+  data-minimisation machine whose guards are structural — `MapperCellObservationDTO` is
+  deliberately not `Codable`, `MapperProbeResult` cannot carry a public key, raw samples
+  have no name column and no anchor case, storage is day-granular. Merging the stores
+  would be a privacy regression and would put the invariant tests in the way of the pill's
+  own UI needs.
+- Bars is position-blind by design (it gets a coarse reference coordinate only, for name
+  disambiguation, never stored). The mapper is position-defined behind a three-reason fix
+  gate.
+- Bars has a viewer mode where the radio owns the table and the app transmits nothing.
+  The mapper can never have one: the radio does not know where it is.
+- Bars is a cadence with a failure ladder; the mapper is a hard token-bucket ceiling with
+  a manual reserve. Two disciplines, not two settings.
+
+### What was actually wrong: the pause
+
+M3.5 review C3 had the survey **stop** the bars engine for the duration of a ride. That
+was the wrong lever, in three ways:
+
+1. **It bought nothing in viewer mode.** On custom firmware the app never transmits for
+   bars anyway — the radio runs its own prober and `SignalBarsTrigger` has no "stop"
+   action. On the firmware most likely to be on a helmet, the pause cost the user their
+   pill and saved zero airtime.
+2. **The premise went stale.** C3 was written when bars was the dominant self-generated
+   airtime. After M3.5's own retune the mapper sustains ~20 TX/min against bars' ~7–10.
+3. **It threw away the warm target set** the survey itself warm-starts from, so every BLE
+   rewire cost a run every repeater it knew, and the start path raced its own stop.
+
+Bars now **backs off instead of stopping**: `SignalBarsPolicy.isSurveyActive` scales every
+cadence by `surveyBackoffMultiplier` (×4), so a ride costs it two or three transmissions a
+minute instead of seven to ten, and the table — and the pill, and the warm targets — stay
+alive. `wireSignalBars` re-applies the backoff after any reconnect or mid-ride toggle, and
+the run-end clear waits the in-flight wiring task out before releasing it. Two new policy
+tests pin the arithmetic; this seam previously had none.
+
+The `pausedForSurvey` state is gone from the UI with it.
+
+### The pill that would not open
+
+Two independent mechanisms, both fixed:
+
+- **The tap target physically collapsed.** `ToolbarActionMenu` hosts the interactive
+  `Menu` in an `.overlay`, which contributes nothing to layout — so the toolbar item's
+  size, and therefore its hit rect, is the *base label's*. When a survey emptied the bars
+  table the label fell from a ~120 pt signal cluster to a ~20 pt glyph, and the pill
+  became a target a fifth of its former size, well under 44 pt. It now carries a
+  `minWidth/minHeight: 44` floor, and `labelContent` is one `HStack` whose children vary
+  rather than three `_ConditionalContent` arms swapping the Menu's whole label subtree.
+- **The presentation binding latched.** A tap landing during the dismissal morph leaves
+  `showingSignalDetail` reading `true` with nothing on screen; every later tap then writes
+  `true` over `true`, which is not a change. `handlePrimaryAction` now treats "already
+  true" as a repair. The same latch existed on `showingWatchScreen` (whose stale value
+  disabled the *only* other reset path), on `pendingAdvancedSettings`, and on the mapper's
+  own `pendingFocusPicker`/`pendingTransmitSheet` deferrals — every one of those
+  `.task(id:)` bodies now clears its flag on cancellation too.
+
+### Manual transmissions
+
+`SignalMapperTransmitSheet` — discover, trace, and a real flood, by hand:
+
+- **Discover** and **trace** go through `manualPlan()`, the same gate as a spot check: a
+  running session, a usable fix, and the token bucket's manual reserve. §2.4's rule stands
+  — there is no separate code path for a user-initiated probe, only a reserve it may spend.
+- **Flood** is the deliberate exception to "the engine never floods". The automatic engine
+  still never does (`floodsPerTierCell = 0`); this is a button, with a channel picker in
+  front of it, and it refuses index 0 outright — a public-channel flood would put survey
+  noise in front of every stranger on the mesh. It sends on a **private** channel, so the
+  packet traverses the mesh (which is the point: repeaters rebroadcasting your own packet
+  is the uplink evidence no amount of listening can produce, and passive capture already
+  folds those echoes as `txHeard`) without being readable by anyone. "Create Survey
+  Channel" makes one on the first free slot with a random 16-byte secret — v1's
+  `createSurveyChannel`, restored.
+
+### And one more thing the join fixed for free
+
+The lock-on picker's "Heard This Session" was **always empty in the start flow**: it asked
+only the probe engine, which does not exist until a run begins — on the one screen whose
+entire question is "who can I hear from here", while the bars table sat next to it with
+the answer. It asks both now.
+
+### §8.1 What the verification review changed
+
+The review of §8 caught four things worth recording, because three of them were claims
+that were not true of the code:
+
+**The tap-target fix did not work.** `.frame(minWidth: 44...)` had been applied to the
+base label — a view with no gesture on it — while the interactive `Menu` sits in an
+`.overlay`, which is *centred* at its ideal size rather than filled. The box grew; the
+hittable area did not. The floor now goes on **both**: the base (or the item's bounds clip
+whatever the overlay does) and the `Menu`'s own label (or the only view with a gesture
+stays glyph-sized).
+
+**The backoff missed the two paths a survey actually inflates.** `cadenceScale` reached
+the engine only through `probeInterval` and the discover interval. A never-measured TX leg
+returned `-infinity` from `probeUrgency` — always maximally due, spaced only by the 1 s
+minimum — and the reactive delay and cooldown were unscaled. Since the mapper's own
+discovers arrive at the bars engine as brand-new unknown-TX rows, **the survey was feeding
+the prober it had just been allowed to keep running**. Both paths are inside the scale
+now, and so is `staleThreshold`, which at 300 s would have evicted rows whose next probe
+was 480 s away — emptying the table mid-ride and refilling it with unknown-TX rows.
+
+**The airtime figure was the stationary one.** A survey *is* a ride, and `MovementHint
+.fast` divides cadence by four. Riding, this engine runs ~21 transmissions a minute
+unscaled and ~5.3 at ×4, against the mapper's ~20 — not the ~1.7 the first comment
+claimed. The number is now stated for the case that matters, and the `.fast` assertion the
+first tests avoided is written.
+
+**The flood picker defaulted to somebody's group chat.** It preselected the lowest-index
+private channel and sat under a footer promising "nobody can read it". Nothing is
+auto-selected now, the picker carries an explicit "None selected", and the footer says the
+message lands in that channel's conversation. Also: `manualDiscover`/`manualTrace` reported
+"Sent" when the radio had thrown (the send paths swallowed their errors and the counters
+incremented before the send), `manualTrace` could stack three probes at one target because
+it lacked the focus scheduler's one-in-flight guard, and opening the sheet while
+disconnected wrote `0` over the saved channel preference.
+
+Remaining, deliberately: the bars/mapper pair still has two schedulers rather than one
+arbiter with priority lanes (M3.5 §5's open item). Backing off is the cheap 80% of it; a
+real arbiter is the honest fix and is still unbuilt.

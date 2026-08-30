@@ -262,7 +262,7 @@ struct SignalBarsTable: Sendable, Equatable {
   /// was removed so in-flight probes for them can be cancelled.
   @discardableResult
   mutating func pruneStale(now: Date) -> [NodeHexID] {
-    let cutoff = now.addingTimeInterval(-policy.staleThreshold)
+    let cutoff = now.addingTimeInterval(-policy.effectiveStaleThreshold)
     let removed = repeaters.filter { $0.lastHeard < cutoff }.map(\.id)
     guard !removed.isEmpty else { return [] }
     repeaters.removeAll { $0.lastHeard < cutoff }

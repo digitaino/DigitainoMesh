@@ -46,6 +46,9 @@ struct SignalMapperCoverageView: View {
   /// Seeds the lock-on picker's search field when it is opened from a repeater chip.
   @State private var focusPickerSeed = ""
   @State private var showingPrecisePrompt = false
+  /// Menu-launched like the picker, so it waits out the menu's own dismissal.
+  @State private var pendingTransmitSheet = false
+  @State private var showingTransmitSheet = false
   @State private var showingRunDetail = false
   @State private var pendingRunDetailAction: SignalMapperRunDetailSheet.PendingAction?
   @State private var breadcrumb: [CLLocationCoordinate2D] = []
@@ -94,12 +97,34 @@ struct SignalMapperCoverageView: View {
         await model.attachSurveyStream(appState: appState)
       }
       .task(id: isSurveying) { await followRider() }
+      // Both deferrals clear their flag on cancellation too. A `.task(id:)` that returns
+      // with its flag still true can never be restarted by setting that flag true again,
+      // and the menu item that sets it is dead for the rest of the session — the same
+      // latch that killed the radio pill (field report, 2026-08-30).
       .task(id: pendingFocusPicker) {
         guard pendingFocusPicker else { return }
+        // A sheet binding left true by a dropped presentation — five `.sheet` modifiers
+        // share one presentation chain here — makes every later request a no-op. Clearing
+        // first means the set below is always a change; the settle delay separates them.
+        showingFocusPicker = false
         try? await Task.sleep(for: .milliseconds(600))
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+          pendingFocusPicker = false
+          return
+        }
         pendingFocusPicker = false
         showingFocusPicker = true
+      }
+      .task(id: pendingTransmitSheet) {
+        guard pendingTransmitSheet else { return }
+        showingTransmitSheet = false
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled else {
+          pendingTransmitSheet = false
+          return
+        }
+        pendingTransmitSheet = false
+        showingTransmitSheet = true
       }
       .onAppear { model.loadCaptureSetting() }
       .sheet(item: $detailCell) { SignalMapperCellDetailSheet(cell: $0) }
@@ -113,6 +138,9 @@ struct SignalMapperCoverageView: View {
             pendingAction: $pendingRunDetailAction
           )
         }
+      }
+      .sheet(isPresented: $showingTransmitSheet) {
+        SignalMapperTransmitSheet(model: model)
       }
       .sheet(isPresented: $showingFocusPicker) {
         // One picker, two jobs: mid-ride it edits the lock-on set; before a ride it IS
@@ -639,12 +667,19 @@ struct SignalMapperCoverageView: View {
             focusPickerSeed = ""
             pendingFocusPicker = true
           }
+          Button(L10n.Tools.Tools.SignalMapper.Transmit.title, systemImage: "dot.radiowaves.right") {
+            pendingTransmitSheet = true
+          }
           Button(L10n.Tools.Tools.SignalMapper.Survey.stop, systemImage: "stop.circle") {
             Task { await model.stopSurvey(appState: appState) }
           }
         } else {
           Button(L10n.Tools.Tools.SignalMapper.Survey.start, systemImage: "dot.radiowaves.left.and.right") {
             startSurveyTapped()
+          }
+          .disabled(!canSurvey)
+          Button(L10n.Tools.Tools.SignalMapper.Transmit.title, systemImage: "dot.radiowaves.right") {
+            pendingTransmitSheet = true
           }
           .disabled(!canSurvey)
           if model.hasCoverage {

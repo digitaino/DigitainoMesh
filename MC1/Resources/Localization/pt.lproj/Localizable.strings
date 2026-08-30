@@ -201,8 +201,6 @@
 
 // MARK: - Signal Bars
 
-/* Location: RadioStatusControl.swift / RepeaterSignalPopover.swift - Shown while a signal-mapper survey run has the repeater tracker paused */
-"signalBars.pausedForSurvey" = "O seguimento de repetidores está em pausa enquanto decorre um levantamento de sinal. Retoma quando o levantamento terminar.";
 
 // MARK: - Error Messages
 

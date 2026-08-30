@@ -2806,8 +2806,6 @@ public enum L10n {
       public static let clearStale = L10n.tr("Localizable", "signalBars.clearStale", fallback: "Clear stale repeaters")
       /// Location: RepeaterSignalToolbarItem.swift - Toolbar value when no repeater has been heard
       public static let noRepeaters = L10n.tr("Localizable", "signalBars.noRepeaters", fallback: "No repeaters heard")
-      /// Location: RadioStatusControl.swift / RepeaterSignalPopover.swift - Shown while a signal-mapper survey run has the repeater tracker paused
-      public static let pausedForSurvey = L10n.tr("Localizable", "signalBars.pausedForSurvey", fallback: "Repeater tracking is paused while a signal survey runs. It resumes when the survey ends.")
       /// Location: RepeaterSignalPopover.swift - Row action that measures one repeater now
       public static let pingNow = L10n.tr("Localizable", "signalBars.pingNow", fallback: "Ping Now")
       /// Location: RepeaterSignalPopover.swift - Row action that hides a repeater until it is heard again
@@ -6972,6 +6970,44 @@ public enum L10n {
             /// Location: SignalMapperSessionSummarySheet.swift - Completion sheet title
             public static let title = L10n.tr("Tools", "tools.signalMapper.survey.summary.title", fallback: "Survey Complete")
           }
+        }
+        public enum Transmit {
+          /// Location: SignalMapperTransmitSheet.swift - Picker label for the flood channel
+          public static let channel = L10n.tr("Tools", "tools.signalMapper.transmit.channel", fallback: "Channel")
+          /// Location: SignalMapperTransmitSheet.swift - Name given to the created survey channel
+          public static let channelName = L10n.tr("Tools", "tools.signalMapper.transmit.channelName", fallback: "Survey")
+          /// Location: SignalMapperTransmitSheet.swift - Creates a private channel for flood tests
+          public static let createChannel = L10n.tr("Tools", "tools.signalMapper.transmit.createChannel", fallback: "Create Survey Channel")
+          /// Location: SignalMapperTransmitSheet.swift - Sends one zero-hop discover broadcast
+          public static let discover = L10n.tr("Tools", "tools.signalMapper.transmit.discover", fallback: "Send Discover")
+          /// Location: SignalMapperTransmitSheet.swift - Sends a real relayed message
+          public static let flood = L10n.tr("Tools", "tools.signalMapper.transmit.flood", fallback: "Send Flood Message")
+          /// Location: SignalMapperTransmitSheet.swift - Footer explaining the flood test
+          public static let floodFooter = L10n.tr("Tools", "tools.signalMapper.transmit.floodFooter", fallback: "This one is relayed by the whole mesh — that is the point, because repeaters rebroadcasting your own packet is the only proof your signal got out. Pick a private channel nobody else uses, or make a survey channel: the message travels the mesh but is readable only by holders of that key, and it appears in that channel's conversation. The automatic survey never floods.")
+          /// Location: SignalMapperTransmitSheet.swift - Flood footer when no survey is running
+          public static let floodFooterIdle = L10n.tr("Tools", "tools.signalMapper.transmit.floodFooterIdle", fallback: "Relayed by the whole mesh, on the private channel you pick — choose one nobody else uses, or make a survey channel. The message appears in that channel's conversation. With no survey running the echoes are still captured, but nothing records which hexagon you sent from.")
+          /// Location: SignalMapperTransmitSheet.swift - Section header for the flood test
+          public static let floodHeader = L10n.tr("Tools", "tools.signalMapper.transmit.floodHeader", fallback: "Flood Test")
+          /// Location: SignalMapperTransmitSheet.swift - Body of the flood test message
+          public static let floodText = L10n.tr("Tools", "tools.signalMapper.transmit.floodText", fallback: "signal survey")
+          /// Location: SignalMapperTransmitSheet.swift - Footer when no survey is running
+          public static let needsSurvey = L10n.tr("Tools", "tools.signalMapper.transmit.needsSurvey", fallback: "Start a survey first. Replies are recorded against the hexagon you send from, and without a run there is nothing to record them in.")
+          /// Location: SignalMapperTransmitSheet.swift - Picker entry meaning no flood channel is chosen
+          public static let noChannel = L10n.tr("Tools", "tools.signalMapper.transmit.noChannel", fallback: "None selected")
+          /// Location: SignalMapperTransmitSheet.swift - Footer explaining what the probes do
+          public static let probesFooter = L10n.tr("Tools", "tools.signalMapper.transmit.probesFooter", fallback: "A discover asks every repeater in direct range to answer. A trace goes to one repeater and comes back. Neither is relayed onward, so neither reaches anyone else's radio.")
+          /// Location: SignalMapperTransmitSheet.swift - Section header for directed probes
+          public static let probesHeader = L10n.tr("Tools", "tools.signalMapper.transmit.probesHeader", fallback: "Probes")
+          /// Location: SignalMapperTransmitSheet.swift - A transmission was refused (no fix, no budget, no radio)
+          public static let refused = L10n.tr("Tools", "tools.signalMapper.transmit.refused", fallback: "Not sent — no usable fix, no transmit budget left, or no radio")
+          /// Location: SignalMapperTransmitSheet.swift - A transmission went out
+          public static let sent = L10n.tr("Tools", "tools.signalMapper.transmit.sent", fallback: "Sent")
+          /// Location: SignalMapperTransmitSheet.swift - Title of the manual transmission sheet
+          public static let title = L10n.tr("Tools", "tools.signalMapper.transmit.title", fallback: "Transmit")
+          /// Location: SignalMapperTransmitSheet.swift - Sends one directed trace
+          public static let trace = L10n.tr("Tools", "tools.signalMapper.transmit.trace", fallback: "Send Trace")
+          /// Location: SignalMapperTransmitSheet.swift - Picker label for the trace destination
+          public static let traceTarget = L10n.tr("Tools", "tools.signalMapper.transmit.traceTarget", fallback: "Repeater")
         }
       }
       public enum TrafficMap {

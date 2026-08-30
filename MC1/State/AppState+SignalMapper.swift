@@ -233,13 +233,17 @@ extension AppState {
     session.startBreadcrumbs(fixProvider: mapperFixRouter())
     updateMapperIdleTimer()
 
-    // The mapper must not stack its traces on top of signal bars' independent prober
-    // (review C3: two uncoordinated schedulers, one duty-cycle budget). The bars table
-    // freezes for the ride; `wireSignalBars` restores it at run end.
-    signalBarsStartTask = Task { [signalBarsStartTask] in
-      await signalBarsStartTask?.value
-      await services.signalBarsEngine.stop()
-    }
+    // The mapper must not stack its traces on top of signal bars' independent prober at
+    // full cadence (review C3: two uncoordinated schedulers, one duty-cycle budget) — but
+    // *stopping* bars was the wrong lever. It bought nothing in viewer mode, where the
+    // radio runs its own prober; it emptied the table the toolbar pill mirrors, so the
+    // pill collapsed to a glyph for the whole ride; and it threw away the warm target set
+    // this very session then warm-starts from, which is why a rewire used to cost a run
+    // every repeater it knew: `stop()` rebuilds the bars table empty, and `warmTargets`
+    // *is* that table. Backing off leaves it populated; the ordering against
+    // `startProbeSession` below is incidental, since the cadence scale has no bearing on
+    // what the table already holds (Rafael, 2026-08-30).
+    await services.signalBarsEngine.setSurveyActive(true)
 
     await startProbeSession(services: services)
     return true
@@ -311,8 +315,10 @@ extension AppState {
     Task {
       await self.signalMapperStartTask?.value
       guard self.signalMapperRideSession === session, self.signalMapperProbeEngine == nil else { return }
-      // Signal bars restarted with the connection; put it back to sleep for the ride.
-      await services.signalBarsEngine.stop()
+      // Signal bars restarted with the connection at its normal cadence; put it back on
+      // the ride's backoff. Its table stays populated, so the probe session below still
+      // warm-starts from real targets instead of rediscovering from nothing.
+      await services.signalBarsEngine.setSurveyActive(true)
       session.recordRadioLink(up: true)
       await self.startProbeSession(services: services)
     }
@@ -372,9 +378,18 @@ extension AppState {
       await signalMapperEngine?.flushNow()
     }
 
-    // Wake signal bars back up per its own setting.
+    // Back to full cadence. The engine was never stopped, so there is nothing to rewire
+    // and no window where the pill's label collapses.
+    //
+    // Waiting the in-flight wiring transition out first is load-bearing: `wireSignalBars`
+    // re-applies the backoff from inside its own task, reading the session flag on its way
+    // past. A reconnect racing a run's end could otherwise apply `true` *after* this
+    // `false` and leave the engine on the ride cadence with no ride (analysis 6.4). The
+    // task handle is the existing convention for ordering these two.
     if let services {
-      wireSignalBars(services: services)
+      let pendingWiring = signalBarsStartTask
+      await pendingWiring?.value
+      await services.signalBarsEngine.setSurveyActive(false)
     }
     return totals
   }

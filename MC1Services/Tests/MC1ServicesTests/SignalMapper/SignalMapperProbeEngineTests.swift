@@ -325,6 +325,63 @@ struct SignalMapperProbeEngineTests {
     await engine.stopSession()
   }
 
+  /// The two halves of a cycle, separately, on demand — "who is out there" and "what does
+  /// *this* one hear of me" are different questions (Rafael, 2026-08-30). Both go through
+  /// the same manual gate a spot check does, so neither is a way around the budget.
+  @Test
+  func `A manual discover transmits only a discover, and a manual trace only a trace`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let target = try makeTarget()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [target], fixes: fixes, clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+
+    #expect(await engine.manualDiscover())
+    #expect(await session.discoverRequests.count == 1)
+    #expect(await session.traces.isEmpty, "a discover is a broadcast, not a trace")
+
+    #expect(await engine.manualTrace(to: target))
+    #expect(await session.discoverRequests.count == 1)
+    let traces = await session.traces
+    #expect(traces.count == 1)
+    #expect(traces.first?.path == target.publicKey.prefix(1), "directed, never flooded")
+
+    let snapshot = await engine.snapshot()
+    #expect(snapshot.discoversSent == 1)
+    #expect(snapshot.tracesSent == 1)
+    #expect(snapshot.probesSent == 2, "each manual transmission is its own attempt")
+    await engine.stopSession()
+  }
+
+  /// A manual probe is exempt from novelty, never from the radio: with no usable fix
+  /// there is nothing to attribute a reply to, so nothing goes out.
+  @Test
+  func `A manual probe with no usable fix transmits nothing`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let sink = RecordingSink()
+    let target = try makeTarget()
+    let fixes = StubMapperFixProvider(nil)
+    let engine = makeEngine(
+      session: session, sink: sink, warmTargets: [target], fixes: fixes, clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    #expect(await engine.manualDiscover() == false)
+    #expect(await engine.manualTrace(to: target) == false)
+    #expect(await session.discoverRequests.isEmpty)
+    #expect(await session.traces.isEmpty)
+    #expect(await engine.snapshot().skippedNoFixCount == 2)
+    await engine.stopSession()
+  }
+
   @Test
   func `Fresh local coverage is skipped instead of probed`() async throws {
     let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))

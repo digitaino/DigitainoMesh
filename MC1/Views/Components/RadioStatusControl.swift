@@ -28,6 +28,9 @@ struct RadioStatusControl: View {
 
   @State private var showingDeviceSelection = false
   @State private var showingSignalDetail = false
+  /// Set when a tap finds the popover binding already true with nothing on screen. See
+  /// ``handlePrimaryAction()``.
+  @State private var pendingSignalDetailReopen = false
   @State private var showingWatchScreen = false
   @State private var pendingMovementHintsPrompt = false
   @State private var pendingAdvancedSettings = false
@@ -57,6 +60,11 @@ struct RadioStatusControl: View {
   /// B8A782EC. One dismissal morph, same budget as the movement prompt.
   private static let menuDismissSettleDelay: Duration = .milliseconds(600)
 
+  /// How long to wait before re-presenting the signal table after clearing a binding that
+  /// was left stranded `true`. Long enough for any dismissal morph still in flight to
+  /// finish, short enough that the second tap still feels like it did something.
+  private static let popoverReopenSettleDelay: Duration = .milliseconds(350)
+
   private let deviceMenuTip = DeviceMenuTip()
 
   private var signals: RepeaterSignalModel {
@@ -70,14 +78,11 @@ struct RadioStatusControl: View {
     signals.isAttached && appState.connectionState.isConnected
   }
 
-  /// A survey run pauses the signal-bars engine to keep its probes off the air
-  /// (ACTIVE_SURVEY_M3_5.md §2.2.7), which empties the table this control mirrors. The
-  /// control must say so rather than render zero bars as if it were scanning — a label
-  /// that lies and a popover that is permanently inert read as "the button is broken"
-  /// (M3.5 UI review S1: exactly the field report).
-  private var isPausedForSurvey: Bool {
-    appState.signalMapperRideSession != nil
-  }
+  /// A survey used to *stop* the signal-bars engine, which emptied this control's table
+  /// and shrank its label to a glyph for the whole ride — and a toolbar item's tap target
+  /// is its label's rect, so the pill became almost untappable exactly when a rider needed
+  /// it. Bars backs off its cadence now instead of stopping, so there is no paused state
+  /// left to render (Rafael, 2026-08-30).
 
   var body: some View {
     ToolbarActionMenu(primaryAction: handlePrimaryAction) {
@@ -141,12 +146,29 @@ struct RadioStatusControl: View {
     // is nothing to navigate away from.
     .task(id: pendingAdvancedSettings) {
       guard pendingAdvancedSettings else { return }
-      do { try await Task.sleep(for: Self.menuDismissSettleDelay) } catch { return }
+      // Clearing on cancellation matters as much as on success: a `.task(id:)` that
+      // returns with its flag still true can never be restarted by setting that flag
+      // true again, and the menu item is dead for the rest of the session.
+      do { try await Task.sleep(for: Self.menuDismissSettleDelay) } catch {
+        pendingAdvancedSettings = false
+        return
+      }
       pendingAdvancedSettings = false
       appState.navigation.navigateToSetting(.advanced)
     }
+    .task(id: pendingSignalDetailReopen) {
+      guard pendingSignalDetailReopen else { return }
+      do { try await Task.sleep(for: Self.popoverReopenSettleDelay) } catch {
+        pendingSignalDetailReopen = false
+        return
+      }
+      pendingSignalDetailReopen = false
+      guard appState.connectionState.isConnected else { return }
+      pendingMovementHintsPrompt = true
+      showingSignalDetail = true
+    }
     .task(id: showingSignalDetail) {
-      guard !showingSignalDetail, pendingMovementHintsPrompt, !isPausedForSurvey else {
+      guard !showingSignalDetail, pendingMovementHintsPrompt else {
         if !showingSignalDetail { pendingMovementHintsPrompt = false }
         return
       }
@@ -163,13 +185,36 @@ struct RadioStatusControl: View {
 
   /// Tap: the one obvious destination for the current state. The signal table needs a
   /// connection to mean anything; without one, the tap goes straight to connecting.
+  ///
+  /// The `guard` is the fix for "I tapped again and now it won't open at all" (field
+  /// report, 2026-08-30). A tap that lands while the popover is still running its
+  /// dismissal morph — or while the toolbar item is being rebuilt around a survey
+  /// starting or ending — is swallowed: SwiftUI drops the presentation but leaves the
+  /// binding reading `true`. From then on every tap sets `true` over `true`, which is not
+  /// a change, so nothing ever opens again. Finding the binding already true when no
+  /// popover is on screen is therefore a *repair*, not a toggle: clear it and re-present
+  /// once the morph has settled.
   private func handlePrimaryAction() {
-    if appState.connectionState.isConnected {
-      pendingMovementHintsPrompt = true
-      showingSignalDetail = true
-    } else {
+    guard appState.connectionState.isConnected else {
       showingDeviceSelection = true
+      return
     }
+    guard !showingSignalDetail else {
+      showingSignalDetail = false
+      // A stranded watch flag disables the *other* reset path — the link-loss handler
+      // below skips its cleanup while it reads true — so a tap that is repairing one
+      // latch clears the one that would otherwise outlive it. Safe here by construction:
+      // the user is tapping the toolbar, so no full-screen watch sheet is up.
+      showingWatchScreen = false
+      // Clearing this too: leaving it armed points a 600 ms Motion & Fitness alert at the
+      // 350 ms re-present below, and a TCC alert landing during a popover presentation is
+      // this file's entire crash history.
+      pendingMovementHintsPrompt = false
+      pendingSignalDetailReopen = true
+      return
+    }
+    pendingMovementHintsPrompt = true
+    showingSignalDetail = true
   }
 
   // MARK: - Label
@@ -182,35 +227,32 @@ struct RadioStatusControl: View {
   /// truncate to "11…" while the bars stay whole. The cluster renders at its natural width
   /// and the title does the yielding; it is the larger, more redundant element.
   private var labelContent: some View {
-    Group {
+    // One `HStack`, always — the branches vary its *children*, not the whole subtree.
+    // A `Group { if … else … }` compiles to `_ConditionalContent`, and swapping arms is a
+    // structural identity change of the hosted toolbar `Menu`'s label; the file's own
+    // invariant above is that only values vary. Ending a survey used to walk this through
+    // three arms in a row across suspension points.
+    HStack(spacing: 6) {
       if showsSignalCluster, let best = signals.best {
-        HStack(spacing: 6) {
-          legColumn(
-            glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
-            readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
-          )
-          legColumn(
-            glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
-            readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
-          )
-          identityColumn(for: best)
-          watchBadge
-        }
-        .padding(.horizontal, 2)
+        legColumn(
+          glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
+          readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
+        )
+        legColumn(
+          glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
+          readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
+        )
+        identityColumn(for: best)
+        watchBadge
       } else if showsSignalCluster {
-        HStack(spacing: 6) {
-          if isPausedForSurvey {
-            pausedGlyph
-          } else {
-            scanningGlyph
-          }
-          powerLabel
-          watchBadge
-        }
+        scanningGlyph
+        powerLabel
+        watchBadge
       } else {
         StatusIcon(iconName: iconName, iconColor: iconColor, isAnimating: isAnimating)
       }
     }
+    .padding(.horizontal, 2)
     .fixedSize(horizontal: true, vertical: false)
   }
 
@@ -236,13 +278,6 @@ struct RadioStatusControl: View {
       .font(.system(size: 14))
       .foregroundStyle(.secondary)
       .accessibilityHidden(true)
-  }
-
-  private var pausedGlyph: some View {
-    Image(systemName: "pause.circle")
-      .font(.system(size: 14))
-      .foregroundStyle(.secondary)
-      .accessibilityLabel(L10n.Localizable.SignalBars.pausedForSurvey)
   }
 
   /// The active adaptive-power step, only while adaptive power is actually managing it —
