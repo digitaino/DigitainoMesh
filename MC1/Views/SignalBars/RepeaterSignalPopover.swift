@@ -159,12 +159,20 @@ struct RepeaterSignalPopover: View {
   private var table: some View {
     let repeaters = model.displayRepeaters
     if repeaters.isEmpty {
-      Text(L10n.Localizable.SignalBars.scanning)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      // While a signal-mapper run owns the airtime, the engine is deliberately stopped —
+      // saying "scanning" here would be a lie and the refresh button below is inert.
+      // Purely informative on purpose: an action that tears the popover host down from
+      // inside it is the iOS 26 zoom-morph crash family.
+      Text(
+        appState.signalMapperRideSession != nil
+          ? L10n.Localizable.SignalBars.pausedForSurvey
+          : L10n.Localizable.SignalBars.scanning
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 12)
+      .frame(maxWidth: .infinity, alignment: .leading)
     } else {
       columnHeaders
       ScrollView {

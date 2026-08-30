@@ -346,6 +346,12 @@ public actor SignalMapperProbeEngine {
     planned.removeAll()
     focusTags.removeAll()
     state.isRunning = false
+    // The read-time-computed fields (`snapshot()` fills these live) must be baked into
+    // the final value: the completion sheet reads this return, and a raw `state` would
+    // report zero hexagons for a session that probed plenty.
+    state.cellsProbed = probedTierCells.count
+    state.targetCount = targets.count
+    state.focusStates = focusOrder.compactMap { focusStates[$0] }
     logger.info(
       "Signal mapper survey session ended: \(self.state.probesSent) probes, \(self.state.traceRepliesHeard + self.state.discoverResponsesHeard) replies"
     )

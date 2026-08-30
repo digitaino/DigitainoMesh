@@ -33,7 +33,11 @@ struct SignalMapperCoverageView: View {
   @State private var pendingFocusPicker = false
   @State private var showingFocusPicker = false
   @State private var showingPrecisePrompt = false
+  @State private var showingRunDetail = false
   @State private var breadcrumb: [CLLocationCoordinate2D] = []
+  /// Rendered overlays, rebuilt only when their inputs change — never inline in `body`,
+  /// which the follow-me loop re-evaluates every 2 s all ride (UI review S3, thermal).
+  @State private var mapOverlays: [MapOverlay] = []
 
   @AppStorage(AppStorageKey.mapStyleSelection.rawValue)
   private var mapStyleSelection: MapStyleSelection = .standard
@@ -54,6 +58,9 @@ struct SignalMapperCoverageView: View {
       .navigationTitle(L10n.Tools.Tools.signalMapper)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
+        // Both items are always present with content varying by value — toolbar
+        // structural identity is load-bearing next to the radio popover host (iOS 26).
+        ToolbarItem(placement: .topBarTrailing) { layerMenu }
         ToolbarItem(placement: .topBarTrailing) { optionsMenu }
       }
       .task(id: appState.servicesVersion) { await reload() }
@@ -72,11 +79,28 @@ struct SignalMapperCoverageView: View {
       }
       .onAppear { model.loadCaptureSetting() }
       .sheet(item: $selection) { SignalMapperCellDetailSheet(cell: $0) }
+      .sheet(isPresented: $showingRunDetail) {
+        if let session = appState.signalMapperRideSession {
+          SignalMapperRunDetailSheet(
+            session: session,
+            onSpotCheck: { Task { await model.spotCheck(appState: appState) } },
+            onEditLockOn: { showingFocusPicker = true },
+            onStop: { Task { await model.stopSurvey(appState: appState) } }
+          )
+        }
+      }
       .sheet(isPresented: $showingFocusPicker) {
-        SignalMapperFocusPickerView { targets, meta in
+        // One picker, two jobs: mid-ride it edits the lock-on set; before a ride it IS
+        // the start flow (review S1 — starting should lead into lock-on, not hide it
+        // behind a button discovered later).
+        SignalMapperFocusPickerView(startsSurvey: !isSurveying) { targets, meta in
           Task {
-            appState.signalMapperRideSession?.focusMeta = meta
-            await appState.setSurveyFocusTargets(targets)
+            if isSurveying {
+              appState.signalMapperRideSession?.focusMeta = meta
+              await appState.setSurveyFocusTargets(targets)
+            } else {
+              await model.startSurvey(appState: appState, focusTargets: targets, focusMeta: meta)
+            }
           }
         }
       }
@@ -96,11 +120,11 @@ struct SignalMapperCoverageView: View {
         Button(L10n.Tools.Tools.SignalMapper.Precise.enable) {
           Task {
             await appState.locationService.requestTemporaryFullAccuracy(purposeKey: "RideSurvey")
-            await model.startSurvey(appState: appState)
+            showingFocusPicker = true
           }
         }
         Button(L10n.Tools.Tools.SignalMapper.Precise.startAnyway) {
-          Task { await model.startSurvey(appState: appState) }
+          showingFocusPicker = true
         }
         Button(L10n.Localizable.Common.cancel, role: .cancel) {}
       } message: {
@@ -131,19 +155,17 @@ struct SignalMapperCoverageView: View {
     appState.signalMapperRideSession != nil
   }
 
+  /// One `map` arm for both "has coverage" and "surveying", so starting a run from the
+  /// empty state does not tear down and rebuild the entire MapLibre view (review S4).
   @ViewBuilder
   private var content: some View {
-    if isSurveying {
-      // A running ride always shows the map + HUD, even before the first cell folds —
-      // the empty state has no live readout and the rider cannot navigate back to one.
+    if isSurveying || model.hasCoverage {
       map
-    } else if model.isLoading, model.snapshot.isEmpty {
+    } else if model.isLoading {
       ProgressView()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    } else if !model.hasCoverage {
-      emptyState
     } else {
-      map
+      emptyState
     }
   }
 
@@ -172,6 +194,9 @@ struct SignalMapperCoverageView: View {
         }
       }
       .padding(.vertical)
+      // Clear of the tab bar: without this the Start button renders half-occluded and
+      // a tap on its visible sliver lands on the Map tab instead (verified in-sim).
+      .padding(.bottom, 24)
     }
   }
 
@@ -233,15 +258,11 @@ struct SignalMapperCoverageView: View {
   }
 
   private var map: some View {
-    ZStack(alignment: .bottom) {
+    ZStack {
       MC1MapView(
         points: [],
         lines: breadcrumbLines,
-        overlays: SignalMapperCoverageRenderer.overlays(
-          for: model.snapshot,
-          selected: selection,
-          layer: mapLayer
-        ),
+        overlays: mapOverlays,
         mapStyle: mapStyleSelection,
         isDarkMode: mapIsDark,
         isOffline: !appState.offlineMapService.isNetworkAvailable,
@@ -268,57 +289,99 @@ struct SignalMapperCoverageView: View {
       )
       .ignoresSafeArea()
 
-      VStack(spacing: 8) {
-        if isSurveying, let session = appState.signalMapperRideSession {
-          SignalMapperRideHUD(
-            session: session,
-            onSpotCheck: { Task { await model.spotCheck(appState: appState) } },
-            onLockOn: { showingFocusPicker = true }
-          )
-          .padding(.horizontal, 12)
-        }
-        controls
+      // Chrome respects the safe area (which the insets below extend), so nothing can
+      // land mid-map: controls hug the top-trailing corner exactly as the v1 survey
+      // screen did, and the legend keeps its bottom-leading home — visible during runs
+      // too, because the Reach layer's grey cells need their key most while riding.
+      controls
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+      SignalMapperLegend(layer: mapLayer, summary: legendSummary)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+    }
+    .safeAreaInset(edge: .top, spacing: 0) {
+      if isSurveying, let session = appState.signalMapperRideSession {
+        SignalMapperLiveStrip(
+          session: session,
+          onDetail: { showingRunDetail = true },
+          onStop: { Task { await model.stopSurvey(appState: appState) } }
+        )
       }
     }
-    .overlay(alignment: .top) {
-      if !isSurveying {
-        summaryPill
-      }
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      bottomInset
     }
-    .overlay(alignment: .bottomLeading) {
-      if !isSurveying {
-        SignalMapperLegend(layer: mapLayer)
-      }
-    }
+    .toolbar(isSurveying ? .hidden : .visible, for: .tabBar)
     // The map gates camera moves until its style has loaded, which usually lands after the
     // first build, so the fit is re-issued on that signal rather than left to chance.
+    // Both auto-frame triggers are dead during a ride: re-framing on a mid-ride store
+    // reload would yank the camera off the rider (review S2).
     .onChange(of: isStyleLoaded) { _, loaded in
+      guard !isSurveying else { return }
       if loaded { frameData() }
     }
     .onChange(of: model.snapshot) { _, _ in
-      guard !hasFramedData else { return }
+      rebuildOverlays()
+      guard !hasFramedData, !isSurveying else { return }
       frameData()
+    }
+    .onChange(of: mapLayer) { _, _ in rebuildOverlays() }
+    .onChange(of: selection) { _, _ in rebuildOverlays() }
+    .onAppear { rebuildOverlays() }
+  }
+
+  /// The bottom inset: focus blocks (or the lock-on hint) while riding; the v1-style
+  /// control row with a labelled, self-explaining start button while idle.
+  @ViewBuilder
+  private var bottomInset: some View {
+    if isSurveying, let session = appState.signalMapperRideSession {
+      if session.focusTargets.isEmpty {
+        SignalMapperLockOnHint { showingFocusPicker = true }
+      } else {
+        SignalMapperFocusBlocks(session: session)
+      }
+    } else if model.hasCoverage {
+      HStack {
+        Button {
+          startSurveyTapped()
+        } label: {
+          Label(
+            canSurvey
+              ? L10n.Tools.Tools.SignalMapper.Survey.start
+              : L10n.Tools.Tools.SignalMapper.Survey.connectToStart,
+            systemImage: canSurvey
+              ? "dot.radiowaves.left.and.right"
+              : "antenna.radiowaves.left.and.right.slash"
+          )
+          .fontWeight(.semibold)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!canSurvey)
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 16)
+      .padding(.bottom, 8)
+      .dynamicTypeSize(...DynamicTypeSize.accessibility2)
     }
   }
 
-  // MARK: - Chrome
-
-  private var summaryPill: some View {
-    Text(L10n.Tools.Tools.SignalMapper.summary(
+  private var legendSummary: String? {
+    guard model.hasCoverage else { return nil }
+    return L10n.Tools.Tools.SignalMapper.summary(
       model.snapshot.cells.count,
       model.snapshot.totalObservations,
       model.snapshot.dayCount
-    ))
-    .font(.subheadline.weight(.medium))
-    .lineLimit(1)
-    .minimumScaleFactor(0.7)
-    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-    .padding(.horizontal, 16)
-    .padding(.vertical, 10)
-    .liquidGlass(in: .capsule)
-    .safeAreaPadding(.top)
-    .accessibilityElement(children: .combine)
+    )
   }
+
+  private func rebuildOverlays() {
+    mapOverlays = SignalMapperCoverageRenderer.overlays(
+      for: model.snapshot,
+      selected: selection,
+      layer: mapLayer
+    )
+  }
+
+  // MARK: - Chrome
 
   /// The ride's own track, threading the live fixes in time order — where you have
   /// actually been, even where the mesh was silent.
@@ -334,14 +397,16 @@ struct SignalMapperCoverageView: View {
 
   /// The Precise Location pre-flight (review 7b): with it off, every fix fails the 50 m
   /// accuracy gate and the whole ride records nothing, silently. Surfacing it *before*
-  /// the ride is the difference between a fixed setting and a wasted evening.
+  /// the ride is the difference between a fixed setting and a wasted evening. Past the
+  /// pre-flight, starting leads into the lock-on picker — its confirm button starts the
+  /// run with the chosen targets, or without any.
   private func startSurveyTapped() {
     if appState.locationService.isAuthorized,
        !appState.locationService.isPreciseLocationAuthorized {
       showingPrecisePrompt = true
       return
     }
-    Task { await model.startSurvey(appState: appState) }
+    showingFocusPicker = true
   }
 
   /// Follow-me + breadcrumbs while riding: every 2 s, thread the live fix onto the trail
@@ -361,59 +426,57 @@ struct SignalMapperCoverageView: View {
           CLLocation(latitude: $0.latitude, longitude: $0.longitude)
             .distance(from: location) >= 5
         } ?? true
+        // Camera and breadcrumb churn are coupled to actual movement: a rider stopped
+        // at a light produces zero body invalidations, which also keeps the toolbar's
+        // popover host quiet (UI review, radio-pill hypothesis #2).
         if movedEnough {
           breadcrumb.append(coordinate)
           if breadcrumb.count > 5400 {
             breadcrumb.removeFirst(breadcrumb.count - 5400)
           }
-        }
-        if isCenteredOnUser {
-          cameraBounds = SignalMapperCoverageRenderer.cameraBounds(around: coordinate)
-          cameraVersion += 1
+          if isCenteredOnUser {
+            cameraBounds = SignalMapperCoverageRenderer.cameraBounds(around: coordinate)
+            cameraVersion += 1
+          }
         }
       }
       try? await Task.sleep(for: .seconds(2))
     }
   }
 
+  /// Location + the shared map-options menu only — 120 pt where the first design
+  /// stacked 211 (review §1). The layer picker lives in the navigation bar (it is the
+  /// tool's mode, not a map utility) and center-on-coverage in the options menu.
   private var controls: some View {
-    HStack {
-      Spacer()
-      MapControlsToolbar(
-        onLocationTap: centerOnUser,
-        isCenteredOnUser: isCenteredOnUser,
-        isNorthLocked: $isNorthLocked,
-        showLabels: $showLabels,
-        mapStyleSelection: $mapStyleSelection,
-        viewportBounds: viewportBounds
-      ) {
-        // A Picker inside a Menu is the map-control column's idiom for a choice
-        // (MapControlsToolbar's own style menu); a segmented control fits neither the
-        // 44-point column nor the iOS 26 toolbar rules.
-        Menu {
-          Picker(L10n.Tools.Tools.SignalMapper.Layer.title, selection: $mapLayer) {
-            Label(L10n.Tools.Tools.SignalMapper.Layer.heard, systemImage: "arrow.down.left")
-              .tag(SignalMapperMapLayer.heard)
-            Label(L10n.Tools.Tools.SignalMapper.Layer.reach, systemImage: "arrow.up.right")
-              .tag(SignalMapperMapLayer.reach)
-          }
-        } label: {
-          Image(systemName: mapLayer == .heard ? "arrow.down.left.square" : "arrow.up.right.square")
-        }
-        .mapControlButton(tint: .primary)
-        .accessibilityLabel(L10n.Tools.Tools.SignalMapper.Layer.title)
-
-        Button(
-          L10n.Tools.Tools.SignalMapper.centerOnCoverage,
-          systemImage: "arrow.up.left.and.arrow.down.right"
-        ) {
-          isCenteredOnUser = false
-          frameData()
-        }
-        .mapControlButton(tint: model.hasCoverage ? .primary : .secondary)
-        .disabled(!model.hasCoverage)
-      }
+    MapControlsToolbar(
+      onLocationTap: centerOnUser,
+      isCenteredOnUser: isCenteredOnUser,
+      isNorthLocked: $isNorthLocked,
+      showLabels: $showLabels,
+      mapStyleSelection: $mapStyleSelection,
+      viewportBounds: viewportBounds
+    ) {
+      EmptyView()
     }
+  }
+
+  /// The tool's mode switch: Heard (what I hear) vs Reach (what hears me). Nav-bar
+  /// resident because it changes what the whole map means, not how the map behaves.
+  private var layerMenu: some View {
+    Menu {
+      Picker(L10n.Tools.Tools.SignalMapper.Layer.title, selection: $mapLayer) {
+        Label(L10n.Tools.Tools.SignalMapper.Layer.heard, systemImage: "arrow.down.left")
+          .tag(SignalMapperMapLayer.heard)
+        Label(L10n.Tools.Tools.SignalMapper.Layer.reach, systemImage: "arrow.up.right")
+          .tag(SignalMapperMapLayer.reach)
+      }
+    } label: {
+      Label(
+        L10n.Tools.Tools.SignalMapper.Layer.title,
+        systemImage: mapLayer == .heard ? "arrow.down.left.square" : "arrow.up.right.square"
+      )
+    }
+    .accessibilityLabel(L10n.Tools.Tools.SignalMapper.Layer.title)
   }
 
   private var optionsMenu: some View {
@@ -433,6 +496,15 @@ struct SignalMapperCoverageView: View {
             startSurveyTapped()
           }
           .disabled(!canSurvey)
+          if model.hasCoverage {
+            Button(
+              L10n.Tools.Tools.SignalMapper.centerOnCoverage,
+              systemImage: "arrow.up.left.and.arrow.down.right"
+            ) {
+              isCenteredOnUser = false
+              frameData()
+            }
+          }
         }
       }
 

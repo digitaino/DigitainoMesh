@@ -10,6 +10,9 @@ import SwiftUI
 /// and name are captured here into the session's display metadata: the engine itself
 /// deliberately learns neither.
 struct SignalMapperFocusPickerView: View {
+  /// True when this picker IS the start flow: confirming starts the run with the
+  /// selection (possibly empty), and the confirm button says so.
+  var startsSurvey = false
   let onApply: ([MapperProbeTarget], [NodeHexID: SignalMapperRideSession.FocusMeta]) -> Void
 
   @Environment(\.appState) private var appState
@@ -65,6 +68,16 @@ struct SignalMapperFocusPickerView: View {
         } footer: {
           Text(L10n.Tools.Tools.SignalMapper.Focus.footer(SignalMapperProbeEngine.maxFocusTargets))
         }
+
+        if startsSurvey {
+          Section {
+            Button(L10n.Tools.Tools.SignalMapper.Focus.startWithout) {
+              selectedHexIDs = []
+              apply()
+              dismiss()
+            }
+          }
+        }
       }
       .navigationTitle(L10n.Tools.Tools.SignalMapper.Ride.lockOn)
       .navigationBarTitleDisplayMode(.inline)
@@ -73,10 +86,15 @@ struct SignalMapperFocusPickerView: View {
           Button(L10n.Localizable.Common.cancel) { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button(L10n.Tools.Tools.SignalMapper.Focus.apply) {
+          Button(
+            startsSurvey
+              ? L10n.Tools.Tools.SignalMapper.Survey.start
+              : L10n.Tools.Tools.SignalMapper.Focus.apply
+          ) {
             apply()
             dismiss()
           }
+          .fontWeight(.semibold)
         }
       }
       .task { await loadCandidates() }

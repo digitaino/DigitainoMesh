@@ -1345,3 +1345,45 @@
 
 /* Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip */
 "tools.signalMapper.detail.probeRoundTrip" = "Andata e ritorno delle sonde";
+
+/* Location: SignalMapperLiveStrip.swift - Accessibility hint on the live strip (opens run details) */
+"tools.signalMapper.strip.detailHint" = "Mostra i dettagli del rilevamento";
+
+/* Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes are being rejected */
+"tools.signalMapper.strip.noFix" = "Nessuna posizione";
+
+/* Location: SignalMapperLiveStrip.swift - Accessibility summary; %1$@ elapsed, %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons */
+"tools.signalMapper.strip.accessibility" = "Rilevamento da %1$@. %2$lld sonde, %3$lld risposte, %4$lld perse, %5$lld esagoni.";
+
+/* Location: SignalMapperCoverageView.swift - Disabled start button while no radio is connected */
+"tools.signalMapper.survey.connectToStart" = "Connetti per iniziare";
+
+/* Location: SignalMapperRunDetailSheet.swift - Sheet title */
+"tools.signalMapper.ride.detailTitle" = "Dettagli del rilevamento";
+
+/* Location: SignalMapperRunDetailSheet.swift - Raw ride-log rows recorded so far */
+"tools.signalMapper.ride.rawSamples" = "Campioni grezzi";
+
+/* Location: SignalMapperRunDetailSheet.swift - Max-range value before any reply arrived */
+"tools.signalMapper.ride.noReplyYet" = "Ancora nessuna risposta";
+
+/* Location: SignalMapperRunDetailSheet.swift - Section header over per-repeater max reply distances */
+"tools.signalMapper.ride.maxRangeHeader" = "Risposta più lontana";
+
+/* Location: SignalMapperFocusPickerView.swift - Start the run with no lock-on selection */
+"tools.signalMapper.focus.startWithout" = "Inizia senza agganciare";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: replies flowing both ways */
+"tools.signalMapper.focus.stateHeard" = "Sentito in entrambe le direzioni";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: we hear them, they are not answering */
+"tools.signalMapper.focus.stateDownlinkOnly" = "Solo ricezione";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: probes going unanswered */
+"tools.signalMapper.focus.stateLost" = "Fuori portata";
+
+/* Location: SignalMapperFocusBlocks.swift - Link state: nothing heard recently */
+"tools.signalMapper.focus.stateUnknown" = "Ancora nessun segnale";
+
+/* Location: SignalMapperFocusBlocks.swift - Accessibility fragment; %lld is the uplink SNR in dB */
+"tools.signalMapper.focus.uplinkAccessibility" = "ti sentono a %lld decibel";

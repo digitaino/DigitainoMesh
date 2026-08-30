@@ -224,6 +224,9 @@
 /* Location: RepeaterSignalPopover.swift - Placeholder while the table is still empty */
 "signalBars.scanning" = "Looking for repeaters…";
 
+/* Location: RadioStatusControl.swift / RepeaterSignalPopover.swift - Shown while a signal-mapper survey run has the repeater tracker paused */
+"signalBars.pausedForSurvey" = "Il monitoraggio dei ripetitori è in pausa durante un rilevamento del segnale. Riprende al termine del rilevamento.";
+
 /* Location: RepeaterSignalPopover.swift - Source label when the radio owns the table */
 "signalBars.sourceRadio" = "Synced with radio";
 

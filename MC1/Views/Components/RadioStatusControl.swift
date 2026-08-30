@@ -70,6 +70,15 @@ struct RadioStatusControl: View {
     signals.isAttached && appState.connectionState.isConnected
   }
 
+  /// A survey run pauses the signal-bars engine to keep its probes off the air
+  /// (ACTIVE_SURVEY_M3_5.md §2.2.7), which empties the table this control mirrors. The
+  /// control must say so rather than render zero bars as if it were scanning — a label
+  /// that lies and a popover that is permanently inert read as "the button is broken"
+  /// (M3.5 UI review S1: exactly the field report).
+  private var isPausedForSurvey: Bool {
+    appState.signalMapperRideSession != nil
+  }
+
   var body: some View {
     ToolbarActionMenu(primaryAction: handlePrimaryAction) {
       menuContent
@@ -114,7 +123,7 @@ struct RadioStatusControl: View {
     // marginal link. Skipped while the watch sheet is up: yanking its presenter would
     // start a second teardown mid-presentation, the same transition-conflict family.
     .onChange(of: appState.connectedDevice == nil) { _, isGone in
-      if isGone && !showingWatchScreen {
+      if isGone, !showingWatchScreen {
         showingSignalDetail = false
       }
     }
@@ -137,7 +146,10 @@ struct RadioStatusControl: View {
       appState.navigation.navigateToSetting(.advanced)
     }
     .task(id: showingSignalDetail) {
-      guard !showingSignalDetail, pendingMovementHintsPrompt else { return }
+      guard !showingSignalDetail, pendingMovementHintsPrompt, !isPausedForSurvey else {
+        if !showingSignalDetail { pendingMovementHintsPrompt = false }
+        return
+      }
       do { try await Task.sleep(for: Self.movementPromptSettleDelay) } catch { return }
       pendingMovementHintsPrompt = false
       appState.requestMovementHintsIfNeeded()
@@ -169,7 +181,6 @@ struct RadioStatusControl: View {
   /// and without it the compression lands on the smallest texts first — the dB readouts
   /// truncate to "11…" while the bars stay whole. The cluster renders at its natural width
   /// and the title does the yielding; it is the larger, more redundant element.
-  @ViewBuilder
   private var labelContent: some View {
     Group {
       if showsSignalCluster, let best = signals.best {
@@ -188,7 +199,11 @@ struct RadioStatusControl: View {
         .padding(.horizontal, 2)
       } else if showsSignalCluster {
         HStack(spacing: 6) {
-          scanningGlyph
+          if isPausedForSurvey {
+            pausedGlyph
+          } else {
+            scanningGlyph
+          }
           powerLabel
           watchBadge
         }
@@ -221,6 +236,13 @@ struct RadioStatusControl: View {
       .font(.system(size: 14))
       .foregroundStyle(.secondary)
       .accessibilityHidden(true)
+  }
+
+  private var pausedGlyph: some View {
+    Image(systemName: "pause.circle")
+      .font(.system(size: 14))
+      .foregroundStyle(.secondary)
+      .accessibilityLabel(L10n.Localizable.SignalBars.pausedForSurvey)
   }
 
   /// The active adaptive-power step, only while adaptive power is actually managing it —

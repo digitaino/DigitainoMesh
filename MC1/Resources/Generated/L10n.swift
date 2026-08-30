@@ -2806,6 +2806,8 @@ public enum L10n {
       public static let clearStale = L10n.tr("Localizable", "signalBars.clearStale", fallback: "Clear stale repeaters")
       /// Location: RepeaterSignalToolbarItem.swift - Toolbar value when no repeater has been heard
       public static let noRepeaters = L10n.tr("Localizable", "signalBars.noRepeaters", fallback: "No repeaters heard")
+      /// Location: RadioStatusControl.swift / RepeaterSignalPopover.swift - Shown while a signal-mapper survey run has the repeater tracker paused
+      public static let pausedForSurvey = L10n.tr("Localizable", "signalBars.pausedForSurvey", fallback: "Repeater tracking is paused while a signal survey runs. It resumes when the survey ends.")
       /// Location: RepeaterSignalPopover.swift - Row action that measures one repeater now
       public static let pingNow = L10n.tr("Localizable", "signalBars.pingNow", fallback: "Ping Now")
       /// Location: RepeaterSignalPopover.swift - Row action that hides a repeater until it is heard again
@@ -6760,6 +6762,20 @@ public enum L10n {
           public static func footer(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.focus.footer", p1, fallback: "Pick up to %lld repeaters to track live. Everything else keeps logging in the background.")
           }
+          /// Location: SignalMapperFocusPickerView.swift - Start the run with no lock-on selection
+          public static let startWithout = L10n.tr("Tools", "tools.signalMapper.focus.startWithout", fallback: "Start Without Lock-On")
+          /// Location: SignalMapperFocusBlocks.swift - Link state: we hear them, they are not answering
+          public static let stateDownlinkOnly = L10n.tr("Tools", "tools.signalMapper.focus.stateDownlinkOnly", fallback: "Receiving only")
+          /// Location: SignalMapperFocusBlocks.swift - Link state: replies flowing both ways
+          public static let stateHeard = L10n.tr("Tools", "tools.signalMapper.focus.stateHeard", fallback: "Heard both ways")
+          /// Location: SignalMapperFocusBlocks.swift - Link state: probes going unanswered
+          public static let stateLost = L10n.tr("Tools", "tools.signalMapper.focus.stateLost", fallback: "Out of reach")
+          /// Location: SignalMapperFocusBlocks.swift - Link state: nothing heard recently
+          public static let stateUnknown = L10n.tr("Tools", "tools.signalMapper.focus.stateUnknown", fallback: "No signal yet")
+          /// Location: SignalMapperFocusBlocks.swift - Accessibility fragment; %lld is the uplink SNR in dB
+          public static func uplinkAccessibility(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.focus.uplinkAccessibility", p1, fallback: "they hear you at %lld decibels")
+          }
         }
         public enum Layer {
           /// Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink)
@@ -6802,20 +6818,40 @@ public enum L10n {
           }
           /// Location: SignalMapperRideHUD.swift - Expanded HUD row: hexagons probed this run
           public static let cells = L10n.tr("Tools", "tools.signalMapper.ride.cells", fallback: "Hexagons probed")
+          /// Location: SignalMapperRunDetailSheet.swift - Sheet title
+          public static let detailTitle = L10n.tr("Tools", "tools.signalMapper.ride.detailTitle", fallback: "Survey Details")
           /// Location: SignalMapperRideHUD.swift - Button opening the lock-on repeater picker
           public static let lockOn = L10n.tr("Tools", "tools.signalMapper.ride.lockOn", fallback: "Lock On Repeaters")
           /// Location: SignalMapperRideHUD.swift - Expanded HUD row: farthest reply distance for a focus repeater; %@ is its name
           public static func maxRange(_ p1: Any) -> String {
             return L10n.tr("Tools", "tools.signalMapper.ride.maxRange", String(describing: p1), fallback: "Max range · %@")
           }
+          /// Location: SignalMapperRunDetailSheet.swift - Section header over per-repeater max reply distances
+          public static let maxRangeHeader = L10n.tr("Tools", "tools.signalMapper.ride.maxRangeHeader", fallback: "Farthest Reply")
           /// Location: SignalMapperRideHUD.swift - Expanded HUD row: samples skipped for lack of a GPS fix (loud when Precise Location is off)
           public static let noFixDrops = L10n.tr("Tools", "tools.signalMapper.ride.noFixDrops", fallback: "Skipped: no usable fix")
+          /// Location: SignalMapperRunDetailSheet.swift - Max-range value before any reply arrived
+          public static let noReplyYet = L10n.tr("Tools", "tools.signalMapper.ride.noReplyYet", fallback: "No reply yet")
           /// Location: SignalMapperRideHUD.swift - Expanded HUD row: probes sent · replies · lost
           public static let probes = L10n.tr("Tools", "tools.signalMapper.ride.probes", fallback: "Probes · replies · lost")
           /// Location: SignalMapperRideHUD.swift - Banner while the BLE link to the radio is down mid-ride
           public static let radioDisconnected = L10n.tr("Tools", "tools.signalMapper.ride.radioDisconnected", fallback: "Radio disconnected — still recording position")
+          /// Location: SignalMapperRunDetailSheet.swift - Raw ride-log rows recorded so far
+          public static let rawSamples = L10n.tr("Tools", "tools.signalMapper.ride.rawSamples", fallback: "Raw samples")
+        }
+        public enum Strip {
+          /// Location: SignalMapperLiveStrip.swift - Accessibility summary; %1$@ elapsed, %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons
+          public static func accessibility(_ p1: Any, _ p2: Int, _ p3: Int, _ p4: Int, _ p5: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.strip.accessibility", String(describing: p1), p2, p3, p4, p5, fallback: "Surveying for %1$@. %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons.")
+          }
+          /// Location: SignalMapperLiveStrip.swift - Accessibility hint on the live strip (opens run details)
+          public static let detailHint = L10n.tr("Tools", "tools.signalMapper.strip.detailHint", fallback: "Shows survey details")
+          /// Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes are being rejected
+          public static let noFix = L10n.tr("Tools", "tools.signalMapper.strip.noFix", fallback: "No fix")
         }
         public enum Survey {
+          /// Location: SignalMapperCoverageView.swift - Disabled start button while no radio is connected
+          public static let connectToStart = L10n.tr("Tools", "tools.signalMapper.survey.connectToStart", fallback: "Connect to Start")
           /// Location: SignalMapperCoverageView.swift - Live session pill; %1$lld probes sent, %2$lld replies heard
           public static func hud(_ p1: Int, _ p2: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.survey.hud", p1, p2, fallback: "Surveying · %1$lld probes · %2$lld replies")

@@ -42,9 +42,15 @@ final class SignalMapperCoverageModel {
 
   /// Starts a survey run. The HUD is driven by ``attachSurveyStream(appState:)``, which
   /// the view re-invokes per engine generation — the run, not this model, is the thing
-  /// that survives a BLE rewire.
-  func startSurvey(appState: AppState) async {
-    _ = await appState.startSignalMapperSurvey()
+  /// that survives a BLE rewire. The lock-on selection rides in from the start-flow
+  /// picker so the first probe cycle already has its focus targets (review S1).
+  func startSurvey(
+    appState: AppState,
+    focusTargets: [MapperProbeTarget] = [],
+    focusMeta: [NodeHexID: SignalMapperRideSession.FocusMeta] = [:]
+  ) async {
+    guard await appState.startSignalMapperSurvey(focusTargets: focusTargets) else { return }
+    appState.signalMapperRideSession?.focusMeta = focusMeta
   }
 
   /// Mirrors the current engine generation's snapshot stream into the run object, and

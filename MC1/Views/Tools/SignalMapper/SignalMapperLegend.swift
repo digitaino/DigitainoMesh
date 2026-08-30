@@ -11,6 +11,9 @@ import SwiftUI
 struct SignalMapperLegend: View {
   /// Which layer the map is showing; the Reach layer adds its "probed, never heard" row.
   var layer: SignalMapperMapLayer = .heard
+  /// One-line coverage totals, shown at the top of the expanded card — the old floating
+  /// summary pill's content, demoted here so the top of the map stays clear.
+  var summary: String?
 
   @State private var isExpanded = false
 
@@ -59,6 +62,14 @@ struct SignalMapperLegend: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel(L10n.Localizable.Common.done)
+
+      if let summary {
+        Text(summary)
+          .font(.caption.weight(.medium))
+          .foregroundStyle(.primary)
+          .fixedSize(horizontal: false, vertical: true)
+        Divider()
+      }
 
       Text(L10n.Tools.Tools.SignalMapper.Legend.density)
         .font(.caption)

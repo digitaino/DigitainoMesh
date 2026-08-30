@@ -49,6 +49,16 @@ final class SignalMapperRideSession {
 
   var focusMeta: [NodeHexID: FocusMeta] = [:]
 
+  /// The focus cadence captured once at session start, so the HUD never touches
+  /// `UserDefaults` from its render path (UI review S3: the old per-render
+  /// `MapperTuningStore()` materialised 22 defaults keys at 1 Hz for hours).
+  var focusProbeInterval: TimeInterval = 20
+
+  /// Reads the radio's confirmed TX power right now, dBm. Injected by AppState so
+  /// breadcrumbs can stamp it — adaptive power re-steps mid-ride and uplink SNRs
+  /// without a power context are not comparable (UI review S3 data-integrity).
+  var currentTxPowerDbm: @MainActor () -> Int8? = { nil }
+
   private var breadcrumbTask: Task<Void, Never>?
   /// When the app last went inactive/background; drives the auto-end rule.
   private var backgroundedAt: Date?
@@ -117,6 +127,7 @@ final class SignalMapperRideSession {
         let at = Date()
         var event = MapperRawSampleEvent(timestamp: at, kind: .breadcrumb, gateOutcome: .accepted)
         event.setFix(fix, at: at)
+        event.txPowerDbm = self.currentTxPowerDbm()
         event.cellRaw = SurveyGrid.cell(
           containing: GeoCoordinate(latitude: fix.latitude, longitude: fix.longitude)
         )?.rawValue

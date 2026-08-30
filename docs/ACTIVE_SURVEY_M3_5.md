@@ -367,3 +367,36 @@ Pre-ride checklist (do at home): run one start/stop cycle to grant Location
 (While Using, **Precise**) + Motion & Fitness; set your repeaters' positions in
 contacts (the HUD distance field reads them); charge + power bank; phone out of
 direct sun.
+
+## 7. UI revision after the first field test (2026-08-30)
+
+Rafael's first real ride failed on UX: the ride HUD rendered mid-screen, showed zero
+live numbers without lock-on, and the radio pill went dead. A second adversarial pass
+(UI/UX/HIG review + a pattern-mining pass over the v1 `personal`-branch Signal Survey
+screen) reshaped the surface; the engines were untouched except one fix.
+
+| Was | Now |
+|---|---|
+| HUD card stacked above a 211 pt control column → landed at 52–65 % screen height | Top **live strip** (`safeAreaInset`): pulsing dot, elapsed, probes·replies·lost, hexagons, a "No fix" chip when fixes are being rejected, 44 pt stop. Bottom inset holds only the focus blocks (or a quiet dashed lock-on hint). Map controls: 2 buttons, top-trailing (the v1 anatomy). |
+| Counts hidden behind an invisible tap-to-expand | Strip is always visible; tap opens a real **run-detail sheet** (full counters, farthest reply per target, raw-sample count, Spot Check / Edit lock-on / End). |
+| Radio pill rendered empty zero-bars "scanning" + an inert popover while the ride paused signal bars | Honest paused state: pause glyph on the label, "paused while a signal survey runs" row in the popover, and the Motion & Fitness prompt never arms mid-ride. |
+| Start/Stop buried in the ⋯ menu once any coverage existed | Idle: labelled **Start Survey** button in a bottom control row (disabled label self-explains: "Connect to Start"). Start flows *into* the lock-on picker ("Start Without Lock-On" available). Stop lives on the strip. |
+| White-on-green/orange focus blocks (≈2:1 contrast), fixed 34 pt type | Near-opaque system-background blocks, 6 pt state bar + soft tint carry the color, `.primary` numerals in a scaling text style. |
+| Camera fought the rider: programmatic moves landed mid-pan; store reloads re-framed mid-ride | `MC1MapView` skips camera applies during gestures; both auto-frame triggers are dead while surveying; follow-me bumps only on actual movement. |
+| Per-render `UserDefaults` (22 keys/call at 1 Hz) + inline overlay rebuilds every 2 s | Focus interval captured once on the session; overlays memoized behind `onChange`. Tab bar hidden during runs. |
+| Debug panel led with an "Upload batching (M2)" section for a nonexistent feature | Section deleted. (Screen-awake/retention remain debug-only for now — a user-facing options sheet is still owed.) |
+
+Data-integrity addition from the same review: adaptive TX power re-steps mid-ride, so
+breadcrumb raw samples now stamp `txPowerDbm` (additive column) — uplink SNRs without a
+power context are not comparable across a ride. Engine fix: `stopSession()` now bakes
+the read-time-computed counters (`cellsProbed`, `targetCount`, focus states) into its
+final snapshot; the completion sheet previously showed zero hexagons.
+
+Deferred, recorded honestly: the cyan "uplink-only" focus state (needs a txHeard →
+focus-state path the engine does not have), the HUD-only battery mode, the app-wide
+mini-indicator on other tabs (v1 had one), per-repeater dead-zone map rendering, and a
+user-facing Survey Options sheet.
+
+Verified end-to-end in the simulator against the mock radio: onboarding → start-into-
+lock-on → live strip counting → "No fix" chip firing when the static sim location went
+stale → run-detail sheet → End Survey → completion sheet with scrubbed export.

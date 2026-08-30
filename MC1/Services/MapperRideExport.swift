@@ -363,6 +363,7 @@ enum MapperRideExport {
     }
     if let speed = finite(sample.speedMetersPerSecond) { object["speedMetersPerSecond"] = .double(speed) }
     if let course = finite(sample.courseDegrees) { object["courseDegrees"] = .double(course) }
+    if let txPower = sample.txPowerDbm { object["txPowerDbm"] = .int(txPower) }
     if let fixAge = finite(sample.fixAgeSeconds) { object["fixAgeSeconds"] = .double(fixAge) }
     if let cell = sample.cellRaw { object["cell"] = .string(h3String(cell)) }
 

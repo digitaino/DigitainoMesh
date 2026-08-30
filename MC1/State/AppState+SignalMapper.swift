@@ -219,6 +219,10 @@ extension AppState {
       focusTargets: focusTargets,
       recorder: recorder?.recorder
     )
+    session.focusProbeInterval = max(4, MapperTuningStore().tuning.focusProbeIntervalSeconds)
+    session.currentTxPowerDbm = { [weak self] in
+      self?.services?.adaptivePowerService.confirmedRadioDbm
+    }
     signalMapperRideSession = session
 
     // Live location for the whole run — keyed to the run, not the connection (review 3b:

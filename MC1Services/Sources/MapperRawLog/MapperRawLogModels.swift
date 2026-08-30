@@ -189,6 +189,9 @@ final class MapperRawSample {
   var horizontalAccuracyMeters: Double?
   var speedMetersPerSecond: Double?
   var courseDegrees: Double?
+  /// Radio TX power at event time, dBm (adaptive power varies mid-ride; see the event
+  /// type's doc). Additive optional column — lightweight-migration-safe.
+  var txPowerDbm: Int?
   /// How old the fix was when the event was placed against it. Stored rather than
   /// derived: the fix's own capture time is not kept, and `timestamp - fixAge` is the
   /// only honest way to say when the phone was actually *there*.
@@ -234,6 +237,7 @@ final class MapperRawSample {
     horizontalAccuracyMeters: Double? = nil,
     speedMetersPerSecond: Double? = nil,
     courseDegrees: Double? = nil,
+    txPowerDbm: Int? = nil,
     fixAgeSeconds: Double? = nil,
     cellRaw: Int64? = nil,
     gateOutcomeRaw: Int
@@ -258,6 +262,7 @@ final class MapperRawSample {
     self.horizontalAccuracyMeters = horizontalAccuracyMeters
     self.speedMetersPerSecond = speedMetersPerSecond
     self.courseDegrees = courseDegrees
+    self.txPowerDbm = txPowerDbm
     self.fixAgeSeconds = fixAgeSeconds
     self.cellRaw = cellRaw
     self.gateOutcomeRaw = gateOutcomeRaw
@@ -287,6 +292,7 @@ final class MapperRawSample {
       horizontalAccuracyMeters: event.horizontalAccuracyMeters,
       speedMetersPerSecond: event.speedMetersPerSecond,
       courseDegrees: event.courseDegrees,
+      txPowerDbm: event.txPowerDbm.map(Int.init),
       fixAgeSeconds: event.fixAgeSeconds,
       cellRaw: event.cellRaw.map { Int64(bitPattern: $0) },
       gateOutcomeRaw: event.gateOutcome.rawValue
@@ -457,6 +463,7 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
   public let horizontalAccuracyMeters: Double?
   public let speedMetersPerSecond: Double?
   public let courseDegrees: Double?
+  public let txPowerDbm: Int?
   public let fixAgeSeconds: Double?
 
   /// The H3 index, converted back from the row's stored bit pattern. See
@@ -485,6 +492,7 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
     horizontalAccuracyMeters: Double? = nil,
     speedMetersPerSecond: Double? = nil,
     courseDegrees: Double? = nil,
+    txPowerDbm: Int? = nil,
     fixAgeSeconds: Double? = nil,
     cellRaw: UInt64? = nil,
     gateOutcomeRaw: Int
@@ -509,6 +517,7 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
     self.horizontalAccuracyMeters = horizontalAccuracyMeters
     self.speedMetersPerSecond = speedMetersPerSecond
     self.courseDegrees = courseDegrees
+    self.txPowerDbm = txPowerDbm
     self.fixAgeSeconds = fixAgeSeconds
     self.cellRaw = cellRaw
     self.gateOutcomeRaw = gateOutcomeRaw
@@ -536,6 +545,7 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
       horizontalAccuracyMeters: model.horizontalAccuracyMeters,
       speedMetersPerSecond: model.speedMetersPerSecond,
       courseDegrees: model.courseDegrees,
+      txPowerDbm: model.txPowerDbm,
       fixAgeSeconds: model.fixAgeSeconds,
       cellRaw: model.cellRaw.map { UInt64(bitPattern: $0) },
       gateOutcomeRaw: model.gateOutcomeRaw

@@ -83,6 +83,11 @@ public struct MapperRawSampleEvent: Sendable, Equatable {
   public var fixAgeSeconds: Double?
   public var cellRaw: UInt64?
   public var gateOutcome: MapperGateOutcome
+  /// The radio's confirmed TX power at the moment of the event, dBm. Stamped by the
+  /// app-side breadcrumb task (the engines never learn power): adaptive power keeps
+  /// re-stepping mid-ride, and uplink SNRs measured at a varying, unrecorded power
+  /// are not comparable to each other (M3.5 UI review S3). Nil when unknown.
+  public var txPowerDbm: Int8?
 
   public init(
     timestamp: Date,
@@ -105,7 +110,8 @@ public struct MapperRawSampleEvent: Sendable, Equatable {
     courseDegrees: Double? = nil,
     fixAgeSeconds: Double? = nil,
     cellRaw: UInt64? = nil,
-    gateOutcome: MapperGateOutcome = .noFix
+    gateOutcome: MapperGateOutcome = .noFix,
+    txPowerDbm: Int8? = nil
   ) {
     self.timestamp = timestamp
     self.kind = kind
@@ -128,6 +134,7 @@ public struct MapperRawSampleEvent: Sendable, Equatable {
     self.fixAgeSeconds = fixAgeSeconds
     self.cellRaw = cellRaw
     self.gateOutcome = gateOutcome
+    self.txPowerDbm = txPowerDbm
   }
 
   /// Populate the position block from a fix, computing the age against `at`.

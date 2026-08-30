@@ -247,6 +247,11 @@ struct MC1MapView: UIViewRepresentable {
 
   private func updateCameraRegion(in mapView: MLNMapView, coordinator: Coordinator) {
     guard cameraRegionVersion != coordinator.lastAppliedRegionVersion else { return }
+    // A programmatic camera landing mid-pan yanks the map out from under the user's
+    // finger (M3.5 UI review S2 — the mapper's follow-me loop made this constant).
+    // The version stays unapplied, so the move happens on the first update after the
+    // gesture ends instead of being lost. Data-layer updates already gate on this.
+    guard !coordinator.isUserInteracting else { return }
     guard let bounds = requestedCameraBounds(coordinator: coordinator) else { return }
 
     let isInflated = mapView.window.map { mapView.bounds.height > $0.bounds.height * 1.5 } ?? false

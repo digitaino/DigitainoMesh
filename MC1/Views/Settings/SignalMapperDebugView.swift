@@ -1,6 +1,6 @@
 #if DEBUG
   import MapperRawLog
-import MC1Services
+  import MC1Services
   import SwiftUI
 
   /// Debug-only control panel for the signal mapper's capture core
@@ -36,7 +36,6 @@ import MC1Services
         flushSection
         probeSection
         rawRideLogSection
-        uploadSection
         maintenanceSection
       }
       .themedCanvas(theme)
@@ -184,14 +183,17 @@ import MC1Services
         Text("Probe discipline (M3)")
       } footer: {
         Text("Survey sessions never send flood-routed packets — that is a design rule, not a knob here. ")
-          + Text("Focus probe interval is the healthy-link cadence for a locked-on target; the engine's loss-streak ladder shortens it at the coverage edge and stretches it once a link is gone, and focus traces spend their own budget, never the novelty one.")
+          +
+          Text(
+            "Focus probe interval is the healthy-link cadence for a locked-on target; the engine's loss-streak ladder shortens it at the coverage edge and stretches it once a link is gone, and focus traces spend their own budget, never the novelty one."
+          )
       }
       .themedRowBackground(theme)
     }
 
     private var rawRideLogSection: some View {
       Section {
-        stepper("Sample cap per ride", value: $tuning.rawSampleCapPerSession, step: 10_000, range: 10_000...200_000, unit: "")
+        stepper("Sample cap per ride", value: $tuning.rawSampleCapPerSession, step: 10000, range: 10000...200_000, unit: "")
         stepper("Retention", value: $tuning.rawRetentionDays, step: 5, range: 0...365, unit: " d")
         Toggle("Keep screen awake", isOn: $tuning.rideKeepsScreenAwake)
           .onChange(of: tuning.rideKeepsScreenAwake) { _, _ in persist() }
@@ -225,21 +227,10 @@ import MC1Services
       } header: {
         Text("Raw ride log")
       } footer: {
-        Text("Every probe, reply, loss and breadcrumb of a survey run, kept at full detail in its own backup-excluded store. Retention 0 means keep forever — an explicit choice, not the default: a precise movement log's value decays in weeks while its exposure does not. ")
+        Text(
+          "Every probe, reply, loss and breadcrumb of a survey run, kept at full detail in its own backup-excluded store. Retention 0 means keep forever — an explicit choice, not the default: a precise movement log's value decays in weeks while its exposure does not. "
+        )
           + Text("Screen awake applies while a run is active and the app is foreground; a bar-mounted phone that sleeps mid-ride ends the ride.")
-      }
-      .themedRowBackground(theme)
-    }
-
-    private var uploadSection: some View {
-      Section {
-        stepper("Batch min cells", value: $tuning.uploadBatchMinCells, step: 5, range: 1...500, unit: "")
-        stepper("Batch max age", value: $tuning.uploadBatchMaxAgeSeconds, step: 3600, range: 3600...604_800, unit: " s")
-        stepper("Upload jitter", value: $tuning.uploadJitterSeconds, step: 1800, range: 0...86400, unit: " s")
-      } header: {
-        Text("Upload batching (M2)")
-      } footer: {
-        Text("Defined now, consumed by the wire v3 uploader.")
       }
       .themedRowBackground(theme)
     }
