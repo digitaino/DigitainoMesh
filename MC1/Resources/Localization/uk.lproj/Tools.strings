@@ -1534,3 +1534,12 @@
 
 /* Location: SignalMapperTransmitSheet.swift - A transmission was refused (no fix, no budget, no radio) */
 "tools.signalMapper.transmit.refused" = "Не надіслано — немає придатних координат, вичерпано ліміт передавання або немає рації";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.discoverShort" = "Виявлення";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.traceShort" = "Трасування";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.floodShort" = "Flood";

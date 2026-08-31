@@ -1559,3 +1559,12 @@
 
 /* Location: SignalMapperTransmitSheet.swift - Flood footer when no survey is running */
 "tools.signalMapper.transmit.floodFooterIdle" = "Relayed by the whole mesh, on the private channel you pick — choose one nobody else uses, or make a survey channel. The message appears in that channel's conversation. With no survey running the echoes are still captured, but nothing records which hexagon you sent from.";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.discoverShort" = "Discover";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.traceShort" = "Trace";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.floodShort" = "Flood";

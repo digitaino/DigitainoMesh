@@ -35,7 +35,7 @@ struct SignalMapperCellCard: View {
 
   /// Ceiling for the scrolling middle. Only what is between the header and the footer
   /// can ever scroll, and only when it does not fit.
-  private static let maxScrollHeight: CGFloat = 260
+  private static let maxScrollHeight: CGFloat = 220
 
   @State private var contentHeight: CGFloat = 0
 

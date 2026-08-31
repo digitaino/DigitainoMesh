@@ -1534,3 +1534,12 @@
 
 /* Location: SignalMapperTransmitSheet.swift - A transmission was refused (no fix, no budget, no radio) */
 "tools.signalMapper.transmit.refused" = "未发送 — 无可用定位、发射额度已用尽或未连接电台";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.discoverShort" = "发现";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.traceShort" = "追踪";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.floodShort" = "泛洪";

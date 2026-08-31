@@ -6980,6 +6980,8 @@ public enum L10n {
           public static let createChannel = L10n.tr("Tools", "tools.signalMapper.transmit.createChannel", fallback: "Create Survey Channel")
           /// Location: SignalMapperTransmitSheet.swift - Sends one zero-hop discover broadcast
           public static let discover = L10n.tr("Tools", "tools.signalMapper.transmit.discover", fallback: "Send Discover")
+          /// Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD
+          public static let discoverShort = L10n.tr("Tools", "tools.signalMapper.transmit.discoverShort", fallback: "Discover")
           /// Location: SignalMapperTransmitSheet.swift - Sends a real relayed message
           public static let flood = L10n.tr("Tools", "tools.signalMapper.transmit.flood", fallback: "Send Flood Message")
           /// Location: SignalMapperTransmitSheet.swift - Footer explaining the flood test
@@ -6988,6 +6990,8 @@ public enum L10n {
           public static let floodFooterIdle = L10n.tr("Tools", "tools.signalMapper.transmit.floodFooterIdle", fallback: "Relayed by the whole mesh, on the private channel you pick — choose one nobody else uses, or make a survey channel. The message appears in that channel's conversation. With no survey running the echoes are still captured, but nothing records which hexagon you sent from.")
           /// Location: SignalMapperTransmitSheet.swift - Section header for the flood test
           public static let floodHeader = L10n.tr("Tools", "tools.signalMapper.transmit.floodHeader", fallback: "Flood Test")
+          /// Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD
+          public static let floodShort = L10n.tr("Tools", "tools.signalMapper.transmit.floodShort", fallback: "Flood")
           /// Location: SignalMapperTransmitSheet.swift - Body of the flood test message
           public static let floodText = L10n.tr("Tools", "tools.signalMapper.transmit.floodText", fallback: "signal survey")
           /// Location: SignalMapperTransmitSheet.swift - Footer when no survey is running
@@ -7006,6 +7010,8 @@ public enum L10n {
           public static let title = L10n.tr("Tools", "tools.signalMapper.transmit.title", fallback: "Transmit")
           /// Location: SignalMapperTransmitSheet.swift - Sends one directed trace
           public static let trace = L10n.tr("Tools", "tools.signalMapper.transmit.trace", fallback: "Send Trace")
+          /// Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD
+          public static let traceShort = L10n.tr("Tools", "tools.signalMapper.transmit.traceShort", fallback: "Trace")
           /// Location: SignalMapperTransmitSheet.swift - Picker label for the trace destination
           public static let traceTarget = L10n.tr("Tools", "tools.signalMapper.transmit.traceTarget", fallback: "Repeater")
         }

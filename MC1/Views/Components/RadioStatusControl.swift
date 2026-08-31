@@ -254,6 +254,13 @@ struct RadioStatusControl: View {
     }
     .padding(.horizontal, 2)
     .fixedSize(horizontal: true, vertical: false)
+    // The tap floor lives here, on the one label both the visible face and the hosted
+    // `Menu` are built from, so the two can never be sized apart. A toolbar item's hit
+    // rect is its label's, and this label legitimately shrinks to a single glyph when the
+    // radio drops or the table empties — at which point the control was a ~20 pt target
+    // and read as dead (field report, 2026-08-30).
+    .frame(minWidth: 44, minHeight: 44)
+    .contentShape(.rect)
   }
 
   private func legColumn(glyph: some View, readout: some View) -> some View {

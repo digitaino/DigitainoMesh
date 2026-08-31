@@ -1140,3 +1140,12 @@
 
 /* Location: SignalMapperTransmitSheet.swift - A transmission was refused (no fix, no budget, no radio) */
 "tools.signalMapper.transmit.refused" = "Não enviado — sem localização utilizável, sem orçamento de transmissão ou sem rádio";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.discoverShort" = "Descoberta";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.traceShort" = "Traçado";
+
+/* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
+"tools.signalMapper.transmit.floodShort" = "Difusão";

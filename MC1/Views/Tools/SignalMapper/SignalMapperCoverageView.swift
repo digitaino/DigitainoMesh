@@ -499,6 +499,13 @@ struct SignalMapperCoverageView: View {
       .id(displayed.cell)
       .transition(.move(edge: .bottom).combined(with: .opacity))
     }
+    // The manual transmissions, on the HUD rather than two taps into a menu.
+    if isSurveying, let session = appState.signalMapperRideSession {
+      Divider().padding(.leading, 14)
+      SignalMapperTransmitBar(session: session, model: model) {
+        pendingTransmitSheet = true
+      }
+    }
   }
 
   private var startRow: some View {

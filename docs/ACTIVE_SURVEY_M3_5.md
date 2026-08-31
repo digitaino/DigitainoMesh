@@ -760,3 +760,26 @@ disconnected wrote `0` over the saved channel preference.
 Remaining, deliberately: the bars/mapper pair still has two schedulers rather than one
 arbiter with priority lanes (M3.5 §5's open item). Backing off is the cheap 80% of it; a
 real arbiter is the honest fix and is still unbuilt.
+
+### §8.2 The pill I broke, and where the manual transmissions actually live
+
+**The 44 pt floor was applied to two copies of one label, separately, and they diverged.**
+`ToolbarActionMenu` draws the visible label and, on top of it, a `Menu` built from a second
+instance of the same label with `colorMultiply(.clear)`. The Menu carries the glass
+backdrop; `colorMultiply` clears its *content* but not that backdrop, so the illusion holds
+only while the two instances are the same size. Flooring the Menu's copy at 44 pt and not
+the base put a 44 pt glass capsule across the middle of a 120 pt signal cluster — the
+screenshot Rafael sent on 2026-08-31.
+
+The floor now lives on `labelContent` itself, upstream of `ToolbarActionMenu`, which is
+back to exactly the arrangement that rendered correctly before: one label, one modifier
+chain, two identical instances. A minimum applied there reaches both copies by
+construction and cannot make them disagree again.
+
+**The manual transmissions were two taps and a sheet away.** `SignalMapperTransmitBar` puts
+Discover / Trace / Flood on the ride HUD as one row, with the sheet still one tap further
+for the decisions that belong in it: which repeater to trace when nothing is locked on, and
+which channel to flood. Both of those hand off rather than guessing — and a hand-off
+returns `nil`, not `true`, so it never reports "Sent" for a packet that was never sent.
+The row is disabled while the radio link is down, and every tap answers in a caption
+underneath.
