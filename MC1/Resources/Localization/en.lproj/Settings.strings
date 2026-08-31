@@ -1115,6 +1115,12 @@
 /* Footer explaining what the message display options show */
 "messages.footer" = "Display routing and timing information inside incoming message bubbles.";
 
+/* Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control */
+"messages.translation" = "Offer Translation";
+
+/* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
+"messages.translationFooter" = "Show a Translate control on incoming messages written in another language. Translation runs on this device and never changes the stored message.";
+
 // MARK: - Direct Messages Settings Section
 
 /* Section header for direct message settings */

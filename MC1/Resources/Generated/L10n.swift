@@ -5256,6 +5256,10 @@ public enum L10n {
       public static let showIncomingPath = L10n.tr("Settings", "messages.showIncomingPath", fallback: "Incoming Path")
       /// Toggle label for showing the radio region an incoming message was flooded under
       public static let showIncomingRegion = L10n.tr("Settings", "messages.showIncomingRegion", fallback: "Incoming Region")
+      /// Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control
+      public static let translation = L10n.tr("Settings", "messages.translation", fallback: "Offer Translation")
+      /// Location: MessagesSettingsSection.swift - Explains what the translation toggle does
+      public static let translationFooter = L10n.tr("Settings", "messages.translationFooter", fallback: "Show a Translate control on incoming messages written in another language. Translation runs on this device and never changes the stored message.")
     }
     public enum MyDevice {
       /// Section header for device-specific settings

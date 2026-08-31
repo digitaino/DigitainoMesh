@@ -1901,3 +1901,9 @@
 
 /* Footer explaining what repeater signal tracking does and costs */
 "signalBars.footer" = "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.";
+
+/* Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control */
+"messages.translation" = "Предлагать перевод";
+
+/* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
+"messages.translationFooter" = "Показывать кнопку «Перевести» во входящих сообщениях, написанных на другом языке. Перевод выполняется на этом устройстве и никогда не изменяет сохранённое сообщение.";

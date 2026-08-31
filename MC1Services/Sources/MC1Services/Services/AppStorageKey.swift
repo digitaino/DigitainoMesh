@@ -44,6 +44,9 @@ public enum AppStorageKey: String {
   /// Channel index the signal mapper's manual flood probe transmits on. Never 0: a flood
   /// on the public channel would put survey noise in front of every stranger on the mesh.
   case mapperFloodChannelIndex
+  /// Whether incoming messages in a language other than the device's may offer an
+  /// in-bubble Translate control.
+  case messageTranslationEnabled
   case hasSeenRepeaterDragHint
   case autoDeleteStaleNodesDays
   case lastStaleCleanupDate
@@ -95,4 +98,6 @@ public enum AppStorageKey: String {
   public static let defaultNotificationEnabled: Bool = true
   /// 0 means "none chosen"; the transmit sheet offers to create a private survey channel.
   public static let defaultMapperFloodChannelIndex: Int = 0
+  /// On: the feature arrived from upstream always-on, and turning it off is the opt-out.
+  public static let defaultMessageTranslationEnabled: Bool = true
 }

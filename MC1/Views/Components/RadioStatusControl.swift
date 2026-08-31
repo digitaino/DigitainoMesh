@@ -227,40 +227,42 @@ struct RadioStatusControl: View {
   /// truncate to "11…" while the bars stay whole. The cluster renders at its natural width
   /// and the title does the yielding; it is the larger, more redundant element.
   private var labelContent: some View {
-    // One `HStack`, always — the branches vary its *children*, not the whole subtree.
-    // A `Group { if … else … }` compiles to `_ConditionalContent`, and swapping arms is a
-    // structural identity change of the hosted toolbar `Menu`'s label; the file's own
-    // invariant above is that only values vary. Ending a survey used to walk this through
-    // three arms in a row across suspension points.
-    HStack(spacing: 6) {
+    // Structure restored to the shape that renders correctly, after two attempts to give
+    // this a 44 pt tap floor broke it in the same way (field reports 2026-08-30 and -31):
+    // the content drew at its ideal width while the item's glass capsule stayed small, so
+    // the cluster spilled out of both ends of a stub of a pill.
+    //
+    // Whatever the sizing negotiation is between `fixedSize`, a hosted toolbar item and
+    // the `Menu` drawn over it, a `frame` here does not survive it, and the hit area is
+    // not worth a broken control. The "won't open at all" report has a second, sufficient
+    // cause that is fixed in `handlePrimaryAction` with no layout involved: a presentation
+    // binding stranded `true`. Leave the geometry alone.
+    Group {
       if showsSignalCluster, let best = signals.best {
-        legColumn(
-          glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
-          readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
-        )
-        legColumn(
-          glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
-          readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
-        )
-        identityColumn(for: best)
-        watchBadge
+        HStack(spacing: 6) {
+          legColumn(
+            glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
+            readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
+          )
+          legColumn(
+            glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
+            readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
+          )
+          identityColumn(for: best)
+          watchBadge
+        }
+        .padding(.horizontal, 2)
       } else if showsSignalCluster {
-        scanningGlyph
-        powerLabel
-        watchBadge
+        HStack(spacing: 6) {
+          scanningGlyph
+          powerLabel
+          watchBadge
+        }
       } else {
         StatusIcon(iconName: iconName, iconColor: iconColor, isAnimating: isAnimating)
       }
     }
-    .padding(.horizontal, 2)
     .fixedSize(horizontal: true, vertical: false)
-    // The tap floor lives here, on the one label both the visible face and the hosted
-    // `Menu` are built from, so the two can never be sized apart. A toolbar item's hit
-    // rect is its label's, and this label legitimately shrinks to a single glyph when the
-    // radio drops or the table empties — at which point the control was a ~20 pt target
-    // and read as dead (field report, 2026-08-30).
-    .frame(minWidth: 44, minHeight: 44)
-    .contentShape(.rect)
   }
 
   private func legColumn(glyph: some View, readout: some View) -> some View {

@@ -1727,3 +1727,9 @@
 "Appearance.Accessibility.ThemeCard.SelectedLabel" = "Tema %@, selecionado neste momento";
 "Appearance.Accessibility.Swatch.DualMode" = "%@, variantes clara e escura";
 "Appearance.Accessibility.Swatch.DarkOnly" = "%@, apenas escuro";
+
+/* Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control */
+"messages.translation" = "Oferecer tradução";
+
+/* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
+"messages.translationFooter" = "Mostra um botão «Traduzir» nas mensagens recebidas escritas noutro idioma. A tradução é feita neste dispositivo e nunca altera a mensagem guardada.";
