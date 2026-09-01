@@ -818,3 +818,16 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Working…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Network View";
+"packetScope.refresh" = "Refresh";
+"packetScope.loading" = "Checking observers…";
+"packetScope.observerCount" = "Observers (%d)";
+"packetScope.notObserved" = "No observer heard this packet";
+"packetScope.notObservedFooter" = "The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.";
+"packetScope.coverageFooter" = "Coverage reflects only the configured observer network. A message can be delivered without being observed.";
+"packetScope.heardDirectly" = "Heard directly";
+"packetScope.via" = "via %@";
+"packetScope.error.disabled" = "Packet Scope is turned off in Settings.";
+"packetScope.error.invalidBaseUrl" = "The Packet Scope server address is not a valid HTTPS URL.";

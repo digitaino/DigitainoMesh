@@ -1252,3 +1252,6 @@
 
 /* Location: UnifiedMessageBubble.swift - Format string for unverified nickname display - %@ is the nickname */
 "chats.message.sender.unverifiedNicknameFormat" = "(%@)";
+
+/* Location: ActionsDetailsSection.swift - opens the Packet Scope observer view */
+"chats.message.action.networkView" = "Vista de rede";

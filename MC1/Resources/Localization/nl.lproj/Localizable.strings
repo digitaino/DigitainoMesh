@@ -822,3 +822,16 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Bezig…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Netwerkweergave";
+"packetScope.refresh" = "Vernieuwen";
+"packetScope.loading" = "Waarnemers controleren…";
+"packetScope.observerCount" = "Waarnemers (%d)";
+"packetScope.notObserved" = "Geen waarnemer heeft dit pakket gehoord";
+"packetScope.notObservedFooter" = "Het pakket heeft het waarnemersnetwerk niet bereikt — het kan toch op de mesh zijn bezorgd. Waarnemers dekken alleen hun eigen regio.";
+"packetScope.coverageFooter" = "De dekking toont alleen het geconfigureerde waarnemersnetwerk. Een bericht kan bezorgd zijn zonder waargenomen te zijn.";
+"packetScope.heardDirectly" = "Rechtstreeks gehoord";
+"packetScope.via" = "via %@";
+"packetScope.error.disabled" = "Packet Scope is uitgeschakeld in Instellingen.";
+"packetScope.error.invalidBaseUrl" = "Het serveradres van Packet Scope is geen geldige HTTPS-URL.";

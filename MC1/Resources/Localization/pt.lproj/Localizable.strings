@@ -626,3 +626,16 @@
 
 /* Location: KeyGenerationError+UserFacingMessage.swift - Key data is not a valid Ed25519 expanded private key */
 "error.keyGeneration.invalidKey" = "A chave não é uma chave privada Ed25519 válida.";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Vista de rede";
+"packetScope.refresh" = "Atualizar";
+"packetScope.loading" = "A verificar observadores…";
+"packetScope.observerCount" = "Observadores (%d)";
+"packetScope.notObserved" = "Nenhum observador ouviu este pacote";
+"packetScope.notObservedFooter" = "O pacote não chegou à rede de observadores — ainda assim pode ter sido entregue na malha. Os observadores cobrem apenas a sua própria região.";
+"packetScope.coverageFooter" = "A cobertura reflete apenas a rede de observadores configurada. Uma mensagem pode ser entregue sem ser observada.";
+"packetScope.heardDirectly" = "Ouvido diretamente";
+"packetScope.via" = "via %@";
+"packetScope.error.disabled" = "O Packet Scope está desativado nas Definições.";
+"packetScope.error.invalidBaseUrl" = "O endereço do servidor Packet Scope não é um URL HTTPS válido.";

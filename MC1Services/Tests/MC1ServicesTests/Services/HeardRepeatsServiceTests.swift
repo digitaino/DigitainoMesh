@@ -149,6 +149,91 @@ struct HeardRepeatsServiceTests {
   }
 
   @Test
+  func `echo stamps the sent message with the packet's mesh-wide content hash`() async throws {
+    let (store, service) = try makeStoreAndService()
+    let radioID = UUID()
+    let sendTimestamp = UInt32(Date().timeIntervalSince1970)
+    let messageID = UUID()
+    try await store.saveMessage(MessageDTO.testChannelMessage(
+      id: messageID,
+      radioID: radioID,
+      channelIndex: 0,
+      text: "hash me",
+      timestamp: sendTimestamp
+    ))
+    await service.configure(radioID: radioID)
+
+    let echo = makeEcho(
+      radioID: radioID,
+      channelIndex: 0,
+      senderTimestamp: sendTimestamp,
+      body: "hash me"
+    )
+    _ = await service.processForRepeats(echo)
+
+    let stamped = try await store.fetchMessage(id: messageID)
+    #expect(stamped?.packetContentHash == echo.contentHash)
+    // And the echo's hash is the firmware formula, not the local packetHash.
+    #expect(echo.contentHash == ParsedRxLogData.computeContentHash(
+      payloadTypeBits: 5, rawPathLengthByte: 1, packetPayload: Data([0x01, 0x02, 0x03])
+    ))
+    #expect(echo.contentHash != echo.packetHash)
+  }
+
+  @Test
+  func `a stamped content hash is never overwritten by a later echo`() async throws {
+    let (store, service) = try makeStoreAndService()
+    let radioID = UUID()
+    let sendTimestamp = UInt32(Date().timeIntervalSince1970)
+    let messageID = UUID()
+    try await store.saveMessage(MessageDTO.testChannelMessage(
+      id: messageID,
+      radioID: radioID,
+      channelIndex: 0,
+      text: "twice heard",
+      timestamp: sendTimestamp
+    ))
+    await service.configure(radioID: radioID)
+
+    let firstEcho = makeEcho(
+      radioID: radioID,
+      channelIndex: 0,
+      senderTimestamp: sendTimestamp,
+      body: "twice heard"
+    )
+    _ = await service.processForRepeats(firstEcho)
+
+    // A second echo of a *different* wire packet (retry attempt) correlating to
+    // the same message: distinct RX entry, distinct payload, distinct hash.
+    let retryEcho = RxLogEntryDTO(
+      id: UUID(),
+      radioID: radioID,
+      from: ParsedRxLogData(
+        snr: 2.0,
+        rssi: -90,
+        rawPayload: Data([0x02]),
+        routeType: .flood,
+        payloadType: .groupText,
+        payloadVersion: 0,
+        payloadTypeBits: 5,
+        transportCode: nil,
+        pathLength: 1,
+        pathNodes: [0x43],
+        packetPayload: Data([0x09, 0x08, 0x07])
+      ),
+      channelIndex: 0,
+      channelName: "Test",
+      decryptStatus: .success,
+      senderTimestamp: sendTimestamp,
+      decodedText: "\(Self.testNodeName): twice heard"
+    )
+    _ = await service.processForRepeats(retryEcho)
+
+    let stamped = try await store.fetchMessage(id: messageID)
+    #expect(stamped?.packetContentHash == firstEcho.contentHash)
+  }
+
+  @Test
   func `same RX log entry is counted once`() async throws {
     let (store, service) = try makeStoreAndService()
     let radioID = UUID()

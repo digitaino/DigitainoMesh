@@ -815,3 +815,16 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Trabajando…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Vista de red";
+"packetScope.refresh" = "Actualizar";
+"packetScope.loading" = "Comprobando observadores…";
+"packetScope.observerCount" = "Observadores (%d)";
+"packetScope.notObserved" = "Ningún observador oyó este paquete";
+"packetScope.notObservedFooter" = "El paquete no llegó a la red de observadores; aun así puede haberse entregado en la malla. Los observadores solo cubren su propia región.";
+"packetScope.coverageFooter" = "La cobertura refleja solo la red de observadores configurada. Un mensaje puede entregarse sin ser observado.";
+"packetScope.heardDirectly" = "Oído directamente";
+"packetScope.via" = "vía %@";
+"packetScope.error.disabled" = "Packet Scope está desactivado en Ajustes.";
+"packetScope.error.invalidBaseUrl" = "La dirección del servidor de Packet Scope no es una URL HTTPS válida.";

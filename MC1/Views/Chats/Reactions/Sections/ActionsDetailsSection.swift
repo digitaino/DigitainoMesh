@@ -18,6 +18,7 @@ struct ActionsDetailsSection: View {
 
   @State private var showPathDetail = false
   @State private var showRepeatsMap = false
+  @State private var showPacketScope = false
   /// Route text picked on `MessagePathDetailView`, dispatched from the sheet's
   /// `onDismiss`. The dispatch also dismisses the actions sheet, and dismissing the
   /// parent while the child is still presented can strand the actions sheet open —
@@ -28,6 +29,10 @@ struct ActionsDetailsSection: View {
     VStack(alignment: .leading, spacing: 0) {
       if availability.canViewPath {
         viewPathButton
+      }
+
+      if availability.canViewPacketScope {
+        networkViewButton
       }
 
       if availability.canShowRepeatDetails {
@@ -85,6 +90,36 @@ struct ActionsDetailsSection: View {
         pathViewModel: pathViewModel
       )
     }
+    // A sheet, not a cover: this is a scrolling list with no map underneath,
+    // so the standard swipe-down dismissal is the right affordance.
+    .sheet(isPresented: $showPacketScope) {
+      PacketScopeDetailView(message: message)
+    }
+  }
+
+  /// Entry to the observer network's view of this packet — the opt-in CoreScope
+  /// lookup. The fetch happens on the presented screen, never from rendering
+  /// this row: the sheet opening is the user-initiated moment the privacy
+  /// contract keys on.
+  private var networkViewButton: some View {
+    Button {
+      showPacketScope = true
+    } label: {
+      HStack {
+        Label(
+          L10n.Chats.Chats.Message.Action.networkView,
+          systemImage: "dot.radiowaves.up.forward"
+        )
+        Spacer()
+        Image(systemName: "chevron.right")
+          .foregroundStyle(.secondary)
+          .font(.caption)
+          .accessibilityHidden(true)
+      }
+      .padding()
+      .contentShape(.rect)
+    }
+    .foregroundStyle(.primary)
   }
 
   /// The one entry point to the path: map, hop list and Reply with Route live

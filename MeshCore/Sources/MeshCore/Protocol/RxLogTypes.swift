@@ -110,8 +110,13 @@ public struct ParsedRxLogData: Sendable, Equatable {
   /// 1-byte recipient pubkey hash for direct messages (nil for channel/other types).
   public let recipientPubkeyPrefix: Data?
 
-  /// Correlation hash for "heard repeats" detection
+  /// Correlation hash for "heard repeats" detection. Local-only — see
+  /// ``computePacketHash(from:)`` for why it differs from ``contentHash``.
   public let packetHash: String
+
+  /// Firmware-compatible content hash — the packet's mesh-wide identity.
+  /// See ``computeContentHash(payloadTypeBits:rawPathLengthByte:packetPayload:)``.
+  public let contentHash: String
 
   public init(
     snr: Double?,
@@ -142,11 +147,54 @@ public struct ParsedRxLogData: Sendable, Equatable {
     self.senderPubkeyPrefix = senderPubkeyPrefix
     self.recipientPubkeyPrefix = recipientPubkeyPrefix
     packetHash = Self.computePacketHash(from: packetPayload)
+    contentHash = Self.computeContentHash(
+      payloadTypeBits: payloadTypeBits,
+      rawPathLengthByte: pathLength,
+      packetPayload: packetPayload
+    )
   }
 
   /// Compute SHA256 hash of packetPayload, return first 8 bytes as hex.
+  ///
+  /// Local-only correlation key. It deliberately omits the payload-type nibble, so it
+  /// does NOT match the firmware's own packet hash — use ``contentHash`` for anything
+  /// that must agree with another node's or an observer's view of the same packet.
   public static func computePacketHash(from packetPayload: Data) -> String {
     let hash = SHA256.hash(data: packetPayload)
+    return hash.prefix(8).map { String(format: "%02x", $0) }.joined()
+  }
+
+  /// Compute the firmware's content hash for a packet: SHA256 over the payload-type
+  /// nibble followed by the packet payload (header and path excluded), truncated to
+  /// 8 bytes of lowercase hex.
+  ///
+  /// This is the mesh-wide identity of a transmission: every node and observer that
+  /// hears the packet — through any path — derives the same value, because the
+  /// route-mutable bytes (route bits, version bits, transport code, path) are all
+  /// excluded. It is the key CoreScope observers group observations under.
+  ///
+  /// TRACE packets fold in the raw path-length byte as a little-endian UInt16,
+  /// matching firmware — their path bytes are per-hop SNR readings that mutate at
+  /// every hop, so the firmware pins the *length* instead.
+  ///
+  /// - Parameters:
+  ///   - payloadTypeBits: raw 4-bit payload-type nibble from the header (bits 2-5),
+  ///     NOT the mapped ``PayloadType`` raw value (bits 12-14 map to `.unknown` = 255,
+  ///     which would corrupt the hash input).
+  ///   - rawPathLengthByte: the undecoded path-length byte (hash-size bits included).
+  ///     Only read for TRACE packets.
+  ///   - packetPayload: payload after header/transport-code/path extraction.
+  public static func computeContentHash(
+    payloadTypeBits: UInt8,
+    rawPathLengthByte: UInt8,
+    packetPayload: Data
+  ) -> String {
+    var input = Data([payloadTypeBits])
+    if payloadTypeBits == PayloadType.trace.rawValue {
+      input.append(contentsOf: [rawPathLengthByte, 0x00])
+    }
+    input.append(packetPayload)
+    let hash = SHA256.hash(data: input)
     return hash.prefix(8).map { String(format: "%02x", $0) }.joined()
   }
 }

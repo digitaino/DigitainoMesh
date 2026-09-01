@@ -820,3 +820,16 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Trwa praca…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Widok sieci";
+"packetScope.refresh" = "Odśwież";
+"packetScope.loading" = "Sprawdzanie obserwatorów…";
+"packetScope.observerCount" = "Obserwatory (%d)";
+"packetScope.notObserved" = "Żaden obserwator nie usłyszał tego pakietu";
+"packetScope.notObservedFooter" = "Pakiet nie dotarł do sieci obserwatorów — mimo to mógł zostać dostarczony w sieci mesh. Obserwatory obejmują tylko własny region.";
+"packetScope.coverageFooter" = "Zasięg odzwierciedla tylko skonfigurowaną sieć obserwatorów. Wiadomość może zostać dostarczona bez bycia zaobserwowaną.";
+"packetScope.heardDirectly" = "Usłyszano bezpośrednio";
+"packetScope.via" = "przez %@";
+"packetScope.error.disabled" = "Packet Scope jest wyłączony w Ustawieniach.";
+"packetScope.error.invalidBaseUrl" = "Adres serwera Packet Scope nie jest prawidłowym adresem HTTPS.";

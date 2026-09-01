@@ -819,3 +819,16 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Выполняется…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Сетевой вид";
+"packetScope.refresh" = "Обновить";
+"packetScope.loading" = "Проверка наблюдателей…";
+"packetScope.observerCount" = "Наблюдатели (%d)";
+"packetScope.notObserved" = "Ни один наблюдатель не услышал этот пакет";
+"packetScope.notObservedFooter" = "Пакет не достиг сети наблюдателей — при этом он всё равно мог быть доставлен по mesh-сети. Наблюдатели покрывают только свой регион.";
+"packetScope.coverageFooter" = "Покрытие отражает только настроенную сеть наблюдателей. Сообщение может быть доставлено, не будучи замеченным.";
+"packetScope.heardDirectly" = "Принят напрямую";
+"packetScope.via" = "через %@";
+"packetScope.error.disabled" = "Packet Scope отключён в настройках.";
+"packetScope.error.invalidBaseUrl" = "Адрес сервера Packet Scope не является корректным HTTPS-URL.";

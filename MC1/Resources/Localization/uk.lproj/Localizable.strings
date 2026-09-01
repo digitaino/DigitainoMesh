@@ -822,3 +822,16 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Виконується…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Мережевий вигляд";
+"packetScope.refresh" = "Оновити";
+"packetScope.loading" = "Перевірка спостерігачів…";
+"packetScope.observerCount" = "Спостерігачі (%d)";
+"packetScope.notObserved" = "Жоден спостерігач не почув цей пакет";
+"packetScope.notObservedFooter" = "Пакет не досяг мережі спостерігачів — попри це він міг бути доставлений у mesh-мережі. Спостерігачі покривають лише свій регіон.";
+"packetScope.coverageFooter" = "Покриття відображає лише налаштовану мережу спостерігачів. Повідомлення може бути доставлене, не будучи поміченим.";
+"packetScope.heardDirectly" = "Почуто напряму";
+"packetScope.via" = "через %@";
+"packetScope.error.disabled" = "Packet Scope вимкнено в налаштуваннях.";
+"packetScope.error.invalidBaseUrl" = "Адреса сервера Packet Scope не є коректною HTTPS-адресою.";

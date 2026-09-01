@@ -1901,3 +1901,9 @@
 
 /* Footer explaining what repeater signal tracking does and costs */
 "signalBars.footer" = "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.";
+
+/* Packet Scope (opt-in CoreScope observer lookup) */
+"packetScope.header" = "Packet Scope";
+"packetScope.toggle" = "查询消息覆盖情况";
+"packetScope.server" = "服务器";
+"packetScope.footer" = "在消息操作中添加“网络视图”，显示哪些网状网观察站听到了该数据包以及信号强度。查询时会通过手机的互联网连接将数据包标识符（绝不包含内容）发送到下方服务器。覆盖范围取决于服务器监测的观察站网络。";

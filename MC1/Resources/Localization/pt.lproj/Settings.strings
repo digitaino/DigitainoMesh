@@ -1727,3 +1727,9 @@
 "Appearance.Accessibility.ThemeCard.SelectedLabel" = "Tema %@, selecionado neste momento";
 "Appearance.Accessibility.Swatch.DualMode" = "%@, variantes clara e escura";
 "Appearance.Accessibility.Swatch.DarkOnly" = "%@, apenas escuro";
+
+/* Packet Scope (opt-in CoreScope observer lookup) */
+"packetScope.header" = "Packet Scope";
+"packetScope.toggle" = "Consultar cobertura de mensagens";
+"packetScope.server" = "Servidor";
+"packetScope.footer" = "Adiciona uma vista de rede às ações de uma mensagem, mostrando que observadores da malha ouviram o seu pacote e com que nível de sinal. A consulta envia o identificador do pacote (nunca o conteúdo) ao servidor abaixo pela ligação à internet do telefone. A cobertura depende da rede de observadores do servidor.";

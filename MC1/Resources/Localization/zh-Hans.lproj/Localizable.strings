@@ -818,3 +818,16 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "处理中…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "网络视图";
+"packetScope.refresh" = "刷新";
+"packetScope.loading" = "正在检查观察站…";
+"packetScope.observerCount" = "观察站（%d）";
+"packetScope.notObserved" = "没有观察站听到此数据包";
+"packetScope.notObservedFooter" = "该数据包未到达观察站网络——但仍可能已在网状网中送达。观察站仅覆盖其所在区域。";
+"packetScope.coverageFooter" = "覆盖情况仅反映所配置的观察站网络。消息可能已送达但未被观察到。";
+"packetScope.heardDirectly" = "直接听到";
+"packetScope.via" = "经由 %@";
+"packetScope.error.disabled" = "Packet Scope 已在设置中关闭。";
+"packetScope.error.invalidBaseUrl" = "Packet Scope 服务器地址不是有效的 HTTPS URL。";

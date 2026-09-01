@@ -25,6 +25,12 @@ public enum AppStorageKey: String {
   /// Retained for the backup wire format only; the `linkPreviewsEnabled` master
   /// now gates inline images, so this value is round-tripped but never read.
   case showInlineImages
+  /// Master opt-in for the Packet Scope lookup (per-message observer coverage from a
+  /// CoreScope instance). Off by default: enabling it sends packet hashes of the
+  /// user's own messages to the configured server on demand.
+  case packetScopeEnabled
+  /// Base URL of the CoreScope instance queried when `packetScopeEnabled` is on.
+  case packetScopeBaseURL
   case autoPlayGIFs
   case replyWithQuote
   case showMapPreviewThumbnails
@@ -72,6 +78,8 @@ public enum AppStorageKey: String {
   public static let defaultShowIncomingRegion: Bool = false
   public static let defaultShowIncomingSendTime: Bool = false
   public static let defaultLinkPreviewsEnabled: Bool = false
+  public static let defaultPacketScopeEnabled: Bool = false
+  public static let defaultPacketScopeBaseURL: String = "https://scope.digitaino.com"
   public static let defaultLinkPreviewsAutoResolveDM: Bool = true
   public static let defaultLinkPreviewsAutoResolveChannels: Bool = true
   public static let defaultAutoPlayGIFs: Bool = true

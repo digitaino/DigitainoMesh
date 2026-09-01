@@ -1899,3 +1899,9 @@
 
 /* Footer explaining what repeater signal tracking does and costs */
 "signalBars.footer" = "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.";
+
+/* Packet Scope (opt-in CoreScope observer lookup) */
+"packetScope.header" = "Packet Scope";
+"packetScope.toggle" = "Consulta copertura messaggi";
+"packetScope.server" = "Server";
+"packetScope.footer" = "Aggiunge alle azioni di un messaggio una vista di rete che mostra quali osservatori della mesh hanno ricevuto il suo pacchetto e con quale livello di segnale. La consultazione invia l'identificatore del pacchetto (mai il contenuto) al server indicato sotto tramite la connessione internet del telefono. La copertura dipende dalla rete di osservatori del server.";

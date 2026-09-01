@@ -232,6 +232,22 @@ public struct RxLogEntryDTO: Sendable, Identifiable, Equatable, Hashable {
 
   // MARK: - Computed Properties
 
+  /// Firmware-compatible content hash — this packet's mesh-wide identity, identical on
+  /// every node and observer that heard it through any path. Derived on demand from the
+  /// persisted wire fields rather than stored: entries are pruned aggressively, and any
+  /// consumer that needs the hash to outlive the entry must copy it out (the message
+  /// ingest pipeline does, onto `Message.packetContentHash`).
+  ///
+  /// Not `packetHash` — that is a local-only correlation key that omits the
+  /// payload-type nibble and does not match what the rest of the mesh computes.
+  public var contentHash: String {
+    ParsedRxLogData.computeContentHash(
+      payloadTypeBits: payloadTypeBits,
+      rawPathLengthByte: pathLength,
+      packetPayload: packetPayload
+    )
+  }
+
   /// Hash size per hop in bytes (1, 2, or 3), derived from pathLength upper 2 bits.
   public var pathHashSize: Int {
     decodePathLen(pathLength)?.hashSize ?? 1

@@ -12,6 +12,7 @@ extension SyncCoordinator {
   /// is now" stops describing the reception. Generous enough for slow
   /// multi-hop flood delivery, far under a backgrounded-overnight queue.
   static let maxStampTransitInterval: TimeInterval = 15 * 60
+
   // MARK: - Message Handler Wiring
 
   func wireMessageHandlers(dependencies: SyncDependencies, radioID: UUID) async {
@@ -265,7 +266,10 @@ extension SyncCoordinator {
       regionScope: rxResult.regionScope,
       regionScopeMatches: rxResult.regionScopeMatches,
       userLatitude: userFix?.latitude,
-      userLongitude: userFix?.longitude
+      userLongitude: userFix?.longitude,
+      // Copied off the correlation now or never: the RxLog row is pruned within
+      // hours, and this hash is what the opt-in Packet Scope lookup keys on.
+      packetContentHash: rxResult.contentHash
     )
 
     // Check for duplicate before saving

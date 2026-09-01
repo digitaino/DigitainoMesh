@@ -612,6 +612,8 @@ public enum L10n {
           public static let expanded = L10n.tr("Chats", "chats.message.action.expanded", fallback: "Expanded")
           /// Location: MessageActionsSheet.swift - Context menu action to mention
           public static let mention = L10n.tr("Chats", "chats.message.action.mention", fallback: "Mention")
+          /// Location: ActionsDetailsSection.swift - opens the Packet Scope observer view
+          public static let networkView = L10n.tr("Chats", "chats.message.action.networkView", fallback: "Network View")
           /// Location: MessageLinkAccessibility.swift - VoiceOver action to open a shared channel link, %@ is the channel name
           public static func openChannel(_ p1: Any) -> String {
             return L10n.tr("Chats", "chats.message.action.openChannel", String(describing: p1), fallback: "Open Channel: %@")
@@ -2799,6 +2801,36 @@ public enum L10n {
         public static func body(_ p1: Any, _ p2: Any) -> String {
           return L10n.tr("Localizable", "notifications.reaction.body", String(describing: p1), String(describing: p2), fallback: "Reacted %1$@ to your message: \"%2$@\"")
         }
+      }
+    }
+    public enum PacketScope {
+      /// Coverage reflects only the configured observer network. A message can be delivered without being observed.
+      public static let coverageFooter = L10n.tr("Localizable", "packetScope.coverageFooter", fallback: "Coverage reflects only the configured observer network. A message can be delivered without being observed.")
+      /// Heard directly
+      public static let heardDirectly = L10n.tr("Localizable", "packetScope.heardDirectly", fallback: "Heard directly")
+      /// Checking observers…
+      public static let loading = L10n.tr("Localizable", "packetScope.loading", fallback: "Checking observers…")
+      /// No observer heard this packet
+      public static let notObserved = L10n.tr("Localizable", "packetScope.notObserved", fallback: "No observer heard this packet")
+      /// The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.
+      public static let notObservedFooter = L10n.tr("Localizable", "packetScope.notObservedFooter", fallback: "The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.")
+      /// Observers (%d)
+      public static func observerCount(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.observerCount", p1, fallback: "Observers (%d)")
+      }
+      /// Refresh
+      public static let refresh = L10n.tr("Localizable", "packetScope.refresh", fallback: "Refresh")
+      /// Location: PacketScopeDetailView.swift - observer coverage for one message
+      public static let title = L10n.tr("Localizable", "packetScope.title", fallback: "Network View")
+      /// via %@
+      public static func via(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.via", String(describing: p1), fallback: "via %@")
+      }
+      public enum Error {
+        /// Packet Scope is turned off in Settings.
+        public static let disabled = L10n.tr("Localizable", "packetScope.error.disabled", fallback: "Packet Scope is turned off in Settings.")
+        /// The Packet Scope server address is not a valid HTTPS URL.
+        public static let invalidBaseUrl = L10n.tr("Localizable", "packetScope.error.invalidBaseUrl", fallback: "The Packet Scope server address is not a valid HTTPS URL.")
       }
     }
     public enum SignalBars {
@@ -5444,6 +5476,16 @@ public enum L10n {
         /// Topography
         public static let topo = L10n.tr("Settings", "offlineMaps.layer.topo", fallback: "Topography")
       }
+    }
+    public enum PacketScope {
+      /// Adds a Network View to a message's actions, showing which mesh observers heard its packet and at what signal level. Looking a message up sends that packet's identifier (never its content) to the server below over your phone's internet connection. Coverage depends on the observer network the server watches.
+      public static let footer = L10n.tr("Settings", "packetScope.footer", fallback: "Adds a Network View to a message's actions, showing which mesh observers heard its packet and at what signal level. Looking a message up sends that packet's identifier (never its content) to the server below over your phone's internet connection. Coverage depends on the observer network the server watches.")
+      /// Packet Scope (opt-in CoreScope observer lookup)
+      public static let header = L10n.tr("Settings", "packetScope.header", fallback: "Packet Scope")
+      /// Server
+      public static let server = L10n.tr("Settings", "packetScope.server", fallback: "Server")
+      /// Look Up Message Coverage
+      public static let toggle = L10n.tr("Settings", "packetScope.toggle", fallback: "Look Up Message Coverage")
     }
     public enum PathHashMode {
       /// Footer explaining path hash mode tradeoff

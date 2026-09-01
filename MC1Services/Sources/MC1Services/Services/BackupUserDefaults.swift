@@ -31,6 +31,8 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
   public var linkPreviewsEnabled: Bool?
   public var linkPreviewsAutoResolveDM: Bool?
   public var linkPreviewsAutoResolveChannels: Bool?
+  public var packetScopeEnabled: Bool?
+  public var packetScopeBaseURL: String?
   public var showMapPreviewThumbnails: Bool?
   public var frequentEmojis: [String]?
   public var recentEmojis: [String]?
@@ -117,6 +119,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.linkPreviewsEnabled, AppStorageKey.linkPreviewsEnabled.rawValue),
     (\.linkPreviewsAutoResolveDM, AppStorageKey.linkPreviewsAutoResolveDM.rawValue),
     (\.linkPreviewsAutoResolveChannels, AppStorageKey.linkPreviewsAutoResolveChannels.rawValue),
+    (\.packetScopeEnabled, AppStorageKey.packetScopeEnabled.rawValue),
     (\.showMapPreviewThumbnails, AppStorageKey.showMapPreviewThumbnails.rawValue),
     (\.hasSeenRepeaterDragHint, AppStorageKey.hasSeenRepeaterDragHint.rawValue),
     (\.notifyContactMessages, AppStorageKey.notifyContactMessages.rawValue),
@@ -148,6 +151,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.discoverySortOrder, AppStorageKey.discoverySortOrder.rawValue),
     (\.nodesSortOrder, AppStorageKey.nodesSortOrder.rawValue),
     (\.tracePathViewMode, AppStorageKey.tracePathViewMode.rawValue),
+    (\.packetScopeBaseURL, AppStorageKey.packetScopeBaseURL.rawValue),
     (\.selectedThemeID, PersistenceKeys.selectedThemeID),
     (\.appColorSchemePreference, PersistenceKeys.appColorSchemePreference),
   ]

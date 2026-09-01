@@ -185,6 +185,17 @@ public final class Message {
   /// Empty, one name, or two-plus for multi-match. Defaults to `[]`.
   public var regionScopeMatches: [String] = []
 
+  /// Firmware-compatible content hash of the wire packet this message arrived on (or,
+  /// for outgoing channel messages, of the echo that proved it went out) — the packet's
+  /// mesh-wide identity, shared by every node and observer that heard it. Copied off the
+  /// RxLog correlation at ingest because RxLog entries are pruned within hours while
+  /// messages live for years; this column is the durable home. Nil for uncorrelated
+  /// receptions, legacy rows, and outgoing messages no echo has been heard for.
+  ///
+  /// Powers the opt-in Packet Scope lookup (observer coverage for a message). Never
+  /// leaves the device unless the user turns that feature on.
+  public var packetContentHash: String?
+
   /// Heard repeats for this message (cascade delete)
   @Relationship(deleteRule: .cascade, inverse: \MessageRepeat.message)
   var repeats: [MessageRepeat]?
@@ -322,6 +333,7 @@ public final class Message {
     // backup restore), so the designated init keeps its Build 40 shape.
     userLatitude = dto.userLatitude
     userLongitude = dto.userLongitude
+    packetContentHash = dto.packetContentHash
   }
 }
 
@@ -413,6 +425,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
   /// backlog-drained rows, receptions with no fresh fix, and legacy rows.
   public var userLatitude: Double?
   public var userLongitude: Double?
+  /// Mesh-wide packet identity from RxLog correlation. See `Message.packetContentHash`.
+  public var packetContentHash: String?
 
   /// Explicit Codable so backups predating ``sortDate`` decode cleanly.
   /// Legacy envelopes have no `sortDate` key; it falls back to `createdAt`,
@@ -426,7 +440,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
          deduplicationKey, linkPreviewURL, linkPreviewTitle, linkPreviewImageData,
          linkPreviewIconData, linkPreviewFetched, containsSelfMention, mentionSeen,
          failureSeen, timestampCorrected, senderTimestamp, reactionSummary, routeType,
-         regionScope, regionScopeMatches, userLatitude, userLongitude
+         regionScope, regionScopeMatches, userLatitude, userLongitude,
+         packetContentHash
   }
 
   public init(from decoder: Decoder) throws {
@@ -474,6 +489,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     regionScopeMatches = try container.decodeIfPresent([String].self, forKey: .regionScopeMatches) ?? []
     userLatitude = try container.decodeIfPresent(Double.self, forKey: .userLatitude)
     userLongitude = try container.decodeIfPresent(Double.self, forKey: .userLongitude)
+    packetContentHash = try container.decodeIfPresent(String.self, forKey: .packetContentHash)
   }
 
   public init(from message: Message, includeLinkPreviewBlobs: Bool = true) {
@@ -528,6 +544,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     regionScopeMatches = message.regionScopeMatches
     userLatitude = message.userLatitude
     userLongitude = message.userLongitude
+    packetContentHash = message.packetContentHash
   }
 
   /// Memberwise initializer for creating DTOs directly
@@ -572,7 +589,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     regionScope: String? = nil,
     regionScopeMatches: [String] = [],
     userLatitude: Double? = nil,
-    userLongitude: Double? = nil
+    userLongitude: Double? = nil,
+    packetContentHash: String? = nil
   ) {
     self.id = id
     self.radioID = radioID
@@ -615,6 +633,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     self.regionScopeMatches = regionScopeMatches
     self.userLatitude = userLatitude
     self.userLongitude = userLongitude
+    self.packetContentHash = packetContentHash
   }
 
   public var isOutgoing: Bool {

@@ -105,6 +105,15 @@ public actor HeardRepeatsService {
 
       try await dataStore.saveMessageRepeat(repeatDTO)
 
+      // The echo is the one place an *outgoing* message's wire identity ever
+      // surfaces — the phone never sees its own on-air bytes, but a repeater's
+      // rebroadcast is byte-identical after path stripping, so the echo's content
+      // hash IS the sent packet's. Stamp it while the RxLog row still exists.
+      try await dataStore.setMessagePacketContentHashIfMissing(
+        id: message.id,
+        contentHash: entry.contentHash
+      )
+
       // Increment and return new count
       let newCount = try await dataStore.incrementMessageHeardRepeats(id: message.id)
 

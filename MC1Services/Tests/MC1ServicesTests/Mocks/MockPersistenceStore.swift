@@ -1530,6 +1530,12 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     0 // Stub
   }
 
+  public func setMessagePacketContentHashIfMissing(id: UUID, contentHash: String) async throws {
+    guard var message = messages[id], message.packetContentHash == nil else { return }
+    message.packetContentHash = contentHash
+    messages[id] = message
+  }
+
   public func incrementMessageSendCount(id: UUID) async throws -> Int {
     if let message = messages[id] {
       let newCount = message.sendCount + 1

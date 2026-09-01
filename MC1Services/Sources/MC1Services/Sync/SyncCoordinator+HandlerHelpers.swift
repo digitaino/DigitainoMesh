@@ -8,6 +8,10 @@ extension SyncCoordinator {
     let pathNodes: Data?
     let pathLength: UInt8
     let packetHash: String?
+    /// Firmware-compatible mesh-wide packet identity (`RxLogEntryDTO.contentHash`),
+    /// captured here because the RxLog row it derives from is pruned within hours —
+    /// the message row is the durable home.
+    let contentHash: String?
     let routeType: RouteType?
     let regionScope: String?
     let regionScopeMatches: [String]
@@ -43,6 +47,7 @@ extension SyncCoordinator {
           pathNodes: pathNodes,
           pathLength: pathLength,
           packetHash: rxEntry.packetHash,
+          contentHash: rxEntry.contentHash,
           routeType: rxEntry.routeType,
           regionScope: rxEntry.regionScope,
           regionScopeMatches: rxEntry.regionScopeMatches
@@ -65,6 +70,7 @@ extension SyncCoordinator {
             pathNodes: rxEntry.pathNodes,
             pathLength: rxEntry.pathLength,
             packetHash: rxEntry.packetHash,
+            contentHash: rxEntry.contentHash,
             routeType: rxEntry.routeType,
             regionScope: rxEntry.regionScope,
             regionScopeMatches: rxEntry.regionScopeMatches
@@ -88,6 +94,7 @@ extension SyncCoordinator {
       pathNodes: nil,
       pathLength: defaultPathLength,
       packetHash: nil,
+      contentHash: nil,
       routeType: nil,
       regionScope: nil,
       regionScopeMatches: []
