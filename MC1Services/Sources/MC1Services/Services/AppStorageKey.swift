@@ -30,6 +30,14 @@ public enum AppStorageKey: String {
   /// user's own messages to the configured server on demand.
   case packetScopeEnabled
   /// Base URL of the CoreScope instance queried when `packetScopeEnabled` is on.
+  ///
+  /// Intentionally device-local: not registered in `BackupUserDefaults`. Every
+  /// other backed-up key is a preference about *this* device's behaviour; this one
+  /// chooses **where user-derived data is sent**, and a restored backup writes
+  /// keys the device does not already have without prompting. Backing it up would
+  /// let a crafted backup file silently aim packet hashes at a host of its
+  /// choosing. The toggle round-trips (it is a preference); the destination does
+  /// not, so a restore always lands on the default instance.
   case packetScopeBaseURL
   case autoPlayGIFs
   case replyWithQuote

@@ -639,3 +639,17 @@
 "packetScope.via" = "via %@";
 "packetScope.error.disabled" = "O Packet Scope está desativado nas Definições.";
 "packetScope.error.invalidBaseUrl" = "O endereço do servidor Packet Scope não é um URL HTTPS válido.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Melhor sinal";
+"packetScope.shortestRoute" = "Rota mais curta";
+"packetScope.direct" = "Direto, sem repetidores";
+"packetScope.hopCount" = "%d saltos";
+"packetScope.propagation" = "Propagação";
+"packetScope.spreadSeconds" = "%@ s pela malha";
+"packetScope.receptions" = "Receções totais";
+"packetScope.timesHeard" = "ouvido %d×";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "O identificador de pacote desta mensagem é ilegível, nada foi consultado.";
+"packetScope.retriedFooter" = "Enviado %d vezes; cada tentativa é um pacote distinto. Mostra-se o ouvido primeiro.";

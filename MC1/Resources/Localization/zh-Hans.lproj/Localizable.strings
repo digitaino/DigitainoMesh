@@ -831,3 +831,17 @@
 "packetScope.via" = "经由 %@";
 "packetScope.error.disabled" = "Packet Scope 已在设置中关闭。";
 "packetScope.error.invalidBaseUrl" = "Packet Scope 服务器地址不是有效的 HTTPS URL。";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "最佳信号";
+"packetScope.shortestRoute" = "最短路径";
+"packetScope.direct" = "直达，无中继";
+"packetScope.hopCount" = "%d 跳";
+"packetScope.propagation" = "传播";
+"packetScope.spreadSeconds" = "%@ 秒传遍网状网";
+"packetScope.receptions" = "接收总次数";
+"packetScope.timesHeard" = "收到 %d 次";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "此消息的数据包标识符无法读取，未进行查询。";
+"packetScope.retriedFooter" = "已发送 %d 次；每次尝试都是独立数据包。此处显示最先被听到的那一个。";

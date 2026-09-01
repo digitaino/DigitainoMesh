@@ -116,7 +116,17 @@ public struct ParsedRxLogData: Sendable, Equatable {
 
   /// Firmware-compatible content hash — the packet's mesh-wide identity.
   /// See ``computeContentHash(payloadTypeBits:rawPathLengthByte:packetPayload:)``.
-  public let contentHash: String
+  ///
+  /// Computed on demand, not stored: `parse` runs on every packet the radio hears,
+  /// and only a handful of them ever become a chat message that needs this. A
+  /// second SHA256 per packet on that path would buy nothing.
+  public var contentHash: String {
+    Self.computeContentHash(
+      payloadTypeBits: payloadTypeBits,
+      rawPathLengthByte: pathLength,
+      packetPayload: packetPayload
+    )
+  }
 
   public init(
     snr: Double?,
@@ -147,11 +157,6 @@ public struct ParsedRxLogData: Sendable, Equatable {
     self.senderPubkeyPrefix = senderPubkeyPrefix
     self.recipientPubkeyPrefix = recipientPubkeyPrefix
     packetHash = Self.computePacketHash(from: packetPayload)
-    contentHash = Self.computeContentHash(
-      payloadTypeBits: payloadTypeBits,
-      rawPathLengthByte: pathLength,
-      packetPayload: packetPayload
-    )
   }
 
   /// Compute SHA256 hash of packetPayload, return first 8 bytes as hex.

@@ -93,7 +93,16 @@ struct ActionsDetailsSection: View {
     // A sheet, not a cover: this is a scrolling list with no map underneath,
     // so the standard swipe-down dismissal is the right affordance.
     .sheet(isPresented: $showPacketScope) {
-      PacketScopeDetailView(message: message)
+      PacketScopeDetailView(
+        message: message,
+        pathViewModel: pathViewModel,
+        // Same stamp-first reference the repeats map resolves against, so a
+        // repeater is not named one thing there and another here.
+        userLocation: MessagePathMapView.receiverReference(
+          for: .message(message),
+          userLocation: appState.bestAvailableLocation
+        )
+      )
     }
   }
 

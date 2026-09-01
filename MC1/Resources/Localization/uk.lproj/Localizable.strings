@@ -835,3 +835,17 @@
 "packetScope.via" = "через %@";
 "packetScope.error.disabled" = "Packet Scope вимкнено в налаштуваннях.";
 "packetScope.error.invalidBaseUrl" = "Адреса сервера Packet Scope не є коректною HTTPS-адресою.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Найкращий сигнал";
+"packetScope.shortestRoute" = "Найкоротший маршрут";
+"packetScope.direct" = "Напряму, без ретрансляторів";
+"packetScope.hopCount" = "переходів: %d";
+"packetScope.propagation" = "Поширення";
+"packetScope.spreadSeconds" = "%@ с мережею";
+"packetScope.receptions" = "Усього прийомів";
+"packetScope.timesHeard" = "прийнято %d×";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "Ідентифікатор пакета цього повідомлення нечитний, запит не надсилався.";
+"packetScope.retriedFooter" = "Надіслано %d разів; кожна спроба — окремий пакет. Показано почутий першим.";

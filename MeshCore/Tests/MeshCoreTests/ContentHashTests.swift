@@ -3,10 +3,19 @@ import Foundation
 import Testing
 
 /// Fixtures are real packets captured from the CoreScope observer network
-/// (scope.digitaino.com, 2026-08-31), whose server-side hash both mirrors the
-/// firmware and groups observations. Each case pins raw on-air bytes to the hash
-/// the observers computed for them, so a drift in our implementation — or a
-/// firmware-side change upstream — fails loudly against ground truth.
+/// (scope.digitaino.com), whose server-side hash both mirrors the firmware and
+/// groups observations. Each case pins raw on-air bytes to the hash the observers
+/// computed for them, so a drift in our implementation — or a firmware-side change
+/// upstream — fails loudly against ground truth.
+///
+/// The set deliberately covers all four route types (including both transport-code
+/// routes, whose 4-byte code must be skipped) and a TRACE with a non-zero
+/// path-length byte, because a zero byte cannot distinguish the TRACE branch from
+/// three plausible wrong implementations of it.
+///
+/// Beyond these fixtures, this formula was checked against **3000 consecutive live
+/// packets** spanning every route and payload type present on the mesh: 3000
+/// matches, 0 mismatches (2026-09-01).
 @Suite("Firmware content hash")
 struct ContentHashTests {
   /// (raw on-air packet, expected content hash)
@@ -25,6 +34,27 @@ struct ContentHashTests {
     ),
     // TRACE — the raw path-length byte folds into the hash as LE16
     ("2600EB35966A000000000078CF9AC8DF92", "5ff4770f84006897"),
+    // TRACE with a NON-ZERO path-length byte (0x01). The zero-byte fixture above
+    // cannot tell the implemented [plb, 0x00] apart from [0x00, plb], a constant
+    // [0x00, 0x00], or folding the *decoded* hop count instead of the raw byte —
+    // all four agree when the byte is zero. This one separates them.
+    ("2601E3EB50966A00000000002A39945BBF1A", "e2f1c6faf4109bc4"),
+    // tcDirect (route 3): the 4-byte transport code must be skipped before the
+    // path byte is read, and its bytes must not reach the hash. Path byte 0x2E,
+    // so this pins the skip and a non-trivial path length together.
+    (
+      "1349F0E47F2E15D54216B49EA1022B3984D1A200C324A605C55C0E2CE949B5AC22ADDC78E1"
+        + "A61F8CDD8495CDB43C3FB5E0882C805AB144",
+      "31fc783b4fc1d8eb"
+    ),
+    // tcFlood (route 0): the other transport-code route type.
+    (
+      "c4fec940205c41be58f7c583dda51fd3068b0c6cdbcae79d49b15f9441d0b242f9510aa287"
+        + "f12af294ef66d5080734ed182cbec72cd4f190da7858204d6bc110acf17f6cc60c695fd5"
+        + "903df82b9da6e9221081fd58f9b5199a0df84fa7be4c2528038aa6c316b684fe36f9fea6"
+        + "3f9dee2c93fbb5ce79bd44efa0c002bf751741",
+      "a6a01cc4d987fee7"
+    ),
   ]
 
   @Test

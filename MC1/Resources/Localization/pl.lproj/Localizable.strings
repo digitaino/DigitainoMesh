@@ -833,3 +833,17 @@
 "packetScope.via" = "przez %@";
 "packetScope.error.disabled" = "Packet Scope jest wyłączony w Ustawieniach.";
 "packetScope.error.invalidBaseUrl" = "Adres serwera Packet Scope nie jest prawidłowym adresem HTTPS.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Najlepszy sygnał";
+"packetScope.shortestRoute" = "Najkrótsza trasa";
+"packetScope.direct" = "Bezpośrednio, bez wzmacniaków";
+"packetScope.hopCount" = "%d przeskoków";
+"packetScope.propagation" = "Propagacja";
+"packetScope.spreadSeconds" = "%@ s przez sieć";
+"packetScope.receptions" = "Łącznie odbiorów";
+"packetScope.timesHeard" = "odebrano %d×";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "Identyfikator pakietu tej wiadomości jest nieczytelny, nic nie sprawdzono.";
+"packetScope.retriedFooter" = "Wysłano %d razy; każda próba to osobny pakiet. Pokazano ten usłyszany jako pierwszy.";

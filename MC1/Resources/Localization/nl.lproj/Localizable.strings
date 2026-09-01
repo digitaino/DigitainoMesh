@@ -835,3 +835,17 @@
 "packetScope.via" = "via %@";
 "packetScope.error.disabled" = "Packet Scope is uitgeschakeld in Instellingen.";
 "packetScope.error.invalidBaseUrl" = "Het serveradres van Packet Scope is geen geldige HTTPS-URL.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Beste signaal";
+"packetScope.shortestRoute" = "Kortste route";
+"packetScope.direct" = "Direct, zonder repeaters";
+"packetScope.hopCount" = "%d hops";
+"packetScope.propagation" = "Voortplanting";
+"packetScope.spreadSeconds" = "%@ s door de mesh";
+"packetScope.receptions" = "Totaal ontvangen";
+"packetScope.timesHeard" = "%d× gehoord";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "De pakket-ID van dit bericht is onleesbaar, er is niets opgezocht.";
+"packetScope.retriedFooter" = "%d× verzonden; elke poging is een apart pakket. Dit is het eerst gehoorde.";

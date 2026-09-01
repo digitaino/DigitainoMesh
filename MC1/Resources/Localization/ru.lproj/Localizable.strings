@@ -832,3 +832,17 @@
 "packetScope.via" = "через %@";
 "packetScope.error.disabled" = "Packet Scope отключён в настройках.";
 "packetScope.error.invalidBaseUrl" = "Адрес сервера Packet Scope не является корректным HTTPS-URL.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Лучший сигнал";
+"packetScope.shortestRoute" = "Кратчайший маршрут";
+"packetScope.direct" = "Напрямую, без ретрансляторов";
+"packetScope.hopCount" = "переходов: %d";
+"packetScope.propagation" = "Распространение";
+"packetScope.spreadSeconds" = "%@ с по сети";
+"packetScope.receptions" = "Всего приёмов";
+"packetScope.timesHeard" = "принято %d×";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "Идентификатор пакета этого сообщения нечитаем, запрос не отправлялся.";
+"packetScope.retriedFooter" = "Отправлено %d раз; каждая попытка — отдельный пакет. Показан услышанный первым.";
