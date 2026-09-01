@@ -34,6 +34,9 @@ struct RadioStatusControl: View {
   @State private var showingWatchScreen = false
   @State private var pendingMovementHintsPrompt = false
   @State private var pendingAdvancedSettings = false
+  /// The label held steady for as long as the repeater table is anchored here, or `nil` to
+  /// follow the live data. See ``PinnedLabel`` and ``labelArm``.
+  @State private var pinnedLabel: PinnedLabel?
   @State private var isSendingAdvert = false
   @State private var successFeedbackTrigger = false
   @State private var errorFeedbackTrigger = false
@@ -65,6 +68,12 @@ struct RadioStatusControl: View {
   /// finish, short enough that the second tap still feels like it did something.
   private static let popoverReopenSettleDelay: Duration = .milliseconds(350)
 
+  /// How long after the table closes before the label may change arms again. The unpin is
+  /// itself an arm swap, so releasing it the instant the binding flips would put the swap
+  /// inside the dismissal morph — the very collision the pin exists to prevent. One
+  /// dismissal morph, same budget as the movement prompt.
+  private static let labelUnpinSettleDelay: Duration = .milliseconds(600)
+
   private let deviceMenuTip = DeviceMenuTip()
 
   private var signals: RepeaterSignalModel {
@@ -78,11 +87,65 @@ struct RadioStatusControl: View {
     signals.isAttached && appState.connectionState.isConnected
   }
 
-  /// A survey used to *stop* the signal-bars engine, which emptied this control's table
-  /// and shrank its label to a glyph for the whole ride — and a toolbar item's tap target
-  /// is its label's rect, so the pill became almost untappable exactly when a rider needed
-  /// it. Bars backs off its cadence now instead of stopping, so there is no paused state
-  /// left to render (Rafael, 2026-08-30).
+  // A survey used to *stop* the signal-bars engine, which emptied this control's table
+  // and shrank its label to a glyph for the whole ride — and a toolbar item's tap target
+  // is its label's rect, so the pill became almost untappable exactly when a rider needed
+  // it. Bars backs off its cadence now instead of stopping, so there is no paused state
+  // left to render (Rafael, 2026-08-30).
+
+  /// Which arm of ``labelContent`` is drawn. Named because the three arms are three
+  /// *identities*, not three appearances: swapping arms destroys one subtree of views and
+  /// builds another, which is a structural change to whatever the presented popover is
+  /// anchored to. See ``labelArm``.
+  private enum LabelArm: Equatable {
+    /// The full cluster: both legs, the identity column, the watch badge.
+    case cluster
+    /// Attached but nothing heard yet — the scanning glyph.
+    case scanning
+    /// Not attached, or not connected — the antenna glyph.
+    case status
+  }
+
+  /// What ``labelContent`` draws while the repeater table is anchored to this control.
+  private struct PinnedLabel: Equatable {
+    let arm: LabelArm
+    /// Stands in if the live `best` vanishes under a pinned `.cluster` — clearing stale
+    /// rows from inside the table can empty it — so the arm outlives its own data rather
+    /// than collapsing to a different one at the worst moment.
+    let best: RepeaterSignal?
+  }
+
+  /// The arm the live data asks for.
+  private var liveLabelArm: LabelArm {
+    guard showsSignalCluster else { return .status }
+    return signals.best != nil ? .cluster : .scanning
+  }
+
+  /// The arm actually drawn: the live one, unless the repeater table is up and pinned it.
+  ///
+  /// TestFlight crash 066A8D88 (0.11.0 build 5, iOS 26.6.1) is B8A782EC recurring on the
+  /// build that was meant to fix it. The reporter re-enabled signal bars and tapped this
+  /// control inside the seconds `wireSignalBars` spends probing the firmware, so the table
+  /// opened over the `.status` arm and then `isAttached` flipped underneath it — walking
+  /// this label `.status` → `.scanning` → `.cluster` with the popover already presented.
+  /// SwiftUI answers a structural anchor change by dismissing and re-presenting
+  /// (`UIKitPopoverBridge.dismissAndReset`), which it did from inside `layoutSubviews`,
+  /// where iOS 26's zoom morph then trapped on the anchor it could no longer find.
+  ///
+  /// Pinning holds the arm — never the readings inside it, which stay live — for as long
+  /// as the table is anchored. It is the second of two defences and deliberately
+  /// redundant with the stable anchor in `body`: which view SwiftUI resolves the anchor
+  /// against, the modified view or the hosted toolbar item, is not something this side of
+  /// the framework can verify, and the crash has already survived one fix.
+  private var labelArm: LabelArm {
+    pinnedLabel?.arm ?? liveLabelArm
+  }
+
+  /// The link the cluster arm draws. Falls back to the pinned copy so a table that empties
+  /// under an open popover cannot pull the arm out from under it.
+  private var displayedBest: RepeaterSignal? {
+    signals.best ?? pinnedLabel?.best
+  }
 
   var body: some View {
     ToolbarActionMenu(primaryAction: handlePrimaryAction) {
@@ -115,9 +178,26 @@ struct RadioStatusControl: View {
     .onChange(of: signals.snapshot.txFlashTick) { _, tick in
       flash(tick, last: &lastTxTick, binding: $isTxFlashing)
     }
-    .popover(isPresented: $showingSignalDetail) {
-      RepeaterSignalPopover(showWatchScreen: $showingWatchScreen)
-        .presentationCompactAdaptation(.popover)
+    // The table anchors to a spacer, not to the label. `labelContent` swaps between three
+    // identities and sizes itself from live engine data, so as an anchor it is a view that
+    // can be destroyed and re-created under a presented popover — the mechanism behind
+    // TestFlight crash 066A8D88 (see ``labelArm``). This 1 pt spacer never changes
+    // identity or size, so the iOS 26 zoom morph always has something to dismiss into.
+    //
+    // A `Color.clear` in a `background` draws nothing and contributes no layout, so the
+    // sizing negotiation between `fixedSize`, the hosted toolbar item and the `Menu` drawn
+    // over it — which has broken this control twice under a `frame`, see `labelContent` —
+    // is untouched. Centred, so the arrow points where it pointed before. Hit testing off:
+    // the tap belongs to the `Menu` overlay above it, and a stray 1 pt target here would
+    // be a second thing to reason about.
+    .background(alignment: .center) {
+      Color.clear
+        .frame(width: 1, height: 1)
+        .allowsHitTesting(false)
+        .popover(isPresented: $showingSignalDetail) {
+          RepeaterSignalPopover(showWatchScreen: $showingWatchScreen)
+            .presentationCompactAdaptation(.popover)
+        }
     }
     // Terminal link loss closes the table rather than leaving it up hollow: session
     // teardown strips the popover's rows and controls, and dismissing a popover over that
@@ -165,7 +245,28 @@ struct RadioStatusControl: View {
       pendingSignalDetailReopen = false
       guard appState.connectionState.isConnected else { return }
       pendingMovementHintsPrompt = true
+      pinnedLabel = PinnedLabel(arm: liveLabelArm, best: signals.best)
       showingSignalDetail = true
+    }
+    // Releases the label pin once the dismissal morph has settled. Deliberately does *not*
+    // clear on cancellation: the only cancellation that matters is the table re-opening,
+    // and `handlePrimaryAction` has already written a fresh pin by then — clearing here
+    // would wipe it. The other cancellation is this control going away, which takes the
+    // state with it.
+    .task(id: showingSignalDetail) {
+      guard !showingSignalDetail, pinnedLabel != nil else { return }
+      do { try await Task.sleep(for: Self.labelUnpinSettleDelay) } catch { return }
+      pinnedLabel = nil
+    }
+    // The breadcrumb this crash has cost two builds for. 066A8D88 and B8A782EC are both
+    // unreproducible off-device, and both were fixed against a reasoned mechanism rather
+    // than an observed one; a line in the log immediately before the next crash report —
+    // or its absence — is what turns the mechanism above into a fact.
+    .onChange(of: liveLabelArm) { from, to in
+      guard showingSignalDetail else { return }
+      logger.info(
+        "Label arm \(String(describing: from)) -> \(String(describing: to)) with the repeater table presented (pinned=\(pinnedLabel != nil))"
+      )
     }
     .task(id: showingSignalDetail) {
       guard !showingSignalDetail, pendingMovementHintsPrompt else {
@@ -214,6 +315,10 @@ struct RadioStatusControl: View {
       return
     }
     pendingMovementHintsPrompt = true
+    // Pinned *before* the binding flips, so the arm the table anchors to is already frozen
+    // by the time the presentation starts. Doing it from an `onChange` of the binding
+    // would leave one update where the popover is presenting against a still-live label.
+    pinnedLabel = PinnedLabel(arm: liveLabelArm, best: signals.best)
     showingSignalDetail = true
   }
 
@@ -237,28 +342,39 @@ struct RadioStatusControl: View {
     // not worth a broken control. The "won't open at all" report has a second, sufficient
     // cause that is fixed in `handlePrimaryAction` with no layout involved: a presentation
     // binding stranded `true`. Leave the geometry alone.
+    //
+    // The arm comes from `labelArm`, not from the live data directly: while the repeater
+    // table is anchored here the arm is pinned, because swapping arms under a presented
+    // popover is what crashed TestFlight build 5 (see `labelArm`). The contents of an arm
+    // stay live either way.
     Group {
-      if showsSignalCluster, let best = signals.best {
-        HStack(spacing: 6) {
-          legColumn(
-            glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
-            readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
-          )
-          legColumn(
-            glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
-            readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
-          )
-          identityColumn(for: best)
-          watchBadge
+      switch labelArm {
+      case .cluster:
+        // `displayedBest` rather than `signals.best`: a pinned `.cluster` must be able to
+        // draw even if the table empties under it, or the fallback here would be the arm
+        // change the pin exists to prevent.
+        if let best = displayedBest {
+          HStack(spacing: 6) {
+            legColumn(
+              glyph: RepeaterSignalGlyph(leg: .rx, quality: best.rxQuality, isFlashing: isRxFlashing),
+              readout: RepeaterSNRText(snr: best.rxSnr, quality: best.rxQuality)
+            )
+            legColumn(
+              glyph: RepeaterTXGlyph(state: best.txState, isFlashing: isTxFlashing),
+              readout: RepeaterSNRText(snr: best.txSnr, quality: best.txQuality)
+            )
+            identityColumn(for: best)
+            watchBadge
+          }
+          .padding(.horizontal, 2)
         }
-        .padding(.horizontal, 2)
-      } else if showsSignalCluster {
+      case .scanning:
         HStack(spacing: 6) {
           scanningGlyph
           powerLabel
           watchBadge
         }
-      } else {
+      case .status:
         StatusIcon(iconName: iconName, iconColor: iconColor, isAnimating: isAnimating)
       }
     }
