@@ -31,6 +31,9 @@ struct ErrorDispatchCoverageTests {
     "StoreRecoveryError": "Raised only while the store is unopenable, where no AppState "
       + "and therefore no .errorAlert exists; StoreRecoveryView shows it verbatim in its "
       + "technical-details disclosure.",
+    "MapperRawLogStoreError": "Every caller opens the raw ride log with try? and treats a "
+      + "store that will not open as \"no ride log\" by design (ACTIVE_SURVEY_M3_5 §6 F3); "
+      + "runNotFound is an internal invariant. Nothing routes it to .errorAlert.",
   ]
 
   // MARK: - Test
