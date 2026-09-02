@@ -113,6 +113,15 @@ extension MC1MapView.Coordinator {
     }
   }
 
+  /// Rewrites the name-pill layers' placement for a live change. Layers created
+  /// later read `currentLabelPlacement` themselves.
+  func updateLabelPlacement(mapView: MLNMapView, placement: MapLabelPlacement) {
+    for layerId in [MapLayerID.nameLabels, MapLayerID.fixedNameLabels] {
+      guard let layer = mapView.style?.layer(withIdentifier: layerId) as? MLNSymbolStyleLayer else { continue }
+      applyLabelPlacement(placement, to: layer)
+    }
+  }
+
   // MARK: - Clustered point layers
 
   private func addClusteredPointLayers(source: MLNShapeSource, style: MLNStyle) {
@@ -149,6 +158,7 @@ extension MC1MapView.Coordinator {
     iconLayer.iconAnchor = NSExpression(forConstantValue: "bottom")
     iconLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
     iconLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+    iconLayer.iconOpacity = NSExpression(forKeyPath: "pinOpacity")
     iconLayer.text = nil
     style.addLayer(iconLayer)
 
@@ -173,6 +183,7 @@ extension MC1MapView.Coordinator {
     fixedIconLayer.iconAnchor = NSExpression(forKeyPath: "anchorType")
     fixedIconLayer.iconAllowsOverlap = NSExpression(forConstantValue: true)
     fixedIconLayer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+    fixedIconLayer.iconOpacity = NSExpression(forKeyPath: "pinOpacity")
     fixedIconLayer.text = nil
     style.addLayer(fixedIconLayer)
 
@@ -418,9 +429,26 @@ extension MC1MapView.Coordinator {
     layer.iconImageName = NSExpression(forKeyPath: "labelSpriteName")
     layer.iconAnchor = NSExpression(forConstantValue: "bottom")
     layer.iconOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: -46)))
-    layer.symbolSortKey = NSExpression(forKeyPath: "hopIndex")
-    layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
-    layer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+    layer.iconOpacity = NSExpression(forKeyPath: "pinOpacity")
+    applyLabelPlacement(currentLabelPlacement, to: layer)
+  }
+
+  /// `.overlap` is byte-for-byte the behaviour every screen has always had:
+  /// every pill draws, ordered by hop. `.collide` hands the pills to MapLibre's
+  /// collision index, where the lower `labelPriority` of a colliding pair wins.
+  /// Pin icons keep overlapping in both modes — a pin never disappears, only
+  /// its pill does.
+  private func applyLabelPlacement(_ placement: MapLabelPlacement, to layer: MLNSymbolStyleLayer) {
+    switch placement {
+    case .overlap:
+      layer.symbolSortKey = NSExpression(forKeyPath: "hopIndex")
+      layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+      layer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+    case .collide:
+      layer.symbolSortKey = NSExpression(forKeyPath: "labelPriority")
+      layer.iconAllowsOverlap = NSExpression(forConstantValue: false)
+      layer.iconIgnoresPlacement = NSExpression(forConstantValue: false)
+    }
   }
 
   private func configureBadgeLayer(_ layer: MLNSymbolStyleLayer) {
@@ -430,7 +458,14 @@ extension MC1MapView.Coordinator {
     layer.textColor = NSExpression(forConstantValue: UIColor.black)
     layer.textAllowsOverlap = NSExpression(forConstantValue: true)
     layer.textIgnoresPlacement = NSExpression(forConstantValue: true)
+    layer.textOpacity = NSExpression(forKeyPath: "pinOpacity")
     layer.iconImageName = NSExpression(forConstantValue: "pill-bg")
+    // The text was force-drawn while the pill behind it was left to MapLibre's
+    // default placement, so a badge could lose its white pill and keep its
+    // black text over a dark basemap. The pill follows the text.
+    layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+    layer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+    layer.iconOpacity = NSExpression(forKeyPath: "pinOpacity")
     layer.iconTextFit = NSExpression(forConstantValue: NSValue(mlnIconTextFit: .both))
     layer.iconTextFitPadding = NSExpression(forConstantValue: NSValue(uiEdgeInsets: UIEdgeInsets(top: 2, left: 8, bottom: 2, right: 8)))
   }
@@ -444,6 +479,8 @@ extension MC1MapView.Coordinator {
       "pointId": point.id.uuidString,
       "spriteName": spriteName(for: point),
       "anchorType": iconAnchor(for: point),
+      "pinOpacity": point.emphasis,
+      "labelPriority": point.labelPriority,
     ]
     if let label = point.label {
       attributes["labelSpriteName"] = "\(PinSpriteRenderer.labelSpritePrefix)\(label)"
@@ -454,7 +491,7 @@ extension MC1MapView.Coordinator {
     return feature
   }
 
-  private func iconAnchor(for point: MapPoint) -> String {
+  func iconAnchor(for point: MapPoint) -> String {
     switch point.pinStyle {
     case .crosshair, .obstruction, .locationFix: "center"
     default: "bottom"

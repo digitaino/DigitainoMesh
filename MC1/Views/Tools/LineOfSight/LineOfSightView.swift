@@ -446,6 +446,10 @@ private struct LOSMapCanvasView: View {
         onPointTap: { point, _ in
           if let repeater = viewModel.repeatersWithLocation.first(where: { $0.id == point.id }) {
             onRepeaterTap(repeater)
+          } else if viewModel.relocatingPoint != nil {
+            // Pins are 44 pt targets, so a relocation aimed beside an endpoint
+            // lands on it; treat that as the map tap it was meant to be.
+            onMapTap(point.coordinate)
           }
         },
         onMapTap: onMapTap,

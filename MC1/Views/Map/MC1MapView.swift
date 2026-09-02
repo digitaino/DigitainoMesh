@@ -5,6 +5,17 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "com.mc1", category: "MapPins")
 
+/// How a map places the name pills above its pins.
+enum MapLabelPlacement {
+  /// Every pill draws, whatever it covers — the behaviour every screen has
+  /// always had.
+  case overlap
+  /// Pills enter MapLibre's collision index; of two that would overlap, the
+  /// one with the lower `MapPoint.labelPriority` draws. Pins themselves never
+  /// disappear.
+  case collide
+}
+
 struct MC1MapView: UIViewRepresentable {
   // Data
   let points: [MapPoint]
@@ -16,8 +27,10 @@ struct MC1MapView: UIViewRepresentable {
   let isDarkMode: Bool
   var isOffline: Bool = false
 
-  // Configuration
+  /// Configuration
   let showLabels: Bool
+  /// Whether name pills force-draw or collide. Defaults to today's behaviour.
+  var labelPlacement: MapLabelPlacement = .overlap
   let showsUserLocation: Bool
   let isInteractive: Bool
   let showsScale: Bool
@@ -46,6 +59,13 @@ struct MC1MapView: UIViewRepresentable {
   let onMapTap: ((CLLocationCoordinate2D) -> Void)?
   var onMapLongPress: ((CLLocationCoordinate2D) -> Void)?
   let onCameraRegionChange: ((MKCoordinateRegion) -> Void)?
+  /// A tap on a `.badge` point's pill. Nil keeps today's behaviour, where a
+  /// badge tap counts as a map tap.
+  var onBadgeTap: ((MapPoint) -> Void)?
+  /// The user took the camera somewhere by gesture. `isCenteredOnUser` cannot
+  /// stand in for this: a gesture sets it to *false*, which is not a signal a
+  /// host can act on.
+  var onUserCameraMove: (() -> Void)?
 
   /// Optional features
   var isStyleLoaded: Binding<Bool> = .constant(true)
@@ -119,6 +139,8 @@ struct MC1MapView: UIViewRepresentable {
     coordinator.onMapTap = onMapTap
     coordinator.onMapLongPress = onMapLongPress
     coordinator.onCameraRegionChange = onCameraRegionChange
+    coordinator.onBadgeTap = onBadgeTap
+    coordinator.onUserCameraMove = onUserCameraMove
     coordinator.setIsStyleLoaded = { isStyleLoaded.wrappedValue = $0 }
     coordinator.setIsCenteredOnUser = { isCenteredOnUser.wrappedValue = $0 }
     coordinator.currentPoints = points
@@ -127,6 +149,9 @@ struct MC1MapView: UIViewRepresentable {
     // Set before the styleURL below: a theme switch changes the styleURL and triggers
     // a reload, so didFinishLoading -> renderAll must already see the new theme.
     coordinator.currentIsDarkMode = isDarkMode
+    // Likewise before the style loads: the name-pill layers are created from
+    // `updatePointSource` inside `didFinishLoading`, and read this then.
+    coordinator.currentLabelPlacement = labelPlacement
 
     // Style URL change — compare against our tracked value, not mapView.styleURL
     // which MapLibre may transiently nil during layout/rotation.
@@ -174,6 +199,10 @@ struct MC1MapView: UIViewRepresentable {
       if coordinator.currentShowLabels != showLabels {
         coordinator.currentShowLabels = showLabels
         coordinator.updateLabelVisibility(mapView: mapView, showLabels: showLabels)
+      }
+      if coordinator.lastAppliedLabelPlacement != labelPlacement {
+        coordinator.lastAppliedLabelPlacement = labelPlacement
+        coordinator.updateLabelPlacement(mapView: mapView, placement: labelPlacement)
       }
     }
 
@@ -256,6 +285,7 @@ struct MC1MapView: UIViewRepresentable {
 
     let isInflated = mapView.window.map { mapView.bounds.height > $0.bounds.height * 1.5 } ?? false
     let animated = coordinator.lastAppliedRegionVersion > 0 && !isInflated
+      && !UIAccessibility.isReduceMotionEnabled
     coordinator.lastAppliedRegionVersion = cameraRegionVersion
 
     var padding = cameraEdgePadding
@@ -321,6 +351,8 @@ extension MC1MapView {
     var onCameraRegionChange: ((MKCoordinateRegion) -> Void)?
     var setIsStyleLoaded: ((Bool) -> Void)?
     var setIsCenteredOnUser: ((Bool) -> Void)?
+    var onBadgeTap: ((MapPoint) -> Void)?
+    var onUserCameraMove: (() -> Void)?
 
     // State
     var isUserInteracting = false
@@ -330,6 +362,10 @@ extension MC1MapView {
     var lastAppliedSelectionVersion = 0
     var pendingRegionTask: Task<Void, Never>?
     var currentShowLabels = true
+    /// The placement the view asks for, read when the name-pill layers are
+    /// created; `lastApplied` mirrors `currentShowLabels`' idiom for live changes.
+    var currentLabelPlacement: MapLabelPlacement = .overlap
+    var lastAppliedLabelPlacement: MapLabelPlacement = .overlap
     /// The basemap theme in force, mirrored from the view so `renderAll` can pick the
     /// location-dot recency palette at style-load time. Kept current by `updateUIView`.
     var currentIsDarkMode = false
@@ -368,6 +404,7 @@ extension MC1MapView {
       lastAppliedLines = []
       lastAppliedMapStyle = nil
       currentShowLabels = true
+      lastAppliedLabelPlacement = .overlap
       resetOverlayState()
 
       PinSpriteRenderer.renderAll(into: style, isDarkMode: currentIsDarkMode)
@@ -407,7 +444,11 @@ extension MC1MapView {
       // it back to true when it centers the map.
       guard !reason.isDisjoint(with: Self.userGestureReasons) else { return }
       let report = setIsCenteredOnUser
-      DispatchQueue.main.async { report?(false) }
+      let moved = onUserCameraMove
+      DispatchQueue.main.async {
+        report?(false)
+        moved?()
+      }
     }
 
     func mapView(_ mapView: MLNMapView, regionDidChangeWith reason: MLNCameraChangeReason, animated: Bool) {
@@ -465,42 +506,95 @@ extension MC1MapView {
          let source = mapView.style?.source(withIdentifier: MapSourceID.points) as? MLNShapeSource {
         let zoom = source.zoomLevel(forExpanding: cluster)
         guard zoom >= 0 else { return }
-        mapView.setCenter(cluster.coordinate, zoomLevel: zoom + 2.0, animated: true)
+        mapView.setCenter(
+          cluster.coordinate,
+          zoomLevel: zoom + 2.0,
+          animated: !UIAccessibility.isReduceMotionEnabled
+        )
         return
       }
 
-      // 2. Check point and name label layers (both clustered and fixed)
-      let pointFeatures = mapView.visibleFeatures(
-        at: point,
-        styleLayerIdentifiers: [
-          MapLayerID.unclusteredIcons, MapLayerID.fixedIcons,
-          MapLayerID.nameLabels, MapLayerID.fixedNameLabels
-        ]
+      // 2. Pin icons, within the same 44 pt square the cluster probe uses, so a
+      //    pin is a 44 pt target rather than an exact-pixel one; the nearest
+      //    wins when several fall inside. Badges are decoration, not pins —
+      //    their icon is a transparent 1×1 sprite — so they never match here.
+      let iconFeatures = mapView.visibleFeatures(
+        in: clusterRect,
+        styleLayerIdentifiers: [MapLayerID.unclusteredIcons, MapLayerID.fixedIcons]
       )
-      logger.debug("pointFeatures: \(pointFeatures.count, privacy: .public), clusterFeatures: \(clusterFeatures.count, privacy: .public)")
-      if let feature = pointFeatures.first,
-         let idString = feature.attribute(forKey: "pointId") as? String,
-         let id = UUID(uuidString: idString),
-         let mapPoint = currentPoints.first(where: { $0.id == id }) {
-        logger.debug("Matched pin: \(mapPoint.label ?? "unnamed", privacy: .public)")
+      let candidates = iconFeatures.compactMap(mapPoint(for:)).filter { !Self.decorativePinStyles.contains($0.pinStyle) }
+      logger.debug("iconFeatures: \(iconFeatures.count, privacy: .public), clusterFeatures: \(clusterFeatures.count, privacy: .public)")
+      // Only a host that listens gets the tap; otherwise it stays a map tap,
+      // so a screen whose whole job is tapping the map (the location picker,
+      // with its one marker) keeps working next to its own pin.
+      if onPointTap != nil, let nearest = candidates.min(by: { lhs, rhs in
+        distanceSquared(from: point, toDrawn: lhs) < distanceSquared(from: point, toDrawn: rhs)
+      }) {
+        logger.debug("Matched pin: \(nearest.label ?? "unnamed", privacy: .public)")
+        selectPoint(nearest)
+        return
+      }
+
+      // 3. Name pills, at the exact point and only after the icons: a pill
+      //    sits 46 pt above its pin, so a rect probe here could let it beat a
+      //    directly-tapped neighbour.
+      let labelFeatures = mapView.visibleFeatures(
+        at: point,
+        styleLayerIdentifiers: [MapLayerID.nameLabels, MapLayerID.fixedNameLabels]
+      )
+      if let mapPoint = labelFeatures.lazy.compactMap(self.mapPoint(for:)).first {
+        logger.debug("Matched pill: \(mapPoint.label ?? "unnamed", privacy: .public)")
         selectPoint(mapPoint)
         return
       }
 
-      // 3. Check badge text layers — dismiss any open callout but don't select
+      // 4. Badge pills: a host that listens gets the badge's point; otherwise
+      //    the tap counts as a map tap, as it always has.
       let badgeFeatures = mapView.visibleFeatures(
         at: point,
         styleLayerIdentifiers: [MapLayerID.badgeText, MapLayerID.fixedBadgeText]
       )
+      if let badge = badgeFeatures.lazy.compactMap(self.mapPoint(for:)).first {
+        if let onBadgeTap {
+          onBadgeTap(badge)
+        } else {
+          onMapTap?(mapView.convert(point, toCoordinateFrom: mapView))
+        }
+        return
+      }
       if badgeFeatures.first != nil {
-        let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
-        onMapTap?(coordinate)
+        onMapTap?(mapView.convert(point, toCoordinateFrom: mapView))
         return
       }
 
-      // 4. Map background tap
+      // 5. Map background tap
       let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
       onMapTap?(coordinate)
+    }
+
+    /// The `MapPoint` a rendered feature stands for, by its `pointId`.
+    private func mapPoint(for feature: MLNFeature) -> MapPoint? {
+      guard let idString = feature.attribute(forKey: "pointId") as? String,
+            let id = UUID(uuidString: idString) else { return nil }
+      return currentPoints.first { $0.id == id }
+    }
+
+    /// Pins that carry no selectable identity on any host: a badge's pill, a
+    /// crosshair, an obstruction marker. They never win a tap.
+    private static let decorativePinStyles: Set<MapPoint.PinStyle> = [.badge, .crosshair, .obstruction]
+
+    /// Distance from the tap to the middle of the pin as drawn — a
+    /// bottom-anchored teardrop stands a full sprite above its coordinate, so
+    /// ranking by the anchor alone would hand a tap on its head to whatever
+    /// pin's anchor happens to sit under it.
+    private func distanceSquared(from point: CGPoint, toDrawn mapPoint: MapPoint) -> CGFloat {
+      var projected = mapView.convert(mapPoint.coordinate, toPointTo: mapView)
+      if iconAnchor(for: mapPoint) == "bottom" {
+        projected.y -= PinSpriteRenderer.calloutLift(for: mapPoint.pinStyle) / 2
+      }
+      let dx = projected.x - point.x
+      let dy = projected.y - point.y
+      return dx * dx + dy * dy
     }
 
     @objc func handleLongPress(_ sender: UILongPressGestureRecognizer) {

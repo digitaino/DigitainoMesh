@@ -51,7 +51,7 @@ extension MapLine {
   /// Geographic midpoint of two coordinates, shifting one longitude by 360° before averaging when
   /// the pair straddles the antimeridian so the badge lands between them rather than on the
   /// opposite hemisphere.
-  private static func midpoint(
+  static func midpoint(
     from: CLLocationCoordinate2D,
     to: CLLocationCoordinate2D
   ) -> CLLocationCoordinate2D {

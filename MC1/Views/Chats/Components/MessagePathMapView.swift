@@ -653,6 +653,38 @@ struct MessagePathMapCanvas: View {
   /// A tap on the map away from any pin. Nil leaves it inert.
   var onMapTap: (() -> Void)?
 
+  /// An explicit request to frame a subset of the map. A new `id` re-fits;
+  /// nil returns the camera to `framedCoordinates`. Deliberately not gated on
+  /// `isCenteredOnUser` or on the user having panned — a selection is a user
+  /// action, exactly like the locate tap. While non-nil it also suppresses
+  /// the automatic fits, so a poll that adds pins cannot throw the framing
+  /// away.
+  struct CameraFocus: Equatable {
+    let id: String
+    let coordinates: [CLLocationCoordinate2D]
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.id == rhs.id && lhs.coordinates.count == rhs.coordinates.count
+        && zip(lhs.coordinates, rhs.coordinates).allSatisfy {
+          $0.latitude == $1.latitude && $0.longitude == $1.longitude
+        }
+    }
+  }
+
+  var cameraFocus: CameraFocus?
+  var labelPlacement: MapLabelPlacement = .overlap
+  /// A tap on a badge pill. Nil leaves badge taps counting as map taps.
+  var onBadgeTap: ((MapPoint) -> Void)?
+  /// One sentence describing what the map is showing, read by VoiceOver in
+  /// place of a map it cannot otherwise describe. Nil leaves the map silent.
+  var accessibilitySummary: String?
+
+  /// How long after a focus fit the host's panel has finished resizing. The
+  /// fit reads `cameraBottomSheetFraction` as it was when the version bumped,
+  /// and a panel that changes height on selection reports it only after
+  /// layout — the same reason the style-load fit needs its settle re-fit.
+  private static let focusSettleDelay: Duration = .milliseconds(350)
+
   @State private var cameraRegion: MKCoordinateRegion?
   @State private var cameraRegionVersion = 0
   @State private var mapStyle: MapStyleSelection = .standard
@@ -661,6 +693,15 @@ struct MessagePathMapCanvas: View {
   @State private var isStyleLoaded = false
   @State private var isCenteredOnUser = false
   @State private var hasInitiallyFit = false
+  /// The user has panned or zoomed. An automatic re-fit after that would take
+  /// the map away from where they put it; only an explicit fit clears it.
+  @State private var hasUserMovedCamera = false
+  /// Bumped by every camera fit. A settle re-fit captures it before sleeping
+  /// and gives up if any other fit landed meanwhile — a focus taken during the
+  /// style-load window, or a second route tapped within a settle delay. Read
+  /// through `@State` because a plain struct property is frozen inside the
+  /// escaping task; `cameraFocus` itself must never be read after an `await`.
+  @State private var cameraFitToken = 0
 
   private var mapPoints: [MapPoint] {
     locatedNodes.map(\.point)
@@ -686,13 +727,14 @@ struct MessagePathMapCanvas: View {
 
   var body: some View {
     ZStack(alignment: .bottomTrailing) {
-      MC1MapView(
+      described(MC1MapView(
         points: mapPoints,
         lines: mapLines,
         overlays: overlays,
         mapStyle: mapStyle,
         isDarkMode: colorScheme == .dark,
         showLabels: showLabels,
+        labelPlacement: labelPlacement,
         // Gated on existing authorization: MapLibre prompts for permission itself
         // when the puck is enabled while status is undetermined, and opening a
         // message's path hasn't earned a system dialog. The explicit locate tap
@@ -707,9 +749,11 @@ struct MessagePathMapCanvas: View {
         onPointTap: onPointTap.map { handler in { point, _ in handler(point) } },
         onMapTap: onMapTap.map { handler in { _ in handler() } },
         onCameraRegionChange: { cameraRegion = $0 },
+        onBadgeTap: onBadgeTap,
+        onUserCameraMove: { hasUserMovedCamera = true },
         isStyleLoaded: $isStyleLoaded,
         isCenteredOnUser: $isCenteredOnUser
-      )
+      ))
       .ignoresSafeArea()
 
       VStack {
@@ -740,7 +784,9 @@ struct MessagePathMapCanvas: View {
     // coordinates rather than the count, because the fix landing *moves* a pin
     // without adding one. Re-fit unless the user has taken the camera somewhere.
     .onChange(of: pathSignature) {
-      guard isStyleLoaded, !isCenteredOnUser else { return }
+      // A focus owns the camera while it exists, and a user who has taken the
+      // camera somewhere keeps it there.
+      guard isStyleLoaded, cameraFocus == nil, !isCenteredOnUser, !hasUserMovedCamera else { return }
       fitCameraToPath()
     }
     .onChange(of: isStyleLoaded) { _, loaded in
@@ -748,21 +794,75 @@ struct MessagePathMapCanvas: View {
       hasInitiallyFit = true
       // A locate tap can resolve before a slow style load; don't wipe it out.
       guard !isCenteredOnUser else { return }
-      fitCameraToPath()
+      // A focus taken while the style was still loading is honoured now: its
+      // own handler had nothing to fit yet.
+      let target = cameraFocus?.coordinates
+      if let target {
+        fitCamera(to: target)
+      } else {
+        fitCameraToPath()
+      }
       // One settle re-fit: the style can finish loading while the presentation
       // is still inflating the map's bounds, and a fit measured then frames far
       // wider than the path. Skipped if the user has already taken the camera
-      // somewhere themselves.
+      // somewhere themselves, or if any other fit landed meanwhile.
+      let token = cameraFitToken
       Task {
         try? await Task.sleep(for: Self.settleRefitDelay)
-        guard !isCenteredOnUser else { return }
-        fitCameraToPath()
+        guard !isCenteredOnUser, cameraFitToken == token else { return }
+        if let target {
+          fitCamera(to: target)
+        } else {
+          fitCameraToPath()
+        }
+      }
+    }
+    .onChange(of: cameraFocus?.id) {
+      // Before the style loads there is nothing to fit; the style-load
+      // handler picks the focus up.
+      guard isStyleLoaded else { return }
+      let coords = cameraFocus?.coordinates ?? framedCoordinates
+      // Never a fake single-node zoom for a selection.
+      guard coords.count >= 2 else { return }
+      // An explicit selection outranks the locate state, but deliberately does
+      // not clear `hasUserMovedCamera`: a user who panned before focusing must
+      // not be re-subscribed to automatic re-fits once the focus clears.
+      isCenteredOnUser = false
+      fitCamera(to: coords)
+      let token = cameraFitToken
+      Task {
+        try? await Task.sleep(for: Self.focusSettleDelay)
+        // Another focus (or a clear) fitted meanwhile: this one is stale.
+        guard cameraFitToken == token else { return }
+        fitCamera(to: coords)
       }
     }
   }
 
+  /// The map, described for VoiceOver when the host has a sentence for it.
+  /// Applied to the map alone so the controls beside it stay reachable.
+  @ViewBuilder
+  private func described(_ map: MC1MapView) -> some View {
+    if let accessibilitySummary {
+      map
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityAddTraits(.updatesFrequently)
+    } else {
+      map
+    }
+  }
+
+  /// An explicit fit to every framed pin: the initial fit, the settle re-fits,
+  /// and the "Center on path" control. Explicit, so it also releases a camera
+  /// the user had moved.
   private func fitCameraToPath() {
-    let coords = framedCoordinates
+    hasUserMovedCamera = false
+    fitCamera(to: framedCoordinates)
+  }
+
+  private func fitCamera(to coords: [CLLocationCoordinate2D]) {
+    cameraFitToken += 1
     if coords.count == 1 {
       cameraRegion = MKCoordinateRegion(
         center: coords[0],

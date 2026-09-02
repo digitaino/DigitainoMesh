@@ -32,6 +32,20 @@ struct MapPoint: Identifiable, Equatable {
 
   let hopIndex: Int?
   let badgeText: String?
+  /// How strongly this pin reads: `1` in focus, ``recessedEmphasis`` when it is
+  /// not part of what the screen is showing. Discrete and never animated — it
+  /// is part of `==`, the diff key for both point sources, so a continuous
+  /// value would re-upload every feature per frame. Emitted as the
+  /// `pinOpacity` feature attribute on the icon, name-pill and badge layers.
+  var emphasis: Double = 1
+  /// Placement priority for the name pill; **lower wins a collision**. Consulted
+  /// only when the host map sets `labelPlacement: .collide`; `0` is never
+  /// dropped. The default sits below every deliberate priority.
+  var labelPriority: Int = 1000
+
+  /// The one recessed value. Two values, not a scale: a pin is either part of
+  /// the focus or it is not.
+  static let recessedEmphasis = 0.25
 
   static func == (lhs: MapPoint, rhs: MapPoint) -> Bool {
     lhs.id == rhs.id
@@ -42,5 +56,7 @@ struct MapPoint: Identifiable, Equatable {
       && lhs.isClusterable == rhs.isClusterable
       && lhs.hopIndex == rhs.hopIndex
       && lhs.badgeText == rhs.badgeText
+      && lhs.emphasis == rhs.emphasis
+      && lhs.labelPriority == rhs.labelPriority
   }
 }

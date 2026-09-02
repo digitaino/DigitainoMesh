@@ -29,33 +29,93 @@ struct PacketScopeObserverLeg: Identifiable {
   let snr: Double?
 }
 
-/// One observer route as drawable geometry, for the focus state where a single
-/// observer's routes are shown in full.
+/// A hop the builder could place: the pin it stands on, and where in the
+/// route's full path it sat (1-based, counting the hops that could not be
+/// placed too, so a gap in the numbers marks exactly where one could not be).
+struct PacketScopeCoveragePlacedHop: Equatable {
+  let pinID: UUID
+  let position: Int
+}
+
+/// One observer route as drawable geometry, in both the shapes the focus
+/// states need.
 struct PacketScopeCoverageRoute: Identifiable {
   /// Observer id plus the hop sequence — stable across refreshes.
   let id: String
+  /// The observer id as the receptions carry it.
   let observerID: String
-  /// Polylines in travel order, split wherever a hop could not be placed: a
-  /// gap in the path is left as a gap rather than bridged with a link that
-  /// nothing in the data says exists. The measured leg into the observer, when
-  /// its tail hop is placed, is the last segment.
+  let hopCount: Int
+  /// Polylines in travel order for observer focus, split wherever a hop could
+  /// not be placed: a gap in the path is left as a gap rather than bridged
+  /// with a link that nothing in the data says exists. The measured leg into
+  /// the observer, when its tail hop is placed, is the last segment — fanned
+  /// into an arc when sibling routes share the same tail.
   let segments: [MapLine]
-  /// The measured leg's "distance · SNR" readout, for the focus state.
+  /// The fanned leg's "distance · SNR" readout.
   let badge: MapPoint?
+  /// The same bodies with the measured leg drawn straight, for single-route
+  /// focus: the one link the reader asked to see is its true bearing.
+  let soloSegments: [MapLine]
+  /// The straight leg's readout at its chord midpoint — or, when no leg can be
+  /// drawn but a body can, the route's signal at the last body segment's end,
+  /// so two routes that differ only in their unplaceable tails still read
+  /// differently.
+  let soloBadge: MapPoint?
+  let placedHops: [PacketScopeCoveragePlacedHop]
+  /// Hops after the last placed one; 0 when the tail is placed.
+  let unplacedTailCount: Int
+  /// Whether the leg into the observer is drawn — the observer is located and
+  /// the tail hop (or the origin, for a direct reception) is placed.
+  let hasMeasuredLeg: Bool
+  /// Link ids (`"<from>><to>"`) this route traversed.
+  let linkIDs: Set<String>
+  /// The pins this route passes through: origin, placed hops, observer.
+  let participantPinIDs: Set<UUID>
+  /// Rounded digest of `segments`, so two routes that draw identical pixels
+  /// can be reported as such rather than pretending the map answered.
+  let drawnGeometryKey: String
+  /// Origin, placed hops and observer, for the camera.
+  let coordinates: [CLLocationCoordinate2D]
+
+  var isDrawable: Bool {
+    !segments.isEmpty
+  }
+
+  /// Every hop placed and the leg drawn: the drawn length is the route's
+  /// length rather than a lower bound.
+  var isComplete: Bool {
+    hasMeasuredLeg && placedHops.count == hopCount
+  }
 }
 
 /// The observer network's view of one packet, as map geometry.
 struct PacketScopeCoverageMap {
-  /// Origin (pin A), hop repeaters (numbered hop pins) and located observers
+  /// Origin (pin A), hop repeaters (named hop pins) and located observers
   /// (pin B). Ids are derived from what the pin stands for, so a poll that
   /// changes nothing re-sources nothing.
   let nodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)]
   let links: [PacketScopeCoverageLink]
   let observerLegs: [PacketScopeObserverLeg]
+  /// Every route of every reception, drawable or not, so the panel's ladder
+  /// and the map can never disagree about what exists.
   let routes: [PacketScopeCoverageRoute]
   /// Straight-line distance from the origin to each located observer, keyed by
   /// observer id as the receptions carry it. Empty without an origin.
   let observerDistances: [String: CLLocationDistance]
+
+  let routesByID: [String: PacketScopeCoverageRoute]
+  /// Route ids per observer (as the receptions carry the id), strongest first.
+  let routeIDsByObserver: [String: [String]]
+  let drawableRouteIDs: Set<String>
+  /// Observers with at least one drawable route.
+  let drawableObserverIDs: Set<String>
+  /// Observer pin id → the observer id as the receptions carry it.
+  let observerIDByPinID: [UUID: String]
+  /// Badge pin id → the route it reads out, for badge taps.
+  let routeIDByBadgePinID: [UUID: String]
+  let originCoordinate: CLLocationCoordinate2D?
+  /// Located observers' coordinates, keyed as the receptions carry the id.
+  let observerCoordinates: [String: CLLocationCoordinate2D]
 
   /// Whether there is anything to look at beyond the origin pin.
   var isPlottable: Bool {
@@ -89,10 +149,18 @@ struct PacketScopeCoverageMap {
 /// ambiguously by its short hash pins when the server names the repeater and
 /// this phone knows where it is. And the far end of a route is an observer
 /// rather than this device: an observer without a published location gets no
-/// geometry at all — its row says so — because a route ending on a repeater
-/// pin would only restate what the pin already shows.
+/// leg — its row says so — because a route ending on a repeater pin would only
+/// restate what the pin already shows.
+///
+/// **Id casing.** Observer ids are carried as the receptions carry them in
+/// every index a caller reads (`routeIDsByObserver`, `observerCoordinates`,
+/// `observerDistances`, route ids). Only the pin-id hash and the link id use
+/// the lowercased form, because the roster reports ids uppercase and the
+/// observations lowercase; `observerIDByPinID` maps back.
 @MainActor
 enum PacketScopeCoverageBuilder {
+  static let originPinID = stableID("origin")
+
   static func build(
     message: MessageDTO,
     receptions: [PacketScopeReception],
@@ -122,18 +190,19 @@ enum PacketScopeCoverageBuilder {
     var nodes: [(MapPoint, CLLocationCoordinate2D)] = []
     if let origin {
       nodes.append((MapPoint(
-        id: stableID("origin"),
+        id: originPinID,
         coordinate: origin.coordinate,
         pinStyle: .pointA,
         label: origin.name,
         isClusterable: false,
         hopIndex: nil,
-        badgeText: nil
+        badgeText: nil,
+        // Never dropped in a collision: it is where everything starts.
+        labelPriority: 0
       ), origin.coordinate))
     }
 
-    // Pass 1: place every hop of every route, remembering each repeater's
-    // path position(s) so its pin can number itself, and which observers can
+    // Pass 1: place every hop of every route, remembering which observers can
     // be placed.
     struct PlottedHop {
       let key: Data
@@ -156,18 +225,25 @@ enum PacketScopeCoverageBuilder {
 
     var plans: [RoutePlan] = []
     var pinOrder: [Data] = []
-    var pinInfo: [Data: (name: String, coordinate: CLLocationCoordinate2D, positions: Set<Int>)] = [:]
+    var pinInfo: [Data: (name: String, coordinate: CLLocationCoordinate2D)] = [:]
     var observerPinOrder: [String] = []
-    var observerPins: [String: (name: String, coordinate: CLLocationCoordinate2D, snr: Double?)] = [:]
+    var observerPins: [String: (name: String, coordinate: CLLocationCoordinate2D)] = [:]
     var observerDistances: [String: CLLocationDistance] = [:]
+    var observerCoordinates: [String: CLLocationCoordinate2D] = [:]
+    var observerIDByPinID: [UUID: String] = [:]
 
     for reception in receptions {
       let observerKey = reception.observerID.lowercased()
       let observerCoordinate = observersByID[observerKey]?.coordinate
+      let observerPinID = stableID("obs:\(observerKey)")
+      if observerIDByPinID[observerPinID] == nil {
+        observerIDByPinID[observerPinID] = reception.observerID
+      }
       if let observerCoordinate {
+        observerCoordinates[reception.observerID] = observerCoordinate
         if observerPins[observerKey] == nil {
           observerPinOrder.append(observerKey)
-          observerPins[observerKey] = (reception.observerName, observerCoordinate, reception.bestSNR)
+          observerPins[observerKey] = (reception.observerName, observerCoordinate)
         }
         if let origin {
           observerDistances[reception.observerID] = CLLocation(latitude: origin.coordinate.latitude, longitude: origin.coordinate.longitude)
@@ -187,14 +263,10 @@ enum PacketScopeCoverageBuilder {
             referenceLocation: referenceLocation
           ) else { continue }
           let coord = CLLocationCoordinate2D(latitude: r.latitude, longitude: r.longitude)
-          let position = index + 1
-          plotted.append(PlottedHop(key: r.publicKey, coordinate: coord, position: position))
-          if var info = pinInfo[r.publicKey] {
-            info.positions.insert(position)
-            pinInfo[r.publicKey] = info
-          } else {
+          plotted.append(PlottedHop(key: r.publicKey, coordinate: coord, position: index + 1))
+          if pinInfo[r.publicKey] == nil {
             pinOrder.append(r.publicKey)
-            pinInfo[r.publicKey] = (r.resolvableName, coord, [position])
+            pinInfo[r.publicKey] = (r.resolvableName, coord)
           }
         }
         let measuredFrom: (String, CLLocationCoordinate2D)? = if route.hops.isEmpty {
@@ -205,7 +277,7 @@ enum PacketScopeCoverageBuilder {
           nil
         }
         plans.append(RoutePlan(
-          id: "\(reception.observerID)|\(route.hops.joined(separator: ","))",
+          id: routeID(observerID: reception.observerID, hops: route.hops),
           observerID: reception.observerID,
           hopCount: route.hops.count,
           plotted: plotted,
@@ -216,6 +288,9 @@ enum PacketScopeCoverageBuilder {
       }
     }
 
+    // Repeater pins keep their name and carry no number: a repeater sits at
+    // different positions in different routes, so a global number would be
+    // wrong for all but one of them. Numbering is a property of a focus.
     for key in pinOrder {
       guard let info = pinInfo[key] else { continue }
       nodes.append((MapPoint(
@@ -224,23 +299,25 @@ enum PacketScopeCoverageBuilder {
         pinStyle: .repeaterHop,
         label: info.name,
         isClusterable: false,
-        hopIndex: info.positions.count == 1 ? info.positions.first : nil,
+        hopIndex: nil,
         badgeText: nil
       ), info.coordinate))
     }
-    for key in observerPinOrder {
+    // Observer pins carry the name alone; the signal lives in the row and on
+    // the leg's badge, and a label that changed with every poll would mint a
+    // new sprite and re-source every pin each time. Receptions arrive
+    // strongest first, so the pill priority follows that order.
+    for (rank, key) in observerPinOrder.enumerated() {
       guard let pin = observerPins[key] else { continue }
-      // The pin label carries the observer's best signal: one pill where the
-      // reader looks, instead of a name pill plus a badge per route.
-      let label = pin.snr.map { "\(pin.name) · \(Self.decibels($0))" } ?? pin.name
       nodes.append((MapPoint(
         id: stableID("obs:\(key)"),
         coordinate: pin.coordinate,
         pinStyle: .pointB,
-        label: label,
+        label: pin.name,
         isClusterable: false,
         hopIndex: nil,
-        badgeText: nil
+        badgeText: nil,
+        labelPriority: 10 + rank
       ), pin.coordinate))
     }
 
@@ -250,7 +327,8 @@ enum PacketScopeCoverageBuilder {
     // stays a gap.
     var linkOrder: [String] = []
     var linkInfo: [String: (from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, count: Int)] = [:]
-    func countLink(_ fromKey: String, _ from: CLLocationCoordinate2D, _ toKey: String, _ to: CLLocationCoordinate2D) {
+    var planLinkIDs: [Set<String>] = Array(repeating: [], count: plans.count)
+    func countLink(_ fromKey: String, _ from: CLLocationCoordinate2D, _ toKey: String, _ to: CLLocationCoordinate2D) -> String {
       let id = "\(fromKey)>\(toKey)"
       if var info = linkInfo[id] {
         info.count += 1
@@ -259,19 +337,20 @@ enum PacketScopeCoverageBuilder {
         linkOrder.append(id)
         linkInfo[id] = (from, to, 1)
       }
+      return id
     }
 
-    for plan in plans {
+    for (index, plan) in plans.enumerated() {
       var previous: (key: String, coordinate: CLLocationCoordinate2D, position: Int)? =
         origin.map { ("origin", $0.coordinate, 0) }
       for hop in plan.plotted {
         if let previous, hop.position == previous.position + 1 {
-          countLink(previous.key, previous.coordinate, hopKey(hop.key), hop.coordinate)
+          planLinkIDs[index].insert(countLink(previous.key, previous.coordinate, hopKey(hop.key), hop.coordinate))
         }
         previous = (hopKey(hop.key), hop.coordinate, hop.position)
       }
       if let observerCoordinate = plan.observerCoordinate, let from = plan.measuredFrom {
-        countLink(from.key, from.coordinate, "obs:\(plan.observerID.lowercased())", observerCoordinate)
+        planLinkIDs[index].insert(countLink(from.key, from.coordinate, "obs:\(plan.observerID.lowercased())", observerCoordinate))
       }
     }
     let links = linkOrder.compactMap { id -> PacketScopeCoverageLink? in
@@ -309,11 +388,12 @@ enum PacketScopeCoverageBuilder {
       ))
     }
 
-    // Pass 4: full per-route geometry for the focus state. Measured legs that
+    // Pass 4: full per-route geometry for the focus states. Measured legs that
     // share a tail into the same observer are repeated measurements of one
-    // link on coincident geometry; they fan into arcs bowing to alternating
-    // sides, the strongest route hugging the true line, so every readout
-    // stays visible.
+    // link on coincident geometry; for observer focus they fan into arcs
+    // bowing to alternating sides, the strongest route hugging the true line,
+    // so every readout stays visible. For single-route focus the same leg is
+    // drawn straight, with its readout at the chord midpoint.
     struct Leg {
       let planIndex: Int
       let from: CLLocationCoordinate2D
@@ -328,7 +408,13 @@ enum PacketScopeCoverageBuilder {
       legsByLink[link, default: []].append(Leg(planIndex: index, from: from.coordinate, to: observerCoordinate))
     }
 
-    var legLines: [Int: (line: MapLine, badge: MapPoint?)] = [:]
+    struct LegLines {
+      let fanned: MapLine
+      let fannedBadge: MapPoint?
+      let solo: MapLine
+      let soloBadge: MapPoint?
+    }
+    var legLines: [Int: LegLines] = [:]
     for link in legLinkOrder {
       guard let legs = legsByLink[link] else { continue }
       let ranked = legs.sorted { Self.outranks(plans[$0.planIndex], plans[$1.planIndex]) }
@@ -342,22 +428,21 @@ enum PacketScopeCoverageBuilder {
         // A measured leg with no SNR value stays neutral — the trace map's
         // dashed "untraced" reads as never measured, which this was; it just
         // carries no number to colour by (and earns no badge).
-        let line = MapLine(
-          id: "scope-\(plan.id)-rx",
-          coordinates: arc,
-          style: plan.snr != nil ? .forSNR(plan.snr) : .messagePath,
-          opacity: 1.0
-        )
-        var badge: MapPoint?
+        let style: MapLine.LineStyle = plan.snr != nil ? .forSNR(plan.snr) : .messagePath
+        let fanned = MapLine(id: "scope-\(plan.id)-rx", coordinates: arc, style: style, opacity: 1.0)
+        let solo = MapLine(id: "scope-\(plan.id)-rx-solo", coordinates: [leg.from, leg.to], style: style, opacity: 1.0)
+        var fannedBadge: MapPoint?
+        var soloBadge: MapPoint?
         if let snr = plan.snr {
+          soloBadge = MapLine.snrBadge(id: stableID("solo-badge:\(plan.id)"), from: leg.from, to: leg.to, snr: snr)
           if arc.count == 2 {
-            badge = MapLine.snrBadge(id: stableID("badge:\(plan.id)"), from: leg.from, to: leg.to, snr: snr)
+            fannedBadge = MapLine.snrBadge(id: stableID("badge:\(plan.id)"), from: leg.from, to: leg.to, snr: snr)
           } else {
             // Fanned leg: the badge rides its own arc's apex. Distance stays
             // the straight link distance, not arc length.
             let distance = CLLocation(latitude: leg.from.latitude, longitude: leg.from.longitude)
               .distance(from: CLLocation(latitude: leg.to.latitude, longitude: leg.to.longitude))
-            badge = MapPoint(
+            fannedBadge = MapPoint(
               id: stableID("badge:\(plan.id)"),
               coordinate: arc[arc.count / 2],
               pinStyle: .badge,
@@ -368,13 +453,14 @@ enum PacketScopeCoverageBuilder {
             )
           }
         }
-        legLines[leg.planIndex] = (line, badge)
+        legLines[leg.planIndex] = LegLines(fanned: fanned, fannedBadge: fannedBadge, solo: solo, soloBadge: soloBadge)
       }
     }
 
     var routes: [PacketScopeCoverageRoute] = []
+    var routeIDByBadgePinID: [UUID: String] = [:]
     for (index, plan) in plans.enumerated() {
-      var segments: [MapLine] = []
+      var bodies: [MapLine] = []
       // The body, as runs of path-adjacent placed points; each run of two or
       // more is one segment.
       var run: [CLLocationCoordinate2D] = []
@@ -386,7 +472,7 @@ enum PacketScopeCoverageBuilder {
       var runIndex = 0
       func flushRun() {
         if run.count >= 2 {
-          segments.append(MapLine(id: "scope-\(plan.id)-body-\(runIndex)", coordinates: run, style: .messagePath, opacity: 1.0))
+          bodies.append(MapLine(id: "scope-\(plan.id)-body-\(runIndex)", coordinates: run, style: .messagePath, opacity: 1.0))
           runIndex += 1
         }
         run = []
@@ -398,24 +484,91 @@ enum PacketScopeCoverageBuilder {
         runPosition = hop.position
       }
       flushRun()
+
       let leg = legLines[index]
-      if let leg { segments.append(leg.line) }
-      guard !segments.isEmpty else { continue }
+      let segments = bodies + (leg.map { [$0.fanned] } ?? [])
+      let soloSegments = bodies + (leg.map { [$0.solo] } ?? [])
+      var soloBadge = leg?.soloBadge
+      if leg == nil, let last = bodies.last, let snr = plan.snr,
+         last.coordinates.count >= 2 {
+        // No measured leg to carry the number, but a body to hang it on: the
+        // route's signal at the end of what could be drawn. The body keeps
+        // its neutral colour — nothing measured that hop.
+        let from = last.coordinates[last.coordinates.count - 2]
+        let to = last.coordinates[last.coordinates.count - 1]
+        soloBadge = MapPoint(
+          id: stableID("solo-badge:\(plan.id)"),
+          coordinate: MapLine.midpoint(from: from, to: to),
+          pinStyle: .badge,
+          label: nil,
+          isClusterable: false,
+          hopIndex: nil,
+          badgeText: decibels(snr)
+        )
+      }
+      if let badge = leg?.fannedBadge { routeIDByBadgePinID[badge.id] = plan.id }
+      if let soloBadge { routeIDByBadgePinID[soloBadge.id] = plan.id }
+
+      let placedHops = plan.plotted.map { PacketScopeCoveragePlacedHop(pinID: stableID(hopKey($0.key)), position: $0.position) }
+      var participants = Set(placedHops.map(\.pinID))
+      var coordinates = plan.plotted.map(\.coordinate)
+      if let origin {
+        participants.insert(originPinID)
+        coordinates.insert(origin.coordinate, at: 0)
+      }
+      if let observerCoordinate = plan.observerCoordinate {
+        participants.insert(stableID("obs:\(plan.observerID.lowercased())"))
+        coordinates.append(observerCoordinate)
+      }
+
       routes.append(PacketScopeCoverageRoute(
         id: plan.id,
         observerID: plan.observerID,
+        hopCount: plan.hopCount,
         segments: segments,
-        badge: leg?.badge
+        badge: leg?.fannedBadge,
+        soloSegments: soloSegments,
+        soloBadge: soloBadge,
+        placedHops: placedHops,
+        unplacedTailCount: plan.hopCount - (plan.plotted.last?.position ?? 0),
+        hasMeasuredLeg: leg != nil,
+        linkIDs: planLinkIDs[index],
+        participantPinIDs: participants,
+        drawnGeometryKey: geometryKey(soloSegments),
+        coordinates: coordinates
       ))
     }
+
+    // The ladder order: strongest first, by the same rule as the headline leg.
+    var routeIDsByObserver: [String: [String]] = [:]
+    for plan in plans.sorted(by: { outranks($0, $1) }) {
+      routeIDsByObserver[plan.observerID, default: []].append(plan.id)
+    }
+    let routesByID = Dictionary(routes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let drawableRouteIDs = Set(routes.filter(\.isDrawable).map(\.id))
+    let drawableObserverIDs = Set(routes.filter(\.isDrawable).map(\.observerID))
 
     return PacketScopeCoverageMap(
       nodes: nodes,
       links: links,
       observerLegs: observerLegs,
       routes: routes,
-      observerDistances: observerDistances
+      observerDistances: observerDistances,
+      routesByID: routesByID,
+      routeIDsByObserver: routeIDsByObserver,
+      drawableRouteIDs: drawableRouteIDs,
+      drawableObserverIDs: drawableObserverIDs,
+      observerIDByPinID: observerIDByPinID,
+      routeIDByBadgePinID: routeIDByBadgePinID,
+      originCoordinate: origin?.coordinate,
+      observerCoordinates: observerCoordinates
     )
+  }
+
+  /// The route id the panel and the map share: observer id as the receptions
+  /// carry it, plus the hop sequence.
+  static func routeID(observerID: String, hops: [String]) -> String {
+    "\(observerID)|\(hops.joined(separator: ","))"
   }
 
   /// The hop rule: the server's resolved public key first, when this phone
@@ -481,7 +634,146 @@ enum PacketScopeCoverageBuilder {
   }
 
   static func decibels(_ snr: Double) -> String {
-    "\(snr.formatted(.number.precision(.fractionLength(0...1)))) dB"
+    "\(snr.formatted(.number.precision(.fractionLength(0...1)))) \(L10n.RemoteNodes.RemoteNodes.Status.snrBadgeUnit)"
+  }
+
+  /// A rounded digest of drawn geometry: routes with the same key draw the
+  /// same pixels.
+  private static func geometryKey(_ segments: [MapLine]) -> String {
+    segments.flatMap(\.coordinates)
+      .map { String(format: "%.5f,%.5f", $0.latitude, $0.longitude) }
+      .joined(separator: ";")
+  }
+
+  // MARK: - Focus
+
+  /// What the map draws for a focus. Pure of arrival: every line comes back
+  /// untruncated, with the arrival key that grows it, and the view applies
+  /// the per-frame cut — baking it in here would freeze the draw-in.
+  ///
+  /// A focus the map cannot place (an observer with no location whose hops
+  /// could not be placed either) returns the everything-state verbatim with
+  /// `isDrawable == false` and no camera coordinates: the map is never
+  /// blanked to promote something that is not there.
+  static func geometry(for focus: PacketScopeFocus, in map: PacketScopeCoverageMap) -> PacketScopeFocusGeometry {
+    switch focus {
+    case .all:
+      return everything(in: map, isDrawable: true)
+
+    case let .observer(observerID):
+      let routes = (map.routeIDsByObserver[observerID] ?? [])
+        .compactMap { map.routesByID[$0] }
+        .filter(\.isDrawable)
+      guard !routes.isEmpty else { return everything(in: map, isDrawable: false) }
+      var arrivalKeys: [String: String] = [:]
+      for route in routes where route.hasMeasuredLeg {
+        arrivalKeys["scope-\(route.id)-rx"] = "leg:\(observerID)"
+      }
+      // With one drawable route the hops number themselves as in route focus;
+      // with several, a repeater can sit at different positions and stays plain.
+      let numbering = routes.count == 1 ? hopNumbering(routes[0]) : [:]
+      let participants = routes.reduce(into: Set<UUID>()) { $0.formUnion($1.participantPinIDs) }
+      var coordinates: [CLLocationCoordinate2D] = []
+      for route in routes {
+        coordinates += route.coordinates
+      }
+      return PacketScopeFocusGeometry(
+        lines: routes.flatMap(\.segments),
+        nodes: focusedNodes(in: map, participants: participants, numbering: numbering, badge: routes.first.flatMap { $0.badge ?? $0.soloBadge }),
+        arrivalKeyByLineID: arrivalKeys,
+        focusLinkIDs: routes.reduce(into: Set<String>()) { $0.formUnion($1.linkIDs) },
+        cameraCoordinates: dedupe(coordinates),
+        routeIDs: routes.map(\.id),
+        isDrawable: true
+      )
+
+    case let .route(observerID, routeID):
+      guard let route = map.routesByID[routeID], route.isDrawable else {
+        return everything(in: map, isDrawable: false)
+      }
+      var arrivalKeys: [String: String] = [:]
+      if route.hasMeasuredLeg {
+        arrivalKeys["scope-\(route.id)-rx-solo"] = "leg:\(observerID)"
+      }
+      return PacketScopeFocusGeometry(
+        lines: route.soloSegments,
+        nodes: focusedNodes(in: map, participants: route.participantPinIDs, numbering: hopNumbering(route), badge: route.soloBadge),
+        arrivalKeyByLineID: arrivalKeys,
+        focusLinkIDs: route.linkIDs,
+        cameraCoordinates: dedupe(route.coordinates),
+        routeIDs: [route.id],
+        isDrawable: true
+      )
+    }
+  }
+
+  private static func everything(in map: PacketScopeCoverageMap, isDrawable: Bool) -> PacketScopeFocusGeometry {
+    PacketScopeFocusGeometry(
+      lines: map.observerLegs.map(\.line),
+      nodes: map.nodes,
+      arrivalKeyByLineID: Dictionary(map.observerLegs.map { ($0.line.id, "leg:\($0.id)") }, uniquingKeysWith: { first, _ in first }),
+      focusLinkIDs: Set(map.links.map(\.id)),
+      cameraCoordinates: isDrawable ? map.pinCoordinates : [],
+      routeIDs: [],
+      isDrawable: isDrawable
+    )
+  }
+
+  /// Pin id → the hop's true path position, for the focus ring sprite. A
+  /// repeater at two positions in one route keeps the first.
+  private static func hopNumbering(_ route: PacketScopeCoverageRoute) -> [UUID: Int] {
+    var numbering: [UUID: Int] = [:]
+    for hop in route.placedHops where numbering[hop.pinID] == nil {
+      numbering[hop.pinID] = hop.position
+    }
+    return numbering
+  }
+
+  /// Every pin of the map, promoted or recessed: participants keep their
+  /// label and never lose a collision; a numbered participant takes the ring
+  /// sprite with its path position; everything else recedes to the one
+  /// recessed emphasis, unlabelled. Then the focus's one badge.
+  private static func focusedNodes(
+    in map: PacketScopeCoverageMap,
+    participants: Set<UUID>,
+    numbering: [UUID: Int],
+    badge: MapPoint?
+  ) -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
+    var nodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)] = map.nodes.map { node in
+      let point = node.point
+      if participants.contains(point.id) {
+        let position = numbering[point.id]
+        return (MapPoint(
+          id: point.id,
+          coordinate: point.coordinate,
+          pinStyle: position != nil ? .repeaterRingWhite : point.pinStyle,
+          label: point.label,
+          isClusterable: false,
+          hopIndex: position,
+          badgeText: nil,
+          emphasis: 1,
+          labelPriority: 0
+        ), node.coordinate)
+      }
+      return (MapPoint(
+        id: point.id,
+        coordinate: point.coordinate,
+        pinStyle: point.pinStyle,
+        label: nil,
+        isClusterable: false,
+        hopIndex: nil,
+        badgeText: nil,
+        emphasis: MapPoint.recessedEmphasis,
+        labelPriority: point.labelPriority
+      ), node.coordinate)
+    }
+    if let badge { nodes.append((badge, badge.coordinate)) }
+    return nodes
+  }
+
+  private static func dedupe(_ coordinates: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
+    var seen = Set<String>()
+    return coordinates.filter { seen.insert("\($0.latitude),\($0.longitude)").inserted }
   }
 
   // MARK: - Partial draws
