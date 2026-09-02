@@ -85,6 +85,17 @@ targets:
         outputFiles:
           - $(PROJECT_DIR)/MC1/Resources/Generated/L10n.swift
         basedOnDependencyAnalysis: false
+    postBuildScripts:
+      # MapLibre is a prebuilt binary with no dSYM in its xcframework, so every
+      # archive uploaded without symbols for it and App Store Connect warned.
+      # Archive builds only: fetch the release's published dSYM for the pinned
+      # version, check its UUIDs against the embedded framework, and add it to
+      # the archive's dSYMs folder. See ci/include-maplibre-dsym.sh.
+      - name: Include MapLibre dSYM in archives
+        script: |
+          "${PROJECT_DIR}/ci/include-maplibre-dsym.sh"
+        runOnlyWhenInstalling: true
+        basedOnDependencyAnalysis: false
     settings:
       base:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
