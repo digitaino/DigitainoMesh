@@ -36,6 +36,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
   public var frequentEmojis: [String]?
   public var recentEmojis: [String]?
   public var hasSeenRepeaterDragHint: Bool?
+  public var hasSeenPacketScopeFocusHint: Bool?
   public var regionSelection: RegionSelection?
 
   // MARK: - Notification preferences
@@ -121,6 +122,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.packetScopeEnabled, AppStorageKey.packetScopeEnabled.rawValue),
     (\.showMapPreviewThumbnails, AppStorageKey.showMapPreviewThumbnails.rawValue),
     (\.hasSeenRepeaterDragHint, AppStorageKey.hasSeenRepeaterDragHint.rawValue),
+    (\.hasSeenPacketScopeFocusHint, AppStorageKey.hasSeenPacketScopeFocusHint.rawValue),
     (\.notifyContactMessages, AppStorageKey.notifyContactMessages.rawValue),
     (\.notifyChannelMessages, AppStorageKey.notifyChannelMessages.rawValue),
     (\.notifyRoomMessages, AppStorageKey.notifyRoomMessages.rawValue),

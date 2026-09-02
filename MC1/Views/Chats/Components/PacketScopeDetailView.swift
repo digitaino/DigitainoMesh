@@ -176,6 +176,10 @@ struct PacketScopeDetailView: View {
   /// observers appended.
   @State private var displayReceptions: [PacketScopeReception] = []
   @State private var sort: ObserverSort = .strongest
+  /// Whether the tap-to-focus hint has done its job. Persisted, so the line
+  /// costs the list a row once rather than on every message forever.
+  @AppStorage(AppStorageKey.hasSeenPacketScopeFocusHint.rawValue)
+  private var hasSeenFocusHint = AppStorageKey.defaultHasSeenPacketScopeFocusHint
   /// The focus bar's observers toggle: a true full-map view is its explicit
   /// second tap, remembered for the life of the focus.
   @State private var showsObserverList = true
@@ -368,9 +372,11 @@ struct PacketScopeDetailView: View {
     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
   }
 
-  /// A fixed shape in every state, so nothing appears or disappears under
-  /// the thumb: the count and the sort, the breadcrumb, then — with nothing
-  /// focused — the answer line and the one line that teaches the model.
+  /// The count and the sort, then — only once there is one — the breadcrumb,
+  /// and with nothing focused the answer line. Everything the header shows
+  /// costs the list a row, so nothing sits here that is not carrying its
+  /// height: with nothing focused the breadcrumb was a 44 pt row holding the
+  /// inert word "All", and the hint outlived the lesson it taught.
   private var panelHeader: some View {
     VStack(alignment: .leading, spacing: 2) {
       HStack(spacing: 8) {
@@ -379,16 +385,23 @@ struct PacketScopeDetailView: View {
         Spacer(minLength: 0)
         sortMenu
       }
-      breadcrumb
+      if focus != .all {
+        breadcrumb
+      }
       if focus == .all {
         if let line = summaryLine {
           Text(line)
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
         }
-        Text(L10n.Localizable.PacketScope.tapHint)
-          .font(.caption2)
-          .foregroundStyle(.tertiary)
+        // Retired for good once the model has been used once: it teaches a
+        // gesture, and a taught gesture does not need re-teaching on every
+        // message for the life of the app.
+        if !hasSeenFocusHint {
+          Text(L10n.Localizable.PacketScope.tapHint)
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
       }
       // A retry puts a *different* packet on the air each attempt, and this
       // row is stamped with whichever attempt's echo arrived first. In the
@@ -906,9 +919,18 @@ struct PacketScopeDetailView: View {
       parts.append(L10n.Localizable.PacketScope.best(PacketScopeCoverageBuilder.decibels(best)))
     }
     if let hops = summary.shortestHopCount {
-      parts.append(hops == 0
-        ? L10n.Localizable.PacketScope.heardDirectlyInline
-        : L10n.Localizable.PacketScope.shortest(Self.routeLength(hops)))
+      if hops == 0 {
+        // One clause, not two. "heard directly" and "N heard directly" always
+        // fired together — a shortest route of zero hops *is* a direct
+        // reception — so the line said the same thing twice. The count is the
+        // one that carries more, and it is only worth printing past one.
+        let direct = (receptions ?? []).count { $0.routes.contains { $0.hops.isEmpty } }
+        parts.append(direct > 1
+          ? L10n.Localizable.PacketScope.directCount(direct)
+          : L10n.Localizable.PacketScope.heardDirectlyInline)
+      } else {
+        parts.append(L10n.Localizable.PacketScope.shortest(Self.routeLength(hops)))
+      }
     }
     if let coverage, let farthest = coverage.observerDistances.values.max() {
       let anyUnlocated = (receptions ?? []).contains { coverage.observerCoordinates[$0.observerID] == nil }
@@ -916,10 +938,6 @@ struct PacketScopeDetailView: View {
       parts.append(L10n.Localizable.PacketScope.farthest(
         anyUnlocated ? L10n.Localizable.PacketScope.lowerBound(figure) : figure
       ))
-    }
-    let direct = (receptions ?? []).count { reception in reception.routes.contains { $0.hops.isEmpty } }
-    if direct > 0, summary.observerCount > 1 {
-      parts.append(L10n.Localizable.PacketScope.directCount(direct))
     }
     if isLive {
       parts.append(L10n.Localizable.PacketScope.stillArriving)
@@ -1156,8 +1174,11 @@ struct PacketScopeDetailView: View {
   /// is something to frame, scrolls the row into view, and tells VoiceOver
   /// what changed — or that nothing could.
   private func setFocus(_ next: PacketScopeFocus, isStep: Bool = false) {
-    if next != .all, frozenOrder == nil {
-      frozenOrder = captureOrder()
+    if next != .all {
+      hasSeenFocusHint = true
+      if frozenOrder == nil {
+        frozenOrder = captureOrder()
+      }
     }
     applyFocus(next, animated: true)
     if next == .all {

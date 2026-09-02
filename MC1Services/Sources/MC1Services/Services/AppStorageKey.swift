@@ -62,6 +62,10 @@ public enum AppStorageKey: String {
   /// in-bubble Translate control.
   case messageTranslationEnabled
   case hasSeenRepeaterDragHint
+  /// Whether the Network View's "tap an observer, then a route" hint has been
+  /// obeyed once. The hint teaches the panel's focus model; once the model has
+  /// been used, the line is only costing the observer list a row.
+  case hasSeenPacketScopeFocusHint
   case autoDeleteStaleNodesDays
   case lastStaleCleanupDate
   case frequentEmojis
@@ -105,6 +109,7 @@ public enum AppStorageKey: String {
   /// Raw value of `AppColorSchemePreference.system` — basemap only, not app chrome.
   public static let defaultMapColorSchemePreference: String = "system"
   public static let defaultHasSeenRepeaterDragHint: Bool = false
+  public static let defaultHasSeenPacketScopeFocusHint: Bool = false
   public static let defaultLiveActivityEnabled: Bool = true
   /// Days before a non-favorite node is auto-deleted; 0 disables cleanup.
   public static let defaultAutoDeleteStaleNodesDays: Int = 0
