@@ -868,3 +868,35 @@
 "packetScope.sortFirstHeard" = "Почуто першим";
 "packetScope.new" = "Новий";
 "packetScope.showAll" = "Показати всі";
+
+/* Packet Scope: focus (route / observer selection on the map) */
+"packetScope.filterAll" = "Усі";
+"packetScope.tapHint" = "Торкніться спостерігача, а потім маршруту, щоб простежити його на мапі";
+"packetScope.hintObserver" = "Показує маршрути цього спостерігача на мапі";
+"packetScope.hintRoute" = "Показує цей маршрут на мапі";
+"packetScope.notOnMapRoute" = "Цей маршрут неможливо намалювати на мапі";
+"packetScope.notOnMapObserver" = "Цей спостерігач не публікує розташування, і жоден із його ретрансляторів не вдалося розмістити";
+"packetScope.hopNotOnMap" = "Немає на мапі";
+"packetScope.tailUnknown" = "+%d стрибків немає на мапі";
+"packetScope.sameDrawnPath" = "%d маршрутів малюють той самий шлях";
+"packetScope.rssiBest" = "Найкращий RSSI %@ дБм";
+"packetScope.heardOffset" = "+%@ с";
+"packetScope.heardDirectlyInline" = "отримано напряму";
+"packetScope.lowerBound" = "≥ %@";
+"packetScope.farthest" = "найдальший %@";
+"packetScope.directCount" = "%d отримано напряму";
+"packetScope.sortFarthest" = "Найдальші";
+"packetScope.drawn" = "%@ намальовано";
+"packetScope.alsoHeardBy" = "отримано %d спостерігачами цим шляхом";
+"packetScope.routeCount" = "%d маршрутів";
+"packetScope.previousRoute" = "Попередній маршрут";
+"packetScope.nextRoute" = "Наступний маршрут";
+"packetScope.showObservers" = "Показати спостерігачів";
+"packetScope.hideObservers" = "Сховати спостерігачів";
+"packetScope.copySummary" = "Скопіювати підсумок";
+"packetScope.a11yExpanded" = "Розгорнуто";
+"packetScope.a11yCollapsed" = "Згорнуто";
+"packetScope.a11yNotDrawable" = "Не показано на мапі";
+"packetScope.a11yShowingRoute" = "Показано маршрут до %1$@ через %2$@";
+"packetScope.a11yShowingObserver" = "Показано %1$d маршрутів до %2$@";
+"packetScope.a11yShowingAll" = "Показано всіх спостерігачів";

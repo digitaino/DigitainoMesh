@@ -868,3 +868,35 @@
 "packetScope.sortFirstHeard" = "Eerst gehoord";
 "packetScope.new" = "Nieuw";
 "packetScope.showAll" = "Alles tonen";
+
+/* Packet Scope: focus (route / observer selection on the map) */
+"packetScope.filterAll" = "Alle";
+"packetScope.tapHint" = "Tik op een waarnemer en daarna op een route om die op de kaart te volgen";
+"packetScope.hintObserver" = "Toont de routes van deze waarnemer op de kaart";
+"packetScope.hintRoute" = "Toont deze route op de kaart";
+"packetScope.notOnMapRoute" = "Deze route kan niet op de kaart worden getekend";
+"packetScope.notOnMapObserver" = "Deze waarnemer publiceert geen locatie en geen van zijn repeaters kon worden geplaatst";
+"packetScope.hopNotOnMap" = "Niet op de kaart";
+"packetScope.tailUnknown" = "+%d hops niet op de kaart";
+"packetScope.sameDrawnPath" = "%d routes tekenen hetzelfde pad";
+"packetScope.rssiBest" = "Beste RSSI %@ dBm";
+"packetScope.heardOffset" = "+%@ s";
+"packetScope.heardDirectlyInline" = "direct gehoord";
+"packetScope.lowerBound" = "≥ %@";
+"packetScope.farthest" = "verste %@";
+"packetScope.directCount" = "%d direct gehoord";
+"packetScope.sortFarthest" = "Verste";
+"packetScope.drawn" = "%@ getekend";
+"packetScope.alsoHeardBy" = "gehoord door %d waarnemers via dit pad";
+"packetScope.routeCount" = "%d routes";
+"packetScope.previousRoute" = "Vorige route";
+"packetScope.nextRoute" = "Volgende route";
+"packetScope.showObservers" = "Waarnemers tonen";
+"packetScope.hideObservers" = "Waarnemers verbergen";
+"packetScope.copySummary" = "Samenvatting kopiëren";
+"packetScope.a11yExpanded" = "Uitgeklapt";
+"packetScope.a11yCollapsed" = "Ingeklapt";
+"packetScope.a11yNotDrawable" = "Niet op de kaart getoond";
+"packetScope.a11yShowingRoute" = "Toont de route naar %1$@ via %2$@";
+"packetScope.a11yShowingObserver" = "Toont %1$d routes naar %2$@";
+"packetScope.a11yShowingAll" = "Toont alle waarnemers";

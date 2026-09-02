@@ -183,8 +183,15 @@ heard through reads fat; a one-off spur reads thin. Links are never coloured
 by signal: nothing in the data says how well an intermediate repeater heard
 the packet. On top, exactly **one SNR-styled leg per located observer**: the
 measured leg (tail hop → observer, or origin → observer when direct) of its
-strongest route, straight. No badges. The observer pin's label carries its
-best signal (`Name · 12.2 dB`) — one pill where the reader looks.
+strongest route, straight. No badges. Pins carry names only: the observer
+pin's label is its name (a label that changed with every poll minted a new
+sprite and re-sourced every pin each time, to state a number the row and the
+leg's badge already carry), and repeater pins are named but **not numbered** —
+a repeater sits at different positions in different routes, so any global
+number is wrong for all but one of them; numbering is a property of a focus.
+Name pills are placed with `labelPlacement: .collide`, so MapLibre arbitrates
+the pills that would overlap by `MapPoint.labelPriority`: origin (0) never
+drops, observers (10 + strength rank) beat repeaters (1000).
 
 **Placement rules** are the heard-repeats map's, with the observer where "us"
 used to be. Origin: an outgoing message started at its send-time stamp, else
@@ -203,30 +210,118 @@ routes up to their last placed hop, since that is what is known. Pin ids derive 
 `origin` / `hop:<key>` / `obs:<id>`), so a poll that changes nothing
 re-sources nothing.
 
-**Selection.** Tap an observer's row or its pin: its routes draw in full — the
-existing per-route machinery, with the arc fan for routes sharing a tail and
-the "distance · SNR" badges — while the link substrate dims and other
-observers' legs drop to 20% opacity; its row opens into a ladder of its routes,
-strongest first (`★`), each as hop pills in path order with the measured
-signal pinned at the trailing edge so a long path can never push it off. Tap a
-route in the ladder to focus it alone. Tap the map, the row again, or "Show
-all" to clear. Selection is keyed on observer id and route id, so it survives
-polls. The camera frames **pins only** (`cameraCoordinates`): badges and
-selection never move it; a new observer or repeater pin still re-fits, since
-that is the arrival the reader is waiting for.
+**Focus.** One value governs the map and the panel: `PacketScopeFocus` is
+`.all`, `.observer(id)` or `.route(observerID:routeID:)`, so "a route selected
+under no observer" cannot be represented and every entry point writes the
+same thing. Entry points: an observer's row or its pin (toggles), a route row
+in the ladder (a hop pill inside it too), a "distance · SNR" badge on the map
+(`onBadgeTap`), the breadcrumb crumbs, the focus bar's ‹ / › steppers, and a
+tap on the map background, which pops **one** level (route → observer → all)
+so a stray tap while panning costs one recoverable step. `✕` in the focus bar
+and the `All` crumb clear in one tap.
 
-**Panel.** Headline `Heard by 9`, then `best 12.2 dB · shortest 2 hops · still
-arriving` (or `settled in 4.2 s` / `settled` once the poll loop has stopped) —
-each figure its own extreme, deliberately not phrased as one route's
-properties. The retry caveat moved up here from a footer nobody scrolled to.
+Focus is a **filter that removes, not a dimmer**. Routes of one observer share
+their leading segments by construction, so three "dimmed" copies at 0.2
+composited to ~0.5 and cancelled the contrast the model depended on;
+`MapLine.opacity` no longer appears on this screen. Rules
+(`PacketScopeCoverageBuilder.geometry(for:in:)`, pure, tested):
+
+- **Route focus** draws only that route's `soloSegments` — bodies in
+  `.messagePath`, the measured leg **straight** with the house chord-midpoint
+  badge — and only its links in the `scope-links` overlay; every other link is
+  dropped. Its placed hops take the `.repeaterRingWhite` sprite numbered by
+  their **true path position** (a gap in the numbers is exactly where a hop
+  could not be placed); every other pin recedes to `MapPoint.recessedEmphasis`
+  with no label. The camera frames origin + placed hops + observer.
+- **Observer focus** draws its drawable routes in full, fanned as before, with
+  exactly one badge (the best route's); the links they use stay at full paint
+  and the rest recede to a casing-less `scope-links-context` overlay. With one
+  drawable route its hops number as in route focus; with several, positions
+  conflict and the pins stay plain.
+- **Where nothing can be drawn** — an observer with no published location whose
+  repeaters could not be placed either, roughly half a real instance's
+  observers — the map is left **exactly as it was**, the camera does not move,
+  and the panel says why (`notOnMapRoute` / `notOnMapObserver`). The builder
+  publishes `drawableRouteIDs`, so a route row shows `mappin.slash` **before**
+  the tap and the panel and the map can never disagree. The builder no longer
+  drops routes with no drawable segment (that mismatch between the ladder and
+  the map was the mechanical cause of "I tapped and nothing happened").
+- A focused route with a body but no drawable leg (the unlocated observer's
+  case) gets a readout badge at the body's end carrying its dB, so two routes
+  that differ only in unplaceable tails still read differently; the body is
+  **not** recoloured — SNR colour means "the observer measured this hop", and
+  nothing measured it. Badge text stays digits and units (the glyph server
+  has one font); every sentence lives in the panel.
+
+**Camera.** A focus owns the camera while it exists (`cameraFocus` on the
+canvas): every automatic re-fit — the poll-driven `pathSignature` fit and
+both style-load fits — yields to it, and to a user who has panned
+(`onUserCameraMove`; `isCenteredOnUser` cannot serve, since a gesture sets it
+to *false*). The focus id embeds a digest of the framed coordinates, so a poll
+re-fits only when a hop finally resolves. One settle re-fit 350 ms after the
+focus fit, because the panel's height is reported after layout. Reduce Motion
+suppresses camera animation in the shared map view.
+
+**Order stability.** Entering a focus freezes the panel's order — observers and
+each ladder — for the life of the focus; new observers append at the tail with
+their `New` chip. A poll therefore cannot move a row or re-rank a ladder under
+a reaching finger. **Deliberate trade, freshness for stability:** during a
+focus the `BEST` chip can disagree with row order. A sort change re-freezes
+around the new order and scrolls the focused row back into view.
+
+**Cost of a focus change.** Pin ids are content-derived, but
+`updatePointSource` compares the whole array and replaces the source wholesale,
+so a focus change is one re-source of the fixed point set (~35 features). That
+is cheap because label sprites are cached by name — toggling a label off and
+back on mints nothing.
+
+**`.collide` acceptance check.** Collision mode enrols our pills in the style's
+single collision index alongside the basemap's own label layers. MapLibre
+Native places layers in reverse render order, so ours — added last — should
+take priority; that is a runtime property of the vendored binary, not
+provable here. **Verify on device over downtown Austin at the metro fit that
+the origin and observer pills draw.** If basemap labels ever suppress ours, the
+bounded fallback is: in `updateLabelPlacement`, when switching to `.collide`,
+set `iconIgnoresPlacement` / `textIgnoresPlacement` on every symbol layer the
+app does not own. That removes basemap labels from the index without hiding
+them, and a style reload undoes it.
+
+**Panel.** A fixed shape in every state, so nothing appears or disappears
+under the thumb: `Heard by 9` + the sort menu (icon plus the current option;
+"Farthest" is offered only when something has a distance), then the breadcrumb
+(`All › SOCO T1000e › via …`, always present, each crumb a target), then —
+with nothing focused — `best 12.2 dB · shortest 2 hops · farthest ≥ 23 mi ·
+4 heard directly · still arriving` (farthest is a lower bound whenever a
+heard observer has no location) and the one line that teaches the model. In a
+focus, a **focus bar** follows: the route's hops as numbered pills (an unplaced
+hop wears `mappin.slash`) or the observer's name; the figures (`13.8 dB · 2
+hops · ≥ 12 mi drawn · heard by 3 observers by this path · +1.4 s`); a caveat
+only when there is one; and ‹ › (step through the frozen ladder, wrapping
+across observers), an observers toggle (a true full-map view is its second
+tap), and ✕. The panel has a **total height budget** (45% of the screen; 30%
+in route focus, which keeps the tapped row and its ladder on screen while the
+map gains height; 0 with observers hidden) and the list gets what the header
+leaves, so a focus never takes room from the map.
+
 Rows are two lines: signal bars (`cellularbars` at `SNRQuality.barLevel`, the
 repeat-row idiom), name, seconds after the first observer (`+1.3 s`, not a
 wall-clock time that reads the same on every row), and chips — dB, hops, `×3`,
-`No location`, distance from origin. RSSI moved into the expanded ladder; it
-is a separate reception's maximum, and beside SNR it read as one measurement.
-Sort: strongest (the fold's order), fewest hops, first heard. One combined
-accessibility element per collapsed row; hop names are resolved when data
-changes, not per animation frame.
+`No location`, distance from origin. The ladder's RSSI line is labelled as
+what it is — the observer's **best** RSSI, a separate reception's maximum.
+Route rows are 44 pt, two-line cells: a persistent leading glyph that states
+the consequence before the tap (`mappin.and.ellipse` when the map can draw the
+route, `mappin.slash` when it cannot), the hops as **wrapping** numbered pills
+(no nested horizontal scroll view competing with the tap), then a `Best route`
+chip, the dB in its quality colour, the hop count, and `+N hops not on the
+map` when the tail is unplaced. Selection is never colour alone: a leading
+accent bar and weight carry it. Sort: strongest (the fold's order), fewest
+hops, first heard, farthest. Every focus transition is announced to VoiceOver
+— branched on drawability, so "Showing the route to X" is never said of a map
+that did not change — and the map carries the same sentence as its
+accessibility label. Haptics: selection on focus, light impact on ‹ ›, success
+on the first load and on Copy summary (toolbar; plain text built from the
+summary, the rows and the resolved names only, so the packet identifier is
+not even in scope).
 
 **Arrivals.** The first successful fetch draws at once. What a later poll adds
 — new links, new observer legs — animates over 0.5 s (links thicken from
@@ -235,16 +330,23 @@ for 20 s. Reduce Motion keeps the chip and skips the animation. Route and pin
 identity are stable, so re-resolution never re-draws.
 
 **Canvas additions** (`MessagePathMapCanvas`, all defaulted, siblings
-untouched): `overlays`, `cameraCoordinates`, `onPointTap`, `onMapTap`. One
-shared-layer change underneath: the path and trace line layers now honour the
-per-feature `segmentOpacity` attribute every `MapLine` already carries (only
-the line-of-sight layer did before). Every existing caller writes 1.0, so
-nothing else changes; the dimming here needs it.
+untouched): `overlays`, `cameraCoordinates`, `onPointTap`, `onMapTap`,
+`cameraFocus`, `labelPlacement`, `onBadgeTap`, `accessibilitySummary`. Shared
+map-layer changes underneath, all inert for existing callers: the path and
+trace line layers honour the per-feature `segmentOpacity`; `MapPoint.emphasis`
+(1 or 0.25, discrete, part of `==`) and `MapPoint.labelPriority` are emitted as
+feature attributes and bound as icon/text opacity and as the collision sort
+key; `MapLabelPlacement` (`.overlap` is byte-for-byte the old placement);
+badge pills now follow their text's overlap flags; pin icons are hit-tested
+inside a 44 pt square with nearest-wins, name pills as an exact-point probe
+after them, and `.badge` points never count as pins; `onUserCameraMove`;
+Reduce Motion on every programmatic camera move.
 
 Known minor behaviours, reviewed and left: a newly heard link appears at the
 ramp's minimum width and thickens rather than growing from nothing (the
-observer leg's draw-in and the `New` chip carry the arrival); tapping a
-"distance · SNR" badge counts as a map tap and clears the selection.
+observer leg's draw-in and the `New` chip carry the arrival). An arriving link
+or leg draws in every focus state, so the `New` chip never advertises
+something the map hid.
 
 Deferred, deliberately: an always-on footer chip ("heard by N") on bubbles would
 require persisted observation summaries plus `MessageItem` rebuild plumbing (the

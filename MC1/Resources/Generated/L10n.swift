@@ -2804,6 +2804,26 @@ public enum L10n {
       }
     }
     public enum PacketScope {
+      /// Collapsed
+      public static let a11yCollapsed = L10n.tr("Localizable", "packetScope.a11yCollapsed", fallback: "Collapsed")
+      /// Expanded
+      public static let a11yExpanded = L10n.tr("Localizable", "packetScope.a11yExpanded", fallback: "Expanded")
+      /// Not shown on the map
+      public static let a11yNotDrawable = L10n.tr("Localizable", "packetScope.a11yNotDrawable", fallback: "Not shown on the map")
+      /// Showing every observer
+      public static let a11yShowingAll = L10n.tr("Localizable", "packetScope.a11yShowingAll", fallback: "Showing every observer")
+      /// Showing %1$d routes to %2$@
+      public static func a11yShowingObserver(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.a11yShowingObserver", p1, String(describing: p2), fallback: "Showing %1$d routes to %2$@")
+      }
+      /// Showing the route to %1$@ via %2$@
+      public static func a11yShowingRoute(_ p1: Any, _ p2: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.a11yShowingRoute", String(describing: p1), String(describing: p2), fallback: "Showing the route to %1$@ via %2$@")
+      }
+      /// heard by %d observers by this path
+      public static func alsoHeardBy(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.alsoHeardBy", p1, fallback: "heard by %d observers by this path")
+      }
       /// best %@
       public static func best(_ p1: Any) -> String {
         return L10n.tr("Localizable", "packetScope.best", String(describing: p1), fallback: "best %@")
@@ -2812,36 +2832,78 @@ public enum L10n {
       public static let bestRoute = L10n.tr("Localizable", "packetScope.bestRoute", fallback: "Best route")
       /// Location: PacketScopeDetailView.swift - propagation summary and per-observer detail
       public static let bestSignal = L10n.tr("Localizable", "packetScope.bestSignal", fallback: "Best signal")
+      /// Copy summary
+      public static let copySummary = L10n.tr("Localizable", "packetScope.copySummary", fallback: "Copy summary")
       /// Coverage reflects only the configured observer network. A message can be delivered without being observed.
       public static let coverageFooter = L10n.tr("Localizable", "packetScope.coverageFooter", fallback: "Coverage reflects only the configured observer network. A message can be delivered without being observed.")
       /// Direct, no repeaters
       public static let direct = L10n.tr("Localizable", "packetScope.direct", fallback: "Direct, no repeaters")
+      /// %d heard directly
+      public static func directCount(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.directCount", p1, fallback: "%d heard directly")
+      }
+      /// %@ drawn
+      public static func drawn(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.drawn", String(describing: p1), fallback: "%@ drawn")
+      }
+      /// farthest %@
+      public static func farthest(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.farthest", String(describing: p1), fallback: "farthest %@")
+      }
+      /// Packet Scope: focus (route / observer selection on the map)
+      public static let filterAll = L10n.tr("Localizable", "packetScope.filterAll", fallback: "All")
       /// Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder
       public static func heardBy(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.heardBy", p1, fallback: "Heard by %d")
       }
       /// Heard directly
       public static let heardDirectly = L10n.tr("Localizable", "packetScope.heardDirectly", fallback: "Heard directly")
+      /// heard directly
+      public static let heardDirectlyInline = L10n.tr("Localizable", "packetScope.heardDirectlyInline", fallback: "heard directly")
+      /// +%@ s
+      public static func heardOffset(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.heardOffset", String(describing: p1), fallback: "+%@ s")
+      }
+      /// Hide observers
+      public static let hideObservers = L10n.tr("Localizable", "packetScope.hideObservers", fallback: "Hide observers")
+      /// Shows this observer's routes on the map
+      public static let hintObserver = L10n.tr("Localizable", "packetScope.hintObserver", fallback: "Shows this observer's routes on the map")
+      /// Shows this route on the map
+      public static let hintRoute = L10n.tr("Localizable", "packetScope.hintRoute", fallback: "Shows this route on the map")
       /// %d hops
       public static func hopCount(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.hopCount", p1, fallback: "%d hops")
       }
+      /// Not on the map
+      public static let hopNotOnMap = L10n.tr("Localizable", "packetScope.hopNotOnMap", fallback: "Not on the map")
       /// 1 hop
       public static let hopOne = L10n.tr("Localizable", "packetScope.hopOne", fallback: "1 hop")
       /// Checking observers…
       public static let loading = L10n.tr("Localizable", "packetScope.loading", fallback: "Checking observers…")
+      /// ≥ %@
+      public static func lowerBound(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.lowerBound", String(describing: p1), fallback: "≥ %@")
+      }
       /// New
       public static let new = L10n.tr("Localizable", "packetScope.new", fallback: "New")
+      /// Next route
+      public static let nextRoute = L10n.tr("Localizable", "packetScope.nextRoute", fallback: "Next route")
       /// No observer heard this packet
       public static let notObserved = L10n.tr("Localizable", "packetScope.notObserved", fallback: "No observer heard this packet")
       /// The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.
       public static let notObservedFooter = L10n.tr("Localizable", "packetScope.notObservedFooter", fallback: "The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.")
+      /// This observer publishes no location, and none of its repeaters could be placed
+      public static let notOnMapObserver = L10n.tr("Localizable", "packetScope.notOnMapObserver", fallback: "This observer publishes no location, and none of its repeaters could be placed")
+      /// This route can't be drawn on the map
+      public static let notOnMapRoute = L10n.tr("Localizable", "packetScope.notOnMapRoute", fallback: "This route can't be drawn on the map")
       /// Observers (%d)
       public static func observerCount(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.observerCount", p1, fallback: "Observers (%d)")
       }
       /// Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place
       public static let observerNotOnMap = L10n.tr("Localizable", "packetScope.observerNotOnMap", fallback: "No location")
+      /// Previous route
+      public static let previousRoute = L10n.tr("Localizable", "packetScope.previousRoute", fallback: "Previous route")
       /// Propagation
       public static let propagation = L10n.tr("Localizable", "packetScope.propagation", fallback: "Propagation")
       /// Total receptions
@@ -2851,6 +2913,18 @@ public enum L10n {
       /// Sent %d times; each attempt is a separate packet. This shows the one an observer heard first.
       public static func retriedFooter(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.retriedFooter", p1, fallback: "Sent %d times; each attempt is a separate packet. This shows the one an observer heard first.")
+      }
+      /// %d routes
+      public static func routeCount(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.routeCount", p1, fallback: "%d routes")
+      }
+      /// Best RSSI %@ dBm
+      public static func rssiBest(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.rssiBest", String(describing: p1), fallback: "Best RSSI %@ dBm")
+      }
+      /// %d routes draw this same path
+      public static func sameDrawnPath(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.sameDrawnPath", p1, fallback: "%d routes draw this same path")
       }
       /// settled
       public static let settled = L10n.tr("Localizable", "packetScope.settled", fallback: "settled")
@@ -2866,8 +2940,12 @@ public enum L10n {
       public static let shortestRoute = L10n.tr("Localizable", "packetScope.shortestRoute", fallback: "Shortest route")
       /// Show all
       public static let showAll = L10n.tr("Localizable", "packetScope.showAll", fallback: "Show all")
+      /// Show observers
+      public static let showObservers = L10n.tr("Localizable", "packetScope.showObservers", fallback: "Show observers")
       /// Sort
       public static let sort = L10n.tr("Localizable", "packetScope.sort", fallback: "Sort")
+      /// Farthest
+      public static let sortFarthest = L10n.tr("Localizable", "packetScope.sortFarthest", fallback: "Farthest")
       /// Fewest hops
       public static let sortFewestHops = L10n.tr("Localizable", "packetScope.sortFewestHops", fallback: "Fewest hops")
       /// First heard
@@ -2880,6 +2958,12 @@ public enum L10n {
       }
       /// still arriving
       public static let stillArriving = L10n.tr("Localizable", "packetScope.stillArriving", fallback: "still arriving")
+      /// +%d hops not on the map
+      public static func tailUnknown(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.tailUnknown", p1, fallback: "+%d hops not on the map")
+      }
+      /// Tap an observer, then a route, to trace it on the map
+      public static let tapHint = L10n.tr("Localizable", "packetScope.tapHint", fallback: "Tap an observer, then a route, to trace it on the map")
       /// ×%d
       public static func timesHeard(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.timesHeard", p1, fallback: "×%d")

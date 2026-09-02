@@ -672,3 +672,35 @@
 "packetScope.sortFirstHeard" = "Ouvido primeiro";
 "packetScope.new" = "Novo";
 "packetScope.showAll" = "Mostrar tudo";
+
+/* Packet Scope: focus (route / observer selection on the map) */
+"packetScope.filterAll" = "Todos";
+"packetScope.tapHint" = "Toque num observador e depois numa rota para a traçar no mapa";
+"packetScope.hintObserver" = "Mostra as rotas deste observador no mapa";
+"packetScope.hintRoute" = "Mostra esta rota no mapa";
+"packetScope.notOnMapRoute" = "Esta rota não pode ser desenhada no mapa";
+"packetScope.notOnMapObserver" = "Este observador não publica localização e nenhum dos seus repetidores pôde ser colocado";
+"packetScope.hopNotOnMap" = "Fora do mapa";
+"packetScope.tailUnknown" = "+%d saltos fora do mapa";
+"packetScope.sameDrawnPath" = "%d rotas desenham este mesmo caminho";
+"packetScope.rssiBest" = "Melhor RSSI %@ dBm";
+"packetScope.heardOffset" = "+%@ s";
+"packetScope.heardDirectlyInline" = "ouvido diretamente";
+"packetScope.lowerBound" = "≥ %@";
+"packetScope.farthest" = "mais distante %@";
+"packetScope.directCount" = "%d ouvidos diretamente";
+"packetScope.sortFarthest" = "Mais distante";
+"packetScope.drawn" = "%@ desenhados";
+"packetScope.alsoHeardBy" = "ouvido por %d observadores por este caminho";
+"packetScope.routeCount" = "%d rotas";
+"packetScope.previousRoute" = "Rota anterior";
+"packetScope.nextRoute" = "Rota seguinte";
+"packetScope.showObservers" = "Mostrar observadores";
+"packetScope.hideObservers" = "Ocultar observadores";
+"packetScope.copySummary" = "Copiar resumo";
+"packetScope.a11yExpanded" = "Expandido";
+"packetScope.a11yCollapsed" = "Recolhido";
+"packetScope.a11yNotDrawable" = "Não mostrado no mapa";
+"packetScope.a11yShowingRoute" = "A mostrar a rota para %1$@ via %2$@";
+"packetScope.a11yShowingObserver" = "A mostrar %1$d rotas para %2$@";
+"packetScope.a11yShowingAll" = "A mostrar todos os observadores";

@@ -861,3 +861,35 @@
 "packetScope.sortFirstHeard" = "Oído primero";
 "packetScope.new" = "Nuevo";
 "packetScope.showAll" = "Mostrar todo";
+
+/* Packet Scope: focus (route / observer selection on the map) */
+"packetScope.filterAll" = "Todos";
+"packetScope.tapHint" = "Toca un observador y luego una ruta para trazarla en el mapa";
+"packetScope.hintObserver" = "Muestra las rutas de este observador en el mapa";
+"packetScope.hintRoute" = "Muestra esta ruta en el mapa";
+"packetScope.notOnMapRoute" = "Esta ruta no se puede dibujar en el mapa";
+"packetScope.notOnMapObserver" = "Este observador no publica ubicación y ninguno de sus repetidores pudo ubicarse";
+"packetScope.hopNotOnMap" = "No está en el mapa";
+"packetScope.tailUnknown" = "+%d saltos fuera del mapa";
+"packetScope.sameDrawnPath" = "%d rutas dibujan este mismo trazado";
+"packetScope.rssiBest" = "Mejor RSSI %@ dBm";
+"packetScope.heardOffset" = "+%@ s";
+"packetScope.heardDirectlyInline" = "oído directamente";
+"packetScope.lowerBound" = "≥ %@";
+"packetScope.farthest" = "más lejano %@";
+"packetScope.directCount" = "%d oídos directamente";
+"packetScope.sortFarthest" = "Más lejano";
+"packetScope.drawn" = "%@ dibujados";
+"packetScope.alsoHeardBy" = "oído por %d observadores por este trazado";
+"packetScope.routeCount" = "%d rutas";
+"packetScope.previousRoute" = "Ruta anterior";
+"packetScope.nextRoute" = "Ruta siguiente";
+"packetScope.showObservers" = "Mostrar observadores";
+"packetScope.hideObservers" = "Ocultar observadores";
+"packetScope.copySummary" = "Copiar resumen";
+"packetScope.a11yExpanded" = "Expandido";
+"packetScope.a11yCollapsed" = "Contraído";
+"packetScope.a11yNotDrawable" = "No se muestra en el mapa";
+"packetScope.a11yShowingRoute" = "Mostrando la ruta a %1$@ vía %2$@";
+"packetScope.a11yShowingObserver" = "Mostrando %1$d rutas a %2$@";
+"packetScope.a11yShowingAll" = "Mostrando todos los observadores";

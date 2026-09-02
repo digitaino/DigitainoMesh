@@ -864,3 +864,35 @@
 "packetScope.sortFirstHeard" = "最先收到";
 "packetScope.new" = "新";
 "packetScope.showAll" = "显示全部";
+
+/* Packet Scope: focus (route / observer selection on the map) */
+"packetScope.filterAll" = "全部";
+"packetScope.tapHint" = "先点观测点，再点一条路径，即可在地图上追踪它";
+"packetScope.hintObserver" = "在地图上显示该观测点的路径";
+"packetScope.hintRoute" = "在地图上显示这条路径";
+"packetScope.notOnMapRoute" = "这条路径无法在地图上绘制";
+"packetScope.notOnMapObserver" = "该观测点未公布位置，其中继器也都无法定位";
+"packetScope.hopNotOnMap" = "不在地图上";
+"packetScope.tailUnknown" = "+%d 跳不在地图上";
+"packetScope.sameDrawnPath" = "%d 条路径绘制的是同一轨迹";
+"packetScope.rssiBest" = "最佳 RSSI %@ dBm";
+"packetScope.heardOffset" = "+%@ 秒";
+"packetScope.heardDirectlyInline" = "直接收到";
+"packetScope.lowerBound" = "≥ %@";
+"packetScope.farthest" = "最远 %@";
+"packetScope.directCount" = "%d 个直接收到";
+"packetScope.sortFarthest" = "最远";
+"packetScope.drawn" = "已绘制 %@";
+"packetScope.alsoHeardBy" = "%d 个观测点经此轨迹收到";
+"packetScope.routeCount" = "%d 条路径";
+"packetScope.previousRoute" = "上一条路径";
+"packetScope.nextRoute" = "下一条路径";
+"packetScope.showObservers" = "显示观测点";
+"packetScope.hideObservers" = "隐藏观测点";
+"packetScope.copySummary" = "复制摘要";
+"packetScope.a11yExpanded" = "已展开";
+"packetScope.a11yCollapsed" = "已折叠";
+"packetScope.a11yNotDrawable" = "未在地图上显示";
+"packetScope.a11yShowingRoute" = "正在显示经 %2$@ 到 %1$@ 的路径";
+"packetScope.a11yShowingObserver" = "正在显示到 %2$@ 的 %1$d 条路径";
+"packetScope.a11yShowingAll" = "正在显示所有观测点";
