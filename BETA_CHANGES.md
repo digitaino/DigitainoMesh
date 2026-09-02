@@ -16,6 +16,18 @@ One thing to check before a long ride: Settings -> Privacy -> Location Services 
 
 Nothing is uploaded anywhere. All of this is on your device.
 
+Packet Scope: Network View
+
+Opt in under Settings -> Chats -> Packet Scope. Once it is on, a message's actions gain a **Network View**: the app asks a CoreScope observer server which mesh observers heard that packet and at what signal level, then draws the answer. One line per located observer, coloured by how strongly it heard you. Tap an observer -- its row or its pin -- to fan out the routes its reports resolved to, hop by hop, with everything else dimmed; tap the map to clear. Sort observers by strongest, fewest hops, or first heard. The headline says who heard the message, which path was best and which was shortest, and whether reports are still arriving. The view keeps polling for three minutes after you open it, and each new report animates in wearing a **New** chip, so you can watch a message spread through the mesh.
+
+The lookup sends only the packet's identifier, never its content, over your phone's internet connection -- and only if you turn it on. Coverage depends on the observer network the server watches.
+
+Radio Swap, Config Import and Backups
+
+Moving your identity to a new radio no longer loses your chats. A radio that connects with a public key the app already knows -- from a device you forgot but kept the data for -- adopts that history the moment it connects, and the contact sync that follows keeps favourites and anyone you have messaged instead of pruning them. Only silent, unmessaged contacts are cleaned up.
+
+Config import is more forgiving. A contact with a blank or malformed coordinate falls back to no position (the preview names it) instead of refusing the whole file. An import that needs more contact slots than the radio has left now imports what fits and tells you which nodes it dropped -- never a favourite or a contact with messages; the least recently heard nodes go first. Channels land in the slot they had in the file when it is free. Backup import no longer crashes on a duplicate device row.
+
 ---
 
 Beta Changes -- v0.11.0 (Build 5)
