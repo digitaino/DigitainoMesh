@@ -229,7 +229,7 @@ struct PacketScopeFoldTests {
     snr: Double?,
     rssi: Int? = nil,
     hops: [String] = [],
-    resolved: [String] = [],
+    resolved: [String?] = [],
     secondsAfterEpoch: TimeInterval? = nil
   ) -> PacketScopeObservation {
     PacketScopeObservation(
@@ -263,6 +263,40 @@ struct PacketScopeFoldTests {
     #expect(row.routes.count == 2)
     #expect(row.routes.first?.hops == ["ABBA"])
     #expect(row.shortestHopCount == 1)
+  }
+
+  @Test
+  func `receptions by the same hops fold into one route, keeping every resolved slot and the route's best signal`() throws {
+    // The server resolves hops per observation, so two receptions by the same
+    // path can disagree on which slots it managed to name.
+    let observations = [
+      observation(id: 1, observer: "A", snr: 4.0, hops: ["DA1C", "8D1C"], resolved: ["da1c…", nil]),
+      observation(id: 2, observer: "A", snr: 6.5, hops: ["DA1C", "8D1C"], resolved: [nil, "8d1c…"]),
+      observation(id: 3, observer: "A", snr: 9.0, hops: ["ABBA"]),
+    ]
+    let row = try #require(PacketScopeFold.receptions(from: observations).first)
+
+    #expect(row.routes.count == 2)
+    let twoHop = try #require(row.routes.last)
+    #expect(twoHop.hops == ["DA1C", "8D1C"])
+    #expect(twoHop.resolvedHops == ["da1c…", "8d1c…"])
+    #expect(twoHop.bestSNR == 6.5)
+    // Each route carries its own signal; the row's headline is still the best overall.
+    #expect(row.routes.first?.bestSNR == 9.0)
+    #expect(row.bestSNR == 9.0)
+  }
+
+  @Test
+  func `routes of equal length order by their hops, so a refresh never reorders them`() throws {
+    let forward = [
+      observation(id: 1, observer: "A", snr: 1.0, hops: ["BB"]),
+      observation(id: 2, observer: "A", snr: 1.0, hops: ["AA"]),
+    ]
+    let reversed = Array(forward.reversed())
+    let a = try #require(PacketScopeFold.receptions(from: forward).first)
+    let b = try #require(PacketScopeFold.receptions(from: reversed).first)
+    #expect(a.routes.map(\.hops) == [["AA"], ["BB"]])
+    #expect(a.routes.map(\.hops) == b.routes.map(\.hops))
   }
 
   @Test
@@ -356,6 +390,95 @@ final class ScopeBatchURLProtocol: URLProtocol {
       {"id":5728503,"hash":"286dcbdeab84b458","observer_id":"A33D","observer_name":"LCC Observer","observer_iata":"AUS","snr":12.2,"rssi":-37,"path_json":"[\\"DA1C\\",\\"8D1C\\"]","direction":"rx","timestamp":"2026-09-01T02:18:16.000Z"},
       {"id":5728500,"hash":"286dcbdeab84b458","observer_name":"Dripping","observer_iata":"AUS","snr":-7,"rssi":-109,"path_json":"[]","direction":"rx","timestamp":"2026-09-01T02:18:16Z"}
     ]}}
+    """
+    let response = HTTPURLResponse(
+      url: request.url!, statusCode: 200, httpVersion: nil,
+      headerFields: ["Content-Type": "application/json"]
+    )!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: Data(body.utf8))
+    client?.urlProtocolDidFinishLoading(self)
+  }
+
+  override func stopLoading() {}
+}
+
+@Suite("PacketScopeService observers", .serialized)
+struct PacketScopeObserversTests {
+  private func makeDefaults() -> UserDefaults {
+    let suiteName = "PacketScopeObserversTests-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    return defaults
+  }
+
+  private func makeService(defaults: UserDefaults) -> PacketScopeService {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [ScopeObserversURLProtocol.self]
+    return PacketScopeService(session: URLSession(configuration: config), defaults: defaults)
+  }
+
+  @Test
+  func `the roster is gated on the opt-in like every other request`() async {
+    let defaults = makeDefaults()
+    let service = makeService(defaults: defaults)
+    ScopeObserversURLProtocol.requestCount = 0
+
+    await #expect(throws: PacketScopeServiceError.self) {
+      _ = try await service.observers()
+    }
+    #expect(ScopeObserversURLProtocol.requestCount == 0)
+  }
+
+  @Test
+  func `decodes the live roster shape, lowercases ids, and places only observers with a plausible fix`() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: AppStorageKey.packetScopeEnabled.rawValue)
+    let service = makeService(defaults: defaults)
+    ScopeObserversURLProtocol.requestCount = 0
+
+    let roster = try await service.observers()
+
+    #expect(ScopeObserversURLProtocol.requestCount == 1)
+    #expect(ScopeObserversURLProtocol.lastPath == "/api/observers")
+    // The nameless-but-identified row survives; the id-less row is dropped.
+    #expect(roster.count == 3)
+    let dripping = try #require(roster.first { $0.name == "Dripping" })
+    // The roster reports ids in uppercase; observations carry them in lowercase.
+    #expect(dripping.id == "476cd28a48379d0c6f3c73e378e366ae93deaa04ca31c4e18f1912a05f69240c")
+    #expect(dripping.coordinate?.latitude == 30.204929)
+    let bimmerhead = try #require(roster.first { $0.name == "Bimmerhead" })
+    #expect(bimmerhead.coordinate == nil)
+    let nullIsland = try #require(roster.first { $0.name == "?" })
+    #expect(nullIsland.coordinate == nil)
+  }
+}
+
+/// Serves the observer roster with a captured slice of the real
+/// scope.digitaino.com response: one located observer, one with null
+/// coordinates, one nameless row at null island, and one row with no id.
+final class ScopeObserversURLProtocol: URLProtocol {
+  nonisolated(unsafe) static var requestCount = 0
+  nonisolated(unsafe) static var lastPath: String?
+
+  override static func canInit(with _: URLRequest) -> Bool {
+    true
+  }
+
+  override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+    request
+  }
+
+  override func startLoading() {
+    Self.requestCount += 1
+    Self.lastPath = request.url?.path
+    let body = """
+    {"observers":[
+      {"id":"476CD28A48379D0C6F3C73E378E366AE93DEAA04CA31C4E18F1912A05F69240C","name":"Dripping","iata":"AUS","last_seen":"2026-09-01T22:44:55Z","first_seen":"2026-06-09T03:27:49Z","packet_count":422697,"lat":30.204929,"lon":-98.087155,"noise_floor":-101,"clock_naive":false},
+      {"id":"6A82C0035FF91E80B62123A51F3A8BEC04EAAFA4E80FF5C71E9944F04586EEA5","name":"Bimmerhead","iata":"AUS","lat":null,"lon":null,"noise_floor":-85},
+      {"id":"0000","lat":0,"lon":0},
+      {"name":"Ghost","lat":30.1,"lon":-97.1}
+    ],"server_time":"2026-09-01T22:44:55Z"}
     """
     let response = HTTPURLResponse(
       url: request.url!, statusCode: 200, httpVersion: nil,

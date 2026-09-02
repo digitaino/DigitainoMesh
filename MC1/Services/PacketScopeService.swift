@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import MC1Services
 import os.log
@@ -52,6 +53,10 @@ struct PacketScopeReception: Sendable, Equatable, Identifiable {
   /// Distinct routes this observer heard the packet by, shortest first. The
   /// `hops`/`resolvedHops` pair is positional, so a caller can name a hop from the
   /// public key when it has one and fall back to the short hash when it does not.
+  /// Routes are distinct by their hop sequence: the server resolves hops per
+  /// observation, so two receptions by the same hops can disagree on which
+  /// slots it managed to resolve — those fold into one route, keeping every
+  /// resolved slot either had.
   let routes: [Route]
   let firstHeard: Date?
   let receptionCount: Int
@@ -69,6 +74,49 @@ struct PacketScopeReception: Sendable, Equatable, Identifiable {
     let hops: [String]
     /// Positionally aligned with `hops`; `nil` where the server had no answer.
     let resolvedHops: [String?]
+    /// Best signal among the receptions that arrived by exactly this route. The
+    /// reception's own `bestSNR` is the observer's headline; this one is what a
+    /// map draws on the leg the observer actually measured for this route.
+    let bestSNR: Double?
+
+    /// Folds another reception by the same hops into this route.
+    func merging(_ observation: PacketScopeObservation) -> Route {
+      let resolved: [String?] = if resolvedHops.count == observation.resolvedPath.count {
+        zip(resolvedHops, observation.resolvedPath).map { $0 ?? $1 }
+      } else if resolvedHops.isEmpty {
+        observation.resolvedPath
+      } else {
+        resolvedHops
+      }
+      return Route(
+        hops: hops,
+        resolvedHops: resolved,
+        bestSNR: [bestSNR, observation.snr].compactMap(\.self).max()
+      )
+    }
+  }
+}
+
+/// One station of the observer network, from the instance's observer list.
+///
+/// Only about half of a real instance's observers publish a location (7 of 16
+/// on the AUS instance, 2026-09-01), so `coordinate` is nil more often than not
+/// and any map treats an unlocated observer as a name, not a place.
+struct PacketScopeObserver: Sendable, Equatable, Identifiable {
+  /// Observer public key as lowercase hex. The observer list reports ids in
+  /// uppercase while observation rows carry them in lowercase; normalising here
+  /// is what lets the two be joined at all.
+  let id: String
+  let name: String
+  let iata: String?
+  let latitude: Double?
+  let longitude: Double?
+
+  /// The observer's position when it publishes a plausible one.
+  var coordinate: CLLocationCoordinate2D? {
+    guard let latitude, let longitude else { return nil }
+    let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    return coordinate.isValidFix ? coordinate : nil
   }
 }
 
@@ -100,13 +148,17 @@ enum PacketScopeFold {
     let grouped = Dictionary(grouping: observations, by: \.observerID)
     return grouped.values.compactMap { group -> PacketScopeReception? in
       guard let first = group.first else { return nil }
-      var seenRoutes: [PacketScopeReception.Route] = []
+      var routes: [PacketScopeReception.Route] = []
       for observation in group {
-        let route = PacketScopeReception.Route(
-          hops: observation.pathHops,
-          resolvedHops: observation.resolvedPath
-        )
-        if !seenRoutes.contains(route) { seenRoutes.append(route) }
+        if let index = routes.firstIndex(where: { $0.hops == observation.pathHops }) {
+          routes[index] = routes[index].merging(observation)
+        } else {
+          routes.append(PacketScopeReception.Route(
+            hops: observation.pathHops,
+            resolvedHops: observation.resolvedPath,
+            bestSNR: observation.snr
+          ))
+        }
       }
       return PacketScopeReception(
         observerID: first.observerID,
@@ -115,7 +167,12 @@ enum PacketScopeFold {
         bestSNR: group.compactMap(\.snr).max(),
         // rssi 0 is the server's "not reported", not a plausible reading.
         bestRSSI: group.compactMap(\.rssi).filter { $0 != 0 }.max(),
-        routes: seenRoutes.sorted { $0.hops.count < $1.hops.count },
+        // Shortest first; equal lengths order by their hops so a poll returning
+        // the same data never reorders a row's routes under the reader.
+        routes: routes.sorted {
+          if $0.hops.count != $1.hops.count { return $0.hops.count < $1.hops.count }
+          return $0.hops.joined(separator: ",") < $1.hops.joined(separator: ",")
+        },
         firstHeard: group.compactMap(\.timestamp).min(),
         receptionCount: group.count
       )
@@ -183,6 +240,11 @@ protocol PacketScopeServicing: Sendable {
   /// maps to an empty array — which is itself information: the packet never
   /// reached the observer backbone.
   func observations(for hashes: [String]) async throws -> [String: [PacketScopeObservation]]
+
+  /// The instance's observer roster — names and, where published, positions.
+  /// Nothing about the user goes on the wire; the request is gated like every
+  /// other one only so that a disabled feature makes no request at all.
+  func observers() async throws -> [PacketScopeObserver]
 }
 
 // MARK: - Service
@@ -206,6 +268,7 @@ actor PacketScopeService: PacketScopeServicing {
   // MARK: - Constants
 
   private static let batchEndpointPath = "/api/packets/observations"
+  private static let observersEndpointPath = "/api/observers"
   private static let requestTimeout: TimeInterval = 15
   /// The API accepts 200, but a conversation screen never legitimately needs more
   /// than this in one call; anything larger indicates a runaway caller.
@@ -215,20 +278,28 @@ actor PacketScopeService: PacketScopeServicing {
   /// reality is a max of 40 for one transmission, so this is pure headroom against
   /// a hostile or broken response, not a real truncation.
   private static let maxObservationsPerHash = 500
+  /// Ceiling on observer rows kept. A real instance runs a few dozen; this is
+  /// headroom against a hostile response, not a real truncation.
+  private static let maxObservers = 500
 
   // MARK: - Dependencies
 
-  private let session: URLSession
+  private let injectedSession: URLSession?
+  /// Built on first use, not in `init`. A view holding this service as `@State`
+  /// constructs a fresh instance on every re-creation of the view struct and
+  /// keeps only the first; a delegate-backed session made eagerly in each of
+  /// the discarded copies would retain itself until invalidated.
+  private lazy var session: URLSession = injectedSession ?? URLSession(
+    configuration: .ephemeral,
+    delegate: PacketScopeRedirectGuard(),
+    delegateQueue: nil
+  )
   private let defaults: UserDefaults
 
   // MARK: - Initialization
 
   init(session: URLSession? = nil, defaults: UserDefaults = .standard) {
-    self.session = session ?? URLSession(
-      configuration: .ephemeral,
-      delegate: PacketScopeRedirectGuard(),
-      delegateQueue: nil
-    )
+    injectedSession = session
     self.defaults = defaults
   }
 
@@ -252,7 +323,7 @@ actor PacketScopeService: PacketScopeServicing {
       throw PacketScopeServiceError.apiError("too many hashes in one request")
     }
 
-    guard let url = endpointURL() else {
+    guard let url = endpointURL(path: Self.batchEndpointPath) else {
       throw PacketScopeServiceError.invalidBaseURL
     }
 
@@ -261,28 +332,7 @@ actor PacketScopeService: PacketScopeServicing {
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try JSONEncoder().encode(BatchRequest(hashes: validHashes))
 
-    let (data, response): (Data, URLResponse)
-    do {
-      (data, response) = try await session.data(for: request)
-    } catch {
-      throw PacketScopeServiceError.networkError(error.localizedDescription)
-    }
-
-    guard let http = response as? HTTPURLResponse else {
-      throw PacketScopeServiceError.invalidResponse
-    }
-    guard (200...299).contains(http.statusCode) else {
-      logger.warning("Batch observations returned HTTP \(http.statusCode)")
-      throw PacketScopeServiceError.apiError("HTTP \(http.statusCode)")
-    }
-
-    let decoded: BatchResponse
-    do {
-      decoded = try JSONDecoder().decode(BatchResponse.self, from: data)
-    } catch {
-      logger.warning("Failed to decode batch observations: \(error.localizedDescription)")
-      throw PacketScopeServiceError.invalidResponse
-    }
+    let decoded: BatchResponse = try await perform(request, describing: "batch observations")
 
     // Queried-but-unheard hashes get explicit empty arrays so callers can tell
     // "nobody heard it" from "we never asked".
@@ -299,7 +349,63 @@ actor PacketScopeService: PacketScopeServicing {
     return results
   }
 
+  func observers() async throws -> [PacketScopeObserver] {
+    guard defaults.bool(forKey: AppStorageKey.packetScopeEnabled.rawValue) else {
+      throw PacketScopeServiceError.disabled
+    }
+    guard let url = endpointURL(path: Self.observersEndpointPath) else {
+      throw PacketScopeServiceError.invalidBaseURL
+    }
+
+    let request = URLRequest(url: url, timeoutInterval: Self.requestTimeout)
+    let decoded: ObserversResponse = try await perform(request, describing: "observers")
+    if decoded.observers.count > Self.maxObservers {
+      logger.warning("Truncating \(decoded.observers.count) observer rows")
+    }
+    // A row without an id can never be joined to an observation, so it is
+    // dropped rather than kept as a nameless pin.
+    return decoded.observers.prefix(Self.maxObservers).compactMap { wire in
+      guard let id = wire.id, !id.isEmpty else { return nil }
+      return PacketScopeObserver(
+        id: id.lowercased(),
+        name: wire.name ?? "?",
+        iata: wire.iata,
+        latitude: wire.lat,
+        longitude: wire.lon
+      )
+    }
+  }
+
   // MARK: - Helpers
+
+  /// Sends one request and decodes a 2xx JSON body; every other outcome maps to
+  /// the error the views already know how to show.
+  private func perform<Response: Decodable>(
+    _ request: URLRequest,
+    describing what: String
+  ) async throws -> Response {
+    let (data, response): (Data, URLResponse)
+    do {
+      (data, response) = try await session.data(for: request)
+    } catch {
+      throw PacketScopeServiceError.networkError(error.localizedDescription)
+    }
+
+    guard let http = response as? HTTPURLResponse else {
+      throw PacketScopeServiceError.invalidResponse
+    }
+    guard (200...299).contains(http.statusCode) else {
+      logger.warning("\(what) returned HTTP \(http.statusCode)")
+      throw PacketScopeServiceError.apiError("HTTP \(http.statusCode)")
+    }
+
+    do {
+      return try JSONDecoder().decode(Response.self, from: data)
+    } catch {
+      logger.warning("Failed to decode \(what): \(error.localizedDescription)")
+      throw PacketScopeServiceError.invalidResponse
+    }
+  }
 
   /// A CoreScope content hash: exactly 16 lowercase ASCII hex characters.
   ///
@@ -313,7 +419,7 @@ actor PacketScopeService: PacketScopeServicing {
     }
   }
 
-  private func endpointURL() -> URL? {
+  private func endpointURL(path: String) -> URL? {
     let stored = defaults.string(forKey: AppStorageKey.packetScopeBaseURL.rawValue)
     let base = (stored?.isEmpty == false ? stored! : AppStorageKey.defaultPacketScopeBaseURL)
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -322,7 +428,7 @@ actor PacketScopeService: PacketScopeServicing {
           components.host?.isEmpty == false else {
       return nil
     }
-    components.path = Self.batchEndpointPath
+    components.path = path
     components.query = nil
     components.fragment = nil
     return components.url
@@ -336,6 +442,20 @@ actor PacketScopeService: PacketScopeServicing {
 
   private struct BatchResponse: Decodable {
     let results: [String: [WireObservation]]
+  }
+
+  private struct ObserversResponse: Decodable {
+    let observers: [WireObserver]
+  }
+
+  /// The observer roster row. Position and IATA are absent or null for the
+  /// observers that do not publish them, which is most of them.
+  struct WireObserver: Decodable {
+    let id: String?
+    let name: String?
+    let iata: String?
+    let lat: Double?
+    let lon: Double?
   }
 
   /// The server's observation row, decoded defensively: only `id` is load-bearing

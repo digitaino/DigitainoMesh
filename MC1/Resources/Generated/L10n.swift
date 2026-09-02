@@ -2804,20 +2804,34 @@ public enum L10n {
       }
     }
     public enum PacketScope {
+      /// best %@
+      public static func best(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.best", String(describing: p1), fallback: "best %@")
+      }
+      /// Best route
+      public static let bestRoute = L10n.tr("Localizable", "packetScope.bestRoute", fallback: "Best route")
       /// Location: PacketScopeDetailView.swift - propagation summary and per-observer detail
       public static let bestSignal = L10n.tr("Localizable", "packetScope.bestSignal", fallback: "Best signal")
       /// Coverage reflects only the configured observer network. A message can be delivered without being observed.
       public static let coverageFooter = L10n.tr("Localizable", "packetScope.coverageFooter", fallback: "Coverage reflects only the configured observer network. A message can be delivered without being observed.")
       /// Direct, no repeaters
       public static let direct = L10n.tr("Localizable", "packetScope.direct", fallback: "Direct, no repeaters")
+      /// Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder
+      public static func heardBy(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.heardBy", p1, fallback: "Heard by %d")
+      }
       /// Heard directly
       public static let heardDirectly = L10n.tr("Localizable", "packetScope.heardDirectly", fallback: "Heard directly")
       /// %d hops
       public static func hopCount(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.hopCount", p1, fallback: "%d hops")
       }
+      /// 1 hop
+      public static let hopOne = L10n.tr("Localizable", "packetScope.hopOne", fallback: "1 hop")
       /// Checking observers…
       public static let loading = L10n.tr("Localizable", "packetScope.loading", fallback: "Checking observers…")
+      /// New
+      public static let new = L10n.tr("Localizable", "packetScope.new", fallback: "New")
       /// No observer heard this packet
       public static let notObserved = L10n.tr("Localizable", "packetScope.notObserved", fallback: "No observer heard this packet")
       /// The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.
@@ -2826,6 +2840,8 @@ public enum L10n {
       public static func observerCount(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.observerCount", p1, fallback: "Observers (%d)")
       }
+      /// Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place
+      public static let observerNotOnMap = L10n.tr("Localizable", "packetScope.observerNotOnMap", fallback: "No location")
       /// Propagation
       public static let propagation = L10n.tr("Localizable", "packetScope.propagation", fallback: "Propagation")
       /// Total receptions
@@ -2836,15 +2852,37 @@ public enum L10n {
       public static func retriedFooter(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.retriedFooter", p1, fallback: "Sent %d times; each attempt is a separate packet. This shows the one an observer heard first.")
       }
+      /// settled
+      public static let settled = L10n.tr("Localizable", "packetScope.settled", fallback: "settled")
+      /// settled in %@ s
+      public static func settledIn(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.settledIn", String(describing: p1), fallback: "settled in %@ s")
+      }
+      /// shortest %@
+      public static func shortest(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.shortest", String(describing: p1), fallback: "shortest %@")
+      }
       /// Shortest route
       public static let shortestRoute = L10n.tr("Localizable", "packetScope.shortestRoute", fallback: "Shortest route")
+      /// Show all
+      public static let showAll = L10n.tr("Localizable", "packetScope.showAll", fallback: "Show all")
+      /// Sort
+      public static let sort = L10n.tr("Localizable", "packetScope.sort", fallback: "Sort")
+      /// Fewest hops
+      public static let sortFewestHops = L10n.tr("Localizable", "packetScope.sortFewestHops", fallback: "Fewest hops")
+      /// First heard
+      public static let sortFirstHeard = L10n.tr("Localizable", "packetScope.sortFirstHeard", fallback: "First heard")
+      /// Strongest signal
+      public static let sortStrongest = L10n.tr("Localizable", "packetScope.sortStrongest", fallback: "Strongest signal")
       /// %@ s across the mesh
       public static func spreadSeconds(_ p1: Any) -> String {
         return L10n.tr("Localizable", "packetScope.spreadSeconds", String(describing: p1), fallback: "%@ s across the mesh")
       }
-      /// heard %d×
+      /// still arriving
+      public static let stillArriving = L10n.tr("Localizable", "packetScope.stillArriving", fallback: "still arriving")
+      /// ×%d
       public static func timesHeard(_ p1: Int) -> String {
-        return L10n.tr("Localizable", "packetScope.timesHeard", p1, fallback: "heard %d×")
+        return L10n.tr("Localizable", "packetScope.timesHeard", p1, fallback: "×%d")
       }
       /// Location: PacketScopeDetailView.swift - observer coverage for one message
       public static let title = L10n.tr("Localizable", "packetScope.title", fallback: "Network View")
@@ -4772,6 +4810,14 @@ public enum L10n {
       public static let confirmTitleAdd = L10n.tr("Settings", "configImport.confirmTitleAdd", fallback: "Add to Device?")
       /// Confirmation alert title (overwrite settings)
       public static let confirmTitleOverwrite = L10n.tr("Settings", "configImport.confirmTitleOverwrite", fallback: "Overwrite Settings?")
+      /// Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names
+      public static func contactCapacityDropped(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.contactCapacityDropped", p1, String(describing: p2), fallback: "%d contact(s) will be skipped because this radio has no free slots left for them: %@")
+      }
+      /// Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names
+      public static func contactCoordinateFallback(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.contactCoordinateFallback", p1, String(describing: p2), fallback: "%d contact(s) have an unusable location in this file and will be imported without one: %@")
+      }
       /// Contact count (param: integer)
       public static func contactCount(_ p1: Int) -> String {
         return L10n.tr("Settings", "configImport.contactCount", p1, fallback: "Will add/update %d contacts on device")

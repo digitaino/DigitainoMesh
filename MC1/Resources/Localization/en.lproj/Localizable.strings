@@ -840,8 +840,27 @@
 "packetScope.propagation" = "Propagation";
 "packetScope.spreadSeconds" = "%@ s across the mesh";
 "packetScope.receptions" = "Total receptions";
-"packetScope.timesHeard" = "heard %d×";
+"packetScope.timesHeard" = "×%d";
 
 /* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
 "packetScope.error.unreadableHash" = "This message's packet identifier is unreadable, so nothing was looked up.";
 "packetScope.retriedFooter" = "Sent %d times; each attempt is a separate packet. This shows the one an observer heard first.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "No location";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Heard by %d";
+"packetScope.best" = "best %@";
+"packetScope.shortest" = "shortest %@";
+"packetScope.stillArriving" = "still arriving";
+"packetScope.settled" = "settled";
+"packetScope.settledIn" = "settled in %@ s";
+"packetScope.hopOne" = "1 hop";
+"packetScope.bestRoute" = "Best route";
+"packetScope.sort" = "Sort";
+"packetScope.sortStrongest" = "Strongest signal";
+"packetScope.sortFewestHops" = "Fewest hops";
+"packetScope.sortFirstHeard" = "First heard";
+"packetScope.new" = "New";
+"packetScope.showAll" = "Show all";

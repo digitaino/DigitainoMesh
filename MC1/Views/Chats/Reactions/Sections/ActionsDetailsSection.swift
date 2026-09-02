@@ -90,9 +90,10 @@ struct ActionsDetailsSection: View {
         pathViewModel: pathViewModel
       )
     }
-    // A sheet, not a cover: this is a scrolling list with no map underneath,
-    // so the standard swipe-down dismissal is the right affordance.
-    .sheet(isPresented: $showPacketScope) {
+    // Same cover treatment as the path and repeats screens: the Network View
+    // draws the observers' routes on a full-bleed map when it can, and a
+    // sheet's swipe-down would fight every downward pan on it. Done closes it.
+    .fullScreenCover(isPresented: $showPacketScope) {
       PacketScopeDetailView(
         message: message,
         pathViewModel: pathViewModel,

@@ -839,8 +839,27 @@
 "packetScope.propagation" = "Propagazione";
 "packetScope.spreadSeconds" = "%@ s nella mesh";
 "packetScope.receptions" = "Ricezioni totali";
-"packetScope.timesHeard" = "ricevuto %d×";
+"packetScope.timesHeard" = "×%d";
 
 /* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
 "packetScope.error.unreadableHash" = "L'identificatore di pacchetto di questo messaggio è illeggibile, non è stata fatta alcuna ricerca.";
 "packetScope.retriedFooter" = "Inviato %d volte; ogni tentativo è un pacchetto distinto. Qui quello ricevuto per primo.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Senza posizione";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Ricevuto da %d";
+"packetScope.best" = "migliore %@";
+"packetScope.shortest" = "più breve %@";
+"packetScope.stillArriving" = "ancora in arrivo";
+"packetScope.settled" = "completato";
+"packetScope.settledIn" = "completato in %@ s";
+"packetScope.hopOne" = "1 salto";
+"packetScope.bestRoute" = "Percorso migliore";
+"packetScope.sort" = "Ordina";
+"packetScope.sortStrongest" = "Segnale più forte";
+"packetScope.sortFewestHops" = "Meno salti";
+"packetScope.sortFirstHeard" = "Ricevuto per primo";
+"packetScope.new" = "Nuovo";
+"packetScope.showAll" = "Mostra tutti";

@@ -20,13 +20,13 @@ enum MessagePathMapSource {
   /// carries per-hop bytes (sizes may vary hop to hop).
   var hopHashes: [Data] {
     switch self {
-    case .message(let message):
+    case let .message(message):
       guard let pathNodes = message.pathNodes else { return [] }
       let size = message.pathHashSize
       return stride(from: 0, to: pathNodes.count, by: size).map { start -> Data in
         Data(pathNodes[start..<min(start + size, pathNodes.count)])
       }
-    case .sharedRoute(let route):
+    case let .sharedRoute(route):
       return route.hashBytesPerHop
     }
   }
@@ -37,8 +37,8 @@ enum MessagePathMapSource {
   /// shared route this is the sender's stated count, matching the card.
   var totalHopCount: Int {
     switch self {
-    case .message(let message): message.pathHops.count
-    case .sharedRoute(let route): route.hopCount
+    case let .message(message): message.pathHops.count
+    case let .sharedRoute(route): route.hopCount
     }
   }
 }
@@ -130,7 +130,7 @@ struct MessagePathMapView: View {
   /// location: only a message's own path whose receiver pin lacks a recorded
   /// receive-time fix.
   private var needsLiveLocationFallback: Bool {
-    if case .message(let message) = source { return message.userFixCoordinate == nil }
+    if case let .message(message) = source { return message.userFixCoordinate == nil }
     return false
   }
 
@@ -165,7 +165,7 @@ struct MessagePathMapView: View {
     for source: MessagePathMapSource,
     userLocation: CLLocation?
   ) -> CLLocation? {
-    if case .message(let message) = source, let coord = message.userFixCoordinate {
+    if case let .message(message) = source, let coord = message.userFixCoordinate {
       return CLLocation(latitude: coord.latitude, longitude: coord.longitude)
     }
     return userLocation
@@ -191,7 +191,7 @@ struct MessagePathMapView: View {
     // happens to be standing when they open this screen later. Unstamped rows
     // (backlog drains, no fresh fix at receive, legacy) fall back to the live
     // `userLocation`.
-    let stampedFix: CLLocationCoordinate2D? = if case .message(let message) = source {
+    let stampedFix: CLLocationCoordinate2D? = if case let .message(message) = source {
       message.userFixCoordinate
     } else {
       nil
@@ -208,7 +208,7 @@ struct MessagePathMapView: View {
     // exists to hold is that a shared distance never disagrees with the drawn
     // polyline. `locatedSender` only accepts a name when exactly one contact matches,
     // which is the same never-guess-when-ambiguous discipline the hop resolution uses.
-    if case .message(let message) = source,
+    if case let .message(message) = source,
        let sender = MessagePathViewModel.locatedSender(for: message, contacts: contacts) {
       let coord = CLLocationCoordinate2D(latitude: sender.latitude, longitude: sender.longitude)
       nodes.append((MapPoint(
@@ -311,7 +311,7 @@ struct MessagePathMapView: View {
     let candidates: [(node: any RepeaterResolvable, matchKind: NodeNameMatchKind)] = [
       resolvedContact.map { ($0.node as any RepeaterResolvable, $0.matchKind) },
       resolvedNode.map { ($0.node as any RepeaterResolvable, $0.matchKind) },
-    ].compactMap { $0 }
+    ].compactMap(\.self)
     return candidates.first {
       $0.matchKind == .exact
         && CLLocationCoordinate2D(latitude: $0.node.latitude, longitude: $0.node.longitude).isValidFix
@@ -635,11 +635,23 @@ struct MessagePathMapCanvas: View {
   /// leave it nil. Every coordinate should be one of `locatedNodes`' — the
   /// camera fit frames the pins only.
   var linesOverride: [MapLine]?
+  /// Weighted data layers drawn beneath the pins and lines (the map's overlay
+  /// API, §2.3). The coverage map puts its link substrate here; the path
+  /// screens leave it empty.
+  var overlays: [MapOverlay] = []
   /// Share of the screen a panel covers at the bottom, so a camera fit frames
   /// the path in the space left above it. The map ignores the safe area, so its
   /// own `safeAreaInsets` can't report a SwiftUI inset — the host states it.
   /// 0 (the default) is a canvas with nothing on top of it.
   var cameraBottomSheetFraction: CGFloat = 0
+  /// The coordinates the camera frames and re-fits on. Defaults to every node
+  /// in `locatedNodes`; a host whose nodes include decoration that must not
+  /// drive the camera — a badge revealed on selection — passes its pins here.
+  var cameraCoordinates: [CLLocationCoordinate2D]?
+  /// A tap on one of `locatedNodes`' pins. Nil leaves pins inert.
+  var onPointTap: ((MapPoint) -> Void)?
+  /// A tap on the map away from any pin. Nil leaves it inert.
+  var onMapTap: (() -> Void)?
 
   @State private var cameraRegion: MKCoordinateRegion?
   @State private var cameraRegionVersion = 0
@@ -663,9 +675,13 @@ struct MessagePathMapCanvas: View {
     return [MapLine(id: "message-path", coordinates: coords, style: .messagePath, opacity: 1.0)]
   }
 
-  /// Value key over the plotted coordinates, for the re-fit `onChange`.
+  private var framedCoordinates: [CLLocationCoordinate2D] {
+    cameraCoordinates ?? locatedNodes.map(\.coordinate)
+  }
+
+  /// Value key over the framed coordinates, for the re-fit `onChange`.
   private var pathSignature: [Double] {
-    locatedNodes.flatMap { [$0.coordinate.latitude, $0.coordinate.longitude] }
+    framedCoordinates.flatMap { [$0.latitude, $0.longitude] }
   }
 
   var body: some View {
@@ -673,6 +689,7 @@ struct MessagePathMapCanvas: View {
       MC1MapView(
         points: mapPoints,
         lines: mapLines,
+        overlays: overlays,
         mapStyle: mapStyle,
         isDarkMode: colorScheme == .dark,
         showLabels: showLabels,
@@ -687,8 +704,8 @@ struct MessagePathMapCanvas: View {
         cameraRegion: $cameraRegion,
         cameraRegionVersion: cameraRegionVersion,
         cameraBottomSheetFraction: cameraBottomSheetFraction,
-        onPointTap: nil,
-        onMapTap: nil,
+        onPointTap: onPointTap.map { handler in { point, _ in handler(point) } },
+        onMapTap: onMapTap.map { handler in { _ in handler() } },
         onCameraRegionChange: { cameraRegion = $0 },
         isStyleLoaded: $isStyleLoaded,
         isCenteredOnUser: $isCenteredOnUser
@@ -745,7 +762,7 @@ struct MessagePathMapCanvas: View {
   }
 
   private func fitCameraToPath() {
-    let coords = locatedNodes.map(\.coordinate)
+    let coords = framedCoordinates
     if coords.count == 1 {
       cameraRegion = MKCoordinateRegion(
         center: coords[0],

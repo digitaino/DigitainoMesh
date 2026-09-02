@@ -840,8 +840,27 @@
 "packetScope.propagation" = "传播";
 "packetScope.spreadSeconds" = "%@ 秒传遍网状网";
 "packetScope.receptions" = "接收总次数";
-"packetScope.timesHeard" = "收到 %d 次";
+"packetScope.timesHeard" = "×%d";
 
 /* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
 "packetScope.error.unreadableHash" = "此消息的数据包标识符无法读取，未进行查询。";
 "packetScope.retriedFooter" = "已发送 %d 次；每次尝试都是独立数据包。此处显示最先被听到的那一个。";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "无位置";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "%d 个观察站听到";
+"packetScope.best" = "最佳 %@";
+"packetScope.shortest" = "最短 %@";
+"packetScope.stillArriving" = "仍在接收";
+"packetScope.settled" = "已稳定";
+"packetScope.settledIn" = "%@ 秒后稳定";
+"packetScope.hopOne" = "1 跳";
+"packetScope.bestRoute" = "最佳路径";
+"packetScope.sort" = "排序";
+"packetScope.sortStrongest" = "信号最强";
+"packetScope.sortFewestHops" = "跳数最少";
+"packetScope.sortFirstHeard" = "最先收到";
+"packetScope.new" = "新";
+"packetScope.showAll" = "显示全部";

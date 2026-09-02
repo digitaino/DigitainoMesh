@@ -844,8 +844,27 @@
 "packetScope.propagation" = "Voortplanting";
 "packetScope.spreadSeconds" = "%@ s door de mesh";
 "packetScope.receptions" = "Totaal ontvangen";
-"packetScope.timesHeard" = "%d× gehoord";
+"packetScope.timesHeard" = "×%d";
 
 /* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
 "packetScope.error.unreadableHash" = "De pakket-ID van dit bericht is onleesbaar, er is niets opgezocht.";
 "packetScope.retriedFooter" = "%d× verzonden; elke poging is een apart pakket. Dit is het eerst gehoorde.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Geen locatie";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Gehoord door %d";
+"packetScope.best" = "beste %@";
+"packetScope.shortest" = "kortste %@";
+"packetScope.stillArriving" = "nog binnenkomend";
+"packetScope.settled" = "afgerond";
+"packetScope.settledIn" = "afgerond in %@ s";
+"packetScope.hopOne" = "1 hop";
+"packetScope.bestRoute" = "Beste route";
+"packetScope.sort" = "Sorteren";
+"packetScope.sortStrongest" = "Sterkste signaal";
+"packetScope.sortFewestHops" = "Minste hops";
+"packetScope.sortFirstHeard" = "Eerst gehoord";
+"packetScope.new" = "Nieuw";
+"packetScope.showAll" = "Alles tonen";

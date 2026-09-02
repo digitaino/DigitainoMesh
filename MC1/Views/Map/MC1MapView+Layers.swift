@@ -216,6 +216,14 @@ extension MC1MapView.Coordinator {
 
     let white = NSExpression(forConstantValue: UIColor.white)
     let casingOpacity = NSExpression(forConstantValue: 0.8)
+    // Per-feature opacity, from `MapLine.opacity`: every caller writes it
+    // (1.0 unless it means to dim), so the path and trace layers honour it the
+    // way the line-of-sight layer always has. A casing fades with its line.
+    let segmentOpacity = NSExpression(forKeyPath: "segmentOpacity")
+    let casingSegmentOpacity = NSExpression(
+      forFunction: "multiply:by:",
+      arguments: [casingOpacity, segmentOpacity]
+    )
     let roundJoin = NSExpression(forConstantValue: "round")
     let roundCap = NSExpression(forConstantValue: "round")
 
@@ -230,7 +238,7 @@ extension MC1MapView.Coordinator {
     let messagePathCasing = MLNLineStyleLayer(identifier: MapLayerID.lineMessagePathCasing, source: source)
     messagePathCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.messagePath.rawValue)
     messagePathCasing.lineColor = white
-    messagePathCasing.lineOpacity = casingOpacity
+    messagePathCasing.lineOpacity = casingSegmentOpacity
     messagePathCasing.lineWidth = NSExpression(forConstantValue: 6)
     messagePathCasing.lineJoin = roundJoin
     messagePathCasing.lineCap = roundCap
@@ -242,12 +250,13 @@ extension MC1MapView.Coordinator {
     messagePathLayer.lineWidth = NSExpression(forConstantValue: 3)
     messagePathLayer.lineJoin = roundJoin
     messagePathLayer.lineCap = roundCap
+    messagePathLayer.lineOpacity = segmentOpacity
     style.addLayer(messagePathLayer)
 
     let untracedCasing = MLNLineStyleLayer(identifier: MapLayerID.lineTraceUntracedCasing, source: source)
     untracedCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.traceUntraced.rawValue)
     untracedCasing.lineColor = white
-    untracedCasing.lineOpacity = casingOpacity
+    untracedCasing.lineOpacity = casingSegmentOpacity
     untracedCasing.lineWidth = NSExpression(forConstantValue: 5)
     untracedCasing.lineDashPattern = NSExpression(forConstantValue: [0.7, 1.3])
     untracedCasing.lineJoin = roundJoin
@@ -261,12 +270,13 @@ extension MC1MapView.Coordinator {
     untracedLayer.lineDashPattern = NSExpression(forConstantValue: [1.75, 3.25])
     untracedLayer.lineJoin = roundJoin
     untracedLayer.lineCap = roundCap
+    untracedLayer.lineOpacity = segmentOpacity
     style.addLayer(untracedLayer)
 
     let weakCasing = MLNLineStyleLayer(identifier: MapLayerID.lineTraceWeakCasing, source: source)
     weakCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.traceWeak.rawValue)
     weakCasing.lineColor = white
-    weakCasing.lineOpacity = casingOpacity
+    weakCasing.lineOpacity = casingSegmentOpacity
     weakCasing.lineWidth = NSExpression(forConstantValue: 6)
     weakCasing.lineDashPattern = NSExpression(forConstantValue: [0.7, 1.3])
     weakCasing.lineJoin = roundJoin
@@ -280,12 +290,13 @@ extension MC1MapView.Coordinator {
     weakLayer.lineDashPattern = NSExpression(forConstantValue: [1.4, 2.6])
     weakLayer.lineJoin = roundJoin
     weakLayer.lineCap = roundCap
+    weakLayer.lineOpacity = segmentOpacity
     style.addLayer(weakLayer)
 
     let mediumCasing = MLNLineStyleLayer(identifier: MapLayerID.lineTraceMediumCasing, source: source)
     mediumCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.traceMedium.rawValue)
     mediumCasing.lineColor = white
-    mediumCasing.lineOpacity = casingOpacity
+    mediumCasing.lineOpacity = casingSegmentOpacity
     mediumCasing.lineWidth = NSExpression(forConstantValue: 6)
     mediumCasing.lineDashPattern = NSExpression(forConstantValue: [0.7, 1.3])
     mediumCasing.lineJoin = roundJoin
@@ -299,13 +310,14 @@ extension MC1MapView.Coordinator {
     mediumLayer.lineDashPattern = NSExpression(forConstantValue: [1.4, 2.6])
     mediumLayer.lineJoin = roundJoin
     mediumLayer.lineCap = roundCap
+    mediumLayer.lineOpacity = segmentOpacity
     style.addLayer(mediumLayer)
 
     // Good: width 4, solid → casing width 7
     let goodCasing = MLNLineStyleLayer(identifier: MapLayerID.lineTraceGoodCasing, source: source)
     goodCasing.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.traceGood.rawValue)
     goodCasing.lineColor = white
-    goodCasing.lineOpacity = casingOpacity
+    goodCasing.lineOpacity = casingSegmentOpacity
     goodCasing.lineWidth = NSExpression(forConstantValue: 7)
     goodCasing.lineJoin = roundJoin
     goodCasing.lineCap = roundCap
@@ -315,8 +327,8 @@ extension MC1MapView.Coordinator {
     goodLayer.predicate = NSPredicate(format: "lineStyle == %@", MapLine.LineStyle.traceGood.rawValue)
     goodLayer.lineColor = NSExpression(forConstantValue: SNRQuality.good.uiColor)
     goodLayer.lineWidth = NSExpression(forConstantValue: 4)
+    goodLayer.lineOpacity = segmentOpacity
     style.addLayer(goodLayer)
-
 
     // Location trail: a faint dashed connector threading location reports in time
     // order, neutral and de-emphasized, since it is not a proven route. A long

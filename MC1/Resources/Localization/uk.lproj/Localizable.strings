@@ -844,8 +844,27 @@
 "packetScope.propagation" = "Поширення";
 "packetScope.spreadSeconds" = "%@ с мережею";
 "packetScope.receptions" = "Усього прийомів";
-"packetScope.timesHeard" = "прийнято %d×";
+"packetScope.timesHeard" = "×%d";
 
 /* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
 "packetScope.error.unreadableHash" = "Ідентифікатор пакета цього повідомлення нечитний, запит не надсилався.";
 "packetScope.retriedFooter" = "Надіслано %d разів; кожна спроба — окремий пакет. Показано почутий першим.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Без координат";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Почули: %d";
+"packetScope.best" = "найкращий: %@";
+"packetScope.shortest" = "найкоротший: %@";
+"packetScope.stillArriving" = "ще надходять";
+"packetScope.settled" = "завершено";
+"packetScope.settledIn" = "завершено за %@ с";
+"packetScope.hopOne" = "1 перехід";
+"packetScope.bestRoute" = "Найкращий маршрут";
+"packetScope.sort" = "Сортування";
+"packetScope.sortStrongest" = "Найсильніший сигнал";
+"packetScope.sortFewestHops" = "Найменше переходів";
+"packetScope.sortFirstHeard" = "Почуто першим";
+"packetScope.new" = "Новий";
+"packetScope.showAll" = "Показати всі";

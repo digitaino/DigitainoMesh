@@ -843,8 +843,27 @@
 "packetScope.propagation" = "Propagation";
 "packetScope.spreadSeconds" = "%@ s à travers le maillage";
 "packetScope.receptions" = "Réceptions totales";
-"packetScope.timesHeard" = "entendu %d×";
+"packetScope.timesHeard" = "×%d";
 
 /* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
 "packetScope.error.unreadableHash" = "L'identifiant de paquet de ce message est illisible, aucune recherche n'a été faite.";
 "packetScope.retriedFooter" = "Envoyé %d fois ; chaque tentative est un paquet distinct. Voici celui entendu en premier.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Sans position";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Entendu par %d";
+"packetScope.best" = "meilleur %@";
+"packetScope.shortest" = "plus courte %@";
+"packetScope.stillArriving" = "réception en cours";
+"packetScope.settled" = "terminé";
+"packetScope.settledIn" = "terminé en %@ s";
+"packetScope.hopOne" = "1 saut";
+"packetScope.bestRoute" = "Meilleure route";
+"packetScope.sort" = "Trier";
+"packetScope.sortStrongest" = "Signal le plus fort";
+"packetScope.sortFewestHops" = "Moins de sauts";
+"packetScope.sortFirstHeard" = "Entendu en premier";
+"packetScope.new" = "Nouveau";
+"packetScope.showAll" = "Tout afficher";
