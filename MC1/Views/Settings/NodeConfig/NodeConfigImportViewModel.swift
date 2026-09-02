@@ -31,6 +31,11 @@ final class NodeConfigImportViewModel {
   /// confirmation alert. True when at least one selected channel would replace an already-configured
   /// slot, so the channels section is not purely additive and the confirmation copy must say so.
   private var channelsWouldOverwrite = false
+  /// Contacts the preview found with unusable coordinates; named in the confirmation so the
+  /// user knows they will land without a location rather than discovering it on the map.
+  private var contactCoordinateFallbacks: [String] = []
+  /// Contacts the preview found no free slot for; named so the user knows what stays behind.
+  private var contactCapacityDropped: [String] = []
 
   /// True once the import has reported progress, i.e. at least one destructive write reached the
   /// device. Distinguishes "cancelled before anything changed" from "cancelled mid-write."
@@ -77,12 +82,23 @@ final class NodeConfigImportViewModel {
   }
 
   func confirmMessage(deviceName: String) -> String {
-    switch (hasOverwriteSections, hasAdditiveSections) {
+    let base = switch (hasOverwriteSections, hasAdditiveSections) {
     case (false, true): L10n.Settings.ConfigImport.confirmMessageAdd(deviceName)
     case (true, false): L10n.Settings.ConfigImport.confirmMessageOverwrite(deviceName)
     case (true, true): L10n.Settings.ConfigImport.confirmMessageMixed(deviceName)
     default: L10n.Settings.ConfigImport.confirmMessage(deviceName)
     }
+    var notes: [String] = []
+    if !contactCapacityDropped.isEmpty {
+      let names = ListFormatter.localizedString(byJoining: contactCapacityDropped)
+      notes.append(L10n.Settings.ConfigImport.contactCapacityDropped(contactCapacityDropped.count, names))
+    }
+    if !contactCoordinateFallbacks.isEmpty {
+      let names = ListFormatter.localizedString(byJoining: contactCoordinateFallbacks)
+      notes.append(L10n.Settings.ConfigImport.contactCoordinateFallback(contactCoordinateFallbacks.count, names))
+    }
+    guard !notes.isEmpty else { return base }
+    return ([base] + notes).joined(separator: "\n\n")
   }
 
   /// Parse a JSON file from a security-scoped URL. The read and decode run detached
@@ -160,7 +176,7 @@ final class NodeConfigImportViewModel {
   /// Runs the non-destructive planner to classify the import (overwrite vs additive) and reject a
   /// malformed config up front, then presents the confirmation alert. Surfacing a planner error here
   /// means a poison file is caught before the user even confirms, and before any write.
-  func prepareConfirmation(nodeConfigService: NodeConfigService?) {
+  func prepareConfirmation(nodeConfigService: NodeConfigService?, radioID: UUID? = nil) {
     guard !isPreparingConfirmation, !isApplying else { return }
     guard let config = importedConfig,
           let service = nodeConfigService else { return }
@@ -170,13 +186,15 @@ final class NodeConfigImportViewModel {
     previewTask = Task {
       defer { isPreparingConfirmation = false }
       do {
-        let preview = try await service.previewImport(config, sections: sections)
+        let preview = try await service.previewImport(config, sections: sections, radioID: radioID)
         // If the user left the screen while the round-trip was in flight, the dismissal has
         // already reset the UI; presenting the confirmation now would pop an alert over a
         // stale, off-screen state, so honour the cancellation even when the BLE call won the
         // race and returned before observing it.
         guard !Task.isCancelled else { return }
         channelsWouldOverwrite = preview.channelsOverwriteExisting
+        contactCoordinateFallbacks = preview.contactCoordinateFallbacks
+        contactCapacityDropped = preview.contactCapacityDropped
         errorMessage = nil
         showConfirmation = true
       } catch is CancellationError {

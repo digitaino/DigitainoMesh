@@ -24,7 +24,8 @@ public enum NodeConfigServiceError: Error, LocalizedError, Sendable {
   case invalidPrivateKey(hexLength: Int)
   case invalidRadioSettings(field: RadioField)
   case noAvailableChannelSlot(name: String)
-  case invalidCoordinate(field: CoordinateField)
+  /// `raw` is the string as it appeared in the file, so the message can show what was rejected.
+  case invalidCoordinate(field: CoordinateField, raw: String)
   case invalidOutPath(name: String)
   case contactCapacityExceeded(needed: Int, available: Int)
 
@@ -42,8 +43,8 @@ public enum NodeConfigServiceError: Error, LocalizedError, Sendable {
       "Radio parameter is outside the supported range"
     case let .noAvailableChannelSlot(name):
       "No empty channel slot available for \"\(name)\""
-    case .invalidCoordinate:
-      "Coordinate is invalid or out of range"
+    case let .invalidCoordinate(_, raw):
+      "Coordinate is invalid or out of range (\"\(raw)\")"
     case let .invalidOutPath(name):
       "Contact \"\(name)\" has an invalid routing path"
     case let .contactCapacityExceeded(needed, available):
@@ -79,6 +80,11 @@ public struct ImportPreview: Sendable {
   /// True when at least one channel write would replace an already-configured slot whose
   /// name or secret differs — i.e. the channels section is not purely additive.
   public let channelsOverwriteExisting: Bool
+  /// Contacts whose coordinates in the file were unusable; they will be written with no
+  /// location. Empty when every contact's position read cleanly.
+  public let contactCoordinateFallbacks: [String]
+  /// Contacts left out because the device has no free slot for them.
+  public let contactCapacityDropped: [String]
 }
 
 // MARK: - Node Config Service
@@ -201,7 +207,7 @@ public actor NodeConfigService {
     onProgress: (@Sendable (ImportProgress) -> Void)? = nil
   ) async throws {
     // Read + validate/plan phase (non-destructive): rejects a poison/malformed config before any write.
-    let plan = try await buildImportPlan(config, sections: sections)
+    let plan = try await buildImportPlan(config, sections: sections, radioID: radioID)
 
     // Execute phase, driven through the testable `executeConfigImport` seam. The actor supplies
     // the concrete write closures; the sequencing, progress, and cancellation live in the seam.
@@ -283,10 +289,15 @@ public actor NodeConfigService {
   /// planner's post-dedup counts are not surfaced here, only the overwrite flag.
   public func previewImport(
     _ config: MeshCoreNodeConfig,
-    sections: ConfigSections
+    sections: ConfigSections,
+    radioID: UUID? = nil
   ) async throws -> ImportPreview {
-    let plan = try await buildImportPlan(config, sections: sections)
-    return ImportPreview(channelsOverwriteExisting: plan.channelsOverwriteExisting)
+    let plan = try await buildImportPlan(config, sections: sections, radioID: radioID)
+    return ImportPreview(
+      channelsOverwriteExisting: plan.channelsOverwriteExisting,
+      contactCoordinateFallbacks: plan.contactCoordinateFallbacks,
+      contactCapacityDropped: plan.contactCapacityDropped
+    )
   }
 
   // MARK: - Internal Helpers
@@ -298,7 +309,8 @@ public actor NodeConfigService {
   /// accepted cost on this cold, user-initiated path.
   private func buildImportPlan(
     _ config: MeshCoreNodeConfig,
-    sections: ConfigSections
+    sections: ConfigSections,
+    radioID: UUID?
   ) async throws -> ConfigImportPlan {
     let capabilities = try await settingsService.queryDevice()
     let maxChannels = UInt8(capabilities.maxChannels)
@@ -343,6 +355,19 @@ public actor NodeConfigService {
       ? (selfInfo?.maxTxPower ?? 0)
       : 0
 
+    // When the file holds more contacts than the radio can take, the ones the app keeps
+    // history for — favorites and anyone with a conversation — are never the ones left out.
+    // The store is the only place that knows which those are; the file cannot say.
+    var protectedContactKeys: Set<String> = []
+    if sections.contacts, let radioID {
+      let known = await (try? dataStore.fetchContacts(radioID: radioID)) ?? []
+      protectedContactKeys = Set(
+        known
+          .filter { $0.isFavorite || $0.lastMessageDate != nil }
+          .map { $0.publicKey.hexString.lowercased() }
+      )
+    }
+
     return try planConfigImport(
       config: planConfig,
       sections: sections,
@@ -350,7 +375,8 @@ public actor NodeConfigService {
       maxContacts: maxContacts,
       maxTxPower: maxTxPower,
       existingChannels: existingChannels,
-      existingContacts: existingContacts
+      existingContacts: existingContacts,
+      protectedContactKeys: protectedContactKeys
     )
   }
 

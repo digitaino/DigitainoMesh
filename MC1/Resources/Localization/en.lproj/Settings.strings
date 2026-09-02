@@ -1279,6 +1279,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "Changing radio settings will disconnect from the current mesh network";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "%d contact(s) have an unusable location in this file and will be imported without one: %@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "%d contact(s) will be skipped because this radio has no free slots left for them: %@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "Will add/update %d contacts on device";
 

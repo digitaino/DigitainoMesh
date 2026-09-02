@@ -1264,6 +1264,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "Änderung der Funkeinstellungen trennt die Verbindung zum aktuellen Mesh-Netzwerk";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "%d Kontakt(e) haben in dieser Datei einen unbrauchbaren Standort und werden ohne Standort importiert: %@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "%d Kontakt(e) werden übersprungen, weil dieses Funkgerät keine freien Plätze mehr dafür hat: %@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "%d Kontakte werden auf dem Gerät hinzugefügt/aktualisiert";
 

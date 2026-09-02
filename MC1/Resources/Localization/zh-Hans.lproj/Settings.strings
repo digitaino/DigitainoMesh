@@ -1264,6 +1264,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "更改无线电设置将断开与当前 mesh 网络的连接";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "此文件中有 %d 个联系人的位置无法使用，将以无位置方式导入：%@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "此电台已无空余位置，将跳过 %d 个联系人：%@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "将在设备上添加/更新 %d 个联系人";
 

@@ -1264,6 +1264,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "Зміна налаштувань радіо призведе до від'єднання від поточної mesh-мережі";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "Контакти з непридатним місцезнаходженням у цьому файлі (%d) буде імпортовано без нього: %@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "Контакти пропущено, бо на цій радіостанції немає вільних комірок (%d): %@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "Буде додано/оновлено %d контактів на пристрої";
 

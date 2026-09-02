@@ -21,8 +21,11 @@ struct NodeConfigImportPlannerTests {
   ])
   private static let validChannelSecretA = "00112233445566778899aabbccddeeff"
   private static let validChannelSecretB = "ffeeddccbbaa99887766554433221100"
+  private static let validChannelSecretC = "0123456789abcdef0123456789abcdef"
+  private static let validChannelSecretD = "fedcba9876543210fedcba9876543210"
   private static let pubKeyHexA = String(repeating: "ab", count: 32)
   private static let pubKeyHexB = String(repeating: "cd", count: 32)
+  private static let pubKeyHexC = String(repeating: "ef", count: 32)
 
   private static func emptySlots(_ count: UInt8) -> [DeviceChannelSlot] {
     (0..<count).map { DeviceChannelSlot(index: $0, name: "", secret: Data(), isConfigured: false) }
@@ -56,13 +59,14 @@ struct NodeConfigImportPlannerTests {
     latitude: String = "0",
     longitude: String = "0",
     lastModified: UInt32 = 0,
+    lastAdvert: UInt32 = 0,
     outPath: String? = nil,
     pathHashMode: UInt8? = nil
   ) -> MeshCoreNodeConfig.ContactConfig {
     MeshCoreNodeConfig.ContactConfig(
       type: type, name: name, publicKey: publicKey, flags: 0,
       latitude: latitude, longitude: longitude,
-      lastAdvert: 0, lastModified: lastModified,
+      lastAdvert: lastAdvert, lastModified: lastModified,
       outPath: outPath, pathHashMode: pathHashMode
     )
   }
@@ -80,7 +84,8 @@ struct NodeConfigImportPlannerTests {
     maxContacts: Int = 100,
     maxTxPower: Int8 = 30,
     existingChannels: [DeviceChannelSlot] = emptySlots(8),
-    existingContacts: [String: MeshContact] = [:]
+    existingContacts: [String: MeshContact] = [:],
+    protectedContactKeys: Set<String> = []
   ) throws -> ConfigImportPlan {
     var config = MeshCoreNodeConfig()
     config.channels = channels
@@ -93,7 +98,8 @@ struct NodeConfigImportPlannerTests {
     return try planConfigImport(
       config: config, sections: sections,
       maxChannels: maxChannels, maxContacts: maxContacts, maxTxPower: maxTxPower,
-      existingChannels: existingChannels, existingContacts: existingContacts
+      existingChannels: existingChannels, existingContacts: existingContacts,
+      protectedContactKeys: protectedContactKeys
     )
   }
 
@@ -132,7 +138,7 @@ struct NodeConfigImportPlannerTests {
         sections: sections
       )
     } throws: { error in
-      if case NodeConfigServiceError.invalidCoordinate(.positionLatitude) = error { return true }
+      if case NodeConfigServiceError.invalidCoordinate(.positionLatitude, _) = error { return true }
       return false
     }
   }
@@ -149,20 +155,106 @@ struct NodeConfigImportPlannerTests {
         sections: sections
       )
     } throws: { error in
-      if case NodeConfigServiceError.invalidCoordinate(.positionLatitude) = error { return true }
+      if case NodeConfigServiceError.invalidCoordinate(.positionLatitude, _) = error { return true }
       return false
     }
   }
 
   @Test
-  func `Contact with infinite longitude is rejected`() {
-    let contacts = [Self.contact(name: "Bad", publicKey: Self.pubKeyHexA, longitude: "inf")]
+  func `A contact with an unusable coordinate is imported without a location, and named`() throws {
+    // A repeater advertising junk must not block a whole radio migration: the firmware stores
+    // any Int32 of microdegrees, so an exported contact can carry a latitude far past ±90°.
+    let contacts = [
+      Self.contact(name: "Bad", publicKey: Self.pubKeyHexA, latitude: "30.1", longitude: "inf"),
+      Self.contact(name: "Junk", publicKey: Self.pubKeyHexB, latitude: "1234.5", longitude: "-97.7"),
+      Self.contact(name: "Good", publicKey: Self.pubKeyHexC, latitude: "30.1", longitude: "-97.7"),
+    ]
+    let plan = try Self.plan(contacts: contacts, sections: Self.contactSections())
+    #expect(plan.contactRecords.count == 3)
+    #expect(plan.contactCoordinateFallbacks == ["Bad", "Junk"])
+    let bad = try #require(plan.contactRecords.first { $0.advertisedName == "Bad" })
+    #expect(bad.latitude == 0 && bad.longitude == 0)
+    let good = try #require(plan.contactRecords.first { $0.advertisedName == "Good" })
+    #expect(good.latitude == 30.1)
+  }
+
+  @Test
+  func `The node's own position stays strict: a contact fallback never applies to it`() {
+    let sections = ConfigSections(
+      nodeIdentity: false, radioSettings: false, positionSettings: true,
+      otherSettings: false, channels: false, contacts: false
+    )
     #expect {
-      _ = try Self.plan(contacts: contacts, sections: Self.contactSections())
+      _ = try Self.plan(
+        positionSettings: .init(latitude: "1234.5", longitude: "0"),
+        sections: sections
+      )
     } throws: { error in
-      if case NodeConfigServiceError.invalidCoordinate(.contactLongitude(name: "Bad")) = error { return true }
+      if case NodeConfigServiceError.invalidCoordinate(.positionLatitude, "1234.5") = error { return true }
       return false
     }
+  }
+
+  @Test
+  func `A rejected position coordinate carries the offending text so the message can show it`() {
+    let sections = ConfigSections(
+      nodeIdentity: false, radioSettings: false, positionSettings: true,
+      otherSettings: false, channels: false, contacts: false
+    )
+    #expect {
+      _ = try Self.plan(positionSettings: .init(latitude: "30.5N", longitude: "0"), sections: sections)
+    } throws: { error in
+      if case NodeConfigServiceError.invalidCoordinate(.positionLatitude, "30.5N") = error { return true }
+      return false
+    }
+  }
+
+  @Test
+  func `Coordinate strings from other exporters parse when they mean one thing`() {
+    let lat = PacketBuilder.latitudeRange
+    let lon = PacketBuilder.longitudeRange
+    // Plain decimal degrees, the companion app's own format.
+    #expect(parseConfigCoordinate("30.4567", range: lat) == 30.4567)
+    #expect(parseConfigCoordinate("-97.7431", range: lon) == -97.7431)
+    // Surrounding whitespace, a locale decimal comma.
+    #expect(parseConfigCoordinate(" 30.4567\n", range: lat) == 30.4567)
+    #expect(parseConfigCoordinate("30,4567", range: lat) == 30.4567)
+    // No location: the firmware's own 0/0, however an exporter spells it.
+    #expect(parseConfigCoordinate("", range: lat) == 0)
+    #expect(parseConfigCoordinate("   ", range: lat) == 0)
+    #expect(parseConfigCoordinate("null", range: lon) == 0)
+    #expect(parseConfigCoordinate("None", range: lon) == 0)
+    // The firmware's int32 microdegrees, exported unconverted.
+    #expect(parseConfigCoordinate("30456700", range: lat) == 30.4567)
+    #expect(parseConfigCoordinate("-97743100", range: lon) == -97.7431)
+  }
+
+  @Test
+  func `Coordinate strings that could mean anything are still rejected`() {
+    let lat = PacketBuilder.latitudeRange
+    // Out of range as degrees, and still out of range as microdegrees.
+    #expect(parseConfigCoordinate("1000000000", range: lat) == nil)
+    // A decimal can't be microdegrees; out of range is out of range.
+    #expect(parseConfigCoordinate("30456700.0", range: lat) == nil)
+    // A small out-of-range integer is a typo, not a point 100 m from null island.
+    #expect(parseConfigCoordinate("91", range: lat) == nil)
+    #expect(parseConfigCoordinate("999", range: lat) == nil)
+    #expect(parseConfigCoordinate("nan", range: lat) == nil)
+    #expect(parseConfigCoordinate("inf", range: lat) == nil)
+    #expect(parseConfigCoordinate("30.5N", range: lat) == nil)
+    // Two commas is a list, not a decimal.
+    #expect(parseConfigCoordinate("30,45,67", range: lat) == nil)
+    // Full-width digits are not ASCII integers.
+    #expect(parseConfigCoordinate("３０", range: lat) == nil)
+  }
+
+  @Test
+  func `A microdegree contact coordinate lands in the plan as degrees`() throws {
+    let contacts = [Self.contact(name: "Lakeline", publicKey: Self.pubKeyHexA, latitude: "30456700", longitude: "-97743100")]
+    let plan = try Self.plan(contacts: contacts, sections: Self.contactSections())
+    let record = try #require(plan.contactRecords.first)
+    #expect(abs(record.latitude - 30.4567) < 0.000001)
+    #expect(abs(record.longitude - -97.7431) < 0.000001)
   }
 
   @Test
@@ -203,6 +295,40 @@ struct NodeConfigImportPlannerTests {
     #expect(plan.channelWrites.count == 2)
     #expect(Set(plan.channelWrites.map(\.index)).count == 1,
             "Same-secret channels must not consume two slots")
+  }
+
+  @Test
+  func `A channel returns to the slot its file position names, so a folded duplicate does not shift the rest`() throws {
+    // A radio swap on 2026-09-01: the export listed 28 channels in slot order with two
+    // duplicate secrets at positions 16 and 18. Folding them must leave those slots empty,
+    // not slide every later channel down onto the slot of another chat's history.
+    let channels = [
+      MeshCoreNodeConfig.ChannelConfig(name: "Public", secret: Self.validChannelSecretA),
+      MeshCoreNodeConfig.ChannelConfig(name: "#one", secret: Self.validChannelSecretB),
+      MeshCoreNodeConfig.ChannelConfig(name: "#two", secret: Self.validChannelSecretC),
+      MeshCoreNodeConfig.ChannelConfig(name: "#one", secret: Self.validChannelSecretB),
+      MeshCoreNodeConfig.ChannelConfig(name: "#four", secret: Self.validChannelSecretD),
+    ]
+    let plan = try Self.plan(channels: channels, sections: Self.channelSections(), maxChannels: 8)
+    // Four writes: the duplicate at position 3 folds onto slot 1 and plans nothing, and
+    // "#four" keeps slot 4 rather than sliding into the vacated 3.
+    #expect(plan.channelWrites.map { ($0.name, $0.index) }.map { "\($0.0)@\($0.1)" }
+      == ["Public@0", "#one@1", "#two@2", "#four@4"])
+  }
+
+  @Test
+  func `A channel whose file position is taken falls back to the first free slot`() throws {
+    // Slot 0 is already configured with a different secret, so the first channel cannot have
+    // its position and takes the first free slot; the second then finds its own position taken
+    // by that write and moves on as well.
+    var slots = Self.emptySlots(4)
+    slots[0] = DeviceChannelSlot(index: 0, name: "Taken", secret: Data(repeating: 0x5A, count: 16), isConfigured: true)
+    let channels = [
+      MeshCoreNodeConfig.ChannelConfig(name: "#a", secret: Self.validChannelSecretA),
+      MeshCoreNodeConfig.ChannelConfig(name: "#b", secret: Self.validChannelSecretB),
+    ]
+    let plan = try Self.plan(channels: channels, sections: Self.channelSections(), maxChannels: 4, existingChannels: slots)
+    #expect(plan.channelWrites.map(\.index) == [1, 2])
   }
 
   @Test
@@ -508,17 +634,35 @@ struct NodeConfigImportPlannerTests {
   }
 
   @Test
-  func `Exceeding device contact capacity is rejected`() {
+  func `Exceeding device contact capacity leaves out the least recently heard, and names them`() throws {
+    // A migration is not refused over the overflow; the nodes the mesh heard from longest ago
+    // are what stay behind.
     let contacts = [
-      Self.contact(name: "A", publicKey: Self.pubKeyHexA),
-      Self.contact(name: "B", publicKey: Self.pubKeyHexB),
+      Self.contact(name: "Quiet", publicKey: Self.pubKeyHexA, lastAdvert: 10),
+      Self.contact(name: "Recent", publicKey: Self.pubKeyHexB, lastAdvert: 20),
     ]
-    #expect {
-      _ = try Self.plan(contacts: contacts, sections: Self.contactSections(), maxContacts: 1)
-    } throws: { error in
-      if case NodeConfigServiceError.contactCapacityExceeded = error { return true }
-      return false
-    }
+    let plan = try Self.plan(contacts: contacts, sections: Self.contactSections(), maxContacts: 1)
+    #expect(plan.contactRecords.map(\.advertisedName) == ["Recent"])
+    #expect(plan.contactCapacityDropped == ["Quiet"])
+  }
+
+  @Test
+  func `An overflow never leaves out a contact the app holds history for`() throws {
+    // A friend last written months ago sorts as the stalest entry in the file, yet is the one
+    // contact that must make it onto the radio; the untouched repeater goes instead.
+    let contacts = [
+      Self.contact(name: "Friend", publicKey: Self.pubKeyHexA, lastModified: 1, lastAdvert: 1),
+      Self.contact(type: 2, name: "Repeater", publicKey: Self.pubKeyHexB, lastModified: 500, lastAdvert: 500),
+      Self.contact(type: 2, name: "Busy repeater", publicKey: Self.pubKeyHexC, lastModified: 900, lastAdvert: 900),
+    ]
+    let plan = try Self.plan(
+      contacts: contacts,
+      sections: Self.contactSections(),
+      maxContacts: 2,
+      protectedContactKeys: [Self.pubKeyHexA.lowercased()]
+    )
+    #expect(Set(plan.contactRecords.map(\.advertisedName)) == ["Friend", "Busy repeater"])
+    #expect(plan.contactCapacityDropped == ["Repeater"])
   }
 
   @Test
@@ -544,52 +688,47 @@ struct NodeConfigImportPlannerTests {
   }
 
   @Test
-  func `Occupancy that includes a virtual extra key blocks update-only until the key is excluded`() {
-    // Simulates GET_CONTACTS returning max real contacts + ZephCore V-contact (+1).
-    // Without excluding V from existingContacts, availableSlots goes negative and even an
-    // update of an existing key is rejected. buildImportPlan drops V before calling the planner.
+  func `Over-occupancy never blocks an update of a key already on the device`() throws {
+    // Simulates GET_CONTACTS returning max real contacts + ZephCore V-contact (+1), so the
+    // free-slot count goes negative. An update consumes no slot, so it still goes through;
+    // only a genuinely new key is left out, and it is named.
     let maxContacts = 1
     let existingWithVirtual = Dictionary(uniqueKeysWithValues: [
       Self.presentContact(keyedAs: Self.pubKeyHexA.lowercased()),
       Self.presentContact(keyedAs: Self.pubKeyHexB.lowercased()),
     ])
-    #expect {
-      _ = try Self.plan(
-        contacts: [Self.contact(name: "Update", publicKey: Self.pubKeyHexA)],
-        sections: Self.contactSections(),
-        maxContacts: maxContacts,
-        existingContacts: existingWithVirtual
-      )
-    } throws: { error in
-      if case NodeConfigServiceError.contactCapacityExceeded = error { return true }
-      return false
-    }
+    let updateOnly = try Self.plan(
+      contacts: [Self.contact(name: "Update", publicKey: Self.pubKeyHexA)],
+      sections: Self.contactSections(),
+      maxContacts: maxContacts,
+      existingContacts: existingWithVirtual
+    )
+    #expect(updateOnly.contactRecords.count == 1)
+    #expect(updateOnly.contactCapacityDropped.isEmpty)
 
-    var occupancy = existingWithVirtual
-    occupancy.removeValue(forKey: Self.pubKeyHexB.lowercased())
-    #expect(throws: Never.self) {
-      _ = try Self.plan(
-        contacts: [Self.contact(name: "Update", publicKey: Self.pubKeyHexA)],
-        sections: Self.contactSections(),
-        maxContacts: maxContacts,
-        existingContacts: occupancy
-      )
-    }
+    let withNew = try Self.plan(
+      contacts: [
+        Self.contact(name: "Update", publicKey: Self.pubKeyHexA),
+        Self.contact(name: "New", publicKey: Self.pubKeyHexC),
+      ],
+      sections: Self.contactSections(),
+      maxContacts: maxContacts,
+      existingContacts: existingWithVirtual
+    )
+    #expect(withNew.contactRecords.map(\.advertisedName) == ["Update"])
+    #expect(withNew.contactCapacityDropped == ["New"])
   }
 
   @Test
-  func `A new contact has no free slot once the device table is full`() {
-    #expect {
-      _ = try Self.plan(
-        contacts: [Self.contact(name: "New", publicKey: Self.pubKeyHexB)],
-        sections: Self.contactSections(),
-        maxContacts: 1,
-        existingContacts: Dictionary(uniqueKeysWithValues: [Self.presentContact(keyedAs: Self.pubKeyHexA.lowercased())])
-      )
-    } throws: { error in
-      if case NodeConfigServiceError.contactCapacityExceeded = error { return true }
-      return false
-    }
+  func `A new contact with no free slot is left out by name, not refused as a whole`() throws {
+    let plan = try Self.plan(
+      contacts: [Self.contact(name: "New", publicKey: Self.pubKeyHexB)],
+      sections: Self.contactSections(),
+      maxContacts: 1,
+      existingContacts: Dictionary(uniqueKeysWithValues: [Self.presentContact(keyedAs: Self.pubKeyHexA.lowercased())])
+    )
+    #expect(plan.contactRecords.isEmpty)
+    #expect(plan.contactCapacityDropped == ["New"])
   }
 
   @Test

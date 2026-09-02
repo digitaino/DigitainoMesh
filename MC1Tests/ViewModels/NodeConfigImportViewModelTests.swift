@@ -16,18 +16,18 @@ struct NodeConfigImportViewModelTests {
 
   @Test
   func `A position-coordinate error maps to the localized position template`() {
-    let message = NodeConfigServiceError.invalidCoordinate(field: .positionLatitude).userFacingMessage
+    let message = NodeConfigServiceError.invalidCoordinate(field: .positionLatitude, raw: "nan").userFacingMessage
     #expect(message == L10n.Settings.ConfigImport.Error.positionInvalid(
       L10n.Settings.ConfigImport.Field.latitude
-    ))
+    ) + " (\"nan\")")
   }
 
   @Test
   func `A contact-coordinate error maps to the localized contact template with the contact name`() {
-    let message = NodeConfigServiceError.invalidCoordinate(field: .contactLongitude(name: "C1")).userFacingMessage
+    let message = NodeConfigServiceError.invalidCoordinate(field: .contactLongitude(name: "C1"), raw: "30.5W").userFacingMessage
     #expect(message == L10n.Settings.ConfigImport.Error.contactCoordinateInvalid(
       "C1", L10n.Settings.ConfigImport.Field.longitude
-    ))
+    ) + " (\"30.5W\")")
   }
 
   @Test

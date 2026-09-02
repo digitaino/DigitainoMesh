@@ -287,7 +287,10 @@ private struct ApplySection: View {
         }
       } else if !viewModel.importComplete {
         Button(viewModel.applyButtonLabel) {
-          viewModel.prepareConfirmation(nodeConfigService: appState.services?.nodeConfigService)
+          viewModel.prepareConfirmation(
+            nodeConfigService: appState.services?.nodeConfigService,
+            radioID: appState.connectedDevice?.radioID
+          )
         }
         .disabled(viewModel.isPreparingConfirmation)
       }
