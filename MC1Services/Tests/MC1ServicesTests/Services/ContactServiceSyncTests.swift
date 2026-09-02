@@ -76,6 +76,61 @@ struct ContactServiceSyncTests {
   }
 
   @Test
+  func `Full sync prune keeps a contact with direct messages: the radio's table is not the user's history`() async throws {
+    let radioID = UUID()
+    let store = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 8)
+    // A contact the device no longer lists, but that this phone has talked to.
+    let messaged = try await store.saveContact(radioID: radioID, from: contactFrame(0xDD, name: "Messaged"))
+    try await store.saveMessage(MessageDTO(
+      id: UUID(), radioID: radioID, contactID: messaged.id, channelIndex: nil,
+      text: "still here", timestamp: 1, createdAt: Date(),
+      direction: .incoming, status: .delivered, textType: .plain,
+      ackCode: nil, pathLength: 0, snr: nil, senderKeyPrefix: nil, senderNodeName: nil,
+      isRead: true, replyToID: nil, roundTripTime: nil, heardRepeats: 0,
+      retryAttempt: 0, maxRetryAttempts: 0
+    ))
+    // A contact the device no longer lists that nobody ever messaged: cache, still pruned.
+    _ = try await store.saveContact(radioID: radioID, from: contactFrame(0xEE, name: "Cache"))
+
+    let session = MockMeshCoreSession()
+    await session.setStubbedContacts([meshContact(0xAA, name: "Alice")])
+
+    let service = ContactService(session: session, dataStore: store, syncCoordinator: nil, cleanupCoordinator: nil)
+    _ = try await service.syncContacts(radioID: radioID, since: nil)
+
+    #expect(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xDD)) != nil)
+    #expect(try await store.fetchMessages(contactID: messaged.id, limit: 10, offset: 0).count == 1)
+    #expect(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xEE)) == nil)
+  }
+
+  @Test
+  func `Full sync prune keeps a favorite the device no longer lists`() async throws {
+    let radioID = UUID()
+    let store = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 8)
+    let saved = try await store.saveContact(radioID: radioID, from: contactFrame(0xDD, name: "Starred"))
+    let starred = try #require(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xDD)))
+    try await store.saveContact(ContactDTO(
+      id: saved.id, radioID: radioID, publicKey: starred.publicKey, name: starred.name,
+      typeRawValue: starred.typeRawValue, flags: starred.flags,
+      outPathLength: starred.outPathLength, outPath: starred.outPath,
+      lastAdvertTimestamp: starred.lastAdvertTimestamp,
+      latitude: starred.latitude, longitude: starred.longitude,
+      lastModified: starred.lastModified, lastHeardTimestamp: starred.lastHeardTimestamp,
+      nickname: nil, isBlocked: false, isMuted: false, isFavorite: true,
+      lastMessageDate: nil, unreadCount: 0
+    ))
+
+    let session = MockMeshCoreSession()
+    await session.setStubbedContacts([meshContact(0xAA, name: "Alice")])
+
+    let service = ContactService(session: session, dataStore: store, syncCoordinator: nil, cleanupCoordinator: nil)
+    _ = try await service.syncContacts(radioID: radioID, since: nil)
+
+    let kept = try #require(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xDD)))
+    #expect(kept.isFavorite)
+  }
+
+  @Test
   func `Full sync prunes true orphans but keeps the ZephCore V-contact`() async throws {
     let radioID = UUID()
     let store = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 8)

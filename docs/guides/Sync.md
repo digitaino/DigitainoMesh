@@ -242,6 +242,14 @@ Benefits:
 
 ### Full Sync
 
+**Prune rule (2026-09-01).** A full sync prunes local contacts the device no longer lists,
+but only *cache* rows — contacts that are neither favorites nor have direct messages. A
+contact with history is the user's data, and `deleteContact` takes the conversation with
+it; the radio's contact table can be legitimately near-empty while the phone's history is
+not (a replacement radio that received the identity but not the contacts, a re-flash, a
+factory reset). One such sync deleted ~250 contacts and every DM with them before this
+rule existed. Kept rows are logged as `Full sync prune: keeping …`.
+
 Used on first connection or when data may be stale:
 
 ```swift

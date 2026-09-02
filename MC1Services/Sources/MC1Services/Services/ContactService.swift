@@ -175,6 +175,17 @@ public actor ContactService {
   /// reported total in step, so a complete-but-smaller reply still prunes.
   /// Both counts include the ZephCore V-contact when firmware streams it.
   ///
+  /// **A prune reconciles the cache, never the user's history.** A contact row
+  /// that is a favorite or has direct messages is the user's data, not a mirror
+  /// of the radio's contact table, and `deleteContact` takes the conversation
+  /// with it. Those rows survive a prune and are only ever removed by the user.
+  /// The rule exists because a radio's table can be legitimately near-empty
+  /// while the phone's history is not: a replacement radio that received the
+  /// identity but not the contacts, a re-flashed radio, a factory reset —
+  /// and on 2026-09-01 one such full sync deleted ~250 contacts and every DM
+  /// with them. Contacts that are neither favorite nor messaged are the
+  /// cache, and still prune.
+  ///
   /// A `nil` `reportedTotal` means the reply carried no `contactsStart` header,
   /// so the device total is unknown and the snapshot cannot be proven complete;
   /// the prune skips.
@@ -210,13 +221,23 @@ public actor ContactService {
     if !orphans.isEmpty {
       logger.notice("Full sync prune: \(orphans.count) local contact(s) not found on device (device has \(devicePublicKeys.count), local has \(localContacts.count))")
     }
+    var kept = 0
     for localContact in orphans {
       let keyPrefix = localContact.publicKey.prefix(4).map { String(format: "%02x", $0) }.joined()
-      logger.notice("Full sync prune: deleting '\(localContact.name)' [\(keyPrefix)…] (favorite=\(localContact.isFavorite), type=\(localContact.typeRawValue), lastModified=\(localContact.lastModified))")
+      let hasHistory = try await !dataStore.fetchMessages(contactID: localContact.id, limit: 1, offset: 0).isEmpty
+      if localContact.isFavorite || hasHistory {
+        kept += 1
+        logger.notice("Full sync prune: keeping '\(localContact.name)' [\(keyPrefix)…] not on device (favorite=\(localContact.isFavorite), hasMessages=\(hasHistory))")
+        continue
+      }
+      logger.notice("Full sync prune: deleting '\(localContact.name)' [\(keyPrefix)…] (type=\(localContact.typeRawValue), lastModified=\(localContact.lastModified))")
       try await dataStore.deleteContact(id: localContact.id)
       await cleanupCoordinator?.handleCleanup(
         contactID: localContact.id, reason: .deleted, publicKey: localContact.publicKey
       )
+    }
+    if kept > 0 {
+      logger.notice("Full sync prune: kept \(kept) contact(s) with history or favorite status that the device no longer lists")
     }
   }
 
