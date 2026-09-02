@@ -895,3 +895,7 @@
 "packetScope.a11yShowingRoute" = "Mostra il percorso verso %1$@ via %2$@";
 "packetScope.a11yShowingObserver" = "Mostra %1$d percorsi verso %2$@";
 "packetScope.a11yShowingAll" = "Mostra tutti gli osservatori";
+"packetScope.routeOne" = "1 percorso";
+"packetScope.tailUnknownOne" = "+1 salto non sulla mappa";
+"packetScope.a11yShowingObserverOne" = "Mostra 1 percorso verso %@";
+"packetScope.a11yShowingDirect" = "Mostra la ricezione diretta presso %@";

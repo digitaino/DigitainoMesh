@@ -43,6 +43,16 @@ enum PacketScopeFocus: Equatable {
 struct PacketScopeFrozenOrder: Equatable {
   let observerIDs: [String]
   let routeIDsByObserver: [String: [String]]
+
+  /// The order with an observer heard since the freeze appended at the tail,
+  /// so the steppers can reach it. An observer already in the order is left
+  /// where it is, ladder included.
+  func appending(observerID: String, routeIDs: [String]) -> PacketScopeFrozenOrder {
+    guard !observerIDs.contains(observerID) else { return self }
+    var ladders = routeIDsByObserver
+    ladders[observerID] = routeIDs
+    return PacketScopeFrozenOrder(observerIDs: observerIDs + [observerID], routeIDsByObserver: ladders)
+  }
 }
 
 /// The map's answer to a focus: what to draw, what to frame, and whether
@@ -105,21 +115,56 @@ enum PacketScopeFocusLogic {
     }
     guard !ladder.isEmpty, delta != 0 else { return nil }
     let step = delta > 0 ? 1 : -1
+    // A focus the order does not know (an observer heard after the freeze
+    // whose ladder was not appended) steps from the ends, like `.all`.
+    let ends = step > 0 ? 0 : ladder.count - 1
 
     let target: Int
     switch focus {
     case .all:
-      target = step > 0 ? 0 : ladder.count - 1
+      target = ends
     case let .observer(observerID):
-      let first = ladder.firstIndex { $0.observerID == observerID } ?? 0
+      guard let first = ladder.firstIndex(where: { $0.observerID == observerID }) else {
+        target = ends
+        break
+      }
       target = step > 0 ? first : first - 1
     case let .route(_, routeID):
-      let current = ladder.firstIndex { $0.routeID == routeID } ?? -1
+      guard let current = ladder.firstIndex(where: { $0.routeID == routeID }) else {
+        target = ends
+        break
+      }
       target = current + step
     }
     let wrapped = ((target % ladder.count) + ladder.count) % ladder.count
     let entry = ladder[wrapped]
     return .route(observerID: entry.observerID, routeID: entry.routeID)
+  }
+
+  /// The camera-focus id for a focus over the coordinates it frames. Canonical
+  /// in coordinate order, so a poll that re-ranks an observer's routes without
+  /// placing anything new does not move the camera; a newly placed hop does.
+  static func cameraFocusID(for focus: PacketScopeFocus, coordinates: [CLLocationCoordinate2D]) -> String {
+    let prefix = switch focus {
+    case .all: "all"
+    case let .observer(id): "obs:\(id)"
+    case let .route(_, routeID): "route:\(routeID)"
+    }
+    let digest = coordinates
+      .map { String(format: "%.5f,%.5f", $0.latitude, $0.longitude) }
+      .sorted()
+      .joined(separator: ";")
+    return "\(prefix)#\(digest)"
+  }
+
+  /// "1 route" / "3 routes", following the `hopOne` / `hopCount` precedent.
+  static func routeCount(_ count: Int) -> String {
+    count == 1 ? L10n.Localizable.PacketScope.routeOne : L10n.Localizable.PacketScope.routeCount(count)
+  }
+
+  /// "+1 hop not on the map" / "+3 hops not on the map".
+  static func tailUnknown(_ count: Int) -> String {
+    count == 1 ? L10n.Localizable.PacketScope.tailUnknownOne : L10n.Localizable.PacketScope.tailUnknown(count)
   }
 
   /// A plain-text account of the coverage for the clipboard. Built from the

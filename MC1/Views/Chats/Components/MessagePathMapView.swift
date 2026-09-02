@@ -696,6 +696,12 @@ struct MessagePathMapCanvas: View {
   /// The user has panned or zoomed. An automatic re-fit after that would take
   /// the map away from where they put it; only an explicit fit clears it.
   @State private var hasUserMovedCamera = false
+  /// Bumped by every camera fit. A settle re-fit captures it before sleeping
+  /// and gives up if any other fit landed meanwhile — a focus taken during the
+  /// style-load window, or a second route tapped within a settle delay. Read
+  /// through `@State` because a plain struct property is frozen inside the
+  /// escaping task; `cameraFocus` itself must never be read after an `await`.
+  @State private var cameraFitToken = 0
 
   private var mapPoints: [MapPoint] {
     locatedNodes.map(\.point)
@@ -787,20 +793,33 @@ struct MessagePathMapCanvas: View {
       guard loaded, !hasInitiallyFit else { return }
       hasInitiallyFit = true
       // A locate tap can resolve before a slow style load; don't wipe it out.
-      // Nor a focus taken while the style was still loading.
-      guard !isCenteredOnUser, cameraFocus == nil else { return }
-      fitCameraToPath()
+      guard !isCenteredOnUser else { return }
+      // A focus taken while the style was still loading is honoured now: its
+      // own handler had nothing to fit yet.
+      let target = cameraFocus?.coordinates
+      if let target {
+        fitCamera(to: target)
+      } else {
+        fitCameraToPath()
+      }
       // One settle re-fit: the style can finish loading while the presentation
       // is still inflating the map's bounds, and a fit measured then frames far
       // wider than the path. Skipped if the user has already taken the camera
-      // somewhere themselves.
+      // somewhere themselves, or if any other fit landed meanwhile.
+      let token = cameraFitToken
       Task {
         try? await Task.sleep(for: Self.settleRefitDelay)
-        guard !isCenteredOnUser, cameraFocus == nil else { return }
-        fitCameraToPath()
+        guard !isCenteredOnUser, cameraFitToken == token else { return }
+        if let target {
+          fitCamera(to: target)
+        } else {
+          fitCameraToPath()
+        }
       }
     }
     .onChange(of: cameraFocus?.id) {
+      // Before the style loads there is nothing to fit; the style-load
+      // handler picks the focus up.
       guard isStyleLoaded else { return }
       let coords = cameraFocus?.coordinates ?? framedCoordinates
       // Never a fake single-node zoom for a selection.
@@ -810,11 +829,12 @@ struct MessagePathMapCanvas: View {
       // not be re-subscribed to automatic re-fits once the focus clears.
       isCenteredOnUser = false
       fitCamera(to: coords)
-      let settled = cameraFocus?.id
+      let token = cameraFitToken
       Task {
         try? await Task.sleep(for: Self.focusSettleDelay)
-        guard cameraFocus?.id == settled else { return }
-        fitCamera(to: cameraFocus?.coordinates ?? framedCoordinates)
+        // Another focus (or a clear) fitted meanwhile: this one is stale.
+        guard cameraFitToken == token else { return }
+        fitCamera(to: coords)
       }
     }
   }
@@ -842,6 +862,7 @@ struct MessagePathMapCanvas: View {
   }
 
   private func fitCamera(to coords: [CLLocationCoordinate2D]) {
+    cameraFitToken += 1
     if coords.count == 1 {
       cameraRegion = MKCoordinateRegion(
         center: coords[0],

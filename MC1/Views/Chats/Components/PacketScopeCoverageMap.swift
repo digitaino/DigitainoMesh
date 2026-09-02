@@ -534,7 +534,7 @@ enum PacketScopeCoverageBuilder {
         hasMeasuredLeg: leg != nil,
         linkIDs: planLinkIDs[index],
         participantPinIDs: participants,
-        drawnGeometryKey: geometryKey(segments),
+        drawnGeometryKey: geometryKey(soloSegments),
         coordinates: coordinates
       ))
     }
@@ -679,7 +679,7 @@ enum PacketScopeCoverageBuilder {
       }
       return PacketScopeFocusGeometry(
         lines: routes.flatMap(\.segments),
-        nodes: focusedNodes(in: map, participants: participants, numbering: numbering, badge: routes.first?.badge),
+        nodes: focusedNodes(in: map, participants: participants, numbering: numbering, badge: routes.first.flatMap { $0.badge ?? $0.soloBadge }),
         arrivalKeyByLineID: arrivalKeys,
         focusLinkIDs: routes.reduce(into: Set<String>()) { $0.formUnion($1.linkIDs) },
         cameraCoordinates: dedupe(coordinates),

@@ -900,3 +900,7 @@
 "packetScope.a11yShowingRoute" = "Toont de route naar %1$@ via %2$@";
 "packetScope.a11yShowingObserver" = "Toont %1$d routes naar %2$@";
 "packetScope.a11yShowingAll" = "Toont alle waarnemers";
+"packetScope.routeOne" = "1 route";
+"packetScope.tailUnknownOne" = "+1 hop niet op de kaart";
+"packetScope.a11yShowingObserverOne" = "Toont 1 route naar %@";
+"packetScope.a11yShowingDirect" = "Toont de directe ontvangst bij %@";

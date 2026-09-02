@@ -218,7 +218,10 @@ in the ladder (a hop pill inside it too), a "distance · SNR" badge on the map
 (`onBadgeTap`), the breadcrumb crumbs, the focus bar's ‹ / › steppers, and a
 tap on the map background, which pops **one** level (route → observer → all)
 so a stray tap while panning costs one recoverable step. `✕` in the focus bar
-and the `All` crumb clear in one tap.
+and the `All` crumb clear in one tap. Repeater hop pins are inert by design
+(a focus axis reachable only from a map pin would be unreachable to
+VoiceOver); on this screen a tap on one is routed to the map tap, so it pops a
+level like the background does.
 
 Focus is a **filter that removes, not a dimmer**. Routes of one observer share
 their leading segments by construction, so three "dimmed" copies at 0.2
@@ -355,6 +358,46 @@ exactly what the privacy stance rules out. Revisit only with a design that keeps
 fetches user-initiated.
 
 Also deferred, with the trade-offs recorded (2026-09-01):
+
+- **Repeater focus** (tap a hop pin to filter to every route through it). A
+  third focus axis reachable only by tapping a map pin is unreachable to
+  VoiceOver, and it needs its own panel filter, focus-bar figures, builder
+  index and strings. Revisit with map accessibility, and give it a panel-side
+  entry point (a "via <repeater>" affordance on the focus bar's hop pills).
+- **Line hit-testing on the map.** Needs a per-feature `lineID` on every line,
+  a rect query with nearest-polyline ranking, and a builder-published
+  `focusByLineID` map — `routeID` is `"observerID|hops"` and both halves can
+  contain `-`, so no prefix or suffix parse is safe. The rows, the observer
+  pins and the badge tap already cover its entry points.
+- **Per-route timestamps / RSSI on `PacketScopeReception.Route`.** Only a
+  per-route RSSI line would have needed them; RSSI stays observer-wide and is
+  labelled as its best. Three more stored properties on a `Hashable`
+  wire-folded type would churn equality on every poll.
+- **A heavier `MapLine.LineStyle` for the focused route.** Once focus removes
+  the competing lines the focused route is the only line on the map. If a
+  metro-wide fit later proves it unreadable, insert it above `lineMessagePath`
+  and below `lineTraceUntracedCasing` — never above `lineTraceGood`.
+- **A `MapPoint.PinStyle.observer` sprite.** `.pointB` is the deliberate
+  choice; a new style needs registration in `allSpecs` before `renderAll`.
+- **A shared floating panel with detents** across this screen,
+  `MessagePathDetailView` and `HeardRepeatsMapView`. The largest blast radius
+  proposed anywhere, and a grabber on a cover risks stealing the pan or
+  reintroducing dismissal. The height budget stays local.
+- **Dark-mode label pills and Dynamic Type on map label sprites.** Both real
+  gaps; each deserves its own change.
+- **Map pins as accessibility elements.** The right eventual fix; frames must
+  be recomputed on the debounced `regionDidChangeWith`, never on
+  `mapViewRegionIsChanging`. The interim is complete: announcements branched
+  on drawability, the map's `accessibilitySummary`, and a panel from which
+  every focus is reachable by row.
+- **`stringsdict` plurals** for `heardBy` / `hopCount`. Needs real plural
+  categories from a translator for pl/ru/uk; the singular-key precedent
+  (`hopOne`, `routeOne`, `tailUnknownOne`) covers the common case.
+- **Observer noise floor / IATA on the map.** `WireObserver` decodes only
+  id/name/iata/lat/lon; noise floor is server work plus a schema change.
+- **A tappable reach histogram or a propagation timeline.** A second filter
+  axis would fight the single-focus model; the timeline re-encodes the `+1.3 s`
+  offsets the rows already show.
 
 - **Pinning repeaters this phone has never heard** from the server's node
   table. `GET /api/nodes/{pubkey}` is ~80 KB per repeater (it embeds 20 recent

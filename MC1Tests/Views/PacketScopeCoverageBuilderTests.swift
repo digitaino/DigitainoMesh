@@ -167,6 +167,9 @@ struct PacketScopeCoverageBuilderTests {
     #expect(signature([leg.line]) == signature([[a.coordinate2D, observerSite]]))
     #expect(leg.line.style == .forSNR(7.5))
     #expect(map.observerDistances["obs"] != nil)
+    // Every hop placed and the leg drawn: the drawn length is not a lower bound.
+    #expect(map.routes.first?.isComplete == true)
+    #expect(map.routes.first?.unplacedTailCount == 0)
   }
 
   @Test
@@ -508,6 +511,48 @@ struct PacketScopeCoverageBuilderTests {
     #expect(routes[0].drawnGeometryKey == routes[1].drawnGeometryKey)
     #expect(Set(routes.map(\.unplacedTailCount)) == [1, 2])
     #expect(routes.allSatisfy { !$0.isComplete })
+  }
+
+  @Test
+  func `Routes with a measured leg that differ only in an unplaceable middle hop share a key, and a different path does not`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let c = makeRepeater(firstByte: 0xCC, latitude: 30.3, longitude: -97.3)
+    let map = build(
+      receptions: [reception("obs", routes: [
+        route(["AA", "ZZ", "BB"], snr: 5.0),
+        route(["AA", "YY", "BB"], snr: -2.0),
+        route(["CC", "BB"], snr: 1.0),
+      ])],
+      observers: [observer("obs")],
+      repeaters: [a, b, c]
+    )
+    let twinA = try #require(map.routesByID["obs|AA,ZZ,BB"])
+    let twinB = try #require(map.routesByID["obs|AA,YY,BB"])
+    let other = try #require(map.routesByID["obs|CC,BB"])
+    // Both legs into B fan apart in observer focus, but route focus draws
+    // them straight — and that is the geometry the key must describe.
+    #expect(twinA.hasMeasuredLeg && twinB.hasMeasuredLeg)
+    #expect(twinA.drawnGeometryKey == twinB.drawnGeometryKey)
+    #expect(other.drawnGeometryKey != twinA.drawnGeometryKey)
+    #expect(other.isComplete)
+    #expect(!twinA.isComplete)
+  }
+
+  @Test
+  func `Observer focus keeps a readout when the best route has no measured leg`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let map = build(
+      receptions: [reception("obs", routes: [route(["AA", "ZZ"], snr: 13.8), route(["BB"], snr: 4.1)])],
+      observers: [observer("obs")],
+      repeaters: [a, b]
+    )
+    let focused = PacketScopeCoverageBuilder.geometry(for: .observer("obs"), in: map)
+    let badge = try #require(focused.nodes.first { $0.point.pinStyle == .badge })
+    // The best route's own readout — at its body's end, since its leg cannot draw.
+    #expect(badge.point.badgeText == PacketScopeCoverageBuilder.decibels(13.8))
+    #expect(map.routeIDByBadgePinID[badge.point.id] == "obs|AA,ZZ")
   }
 
   @Test

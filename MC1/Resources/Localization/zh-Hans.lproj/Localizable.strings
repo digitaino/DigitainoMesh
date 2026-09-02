@@ -896,3 +896,7 @@
 "packetScope.a11yShowingRoute" = "正在显示经 %2$@ 到 %1$@ 的路径";
 "packetScope.a11yShowingObserver" = "正在显示到 %2$@ 的 %1$d 条路径";
 "packetScope.a11yShowingAll" = "正在显示所有观测点";
+"packetScope.routeOne" = "1 条路径";
+"packetScope.tailUnknownOne" = "+1 跳不在地图上";
+"packetScope.a11yShowingObserverOne" = "正在显示到 %@ 的 1 条路径";
+"packetScope.a11yShowingDirect" = "正在显示 %@ 的直接接收";

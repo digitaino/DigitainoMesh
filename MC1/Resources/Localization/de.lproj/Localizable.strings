@@ -889,3 +889,7 @@
 "packetScope.a11yShowingRoute" = "Zeigt die Route zu %1$@ über %2$@";
 "packetScope.a11yShowingObserver" = "Zeigt %1$d Routen zu %2$@";
 "packetScope.a11yShowingAll" = "Zeigt alle Beobachter";
+"packetScope.routeOne" = "1 Route";
+"packetScope.tailUnknownOne" = "+1 Hop nicht auf der Karte";
+"packetScope.a11yShowingObserverOne" = "Zeigt 1 Route zu %@";
+"packetScope.a11yShowingDirect" = "Zeigt den direkten Empfang bei %@";

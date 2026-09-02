@@ -897,3 +897,7 @@
 "packetScope.a11yShowingRoute" = "Показан маршрут к %1$@ через %2$@";
 "packetScope.a11yShowingObserver" = "Показано %1$d маршрутов к %2$@";
 "packetScope.a11yShowingAll" = "Показаны все наблюдатели";
+"packetScope.routeOne" = "1 маршрут";
+"packetScope.tailUnknownOne" = "+1 прыжок нет на карте";
+"packetScope.a11yShowingObserverOne" = "Показан 1 маршрут к %@";
+"packetScope.a11yShowingDirect" = "Показан прямой приём у %@";

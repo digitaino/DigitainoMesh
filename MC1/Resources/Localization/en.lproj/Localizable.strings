@@ -896,3 +896,7 @@
 "packetScope.a11yShowingRoute" = "Showing the route to %1$@ via %2$@";
 "packetScope.a11yShowingObserver" = "Showing %1$d routes to %2$@";
 "packetScope.a11yShowingAll" = "Showing every observer";
+"packetScope.routeOne" = "1 route";
+"packetScope.tailUnknownOne" = "+1 hop not on the map";
+"packetScope.a11yShowingObserverOne" = "Showing 1 route to %@";
+"packetScope.a11yShowingDirect" = "Showing the direct reception at %@";

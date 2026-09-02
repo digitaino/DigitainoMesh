@@ -704,3 +704,7 @@
 "packetScope.a11yShowingRoute" = "A mostrar a rota para %1$@ via %2$@";
 "packetScope.a11yShowingObserver" = "A mostrar %1$d rotas para %2$@";
 "packetScope.a11yShowingAll" = "A mostrar todos os observadores";
+"packetScope.routeOne" = "1 rota";
+"packetScope.tailUnknownOne" = "+1 salto fora do mapa";
+"packetScope.a11yShowingObserverOne" = "A mostrar 1 rota para %@";
+"packetScope.a11yShowingDirect" = "A mostrar a receção direta em %@";

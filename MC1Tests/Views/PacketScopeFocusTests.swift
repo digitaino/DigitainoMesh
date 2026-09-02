@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 @testable import MC1
 import Testing
@@ -71,6 +72,40 @@ struct PacketScopeFocusTests {
     #expect(PacketScopeFocusLogic.stepped(.all, by: -1, order: order) == .route(observerID: "three", routeID: "three|FF"))
     let empty = PacketScopeFrozenOrder(observerIDs: [], routeIDsByObserver: [:])
     #expect(PacketScopeFocusLogic.stepped(.all, by: 1, order: empty) == nil)
+  }
+
+  @Test
+  func `A focus the frozen order does not know steps from the ends rather than into a random route`() {
+    let unknownRoute = PacketScopeFocus.route(observerID: "four", routeID: "four|GG")
+    #expect(PacketScopeFocusLogic.stepped(unknownRoute, by: 1, order: order) == .route(observerID: "one", routeID: "one|AA"))
+    #expect(PacketScopeFocusLogic.stepped(unknownRoute, by: -1, order: order) == .route(observerID: "three", routeID: "three|FF"))
+    #expect(PacketScopeFocusLogic.stepped(.observer("four"), by: 1, order: order) == .route(observerID: "one", routeID: "one|AA"))
+    #expect(PacketScopeFocusLogic.stepped(.observer("four"), by: -1, order: order) == .route(observerID: "three", routeID: "three|FF"))
+  }
+
+  @Test
+  func `Appending an observer to a frozen order puts it at the tail once, ladder included`() {
+    let grown = order.appending(observerID: "four", routeIDs: ["four|GG"])
+    #expect(grown.observerIDs == ["one", "two", "three", "four"])
+    #expect(grown.routeIDsByObserver["four"] == ["four|GG"])
+    #expect(grown.appending(observerID: "one", routeIDs: ["one|ZZ"]) == grown)
+    #expect(PacketScopeFocusLogic.stepped(.route(observerID: "three", routeID: "three|FF"), by: 1, order: grown)
+      == .route(observerID: "four", routeID: "four|GG"))
+  }
+
+  // MARK: - Camera focus id
+
+  @Test
+  func `The camera focus id ignores coordinate order, and changes with the focus level or a newly placed point`() {
+    let a = CLLocationCoordinate2D(latitude: 30.0, longitude: -97.0)
+    let b = CLLocationCoordinate2D(latitude: 30.1, longitude: -97.1)
+    let c = CLLocationCoordinate2D(latitude: 30.2, longitude: -97.2)
+    let route = PacketScopeFocus.route(observerID: "one", routeID: "one|AA")
+    let forward = PacketScopeFocusLogic.cameraFocusID(for: route, coordinates: [a, b, c])
+    let reordered = PacketScopeFocusLogic.cameraFocusID(for: route, coordinates: [c, a, b])
+    #expect(forward == reordered)
+    #expect(PacketScopeFocusLogic.cameraFocusID(for: route, coordinates: [a, b]) != forward)
+    #expect(PacketScopeFocusLogic.cameraFocusID(for: .observer("one"), coordinates: [a, b, c]) != forward)
   }
 
   // MARK: - Copy summary

@@ -2812,9 +2812,17 @@ public enum L10n {
       public static let a11yNotDrawable = L10n.tr("Localizable", "packetScope.a11yNotDrawable", fallback: "Not shown on the map")
       /// Showing every observer
       public static let a11yShowingAll = L10n.tr("Localizable", "packetScope.a11yShowingAll", fallback: "Showing every observer")
+      /// Showing the direct reception at %@
+      public static func a11yShowingDirect(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.a11yShowingDirect", String(describing: p1), fallback: "Showing the direct reception at %@")
+      }
       /// Showing %1$d routes to %2$@
       public static func a11yShowingObserver(_ p1: Int, _ p2: Any) -> String {
         return L10n.tr("Localizable", "packetScope.a11yShowingObserver", p1, String(describing: p2), fallback: "Showing %1$d routes to %2$@")
+      }
+      /// Showing 1 route to %@
+      public static func a11yShowingObserverOne(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.a11yShowingObserverOne", String(describing: p1), fallback: "Showing 1 route to %@")
       }
       /// Showing the route to %1$@ via %2$@
       public static func a11yShowingRoute(_ p1: Any, _ p2: Any) -> String {
@@ -2918,6 +2926,8 @@ public enum L10n {
       public static func routeCount(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.routeCount", p1, fallback: "%d routes")
       }
+      /// 1 route
+      public static let routeOne = L10n.tr("Localizable", "packetScope.routeOne", fallback: "1 route")
       /// Best RSSI %@ dBm
       public static func rssiBest(_ p1: Any) -> String {
         return L10n.tr("Localizable", "packetScope.rssiBest", String(describing: p1), fallback: "Best RSSI %@ dBm")
@@ -2962,6 +2972,8 @@ public enum L10n {
       public static func tailUnknown(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.tailUnknown", p1, fallback: "+%d hops not on the map")
       }
+      /// +1 hop not on the map
+      public static let tailUnknownOne = L10n.tr("Localizable", "packetScope.tailUnknownOne", fallback: "+1 hop not on the map")
       /// Tap an observer, then a route, to trace it on the map
       public static let tapHint = L10n.tr("Localizable", "packetScope.tapHint", fallback: "Tap an observer, then a route, to trace it on the map")
       /// ×%d

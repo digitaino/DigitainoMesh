@@ -898,3 +898,7 @@
 "packetScope.a11yShowingRoute" = "Pokazuje trasę do %1$@ przez %2$@";
 "packetScope.a11yShowingObserver" = "Pokazuje %1$d tras do %2$@";
 "packetScope.a11yShowingAll" = "Pokazuje wszystkich obserwatorów";
+"packetScope.routeOne" = "1 trasa";
+"packetScope.tailUnknownOne" = "+1 przeskok poza mapą";
+"packetScope.a11yShowingObserverOne" = "Pokazuje 1 trasę do %@";
+"packetScope.a11yShowingDirect" = "Pokazuje bezpośredni odbiór w %@";

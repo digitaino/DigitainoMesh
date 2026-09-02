@@ -517,10 +517,13 @@ extension MC1MapView {
         in: clusterRect,
         styleLayerIdentifiers: [MapLayerID.unclusteredIcons, MapLayerID.fixedIcons]
       )
-      let candidates = iconFeatures.compactMap(mapPoint(for:)).filter { $0.pinStyle != .badge }
+      let candidates = iconFeatures.compactMap(mapPoint(for:)).filter { !Self.decorativePinStyles.contains($0.pinStyle) }
       logger.debug("iconFeatures: \(iconFeatures.count, privacy: .public), clusterFeatures: \(clusterFeatures.count, privacy: .public)")
-      if let nearest = candidates.min(by: { lhs, rhs in
-        distanceSquared(from: point, to: lhs.coordinate) < distanceSquared(from: point, to: rhs.coordinate)
+      // Only a host that listens gets the tap; otherwise it stays a map tap,
+      // so a screen whose whole job is tapping the map (the location picker,
+      // with its one marker) keeps working next to its own pin.
+      if onPointTap != nil, let nearest = candidates.min(by: { lhs, rhs in
+        distanceSquared(from: point, toDrawn: lhs) < distanceSquared(from: point, toDrawn: rhs)
       }) {
         logger.debug("Matched pin: \(nearest.label ?? "unnamed", privacy: .public)")
         selectPoint(nearest)
@@ -571,8 +574,19 @@ extension MC1MapView {
       return currentPoints.first { $0.id == id }
     }
 
-    private func distanceSquared(from point: CGPoint, to coordinate: CLLocationCoordinate2D) -> CGFloat {
-      let projected = mapView.convert(coordinate, toPointTo: mapView)
+    /// Pins that carry no selectable identity on any host: a badge's pill, a
+    /// crosshair, an obstruction marker. They never win a tap.
+    private static let decorativePinStyles: Set<MapPoint.PinStyle> = [.badge, .crosshair, .obstruction]
+
+    /// Distance from the tap to the middle of the pin as drawn — a
+    /// bottom-anchored teardrop stands a full sprite above its coordinate, so
+    /// ranking by the anchor alone would hand a tap on its head to whatever
+    /// pin's anchor happens to sit under it.
+    private func distanceSquared(from point: CGPoint, toDrawn mapPoint: MapPoint) -> CGFloat {
+      var projected = mapView.convert(mapPoint.coordinate, toPointTo: mapView)
+      if iconAnchor(for: mapPoint) == "bottom" {
+        projected.y -= PinSpriteRenderer.calloutLift(for: mapPoint.pinStyle) / 2
+      }
       let dx = projected.x - point.x
       let dy = projected.y - point.y
       return dx * dx + dy * dy

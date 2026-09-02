@@ -491,7 +491,7 @@ extension MC1MapView.Coordinator {
     return feature
   }
 
-  private func iconAnchor(for point: MapPoint) -> String {
+  func iconAnchor(for point: MapPoint) -> String {
     switch point.pinStyle {
     case .crosshair, .obstruction, .locationFix: "center"
     default: "bottom"

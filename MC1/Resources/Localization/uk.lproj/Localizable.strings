@@ -900,3 +900,7 @@
 "packetScope.a11yShowingRoute" = "Показано маршрут до %1$@ через %2$@";
 "packetScope.a11yShowingObserver" = "Показано %1$d маршрутів до %2$@";
 "packetScope.a11yShowingAll" = "Показано всіх спостерігачів";
+"packetScope.routeOne" = "1 маршрут";
+"packetScope.tailUnknownOne" = "+1 стрибок немає на мапі";
+"packetScope.a11yShowingObserverOne" = "Показано 1 маршрут до %@";
+"packetScope.a11yShowingDirect" = "Показано прямий прийом у %@";
