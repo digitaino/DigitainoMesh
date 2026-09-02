@@ -148,9 +148,15 @@ struct PacketScopeCoverageBuilderTests {
     #expect(map.isPlottable)
     #expect(map.nodes.map(\.point.pinStyle) == [.pointA, .repeaterHop, .pointB])
     #expect(map.nodes[0].point.label == "Me")
-    #expect(map.nodes[1].point.hopIndex == 1)
-    // The observer pin carries its best signal in its label.
-    #expect(map.nodes[2].point.label == "Observer obs · \(PacketScopeCoverageBuilder.decibels(7.5))")
+    #expect(map.nodes[0].point.labelPriority == 0)
+    // Repeater pins are named, never numbered — numbering belongs to a focus.
+    #expect(map.nodes[1].point.label == a.resolvableName)
+    #expect(map.nodes[1].point.hopIndex == nil)
+    // The observer pin carries its name alone; the signal lives in the row and
+    // on the leg's badge. Observer pills outrank repeater pills in a collision.
+    #expect(map.nodes[2].point.label == "Observer obs")
+    #expect(map.nodes[2].point.labelPriority == 10)
+    #expect(map.nodes[1].point.labelPriority > map.nodes[2].point.labelPriority)
 
     #expect(map.links.map(\.routeCount) == [1, 1])
     #expect(signature(map.links.map { MapLine(id: $0.id, coordinates: [$0.from, $0.to], style: .messagePath, opacity: 1) })
@@ -213,7 +219,7 @@ struct PacketScopeCoverageBuilderTests {
   }
 
   @Test
-  func `An observer with no location gets no leg and no link into it, but its hops still pin and link`() {
+  func `An observer with no location gets no leg and no link into it, but its hops still pin and link`() throws {
     let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
     let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
     let map = build(
@@ -225,9 +231,17 @@ struct PacketScopeCoverageBuilderTests {
     #expect(map.links.map(\.id) == ["origin>hop:\(hex(a))", "hop:\(hex(a))>hop:\(hex(b))"])
     #expect(map.nodes.map(\.point.pinStyle) == [.pointA, .repeaterHop, .repeaterHop])
     #expect(map.observerDistances.isEmpty)
-    // Its one route still exists for the focus state: the body, with no leg.
-    #expect(map.routes.first?.segments.count == 1)
-    #expect(map.routes.first?.badge == nil)
+    // Its one route still exists for the focus state: the body, with no leg —
+    // and, since the route carries a signal, a readout badge at the body's end
+    // so it can still be told apart from a sibling route on the same body.
+    let built = try #require(map.routes.first)
+    #expect(built.segments.count == 1)
+    #expect(built.badge == nil)
+    #expect(!built.hasMeasuredLeg)
+    #expect(built.isDrawable)
+    let readout = try #require(built.soloBadge)
+    #expect(readout.badgeText == PacketScopeCoverageBuilder.decibels(3.0))
+    #expect(map.drawableObserverIDs == ["obs"])
   }
 
   @Test
@@ -264,12 +278,16 @@ struct PacketScopeCoverageBuilderTests {
   }
 
   @Test
-  func `A route no part of which can be placed draws nothing, and an origin alone is not plottable`() {
+  func `A route no part of which can be placed still exists, undrawable, and an origin alone is not plottable`() {
     let map = build(
       receptions: [reception("obs", routes: [route(["ZZ"], snr: 9.0)])],
       observers: [observer("obs", located: false)]
     )
-    #expect(map.routes.isEmpty)
+    // The ladder lists it, so the map must know it too — as not drawable.
+    #expect(map.routes.count == 1)
+    #expect(map.routes.first?.isDrawable == false)
+    #expect(map.drawableRouteIDs.isEmpty)
+    #expect(map.drawableObserverIDs.isEmpty)
     #expect(map.links.isEmpty)
     #expect(map.nodes.map(\.point.pinStyle) == [.pointA])
     #expect(!map.isPlottable)
@@ -298,9 +316,11 @@ struct PacketScopeCoverageBuilderTests {
     let leg = try #require(map.observerLegs.first)
     #expect(leg.line.coordinates.count == 2)
     #expect(leg.snr == 6.0)
-    // B sits at position 2 in both routes; A and C are both hop 1.
+    // No global numbering: a repeater's position is a property of a focus.
     let hopPins = map.nodes.filter { $0.point.pinStyle == .repeaterHop }
-    #expect(hopPins.map(\.point.hopIndex) == [1, 2, 1])
+    #expect(hopPins.map(\.point.hopIndex) == [nil, nil, nil])
+    // The ladder order matches the headline leg: the 6 dB route first.
+    #expect(map.routeIDsByObserver["obs"] == ["obs|CC,BB", "obs|AA,BB"])
   }
 
   @Test
@@ -403,7 +423,8 @@ struct PacketScopeCoverageBuilderTests {
     #expect(map.nodes.map(\.point.pinStyle) == [.pointB])
     #expect(map.links.isEmpty)
     #expect(map.observerLegs.isEmpty)
-    #expect(map.routes.isEmpty)
+    #expect(map.routes.count == 1)
+    #expect(map.drawableRouteIDs.isEmpty)
     #expect(map.isPlottable)
   }
 
@@ -418,6 +439,214 @@ struct PacketScopeCoverageBuilderTests {
     let pin = try #require(map.nodes.first)
     #expect(pin.point.pinStyle == .pointA)
     #expect(pin.coordinate.latitude == 40.0)
+  }
+
+  // MARK: - Focus geometry
+
+  private func lineIDs(_ geometry: PacketScopeFocusGeometry) -> [String] {
+    geometry.lines.map(\.id)
+  }
+
+  @Test
+  func `Focusing what cannot be placed leaves the map exactly as it was, and does not move the camera`() {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let map = build(
+      receptions: [
+        reception("obs", routes: [route(["AA"], snr: 7.5)]),
+        reception("ghost", routes: [route(["ZZ"], snr: 2.0)]),
+      ],
+      observers: [observer("obs"), observer("ghost", located: false)],
+      repeaters: [a]
+    )
+    #expect(map.routes.count == 2)
+    #expect(map.drawableRouteIDs == ["obs|AA"])
+
+    let everything = PacketScopeCoverageBuilder.geometry(for: .all, in: map)
+    let ghostRoute = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "ghost", routeID: "ghost|ZZ"), in: map)
+    let ghost = PacketScopeCoverageBuilder.geometry(for: .observer("ghost"), in: map)
+    for undrawable in [ghostRoute, ghost] {
+      #expect(!undrawable.isDrawable)
+      #expect(undrawable.cameraCoordinates.isEmpty)
+      #expect(lineIDs(undrawable) == lineIDs(everything))
+      #expect(undrawable.nodes.map(\.point) == everything.nodes.map(\.point))
+      #expect(undrawable.focusLinkIDs == everything.focusLinkIDs)
+    }
+    #expect(everything.isDrawable)
+    #expect(everything.cameraCoordinates.count == map.pinCoordinates.count)
+  }
+
+  @Test
+  func `An unlocated observer with placed hops focuses as a body: framed to the origin and its hops, with its readout at the body's end`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let map = build(
+      receptions: [reception("obs", routes: [route(["AA", "BB"], snr: 3.0)])],
+      observers: [observer("obs", located: false)],
+      repeaters: [a, b]
+    )
+    let focused = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "obs", routeID: "obs|AA,BB"), in: map)
+    #expect(focused.isDrawable)
+    #expect(focused.lines.count == 1)
+    #expect(focused.lines.allSatisfy { $0.style == .messagePath })
+    #expect(signature(focused.cameraCoordinates.map { [$0] }) == signature([[origin], [a.coordinate2D], [b.coordinate2D]]))
+    let badge = try #require(focused.nodes.first { $0.point.pinStyle == .badge })
+    #expect(badge.point.badgeText == PacketScopeCoverageBuilder.decibels(3.0))
+    #expect(abs(badge.coordinate.latitude - (a.latitude + b.latitude) / 2) < 1e-9)
+    #expect(map.routeIDByBadgePinID[badge.point.id] == "obs|AA,BB")
+  }
+
+  @Test
+  func `Routes that differ only in unplaceable tails draw the same pixels and say so`() {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let map = build(
+      receptions: [reception("obs", routes: [route(["AA", "ZZ"], snr: 5.0), route(["AA", "ZZ", "YY"], snr: -2.0)])],
+      observers: [observer("obs", located: false)],
+      repeaters: [a]
+    )
+    let routes = map.routes
+    #expect(routes.count == 2)
+    #expect(routes[0].drawnGeometryKey == routes[1].drawnGeometryKey)
+    #expect(Set(routes.map(\.unplacedTailCount)) == [1, 2])
+    #expect(routes.allSatisfy { !$0.isComplete })
+  }
+
+  @Test
+  func `Route focus draws only that route, and its links are the exact complement of the context`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let c = makeRepeater(firstByte: 0xCC, latitude: 30.3, longitude: -97.3)
+    let far = CLLocationCoordinate2D(latitude: 30.9, longitude: -97.9)
+    let map = build(
+      receptions: [
+        reception("one", routes: [route(["AA", "BB"], snr: 5), route(["AA", "CC"], snr: 3)]),
+        reception("two", routes: [route(["AA", "BB"], snr: 2)]),
+      ],
+      observers: [observer("one"), observer("two", at: far)],
+      repeaters: [a, b, c]
+    )
+    let focused = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "one", routeID: "one|AA,BB"), in: map)
+    let route = try #require(map.routesByID["one|AA,BB"])
+    #expect(lineIDs(focused) == route.soloSegments.map(\.id))
+    #expect(focused.routeIDs == ["one|AA,BB"])
+    #expect(focused.focusLinkIDs == route.linkIDs)
+    #expect(focused.focusLinkIDs == ["origin>hop:\(hex(a))", "hop:\(hex(a))>hop:\(hex(b))", "hop:\(hex(b))>obs:one"])
+    let everyLink = Set(map.links.map(\.id))
+    let context = everyLink.subtracting(focused.focusLinkIDs)
+    #expect(context.isDisjoint(with: focused.focusLinkIDs))
+    #expect(context.union(focused.focusLinkIDs) == everyLink)
+    #expect(context == ["hop:\(hex(a))>hop:\(hex(c))", "hop:\(hex(c))>obs:one", "hop:\(hex(b))>obs:two"])
+    // Nothing is emitted dimmed.
+    #expect(focused.lines.allSatisfy { $0.opacity == 1 })
+  }
+
+  @Test
+  func `Route focus numbers placed hops by their true path positions, leaving a gap for an unplaced one`() {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let map = build(
+      receptions: [reception("obs", routes: [route(["AA"], snr: 4), route(["BB", "ZZ", "AA"], snr: 1)])],
+      observers: [observer("obs")],
+      repeaters: [a, b]
+    )
+    func number(_ geometry: PacketScopeFocusGeometry, _ name: String) -> Int? {
+      geometry.nodes.first { $0.point.label == name }?.point.hopIndex
+    }
+    func style(_ geometry: PacketScopeFocusGeometry, _ name: String) -> MapPoint.PinStyle? {
+      geometry.nodes.first { $0.point.label == name }?.point.pinStyle
+    }
+    let short = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "obs", routeID: "obs|AA"), in: map)
+    #expect(number(short, a.resolvableName) == 1)
+    #expect(style(short, a.resolvableName) == .repeaterRingWhite)
+    // B is recessed and unlabelled in this focus, so it cannot be found by name.
+    #expect(short.nodes.contains { $0.point.id == PacketScopeCoverageBuilder.stableID("hop:\(hex(b))") && $0.point.label == nil })
+
+    let long = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "obs", routeID: "obs|BB,ZZ,AA"), in: map)
+    #expect(number(long, b.resolvableName) == 1)
+    #expect(number(long, a.resolvableName) == 3)
+    // With one drawable route the observer focus numbers the same way; with
+    // two, positions conflict and the pins stay plain.
+    let both = PacketScopeCoverageBuilder.geometry(for: .observer("obs"), in: map)
+    #expect(number(both, a.resolvableName) == nil)
+    #expect(style(both, a.resolvableName) == .repeaterHop)
+  }
+
+  @Test
+  func `Single-route focus draws the measured leg straight, with its readout at the chord midpoint`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let c = makeRepeater(firstByte: 0xCC, latitude: 30.3, longitude: -97.3)
+    let map = build(
+      receptions: [reception("obs", routes: [route(["AA", "BB"], snr: 5.0), route(["CC", "BB"], snr: 6.0)])],
+      observers: [observer("obs")],
+      repeaters: [a, b, c]
+    )
+    let focused = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "obs", routeID: "obs|AA,BB"), in: map)
+    let leg = try #require(focused.lines.last)
+    #expect(leg.coordinates.count == 2)
+    #expect(leg.style == .forSNR(5.0))
+    let badge = try #require(focused.nodes.first { $0.point.pinStyle == .badge })
+    #expect(abs(badge.coordinate.latitude - (b.latitude + observerSite.latitude) / 2) < 1e-9)
+    #expect(abs(badge.coordinate.longitude - (b.longitude + observerSite.longitude) / 2) < 1e-9)
+    // Observer focus keeps the fan, and exactly one badge: the best route's.
+    let fanned = PacketScopeCoverageBuilder.geometry(for: .observer("obs"), in: map)
+    #expect(fanned.lines.count == 4)
+    #expect(fanned.nodes.filter { $0.point.pinStyle == .badge }.count == 1)
+    #expect(try map.routeIDByBadgePinID[#require(fanned.nodes.first { $0.point.pinStyle == .badge }).point.id] == "obs|CC,BB")
+  }
+
+  @Test
+  func `Emphasis is two-valued in every focus state`() {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let map = build(
+      receptions: [
+        reception("one", routes: [route(["AA"], snr: 5), route(["BB"], snr: 3)]),
+        reception("two", routes: [route([], snr: 2)]),
+      ],
+      observers: [observer("one"), observer("two", at: CLLocationCoordinate2D(latitude: 30.9, longitude: -97.9))],
+      repeaters: [a, b]
+    )
+    let states: [PacketScopeFocus] = [.all, .observer("one"), .route(observerID: "one", routeID: "one|AA"), .route(observerID: "two", routeID: "two|")]
+    for state in states {
+      let geometry = PacketScopeCoverageBuilder.geometry(for: state, in: map)
+      #expect(geometry.nodes.allSatisfy { $0.point.emphasis == 1 || $0.point.emphasis == MapPoint.recessedEmphasis })
+    }
+    let focused = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "one", routeID: "one|AA"), in: map)
+    #expect(focused.nodes.contains { $0.point.emphasis == MapPoint.recessedEmphasis && $0.point.label == nil })
+    #expect(focused.nodes.first { $0.point.pinStyle == .pointA }?.point.emphasis == 1)
+  }
+
+  @Test
+  func `Arrival is not baked into geometry: every leg comes back whole, with its arrival key`() {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let map = build(
+      receptions: [reception("obs", routes: [route(["AA"], snr: 5)])],
+      observers: [observer("obs")],
+      repeaters: [a]
+    )
+    let everything = PacketScopeCoverageBuilder.geometry(for: .all, in: map)
+    #expect(everything.lines.map(\.id) == map.observerLegs.map(\.line.id))
+    #expect(everything.lines.allSatisfy { $0.coordinates.count == 2 })
+    #expect(everything.arrivalKeyByLineID == ["scope-leg-obs": "leg:obs"])
+    let focused = PacketScopeCoverageBuilder.geometry(for: .route(observerID: "obs", routeID: "obs|AA"), in: map)
+    #expect(focused.arrivalKeyByLineID == ["scope-obs|AA-rx-solo": "leg:obs"])
+  }
+
+  @Test
+  func `Every focus index keys on the observer id as the receptions carry it`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let map = build(
+      receptions: [reception("ABCDEF", routes: [route(["AA"], snr: 1.0)])],
+      observers: [observer("abcdef")],
+      repeaters: [a]
+    )
+    #expect(map.routeIDsByObserver["ABCDEF"] == ["ABCDEF|AA"])
+    #expect(map.observerCoordinates["ABCDEF"] != nil)
+    #expect(map.drawableObserverIDs == ["ABCDEF"])
+    let pin = try #require(map.nodes.first { $0.point.pinStyle == .pointB })
+    #expect(map.observerIDByPinID[pin.point.id] == "ABCDEF")
+    let focused = PacketScopeCoverageBuilder.geometry(for: .observer("ABCDEF"), in: map)
+    #expect(focused.isDrawable)
   }
 
   // MARK: - Partial draws
