@@ -825,6 +825,7 @@
 "packetScope.notObserved" = "Ningún observador oyó este paquete";
 "packetScope.notObservedFooter" = "El paquete no llegó a la red de observadores; aun así puede haberse entregado en la malla. Los observadores solo cubren su propia región.";
 "packetScope.coverageFooter" = "La cobertura refleja solo la red de observadores configurada. Un mensaje puede entregarse sin ser observado.";
+"packetScope.signalFooter" = "Solo aparece un valor de señal donde un observador escuchó directamente la radio del remitente. A través de un repetidor mide el enlace del repetidor.";
 "packetScope.heardDirectly" = "Oído directamente";
 "packetScope.via" = "vía %@";
 "packetScope.error.disabled" = "Packet Scope está desactivado en Ajustes.";
@@ -832,7 +833,7 @@
 "packetScope.error.invalidResponse" = "El servidor de observadores envió una respuesta que la app no pudo leer.";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
-"packetScope.bestSignal" = "Mejor señal";
+"packetScope.bestSignal" = "Mejor señal directa";
 "packetScope.shortestRoute" = "Ruta más corta";
 "packetScope.direct" = "Directo, sin repetidores";
 "packetScope.hopCount" = "%d saltos";
@@ -850,31 +851,31 @@
 
 /* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
 "packetScope.heardBy" = "Oído por %d";
-"packetScope.best" = "mejor %@";
+"packetScope.best" = "mejor directa %@";
 "packetScope.shortest" = "más corta %@";
 "packetScope.stillArriving" = "aún llegando";
 "packetScope.settled" = "finalizado";
 "packetScope.settledIn" = "finalizado en %@ s";
 "packetScope.hopOne" = "1 salto";
-"packetScope.bestRoute" = "Mejor ruta";
 "packetScope.sort" = "Ordenar";
-"packetScope.sortStrongest" = "Señal más fuerte";
 "packetScope.sortFewestHops" = "Menos saltos";
+"packetScope.sortMostObservers" = "Más observadores";
 "packetScope.sortFirstHeard" = "Oído primero";
 "packetScope.new" = "Nuevo";
 "packetScope.showAll" = "Mostrar todo";
 
 /* Packet Scope: focus (route / observer selection on the map) */
 "packetScope.filterAll" = "Todos";
-"packetScope.tapHint" = "Toca un observador y luego una ruta para trazarla en el mapa";
-"packetScope.hintObserver" = "Muestra las rutas de este observador en el mapa";
+"packetScope.tapHint" = "Toca una ruta y luego un observador para trazarla en el mapa";
 "packetScope.hintRoute" = "Muestra esta ruta en el mapa";
+"packetScope.hintPath" = "Muestra todos los observadores que la oyeron por esta ruta";
 "packetScope.notOnMapRoute" = "Esta ruta no se puede dibujar en el mapa";
+"packetScope.notOnMapPath" = "Esta ruta no se puede dibujar en el mapa";
 "packetScope.notOnMapObserver" = "Este observador no publica ubicación y ninguno de sus repetidores pudo ubicarse";
 "packetScope.hopNotOnMap" = "No está en el mapa";
 "packetScope.tailUnknown" = "+%d saltos fuera del mapa";
 "packetScope.sameDrawnPath" = "%d rutas dibujan este mismo trazado";
-"packetScope.rssiBest" = "Mejor RSSI %@ dBm";
+"packetScope.rssiBest" = "RSSI directo %@ dBm";
 "packetScope.heardOffset" = "+%@ s";
 "packetScope.heardDirectlyInline" = "oído directamente";
 "packetScope.lowerBound" = "≥ %@";
@@ -882,7 +883,6 @@
 "packetScope.directCount" = "%d oídos directamente";
 "packetScope.sortFarthest" = "Más lejano";
 "packetScope.drawn" = "%@ dibujados";
-"packetScope.alsoHeardBy" = "oído por %d observadores por este trazado";
 "packetScope.routeCount" = "%d rutas";
 "packetScope.previousRoute" = "Ruta anterior";
 "packetScope.nextRoute" = "Ruta siguiente";
@@ -896,6 +896,10 @@
 "packetScope.a11yShowingObserver" = "Mostrando %1$d rutas a %2$@";
 "packetScope.a11yShowingAll" = "Mostrando todos los observadores";
 "packetScope.routeOne" = "1 ruta";
+"packetScope.pathObserverOne" = "1 observador";
+"packetScope.pathObservers" = "%d observadores";
 "packetScope.tailUnknownOne" = "+1 salto fuera del mapa";
 "packetScope.a11yShowingObserverOne" = "Mostrando 1 ruta a %@";
+"packetScope.a11yShowingPathOne" = "Mostrando 1 observador que la oyó vía %@";
+"packetScope.a11yShowingPath" = "Mostrando %1$d observadores que la oyeron vía %2$@";
 "packetScope.a11yShowingDirect" = "Mostrando la recepción directa en %@";

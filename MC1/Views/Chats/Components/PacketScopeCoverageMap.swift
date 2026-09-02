@@ -104,8 +104,12 @@ struct PacketScopeCoverageMap {
   let observerDistances: [String: CLLocationDistance]
 
   let routesByID: [String: PacketScopeCoverageRoute]
-  /// Route ids per observer (as the receptions carry the id), strongest first.
+  /// Route ids per observer (as the receptions carry the id), shortest first.
   let routeIDsByObserver: [String: [String]]
+  /// Route ids per repeater chain, keyed by ``PacketScopeFocus/pathKey(hops:)``
+  /// — every observer that heard the packet by exactly those repeaters. The
+  /// panel's list is a list of these.
+  let routeIDsByPath: [String: [String]]
   let drawableRouteIDs: Set<String>
   /// Observers with at least one drawable route.
   let drawableObserverIDs: Set<String>
@@ -544,6 +548,12 @@ enum PacketScopeCoverageBuilder {
     for plan in plans.sorted(by: { outranks($0, $1) }) {
       routeIDsByObserver[plan.observerID, default: []].append(plan.id)
     }
+    var routeIDsByPath: [String: [String]] = [:]
+    for route in routes {
+      // Derived from the id rather than re-threading the hops: the id is built
+      // from exactly `observerID` and `hops`, so this cannot drift from it.
+      routeIDsByPath[PacketScopeFocus.pathKey(fromRouteID: route.id), default: []].append(route.id)
+    }
     let routesByID = Dictionary(routes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     let drawableRouteIDs = Set(routes.filter(\.isDrawable).map(\.id))
     let drawableObserverIDs = Set(routes.filter(\.isDrawable).map(\.observerID))
@@ -556,6 +566,7 @@ enum PacketScopeCoverageBuilder {
       observerDistances: observerDistances,
       routesByID: routesByID,
       routeIDsByObserver: routeIDsByObserver,
+      routeIDsByPath: routeIDsByPath,
       drawableRouteIDs: drawableRouteIDs,
       drawableObserverIDs: drawableObserverIDs,
       observerIDByPinID: observerIDByPinID,
@@ -567,6 +578,10 @@ enum PacketScopeCoverageBuilder {
 
   /// The route id the panel and the map share: observer id as the receptions
   /// carry it, plus the hop sequence.
+  ///
+  /// Read back apart by ``PacketScopeFocus/pathKey(fromRouteID:)`` and
+  /// ``PacketScopeFocus/observerID(fromRouteID:)``, which split on the first
+  /// separator. Keep the separator out of both halves.
   static func routeID(observerID: String, hops: [String]) -> String {
     "\(observerID)|\(hops.joined(separator: ","))"
   }
@@ -602,17 +617,23 @@ enum PacketScopeCoverageBuilder {
     )
   }
 
-  /// Route ranking for "strongest": higher SNR first, an unmeasured route last,
-  /// then fewer hops, then id — total, so a poll returning the same data never
-  /// swaps which route is an observer's headline.
+  /// Route ranking: fewer hops first, then higher SNR, then id — total, so a
+  /// poll returning the same data never swaps which route is an observer's
+  /// headline.
+  ///
+  /// Hops lead because the SNR does not measure what the ranking was being read
+  /// as. Each figure is taken at the observer on its last leg, so ranking a
+  /// 3-hop route above a direct one for its stronger number ranked a repeater's
+  /// link to that observer above the sender's own. SNR still breaks ties, where
+  /// the compared routes are at least the same length.
   private static func outranks(_ lhs: some RoutePlanLike, _ rhs: some RoutePlanLike) -> Bool {
+    if lhs.hopCount != rhs.hopCount { return lhs.hopCount < rhs.hopCount }
     switch (lhs.snr, rhs.snr) {
     case let (l?, r?) where l != r: return l > r
     case (.some, .none): return true
     case (.none, .some): return false
     default: break
     }
-    if lhs.hopCount != rhs.hopCount { return lhs.hopCount < rhs.hopCount }
     return lhs.id < rhs.id
   }
 
@@ -659,6 +680,41 @@ enum PacketScopeCoverageBuilder {
     switch focus {
     case .all:
       return everything(in: map, isDrawable: true)
+
+    case let .path(key):
+      let routes = (map.routeIDsByPath[key] ?? [])
+        .compactMap { map.routesByID[$0] }
+        .filter(\.isDrawable)
+      guard !routes.isEmpty else { return everything(in: map, isDrawable: false) }
+      var arrivalKeys: [String: String] = [:]
+      for route in routes where route.hasMeasuredLeg {
+        arrivalKeys["scope-\(route.id)-rx"] = "leg:\(route.observerID)"
+      }
+      // Every route here traverses the same repeaters in the same order, so a
+      // repeater has exactly one position and the pills can be numbered however
+      // many observers heard it — which is not true of observer focus.
+      let numbering = routes.first.map(hopNumbering) ?? [:]
+      let participants = routes.reduce(into: Set<UUID>()) { $0.formUnion($1.participantPinIDs) }
+      var coordinates: [CLLocationCoordinate2D] = []
+      for route in routes {
+        coordinates += route.coordinates
+      }
+      return PacketScopeFocusGeometry(
+        lines: routes.flatMap(\.segments),
+        nodes: focusedNodes(
+          in: map,
+          participants: participants,
+          numbering: numbering,
+          // One badge only where one route can own it; several observers off
+          // the same chain would each claim the same readout.
+          badge: routes.count == 1 ? (routes[0].badge ?? routes[0].soloBadge) : nil
+        ),
+        arrivalKeyByLineID: arrivalKeys,
+        focusLinkIDs: routes.reduce(into: Set<String>()) { $0.formUnion($1.linkIDs) },
+        cameraCoordinates: dedupe(coordinates),
+        routeIDs: routes.map(\.id),
+        isDrawable: true
+      )
 
     case let .observer(observerID):
       let routes = (map.routeIDsByObserver[observerID] ?? [])

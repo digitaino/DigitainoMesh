@@ -828,6 +828,7 @@
 "packetScope.notObserved" = "No observer heard this packet";
 "packetScope.notObservedFooter" = "The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.";
 "packetScope.coverageFooter" = "Coverage reflects only the configured observer network. A message can be delivered without being observed.";
+"packetScope.signalFooter" = "A signal figure appears only where an observer heard the sender’s radio directly. Through a repeater it measures the repeater’s link instead.";
 "packetScope.heardDirectly" = "Heard directly";
 "packetScope.via" = "via %@";
 "packetScope.error.disabled" = "Packet Scope is turned off in Settings.";
@@ -836,7 +837,7 @@
 "packetScope.error.invalidResponse" = "The observer server sent a response the app couldn’t read.";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
-"packetScope.bestSignal" = "Best signal";
+"packetScope.bestSignal" = "Best direct signal";
 "packetScope.shortestRoute" = "Shortest route";
 "packetScope.direct" = "Direct, no repeaters";
 "packetScope.hopCount" = "%d hops";
@@ -854,31 +855,31 @@
 
 /* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
 "packetScope.heardBy" = "Heard by %d";
-"packetScope.best" = "best %@";
+"packetScope.best" = "best direct %@";
 "packetScope.shortest" = "shortest %@";
 "packetScope.stillArriving" = "still arriving";
 "packetScope.settled" = "settled";
 "packetScope.settledIn" = "settled in %@ s";
 "packetScope.hopOne" = "1 hop";
-"packetScope.bestRoute" = "Best route";
 "packetScope.sort" = "Sort";
-"packetScope.sortStrongest" = "Strongest signal";
 "packetScope.sortFewestHops" = "Fewest hops";
+"packetScope.sortMostObservers" = "Most observers";
 "packetScope.sortFirstHeard" = "First heard";
 "packetScope.new" = "New";
 "packetScope.showAll" = "Show all";
 
 /* Packet Scope: focus (route / observer selection on the map) */
 "packetScope.filterAll" = "All";
-"packetScope.tapHint" = "Tap an observer, then a route, to trace it on the map";
-"packetScope.hintObserver" = "Shows this observer's routes on the map";
+"packetScope.tapHint" = "Tap a path, then an observer, to trace it on the map";
 "packetScope.hintRoute" = "Shows this route on the map";
+"packetScope.hintPath" = "Shows every observer that heard it by this path";
 "packetScope.notOnMapRoute" = "This route can't be drawn on the map";
+"packetScope.notOnMapPath" = "This path can't be drawn on the map";
 "packetScope.notOnMapObserver" = "This observer publishes no location, and none of its repeaters could be placed";
 "packetScope.hopNotOnMap" = "Not on the map";
 "packetScope.tailUnknown" = "+%d hops not on the map";
 "packetScope.sameDrawnPath" = "%d routes draw this same path";
-"packetScope.rssiBest" = "Best RSSI %@ dBm";
+"packetScope.rssiBest" = "Direct RSSI %@ dBm";
 "packetScope.heardOffset" = "+%@ s";
 "packetScope.heardDirectlyInline" = "heard directly";
 "packetScope.lowerBound" = "≥ %@";
@@ -886,7 +887,6 @@
 "packetScope.directCount" = "%d heard directly";
 "packetScope.sortFarthest" = "Farthest";
 "packetScope.drawn" = "%@ drawn";
-"packetScope.alsoHeardBy" = "heard by %d observers by this path";
 "packetScope.routeCount" = "%d routes";
 "packetScope.previousRoute" = "Previous route";
 "packetScope.nextRoute" = "Next route";
@@ -900,6 +900,10 @@
 "packetScope.a11yShowingObserver" = "Showing %1$d routes to %2$@";
 "packetScope.a11yShowingAll" = "Showing every observer";
 "packetScope.routeOne" = "1 route";
+"packetScope.pathObserverOne" = "1 observer";
+"packetScope.pathObservers" = "%d observers";
 "packetScope.tailUnknownOne" = "+1 hop not on the map";
 "packetScope.a11yShowingObserverOne" = "Showing 1 route to %@";
+"packetScope.a11yShowingPathOne" = "Showing 1 observer that heard it via %@";
+"packetScope.a11yShowingPath" = "Showing %1$d observers that heard it via %2$@";
 "packetScope.a11yShowingDirect" = "Showing the direct reception at %@";

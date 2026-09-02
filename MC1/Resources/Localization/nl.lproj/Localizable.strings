@@ -832,6 +832,7 @@
 "packetScope.notObserved" = "Geen waarnemer heeft dit pakket gehoord";
 "packetScope.notObservedFooter" = "Het pakket heeft het waarnemersnetwerk niet bereikt — het kan toch op de mesh zijn bezorgd. Waarnemers dekken alleen hun eigen regio.";
 "packetScope.coverageFooter" = "De dekking toont alleen het geconfigureerde waarnemersnetwerk. Een bericht kan bezorgd zijn zonder waargenomen te zijn.";
+"packetScope.signalFooter" = "Een signaalwaarde verschijnt alleen waar een waarnemer de radio van de afzender rechtstreeks hoorde. Via een repeater meet hij de verbinding van de repeater.";
 "packetScope.heardDirectly" = "Rechtstreeks gehoord";
 "packetScope.via" = "via %@";
 "packetScope.error.disabled" = "Packet Scope is uitgeschakeld in Instellingen.";
@@ -839,7 +840,7 @@
 "packetScope.error.invalidResponse" = "De waarnemersserver stuurde een antwoord dat de app niet kon lezen.";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
-"packetScope.bestSignal" = "Beste signaal";
+"packetScope.bestSignal" = "Beste directe signaal";
 "packetScope.shortestRoute" = "Kortste route";
 "packetScope.direct" = "Direct, zonder repeaters";
 "packetScope.hopCount" = "%d hops";
@@ -857,31 +858,31 @@
 
 /* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
 "packetScope.heardBy" = "Gehoord door %d";
-"packetScope.best" = "beste %@";
+"packetScope.best" = "beste direct %@";
 "packetScope.shortest" = "kortste %@";
 "packetScope.stillArriving" = "nog binnenkomend";
 "packetScope.settled" = "afgerond";
 "packetScope.settledIn" = "afgerond in %@ s";
 "packetScope.hopOne" = "1 hop";
-"packetScope.bestRoute" = "Beste route";
 "packetScope.sort" = "Sorteren";
-"packetScope.sortStrongest" = "Sterkste signaal";
 "packetScope.sortFewestHops" = "Minste hops";
+"packetScope.sortMostObservers" = "Meeste waarnemers";
 "packetScope.sortFirstHeard" = "Eerst gehoord";
 "packetScope.new" = "Nieuw";
 "packetScope.showAll" = "Alles tonen";
 
 /* Packet Scope: focus (route / observer selection on the map) */
 "packetScope.filterAll" = "Alle";
-"packetScope.tapHint" = "Tik op een waarnemer en daarna op een route om die op de kaart te volgen";
-"packetScope.hintObserver" = "Toont de routes van deze waarnemer op de kaart";
+"packetScope.tapHint" = "Tik op een pad en dan op een waarnemer om het op de kaart te volgen";
 "packetScope.hintRoute" = "Toont deze route op de kaart";
+"packetScope.hintPath" = "Toont elke waarnemer die het via dit pad hoorde";
 "packetScope.notOnMapRoute" = "Deze route kan niet op de kaart worden getekend";
+"packetScope.notOnMapPath" = "Dit pad kan niet op de kaart worden getekend";
 "packetScope.notOnMapObserver" = "Deze waarnemer publiceert geen locatie en geen van zijn repeaters kon worden geplaatst";
 "packetScope.hopNotOnMap" = "Niet op de kaart";
 "packetScope.tailUnknown" = "+%d hops niet op de kaart";
 "packetScope.sameDrawnPath" = "%d routes tekenen hetzelfde pad";
-"packetScope.rssiBest" = "Beste RSSI %@ dBm";
+"packetScope.rssiBest" = "Directe RSSI %@ dBm";
 "packetScope.heardOffset" = "+%@ s";
 "packetScope.heardDirectlyInline" = "direct gehoord";
 "packetScope.lowerBound" = "≥ %@";
@@ -889,7 +890,6 @@
 "packetScope.directCount" = "%d direct gehoord";
 "packetScope.sortFarthest" = "Verste";
 "packetScope.drawn" = "%@ getekend";
-"packetScope.alsoHeardBy" = "gehoord door %d waarnemers via dit pad";
 "packetScope.routeCount" = "%d routes";
 "packetScope.previousRoute" = "Vorige route";
 "packetScope.nextRoute" = "Volgende route";
@@ -903,6 +903,10 @@
 "packetScope.a11yShowingObserver" = "Toont %1$d routes naar %2$@";
 "packetScope.a11yShowingAll" = "Toont alle waarnemers";
 "packetScope.routeOne" = "1 route";
+"packetScope.pathObserverOne" = "1 waarnemer";
+"packetScope.pathObservers" = "%d waarnemers";
 "packetScope.tailUnknownOne" = "+1 hop niet op de kaart";
 "packetScope.a11yShowingObserverOne" = "Toont 1 route naar %@";
+"packetScope.a11yShowingPathOne" = "Toont 1 waarnemer die het via %@ hoorde";
+"packetScope.a11yShowingPath" = "Toont %1$d waarnemers die het via %2$@ hoorden";
 "packetScope.a11yShowingDirect" = "Toont de directe ontvangst bij %@";

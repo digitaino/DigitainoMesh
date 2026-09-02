@@ -70,6 +70,32 @@ struct PacketScopeReception: Sendable, Equatable, Identifiable {
     routes.map(\.hops.count).min()
   }
 
+  /// Whether this observer's own radio demodulated the sender's transmission,
+  /// with no repeater in between.
+  var heardDirectly: Bool {
+    routes.contains { $0.hops.isEmpty }
+  }
+
+  /// The signal this observer measured **on the sender's own transmission**.
+  ///
+  /// Every SNR the observer network reports is measured at the observer, on the
+  /// last leg into it. Where that leg started at a repeater, the figure grades a
+  /// link the sender was not part of — a repeater's transmitter and the
+  /// observer's receiver — and says nothing about how well the sender got out.
+  /// It is only the sender's number when the reception was direct, so that is
+  /// the only case that yields one.
+  var directSNR: Double? {
+    routes.first { $0.hops.isEmpty }?.bestSNR
+  }
+
+  /// `bestRSSI` is folded across every observation this observer made, with no
+  /// route attribution, so it can only be read as the sender's signal when this
+  /// observer heard nothing but direct receptions.
+  var directRSSI: Int? {
+    guard !routes.isEmpty, routes.allSatisfy({ $0.hops.isEmpty }) else { return nil }
+    return bestRSSI
+  }
+
   struct Route: Sendable, Equatable, Hashable {
     let hops: [String]
     /// Positionally aligned with `hops`; `nil` where the server had no answer.
@@ -124,7 +150,16 @@ struct PacketScopeObserver: Sendable, Equatable, Identifiable {
 struct PacketScopeSummary: Sendable, Equatable {
   let observerCount: Int
   let receptionCount: Int
+  /// The strongest signal any observer measured, whatever leg it measured it
+  /// on. Raw fold output; not fit to print on its own, because a hopped
+  /// reception's figure grades a repeater's link rather than the sender's —
+  /// see `bestDirectSNR`, which is what the screen shows.
   let bestSNR: Double?
+  /// The strongest signal measured on the sender's own transmission — the best
+  /// of the receptions that reached an observer with no repeater in between.
+  /// Nil when no observer heard the sender directly, in which case the network
+  /// measured nothing about the sender's transmitter at all.
+  let bestDirectSNR: Double?
   let shortestHopCount: Int?
   let firstHeard: Date?
   let lastHeard: Date?
@@ -194,6 +229,7 @@ enum PacketScopeFold {
       observerCount: Set(observations.map(\.observerID)).count,
       receptionCount: observations.count,
       bestSNR: observations.compactMap(\.snr).max(),
+      bestDirectSNR: observations.filter { $0.pathHops.isEmpty }.compactMap(\.snr).max(),
       shortestHopCount: observations.map(\.pathHops.count).min(),
       firstHeard: timestamps.min(),
       lastHeard: timestamps.max()

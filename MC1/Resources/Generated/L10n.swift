@@ -2824,22 +2824,24 @@ public enum L10n {
       public static func a11yShowingObserverOne(_ p1: Any) -> String {
         return L10n.tr("Localizable", "packetScope.a11yShowingObserverOne", String(describing: p1), fallback: "Showing 1 route to %@")
       }
+      /// Showing %1$d observers that heard it via %2$@
+      public static func a11yShowingPath(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.a11yShowingPath", p1, String(describing: p2), fallback: "Showing %1$d observers that heard it via %2$@")
+      }
+      /// Showing 1 observer that heard it via %@
+      public static func a11yShowingPathOne(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.a11yShowingPathOne", String(describing: p1), fallback: "Showing 1 observer that heard it via %@")
+      }
       /// Showing the route to %1$@ via %2$@
       public static func a11yShowingRoute(_ p1: Any, _ p2: Any) -> String {
         return L10n.tr("Localizable", "packetScope.a11yShowingRoute", String(describing: p1), String(describing: p2), fallback: "Showing the route to %1$@ via %2$@")
       }
-      /// heard by %d observers by this path
-      public static func alsoHeardBy(_ p1: Int) -> String {
-        return L10n.tr("Localizable", "packetScope.alsoHeardBy", p1, fallback: "heard by %d observers by this path")
-      }
-      /// best %@
+      /// best direct %@
       public static func best(_ p1: Any) -> String {
-        return L10n.tr("Localizable", "packetScope.best", String(describing: p1), fallback: "best %@")
+        return L10n.tr("Localizable", "packetScope.best", String(describing: p1), fallback: "best direct %@")
       }
-      /// Best route
-      public static let bestRoute = L10n.tr("Localizable", "packetScope.bestRoute", fallback: "Best route")
       /// Location: PacketScopeDetailView.swift - propagation summary and per-observer detail
-      public static let bestSignal = L10n.tr("Localizable", "packetScope.bestSignal", fallback: "Best signal")
+      public static let bestSignal = L10n.tr("Localizable", "packetScope.bestSignal", fallback: "Best direct signal")
       /// Copy summary
       public static let copySummary = L10n.tr("Localizable", "packetScope.copySummary", fallback: "Copy summary")
       /// Coverage reflects only the configured observer network. A message can be delivered without being observed.
@@ -2874,8 +2876,8 @@ public enum L10n {
       }
       /// Hide observers
       public static let hideObservers = L10n.tr("Localizable", "packetScope.hideObservers", fallback: "Hide observers")
-      /// Shows this observer's routes on the map
-      public static let hintObserver = L10n.tr("Localizable", "packetScope.hintObserver", fallback: "Shows this observer's routes on the map")
+      /// Shows every observer that heard it by this path
+      public static let hintPath = L10n.tr("Localizable", "packetScope.hintPath", fallback: "Shows every observer that heard it by this path")
       /// Shows this route on the map
       public static let hintRoute = L10n.tr("Localizable", "packetScope.hintRoute", fallback: "Shows this route on the map")
       /// %d hops
@@ -2902,6 +2904,8 @@ public enum L10n {
       public static let notObservedFooter = L10n.tr("Localizable", "packetScope.notObservedFooter", fallback: "The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.")
       /// This observer publishes no location, and none of its repeaters could be placed
       public static let notOnMapObserver = L10n.tr("Localizable", "packetScope.notOnMapObserver", fallback: "This observer publishes no location, and none of its repeaters could be placed")
+      /// This path can't be drawn on the map
+      public static let notOnMapPath = L10n.tr("Localizable", "packetScope.notOnMapPath", fallback: "This path can't be drawn on the map")
       /// This route can't be drawn on the map
       public static let notOnMapRoute = L10n.tr("Localizable", "packetScope.notOnMapRoute", fallback: "This route can't be drawn on the map")
       /// Observers (%d)
@@ -2910,6 +2914,12 @@ public enum L10n {
       }
       /// Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place
       public static let observerNotOnMap = L10n.tr("Localizable", "packetScope.observerNotOnMap", fallback: "No location")
+      /// 1 observer
+      public static let pathObserverOne = L10n.tr("Localizable", "packetScope.pathObserverOne", fallback: "1 observer")
+      /// %d observers
+      public static func pathObservers(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.pathObservers", p1, fallback: "%d observers")
+      }
       /// Previous route
       public static let previousRoute = L10n.tr("Localizable", "packetScope.previousRoute", fallback: "Previous route")
       /// Propagation
@@ -2928,9 +2938,9 @@ public enum L10n {
       }
       /// 1 route
       public static let routeOne = L10n.tr("Localizable", "packetScope.routeOne", fallback: "1 route")
-      /// Best RSSI %@ dBm
+      /// Direct RSSI %@ dBm
       public static func rssiBest(_ p1: Any) -> String {
-        return L10n.tr("Localizable", "packetScope.rssiBest", String(describing: p1), fallback: "Best RSSI %@ dBm")
+        return L10n.tr("Localizable", "packetScope.rssiBest", String(describing: p1), fallback: "Direct RSSI %@ dBm")
       }
       /// %d routes draw this same path
       public static func sameDrawnPath(_ p1: Int) -> String {
@@ -2952,6 +2962,8 @@ public enum L10n {
       public static let showAll = L10n.tr("Localizable", "packetScope.showAll", fallback: "Show all")
       /// Show observers
       public static let showObservers = L10n.tr("Localizable", "packetScope.showObservers", fallback: "Show observers")
+      /// A signal figure appears only where an observer heard the sender’s radio directly. Through a repeater it measures the repeater’s link instead.
+      public static let signalFooter = L10n.tr("Localizable", "packetScope.signalFooter", fallback: "A signal figure appears only where an observer heard the sender’s radio directly. Through a repeater it measures the repeater’s link instead.")
       /// Sort
       public static let sort = L10n.tr("Localizable", "packetScope.sort", fallback: "Sort")
       /// Farthest
@@ -2960,8 +2972,8 @@ public enum L10n {
       public static let sortFewestHops = L10n.tr("Localizable", "packetScope.sortFewestHops", fallback: "Fewest hops")
       /// First heard
       public static let sortFirstHeard = L10n.tr("Localizable", "packetScope.sortFirstHeard", fallback: "First heard")
-      /// Strongest signal
-      public static let sortStrongest = L10n.tr("Localizable", "packetScope.sortStrongest", fallback: "Strongest signal")
+      /// Most observers
+      public static let sortMostObservers = L10n.tr("Localizable", "packetScope.sortMostObservers", fallback: "Most observers")
       /// %@ s across the mesh
       public static func spreadSeconds(_ p1: Any) -> String {
         return L10n.tr("Localizable", "packetScope.spreadSeconds", String(describing: p1), fallback: "%@ s across the mesh")
@@ -2974,8 +2986,8 @@ public enum L10n {
       }
       /// +1 hop not on the map
       public static let tailUnknownOne = L10n.tr("Localizable", "packetScope.tailUnknownOne", fallback: "+1 hop not on the map")
-      /// Tap an observer, then a route, to trace it on the map
-      public static let tapHint = L10n.tr("Localizable", "packetScope.tapHint", fallback: "Tap an observer, then a route, to trace it on the map")
+      /// Tap a path, then an observer, to trace it on the map
+      public static let tapHint = L10n.tr("Localizable", "packetScope.tapHint", fallback: "Tap a path, then an observer, to trace it on the map")
       /// ×%d
       public static func timesHeard(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.timesHeard", p1, fallback: "×%d")

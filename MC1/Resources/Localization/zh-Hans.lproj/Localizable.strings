@@ -828,6 +828,7 @@
 "packetScope.notObserved" = "没有观察站听到此数据包";
 "packetScope.notObservedFooter" = "该数据包未到达观察站网络——但仍可能已在网状网中送达。观察站仅覆盖其所在区域。";
 "packetScope.coverageFooter" = "覆盖情况仅反映所配置的观察站网络。消息可能已送达但未被观察到。";
+"packetScope.signalFooter" = "只有观察站直接收到发送方电台时才显示信号值。经过中继时，该数值衡量的是中继的链路。";
 "packetScope.heardDirectly" = "直接听到";
 "packetScope.via" = "经由 %@";
 "packetScope.error.disabled" = "Packet Scope 已在设置中关闭。";
@@ -835,7 +836,7 @@
 "packetScope.error.invalidResponse" = "观察站服务器返回了应用无法读取的响应。";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
-"packetScope.bestSignal" = "最佳信号";
+"packetScope.bestSignal" = "最佳直接信号";
 "packetScope.shortestRoute" = "最短路径";
 "packetScope.direct" = "直达，无中继";
 "packetScope.hopCount" = "%d 跳";
@@ -853,31 +854,31 @@
 
 /* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
 "packetScope.heardBy" = "%d 个观察站听到";
-"packetScope.best" = "最佳 %@";
+"packetScope.best" = "直接最佳 %@";
 "packetScope.shortest" = "最短 %@";
 "packetScope.stillArriving" = "仍在接收";
 "packetScope.settled" = "已稳定";
 "packetScope.settledIn" = "%@ 秒后稳定";
 "packetScope.hopOne" = "1 跳";
-"packetScope.bestRoute" = "最佳路径";
 "packetScope.sort" = "排序";
-"packetScope.sortStrongest" = "信号最强";
 "packetScope.sortFewestHops" = "跳数最少";
+"packetScope.sortMostObservers" = "观察站最多";
 "packetScope.sortFirstHeard" = "最先收到";
 "packetScope.new" = "新";
 "packetScope.showAll" = "显示全部";
 
 /* Packet Scope: focus (route / observer selection on the map) */
 "packetScope.filterAll" = "全部";
-"packetScope.tapHint" = "先点观测点，再点一条路径，即可在地图上追踪它";
-"packetScope.hintObserver" = "在地图上显示该观测点的路径";
+"packetScope.tapHint" = "点按一条路径，再点按观察站，即可在地图上追踪";
 "packetScope.hintRoute" = "在地图上显示这条路径";
+"packetScope.hintPath" = "显示经由此路径收到它的所有观察站";
 "packetScope.notOnMapRoute" = "这条路径无法在地图上绘制";
+"packetScope.notOnMapPath" = "此路径无法在地图上绘制";
 "packetScope.notOnMapObserver" = "该观测点未公布位置，其中继器也都无法定位";
 "packetScope.hopNotOnMap" = "不在地图上";
 "packetScope.tailUnknown" = "+%d 跳不在地图上";
 "packetScope.sameDrawnPath" = "%d 条路径绘制的是同一轨迹";
-"packetScope.rssiBest" = "最佳 RSSI %@ dBm";
+"packetScope.rssiBest" = "直接 RSSI %@ dBm";
 "packetScope.heardOffset" = "+%@ 秒";
 "packetScope.heardDirectlyInline" = "直接收到";
 "packetScope.lowerBound" = "≥ %@";
@@ -885,7 +886,6 @@
 "packetScope.directCount" = "%d 个直接收到";
 "packetScope.sortFarthest" = "最远";
 "packetScope.drawn" = "已绘制 %@";
-"packetScope.alsoHeardBy" = "%d 个观测点经此轨迹收到";
 "packetScope.routeCount" = "%d 条路径";
 "packetScope.previousRoute" = "上一条路径";
 "packetScope.nextRoute" = "下一条路径";
@@ -899,6 +899,10 @@
 "packetScope.a11yShowingObserver" = "正在显示到 %2$@ 的 %1$d 条路径";
 "packetScope.a11yShowingAll" = "正在显示所有观测点";
 "packetScope.routeOne" = "1 条路径";
+"packetScope.pathObserverOne" = "1 个观察站";
+"packetScope.pathObservers" = "%d 个观察站";
 "packetScope.tailUnknownOne" = "+1 跳不在地图上";
 "packetScope.a11yShowingObserverOne" = "正在显示到 %@ 的 1 条路径";
+"packetScope.a11yShowingPathOne" = "正在显示经由 %@ 收到它的 1 个观察站";
+"packetScope.a11yShowingPath" = "正在显示经由 %2$@ 收到它的 %1$d 个观察站";
 "packetScope.a11yShowingDirect" = "正在显示 %@ 的直接接收";

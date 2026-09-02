@@ -540,19 +540,43 @@ struct PacketScopeCoverageBuilderTests {
   }
 
   @Test
-  func `Observer focus keeps a readout when the best route has no measured leg`() throws {
+  func `Observer focus keeps a readout when the headline route has no measured leg`() throws {
     let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
     let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
     let map = build(
-      receptions: [reception("obs", routes: [route(["AA", "ZZ"], snr: 13.8), route(["BB"], snr: 4.1)])],
+      receptions: [reception("obs", routes: [
+        route(["AA", "ZZ"], snr: 13.8),
+        route(["BB", "YY", "XX"], snr: 4.1),
+      ])],
       observers: [observer("obs")],
       repeaters: [a, b]
     )
     let focused = PacketScopeCoverageBuilder.geometry(for: .observer("obs"), in: map)
     let badge = try #require(focused.nodes.first { $0.point.pinStyle == .badge })
-    // The best route's own readout — at its body's end, since its leg cannot draw.
+    // The headline is the shortest route; its readout sits at its body's end,
+    // since its leg cannot draw past the unplaceable tail.
     #expect(badge.point.badgeText == PacketScopeCoverageBuilder.decibels(13.8))
     #expect(map.routeIDByBadgePinID[badge.point.id] == "obs|AA,ZZ")
+  }
+
+  /// The ranking that picks an observer's headline route, and the fan order on
+  /// the map, leads on hops rather than on signal: every SNR here is measured
+  /// at the observer on its last leg, so ranking a longer route first for its
+  /// stronger number ranks a repeater's link to that observer above the
+  /// sender's own.
+  @Test
+  func `A shorter route outranks a louder longer one`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let map = build(
+      receptions: [reception("obs", routes: [
+        route(["AA", "BB"], snr: 13.8),
+        route(["BB"], snr: 4.1),
+      ])],
+      observers: [observer("obs")],
+      repeaters: [a, b]
+    )
+    #expect(map.routeIDsByObserver["obs"]?.first == "obs|BB")
   }
 
   @Test

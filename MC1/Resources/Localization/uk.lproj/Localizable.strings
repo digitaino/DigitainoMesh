@@ -832,6 +832,7 @@
 "packetScope.notObserved" = "Жоден спостерігач не почув цей пакет";
 "packetScope.notObservedFooter" = "Пакет не досяг мережі спостерігачів — попри це він міг бути доставлений у mesh-мережі. Спостерігачі покривають лише свій регіон.";
 "packetScope.coverageFooter" = "Покриття відображає лише налаштовану мережу спостерігачів. Повідомлення може бути доставлене, не будучи поміченим.";
+"packetScope.signalFooter" = "Рівень сигналу показано лише там, де спостерігач почув рацію відправника напряму. Через ретранслятор він вимірює канал ретранслятора.";
 "packetScope.heardDirectly" = "Почуто напряму";
 "packetScope.via" = "через %@";
 "packetScope.error.disabled" = "Packet Scope вимкнено в налаштуваннях.";
@@ -839,7 +840,7 @@
 "packetScope.error.invalidResponse" = "Сервер спостерігачів надіслав відповідь, яку застосунок не зміг прочитати.";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
-"packetScope.bestSignal" = "Найкращий сигнал";
+"packetScope.bestSignal" = "Найкращий прямий сигнал";
 "packetScope.shortestRoute" = "Найкоротший маршрут";
 "packetScope.direct" = "Напряму, без ретрансляторів";
 "packetScope.hopCount" = "переходів: %d";
@@ -857,31 +858,31 @@
 
 /* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
 "packetScope.heardBy" = "Почули: %d";
-"packetScope.best" = "найкращий: %@";
+"packetScope.best" = "найкращий прямий: %@";
 "packetScope.shortest" = "найкоротший: %@";
 "packetScope.stillArriving" = "ще надходять";
 "packetScope.settled" = "завершено";
 "packetScope.settledIn" = "завершено за %@ с";
 "packetScope.hopOne" = "1 перехід";
-"packetScope.bestRoute" = "Найкращий маршрут";
 "packetScope.sort" = "Сортування";
-"packetScope.sortStrongest" = "Найсильніший сигнал";
 "packetScope.sortFewestHops" = "Найменше переходів";
+"packetScope.sortMostObservers" = "Найбільше спостерігачів";
 "packetScope.sortFirstHeard" = "Почуто першим";
 "packetScope.new" = "Новий";
 "packetScope.showAll" = "Показати всі";
 
 /* Packet Scope: focus (route / observer selection on the map) */
 "packetScope.filterAll" = "Усі";
-"packetScope.tapHint" = "Торкніться спостерігача, а потім маршруту, щоб простежити його на мапі";
-"packetScope.hintObserver" = "Показує маршрути цього спостерігача на мапі";
+"packetScope.tapHint" = "Торкніться маршруту, потім спостерігача, щоб показати його на карті";
 "packetScope.hintRoute" = "Показує цей маршрут на мапі";
+"packetScope.hintPath" = "Показує всіх спостерігачів, які почули її цим маршрутом";
 "packetScope.notOnMapRoute" = "Цей маршрут неможливо намалювати на мапі";
+"packetScope.notOnMapPath" = "Цей маршрут не можна намалювати на карті";
 "packetScope.notOnMapObserver" = "Цей спостерігач не публікує розташування, і жоден із його ретрансляторів не вдалося розмістити";
 "packetScope.hopNotOnMap" = "Немає на мапі";
 "packetScope.tailUnknown" = "+%d стрибків немає на мапі";
 "packetScope.sameDrawnPath" = "%d маршрутів малюють той самий шлях";
-"packetScope.rssiBest" = "Найкращий RSSI %@ дБм";
+"packetScope.rssiBest" = "Прямий RSSI %@ дБм";
 "packetScope.heardOffset" = "+%@ с";
 "packetScope.heardDirectlyInline" = "отримано напряму";
 "packetScope.lowerBound" = "≥ %@";
@@ -889,7 +890,6 @@
 "packetScope.directCount" = "%d отримано напряму";
 "packetScope.sortFarthest" = "Найдальші";
 "packetScope.drawn" = "%@ намальовано";
-"packetScope.alsoHeardBy" = "отримано %d спостерігачами цим шляхом";
 "packetScope.routeCount" = "%d маршрутів";
 "packetScope.previousRoute" = "Попередній маршрут";
 "packetScope.nextRoute" = "Наступний маршрут";
@@ -903,6 +903,10 @@
 "packetScope.a11yShowingObserver" = "Показано %1$d маршрутів до %2$@";
 "packetScope.a11yShowingAll" = "Показано всіх спостерігачів";
 "packetScope.routeOne" = "1 маршрут";
+"packetScope.pathObserverOne" = "1 спостерігач";
+"packetScope.pathObservers" = "Спостерігачів: %d";
 "packetScope.tailUnknownOne" = "+1 стрибок немає на мапі";
 "packetScope.a11yShowingObserverOne" = "Показано 1 маршрут до %@";
+"packetScope.a11yShowingPathOne" = "Показано 1 спостерігача, який почув її через %@";
+"packetScope.a11yShowingPath" = "Показано спостерігачів (%1$d), які почули її через %2$@";
 "packetScope.a11yShowingDirect" = "Показано прямий прийом у %@";
