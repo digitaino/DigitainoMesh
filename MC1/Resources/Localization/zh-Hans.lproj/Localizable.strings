@@ -832,6 +832,7 @@
 "packetScope.via" = "经由 %@";
 "packetScope.error.disabled" = "Packet Scope 已在设置中关闭。";
 "packetScope.error.invalidBaseUrl" = "Packet Scope 服务器地址不是有效的 HTTPS URL。";
+"packetScope.error.invalidResponse" = "观察站服务器返回了应用无法读取的响应。";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
 "packetScope.bestSignal" = "最佳信号";

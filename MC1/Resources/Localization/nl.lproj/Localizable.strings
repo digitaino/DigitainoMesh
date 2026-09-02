@@ -836,6 +836,7 @@
 "packetScope.via" = "via %@";
 "packetScope.error.disabled" = "Packet Scope is uitgeschakeld in Instellingen.";
 "packetScope.error.invalidBaseUrl" = "Het serveradres van Packet Scope is geen geldige HTTPS-URL.";
+"packetScope.error.invalidResponse" = "De waarnemersserver stuurde een antwoord dat de app niet kon lezen.";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
 "packetScope.bestSignal" = "Beste signaal";

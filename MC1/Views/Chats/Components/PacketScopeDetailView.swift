@@ -125,6 +125,10 @@ struct PacketScopeDetailView: View {
   /// Whether the live poll loop is running: the headline's "still arriving"
   /// versus "settled".
   @State private var isLive = false
+  /// How the poll loop ended. "Settled" is a claim — coverage stopped changing —
+  /// and it must not be printed when the loop gave up on failures instead
+  /// (review F061); a single `isLive` flag cannot tell those apart.
+  @State private var loopOutcome: LoopOutcome = .running
   /// `scenePhase` as the poll loop sees it. The loop runs in a `.task` that
   /// captured the view struct once, so reading the environment there would
   /// return the phase at appear forever; a `@State` box reads live.
@@ -571,14 +575,28 @@ struct PacketScopeDetailView: View {
       .themedRowBackground(theme)
     } else if let receptions, let summary {
       if receptions.isEmpty {
+        // An empty first answer is not a verdict while the loop is still asking:
+        // observers ingest over MQTT seconds behind the air, which is the whole
+        // reason the loop exists. Only a stopped loop may state the negative
+        // (review F087).
         Section {
-          Label(
-            L10n.Localizable.PacketScope.notObserved,
-            systemImage: "waveform.slash"
-          )
-          .foregroundStyle(.secondary)
+          if isLive {
+            HStack(spacing: 10) {
+              ProgressView()
+              Text(L10n.Localizable.PacketScope.loading)
+                .foregroundStyle(.secondary)
+            }
+          } else {
+            Label(
+              L10n.Localizable.PacketScope.notObserved,
+              systemImage: "waveform.slash"
+            )
+            .foregroundStyle(.secondary)
+          }
         } footer: {
-          Text(L10n.Localizable.PacketScope.notObservedFooter)
+          if !isLive {
+            Text(L10n.Localizable.PacketScope.notObservedFooter)
+          }
         }
         .themedRowBackground(theme)
       } else {
@@ -905,6 +923,9 @@ struct PacketScopeDetailView: View {
     }
     if isLive {
       parts.append(L10n.Localizable.PacketScope.stillArriving)
+    } else if loopOutcome == .failed {
+      // The loop stopped because the server stopped answering, not because
+      // coverage stopped changing. Saying nothing beats saying "settled".
     } else if let spread = summary.propagationSpread {
       parts.append(L10n.Localizable.PacketScope.settledIn(
         spread.formatted(.number.precision(.fractionLength(0...1)))
@@ -1533,6 +1554,7 @@ struct PacketScopeDetailView: View {
   /// exits through the sleep.
   private func liveRefreshLoop() async {
     isLive = isWithinLiveWindow
+    loopOutcome = .running
     defer { isLive = false }
     await refresh()
     var quietPolls = 0
@@ -1552,6 +1574,15 @@ struct PacketScopeDetailView: View {
       quietPolls = current == lastReceptionCount ? quietPolls + 1 : 0
       lastReceptionCount = current
     }
+    // Recorded in the order the loop's own condition checks them: a run of
+    // failures is a failure even if the window closed on the same tick.
+    if consecutiveFailures >= Self.failuresBeforeStopping {
+      loopOutcome = .failed
+    } else if quietPolls >= Self.quietPollsBeforeStopping {
+      loopOutcome = .settled
+    } else {
+      loopOutcome = .windowClosed
+    }
   }
 
   /// Whether the message is new enough that observers may still be ingesting it.
@@ -1563,6 +1594,15 @@ struct PacketScopeDetailView: View {
     let age = Date().timeIntervalSince(message.createdAt)
     return age >= 0 && age < Self.livePollWindow
   }
+}
+
+/// How `liveRefreshLoop` ended. Only `.settled` and `.windowClosed` earn the
+/// word "settled" in the headline.
+private enum LoopOutcome {
+  case running
+  case settled
+  case windowClosed
+  case failed
 }
 
 /// What the focus bar prints for one focus.

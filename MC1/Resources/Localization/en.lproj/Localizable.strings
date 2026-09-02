@@ -832,6 +832,8 @@
 "packetScope.via" = "via %@";
 "packetScope.error.disabled" = "Packet Scope is turned off in Settings.";
 "packetScope.error.invalidBaseUrl" = "The Packet Scope server address is not a valid HTTPS URL.";
+/* Location: PacketScopeService.swift - error shown when the observer server returns a response the app cannot decode */
+"packetScope.error.invalidResponse" = "The observer server sent a response the app couldn’t read.";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
 "packetScope.bestSignal" = "Best signal";

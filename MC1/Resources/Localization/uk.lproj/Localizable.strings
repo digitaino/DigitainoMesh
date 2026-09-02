@@ -836,6 +836,7 @@
 "packetScope.via" = "через %@";
 "packetScope.error.disabled" = "Packet Scope вимкнено в налаштуваннях.";
 "packetScope.error.invalidBaseUrl" = "Адреса сервера Packet Scope не є коректною HTTPS-адресою.";
+"packetScope.error.invalidResponse" = "Сервер спостерігачів надіслав відповідь, яку застосунок не зміг прочитати.";
 
 /* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
 "packetScope.bestSignal" = "Найкращий сигнал";

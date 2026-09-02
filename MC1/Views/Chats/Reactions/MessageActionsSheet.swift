@@ -99,34 +99,41 @@ struct MessageActionsSheet: View {
     .presentationBackground(Color(.systemBackground))
     .sensoryFeedback(.warning, trigger: destructiveHapticTrigger)
     .task {
+      // The path view model names hops for every destination — the path screen,
+      // the repeats map and the Network View — so it loads for every message, from
+      // the process store, with no radio required. It used to load only inside the
+      // two local-evidence branches and only when `services` existed, which left a
+      // Network-View-only message (an incoming DM) with unresolved hops forever, and a
+      // disconnected radio with a spinner that never ended (review F010, F075).
+      async let pathLoad: Void = pathViewModel.loadContacts(
+        dataStore: appState.offlineDataStore,
+        radioID: message.radioID
+      )
       if availability.canShowRepeatDetails {
-        guard let services = appState.services else { return }
-        // Four loads that share no data, so run them concurrently rather
-        // than stacking actor round-trips while the detail rows are blank.
-        // The path view model is loaded here too: the heard-repeats map
-        // (reached through Repeat Details → View on Map) resolves hop pins
-        // from it, and without this preload it would spin forever —
-        // `canShowRepeatDetails` and `canViewPath` are mutually exclusive,
-        // so the branch below never runs for an outgoing message.
-        async let fetchedRepeats = services.heardRepeatsService.refreshRepeats(for: message.id)
-        async let pathLoad: Void = pathViewModel.loadContacts(
-          dataStore: appState.offlineDataStore,
-          radioID: message.radioID
-        )
-        do {
-          async let fetchedContacts = services.dataStore.fetchContacts(radioID: message.radioID)
-          async let fetchedNodes = services.dataStore.fetchDiscoveredNodes(radioID: message.radioID)
-          contacts = try await fetchedContacts
-          discoveredNodes = try await fetchedNodes
-        } catch {
-          contacts = []
-          discoveredNodes = []
+        // Repeats, contacts and discovered nodes share no data, so they run
+        // concurrently. The store is the durable home of the repeat rows —
+        // `refreshRepeats` only ever re-read them — so reading it directly drops
+        // the dependency on a connected radio's service container.
+        if let store = appState.offlineDataStore {
+          do {
+            async let fetchedRepeats = store.fetchMessageRepeats(messageID: message.id)
+            async let fetchedContacts = store.fetchContacts(radioID: message.radioID)
+            async let fetchedNodes = store.fetchDiscoveredNodes(radioID: message.radioID)
+            contacts = try await fetchedContacts
+            discoveredNodes = try await fetchedNodes
+            repeats = try await fetchedRepeats
+          } catch {
+            contacts = []
+            discoveredNodes = []
+            repeats = []
+          }
+        } else {
+          // Never paired: there is no store to read. An empty list is a terminal
+          // state the rows can render; `nil` is a spinner that never ends.
+          repeats = []
         }
-        repeats = await fetchedRepeats
-        await pathLoad
-      } else if availability.canViewPath {
-        await pathViewModel.loadContacts(dataStore: appState.offlineDataStore, radioID: message.radioID)
       }
+      await pathLoad
     }
   }
 }

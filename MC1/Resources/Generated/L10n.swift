@@ -2991,6 +2991,8 @@ public enum L10n {
         public static let disabled = L10n.tr("Localizable", "packetScope.error.disabled", fallback: "Packet Scope is turned off in Settings.")
         /// The Packet Scope server address is not a valid HTTPS URL.
         public static let invalidBaseUrl = L10n.tr("Localizable", "packetScope.error.invalidBaseUrl", fallback: "The Packet Scope server address is not a valid HTTPS URL.")
+        /// Location: PacketScopeService.swift - error shown when the observer server returns a response the app cannot decode
+        public static let invalidResponse = L10n.tr("Localizable", "packetScope.error.invalidResponse", fallback: "The observer server sent a response the app couldn’t read.")
         /// Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat
         public static let unreadableHash = L10n.tr("Localizable", "packetScope.error.unreadableHash", fallback: "This message's packet identifier is unreadable, so nothing was looked up.")
       }

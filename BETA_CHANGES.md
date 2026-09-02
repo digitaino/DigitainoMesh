@@ -24,6 +24,8 @@ Tap a route, see the route. In the Network View, tapping a route in an observer'
 
 The lookup sends only the packet's identifier, never its content, over your phone's internet connection -- and only if you turn it on. Coverage depends on the observer network the server watches.
 
+Three honesty fixes in the message actions sheet, ahead of a larger redesign of that sheet (the review and spec are in docs/MESSAGE_JOURNEY_REDESIGN.md). **Repeat Details** and the Network View's repeater names now load from the phone's own store, so they work with the radio disconnected -- before, a disconnected radio left Repeat Details spinning forever and a DM's Network View naming every hop as raw hex. The Network View no longer says **"No observer heard this packet"** while it is still asking: for the first three minutes after a send an empty answer reads "Checking observers..." until the polling stops. And after the polling gives up on server failures the headline no longer claims the coverage has "settled". An unreadable server response now says so instead of borrowing the elevation API's error text.
+
 Radio Swap, Config Import and Backups
 
 Moving your identity to a new radio no longer loses your chats. A radio that connects with a public key the app already knows -- from a device you forgot but kept the data for -- adopts that history the moment it connects, and the contact sync that follows keeps favourites and anyone you have messaged instead of pruning them. Only silent, unmessaged contacts are cleaned up.

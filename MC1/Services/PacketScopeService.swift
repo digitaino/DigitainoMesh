@@ -225,7 +225,7 @@ enum PacketScopeServiceError: LocalizedError {
     case let .networkError(description):
       L10n.Localizable.Common.Error.networkError(description)
     case .invalidResponse:
-      L10n.Localizable.Common.Error.invalidResponse
+      L10n.Localizable.PacketScope.Error.invalidResponse
     case let .apiError(message):
       L10n.Localizable.Common.Error.apiError(message)
     }
