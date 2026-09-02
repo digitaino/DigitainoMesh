@@ -816,3 +816,49 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Trabajando…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Vista de red";
+"packetScope.refresh" = "Actualizar";
+"packetScope.loading" = "Comprobando observadores…";
+"packetScope.observerCount" = "Observadores (%d)";
+"packetScope.notObserved" = "Ningún observador oyó este paquete";
+"packetScope.notObservedFooter" = "El paquete no llegó a la red de observadores; aun así puede haberse entregado en la malla. Los observadores solo cubren su propia región.";
+"packetScope.coverageFooter" = "La cobertura refleja solo la red de observadores configurada. Un mensaje puede entregarse sin ser observado.";
+"packetScope.heardDirectly" = "Oído directamente";
+"packetScope.via" = "vía %@";
+"packetScope.error.disabled" = "Packet Scope está desactivado en Ajustes.";
+"packetScope.error.invalidBaseUrl" = "La dirección del servidor de Packet Scope no es una URL HTTPS válida.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Mejor señal";
+"packetScope.shortestRoute" = "Ruta más corta";
+"packetScope.direct" = "Directo, sin repetidores";
+"packetScope.hopCount" = "%d saltos";
+"packetScope.propagation" = "Propagación";
+"packetScope.spreadSeconds" = "%@ s por la malla";
+"packetScope.receptions" = "Recepciones totales";
+"packetScope.timesHeard" = "×%d";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "El identificador de paquete de este mensaje es ilegible, no se consultó nada.";
+"packetScope.retriedFooter" = "Enviado %d veces; cada intento es un paquete distinto. Se muestra el que se oyó primero.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Sin ubicación";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Oído por %d";
+"packetScope.best" = "mejor %@";
+"packetScope.shortest" = "más corta %@";
+"packetScope.stillArriving" = "aún llegando";
+"packetScope.settled" = "finalizado";
+"packetScope.settledIn" = "finalizado en %@ s";
+"packetScope.hopOne" = "1 salto";
+"packetScope.bestRoute" = "Mejor ruta";
+"packetScope.sort" = "Ordenar";
+"packetScope.sortStrongest" = "Señal más fuerte";
+"packetScope.sortFewestHops" = "Menos saltos";
+"packetScope.sortFirstHeard" = "Oído primero";
+"packetScope.new" = "Nuevo";
+"packetScope.showAll" = "Mostrar todo";

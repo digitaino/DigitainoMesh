@@ -1264,6 +1264,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "Änderung der Funkeinstellungen trennt die Verbindung zum aktuellen Mesh-Netzwerk";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "%d Kontakt(e) haben in dieser Datei einen unbrauchbaren Standort und werden ohne Standort importiert: %@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "%d Kontakt(e) werden übersprungen, weil dieses Funkgerät keine freien Plätze mehr dafür hat: %@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "%d Kontakte werden auf dem Gerät hinzugefügt/aktualisiert";
 
@@ -1907,3 +1913,9 @@
 
 /* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
 "messages.translationFooter" = "Bei eingehenden Nachrichten in einer anderen Sprache eine Schaltfläche „Übersetzen“ anzeigen. Die Übersetzung erfolgt auf diesem Gerät und ändert die gespeicherte Nachricht nie.";
+
+/* Packet Scope (opt-in CoreScope observer lookup) */
+"packetScope.header" = "Packet Scope";
+"packetScope.toggle" = "Nachrichtenabdeckung abrufen";
+"packetScope.server" = "Server";
+"packetScope.footer" = "Fügt den Aktionen einer Nachricht eine Netzwerkansicht hinzu, die zeigt, welche Mesh-Beobachter ihr Paket mit welcher Signalstärke empfangen haben. Beim Nachschlagen wird die Paketkennung (nie der Inhalt) über die Internetverbindung deines Telefons an den unten angegebenen Server gesendet. Die Abdeckung hängt vom Beobachternetz des Servers ab.";

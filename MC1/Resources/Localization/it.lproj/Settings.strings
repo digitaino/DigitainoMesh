@@ -1279,6 +1279,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "Modificare le impostazioni radio ti disconnetterà dalla rete mesh attuale";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "%d contatto/i hanno una posizione inutilizzabile in questo file e verranno importati senza: %@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "%d contatto/i verranno saltati perché questa radio non ha più posti liberi per loro: %@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "Aggiungerà/aggiornerà %d contatti sul dispositivo";
 
@@ -1905,3 +1911,9 @@
 
 /* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
 "messages.translationFooter" = "Mostra un pulsante “Traduci” sui messaggi in arrivo scritti in un’altra lingua. La traduzione avviene su questo dispositivo e non modifica mai il messaggio salvato.";
+
+/* Packet Scope (opt-in CoreScope observer lookup) */
+"packetScope.header" = "Packet Scope";
+"packetScope.toggle" = "Consulta copertura messaggi";
+"packetScope.server" = "Server";
+"packetScope.footer" = "Aggiunge alle azioni di un messaggio una vista di rete che mostra quali osservatori della mesh hanno ricevuto il suo pacchetto e con quale livello di segnale. La consultazione invia l'identificatore del pacchetto (mai il contenuto) al server indicato sotto tramite la connessione internet del telefono. La copertura dipende dalla rete di osservatori del server.";

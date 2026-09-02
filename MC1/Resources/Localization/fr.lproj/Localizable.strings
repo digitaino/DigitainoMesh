@@ -822,3 +822,49 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "En cours…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Vue réseau";
+"packetScope.refresh" = "Actualiser";
+"packetScope.loading" = "Vérification des observateurs…";
+"packetScope.observerCount" = "Observateurs (%d)";
+"packetScope.notObserved" = "Aucun observateur n'a entendu ce paquet";
+"packetScope.notObservedFooter" = "Le paquet n'a pas atteint le réseau d'observateurs — il peut néanmoins avoir été livré sur le maillage. Les observateurs ne couvrent que leur propre région.";
+"packetScope.coverageFooter" = "La couverture ne reflète que le réseau d'observateurs configuré. Un message peut être livré sans être observé.";
+"packetScope.heardDirectly" = "Entendu directement";
+"packetScope.via" = "via %@";
+"packetScope.error.disabled" = "Packet Scope est désactivé dans les Réglages.";
+"packetScope.error.invalidBaseUrl" = "L'adresse du serveur Packet Scope n'est pas une URL HTTPS valide.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Meilleur signal";
+"packetScope.shortestRoute" = "Route la plus courte";
+"packetScope.direct" = "Direct, sans répéteur";
+"packetScope.hopCount" = "%d sauts";
+"packetScope.propagation" = "Propagation";
+"packetScope.spreadSeconds" = "%@ s à travers le maillage";
+"packetScope.receptions" = "Réceptions totales";
+"packetScope.timesHeard" = "×%d";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "L'identifiant de paquet de ce message est illisible, aucune recherche n'a été faite.";
+"packetScope.retriedFooter" = "Envoyé %d fois ; chaque tentative est un paquet distinct. Voici celui entendu en premier.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Sans position";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Entendu par %d";
+"packetScope.best" = "meilleur %@";
+"packetScope.shortest" = "plus courte %@";
+"packetScope.stillArriving" = "réception en cours";
+"packetScope.settled" = "terminé";
+"packetScope.settledIn" = "terminé en %@ s";
+"packetScope.hopOne" = "1 saut";
+"packetScope.bestRoute" = "Meilleure route";
+"packetScope.sort" = "Trier";
+"packetScope.sortStrongest" = "Signal le plus fort";
+"packetScope.sortFewestHops" = "Moins de sauts";
+"packetScope.sortFirstHeard" = "Entendu en premier";
+"packetScope.new" = "Nouveau";
+"packetScope.showAll" = "Tout afficher";

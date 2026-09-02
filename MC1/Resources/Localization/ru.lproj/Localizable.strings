@@ -820,3 +820,49 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Выполняется…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Сетевой вид";
+"packetScope.refresh" = "Обновить";
+"packetScope.loading" = "Проверка наблюдателей…";
+"packetScope.observerCount" = "Наблюдатели (%d)";
+"packetScope.notObserved" = "Ни один наблюдатель не услышал этот пакет";
+"packetScope.notObservedFooter" = "Пакет не достиг сети наблюдателей — при этом он всё равно мог быть доставлен по mesh-сети. Наблюдатели покрывают только свой регион.";
+"packetScope.coverageFooter" = "Покрытие отражает только настроенную сеть наблюдателей. Сообщение может быть доставлено, не будучи замеченным.";
+"packetScope.heardDirectly" = "Принят напрямую";
+"packetScope.via" = "через %@";
+"packetScope.error.disabled" = "Packet Scope отключён в настройках.";
+"packetScope.error.invalidBaseUrl" = "Адрес сервера Packet Scope не является корректным HTTPS-URL.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Лучший сигнал";
+"packetScope.shortestRoute" = "Кратчайший маршрут";
+"packetScope.direct" = "Напрямую, без ретрансляторов";
+"packetScope.hopCount" = "переходов: %d";
+"packetScope.propagation" = "Распространение";
+"packetScope.spreadSeconds" = "%@ с по сети";
+"packetScope.receptions" = "Всего приёмов";
+"packetScope.timesHeard" = "×%d";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "Идентификатор пакета этого сообщения нечитаем, запрос не отправлялся.";
+"packetScope.retriedFooter" = "Отправлено %d раз; каждая попытка — отдельный пакет. Показан услышанный первым.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Без координат";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Услышали: %d";
+"packetScope.best" = "лучший: %@";
+"packetScope.shortest" = "кратчайший: %@";
+"packetScope.stillArriving" = "ещё поступают";
+"packetScope.settled" = "завершено";
+"packetScope.settledIn" = "завершено за %@ с";
+"packetScope.hopOne" = "1 переход";
+"packetScope.bestRoute" = "Лучший маршрут";
+"packetScope.sort" = "Сортировка";
+"packetScope.sortStrongest" = "Сильнейший сигнал";
+"packetScope.sortFewestHops" = "Меньше переходов";
+"packetScope.sortFirstHeard" = "Услышано первым";
+"packetScope.new" = "Новый";
+"packetScope.showAll" = "Показать все";

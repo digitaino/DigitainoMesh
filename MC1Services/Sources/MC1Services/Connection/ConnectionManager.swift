@@ -876,7 +876,24 @@ public final class ConnectionManager {
       nil
     }
     let effectiveExisting = existingDevice ?? deviceByPublicKey
-    let resolvedRadioID = effectiveExisting?.radioID ?? UUID()
+    var resolvedRadioID = effectiveExisting?.radioID ?? UUID()
+
+    // A row already known by BLE id can still be the wrong home for this
+    // identity: "Forget Device (keep data)" leaves a ghost row that holds the
+    // old key, radioID and every chat, and a replacement radio paired *before*
+    // it received that key gets its own row and radioID. Once the radio does
+    // carry the key, the post-identity-import hook rejoins the ghost — but only
+    // if the import ran in that order. Rejoin on connect as well, so the order
+    // stops mattering. The predicate only ever matches an inactive row with no
+    // Bluetooth method, so a real saved radio is never merged away.
+    if existingDevice != nil,
+       let rejoinedRadioID = try? await persistenceStore.reconcileGhostIdentity(
+         currentDeviceID: deviceID,
+         newPublicKey: selfInfo.publicKey
+       ) {
+      logger.info("Rejoined ghost identity on connect: radioID \(rejoinedRadioID)")
+      resolvedRadioID = rejoinedRadioID
+    }
 
     let newServices = ServiceContainer(
       session: session,

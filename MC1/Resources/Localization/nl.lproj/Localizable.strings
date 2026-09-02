@@ -823,3 +823,49 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "Bezig…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "Netwerkweergave";
+"packetScope.refresh" = "Vernieuwen";
+"packetScope.loading" = "Waarnemers controleren…";
+"packetScope.observerCount" = "Waarnemers (%d)";
+"packetScope.notObserved" = "Geen waarnemer heeft dit pakket gehoord";
+"packetScope.notObservedFooter" = "Het pakket heeft het waarnemersnetwerk niet bereikt — het kan toch op de mesh zijn bezorgd. Waarnemers dekken alleen hun eigen regio.";
+"packetScope.coverageFooter" = "De dekking toont alleen het geconfigureerde waarnemersnetwerk. Een bericht kan bezorgd zijn zonder waargenomen te zijn.";
+"packetScope.heardDirectly" = "Rechtstreeks gehoord";
+"packetScope.via" = "via %@";
+"packetScope.error.disabled" = "Packet Scope is uitgeschakeld in Instellingen.";
+"packetScope.error.invalidBaseUrl" = "Het serveradres van Packet Scope is geen geldige HTTPS-URL.";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "Beste signaal";
+"packetScope.shortestRoute" = "Kortste route";
+"packetScope.direct" = "Direct, zonder repeaters";
+"packetScope.hopCount" = "%d hops";
+"packetScope.propagation" = "Voortplanting";
+"packetScope.spreadSeconds" = "%@ s door de mesh";
+"packetScope.receptions" = "Totaal ontvangen";
+"packetScope.timesHeard" = "×%d";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "De pakket-ID van dit bericht is onleesbaar, er is niets opgezocht.";
+"packetScope.retriedFooter" = "%d× verzonden; elke poging is een apart pakket. Dit is het eerst gehoorde.";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "Geen locatie";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "Gehoord door %d";
+"packetScope.best" = "beste %@";
+"packetScope.shortest" = "kortste %@";
+"packetScope.stillArriving" = "nog binnenkomend";
+"packetScope.settled" = "afgerond";
+"packetScope.settledIn" = "afgerond in %@ s";
+"packetScope.hopOne" = "1 hop";
+"packetScope.bestRoute" = "Beste route";
+"packetScope.sort" = "Sorteren";
+"packetScope.sortStrongest" = "Sterkste signaal";
+"packetScope.sortFewestHops" = "Minste hops";
+"packetScope.sortFirstHeard" = "Eerst gehoord";
+"packetScope.new" = "Nieuw";
+"packetScope.showAll" = "Alles tonen";

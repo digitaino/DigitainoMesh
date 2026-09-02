@@ -18,6 +18,7 @@ struct ActionsDetailsSection: View {
 
   @State private var showPathDetail = false
   @State private var showRepeatsMap = false
+  @State private var showPacketScope = false
   /// Route text picked on `MessagePathDetailView`, dispatched from the sheet's
   /// `onDismiss`. The dispatch also dismisses the actions sheet, and dismissing the
   /// parent while the child is still presented can strand the actions sheet open —
@@ -28,6 +29,10 @@ struct ActionsDetailsSection: View {
     VStack(alignment: .leading, spacing: 0) {
       if availability.canViewPath {
         viewPathButton
+      }
+
+      if availability.canViewPacketScope {
+        networkViewButton
       }
 
       if availability.canShowRepeatDetails {
@@ -85,6 +90,46 @@ struct ActionsDetailsSection: View {
         pathViewModel: pathViewModel
       )
     }
+    // Same cover treatment as the path and repeats screens: the Network View
+    // draws the observers' routes on a full-bleed map when it can, and a
+    // sheet's swipe-down would fight every downward pan on it. Done closes it.
+    .fullScreenCover(isPresented: $showPacketScope) {
+      PacketScopeDetailView(
+        message: message,
+        pathViewModel: pathViewModel,
+        // Same stamp-first reference the repeats map resolves against, so a
+        // repeater is not named one thing there and another here.
+        userLocation: MessagePathMapView.receiverReference(
+          for: .message(message),
+          userLocation: appState.bestAvailableLocation
+        )
+      )
+    }
+  }
+
+  /// Entry to the observer network's view of this packet — the opt-in CoreScope
+  /// lookup. The fetch happens on the presented screen, never from rendering
+  /// this row: the sheet opening is the user-initiated moment the privacy
+  /// contract keys on.
+  private var networkViewButton: some View {
+    Button {
+      showPacketScope = true
+    } label: {
+      HStack {
+        Label(
+          L10n.Chats.Chats.Message.Action.networkView,
+          systemImage: "dot.radiowaves.up.forward"
+        )
+        Spacer()
+        Image(systemName: "chevron.right")
+          .foregroundStyle(.secondary)
+          .font(.caption)
+          .accessibilityHidden(true)
+      }
+      .padding()
+      .contentShape(.rect)
+    }
+    .foregroundStyle(.primary)
   }
 
   /// The one entry point to the path: map, hop list and Reply with Route live

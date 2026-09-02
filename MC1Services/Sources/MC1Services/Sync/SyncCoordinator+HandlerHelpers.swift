@@ -8,6 +8,10 @@ extension SyncCoordinator {
     let pathNodes: Data?
     let pathLength: UInt8
     let packetHash: String?
+    /// Firmware-compatible mesh-wide packet identity (`RxLogEntryDTO.contentHash`),
+    /// captured here because the RxLog row it derives from is pruned within hours —
+    /// the message row is the durable home.
+    let contentHash: String?
     let routeType: RouteType?
     let regionScope: String?
     let regionScopeMatches: [String]
@@ -43,6 +47,7 @@ extension SyncCoordinator {
           pathNodes: pathNodes,
           pathLength: pathLength,
           packetHash: rxEntry.packetHash,
+          contentHash: rxEntry.contentHash,
           routeType: rxEntry.routeType,
           regionScope: rxEntry.regionScope,
           regionScopeMatches: rxEntry.regionScopeMatches
@@ -65,6 +70,19 @@ extension SyncCoordinator {
             pathNodes: rxEntry.pathNodes,
             pathLength: rxEntry.pathLength,
             packetHash: rxEntry.packetHash,
+            // Deliberately nil on this branch, unlike the exact-timestamp match
+            // above. This fallback matches on a *one-byte* sender prefix within a
+            // 30-second window and does not check the recipient at all, so it can
+            // land on a DM between two other people that this radio merely
+            // overheard — or on an unrelated sender colliding 1-in-256.
+            //
+            // Every other field here is cosmetic and stays local if wrong. The
+            // content hash is not: it is the one value that leaves the device, and
+            // stamping a stranger's packet identity onto the user's message would
+            // both show someone else's coverage as theirs and POST a third party's
+            // packet to the observer network. Fail closed — a DM whose exact
+            // correlation missed simply gets no Network View.
+            contentHash: nil,
             routeType: rxEntry.routeType,
             regionScope: rxEntry.regionScope,
             regionScopeMatches: rxEntry.regionScopeMatches
@@ -88,6 +106,7 @@ extension SyncCoordinator {
       pathNodes: nil,
       pathLength: defaultPathLength,
       packetHash: nil,
+      contentHash: nil,
       routeType: nil,
       regionScope: nil,
       regionScopeMatches: []

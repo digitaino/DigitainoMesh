@@ -50,6 +50,14 @@ struct ConfigImportPlan: Equatable {
   var channelsOverwriteExisting: Bool
   /// Validated, deduplicated contact records ready to write (raw type byte preserved).
   var contactRecords: [MeshContact]
+  /// Names of contacts whose coordinates in the file could not be used and were imported
+  /// with no location instead. A contact's position came off the mesh, not from the user's
+  /// hand — a repeater advertising junk must not block a whole radio migration.
+  var contactCoordinateFallbacks: [String] = []
+  /// Names of contacts left out because the device has no free slot for them. A migration is
+  /// not refused wholesale over a handful of entries the radio cannot take: what fits is
+  /// written, newest first, and the rest is reported.
+  var contactCapacityDropped: [String] = []
 }
 
 // MARK: - Planner
@@ -66,7 +74,8 @@ func planConfigImport(
   maxContacts: Int,
   maxTxPower: Int8,
   existingChannels: [DeviceChannelSlot],
-  existingContacts: [String: MeshContact]
+  existingContacts: [String: MeshContact],
+  protectedContactKeys: Set<String> = []
 ) throws -> ConfigImportPlan {
   var plan = ConfigImportPlan(
     importPrivateKey: nil,
@@ -107,9 +116,13 @@ func planConfigImport(
   }
 
   if sections.contacts, let contacts = config.contacts {
-    plan.contactRecords = try planContactRecords(
-      contacts, maxContacts: maxContacts, existingContacts: existingContacts
+    let planned = try planContactRecords(
+      contacts, maxContacts: maxContacts, existingContacts: existingContacts,
+      protectedKeys: protectedContactKeys
     )
+    plan.contactRecords = planned.records
+    plan.contactCoordinateFallbacks = planned.coordinateFallbacks
+    plan.contactCapacityDropped = planned.capacityDropped
   }
 
   return plan
@@ -140,10 +153,46 @@ private func planPrivateKey(config: MeshCoreNodeConfig) throws -> Data? {
 // MARK: - Coordinates
 
 private func validatedCoordinate(_ raw: String, field: CoordinateField, range: ClosedRange<Double>) throws -> Double {
-  guard let value = Double(raw), value.isFinite, range.contains(value) else {
-    throw NodeConfigServiceError.invalidCoordinate(field: field)
+  guard let value = parseConfigCoordinate(raw, range: range) else {
+    throw NodeConfigServiceError.invalidCoordinate(field: field, raw: raw)
   }
   return value
+}
+
+/// The firmware stores a coordinate as an `Int32` of microdegrees; some exporters write that
+/// integer out unconverted.
+private let microdegreesPerDegree = 1_000_000.0
+/// The smallest integer read as microdegrees rather than as a mistyped degree value. Below this
+/// the microdegree reading is a point within ~100 m of null island, which no mesh is at, while
+/// a small out-of-range integer such as "91" is almost certainly a typo worth surfacing.
+private let minimumMicrodegreeMagnitude = 1000.0
+
+/// Reads a coordinate string from a config file, in decimal degrees.
+///
+/// The companion app writes plain decimal degrees, but a config can come from any exporter or a
+/// hand edit, and a file rejected over a repeater's coordinate is a file nobody can import. So
+/// this accepts the variants that mean one thing unambiguously: surrounding whitespace, a
+/// decimal comma, an empty or `null` value for "no location" (the firmware's own 0/0), and a bare
+/// integer of microdegrees — the value the firmware itself stores — when it only fits the range
+/// once scaled. A non-finite or out-of-range value is still rejected rather than clamped, so a
+/// mistyped number surfaces instead of silently landing at a pole.
+func parseConfigCoordinate(_ raw: String, range: ClosedRange<Double>) -> Double? {
+  var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+  if text.isEmpty || ["null", "none", "nil"].contains(text.lowercased()) {
+    return 0
+  }
+  // A single comma and no point is a locale decimal separator, not a list.
+  if !text.contains("."), text.filter({ $0 == "," }).count == 1 {
+    text = text.replacingOccurrences(of: ",", with: ".")
+  }
+  guard let value = Double(text), value.isFinite else { return nil }
+  if range.contains(value) { return value }
+  let isIntegerLiteral = !text.isEmpty && text.allSatisfy { $0.isASCII && ($0.isNumber || $0 == "-" || $0 == "+") }
+  if isIntegerLiteral, abs(value) >= minimumMicrodegreeMagnitude {
+    let degrees = value / microdegreesPerDegree
+    if range.contains(degrees) { return degrees }
+  }
+  return nil
 }
 
 // MARK: - Radio
@@ -230,11 +279,21 @@ private func planChannelWrites(
     // the name's slot while its original slot still holds it, mis-attributing mesh traffic.
     let secretSlot = secretToIndex[secretKey]
 
+    // A new channel goes back to the slot its file position names when that slot is free,
+    // and only otherwise to the first free slot. The app keys channel history by slot number
+    // and an export lists channels in slot order, so this puts a restored radio's channels
+    // where its messages already are. It also means an intra-import duplicate folds onto its
+    // first slot and simply leaves its own slot empty, instead of shifting every channel
+    // after it down by one and filing their history under the wrong chats.
+    let positionSlot = UInt8(clamping: i)
     let targetIndex: UInt8
     if let secretSlot {
       targetIndex = secretSlot
     } else if channel.name.hasPrefix("#"), let existing = hashtagNameToIndex[lookupName] {
       targetIndex = existing
+    } else if let position = emptyIndices.firstIndex(of: positionSlot) {
+      emptyIndices.remove(at: position)
+      targetIndex = positionSlot
     } else if let empty = emptyIndices.first {
       emptyIndices.removeFirst()
       targetIndex = empty
@@ -277,11 +336,14 @@ private func planChannelWrites(
 /// Dedups by public key (newest by `last_modified` wins), enforces device capacity, drops records
 /// the device already stores byte-for-byte, and rejects invalid keys, path modes, coordinates, and
 /// routing paths before any write.
+/// `protectedKeys` are lowercase hex public keys of contacts the app holds history for —
+/// favorites and anyone with a conversation — which an overflow must never leave out.
 private func planContactRecords(
   _ contacts: [MeshCoreNodeConfig.ContactConfig],
   maxContacts: Int,
-  existingContacts: [String: MeshContact]
-) throws -> [MeshContact] {
+  existingContacts: [String: MeshContact],
+  protectedKeys: Set<String> = []
+) throws -> (records: [MeshContact], coordinateFallbacks: [String], capacityDropped: [String]) {
   var byKey: [String: (config: MeshCoreNodeConfig.ContactConfig, publicKey: Data)] = [:]
   var order: [String] = []
 
@@ -309,22 +371,49 @@ private func planContactRecords(
   let newKeyCount = order.reduce(0) { count, key in
     existingContacts.keys.contains(key) ? count : count + 1
   }
-  let availableSlots = maxContacts - existingContacts.count
-  guard newKeyCount <= availableSlots else {
-    throw NodeConfigServiceError.contactCapacityExceeded(needed: newKeyCount, available: availableSlots)
+  let availableSlots = max(0, maxContacts - existingContacts.count)
+  var capacityDropped: [String] = []
+  if newKeyCount > availableSlots {
+    // Refusing the whole import over the overflow would block a radio migration (measured
+    // 2026-09-01: 338 needed, 335 free), so leave out only as many as do not fit, and choose
+    // them by disposability: never a contact the app holds history for, then the nodes the
+    // mesh has heard from least recently (`last_advert`; a record's `last_modified` is a poor
+    // proxy — a friend's entry that nothing rewrote in months sorts as "stale" by it, which is
+    // exactly backwards). Ties break on the key so a re-run drops the same ones.
+    let mostDisposableFirst = order
+      .filter { !existingContacts.keys.contains($0) }
+      .sorted { lhs, rhs in
+        let l = byKey[lhs]!.config
+        let r = byKey[rhs]!.config
+        let lProtected = protectedKeys.contains(lhs)
+        let rProtected = protectedKeys.contains(rhs)
+        if lProtected != rProtected { return !lProtected }
+        if l.lastAdvert != r.lastAdvert { return l.lastAdvert < r.lastAdvert }
+        if l.lastModified != r.lastModified { return l.lastModified < r.lastModified }
+        return lhs < rhs
+      }
+    let dropped = Set(mostDisposableFirst.prefix(newKeyCount - availableSlots))
+    capacityDropped = order.filter { dropped.contains($0) }.map { byKey[$0]!.config.name }
+    order.removeAll { dropped.contains($0) }
   }
 
   // Drop a record the device already stores byte-for-byte: re-adding it would arm a
   // /contacts3 rewrite for no change. A dropped record was an existing key, so it never
   // counted against free capacity above.
-  return try order.compactMap { key in
+  var records: [MeshContact] = []
+  var coordinateFallbacks: [String] = []
+  for key in order {
     let entry = byKey[key]!
-    let record = try buildContactRecord(entry.config, publicKey: entry.publicKey, hexKey: key)
-    if let existing = existingContacts[key], persistedContactFieldsMatch(existing, record) {
-      return nil
+    let built = try buildContactRecord(entry.config, publicKey: entry.publicKey, hexKey: key)
+    if built.coordinateFellBack {
+      coordinateFallbacks.append(entry.config.name)
     }
-    return record
+    if let existing = existingContacts[key], persistedContactFieldsMatch(existing, built.record) {
+      continue
+    }
+    records.append(built.record)
   }
+  return (records, coordinateFallbacks, capacityDropped)
 }
 
 /// True when `existing` (a device-resident contact) already stores exactly what `record` would
@@ -351,17 +440,26 @@ private func persistedContactFieldsMatch(_ existing: MeshContact, _ record: Mesh
 
 /// Builds one validated contact record. `publicKey` and `hexKey` are the already-decoded key
 /// and its lowercase hex from ``planContactRecords``, so the key is parsed exactly once.
+///
+/// A coordinate that cannot be read or is out of range does not reject the record. The node's
+/// own position is strict because the user typed it; a contact's position came off the mesh
+/// in an advert, and a repeater advertising junk — the firmware stores any `Int32`, well past
+/// ±90° — must not block a whole radio migration. Such a contact is written with no location
+/// (the firmware's own 0/0) and reported back so the user knows which ones.
 private func buildContactRecord(
   _ contact: MeshCoreNodeConfig.ContactConfig,
   publicKey: Data,
   hexKey: String
-) throws -> MeshContact {
+) throws -> (record: MeshContact, coordinateFellBack: Bool) {
   let (outPath, outPathLength) = try resolveOutPath(contact)
 
-  let lat = try validatedCoordinate(contact.latitude, field: .contactLatitude(name: contact.name), range: PacketBuilder.latitudeRange)
-  let lon = try validatedCoordinate(contact.longitude, field: .contactLongitude(name: contact.name), range: PacketBuilder.longitudeRange)
+  let parsedLat = parseConfigCoordinate(contact.latitude, range: PacketBuilder.latitudeRange)
+  let parsedLon = parseConfigCoordinate(contact.longitude, range: PacketBuilder.longitudeRange)
+  let coordinateFellBack = parsedLat == nil || parsedLon == nil
+  let lat = coordinateFellBack ? 0 : parsedLat!
+  let lon = coordinateFellBack ? 0 : parsedLon!
 
-  return MeshContact(
+  let record = MeshContact(
     id: hexKey,
     publicKey: publicKey,
     type: ContactType(rawValue: contact.type) ?? .chat,
@@ -375,6 +473,7 @@ private func buildContactRecord(
     longitude: lon,
     lastModified: Date(timeIntervalSince1970: TimeInterval(contact.lastModified))
   )
+  return (record, coordinateFellBack)
 }
 
 /// Resolves the encoded out-path for a contact, rejecting malformed routing data instead of

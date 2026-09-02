@@ -819,3 +819,49 @@
 
 /* Location: StoreRecoveryView.swift - Shown while a recovery attempt is running */
 "storeRecovery.working" = "处理中…";
+
+/* Location: PacketScopeDetailView.swift - observer coverage for one message */
+"packetScope.title" = "网络视图";
+"packetScope.refresh" = "刷新";
+"packetScope.loading" = "正在检查观察站…";
+"packetScope.observerCount" = "观察站（%d）";
+"packetScope.notObserved" = "没有观察站听到此数据包";
+"packetScope.notObservedFooter" = "该数据包未到达观察站网络——但仍可能已在网状网中送达。观察站仅覆盖其所在区域。";
+"packetScope.coverageFooter" = "覆盖情况仅反映所配置的观察站网络。消息可能已送达但未被观察到。";
+"packetScope.heardDirectly" = "直接听到";
+"packetScope.via" = "经由 %@";
+"packetScope.error.disabled" = "Packet Scope 已在设置中关闭。";
+"packetScope.error.invalidBaseUrl" = "Packet Scope 服务器地址不是有效的 HTTPS URL。";
+
+/* Location: PacketScopeDetailView.swift - propagation summary and per-observer detail */
+"packetScope.bestSignal" = "最佳信号";
+"packetScope.shortestRoute" = "最短路径";
+"packetScope.direct" = "直达，无中继";
+"packetScope.hopCount" = "%d 跳";
+"packetScope.propagation" = "传播";
+"packetScope.spreadSeconds" = "%@ 秒传遍网状网";
+"packetScope.receptions" = "接收总次数";
+"packetScope.timesHeard" = "×%d";
+
+/* Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat */
+"packetScope.error.unreadableHash" = "此消息的数据包标识符无法读取，未进行查询。";
+"packetScope.retriedFooter" = "已发送 %d 次；每次尝试都是独立数据包。此处显示最先被听到的那一个。";
+
+/* Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place */
+"packetScope.observerNotOnMap" = "无位置";
+
+/* Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder */
+"packetScope.heardBy" = "%d 个观察站听到";
+"packetScope.best" = "最佳 %@";
+"packetScope.shortest" = "最短 %@";
+"packetScope.stillArriving" = "仍在接收";
+"packetScope.settled" = "已稳定";
+"packetScope.settledIn" = "%@ 秒后稳定";
+"packetScope.hopOne" = "1 跳";
+"packetScope.bestRoute" = "最佳路径";
+"packetScope.sort" = "排序";
+"packetScope.sortStrongest" = "信号最强";
+"packetScope.sortFewestHops" = "跳数最少";
+"packetScope.sortFirstHeard" = "最先收到";
+"packetScope.new" = "新";
+"packetScope.showAll" = "显示全部";

@@ -612,6 +612,8 @@ public enum L10n {
           public static let expanded = L10n.tr("Chats", "chats.message.action.expanded", fallback: "Expanded")
           /// Location: MessageActionsSheet.swift - Context menu action to mention
           public static let mention = L10n.tr("Chats", "chats.message.action.mention", fallback: "Mention")
+          /// Location: ActionsDetailsSection.swift - opens the Packet Scope observer view
+          public static let networkView = L10n.tr("Chats", "chats.message.action.networkView", fallback: "Network View")
           /// Location: MessageLinkAccessibility.swift - VoiceOver action to open a shared channel link, %@ is the channel name
           public static func openChannel(_ p1: Any) -> String {
             return L10n.tr("Chats", "chats.message.action.openChannel", String(describing: p1), fallback: "Open Channel: %@")
@@ -2801,6 +2803,102 @@ public enum L10n {
         }
       }
     }
+    public enum PacketScope {
+      /// best %@
+      public static func best(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.best", String(describing: p1), fallback: "best %@")
+      }
+      /// Best route
+      public static let bestRoute = L10n.tr("Localizable", "packetScope.bestRoute", fallback: "Best route")
+      /// Location: PacketScopeDetailView.swift - propagation summary and per-observer detail
+      public static let bestSignal = L10n.tr("Localizable", "packetScope.bestSignal", fallback: "Best signal")
+      /// Coverage reflects only the configured observer network. A message can be delivered without being observed.
+      public static let coverageFooter = L10n.tr("Localizable", "packetScope.coverageFooter", fallback: "Coverage reflects only the configured observer network. A message can be delivered without being observed.")
+      /// Direct, no repeaters
+      public static let direct = L10n.tr("Localizable", "packetScope.direct", fallback: "Direct, no repeaters")
+      /// Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder
+      public static func heardBy(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.heardBy", p1, fallback: "Heard by %d")
+      }
+      /// Heard directly
+      public static let heardDirectly = L10n.tr("Localizable", "packetScope.heardDirectly", fallback: "Heard directly")
+      /// %d hops
+      public static func hopCount(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.hopCount", p1, fallback: "%d hops")
+      }
+      /// 1 hop
+      public static let hopOne = L10n.tr("Localizable", "packetScope.hopOne", fallback: "1 hop")
+      /// Checking observers…
+      public static let loading = L10n.tr("Localizable", "packetScope.loading", fallback: "Checking observers…")
+      /// New
+      public static let new = L10n.tr("Localizable", "packetScope.new", fallback: "New")
+      /// No observer heard this packet
+      public static let notObserved = L10n.tr("Localizable", "packetScope.notObserved", fallback: "No observer heard this packet")
+      /// The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.
+      public static let notObservedFooter = L10n.tr("Localizable", "packetScope.notObservedFooter", fallback: "The packet never reached the observer network — it may still have been delivered on the mesh. Observers only cover their own region.")
+      /// Observers (%d)
+      public static func observerCount(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.observerCount", p1, fallback: "Observers (%d)")
+      }
+      /// Location: PacketScopeDetailView.swift - row caption under the coverage map for an observer it cannot place
+      public static let observerNotOnMap = L10n.tr("Localizable", "packetScope.observerNotOnMap", fallback: "No location")
+      /// Propagation
+      public static let propagation = L10n.tr("Localizable", "packetScope.propagation", fallback: "Propagation")
+      /// Total receptions
+      public static let receptions = L10n.tr("Localizable", "packetScope.receptions", fallback: "Total receptions")
+      /// Refresh
+      public static let refresh = L10n.tr("Localizable", "packetScope.refresh", fallback: "Refresh")
+      /// Sent %d times; each attempt is a separate packet. This shows the one an observer heard first.
+      public static func retriedFooter(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.retriedFooter", p1, fallback: "Sent %d times; each attempt is a separate packet. This shows the one an observer heard first.")
+      }
+      /// settled
+      public static let settled = L10n.tr("Localizable", "packetScope.settled", fallback: "settled")
+      /// settled in %@ s
+      public static func settledIn(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.settledIn", String(describing: p1), fallback: "settled in %@ s")
+      }
+      /// shortest %@
+      public static func shortest(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.shortest", String(describing: p1), fallback: "shortest %@")
+      }
+      /// Shortest route
+      public static let shortestRoute = L10n.tr("Localizable", "packetScope.shortestRoute", fallback: "Shortest route")
+      /// Show all
+      public static let showAll = L10n.tr("Localizable", "packetScope.showAll", fallback: "Show all")
+      /// Sort
+      public static let sort = L10n.tr("Localizable", "packetScope.sort", fallback: "Sort")
+      /// Fewest hops
+      public static let sortFewestHops = L10n.tr("Localizable", "packetScope.sortFewestHops", fallback: "Fewest hops")
+      /// First heard
+      public static let sortFirstHeard = L10n.tr("Localizable", "packetScope.sortFirstHeard", fallback: "First heard")
+      /// Strongest signal
+      public static let sortStrongest = L10n.tr("Localizable", "packetScope.sortStrongest", fallback: "Strongest signal")
+      /// %@ s across the mesh
+      public static func spreadSeconds(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.spreadSeconds", String(describing: p1), fallback: "%@ s across the mesh")
+      }
+      /// still arriving
+      public static let stillArriving = L10n.tr("Localizable", "packetScope.stillArriving", fallback: "still arriving")
+      /// ×%d
+      public static func timesHeard(_ p1: Int) -> String {
+        return L10n.tr("Localizable", "packetScope.timesHeard", p1, fallback: "×%d")
+      }
+      /// Location: PacketScopeDetailView.swift - observer coverage for one message
+      public static let title = L10n.tr("Localizable", "packetScope.title", fallback: "Network View")
+      /// via %@
+      public static func via(_ p1: Any) -> String {
+        return L10n.tr("Localizable", "packetScope.via", String(describing: p1), fallback: "via %@")
+      }
+      public enum Error {
+        /// Packet Scope is turned off in Settings.
+        public static let disabled = L10n.tr("Localizable", "packetScope.error.disabled", fallback: "Packet Scope is turned off in Settings.")
+        /// The Packet Scope server address is not a valid HTTPS URL.
+        public static let invalidBaseUrl = L10n.tr("Localizable", "packetScope.error.invalidBaseUrl", fallback: "The Packet Scope server address is not a valid HTTPS URL.")
+        /// Location: PacketScopeDetailView.swift - rejected hash and retried-message caveat
+        public static let unreadableHash = L10n.tr("Localizable", "packetScope.error.unreadableHash", fallback: "This message's packet identifier is unreadable, so nothing was looked up.")
+      }
+    }
     public enum SignalBars {
       /// Location: RepeaterSignalPopover.swift - Button that hides every stale row
       public static let clearStale = L10n.tr("Localizable", "signalBars.clearStale", fallback: "Clear stale repeaters")
@@ -4712,6 +4810,14 @@ public enum L10n {
       public static let confirmTitleAdd = L10n.tr("Settings", "configImport.confirmTitleAdd", fallback: "Add to Device?")
       /// Confirmation alert title (overwrite settings)
       public static let confirmTitleOverwrite = L10n.tr("Settings", "configImport.confirmTitleOverwrite", fallback: "Overwrite Settings?")
+      /// Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names
+      public static func contactCapacityDropped(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.contactCapacityDropped", p1, String(describing: p2), fallback: "%d contact(s) will be skipped because this radio has no free slots left for them: %@")
+      }
+      /// Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names
+      public static func contactCoordinateFallback(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.contactCoordinateFallback", p1, String(describing: p2), fallback: "%d contact(s) have an unusable location in this file and will be imported without one: %@")
+      }
       /// Contact count (param: integer)
       public static func contactCount(_ p1: Int) -> String {
         return L10n.tr("Settings", "configImport.contactCount", p1, fallback: "Will add/update %d contacts on device")
@@ -5448,6 +5554,16 @@ public enum L10n {
         /// Topography
         public static let topo = L10n.tr("Settings", "offlineMaps.layer.topo", fallback: "Topography")
       }
+    }
+    public enum PacketScope {
+      /// Adds a Network View to a message's actions, showing which mesh observers heard its packet and at what signal level. Looking a message up sends that packet's identifier (never its content) to the server below over your phone's internet connection. Coverage depends on the observer network the server watches.
+      public static let footer = L10n.tr("Settings", "packetScope.footer", fallback: "Adds a Network View to a message's actions, showing which mesh observers heard its packet and at what signal level. Looking a message up sends that packet's identifier (never its content) to the server below over your phone's internet connection. Coverage depends on the observer network the server watches.")
+      /// Packet Scope (opt-in CoreScope observer lookup)
+      public static let header = L10n.tr("Settings", "packetScope.header", fallback: "Packet Scope")
+      /// Server
+      public static let server = L10n.tr("Settings", "packetScope.server", fallback: "Server")
+      /// Look Up Message Coverage
+      public static let toggle = L10n.tr("Settings", "packetScope.toggle", fallback: "Look Up Message Coverage")
     }
     public enum PathHashMode {
       /// Footer explaining path hash mode tradeoff

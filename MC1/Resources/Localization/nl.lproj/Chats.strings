@@ -1313,3 +1313,6 @@
 
 /* Location: ConversationMessageSearchBar.swift - Accessibility label for the next-match button */
 "chats.search.inConversation.next" = "Volgend resultaat";
+
+/* Location: ActionsDetailsSection.swift - opens the Packet Scope observer view */
+"chats.message.action.networkView" = "Netwerkweergave";

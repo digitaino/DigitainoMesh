@@ -143,9 +143,9 @@ extension PersistenceStore {
 
     let predicate = #Predicate<Contact> { radioIDArray.contains($0.radioID) }
     let contacts = try modelContext.fetch(FetchDescriptor(predicate: predicate))
-    return Dictionary(uniqueKeysWithValues: contacts.map {
+    return Dictionary(contacts.map {
       (contactKey(radioID: $0.radioID, publicKey: $0.publicKey), $0)
-    })
+    }, uniquingKeysWith: { first, _ in first })
   }
 
   func fetchExistingChannelsByKey(radioIDs: Set<UUID>) throws -> [String: Channel] {
@@ -154,9 +154,9 @@ extension PersistenceStore {
 
     let predicate = #Predicate<Channel> { radioIDArray.contains($0.radioID) }
     let channels = try modelContext.fetch(FetchDescriptor(predicate: predicate))
-    return Dictionary(uniqueKeysWithValues: channels.map {
+    return Dictionary(channels.map {
       (channelKey(radioID: $0.radioID, index: $0.index), $0)
-    })
+    }, uniquingKeysWith: { first, _ in first })
   }
 
   /// Fetches every local channel for the given radios as raw models. Channel
@@ -176,9 +176,9 @@ extension PersistenceStore {
 
     let predicate = #Predicate<RemoteNodeSession> { radioIDArray.contains($0.radioID) }
     let sessions = try modelContext.fetch(FetchDescriptor(predicate: predicate))
-    return Dictionary(uniqueKeysWithValues: sessions.map {
+    return Dictionary(sessions.map {
       (remoteNodeSessionKey(radioID: $0.radioID, publicKey: $0.publicKey), $0)
-    })
+    }, uniquingKeysWith: { first, _ in first })
   }
 }
 

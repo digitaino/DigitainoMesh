@@ -109,6 +109,30 @@ public actor HeardRepeatsService {
 
       try await dataStore.saveMessageRepeat(repeatDTO)
 
+      // The echo is the one place an *outgoing* message's wire identity ever
+      // surfaces — the phone never sees its own on-air bytes, but a repeater's
+      // rebroadcast is byte-identical after path stripping, so the echo's content
+      // hash IS the sent packet's. Stamp it while the RxLog row still exists.
+      //
+      // Its own do/catch on purpose: this is a new, optional, opt-in-only write
+      // sitting between a committed MessageRepeat row and the heardRepeats
+      // increment. Letting it throw into the outer catch would leave the repeat
+      // saved but never counted and no event yielded — and unrecoverably so,
+      // since isDuplicateRepeat rejects the next echo of the same RX entry. A
+      // failure here must cost the Network View, never the repeat counter.
+      do {
+        // nil for a pre-migration RxLog row whose payload-type nibble is lost;
+        // no hash beats a wrong one on a column that lives for years.
+        if let contentHash = entry.contentHash {
+          try await dataStore.setMessagePacketContentHashIfMissing(
+            id: message.id,
+            contentHash: contentHash
+          )
+        }
+      } catch {
+        logger.warning("Could not stamp packet content hash: \(error.localizedDescription)")
+      }
+
       // Increment and return new count
       let newCount = try await dataStore.incrementMessageHeardRepeats(id: message.id)
 

@@ -1264,6 +1264,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "Wijziging van radio-instellingen verbreekt de verbinding met het huidige mesh-netwerk";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "%d contact(en) hebben een onbruikbare locatie in dit bestand en worden zonder locatie geïmporteerd: %@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "%d contact(en) worden overgeslagen omdat deze radio geen vrije plaatsen meer voor ze heeft: %@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "%d contacten worden toegevoegd/bijgewerkt op het apparaat";
 
@@ -1907,3 +1913,9 @@
 
 /* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
 "messages.translationFooter" = "Bij inkomende berichten die in een andere taal zijn geschreven een knop Vertalen weergeven. Vertalen gebeurt op dit apparaat en verandert nooit het opgeslagen bericht.";
+
+/* Packet Scope (opt-in CoreScope observer lookup) */
+"packetScope.header" = "Packet Scope";
+"packetScope.toggle" = "Berichtdekking opzoeken";
+"packetScope.server" = "Server";
+"packetScope.footer" = "Voegt een netwerkweergave toe aan de acties van een bericht, met welke mesh-waarnemers het pakket hoorden en met welk signaalniveau. Bij het opzoeken wordt de pakket-ID (nooit de inhoud) via de internetverbinding van je telefoon naar de onderstaande server gestuurd. De dekking hangt af van het waarnemersnetwerk van de server.";

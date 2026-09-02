@@ -360,7 +360,10 @@ extension PersistenceStore {
       let predicate = #Predicate<Message> { chunk.contains($0.id) }
       return try modelContext.fetch(FetchDescriptor(predicate: predicate))
     }
-    let messagesByID = Dictionary(uniqueKeysWithValues: parentMessages.map { ($0.id, $0) })
+    // Never trap on a duplicate: a message inserted earlier in this same unsaved import
+    // can share an id with a persisted row when two local devices carry one identity,
+    // and a fetch then returns both. An import must degrade, not kill the app.
+    let messagesByID = Dictionary(parentMessages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
     let result = insertUniqueWithParent(
       dtos,

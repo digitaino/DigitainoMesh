@@ -817,6 +817,23 @@ public extension PersistenceStore {
     return message.heardRepeats
   }
 
+  /// Stamps the mesh-wide packet content hash, first writer wins. See
+  /// `HeardRepeatPersisting` for why an existing value is never overwritten.
+  func setMessagePacketContentHashIfMissing(id: UUID, contentHash: String) throws {
+    let targetID = id
+    let predicate = #Predicate<Message> { message in message.id == targetID }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    guard let message = try modelContext.fetch(descriptor).first,
+          message.packetContentHash == nil else {
+      return
+    }
+
+    message.packetContentHash = contentHash
+    try modelContext.save()
+  }
+
   /// Increments the sendCount for a message and returns the new count.
   func incrementMessageSendCount(id: UUID) throws -> Int {
     let targetID = id

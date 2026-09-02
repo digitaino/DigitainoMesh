@@ -20,6 +20,12 @@ public protocol HeardRepeatPersisting: Actor {
   /// Increment heard repeats count and return new count
   func incrementMessageHeardRepeats(id: UUID) async throws -> Int
 
+  /// Stamp the mesh-wide packet content hash onto a message, first writer wins.
+  /// Every echo of one transmission shares the hash, so which echo stamps it is
+  /// immaterial — but a hash already present (a retry's echo racing an earlier
+  /// attempt's) is never overwritten, keeping the row pinned to one wire packet.
+  func setMessagePacketContentHashIfMissing(id: UUID, contentHash: String) async throws
+
   /// Increment send count and return new count
   func incrementMessageSendCount(id: UUID) async throws -> Int
 }

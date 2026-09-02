@@ -1264,6 +1264,12 @@
 /* Radio settings change warning */
 "configImport.radioWarning" = "Зміна налаштувань радіо призведе до від'єднання від поточної mesh-мережі";
 
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts whose file coordinates were unusable; %d count, %@ names */
+"configImport.contactCoordinateFallback" = "Контакти з непридатним місцезнаходженням у цьому файлі (%d) буде імпортовано без нього: %@";
+
+/* Location: NodeConfigImportViewModel.swift - confirmation note listing contacts the radio has no free slot for; %d count, %@ names */
+"configImport.contactCapacityDropped" = "Контакти пропущено, бо на цій радіостанції немає вільних комірок (%d): %@";
+
 /* Contact count (param: integer) */
 "configImport.contactCount" = "Буде додано/оновлено %d контактів на пристрої";
 
@@ -1907,3 +1913,9 @@
 
 /* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
 "messages.translationFooter" = "Показувати кнопку «Перекласти» у вхідних повідомленнях, написаних іншою мовою. Переклад виконується на цьому пристрої й ніколи не змінює збережене повідомлення.";
+
+/* Packet Scope (opt-in CoreScope observer lookup) */
+"packetScope.header" = "Packet Scope";
+"packetScope.toggle" = "Перевіряти покриття повідомлень";
+"packetScope.server" = "Сервер";
+"packetScope.footer" = "Додає до дій повідомлення мережевий вигляд: які спостерігачі mesh-мережі почули його пакет і з яким рівнем сигналу. Під час перевірки ідентифікатор пакета (але не його вміст) надсилається на вказаний нижче сервер через інтернет-з'єднання телефону. Покриття залежить від мережі спостерігачів сервера.";

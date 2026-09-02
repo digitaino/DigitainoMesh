@@ -17,12 +17,14 @@ extension NodeConfigServiceError {
       L10n.Settings.ConfigImport.Error.radioOutOfRange(Self.radioFieldLabel(field))
     case let .noAvailableChannelSlot(name):
       L10n.Settings.ConfigImport.Error.noAvailableChannelSlot(name)
-    case let .invalidCoordinate(field):
+    case let .invalidCoordinate(field, raw):
+      // The rejected text rides along verbatim (not localized — it is the user's
+      // own file) so the fix is obvious from the message alone.
       switch field {
       case .positionLatitude, .positionLongitude:
-        L10n.Settings.ConfigImport.Error.positionInvalid(Self.coordinateLabel(field))
+        L10n.Settings.ConfigImport.Error.positionInvalid(Self.coordinateLabel(field)) + " (\"\(raw)\")"
       case let .contactLatitude(name), let .contactLongitude(name):
-        L10n.Settings.ConfigImport.Error.contactCoordinateInvalid(name, Self.coordinateLabel(field))
+        L10n.Settings.ConfigImport.Error.contactCoordinateInvalid(name, Self.coordinateLabel(field)) + " (\"\(raw)\")"
       }
     case let .invalidOutPath(name):
       L10n.Settings.ConfigImport.Error.invalidOutPath(name)
