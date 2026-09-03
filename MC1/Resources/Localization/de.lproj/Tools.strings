@@ -1409,23 +1409,17 @@
 /* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
 "tools.signalMapper.focus.search" = "Repeater suchen";
 
-/* Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent */
-"tools.signalMapper.card.probeSuccess" = "%1$lld/%2$lld Antworten (%3$lld%%)";
-
-/* Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s" */
-"tools.signalMapper.card.lastHeard" = "Zuletzt vor %@ gehört";
-
 /* Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon */
 "tools.signalMapper.card.myCell" = "Meine Zelle";
 
 /* Location: SignalMapperCellCard.swift - Packet count under the quality headline */
-"tools.signalMapper.card.packetsReceived" = "%lld Pakete empfangen";
+"tools.signalMapper.card.packetsReceived" = "%lld empfangen";
 
 /* Location: SignalMapperCellCard.swift - Downlink column label */
-"tools.signalMapper.card.rxSignal" = "RX-Signal";
+"tools.signalMapper.card.rxSignal" = "Ich höre sie";
 
 /* Location: SignalMapperCellCard.swift - Uplink column label */
-"tools.signalMapper.card.txSignal" = "TX-Signal";
+"tools.signalMapper.card.txSignal" = "Sie hören mich";
 
 /* Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name */
 "tools.signalMapper.card.via" = "über %@";
@@ -1439,20 +1433,11 @@
 /* Location: SignalMapperCellCard.swift - Uplink is blank because no probe has been answered yet */
 "tools.signalMapper.card.waitingUplink" = "Warte auf Erkennungsantwort";
 
-/* Location: SignalMapperCellCard.swift - Strongest repeater in the cell */
-"tools.signalMapper.card.bestRepeater" = "Bester Repeater";
-
-/* Location: SignalMapperCellCard.swift - Label of the live last-heard clock */
-"tools.signalMapper.card.lastHeardLabel" = "Zuletzt gehört";
-
-/* Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s" */
-"tools.signalMapper.card.ago" = "vor %@";
-
 /* Location: SignalMapperCellCard.swift - Share of probes that were answered */
 "tools.signalMapper.card.probeSuccessLabel" = "Sondenerfolg";
 
 /* Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent */
-"tools.signalMapper.card.probeSuccessValue" = "%1$lld%% (%2$lld/%3$lld) · %4$lld Antworten";
+"tools.signalMapper.card.probeSuccessValue" = "%1$lld%% (%2$lld/%3$lld)";
 
 /* Location: SignalMapperCellCard.swift - Packets split by direction for one repeater */
 "tools.signalMapper.card.packetSplit" = "Pakete";
@@ -1461,10 +1446,10 @@
 "tools.signalMapper.card.packetSplitValue" = "%1$lld gehört · %2$lld gemeldet";
 
 /* Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link */
-"tools.signalMapper.card.connected" = "Verbunden (beidseitig)";
+"tools.signalMapper.card.connected" = "Beidseitig";
 
 /* Location: SignalMapperCellCard.swift - Group of repeaters we only hear */
-"tools.signalMapper.card.heardOnly" = "Gehört (einseitig)";
+"tools.signalMapper.card.heardOnly" = "Gehört";
 
 /* Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at */
 "tools.signalMapper.card.downlinkAccessibility" = "du hörst sie mit %lld Dezibel";
@@ -1483,6 +1468,51 @@
 
 /* Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip */
 "tools.signalMapper.card.chipHint" = "Zeigt die Messwerte dieses Repeaters für die Zelle";
+
+/* Location: SignalMapperCellCard.swift - VoiceOver hint on the header leg badge, which flips the map layer */
+"tools.signalMapper.card.legBadgeHint" = "Wechselt die Karte zwischen dem, was du hörst, und dem, was dich hört";
+
+/* Location: SignalMapperCellCard.swift - Reach-layer subtitle; %lld repeater readings of our transmissions */
+"tools.signalMapper.card.txReadings" = "%lld Messungen von dir";
+
+/* Location: SignalMapperCellCard.swift - Age of the last direct hearing; %@ is a short duration like "8 s" */
+"tools.signalMapper.card.heardAgo" = "gehört vor %@";
+
+/* Location: SignalMapperCellCard.swift - Strongest direct reading inside the freshness window */
+"tools.signalMapper.card.strongestNow" = "Stärkster jetzt";
+
+/* Location: SignalMapperCellCard.swift - Tag after a graded number that is a mean, not a best reading */
+"tools.signalMapper.card.averageTag" = "Ø";
+
+/* Location: SignalMapperCellCard.swift - Count of repeaters never heard directly; opens the detail sheet */
+"tools.signalMapper.card.indirectCount" = "+%lld indirekt";
+
+/* Location: SignalMapperCellCard.swift - VoiceOver hint on the indirect count */
+"tools.signalMapper.card.indirectHint" = "Repeater in den Paketpfaden dieses Sechsecks, die dieses Funkgerät nie direkt gehört hat";
+
+/* Location: SignalMapperCellCard.swift - Scope picker: figures from the open run only */
+"tools.signalMapper.card.thisRide" = "Diese Fahrt";
+
+/* Location: SignalMapperCellCard.swift - Scope picker: figures merged across every day */
+"tools.signalMapper.card.allTime" = "Gesamt";
+
+/* Location: SignalMapperCellCard.swift - Ride scope on a hexagon the run has not touched */
+"tools.signalMapper.card.nothingThisRide" = "Auf dieser Fahrt hier nichts gehört";
+
+/* Location: SignalMapperCoverageView.swift - Legend totals line while idle; %@ is the cells/observations/days summary */
+"tools.signalMapper.legend.allTime" = "Gesamt · %@";
+
+/* Location: SignalMapperCoverageView.swift - Legend line for the open run; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.thisRide" = "Diese Fahrt · %1$lld Sechsecke · %2$lld Beobachtungen";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section of repeaters never heard directly */
+"tools.signalMapper.detail.indirectRepeaters" = "Nicht direkt gehört";
+
+/* Location: SignalMapperCellDetailSheet.swift - Footer explaining the indirect section */
+"tools.signalMapper.detail.indirectFooter" = "Diese Repeater haben Pakete in dieses Sechseck getragen oder gemeldet, dich zu hören, wurden von diesem Funkgerät aber nie direkt gehört.";
+
+/* Location: SignalMapperCellDetailSheet.swift - Per-repeater last direct hearing; %@ is a short age */
+"tools.signalMapper.detail.lastHeardDirectly" = "gehört vor %@";
 
 /* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
 "tools.signalMapper.focus.unlock" = "Aufschaltung aufheben";

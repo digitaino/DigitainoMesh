@@ -1,6 +1,15 @@
 import Foundation
 import SurveyKit
 
+/// How long a measurement counts as "now" on the coverage card.
+///
+/// Ten minutes: long enough that a repeater heard while you were walking the last block is
+/// still current, short enough that "strongest now" cannot be answered by something from
+/// this morning (Rafael, 2026-09-03).
+public enum SignalMapperFreshness {
+  public static let window: TimeInterval = 600
+}
+
 /// One repeater's involvement in a cell, ready to list.
 ///
 /// Identity is the canonical hex the capture engine stored (`NodeHexID.hex`). The display
@@ -32,11 +41,85 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
   /// The packet count split by which side transmitted.
   public let rxPacketCount: Int
   public let txPacketCount: Int
+  /// Times this repeater was merely a hop on somebody else's measured link. Not part of
+  /// ``packetCount``: appearing on a path is not the same as being heard, and treating the
+  /// two alike listed every hop of every route as a repeater of this hexagon.
+  public let relayCount: Int
+  /// Echoes of our own packets that entered the mesh through this node.
+  public let echoCount: Int
+  /// How many direct readings back ``averageSnr`` — the sample size behind the number.
+  public let directReadingCount: Int
+  /// When this repeater was last heard *directly*, and the reading of that very sighting.
+  /// Nil when it has only ever been an upstream hop. A pair: never mix one's time with the
+  /// other's number.
+  public let lastDirectHeard: Date?
+  public let lastRxSnr: Double?
+  /// When we last had evidence this repeater heard *us* — a reported reading, or an echo
+  /// whose first hop it was.
+  public let lastUplinkAt: Date?
   public let firstHeard: Date
   public let lastHeard: Date
 
   public var id: String {
     hexID
+  }
+
+  // MARK: - What the evidence supports
+
+  /// We have measured this repeater ourselves, at least once.
+  public var wasHeardDirectly: Bool {
+    lastDirectHeard != nil
+  }
+
+  /// It has heard us, at least once — reported or echoed.
+  public var wasUplinkProven: Bool {
+    lastUplinkAt != nil
+  }
+
+  /// Neither leg was ever measured: it is on the paths we received and nothing more. The
+  /// row that must not be presented as a link.
+  public var isRelayOnly: Bool {
+    !wasHeardDirectly && !wasUplinkProven
+  }
+
+  /// Whether the direct measurement is inside ``SignalMapperFreshness/window``.
+  public func isDirectCurrent(at now: Date) -> Bool {
+    guard let lastDirectHeard else { return false }
+    return now.timeIntervalSince(lastDirectHeard) <= SignalMapperFreshness.window
+  }
+
+  /// Whether the uplink evidence is inside ``SignalMapperFreshness/window``.
+  public func isUplinkCurrent(at now: Date) -> Bool {
+    guard let lastUplinkAt else { return false }
+    return now.timeIntervalSince(lastUplinkAt) <= SignalMapperFreshness.window
+  }
+
+  /// What the *current* evidence says about the link, as three cases and no more.
+  public enum Link: Sendable, Hashable {
+    /// Both legs proved inside the freshness window: we hear it and it hears us.
+    case twoWay
+    /// One leg current, or one leg only ever proved — a link, but half-measured.
+    case oneWay
+    /// Never on either end of a measurement here.
+    case relayOnly
+  }
+
+  public func link(at now: Date) -> Link {
+    if isDirectCurrent(at: now), isUplinkCurrent(at: now) { return .twoWay }
+    if isRelayOnly { return .relayOnly }
+    return .oneWay
+  }
+
+  /// The most recent thing we actually know about this repeater, either leg.
+  public func freshestEvidence(at now: Date) -> Date? {
+    [lastDirectHeard, lastUplinkAt].compactMap(\.self).max()
+  }
+
+  /// Nothing about this repeater is current — including a repeater nothing was ever
+  /// measured on.
+  public func isStale(at now: Date) -> Bool {
+    guard let freshest = freshestEvidence(at: now) else { return true }
+    return now.timeIntervalSince(freshest) > SignalMapperFreshness.window
   }
 
   public init(
@@ -53,6 +136,12 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
     averageRssi: Double? = nil,
     rxPacketCount: Int = 0,
     txPacketCount: Int = 0,
+    relayCount: Int = 0,
+    echoCount: Int = 0,
+    directReadingCount: Int = 0,
+    lastDirectHeard: Date? = nil,
+    lastRxSnr: Double? = nil,
+    lastUplinkAt: Date? = nil,
     firstHeard: Date,
     lastHeard: Date
   ) {
@@ -69,6 +158,12 @@ public struct SignalMapperCoverageRepeater: Sendable, Hashable, Identifiable {
     self.averageRssi = averageRssi
     self.rxPacketCount = rxPacketCount
     self.txPacketCount = txPacketCount
+    self.relayCount = relayCount
+    self.echoCount = echoCount
+    self.directReadingCount = directReadingCount
+    self.lastDirectHeard = lastDirectHeard
+    self.lastRxSnr = lastRxSnr
+    self.lastUplinkAt = lastUplinkAt
     self.firstHeard = firstHeard
     self.lastHeard = lastHeard
   }

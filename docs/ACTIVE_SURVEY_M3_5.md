@@ -783,3 +783,102 @@ which channel to flood. Both of those hand off rather than guessing — and a ha
 returns `nil`, not `true`, so it never reports "Sent" for a packet that was never sent.
 The row is disabled while the radio link is down, and every tap answers in a caption
 underneath.
+
+## §9 Sixth field pass — the card told the truth about the wrong things (2026-09-03)
+
+Rafael, standing under his home repeater with the cell card open: the card called a
+distant solar repeater the **Best Repeater**, listed dozens of repeaters as **Heard**, put a
+repeater he had not heard in weeks under **Connected (2-way)**, printed a **Last Heard**
+nobody could attribute, and never said whether the headline was grading what he hears or
+what hears him. He also asked for the map to keep showing everything ever mapped when no
+survey is running, and to tell a ride's data from the history once one is.
+
+A four-agent review (data path, session design, card UX, and a skeptic refuting the other
+three against the code) confirmed every complaint and traced three of them to one root
+cause: `SignalMapperCaptureEngine.sightings` credited **every hop of every path** as a
+repeater of the hexagon, `CellAggregator.fold` stamped `lastHeard` and `rxPacketCount` for
+each of them, and nothing ever expired. The card was rendering path membership as hearing.
+
+### What each number actually was
+
+- **Best Repeater** was the single highest RX reading ever recorded for any hash in the
+  cell, merged across every day, with no recency, no sample floor, and RSSI never read.
+  LoRa SNR saturates near +13 dB, so nearby repeaters tie there, and `max(by:)` keeps the
+  first tied element of a busiest-first array — where "busiest" counted appearances in
+  other people's paths. The winner in his screenshot was a one-byte hash resolved to a
+  best-guess name; the same node also appeared as `ABBA` and `ABBA4A`, three chips for one
+  repeater.
+- **Heard (1-way)** was every hash that ever appeared anywhere in the path of any packet
+  received in the hexagon, on any day. Only the last hop was ever heard; the rest were
+  measured by somebody else.
+- **Connected (2-way)** was `averageTxSnr != nil` — reported hearing us at least once,
+  ever. An echo of our own packet, the strongest uplink proof there is, did not count.
+  The per-repeater packet split booked a probe reply (which carries both legs) as TX only
+  and a signal-less relay hop as RX.
+- **Last Heard** unfiltered was `row.latest`, widened by our own probe transmissions and
+  by delivery ACKs; filtered it was the repeater's last *path appearance*. Two statistics,
+  one label, sitting under Best Repeater so it read as that repeater's.
+- **The leg** was never named: the headline word followed the map layer silently, and on
+  Reach the subtitle counted "packets received" (RX plus our own echoes) under a TX grade.
+
+### Decisions (Rafael, 2026-09-03)
+
+1. **A repeater is listed only if this radio heard it directly.** Everything else — relays
+   somebody else measured, and repeaters that reported hearing us over a path we never
+   heard them on — is one `+N indirect` count that opens Cell Detail.
+2. **"Now" is ten minutes** (`SignalMapperFreshness.window`). Nothing on the card calls a
+   link current, strongest or two-way on evidence older than that; older chips stay,
+   dimmed, wearing their age.
+3. **Best Repeater → Strongest now**: the strongest of the *latest* direct readings inside
+   the window, under a total order the reader can check — reading to the nearest dB, then
+   RSSI (which still has range at the SNR ceiling), then direct-reading count, then
+   recency, then hash. Nothing is printed when nobody is current.
+4. **Ring this ride, dim the history.** Idle shows the all-time aggregate, labelled "All
+   time". A run keeps a memory-only baseline of the store at start; cells with new data
+   since then wear an accent ring (heavier when never mapped before) over dimmed fills,
+   and the card offers **This ride | All time**, defaulting to the ride.
+
+### What changed
+
+- **Aggregation** (`CellAggregator`, `MapperRepeaterStats`, the private column codec): five
+  additive local-only fields per repeater — `relayCount`, `echoCount`, `lastDirectHeard`,
+  `lastRxSnr` (kept as a pair), `lastUplinkAt` — and the packet split fixed to count each
+  leg by the reading it carries. The first hop of a heard-repeat path is now an *echo*: the
+  node that heard our radio directly. These are second-precision timestamps and must never
+  reach a wire type; the codec comment says so next to the min/max one.
+- **Builder**: one row per physical node — hashes that resolve unambiguously to the same
+  node merge, the widest hash is displayed, ambiguous short hashes stay their own row.
+  Legacy rows without the new columns fall back to `lastHeard` when they have direct
+  readings.
+- **Two-way** means both legs current: heard directly *and* (reported hearing us *or*
+  echoed us as first hop) inside the window.
+- **Last Heard** is gone as a row. The subtitle carries "heard 8 s ago" and means one
+  thing: the freshest direct hearing — of the filtered repeater, else of any repeater in the
+  hexagon. Our own transmissions and ACKs feed no "heard" figure anywhere on the card.
+- **The leg badge** — "↓ I hear them" / "↑ They hear me" — heads the card, flips the map
+  layer, and the columns carry the same words. Headline and column grade the value they
+  print (a ride's residual has no best, so it grades the mean and says "avg").
+- **Cuts**: route mix, probe round trip and the reply count leave the card for Cell Detail,
+  which gains a "Not Heard Directly" section and per-repeater RSSI and ages.
+- **Session**: `SignalMapperSessionBaseline` on the run object; `residual(since:)`
+  mirrors `merged(with:)` (sums and counts subtract and clamp, maxima become nil, so a
+  ride never shows a stored best as its own); `buildSession` runs the residuals through the
+  same cell path as `build`; the coverage model publishes `sessionSnapshot` and
+  `sessionScope` from the same read as the all-time snapshot, merges the engine's
+  unflushed buffer over the rows (most of the card's lag was the 30 s flush plus the
+  20–45 s reload), and guards reloads with a generation so a slow build cannot overwrite a
+  newer one. Rejected: a second fold inside the engine (dies on every BLE rewire, and would
+  keep painting a cell the anchor purge had just deleted) and a run-id column (a
+  trip-linkage key beside a res-9 cell in the main store — §3 hard rules 1 and 5).
+
+### Still open
+
+- The Reach layer colours a hexagon from its best uplink reading ever; nothing decays it.
+  The card no longer calls such a cell "connected", the map still paints it reachable.
+- The nav-bar pill and the card define "best" differently by design: the pill scores live
+  smoothed readings across both legs over the whole mesh; the card grades one leg inside
+  one hexagon. They are named differently now, and should stay so.
+- Anchor exclusion arms at `anchorMinDistinctDays` (5) of dwell. Rafael's home cell is on
+  his map only because that has not tripped yet; when it does, the cell and a randomised
+  disc around it leave his own map by design (docs/SIGNAL_MAPPER_V2.md §2.6). Say so in the
+  app before it happens.

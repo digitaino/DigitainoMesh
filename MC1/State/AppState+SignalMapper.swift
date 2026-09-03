@@ -53,6 +53,10 @@ extension AppState {
       tuningProvider: tuning,
       anchorSeedProvider: tuning
     )
+    // The engine being replaced still holds up to a whole flush interval of folded cells.
+    // Overwriting the property drops them, which on a mid-ride reconnect silently loses the
+    // last half-minute of the ride; `stop()` writes them out first.
+    let outgoingEngine = signalMapperEngine
     signalMapperFixCache = fixes
     signalMapperEngine = engine
 
@@ -60,6 +64,9 @@ extension AppState {
       // Wait out whichever transition was already in flight, so a stop queued a moment ago
       // cannot land after the start it was meant to precede.
       await previousTransition?.value
+      // Ahead of the cancellation check on purpose: a superseded transition must still not
+      // be the reason a window of coverage never reached the store.
+      await outgoingEngine?.stop()
       guard !Task.isCancelled else { return }
       await router.setFallback(fixes)
       await engine.start()
@@ -213,11 +220,25 @@ extension AppState {
     // The raw ride log. Failing to open it degrades the run to aggregates-only rather
     // than blocking it — but that degradation is loud in the summary sheet.
     let recorder = await makeRawRecorder(focusTargets: focusTargets)
+
+    // The ride's reference point, read once, here. Flushing first is what makes it honest:
+    // ambient capture may have been folding for half a minute, and cells already earned
+    // before the user tapped start belong to the history, not to the ride. Everything the
+    // ride shows is measured against this copy — memory-only, never stored, dies with the
+    // run (docs/SIGNAL_MAPPER_V2.md §2.6).
+    await signalMapperEngine?.flushNow()
+    let startedAt = Date()
+    let baseline = SignalMapperSessionBaseline(
+      startedAt: startedAt,
+      rows: (try? await services.dataStore.fetchMapperCellObservations()) ?? []
+    )
+
     let session = SignalMapperRideSession(
       runID: recorder?.runID ?? UUID(),
-      startedAt: Date(),
+      startedAt: startedAt,
       focusTargets: focusTargets,
-      recorder: recorder?.recorder
+      recorder: recorder?.recorder,
+      baseline: baseline
     )
     session.focusProbeInterval = max(4, MapperTuningStore().tuning.focusProbeIntervalSeconds)
     session.currentTxPowerDbm = { [weak self] in
@@ -366,16 +387,16 @@ extension AppState {
       try? await store.endRun(runID, at: Date())
     }
 
+    // Before either branch below, and awaited: the completion sheet reloads the map the
+    // moment this returns, so the ride's last half-minute has to be on disk by now.
+    // `tearDownSignalMapper()` does flush, but from inside a detached task the reload does
+    // not wait for — which would leave the sheet over a map missing its own ending.
+    await signalMapperEngine?.flushNow()
+
     if surveySessionOwnsCaptureStack {
       surveySessionOwnsCaptureStack = false
-      // The toggle is still off; the stack existed only for this session. `tearDown`
-      // flushes the buffered tail before stopping, so the session's last cells land.
+      // The toggle is still off; the stack existed only for this session.
       tearDownSignalMapper()
-    } else {
-      // Ambient capture keeps running, but the completion sheet reloads the map *now* —
-      // without this, the session's last half-minute sits in the buffer until the next
-      // scheduled flush and the sheet appears over a map missing its own ending.
-      await signalMapperEngine?.flushNow()
     }
 
     // Back to full cadence. The engine was never stopped, so there is nothing to rewire

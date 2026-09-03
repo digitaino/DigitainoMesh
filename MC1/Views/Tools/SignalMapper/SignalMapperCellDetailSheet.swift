@@ -16,8 +16,9 @@ import SwiftUI
 struct SignalMapperCellDetailSheet: View {
   let cell: SignalMapperCoverageCell
 
-  /// Enough to name the busiest neighbours without turning the sheet into a list screen.
-  private static let repeaterLimit = 5
+  /// The sheet is the one place the whole list lives — the card shows only the repeaters
+  /// this radio heard directly and folds the rest into a count that lands here.
+  private static let repeaterLimit = 40
 
   @Environment(\.dismiss) private var dismiss
 
@@ -28,8 +29,11 @@ struct SignalMapperCellDetailSheet: View {
         directionSection
         uplinkSection
         signalSection
-        if !cell.repeaters.isEmpty {
+        if !heardDirectly.isEmpty {
           repeaterSection
+        }
+        if !indirect.isEmpty {
+          indirectSection
         }
       }
       .navigationTitle(L10n.Tools.Tools.SignalMapper.Detail.title)
@@ -179,9 +183,36 @@ struct SignalMapperCellDetailSheet: View {
     }
   }
 
+  /// Repeaters this radio heard directly here — the last hop of a packet's path, the only
+  /// link the packet measured. Most recently heard first.
+  private var heardDirectly: [SignalMapperCoverageRepeater] {
+    cell.repeaters
+      .filter(\.wasHeardDirectly)
+      .sorted { lhs, rhs in
+        let lhsHeard = lhs.lastDirectHeard ?? .distantPast
+        let rhsHeard = rhs.lastDirectHeard ?? .distantPast
+        if lhsHeard != rhsHeard { return lhsHeard > rhsHeard }
+        return lhs.hexID < rhs.hexID
+      }
+  }
+
+  /// Everything else: upstream relays somebody else measured, and repeaters that reported
+  /// hearing us over a path this radio never heard them on. Real evidence of reach, no
+  /// signal of our own to show for it.
+  private var indirect: [SignalMapperCoverageRepeater] {
+    cell.repeaters
+      .filter { !$0.wasHeardDirectly }
+      .sorted { lhs, rhs in
+        let lhsCount = lhs.packetCount + lhs.relayCount
+        let rhsCount = rhs.packetCount + rhs.relayCount
+        if lhsCount != rhsCount { return lhsCount > rhsCount }
+        return lhs.hexID < rhs.hexID
+      }
+  }
+
   private var repeaterSection: some View {
     Section(L10n.Tools.Tools.SignalMapper.Detail.repeaters) {
-      ForEach(cell.repeaters.prefix(Self.repeaterLimit)) { repeater in
+      ForEach(heardDirectly.prefix(Self.repeaterLimit)) { repeater in
         VStack(alignment: .leading, spacing: 2) {
           HStack(spacing: 6) {
             Text(repeater.name ?? repeater.hexID)
@@ -202,15 +233,62 @@ struct SignalMapperCellDetailSheet: View {
             Text(repeater.hexID)
               .font(.caption2.monospaced())
               .foregroundStyle(.secondary)
-            if let snr = repeater.averageSnr {
-              Text(decibels(snr))
+            if let snr = repeater.lastRxSnr ?? repeater.averageSnr {
+              Text("▼" + decibels(snr))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+            }
+            if let tx = repeater.bestTxSnr ?? repeater.averageTxSnr {
+              Text("▲" + decibels(tx))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            if let rssi = repeater.averageRssi {
+              Text("\(Int(rssi.rounded())) dBm")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            if let heard = repeater.lastDirectHeard {
+              Text(L10n.Tools.Tools.SignalMapper.Detail.lastHeardDirectly(Self.age(from: heard)))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             }
           }
         }
         .accessibilityElement(children: .combine)
       }
+    }
+  }
+
+  private var indirectSection: some View {
+    Section {
+      ForEach(indirect.prefix(Self.repeaterLimit)) { repeater in
+        HStack(spacing: 6) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(repeater.name ?? repeater.hexID)
+              .font(.subheadline.weight(.medium))
+              .lineLimit(1)
+            Text(repeater.hexID)
+              .font(.caption2.monospaced())
+              .foregroundStyle(.secondary)
+          }
+          if repeater.isAmbiguous {
+            Image(systemName: "questionmark.circle")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .accessibilityLabel(L10n.Tools.Tools.SignalMapper.Detail.ambiguousName)
+          }
+          Spacer(minLength: 8)
+          Text(L10n.Tools.Tools.SignalMapper.Detail.packets(repeater.packetCount + repeater.relayCount))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+      }
+    } header: {
+      Text(L10n.Tools.Tools.SignalMapper.Detail.indirectRepeaters)
+    } footer: {
+      Text(L10n.Tools.Tools.SignalMapper.Detail.indirectFooter)
     }
   }
 
@@ -226,5 +304,18 @@ struct SignalMapperCellDetailSheet: View {
 
   private func decibels(_ value: Double) -> String {
     value.formatted(.number.precision(.fractionLength(1))) + " dB"
+  }
+
+  private static let ageFormatter: DateComponentsFormatter = {
+    let formatter = DateComponentsFormatter()
+    formatter.allowedUnits = [.second, .minute, .hour, .day]
+    formatter.unitsStyle = .abbreviated
+    formatter.maximumUnitCount = 1
+    return formatter
+  }()
+
+  /// A static age: the sheet is a value copy re-resolved on every snapshot, not a clock.
+  private static func age(from date: Date) -> String {
+    ageFormatter.string(from: max(0, Date().timeIntervalSince(date))) ?? ""
   }
 }

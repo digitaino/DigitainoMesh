@@ -355,4 +355,55 @@ struct MapperPrivacyInvariantTests {
 
     #expect(decoded == original)
   }
+
+  // MARK: - The ride's own figures are not a second store
+
+  @Test
+  func `The session baseline and scope expose no serialization of their own`() throws {
+    // The baseline is a copy of stored rows held in memory for the length of one run
+    // (docs/SIGNAL_MAPPER_V2.md §2.6). A `Codable` conformance on either of these is one
+    // `JSONEncoder().encode()` away from uploading a run's route as a set of hexagons, so
+    // neither may have one — and neither may acquire one by inheritance from the DTO.
+    #expect((SignalMapperSessionBaseline.self as Any) is Encodable.Type == false)
+    #expect((SignalMapperSessionBaseline.self as Any) is Decodable.Type == false)
+    #expect((SignalMapperSessionScope.self as Any) is Encodable.Type == false)
+    #expect((SignalMapperSessionScope.self as Any) is Decodable.Type == false)
+
+    let baseline: Any = SignalMapperSessionBaseline(
+      startedAt: Date(timeIntervalSince1970: 1_752_000_000),
+      rows: [try populatedDTO()]
+    )
+    #expect(!(baseline is any Encodable))
+    #expect(!(baseline is any Decodable))
+
+    let scope: Any = SignalMapperSessionScope(touched: [1, 2], fresh: [2])
+    #expect(!(scope is any Encodable))
+    #expect(!(scope is any Decodable))
+  }
+
+  @Test
+  func `A residual carries no field the stored row does not`() throws {
+    let startedAt = Date(timeIntervalSince1970: 1_752_000_000)
+    let stored = try populatedDTO()
+    let residual = try #require(stored.residual(since: nil, startedAt: startedAt))
+
+    // Same type, so this is really a claim about the nested repeater maps and about nobody
+    // having bolted a "where the ride went" field onto the display-only path.
+    let storedLabels = Set(reachableProperties(of: stored).map(\.label))
+    let residualLabels = Set(reachableProperties(of: residual).map(\.label))
+    #expect(
+      residualLabels.subtracting(storedLabels).isEmpty,
+      "the ride's view of a row is a subset of the row: \(residualLabels.subtracting(storedLabels))"
+    )
+
+    for property in reachableProperties(of: residual) {
+      #expect(
+        !readsAsCoordinate(property.label),
+        "residual property '\(property.label)' reads as a coordinate"
+      )
+    }
+
+    let residualValue: Any = residual
+    #expect(!(residualValue is any Encodable), "a residual is as unshippable as the row it came from")
+  }
 }

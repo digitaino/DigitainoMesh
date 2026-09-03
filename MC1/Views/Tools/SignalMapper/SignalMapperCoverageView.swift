@@ -407,6 +407,10 @@ struct SignalMapperCoverageView: View {
     }
     .onChange(of: mapLayer) { _, _ in rebuildOverlays() }
     .onChange(of: selection) { _, _ in rebuildOverlays() }
+    // The ride's rings and the history's dimming are paint on the same stable overlay
+    // ids: a scope change or a run starting/stopping swaps features, never sources.
+    .onChange(of: model.sessionScope) { _, _ in rebuildOverlays() }
+    .onChange(of: isSurveying) { _, _ in rebuildOverlays() }
     .onAppear { rebuildOverlays() }
   }
 
@@ -417,6 +421,14 @@ struct SignalMapperCoverageView: View {
     if let selection { return selection }
     guard isSurveying, let liveCell, dismissedLiveCell != liveCell else { return nil }
     return model.snapshot.cells.first { $0.cell == liveCell }
+  }
+
+  /// The ride's share of the displayed hexagon, resolved from the session snapshot the
+  /// same load produced — so the card can never show ride figures with no all-time cell
+  /// behind them, nor the reverse.
+  private var displayedSessionCell: SignalMapperCoverageCell? {
+    guard isSurveying, let displayed = displayedCell else { return nil }
+    return model.sessionSnapshot.cells.first { $0.cell == displayed.cell }
   }
 
   private var focusHexIDs: Set<String> {
@@ -473,14 +485,21 @@ struct SignalMapperCoverageView: View {
     if let displayed = displayedCell {
       SignalMapperCellCard(
         cell: displayed,
+        sessionCell: displayedSessionCell,
         layer: mapLayer,
         focusHexIDs: focusHexIDs,
         isLiveCell: selection == nil,
+        isRunActive: isSurveying,
         repeaterFilter: $repeaterFilter,
         onDetails: { detailCell = displayed },
         onLockOn: { repeater in
           focusPickerSeed = repeater.name ?? repeater.hexID
           showingFocusPicker = true
+        },
+        onSwitchLayer: {
+          withAnimation(.snappy(duration: 0.2)) {
+            mapLayer = mapLayer == .heard ? .reach : .heard
+          }
         },
         onClose: {
           withAnimation(.snappy(duration: 0.25)) {
@@ -533,20 +552,32 @@ struct SignalMapperCoverageView: View {
     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
   }
 
+  /// "All time" is said out loud so the aggregate reads as deliberate; while a run is open
+  /// the ride gets its own line under it, counted from the ride's own snapshot.
   private var legendSummary: String? {
     guard model.hasCoverage else { return nil }
-    return L10n.Tools.Tools.SignalMapper.summary(
-      model.snapshot.cells.count,
-      model.snapshot.totalObservations,
-      model.snapshot.dayCount
+    let allTime = L10n.Tools.Tools.SignalMapper.Legend.allTime(
+      L10n.Tools.Tools.SignalMapper.summary(
+        model.snapshot.cells.count,
+        model.snapshot.totalObservations,
+        model.snapshot.dayCount
+      )
     )
+    guard isSurveying else { return allTime }
+    let ride = L10n.Tools.Tools.SignalMapper.Legend.thisRide(
+      model.sessionSnapshot.cells.count,
+      model.sessionSnapshot.totalObservations
+    )
+    return allTime + "\n" + ride
   }
 
   private func rebuildOverlays() {
     mapOverlays = SignalMapperCoverageRenderer.overlays(
       for: model.snapshot,
       selected: selection,
-      layer: mapLayer
+      layer: mapLayer,
+      sessionScope: model.sessionScope,
+      isRunActive: isSurveying
     )
   }
 
@@ -720,10 +751,7 @@ struct SignalMapperCoverageView: View {
 
   private func reload() async {
     model.loadCaptureSetting()
-    await model.load(
-      dataStore: appState.services?.dataStore,
-      radioID: appState.currentRadioID
-    )
+    await model.refresh(appState: appState)
   }
 
   /// Frames every captured cell. The map ignores a camera whose version still matches the

@@ -6906,42 +6906,48 @@ public enum L10n {
           return L10n.tr("Tools", "tools.signalMapper.summary", p1, p2, p3, fallback: "%1$lld cells · %2$lld observations · %3$lld days")
         }
         public enum Card {
-          /// Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s"
-          public static func ago(_ p1: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.ago", String(describing: p1), fallback: "%@ ago")
-          }
+          /// Location: SignalMapperCellCard.swift - Scope picker: figures merged across every day
+          public static let allTime = L10n.tr("Tools", "tools.signalMapper.card.allTime", fallback: "All time")
           /// Location: SignalMapperCellCard.swift - Mean reading under the best one; %@ is decibels
           public static func average(_ p1: Any) -> String {
             return L10n.tr("Tools", "tools.signalMapper.card.average", String(describing: p1), fallback: "avg %@")
           }
-          /// Location: SignalMapperCellCard.swift - Strongest repeater in the cell
-          public static let bestRepeater = L10n.tr("Tools", "tools.signalMapper.card.bestRepeater", fallback: "Best Repeater")
+          /// Location: SignalMapperCellCard.swift - Tag after a graded number that is a mean, not a best reading
+          public static let averageTag = L10n.tr("Tools", "tools.signalMapper.card.averageTag", fallback: "avg")
           /// Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip
           public static let chipHint = L10n.tr("Tools", "tools.signalMapper.card.chipHint", fallback: "Shows this repeater's own readings for the cell")
           /// Location: SignalMapperCellCard.swift - Clears the repeater filter
           public static let clear = L10n.tr("Tools", "tools.signalMapper.card.clear", fallback: "Clear")
           /// Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link
-          public static let connected = L10n.tr("Tools", "tools.signalMapper.card.connected", fallback: "Connected (2-way)")
+          public static let connected = L10n.tr("Tools", "tools.signalMapper.card.connected", fallback: "Two-way")
           /// Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at
           public static func downlinkAccessibility(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.card.downlinkAccessibility", p1, fallback: "you hear them at %lld decibels")
           }
+          /// Location: SignalMapperCellCard.swift - Age of the last direct hearing; %@ is a short duration like "8 s"
+          public static func heardAgo(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.heardAgo", String(describing: p1), fallback: "heard %@ ago")
+          }
           /// Location: SignalMapperCellCard.swift - Group of repeaters we only hear
-          public static let heardOnly = L10n.tr("Tools", "tools.signalMapper.card.heardOnly", fallback: "Heard (1-way)")
+          public static let heardOnly = L10n.tr("Tools", "tools.signalMapper.card.heardOnly", fallback: "Heard")
           /// Location: SignalMapperCellCard.swift - Uplink is blank because this repeater has never reported hearing us
           public static let heardOnlyReason = L10n.tr("Tools", "tools.signalMapper.card.heardOnlyReason", fallback: "Heard only — never reported hearing you")
-          /// Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s"
-          public static func lastHeard(_ p1: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.lastHeard", String(describing: p1), fallback: "Last heard %@ ago")
+          /// Location: SignalMapperCellCard.swift - Count of repeaters never heard directly; opens the detail sheet
+          public static func indirectCount(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.indirectCount", p1, fallback: "+%lld indirect")
           }
-          /// Location: SignalMapperCellCard.swift - Label of the live last-heard clock
-          public static let lastHeardLabel = L10n.tr("Tools", "tools.signalMapper.card.lastHeardLabel", fallback: "Last Heard")
+          /// Location: SignalMapperCellCard.swift - VoiceOver hint on the indirect count
+          public static let indirectHint = L10n.tr("Tools", "tools.signalMapper.card.indirectHint", fallback: "Repeaters in this hexagon's packet paths that this radio never heard directly")
+          /// Location: SignalMapperCellCard.swift - VoiceOver hint on the header leg badge, which flips the map layer
+          public static let legBadgeHint = L10n.tr("Tools", "tools.signalMapper.card.legBadgeHint", fallback: "Switches the map between what you hear and what hears you")
           /// Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon
           public static let myCell = L10n.tr("Tools", "tools.signalMapper.card.myCell", fallback: "My Cell")
           /// Location: SignalMapperCellCard.swift - Header when probes from this hexagon were never answered
           public static let noResponse = L10n.tr("Tools", "tools.signalMapper.card.noResponse", fallback: "No Response")
           /// Location: SignalMapperCellCard.swift - Subtitle of the no-response header
           public static let noResponseDetail = L10n.tr("Tools", "tools.signalMapper.card.noResponseDetail", fallback: "Probe sent, no response")
+          /// Location: SignalMapperCellCard.swift - Ride scope on a hexagon the run has not touched
+          public static let nothingThisRide = L10n.tr("Tools", "tools.signalMapper.card.nothingThisRide", fallback: "Nothing heard here this ride")
           /// Location: SignalMapperCellCard.swift - Packets split by direction for one repeater
           public static let packetSplit = L10n.tr("Tools", "tools.signalMapper.card.packetSplit", fallback: "Packets")
           /// Location: SignalMapperCellCard.swift - Packet split; %1$lld heard from them, %2$lld carrying their reading of us
@@ -6950,22 +6956,26 @@ public enum L10n {
           }
           /// Location: SignalMapperCellCard.swift - Packet count under the quality headline
           public static func packetsReceived(_ p1: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.packetsReceived", p1, fallback: "%lld packets received")
-          }
-          /// Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent
-          public static func probeSuccess(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.probeSuccess", p1, p2, p3, fallback: "%1$lld/%2$lld replies (%3$lld%%)")
+            return L10n.tr("Tools", "tools.signalMapper.card.packetsReceived", p1, fallback: "%lld received")
           }
           /// Location: SignalMapperCellCard.swift - Share of probes that were answered
           public static let probeSuccessLabel = L10n.tr("Tools", "tools.signalMapper.card.probeSuccessLabel", fallback: "Probe Success")
           /// Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent
-          public static func probeSuccessValue(_ p1: Int, _ p2: Int, _ p3: Int, _ p4: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.probeSuccessValue", p1, p2, p3, p4, fallback: "%1$lld%% (%2$lld/%3$lld) · %4$lld replies")
+          public static func probeSuccessValue(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.probeSuccessValue", p1, p2, p3, fallback: "%1$lld%% (%2$lld/%3$lld)")
           }
           /// Location: SignalMapperCellCard.swift - Downlink column label
-          public static let rxSignal = L10n.tr("Tools", "tools.signalMapper.card.rxSignal", fallback: "RX Signal")
+          public static let rxSignal = L10n.tr("Tools", "tools.signalMapper.card.rxSignal", fallback: "I hear them")
+          /// Location: SignalMapperCellCard.swift - Strongest direct reading inside the freshness window
+          public static let strongestNow = L10n.tr("Tools", "tools.signalMapper.card.strongestNow", fallback: "Strongest now")
+          /// Location: SignalMapperCellCard.swift - Scope picker: figures from the open run only
+          public static let thisRide = L10n.tr("Tools", "tools.signalMapper.card.thisRide", fallback: "This ride")
+          /// Location: SignalMapperCellCard.swift - Reach-layer subtitle; %lld repeater readings of our transmissions
+          public static func txReadings(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.txReadings", p1, fallback: "%lld readings of you")
+          }
           /// Location: SignalMapperCellCard.swift - Uplink column label
-          public static let txSignal = L10n.tr("Tools", "tools.signalMapper.card.txSignal", fallback: "TX Signal")
+          public static let txSignal = L10n.tr("Tools", "tools.signalMapper.card.txSignal", fallback: "They hear me")
           /// Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name
           public static func via(_ p1: Any) -> String {
             return L10n.tr("Tools", "tools.signalMapper.card.via", String(describing: p1), fallback: "via %@")
@@ -7004,6 +7014,14 @@ public enum L10n {
           public static let days = L10n.tr("Tools", "tools.signalMapper.detail.days", fallback: "Days")
           /// Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction
           public static let direction = L10n.tr("Tools", "tools.signalMapper.detail.direction", fallback: "By Direction")
+          /// Location: SignalMapperCellDetailSheet.swift - Footer explaining the indirect section
+          public static let indirectFooter = L10n.tr("Tools", "tools.signalMapper.detail.indirectFooter", fallback: "These repeaters carried packets into this hexagon or reported hearing you, but this radio never heard them directly.")
+          /// Location: SignalMapperCellDetailSheet.swift - Section of repeaters never heard directly
+          public static let indirectRepeaters = L10n.tr("Tools", "tools.signalMapper.detail.indirectRepeaters", fallback: "Not Heard Directly")
+          /// Location: SignalMapperCellDetailSheet.swift - Per-repeater last direct hearing; %@ is a short age
+          public static func lastHeardDirectly(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.lastHeardDirectly", String(describing: p1), fallback: "heard %@ ago")
+          }
           /// Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number
           public static func milliseconds(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.detail.milliseconds", p1, fallback: "%lldms")
@@ -7092,6 +7110,10 @@ public enum L10n {
           public static let title = L10n.tr("Tools", "tools.signalMapper.layer.title", fallback: "Map Layer")
         }
         public enum Legend {
+          /// Location: SignalMapperCoverageView.swift - Legend totals line while idle; %@ is the cells/observations/days summary
+          public static func allTime(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.legend.allTime", String(describing: p1), fallback: "All time · %@")
+          }
           /// Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity
           public static let density = L10n.tr("Tools", "tools.signalMapper.legend.density", fallback: "Solid hexagons were observed more often than faint ones.")
           /// Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells
@@ -7100,6 +7122,10 @@ public enum L10n {
           public static let reachSignal = L10n.tr("Tools", "tools.signalMapper.legend.reachSignal", fallback: "Color is how well repeaters heard your transmissions from that hexagon.")
           /// Location: SignalMapperLegend.swift - Legend note explaining hexagon color
           public static let signal = L10n.tr("Tools", "tools.signalMapper.legend.signal", fallback: "Color is the average signal the mesh reached that hexagon with.")
+          /// Location: SignalMapperCoverageView.swift - Legend line for the open run; %1$lld hexagons, %2$lld observations
+          public static func thisRide(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.legend.thisRide", p1, p2, fallback: "This ride · %1$lld hexagons · %2$lld observations")
+          }
           /// Location: SignalMapperLegend.swift - Legend title
           public static let title = L10n.tr("Tools", "tools.signalMapper.legend.title", fallback: "Legend")
         }

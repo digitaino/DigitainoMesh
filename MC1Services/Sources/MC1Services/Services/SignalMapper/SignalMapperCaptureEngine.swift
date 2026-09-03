@@ -386,6 +386,22 @@ public actor SignalMapperCaptureEngine {
     await flush()
   }
 
+  /// The buffered `(cell, day)` aggregates as DTOs — exactly what the next flush would
+  /// write, in no particular order.
+  ///
+  /// A screen that folds these over the stored rows sees the current minute of capture
+  /// instead of waiting out the flush interval for it, which is the difference between a
+  /// cell card that follows the rider and one that trails half a minute behind
+  /// (docs/SIGNAL_MAPPER_V2.md §2.3). Read-only: nothing is cleared, so the next flush
+  /// still writes the same batch and the store stays the single source of truth.
+  ///
+  /// Cells inside an anchor disc are not here to be read: the fix gate refuses to place an
+  /// observation in one, and ``recomputeAnchors()`` drops any buffered cell a newly raised
+  /// disc covers before the next flush can write it.
+  public func pendingObservations() -> [MapperCellObservationDTO] {
+    pending.map { $0.value.observation(day: $0.key.day) }
+  }
+
   /// Attaches the raw ride-log recorder (nil detaches). Session-scoped; see the stored
   /// property for the rules.
   public func setRawRecorder(_ recorder: (any MapperRawSampleRecording)?) {
@@ -826,6 +842,9 @@ public actor SignalMapperCaptureEngine {
   /// `txSnr` is emphatically not used: it is reserved for a repeater *reporting* how well
   /// it heard us, which only a trace or discover response carries (see
   /// ``SurveySample/RepeaterSighting``).
+  ///
+  /// The path is marked as an echo, which credits its *first* hop with having heard our
+  /// radio: our own packet reached the mesh through that node, whatever it measured.
   static func sample(from event: HeardRepeatEvent, at coordinate: GeoCoordinate) -> SurveySample {
     let detail = event.detail
     return SurveySample(
@@ -841,16 +860,30 @@ public actor SignalMapperCaptureEngine {
         pathNodes: detail.pathNodes,
         hashSize: detail.hashSize,
         snr: detail.snr,
-        rssi: detail.rssi
+        rssi: detail.rssi,
+        isEcho: true
       )
     )
   }
 
+  /// The hops of one path as sightings.
+  ///
+  /// Two hops of a path mean anything about *our* radio, and they are different hops:
+  ///
+  /// - The **last** hop carries the packet's SNR and RSSI — those numbers describe the link
+  ///   between that node and us, the only link this packet measured.
+  /// - On an echo (`isEcho`, i.e. one of our own packets heard coming back), the **first**
+  ///   hop gets credit for having heard *us*: our transmission entered the mesh there. It
+  ///   still carries no reading, because it never reported one.
+  ///
+  /// Everything in between is recorded as involved, with no reading and no direction: the
+  /// hop that heard it was somebody else's.
   private static func sightings(
     pathNodes: Data,
     hashSize: Int,
     snr: Double?,
-    rssi: Int?
+    rssi: Int?,
+    isEcho: Bool = false
   ) -> [SurveySample.RepeaterSighting] {
     let hashes = TrafficHopResolver.hopHashes(pathNodes: pathNodes, hashSize: hashSize)
     let hops = hashes.compactMap(NodeHexID.init(data:))
@@ -862,7 +895,8 @@ public actor SignalMapperCaptureEngine {
         id: hop.hex,
         rxSnr: heardDirectly ? snr : nil,
         txSnr: nil,
-        rssi: heardDirectly ? rssi.map(Double.init) : nil
+        rssi: heardDirectly ? rssi.map(Double.init) : nil,
+        isEcho: isEcho && index == 0
       )
     }
   }

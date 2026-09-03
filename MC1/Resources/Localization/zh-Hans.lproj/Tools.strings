@@ -1409,23 +1409,17 @@
 /* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
 "tools.signalMapper.focus.search" = "搜索中继";
 
-/* Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent */
-"tools.signalMapper.card.probeSuccess" = "%1$lld/%2$lld 次回复 (%3$lld%%)";
-
-/* Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s" */
-"tools.signalMapper.card.lastHeard" = "最后听到于 %@ 前";
-
 /* Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon */
 "tools.signalMapper.card.myCell" = "我的格子";
 
 /* Location: SignalMapperCellCard.swift - Packet count under the quality headline */
-"tools.signalMapper.card.packetsReceived" = "收到 %lld 个数据包";
+"tools.signalMapper.card.packetsReceived" = "已接收 %lld 个";
 
 /* Location: SignalMapperCellCard.swift - Downlink column label */
-"tools.signalMapper.card.rxSignal" = "RX 信号";
+"tools.signalMapper.card.rxSignal" = "我能听到它们";
 
 /* Location: SignalMapperCellCard.swift - Uplink column label */
-"tools.signalMapper.card.txSignal" = "TX 信号";
+"tools.signalMapper.card.txSignal" = "它们能听到我";
 
 /* Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name */
 "tools.signalMapper.card.via" = "经由 %@";
@@ -1439,20 +1433,11 @@
 /* Location: SignalMapperCellCard.swift - Uplink is blank because no probe has been answered yet */
 "tools.signalMapper.card.waitingUplink" = "等待发现回复";
 
-/* Location: SignalMapperCellCard.swift - Strongest repeater in the cell */
-"tools.signalMapper.card.bestRepeater" = "最佳中继";
-
-/* Location: SignalMapperCellCard.swift - Label of the live last-heard clock */
-"tools.signalMapper.card.lastHeardLabel" = "最后听到";
-
-/* Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s" */
-"tools.signalMapper.card.ago" = "%@ 前";
-
 /* Location: SignalMapperCellCard.swift - Share of probes that were answered */
 "tools.signalMapper.card.probeSuccessLabel" = "探测成功率";
 
 /* Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent */
-"tools.signalMapper.card.probeSuccessValue" = "%1$lld%% (%2$lld/%3$lld) · %4$lld 次回复";
+"tools.signalMapper.card.probeSuccessValue" = "%1$lld%% (%2$lld/%3$lld)";
 
 /* Location: SignalMapperCellCard.swift - Packets split by direction for one repeater */
 "tools.signalMapper.card.packetSplit" = "数据包";
@@ -1461,10 +1446,10 @@
 "tools.signalMapper.card.packetSplitValue" = "听到 %1$lld · 上报 %2$lld";
 
 /* Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link */
-"tools.signalMapper.card.connected" = "已连接（双向）";
+"tools.signalMapper.card.connected" = "双向";
 
 /* Location: SignalMapperCellCard.swift - Group of repeaters we only hear */
-"tools.signalMapper.card.heardOnly" = "仅听到（单向）";
+"tools.signalMapper.card.heardOnly" = "已听到";
 
 /* Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at */
 "tools.signalMapper.card.downlinkAccessibility" = "你以 %lld 分贝听到对方";
@@ -1483,6 +1468,51 @@
 
 /* Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip */
 "tools.signalMapper.card.chipHint" = "显示该中继自己对此格子的读数";
+
+/* Location: SignalMapperCellCard.swift - VoiceOver hint on the header leg badge, which flips the map layer */
+"tools.signalMapper.card.legBadgeHint" = "在“你能听到什么”和“什么能听到你”之间切换地图";
+
+/* Location: SignalMapperCellCard.swift - Reach-layer subtitle; %lld repeater readings of our transmissions */
+"tools.signalMapper.card.txReadings" = "对你的读数 %lld 次";
+
+/* Location: SignalMapperCellCard.swift - Age of the last direct hearing; %@ is a short duration like "8 s" */
+"tools.signalMapper.card.heardAgo" = "%@前听到";
+
+/* Location: SignalMapperCellCard.swift - Strongest direct reading inside the freshness window */
+"tools.signalMapper.card.strongestNow" = "当前最强";
+
+/* Location: SignalMapperCellCard.swift - Tag after a graded number that is a mean, not a best reading */
+"tools.signalMapper.card.averageTag" = "平均";
+
+/* Location: SignalMapperCellCard.swift - Count of repeaters never heard directly; opens the detail sheet */
+"tools.signalMapper.card.indirectCount" = "+%lld 间接";
+
+/* Location: SignalMapperCellCard.swift - VoiceOver hint on the indirect count */
+"tools.signalMapper.card.indirectHint" = "出现在此六边形数据包路径中、但此电台从未直接听到的中继器";
+
+/* Location: SignalMapperCellCard.swift - Scope picker: figures from the open run only */
+"tools.signalMapper.card.thisRide" = "本次骑行";
+
+/* Location: SignalMapperCellCard.swift - Scope picker: figures merged across every day */
+"tools.signalMapper.card.allTime" = "全部时间";
+
+/* Location: SignalMapperCellCard.swift - Ride scope on a hexagon the run has not touched */
+"tools.signalMapper.card.nothingThisRide" = "本次骑行在此未听到任何信号";
+
+/* Location: SignalMapperCoverageView.swift - Legend totals line while idle; %@ is the cells/observations/days summary */
+"tools.signalMapper.legend.allTime" = "全部时间 · %@";
+
+/* Location: SignalMapperCoverageView.swift - Legend line for the open run; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.thisRide" = "本次骑行 · %1$lld 个六边形 · %2$lld 次观测";
+
+/* Location: SignalMapperCellDetailSheet.swift - Section of repeaters never heard directly */
+"tools.signalMapper.detail.indirectRepeaters" = "未直接听到";
+
+/* Location: SignalMapperCellDetailSheet.swift - Footer explaining the indirect section */
+"tools.signalMapper.detail.indirectFooter" = "这些中继器曾将数据包带入此六边形或报告听到了你，但此电台从未直接听到它们。";
+
+/* Location: SignalMapperCellDetailSheet.swift - Per-repeater last direct hearing; %@ is a short age */
+"tools.signalMapper.detail.lastHeardDirectly" = "%@前听到";
 
 /* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
 "tools.signalMapper.focus.unlock" = "取消锁定";

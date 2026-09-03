@@ -43,6 +43,21 @@ public struct SignalMapperCoverageBuilder: Sendable {
     now: Date,
     overrides: NodeIdentityOverrides = [:]
   ) -> SignalMapperCoverageSnapshot {
+    assembled(rows: rows, candidates: candidates, now: now, overrides: overrides)
+  }
+
+  /// The whole of ``build(rows:candidates:now:overrides:)``'s arithmetic, shared verbatim
+  /// with ``buildSession(rows:baseline:candidates:now:overrides:)``.
+  ///
+  /// The ride's map is the same map drawn over fewer, smaller rows — so it merges, weights,
+  /// colours and sorts through this one path, and the two can never disagree about what a
+  /// hexagon is.
+  func assembled(
+    rows: [MapperCellObservationDTO],
+    candidates: [AnyResolvableNode],
+    now: Date,
+    overrides: NodeIdentityOverrides
+  ) -> SignalMapperCoverageSnapshot {
     var merged: [UInt64: MapperCellObservationDTO] = [:]
     var days: [UInt64: Set<String>] = [:]
     var allDays: Set<String> = []
@@ -116,37 +131,55 @@ public struct SignalMapperCoverageBuilder: Sendable {
   ) -> SignalMapperCoverageCell? {
     guard let cell = row.cell else { return nil }
 
-    let repeaters = row.repeaters.values
-      .map { stats -> SignalMapperCoverageRepeater in
-        let resolved = resolvedName(
-          for: stats.id,
-          candidates: candidates,
-          now: now,
-          overrides: overrides,
-          cache: &names
-        )
-        return SignalMapperCoverageRepeater(
-          hexID: stats.id,
-          name: resolved.name,
-          isAmbiguous: resolved.isAmbiguous,
-          packetCount: stats.packetCount,
-          averageSnr: stats.avgRxSnr,
-          averageTxSnr: stats.avgTxSnr,
-          bestSnr: stats.maxRxSnr,
-          worstSnr: stats.minRxSnr,
-          bestTxSnr: stats.maxTxSnr,
-          worstTxSnr: stats.minTxSnr,
-          averageRssi: stats.avgRssi,
-          rxPacketCount: stats.rxPacketCount,
-          txPacketCount: stats.txPacketCount,
-          firstHeard: stats.firstHeard,
-          lastHeard: stats.lastHeard
-        )
-      }
-      .sorted { lhs, rhs in
-        if lhs.packetCount != rhs.packetCount { return lhs.packetCount > rhs.packetCount }
-        return lhs.hexID < rhs.hexID
-      }
+    let repeaters = collapsed(
+      row.repeaters.values,
+      candidates: candidates,
+      now: now,
+      overrides: overrides,
+      names: &names
+    )
+    .map { group -> SignalMapperCoverageRepeater in
+      let stats = group.stats
+      // Rows written before the freshness columns existed still carry the two facts they
+      // imply: a repeater with direct readings was last heard directly no later than
+      // `lastHeard`, and one that reported an uplink reading proved the uplink by then
+      // too. The best reading stands in for the last one — it is the only reading such a
+      // row kept — and both fall away as soon as a fresh sighting writes the real pair.
+      let legacyDirect = stats.rxSnrCount > 0 ? stats.lastHeard : nil
+      let lastDirectHeard = stats.lastDirectHeard ?? legacyDirect
+      let lastRxSnr = stats.lastRxSnr ?? (stats.lastDirectHeard == nil && legacyDirect != nil
+        ? stats.maxRxSnr
+        : nil)
+      let lastUplinkAt = stats.lastUplinkAt ?? (stats.txSnrCount > 0 ? stats.lastHeard : nil)
+
+      return SignalMapperCoverageRepeater(
+        hexID: stats.id,
+        name: group.resolved.name,
+        isAmbiguous: group.resolved.isAmbiguous,
+        packetCount: stats.packetCount,
+        averageSnr: stats.avgRxSnr,
+        averageTxSnr: stats.avgTxSnr,
+        bestSnr: stats.maxRxSnr,
+        worstSnr: stats.minRxSnr,
+        bestTxSnr: stats.maxTxSnr,
+        worstTxSnr: stats.minTxSnr,
+        averageRssi: stats.avgRssi,
+        rxPacketCount: stats.rxPacketCount,
+        txPacketCount: stats.txPacketCount,
+        relayCount: stats.relayCount,
+        echoCount: stats.echoCount,
+        directReadingCount: stats.rxSnrCount,
+        lastDirectHeard: lastDirectHeard,
+        lastRxSnr: lastRxSnr,
+        lastUplinkAt: lastUplinkAt,
+        firstHeard: stats.firstHeard,
+        lastHeard: stats.lastHeard
+      )
+    }
+    .sorted { lhs, rhs in
+      if lhs.packetCount != rhs.packetCount { return lhs.packetCount > rhs.packetCount }
+      return lhs.hexID < rhs.hexID
+    }
 
     return SignalMapperCoverageCell(
       cell: cell,
@@ -185,11 +218,80 @@ public struct SignalMapperCoverageBuilder: Sendable {
     )
   }
 
+  // MARK: - One chip per physical node
+
+  /// One group per *node*, not per hash width.
+  ///
+  /// Firmware advertises the same repeater at 1, 2 or 3 bytes depending on the path a
+  /// packet took, so one node routinely arrives as two or three hashes in the same cell and
+  /// used to be listed two or three times — as if the hexagon had that many repeaters. The
+  /// grouping key is therefore the resolved node's public key whenever the resolution is
+  /// unambiguous, and the raw hash otherwise.
+  ///
+  /// **An ambiguous hash is never folded into anyone.** A 1-byte `"AB"` that two known
+  /// nodes answer to is exactly the case where merging would invent a fact; it stays its own
+  /// row, carrying the ambiguity flag that says so.
+  private func collapsed(
+    _ stats: some Collection<MapperRepeaterStats>,
+    candidates: [AnyResolvableNode],
+    now: Date,
+    overrides: NodeIdentityOverrides,
+    names: inout [String: ResolvedName]
+  ) -> [RepeaterGroup] {
+    var groups: [RepeaterIdentity: RepeaterGroup] = [:]
+    for stat in stats {
+      let resolved = resolvedName(
+        for: stat.id,
+        candidates: candidates,
+        now: now,
+        overrides: overrides,
+        cache: &names
+      )
+      let identity: RepeaterIdentity = if let key = resolved.publicKey, !resolved.isAmbiguous {
+        .node(key)
+      } else {
+        .hash(stat.id)
+      }
+      guard let existing = groups[identity] else {
+        groups[identity] = RepeaterGroup(stats: stat, resolved: resolved)
+        continue
+      }
+      // The widest hash in the group is the one shown: it is the most the mesh ever said
+      // about this node, and narrowing it would throw away identity the card can use.
+      var merged = existing.stats.merged(with: stat)
+      merged.id = Self.widest(existing.stats.id, stat.id)
+      groups[identity] = RepeaterGroup(stats: merged, resolved: existing.resolved)
+    }
+    return Array(groups.values)
+  }
+
+  /// The wider of two hashes, ties broken lexicographically so a rebuild of unchanged rows
+  /// is identical however the dictionary happens to iterate.
+  private static func widest(_ lhs: String, _ rhs: String) -> String {
+    if lhs.count != rhs.count { return lhs.count > rhs.count ? lhs : rhs }
+    return Swift.min(lhs, rhs)
+  }
+
+  /// What one chip's worth of sightings is keyed by: a node when we know which one, and a
+  /// bare hash when we do not (or when more than one node answers to it).
+  private enum RepeaterIdentity: Hashable {
+    case node(Data)
+    case hash(String)
+  }
+
+  private struct RepeaterGroup {
+    var stats: MapperRepeaterStats
+    var resolved: ResolvedName
+  }
+
   // MARK: - Names
 
   private struct ResolvedName {
     var name: String?
     var isAmbiguous: Bool
+    /// The winning candidate's key, which is what makes two hash widths one node. Nil when
+    /// nothing answered to the hash.
+    var publicKey: Data?
   }
 
   private func resolvedName(
@@ -205,10 +307,11 @@ public struct SignalMapperCoverageBuilder: Sendable {
                       let resolution = resolver.resolve(id, among: candidates, now: now, overrides: overrides) {
       ResolvedName(
         name: resolution.best.resolvableName,
-        isAmbiguous: resolution.isAmbiguous
+        isAmbiguous: resolution.isAmbiguous,
+        publicKey: resolution.best.publicKey
       )
     } else {
-      ResolvedName(name: nil, isAmbiguous: false)
+      ResolvedName(name: nil, isAmbiguous: false, publicKey: nil)
     }
     cache[hexID] = resolved
     return resolved

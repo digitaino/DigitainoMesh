@@ -147,11 +147,16 @@ struct SignalMapperCaptureEngineTests {
     #expect(Set(row.repeaters.keys) == ["0C", "42"], "hex identity comes from NodeHexID")
     let firstHop = try #require(row.repeaters["0C"])
     #expect(firstHop.rxSnrCount == 0, "an upstream hop was heard by someone else, not by us")
-    #expect(firstHop.rxPacketCount == 1)
+    #expect(firstHop.relayCount == 1, "on the path, and that is all it is")
+    #expect(firstHop.rxPacketCount == 0, "path membership is not a packet we heard from it")
+    #expect(firstHop.packetCount == 0)
     let lastHop = try #require(row.repeaters["42"])
     #expect(lastHop.rxSnrCount == 1)
     #expect(lastHop.rxSnrSum == 4)
     #expect(lastHop.rssiSum == -95)
+    #expect(lastHop.relayCount == 0)
+    #expect(lastHop.lastDirectHeard == clock.now)
+    #expect(lastHop.lastRxSnr == 4)
     #expect(row.hopHistogram == [2: 1])
   }
 
@@ -216,6 +221,46 @@ struct SignalMapperCaptureEngineTests {
     let upstream = try #require(row.repeaters["0C"])
     #expect(upstream.rxSnrCount == 0, "an earlier hop was heard by someone else, not by us")
     #expect(row.hopHistogram == [2: 1])
+  }
+
+  @Test
+  func `On an echo, the first hop is the node that heard us and the last is the one we heard`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let repeats = ScriptedTxHeardSource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      source: source, txHeard: repeats, store: store, fixes: fixes, clock: clock, tuning: makeTuning()
+    )
+
+    await engine.start()
+    repeats.send(mapperHeardRepeat(
+      receivedAt: clock.now,
+      snr: 5,
+      rssi: -85,
+      pathNodes: [0x0C, 0x42]
+    ))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+
+    // Our packet entered the mesh through 0C: it heard our radio, and never said with what
+    // SNR — which is why the uplink evidence is a timestamp and not a reading.
+    let entryHop = try #require(row.repeaters["0C"])
+    #expect(entryHop.echoCount == 1)
+    #expect(entryHop.lastUplinkAt == clock.now)
+    #expect(entryHop.lastDirectHeard == nil)
+    #expect(entryHop.txSnrCount == 0, "an echo is not a reported reading")
+
+    // 42 rebroadcast it into our radio, so the packet's numbers describe *that* link only.
+    let rebroadcaster = try #require(row.repeaters["42"])
+    #expect(rebroadcaster.echoCount == 0, "only the hop that heard us gets the echo credit")
+    #expect(rebroadcaster.lastDirectHeard == clock.now)
+    #expect(rebroadcaster.lastRxSnr == 5)
+    #expect(rebroadcaster.lastUplinkAt == nil)
   }
 
   @Test
@@ -967,5 +1012,104 @@ struct SignalMapperCaptureEngineTests {
 
     let rows = try await store.fetchMapperCellObservations()
     #expect(rows.isEmpty, "a rejected sample must still be rejected from aggregates")
+  }
+
+  // MARK: - Reading the buffer
+
+  @Test
+  func `flushNow writes the batch and leaves nothing buffered`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    source.send(mapperRxEntry(payload: Data([0x01]), receivedAt: clock.now, snr: 5, rssi: -70))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    #expect(await engine.snapshot().pendingCellCount == 1)
+    #expect(await engine.pendingObservations().count == 1)
+
+    await engine.flushNow()
+
+    #expect(try await store.countMapperCellObservations() == 1)
+    #expect(await engine.snapshot().pendingCellCount == 0)
+    #expect(await engine.pendingObservations().isEmpty)
+    await engine.stop()
+  }
+
+  @Test
+  func `pendingObservations is exactly what the next flush writes`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    source.send(mapperRxEntry(payload: Data([0x01]), receivedAt: clock.now, snr: 4, rssi: -70))
+    source.send(mapperRxEntry(payload: Data([0x02]), receivedAt: clock.now, snr: 10, rssi: -60))
+    #expect(await waitForMapperAccounted(engine, count: 2))
+
+    // Read first, flush second: what a screen folded over the store has to be what the
+    // store is about to hold, or the card jumps when the flush lands.
+    let peeked = await engine.pendingObservations()
+    await engine.flushNow()
+    let stored = try await store.fetchMapperCellObservations()
+    await engine.stop()
+
+    #expect(peeked.count == stored.count)
+    let expected = try #require(peeked.first)
+    let written = try #require(stored.first)
+    #expect(expected.cellRaw == written.cellRaw)
+    #expect(expected.day == written.day)
+    #expect(expected == written, "the peek is the same DTO the flush upserted")
+    #expect(written.packetCount == 2)
+    #expect(written.snrSum == 14)
+  }
+
+  @Test
+  func `A cell inside an anchor disc is never offered as pending`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let home = try #require(MapperFixtureLocation.cell(MapperFixtureLocation.plaza))
+    let engine = makeEngine(
+      source: source,
+      store: store,
+      fixes: StubMapperFixProvider(mapperFix(MapperFixtureLocation.plaza, at: clock.now)),
+      clock: clock,
+      tuning: makeTuning()
+    )
+
+    await engine.start()
+    source.send(mapperRxEntry(payload: Data([0x01]), receivedAt: clock.now))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    #expect(await engine.pendingObservations().count == 1)
+
+    // The plaza crosses the distinct-day threshold while its own fold is still buffered.
+    try await store.upsertMapperCellObservations((0..<6).map { index in
+      MapperCellObservationDTO(
+        cellRaw: home.rawValue,
+        day: String(format: "2025-06-%02d", index + 1),
+        packetCount: 10,
+        rxCount: 10,
+        stationaryObservationCount: 10
+      )
+    })
+    await engine.recomputeAnchors()
+
+    #expect(
+      await engine.pendingObservations().isEmpty,
+      "a purge that empties the buffer must empty what a screen can read out of it"
+    )
+
+    // And nothing folded from inside the disc afterwards can reappear there either.
+    source.send(mapperRxEntry(payload: Data([0x02]), receivedAt: clock.now))
+    source.send(mapperRxEntry(payload: Data([0x03]), receivedAt: clock.now))
+    #expect(await waitForMapper { await engine.snapshot().droppedCount >= 2 })
+    #expect(await engine.pendingObservations().isEmpty)
+    await engine.stop()
+    #expect(try await store.countMapperCellObservations() == 0)
   }
 }

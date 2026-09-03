@@ -248,6 +248,18 @@ public struct MapperRepeaterStats: Sendable, Equatable {
   public var maxRxSnr: Double?
   public var minTxSnr: Double?
   public var maxTxSnr: Double?
+  /// Appearances as an upstream hop of somebody else's measured link — neither leg
+  /// measured. Kept out of ``packetCount``, because being named on a path is not hearing.
+  public var relayCount: Int
+  /// Echoes of our own packets in which this node was the first hop: it heard our radio.
+  public var echoCount: Int
+  /// The last *direct* measurement of this repeater and when it was taken — a pair, always
+  /// moved together, so "strongest now" can never show a fresh time beside a stale number.
+  public var lastDirectHeard: Date?
+  public var lastRxSnr: Double?
+  /// The last evidence this repeater heard *us*: a reported `txSnr`, or an echo whose first
+  /// hop it was.
+  public var lastUplinkAt: Date?
   public var firstHeard: Date
   public var lastHeard: Date
 
@@ -265,6 +277,11 @@ public struct MapperRepeaterStats: Sendable, Equatable {
     maxRxSnr: Double? = nil,
     minTxSnr: Double? = nil,
     maxTxSnr: Double? = nil,
+    relayCount: Int = 0,
+    echoCount: Int = 0,
+    lastDirectHeard: Date? = nil,
+    lastRxSnr: Double? = nil,
+    lastUplinkAt: Date? = nil,
     firstHeard: Date,
     lastHeard: Date
   ) {
@@ -281,6 +298,11 @@ public struct MapperRepeaterStats: Sendable, Equatable {
     self.maxRxSnr = maxRxSnr
     self.minTxSnr = minTxSnr
     self.maxTxSnr = maxTxSnr
+    self.relayCount = relayCount
+    self.echoCount = echoCount
+    self.lastDirectHeard = lastDirectHeard
+    self.lastRxSnr = lastRxSnr
+    self.lastUplinkAt = lastUplinkAt
     self.firstHeard = firstHeard
     self.lastHeard = lastHeard
   }
@@ -300,6 +322,11 @@ public struct MapperRepeaterStats: Sendable, Equatable {
       maxRxSnr: stats.maxRxSnr,
       minTxSnr: stats.minTxSnr,
       maxTxSnr: stats.maxTxSnr,
+      relayCount: stats.relayCount,
+      echoCount: stats.echoCount,
+      lastDirectHeard: stats.lastDirectHeard,
+      lastRxSnr: stats.lastRxSnr,
+      lastUplinkAt: stats.lastUplinkAt,
       firstHeard: stats.firstHeard,
       lastHeard: stats.lastHeard
     )
@@ -330,8 +357,16 @@ public struct MapperRepeaterStats: Sendable, Equatable {
 
   /// Adds another sighting run for the same repeater. Counts and sums add; the heard
   /// window widens to cover both.
+  ///
+  /// `lastDirectHeard` and `lastRxSnr` move as one: the later of the two *pairs* wins
+  /// outright, rather than each field taking its own maximum, which would report the
+  /// stronger reading from an older sighting as the current one.
   public func merged(with other: MapperRepeaterStats) -> MapperRepeaterStats {
-    MapperRepeaterStats(
+    let direct = Self.laterDirect(
+      (lastDirectHeard, lastRxSnr),
+      (other.lastDirectHeard, other.lastRxSnr)
+    )
+    return MapperRepeaterStats(
       id: id,
       rxPacketCount: rxPacketCount + other.rxPacketCount,
       txPacketCount: txPacketCount + other.txPacketCount,
@@ -345,9 +380,27 @@ public struct MapperRepeaterStats: Sendable, Equatable {
       maxRxSnr: [maxRxSnr, other.maxRxSnr].compactMap(\.self).max(),
       minTxSnr: [minTxSnr, other.minTxSnr].compactMap(\.self).min(),
       maxTxSnr: [maxTxSnr, other.maxTxSnr].compactMap(\.self).max(),
+      relayCount: relayCount + other.relayCount,
+      echoCount: echoCount + other.echoCount,
+      lastDirectHeard: direct.at,
+      lastRxSnr: direct.snr,
+      lastUplinkAt: [lastUplinkAt, other.lastUplinkAt].compactMap(\.self).max(),
       firstHeard: Swift.min(firstHeard, other.firstHeard),
       lastHeard: Swift.max(lastHeard, other.lastHeard)
     )
+  }
+
+  /// The later of two `(instant, reading)` pairs, kept whole.
+  private static func laterDirect(
+    _ lhs: (at: Date?, snr: Double?),
+    _ rhs: (at: Date?, snr: Double?)
+  ) -> (at: Date?, snr: Double?) {
+    switch (lhs.at, rhs.at) {
+    case let (mine?, theirs?): theirs > mine ? rhs : lhs
+    case (_?, nil): lhs
+    case (nil, _?): rhs
+    case (nil, nil): (nil, nil)
+    }
   }
 }
 
@@ -658,6 +711,11 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
         maxRxSnr: stats.maxRxSnr,
         minTxSnr: stats.minTxSnr,
         maxTxSnr: stats.maxTxSnr,
+        relayCount: stats.relayCount,
+        echoCount: stats.echoCount,
+        lastDirectHeard: stats.lastDirectHeard,
+        lastRxSnr: stats.lastRxSnr,
+        lastUplinkAt: stats.lastUplinkAt,
         firstHeard: stats.firstHeard,
         lastHeard: stats.lastHeard
       )
@@ -749,6 +807,20 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
     var maxRxSnr: Double?
     var minTxSnr: Double?
     var maxTxSnr: Double?
+    /// Added after the first rows were written, same rule as the range fields above: the
+    /// counts are optional so an absent key decodes as nil and reads back as zero, and a
+    /// row written before this change loses nothing it ever had.
+    ///
+    /// **Local only, like `firstHeard`/`lastHeard`.** `lastDirectHeard` and `lastUplinkAt`
+    /// are second-precision instants, which is exactly the granularity
+    /// docs/SIGNAL_MAPPER_V2.md §3.4 forbids on the wire — where the unit is the UTC day.
+    /// No wire type carries them today, and none may: a wire representation of a repeater
+    /// gets its fields chosen on purpose, and these are not among them.
+    var relayCount: Int?
+    var echoCount: Int?
+    var lastDirectHeard: Date?
+    var lastRxSnr: Double?
+    var lastUplinkAt: Date?
     var firstHeard: Date
     var lastHeard: Date
 
@@ -766,6 +838,11 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
       maxRxSnr = stats.maxRxSnr
       minTxSnr = stats.minTxSnr
       maxTxSnr = stats.maxTxSnr
+      relayCount = stats.relayCount
+      echoCount = stats.echoCount
+      lastDirectHeard = stats.lastDirectHeard
+      lastRxSnr = stats.lastRxSnr
+      lastUplinkAt = stats.lastUplinkAt
       firstHeard = stats.firstHeard
       lastHeard = stats.lastHeard
     }
@@ -785,6 +862,11 @@ public struct MapperCellObservationDTO: Sendable, Equatable {
         maxRxSnr: maxRxSnr,
         minTxSnr: minTxSnr,
         maxTxSnr: maxTxSnr,
+        relayCount: relayCount ?? 0,
+        echoCount: echoCount ?? 0,
+        lastDirectHeard: lastDirectHeard,
+        lastRxSnr: lastRxSnr,
+        lastUplinkAt: lastUplinkAt,
         firstHeard: firstHeard,
         lastHeard: lastHeard
       )

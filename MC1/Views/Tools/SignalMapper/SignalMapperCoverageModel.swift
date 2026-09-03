@@ -21,6 +21,14 @@ final class SignalMapperCoverageModel {
   private(set) var isLoading = false
   private(set) var didFail = false
 
+  /// The open run's own share of ``snapshot``, built from the same rows in the same pass —
+  /// so the card can never show ride figures with no all-time cell behind them. `.empty`
+  /// whenever no run is open.
+  private(set) var sessionSnapshot: SignalMapperCoverageSnapshot = .empty
+  /// Which hexagons the open run has touched, and which of those it mapped for the first
+  /// time. `.empty` whenever no run is open.
+  private(set) var sessionScope: SignalMapperSessionScope = .empty
+
   /// Whether passive capture is running. The same setting the debug panel toggles — both
   /// read and write ``MapperTuningStore``, so neither can drift from the other.
   var isCaptureEnabled = false
@@ -30,9 +38,10 @@ final class SignalMapperCoverageModel {
   /// The run behind ``surveySummary`` — what the completion sheet exports.
   var lastCompletedRunID: UUID?
 
-
   private let builder = SignalMapperCoverageBuilder()
   private let tuningStore = MapperTuningStore()
+  /// Bumped on entry to every load; only the newest one is allowed to publish.
+  private var loadGeneration = 0
 
   var hasCoverage: Bool {
     !snapshot.isEmpty
@@ -51,6 +60,9 @@ final class SignalMapperCoverageModel {
   ) async {
     guard await appState.startSignalMapperSurvey(focusTargets: focusTargets) else { return }
     appState.signalMapperRideSession?.focusMeta = focusMeta
+    // The first paint of the ride comes off the same read the baseline was taken from, so
+    // the ride starts at zero on screen rather than inheriting the last idle build.
+    await refresh(appState: appState)
   }
 
   /// Mirrors the current engine generation's snapshot stream into the run object, and
@@ -85,7 +97,7 @@ final class SignalMapperCoverageModel {
       let riding = appState.signalMapperRideSession != nil
       try? await Task.sleep(for: .seconds(riding ? 20 : 45))
       guard !Task.isCancelled else { return }
-      await load(dataStore: appState.services?.dataStore, radioID: appState.currentRadioID)
+      await refresh(appState: appState)
     }
   }
 
@@ -148,7 +160,9 @@ final class SignalMapperCoverageModel {
     let summary = await appState.stopSignalMapperSurvey()
     surveySummary = summary
     lastCompletedRunID = runID
-    await load(dataStore: appState.services?.dataStore, radioID: appState.currentRadioID)
+    // The run is over and its flush has landed, so this reads back the whole ride — and
+    // with no session open it clears the ride layers, leaving the all-time map behind.
+    await refresh(appState: appState)
   }
 
   /// One probe cycle for the cell the user is standing in. The snapshot stream carries
@@ -266,18 +280,48 @@ final class SignalMapperCoverageModel {
   /// which radio was paired — so this reads without a radio ID and works while
   /// disconnected. The *candidate pool* for repeater names is radio-scoped, and simply
   /// comes back empty when there is no radio, which leaves repeaters showing as hashes.
-  func load(dataStore: PersistenceStore?, radioID: UUID?) async {
+  /// The one call every screen makes: reads the store, folds in whatever the capture engine
+  /// still holds unflushed, and rebuilds the all-time map — plus the ride's own map when a
+  /// run is open, against that run's baseline.
+  func refresh(appState: AppState) async {
+    await load(
+      dataStore: appState.services?.dataStore,
+      radioID: appState.currentRadioID,
+      baseline: appState.signalMapperRideSession?.baseline,
+      pending: await appState.signalMapperEngine?.pendingObservations() ?? []
+    )
+  }
+
+  /// - Parameters:
+  ///   - baseline: the open run's reference rows, or nil when nothing is running — which
+  ///     resets the two session values, since a map with no run has no ride on it.
+  ///   - pending: cell-days the engine has folded but not yet written. Merged over the
+  ///     stored rows so both maps see the current minute of capture rather than trailing
+  ///     the flush interval.
+  func load(
+    dataStore: PersistenceStore?,
+    radioID: UUID?,
+    baseline: SignalMapperSessionBaseline? = nil,
+    pending: [MapperCellObservationDTO] = []
+  ) async {
     guard let dataStore else {
       snapshot = .empty
+      sessionSnapshot = .empty
+      sessionScope = .empty
       return
     }
 
+    // Loads overlap: the auto-refresh ticker, a pull, a run starting and the completion
+    // sheet all call in, and a slow build used to be free to publish over a newer one.
+    loadGeneration += 1
+    let generation = loadGeneration
     isLoading = true
     didFail = false
-    defer { isLoading = false }
+    defer { if generation == loadGeneration { isLoading = false } }
 
     do {
-      let rows = try await dataStore.fetchMapperCellObservations()
+      let stored = try await dataStore.fetchMapperCellObservations()
+      let rows = Self.folded(stored: stored, pending: pending)
       var candidates: [AnyResolvableNode] = []
       if let radioID {
         let contacts = try await dataStore.fetchContacts(radioID: radioID)
@@ -288,14 +332,63 @@ final class SignalMapperCoverageModel {
       let builder = builder
       let now = Date()
       let pool = candidates
-      snapshot = await Task.detached(priority: .userInitiated) {
-        builder.build(rows: rows, candidates: pool, now: now)
+      let result = await Task.detached(priority: .userInitiated) { () -> BuildResult in
+        var result = BuildResult(allTime: builder.build(rows: rows, candidates: pool, now: now))
+        if let baseline {
+          let ride = builder.buildSession(
+            rows: rows,
+            baseline: baseline,
+            candidates: pool,
+            now: now
+          )
+          result.session = ride.snapshot
+          result.scope = ride.scope
+        }
+        return result
       }.value
+
+      guard generation == loadGeneration else { return }
+      snapshot = result.allTime
+      sessionSnapshot = result.session ?? .empty
+      sessionScope = result.scope ?? .empty
     } catch {
       logger.error("Coverage build failed: \(error.localizedDescription, privacy: .public)")
+      guard generation == loadGeneration else { return }
       didFail = true
       snapshot = .empty
+      sessionSnapshot = .empty
+      sessionScope = .empty
     }
+  }
+
+  /// One build's worth of output, so the detached build publishes all of it or none of it.
+  private struct BuildResult: Sendable {
+    var allTime: SignalMapperCoverageSnapshot
+    var session: SignalMapperCoverageSnapshot?
+    var scope: SignalMapperSessionScope?
+  }
+
+  /// Stored rows with the engine's unflushed aggregates folded on top, by `(cell, day)` —
+  /// the same fold the store's upsert performs, so the merged view is what the next flush
+  /// will make true.
+  private static func folded(
+    stored: [MapperCellObservationDTO],
+    pending: [MapperCellObservationDTO]
+  ) -> [MapperCellObservationDTO] {
+    guard !pending.isEmpty else { return stored }
+
+    var byKey: [SignalMapperSessionBaseline.Key: MapperCellObservationDTO] = [:]
+    var order: [SignalMapperSessionBaseline.Key] = []
+    for row in stored + pending {
+      let key = SignalMapperSessionBaseline.Key(cellRaw: row.cellRaw, day: row.day)
+      if let existing = byKey[key] {
+        byKey[key] = existing.merged(with: row)
+      } else {
+        byKey[key] = row
+        order.append(key)
+      }
+    }
+    return order.compactMap { byKey[$0] }
   }
 
   /// Drops every captured cell. The user-facing half of the debug panel's reset.

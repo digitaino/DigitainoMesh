@@ -48,16 +48,30 @@ enum SignalMapperCoverageRenderer {
   /// diff key, and an id change would tear down and rebuild every `MLNShapeSource` on
   /// each toggle (M3.5 review M13).
   static let noReachOverlayID = "mapper-cells-noreach"
+  /// The open run's hexagons, ringed. Present on every apply — empty features when no run
+  /// is open — for the same stable-id reason as ``noReachOverlayID``.
+  static let sessionOverlayID = "mapper-session"
+
+  /// How far the all-time fills step back while a run is open, so the ride's rings read
+  /// as the foreground and the season behind them as context (Rafael, 2026-09-03: ring
+  /// this ride, dim the history).
+  private static let idleOpacity: ClosedRange<Double> = 0.18...0.55
+  private static let ridingOpacity: ClosedRange<Double> = 0.10...0.34
 
   // MARK: - Overlays
 
   static func overlays(
     for snapshot: SignalMapperCoverageSnapshot,
     selected: SignalMapperCoverageCell?,
-    layer: SignalMapperMapLayer = .heard
+    layer: SignalMapperMapLayer = .heard,
+    sessionScope: SignalMapperSessionScope = .empty,
+    isRunActive: Bool = false
   ) -> [MapOverlay] {
-    // Fills first, ring last: overlays stack in the order they are listed.
-    cellOverlays(for: snapshot, layer: layer) + [selectionOverlay(for: selected)]
+    // Fills first, session rings over them, the selection ring last: overlays stack in
+    // the order they are listed, and the array's ids never change between calls.
+    cellOverlays(for: snapshot, layer: layer, isRunActive: isRunActive)
+      + [sessionOverlay(for: snapshot, scope: sessionScope)]
+      + [selectionOverlay(for: selected)]
   }
 
   /// One translucent hexagon per captured cell, tinted by how well the mesh reaches it
@@ -68,8 +82,11 @@ enum SignalMapperCoverageRenderer {
   /// keep the diff on its cheap in-place path.
   private static func cellOverlays(
     for snapshot: SignalMapperCoverageSnapshot,
-    layer: SignalMapperMapLayer
+    layer: SignalMapperMapLayer,
+    isRunActive: Bool
   ) -> [MapOverlay] {
+    let opacity = isRunActive ? ridingOpacity : idleOpacity
+    let outlineAlpha: CGFloat = isRunActive ? 0.35 : 0.7
     let qualityOverlays = SignalQuality.coverageOrder.map { quality in
       let members = snapshot.cells.filter { cell in
         switch layer {
@@ -90,8 +107,8 @@ enum SignalMapperCoverageRenderer {
           color: quality.uiColor,
           // Never fully opaque: the streets under a cell are what make it legible as
           // coverage of a *place* rather than an abstract grid.
-          opacity: 0.18...0.55,
-          outlineColor: quality.uiColor.withAlphaComponent(0.7)
+          opacity: opacity,
+          outlineColor: quality.uiColor.withAlphaComponent(outlineAlpha)
         ).asPaint
       )
     }
@@ -110,11 +127,46 @@ enum SignalMapperCoverageRenderer {
       },
       paint: MapOverlay.WeightedFill(
         color: .systemGray,
-        opacity: 0.25...0.45,
-        outlineColor: UIColor.systemGray.withAlphaComponent(0.8)
+        opacity: isRunActive ? 0.15...0.28 : 0.25...0.45,
+        outlineColor: UIColor.systemGray.withAlphaComponent(outlineAlpha)
       ).asPaint
     )
     return qualityOverlays + [noReach]
+  }
+
+  /// One closed ring per hexagon the open run has touched, in the accent colour, over
+  /// the dimmed all-time fills. A hexagon mapped for the first time on this ride gets the
+  /// full-weight ring; one the ride only re-covered gets the light one — the ride's real
+  /// product stands out from its retracing.
+  ///
+  /// Rings, not fills: the fill colour underneath still means what it means everywhere
+  /// else on the map (the all-time best link), and a ride's own cells have no derivable
+  /// best to colour by — maxima do not subtract.
+  private static func sessionOverlay(
+    for snapshot: SignalMapperCoverageSnapshot,
+    scope: SignalMapperSessionScope
+  ) -> MapOverlay {
+    let members = scope.isEmpty ? [] : snapshot.cells.filter { scope.contains($0.cell.rawValue) }
+    return MapOverlay(
+      id: sessionOverlayID,
+      features: members.map { cell in
+        var ring = cell.boundary.map(\.locationCoordinate)
+        if let first = ring.first {
+          ring.append(first)
+        }
+        return MapOverlay.Feature(
+          id: cell.cell.stringValue,
+          geometry: .polyline(ring),
+          weight: scope.isFresh(cell.cell.rawValue) ? 1 : 0.5
+        )
+      },
+      paint: MapOverlay.WeightedLine(
+        color: .tintColor,
+        width: 1.8...3.2,
+        opacity: 0.85...1.0,
+        casing: MapOverlay.Casing(extraWidth: 1.5)
+      ).asPaint
+    )
   }
 
   /// A ring around the tapped cell, drawn as a closed polyline through the paint the

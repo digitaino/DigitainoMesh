@@ -26,12 +26,25 @@ public struct SurveySample: Sendable {
     /// populated from discover/trace responses: "they heard us").
     public var txSnr: Double?
     public var rssi: Double?
+    /// Whether this sighting sits on the path of one of *our own* packets, heard back.
+    ///
+    /// Set only for the FIRST hop of a heard-repeat path: that is the node which heard our
+    /// radio directly, so it is the one hop an echo proves anything about in the uplink
+    /// direction. Everything later on the path heard somebody else.
+    public var isEcho: Bool = false
 
-    public init(id: String, rxSnr: Double? = nil, txSnr: Double? = nil, rssi: Double? = nil) {
+    public init(
+      id: String,
+      rxSnr: Double? = nil,
+      txSnr: Double? = nil,
+      rssi: Double? = nil,
+      isEcho: Bool = false
+    ) {
       self.id = id
       self.rxSnr = rxSnr
       self.txSnr = txSnr
       self.rssi = rssi
+      self.isEcho = isEcho
     }
   }
 
@@ -87,6 +100,23 @@ public struct AggregatedCell: Sendable {
     public var maxRxSnr: Double?
     public var minTxSnr: Double?
     public var maxTxSnr: Double?
+    /// Appearances on somebody else's measured hop: sightings with neither leg measured,
+    /// i.e. an upstream hop of a path we received. Evidence the cell can reach this node
+    /// *through the mesh*, and deliberately not evidence of hearing it — which is why it
+    /// is counted apart from ``packetCount``.
+    public var relayCount: Int = 0
+    /// Echoes in which this node was the first hop — it heard our radio directly.
+    public var echoCount: Int = 0
+    /// When this repeater was last heard *directly* (a sighting carrying `rxSnr`), and the
+    /// reading of that same sighting. A pair, always updated together: "strongest now"
+    /// needs a number and the moment it was taken, and mixing a new time with an old
+    /// reading would be a fabricated measurement.
+    public var lastDirectHeard: Date?
+    public var lastRxSnr: Double?
+    /// When we last had evidence this repeater heard *us*: either it reported an SNR for
+    /// our transmission (`txSnr`) or it was the first hop of one of our packets coming
+    /// back (an echo).
+    public var lastUplinkAt: Date?
     public var firstHeard: Date
     public var lastHeard: Date
 
@@ -108,6 +138,11 @@ public struct AggregatedCell: Sendable {
       maxRxSnr: Double? = nil,
       minTxSnr: Double? = nil,
       maxTxSnr: Double? = nil,
+      relayCount: Int = 0,
+      echoCount: Int = 0,
+      lastDirectHeard: Date? = nil,
+      lastRxSnr: Double? = nil,
+      lastUplinkAt: Date? = nil,
       firstHeard: Date,
       lastHeard: Date
     ) {
@@ -124,10 +159,18 @@ public struct AggregatedCell: Sendable {
       self.maxRxSnr = maxRxSnr
       self.minTxSnr = minTxSnr
       self.maxTxSnr = maxTxSnr
+      self.relayCount = relayCount
+      self.echoCount = echoCount
+      self.lastDirectHeard = lastDirectHeard
+      self.lastRxSnr = lastRxSnr
+      self.lastUplinkAt = lastUplinkAt
       self.firstHeard = firstHeard
       self.lastHeard = lastHeard
     }
 
+    /// Packets this repeater was on one measured end of. Relay-only appearances are not
+    /// here: being named on somebody else's path is not the same as hearing or being
+    /// heard, and counting them made every hop of every path look like a link.
     public var packetCount: Int {
       rxPacketCount + txPacketCount
     }
@@ -256,26 +299,47 @@ public enum CellAggregator {
         firstHeard: sample.timestamp,
         lastHeard: sample.timestamp
       )
+      // The two legs are counted independently, because one sighting can carry both: a
+      // probe reply says "here is my reading of you" *and* is itself a packet we measured,
+      // and the old either/or booked it as TX only. A sighting carrying neither reading is
+      // an upstream hop of somebody else's measured link, and is not a packet count at all.
       if let rxSnr = sighting.rxSnr {
+        stats.rxPacketCount += 1
         stats.rxSnrSum += rxSnr
         stats.rxSnrCount += 1
         stats.minRxSnr = Swift.min(stats.minRxSnr ?? rxSnr, rxSnr)
         stats.maxRxSnr = Swift.max(stats.maxRxSnr ?? rxSnr, rxSnr)
+        // Time and reading move as a pair, and only forwards: folding an out-of-order
+        // sample must not pair a newer instant with an older number.
+        if stats.lastDirectHeard.map({ sample.timestamp >= $0 }) ?? true {
+          stats.lastDirectHeard = sample.timestamp
+          stats.lastRxSnr = rxSnr
+        }
       }
       if let txSnr = sighting.txSnr {
+        stats.txPacketCount += 1
         stats.txSnrSum += txSnr
         stats.txSnrCount += 1
-        stats.txPacketCount += 1
         stats.minTxSnr = Swift.min(stats.minTxSnr ?? txSnr, txSnr)
         stats.maxTxSnr = Swift.max(stats.maxTxSnr ?? txSnr, txSnr)
-      } else {
-        stats.rxPacketCount += 1
+        stats.lastUplinkAt = Swift.max(stats.lastUplinkAt ?? sample.timestamp, sample.timestamp)
+      }
+      if sighting.rxSnr == nil, sighting.txSnr == nil {
+        stats.relayCount += 1
+      }
+      if sighting.isEcho {
+        // Our own packet came back through this node: it heard our radio, even though it
+        // never told us with what SNR.
+        stats.echoCount += 1
+        stats.lastUplinkAt = Swift.max(stats.lastUplinkAt ?? sample.timestamp, sample.timestamp)
       }
       if let rssi = sighting.rssi {
         stats.rssiSum += rssi
         stats.rssiCount += 1
       }
       stats.firstHeard = Swift.min(stats.firstHeard, sample.timestamp)
+      // Still "last appeared in a path", relay hops included — the freshness of a *direct*
+      // measurement is `lastDirectHeard`, which is a different question.
       stats.lastHeard = Swift.max(stats.lastHeard, sample.timestamp)
       cell.repeaters[sighting.id] = stats
     }

@@ -35,6 +35,16 @@ final class SignalMapperRideSession {
   /// a survey — the aggregates still capture.
   let recorder: MapperRawSampleRecorder?
 
+  /// The store as it stood when this run started — the reference every "this ride" figure
+  /// is measured against.
+  ///
+  /// Immutable like ``runID`` and ``startedAt``, and for the same reason: it is the run's
+  /// identity as much as they are. Engine instances are cattle and a rewire clears
+  /// everything they hold, so a ride's own contribution can only be a difference held by
+  /// the thing that survives the rewire. Optional so a run whose baseline read failed still
+  /// starts — it simply shows no ride/all-time distinction.
+  let baseline: SignalMapperSessionBaseline?
+
   /// Highest reply distance per focus target, meters — the ride's actual answer,
   /// computed app-side where contact positions live.
   var maxReplyDistanceMeters: [NodeHexID: Double] = [:]
@@ -77,12 +87,14 @@ final class SignalMapperRideSession {
     runID: UUID,
     startedAt: Date,
     focusTargets: [MapperProbeTarget],
-    recorder: MapperRawSampleRecorder?
+    recorder: MapperRawSampleRecorder?,
+    baseline: SignalMapperSessionBaseline? = nil
   ) {
     self.runID = runID
     self.startedAt = startedAt
     self.focusTargets = focusTargets
     self.recorder = recorder
+    self.baseline = baseline
   }
 
   /// Totals across all generations: what the HUD and the completion sheet show.

@@ -83,6 +83,80 @@ struct MapperCellObservationStoreTests {
   }
 
   @Test
+  func `The direction and freshness columns survive a store round trip`() async throws {
+    let store = try makeStore()
+    let target = try cell(MapperFixtureLocation.plaza)
+    let heard = Date(timeIntervalSince1970: 1_753_000_000)
+    let stats = MapperRepeaterStats(
+      id: "0C13",
+      rxPacketCount: 2,
+      txPacketCount: 1,
+      rxSnrSum: 14,
+      rxSnrCount: 2,
+      txSnrSum: 5,
+      txSnrCount: 1,
+      maxRxSnr: 9,
+      relayCount: 4,
+      echoCount: 3,
+      lastDirectHeard: heard.addingTimeInterval(120),
+      lastRxSnr: 5,
+      lastUplinkAt: heard.addingTimeInterval(180),
+      firstHeard: heard,
+      lastHeard: heard.addingTimeInterval(180)
+    )
+
+    try await store.upsertMapperCellObservations([
+      observation(cell: target, day: "2025-07-20", repeaters: ["0C13": stats])
+    ])
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    let restored = try #require(row.repeaters["0C13"])
+    #expect(restored.relayCount == 4)
+    #expect(restored.echoCount == 3)
+    #expect(restored.lastDirectHeard == heard.addingTimeInterval(120))
+    #expect(restored.lastRxSnr == 5)
+    #expect(restored.lastUplinkAt == heard.addingTimeInterval(180))
+    #expect(restored == stats)
+  }
+
+  /// The compatibility half of the same claim: the columns were added after rows had been
+  /// written, so a row from an earlier build has to decode as "we don't know", not fail.
+  @Test
+  func `A repeater column written before the freshness fields decodes with them empty`() throws {
+    let heard = Date(timeIntervalSince1970: 1_753_000_000)
+    // Hand-built rather than encoded from a struct: the point is a payload with the keys
+    // *absent*, which no current encoder can produce.
+    let legacy: [String: Any] = [
+      "0C13": [
+        "id": "0C13",
+        "rxPacketCount": 3,
+        "txPacketCount": 0,
+        "rxSnrSum": 12.0,
+        "rxSnrCount": 2,
+        "txSnrSum": 0.0,
+        "txSnrCount": 0,
+        "rssiSum": -180.0,
+        "rssiCount": 2,
+        "firstHeard": heard.timeIntervalSinceReferenceDate,
+        "lastHeard": heard.addingTimeInterval(60).timeIntervalSinceReferenceDate
+      ]
+    ]
+
+    let decoded = try MapperCellObservationDTO.decodeRepeaters(
+      JSONSerialization.data(withJSONObject: legacy)
+    )
+
+    let stats = try #require(decoded["0C13"])
+    #expect(stats.rxPacketCount == 3, "the fields the old row did carry are still read")
+    #expect(stats.lastHeard == heard.addingTimeInterval(60))
+    #expect(stats.relayCount == 0)
+    #expect(stats.echoCount == 0)
+    #expect(stats.lastDirectHeard == nil)
+    #expect(stats.lastRxSnr == nil)
+    #expect(stats.lastUplinkAt == nil)
+  }
+
+  @Test
   func `The SurveyKit aggregate survives the trip through storage`() async throws {
     let store = try makeStore()
     let target = try cell(MapperFixtureLocation.plaza)
