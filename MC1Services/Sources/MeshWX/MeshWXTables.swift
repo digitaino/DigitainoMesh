@@ -31,6 +31,13 @@ public struct MeshWXPlace: Sendable, Hashable, Codable {
   public let lat: Double
   public let lon: Double
   public let population: Int
+  public init(name: String, state: String, lat: Double, lon: Double, population: Int) {
+    self.name = name
+    self.state = state
+    self.lat = lat
+    self.lon = lon
+    self.population = population
+  }
 }
 
 /// A forecast zone (`zones.json`). ``lat``/``lon`` are the centroid, which is the pin
