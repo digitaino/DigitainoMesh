@@ -1,171 +1,150 @@
-import CoreLocation
-import Foundation
 import MC1Services
 import MeshWX
 import SwiftUI
 
-/// Point forecasts (spec §7), most recently received first, so the answer to the last request
-/// is on top.
+/// The Forecast card (docs/MESHWX_UI.md §9): the forecast for the point nearest the place, one
+/// row per day or day-and-night, labelled against now.
 struct WeatherForecastSection: View {
   @Environment(\.appTheme) private var theme
 
   let model: WeatherToolModel
-  let userLocation: CLLocationCoordinate2D?
-  let onFindPlace: () -> Void
+  let snapshot: WeatherScreenSnapshot
+  let showsAskFootnotes: Bool
+  let onUseMyLocation: () -> Void
+  let onSearch: () -> Void
+
+  static func askRequest(_ snapshot: WeatherScreenSnapshot) -> WeatherRequest? {
+    switch snapshot.forecast {
+    case let .missing(point, _): .forecast(point: point.index)
+    case let .forecast(summary) where summary.isStale: .forecast(point: summary.point.index)
+    case .forecast, .noPlace, .noPointNearby: nil
+    }
+  }
 
   var body: some View {
-    Section(L10n.Weather.Weather.Forecast.section) {
-      if model.forecasts.isEmpty {
-        Text(L10n.Weather.Weather.Forecast.none)
-          .foregroundStyle(.secondary)
-      } else {
-        ForEach(model.forecasts, id: \.forecast.pointIndex) { stored in
-          forecastHeader(stored)
-          ForEach(Array(stored.forecast.periods.enumerated()), id: \.offset) { offset, period in
-            WeatherForecastPeriodRow(
-              period: period,
-              periodID: stored.forecast.firstPeriod &+ UInt8(truncatingIfNeeded: offset),
-              issuedAt: stored.issuedAt
-            )
-          }
+    let title = model.placeName.map { L10n.Weather.Weather.Forecast.title($0) } ?? L10n.Weather.Weather.Forecast.titleGeneric
+    Section {
+      switch snapshot.forecast {
+      case .noPlace:
+        WeatherPlacePrompt(onUseMyLocation: onUseMyLocation, onSearch: onSearch)
+      case .noPointNearby:
+        // No point close enough to speak for the place: nothing worth asking for.
+        Text(WeatherCopy.noForecastPoint(placeName: model.placeName ?? ""))
+          .font(.subheadline)
+      case let .missing(point, kilometres):
+        VStack(alignment: .leading, spacing: 8) {
+          Text(WeatherCopy.forecastMissing(placeName: model.placeName ?? "", point: point, kilometres: kilometres))
+            .font(.subheadline)
+          WeatherAskButton(
+            model: model, title: L10n.Weather.Weather.Request.askForecast, request: .forecast(point: point.index),
+            showsFootnotes: showsAskFootnotes)
+        }
+        .padding(.vertical, 2)
+      case let .forecast(summary):
+        issuedRow(summary)
+        ForEach(summary.rows) { row in
+          WeatherForecastRowView(row: row)
+            .equatable()
         }
       }
-
-      requestButtons
+    } header: {
+      VStack(alignment: .leading) {
+        Text(title)
+      }
+      .accessibilityElement(children: .contain)
+      .accessibilityLabel(summaryLabel(title: title))
     }
     .themedRowBackground(theme)
   }
 
-  // MARK: - Header
+  private func issuedText(_ summary: WeatherForecastCard.Summary) -> String {
+    let issuedAt = summary.stored.issuedAt
+    return summary.isStale
+      ? L10n.Weather.Weather.Forecast.issued(WeatherFormatting.ago(issuedAt, now: model.now))
+      : L10n.Weather.Weather.Forecast.issued(WeatherFormatting.clockTime(
+        issuedAt, now: model.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
+  }
 
-  private func forecastHeader(_ stored: WeatherStoredForecast) -> some View {
-    VStack(alignment: .leading, spacing: 3) {
-      HStack(spacing: 8) {
-        Text(pointName(stored))
-          .font(.headline)
-        if stored.isStale(at: model.now) {
-          WeatherBadge(text: L10n.Weather.Weather.Forecast.stale, tint: .orange)
-        }
-      }
-      Text(L10n.Weather.Weather.Forecast.issued(stored.issuedAt.formatted(date: .abbreviated, time: .shortened)))
+  private func summaryLabel(title: String) -> String {
+    guard case let .forecast(summary) = snapshot.forecast else { return title }
+    return [title, issuedText(summary), L10n.Weather.Weather.Forecast.Accessibility.rows(summary.rows.count)]
+      .joined(separator: ". ")
+  }
+
+  private func issuedRow(_ summary: WeatherForecastCard.Summary) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(issuedText(summary))
+        .font(.subheadline)
+        .foregroundStyle(summary.isStale ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+      if case let .nearbyPoint(kilometres) = summary.source {
+        Text(L10n.Weather.Weather.Forecast.nearbyPoint(
+          WeatherNames.pointName(summary.point.name), WeatherFormatting.kilometres(kilometres)))
         .font(.footnote)
         .foregroundStyle(.secondary)
-    }
-    .accessibilityElement(children: .combine)
-  }
-
-  /// A forecast the bot resolved from a place string carries no point name on the wire, so the
-  /// request text is the only label there is — and it is labelled as approximate, because the
-  /// answer is for the nearest point, not for the place asked about (spec §7, §11).
-  private func pointName(_ stored: WeatherStoredForecast) -> String {
-    if let point = model.tables.point(at: stored.forecast.pointIndex) {
-      return point.name
-    }
-    if let requestLabel = stored.requestLabel {
-      return L10n.Weather.Weather.Forecast.nearestPoint(requestLabel)
-    }
-    return L10n.Weather.Weather.Forecast.point(Int(stored.forecast.pointIndex))
-  }
-
-  // MARK: - Requests
-
-  private var requestButtons: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      WeatherRequestButton(
-        title: L10n.Weather.Weather.Forecast.home,
-        systemImage: "house",
-        model: model,
-        request: .homeForecast
-      )
-      WeatherRequestButton(
-        title: L10n.Weather.Weather.Forecast.myLocation,
-        systemImage: "location",
-        model: model,
-        request: .forecast(point: nearestPointIndex ?? 0),
-        isEnabled: nearestPointIndex != nil
-      )
-      Button {
-        onFindPlace()
-      } label: {
-        Label(L10n.Weather.Weather.Forecast.findPlace, systemImage: "magnifyingglass")
       }
-      .buttonStyle(.borderless)
-      .foregroundStyle(canFindPlace ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-      .disabled(!canFindPlace)
+      if summary.isStale {
+        WeatherAskButton(
+          model: model, title: L10n.Weather.Weather.Request.askForecast,
+          request: .forecast(point: summary.point.index), showsFootnotes: showsAskFootnotes)
+      }
     }
-  }
-
-  private var canFindPlace: Bool {
-    model.canSendRequests && !model.hasPendingRequest
-  }
-
-  /// The nearest bundled point to the phone: "forecast here" is `>f <index>`, never a
-  /// coordinate — the bot has no way to forecast for a point it does not hold (spec §11).
-  private var nearestPointIndex: UInt16? {
-    guard let userLocation else { return nil }
-    return model.tables
-      .nearestPoint(toLat: userLocation.latitude, lon: userLocation.longitude)?
-      .index
   }
 }
 
-/// One forecast period: when, what it looks like, the one temperature the period carries, the
-/// chance of rain and the wind.
-struct WeatherForecastPeriodRow: View {
-  let period: MeshWXForecastPeriod
-  let periodID: UInt8
-  let issuedAt: Date
+/// One forecast row: label, icon, temperatures, rain chance, hazards.
+struct WeatherForecastRowView: View, Equatable {
+  @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 36
 
-  private var slot: MeshWXPeriodSlot { MeshWXPeriodSlot(periodID: periodID) }
+  let row: WeatherForecastRow
+
+  nonisolated static func == (lhs: WeatherForecastRowView, rhs: WeatherForecastRowView) -> Bool {
+    lhs.row == rhs.row
+  }
 
   var body: some View {
-    HStack(spacing: 12) {
-      icon
-        .frame(width: 34, alignment: .leading)
-        .accessibilityHidden(true)
+    let icon = MeshWXPresentation.icon(
+      for: MeshWXForecastPeriod(
+        highF: row.highF, lowF: row.lowF, popPercent: row.popPercent, sky: row.sky, thunder: row.thunder,
+        wintry: row.wintry, windy: row.windy, fog: row.fog, windDirection: row.windDirection, windMph: row.windMph),
+      isNight: row.isNightIcon)
+    let label = WeatherCopy.rowLabel(row.label, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
 
-      Text(WeatherFormatting.periodLabel(periodID: periodID, issuedAt: issuedAt))
-        .font(.subheadline)
+    HStack(alignment: .center, spacing: 12) {
+      HStack(spacing: 2) {
+        Image(systemName: icon.symbolName)
+          .symbolRenderingMode(.multicolor)
+        if icon.showsWindAccent {
+          Image(systemName: "wind")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .frame(minWidth: iconWidth, alignment: .leading)
+      .accessibilityHidden(true)
 
+      VStack(alignment: .leading, spacing: 2) {
+        Text(label)
+          .font(.body)
+        if let hazards = WeatherCopy.hazards(row) {
+          Text(hazards)
+            .font(.footnote)
+            .foregroundStyle(.orange)
+        }
+      }
       Spacer(minLength: 8)
-
-      Text(trailingText)
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.trailing)
-    }
-    .accessibilityElement(children: .combine)
-  }
-
-  /// Wind is an accent rather than a replacement: "windy and raining" still has to read as
-  /// rain (`MeshWXConditionIcon`).
-  private var icon: some View {
-    let condition = MeshWXPresentation.icon(for: period, isNight: slot.isNight)
-    return HStack(spacing: 2) {
-      Image(systemName: condition.symbolName)
-      if condition.showsWindAccent {
-        Image(systemName: "wind")
-          .font(.caption2)
-          .foregroundStyle(.secondary)
+      VStack(alignment: .trailing, spacing: 2) {
+        if let temperatures = WeatherCopy.temperatures(highF: row.highF, lowF: row.lowF) {
+          Text(temperatures)
+            .font(.body)
+            .monospacedDigit()
+        }
+        if let rain = WeatherCopy.rainChance(row) {
+          Text(rain)
+            .font(.footnote)
+            .foregroundStyle(.blue)
+        }
       }
     }
-  }
-
-  /// A day period carries a high and a night period a low; showing the missing one as a dash
-  /// would suggest the bot sent something it did not.
-  private var trailingText: String {
-    var parts: [String] = []
-    if let highF = period.highF {
-      parts.append(L10n.Weather.Weather.Forecast.high(WeatherFormatting.temperature(fahrenheit: Int(highF))))
-    } else if let lowF = period.lowF {
-      parts.append(L10n.Weather.Weather.Forecast.low(WeatherFormatting.temperature(fahrenheit: Int(lowF))))
-    }
-    if let pop = period.popPercent {
-      parts.append(L10n.Weather.Weather.Forecast.pop(Int(pop)))
-    }
-    if let wind = WeatherFormatting.wind(MeshWXWindReading(period: period)) {
-      parts.append(wind)
-    }
-    return parts.joined(separator: " · ")
+    .accessibilityElement(children: .combine)
   }
 }

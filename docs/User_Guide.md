@@ -419,26 +419,32 @@ The log shows:
 
 ### Weather
 
-The Weather tool shows what a MeshWX weather bot puts on the mesh. A bot is a chat node named `WX-<city>` that receives NOAA products by satellite and broadcasts them on the `#meshwx` channel as compact binary messages; the app decodes them with tables it carries, so the tool works with no internet at all.
+The Weather tool shows severe weather alerts, current conditions and the forecast for one place, from a MeshWX weather bot on the mesh. A bot is a chat node named `WX-<city>` (WX-AUS in Austin) that puts National Weather Service products on the `#meshwx` channel as compact binary messages; the app decodes them with tables it carries, so the tool works with no internet at all.
 
 **Requirements**
 
 - MeshCore companion firmware 1.15 or newer on the radio. Older firmware never delivers these packets; the tool tells you when that is the case.
-- The `#meshwx` channel on the radio. The tool offers to add it to a free slot; nothing is written until you tap **Add Channel**.
-- A bot in range. Bots advertise like any node; the tool lists every `WX-` contact the radio knows, nearest first, and lets you switch between them.
+- The `#meshwx` channel on the radio. Once your radio's channel list has loaded, the tool offers to add it; nothing is written until you tap **Add channel**, and only into a slot the radio confirms is empty.
+- A bot in range. Bots advertise like any node. With more than one, **About weather on the mesh** (the ⓘ in the header) lists them and offers **Choose automatically**.
 
-**What the tool shows**
+**The place**
 
-1. **Warnings**: every active warning, watch and advisory in the bot's coverage, most severe first, with its tags (hail, wind, tornado, flood), the counties or zones it names, and a countdown to its expiry. Tap a warning for a map (the storm polygon, or the zones and counties filled from bundled boundaries), the full area list, and **Read full text** for the forecaster's narrative.
-2. **Now**: the latest reading from each METAR station the bot covers, nearest to you first. A **stale** badge appears once a reading is more than two hours old. **Refresh** asks the bot for a new batch.
-3. **Forecast**: seven-period point forecasts. **Home forecast** asks for the bot's own point, **My location** for the point nearest you, and **Find a place…** searches by name.
-4. **Text products**: the forecast discussion, hazardous weather outlook, space weather, storm reports, rainfall totals, and the raw METAR or TAF for a station. Long replies arrive in parts; a part that never arrives is marked, and **Ask again** re-requests it once 20 seconds have passed.
+Everything on the screen answers for one place, named in the header. It is your location when the app has one; tap the place name to search for a town instead, for this visit, and **Back to my location** to return. With no location the screen asks **Where do you want weather for?** and offers **Use my location** and **Search a town**. A location more than an hour old is shown as last known, with its age, and never earns the green check.
 
-**How requests work**
+**What the screen shows**
 
-Requests are direct messages to the bot; the answer comes back on `#meshwx` so every phone listening benefits. The tool sends one request per tap, keeps them five seconds apart, waits fifteen seconds and retries once, then tells you the bot may be out of range. Anything received in the last five minutes is not asked for again. The bot's own broadcasts (warnings as they change, a digest every three hours, observations hourly, the home forecast every six) are kept whether or not the tool is open, and the last picture is shown even with no radio connected.
+1. **Alerts for <place>**: warnings, watches and advisories that cover the place or lie within 50 km, most dangerous first, each with its colour, a countdown, and for a nearby one its distance and direction. Tornado, extreme wind, flash flood and severe thunderstorm warnings are always listed; lesser alerts beyond two fold into "more". One line under the rows says what the app can vouch for:
+   - a green check, **No alerts received**, only when a fresh alert list arrived while your radio was connected, no messages were missed, the place is inside the area the bot reports on, and nothing is active anywhere in that area;
+   - otherwise the reason it can't tell (no alert list yet, the list is old, messages were missed, your radio isn't connected, the place is outside the bot's area), with **Ask for alerts** where asking would help.
 
-If the tool says some messages were missed, tap **Get digest**; a warning the digest lists that you never received can be fetched with one tap.
+   Tap an alert for its map (the storm polygon, or the zones and counties filled from bundled boundaries), whether it covers your place, its details and areas, and **Ask for full text** for the forecaster's narrative. **Alerts in WX-AUS's area** puts every alert the bot holds on one map and list.
+2. **Now**: the nearest fresh weather station's reading, with its distance and the time of the report. **Weather stations** lists every station the bot reports on; a station's page has all its readings and its coded airport reports, with **Ask for METAR (conditions)** and **Ask for TAF (forecast)**.
+3. **Forecast**: the forecast for the place's nearest forecast point, labelled Today, Tonight, Tomorrow and by weekday, with **Ask for forecast** when nothing is held for it. A place more than 115 km from any forecast point says so rather than borrowing a distant one.
+4. **Weather Service text reports**: the forecast discussion, hazardous weather outlook, storm reports and rainfall totals for your state (which you can change), and space weather, each with **Ask for latest**. Long replies arrive in parts; a part that never arrives is marked.
+
+**How asking works**
+
+Asking is public: a request is a direct message to the bot, and the answer comes back on `#meshwx` for every phone listening. The tool says so under the first ask button, labels answers somebody else asked for as theirs, and doesn't ask for anything the channel delivered in the last five minutes. It never asks on its own: one request per tap, five seconds apart, and one retry only if the bot has gone silent, after which it says the bot may be out of range. The bot's own broadcasts (warnings as they change, the alert list every three hours, station readings every hour) are kept whether or not the tool is open, and the last picture is shown with its age even with no radio connected. **Clear received weather**, in About, removes everything received from a bot.
 
 ## 8. iPad Experience
 

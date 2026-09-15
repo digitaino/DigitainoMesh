@@ -4,33 +4,236 @@ import MeshWX
 import SwiftUI
 import UIKit
 
-/// Every word and colour the Weather tool puts on screen, as pure functions.
+/// Words, units and colours the Weather tool puts on screen, as pure functions.
 ///
-/// `MeshWX` deliberately stops at numbers and enum cases — it names a tint, it does not pick a
-/// `Color`; it hands over 1.0 inches of hail, not `"Hail 1.00 in"` — because units, decimal
-/// separators and the word for hail are localisation. This is where that turns into text, kept
-/// free of any view so each rule in spec §10 is a unit test rather than a screenshot.
+/// `MeshWX` stops at numbers and enum cases; this is where they become text. Kept free of any
+/// view so each rule is a unit test rather than a screenshot.
 enum WeatherFormatting {
+  // MARK: - Clock and durations
 
-  // MARK: - Warnings (spec §10.2)
-
-  /// "expires in 42 min", or "expired" once the phone's clock has passed it.
-  ///
-  /// Counted against the phone's clock and the absolute expiry, never against receipt: a
-  /// warning drained from an offline queue an hour late still has to expire on time.
-  static func expiry(expiresMinutes: UInt32, now: Date) -> String {
-    let remaining = MeshWXPresentation.minutesUntilExpiry(
-      expiresMinutes: expiresMinutes,
-      now: MeshWXPresentation.unixMinutes(for: now)
-    )
-    guard let remaining else { return L10n.Weather.Weather.Warnings.expired }
-    guard remaining >= 60 else { return L10n.Weather.Weather.Warnings.expiresIn(remaining) }
-    return L10n.Weather.Weather.Warnings.expiresInHours(remaining / 60, remaining % 60)
+  /// "11:02 PM" for today and for anything up to twelve hours ahead (a warning ending at 12:40 AM
+  /// is "until 12:40 AM"); "yesterday 2:00 PM" for yesterday; "Sep 13, 8:02 PM" otherwise.
+  static func clockTime(_ date: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+    let base = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+    let time = date.formatted(base.hour().minute())
+    if calendar.isDate(date, inSameDayAs: now) { return time }
+    if date > now, date.timeIntervalSince(now) < 12 * 3600 { return time }
+    if date < now, let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+       calendar.isDate(date, inSameDayAs: yesterday) {
+      return L10n.Weather.Weather.Time.yesterday(time)
+    }
+    return date.formatted(base.month(.abbreviated).day().hour().minute())
   }
 
-  /// A warning's tags in the spec's own words, ready to be joined.
+  /// "40 s", "2 min", "3 h", "2 d": the largest unit that fits, rounded down.
+  static func duration(seconds: TimeInterval) -> String {
+    let seconds = max(0, Int(seconds))
+    if seconds < 60 { return L10n.Weather.Weather.Unit.seconds(seconds) }
+    if seconds < 3600 { return L10n.Weather.Weather.Unit.minutes(seconds / 60) }
+    if seconds < 48 * 3600 { return L10n.Weather.Weather.Unit.hours(seconds / 3600) }
+    return L10n.Weather.Weather.Unit.days(seconds / 86_400)
+  }
+
+  /// "just now", "40 s ago", "2 min ago", "3 h ago".
+  static func ago(_ date: Date, now: Date) -> String {
+    let elapsed = now.timeIntervalSince(date)
+    guard elapsed >= 5 else { return L10n.Weather.Weather.Time.justNow }
+    return L10n.Weather.Weather.Time.ago(duration(seconds: elapsed))
+  }
+
+  /// "3 h old".
+  static func age(_ date: Date, now: Date) -> String {
+    L10n.Weather.Weather.Time.old(duration(seconds: now.timeIntervalSince(date)))
+  }
+
+  /// "in 40 min", "in 1 h 20 min", "in 2 h".
+  static func countdown(minutes: Int) -> String {
+    let minutes = max(0, minutes)
+    if minutes < 60 { return L10n.Weather.Weather.Time.within(L10n.Weather.Weather.Unit.minutes(minutes)) }
+    let hours = minutes / 60
+    let rest = minutes % 60
+    let words = rest == 0
+      ? L10n.Weather.Weather.Unit.hours(hours)
+      : L10n.Weather.Weather.Unit.hoursMinutes(hours, rest)
+    return L10n.Weather.Weather.Time.within(words)
+  }
+
+  /// "45 min" or "5 h", for how long a feed has been quiet.
+  static func quietDuration(minutes: Int) -> String {
+    minutes < 60
+      ? L10n.Weather.Weather.Unit.minutes(max(0, minutes))
+      : L10n.Weather.Weather.Unit.hours(minutes / 60)
+  }
+
+  /// "until 11:41 PM · in 40 min".
+  static func untilLine(expiresAt: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+    let minutes = Int(ceil(expiresAt.timeIntervalSince(now) / 60))
+    return L10n.Weather.Weather.Alerts.until(
+      clockTime(expiresAt, now: now, calendar: calendar, locale: locale), countdown(minutes: minutes))
+  }
+
+  // MARK: - Distance
+
+  /// "3 km", "under 1 km".
+  static func kilometres(_ kilometres: Double) -> String {
+    guard kilometres >= 0.5 else { return L10n.Weather.Weather.Unit.underOneKilometre }
+    return L10n.Weather.Weather.Unit.kilometres(Int(kilometres.rounded()))
+  }
+
+  /// "25 km N".
+  static func distance(_ kilometres: Double, direction: MeshWXCompass?) -> String {
+    let distance = Self.kilometres(kilometres)
+    guard let direction else { return distance }
+    return L10n.Weather.Weather.Unit.distanceDirection(distance, direction.abbreviation)
+  }
+
+  /// The 16-point compass direction from one coordinate towards another.
+  static func direction(from: MeshWXCoordinate, to: MeshWXCoordinate) -> MeshWXCompass {
+    let lat1 = from.latitude * .pi / 180
+    let lat2 = to.latitude * .pi / 180
+    let dLon = (to.longitude - from.longitude) * .pi / 180
+    let y = sin(dLon) * cos(lat2)
+    let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+    let degrees = (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+    return MeshWXCompass(degrees: degrees)
+  }
+
+  // MARK: - Names
+
+  /// "WX-AUS", or "Weather radio 041D" for a bot heard without an advert.
+  static func botName(botID: UInt16, bot: WeatherBot?) -> String {
+    bot?.name ?? L10n.Weather.Weather.Bot.heardOnly(String(format: "%04X", botID))
+  }
+
+  /// A name at the start of a sentence: "the weather radio" becomes "The weather radio".
+  static func sentenceStart(_ text: String) -> String {
+    guard let first = text.first else { return text }
+    return first.uppercased() + text.dropFirst()
+  }
+
+  /// "Austin, TX" → "Austin".
+  static func shortPlaceName(_ label: String) -> String {
+    guard let comma = label.lastIndex(of: ","), comma != label.startIndex else { return label }
+    return String(label[..<comma])
+  }
+
+  /// "v1.14.0" → "1.14"; anything unrecognised is returned as it is.
+  static func firmwareVersion(_ raw: String) -> String {
+    var text = raw.trimmingCharacters(in: .whitespaces)
+    if text.lowercased().hasPrefix("v") { text.removeFirst() }
+    var parts = text.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+    guard parts.count >= 2, parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }) else { return raw }
+    while parts.count > 2, parts.last == "0" { parts.removeLast() }
+    return parts.joined(separator: ".")
+  }
+
+  /// A forecast point's state from its bundle name, "Austin Camp Mabry-Travis TX" → "TX".
+  static func pointState(_ raw: String) -> String? {
+    guard let last = raw.split(separator: " ").last, last.count == 2,
+          last.allSatisfy({ $0.isUppercase && $0.isLetter }),
+          raw.contains("-") else { return nil }
+    return String(last)
+  }
+
+  /// A forecast point as a place: "Central Park, NY" from "Central Park-New York NY", and
+  /// "San Juan · Luis Munoz Marin International Airport" from a name whose tail is a town.
+  static func pointLabel(_ raw: String) -> String {
+    let name = WeatherNames.pointName(raw)
+    if let state = pointState(raw) { return "\(name), \(state)" }
+    guard let dash = raw.lastIndex(of: "-") else { return raw }
+    let head = raw[..<dash].trimmingCharacters(in: .whitespaces)
+    let tail = raw[raw.index(after: dash)...].trimmingCharacters(in: .whitespaces)
+    guard !head.isEmpty, !tail.isEmpty else { return raw }
+    return L10n.Weather.Weather.Place.pointInTown(tail, head)
+  }
+
+  static func eventName(_ event: UInt8, tables: MeshWXTables) -> String {
+    tables.eventName(for: event)?.long ?? tables.eventLabel(for: event)
+  }
+
+  /// "Travis, TX" for a named area; the bare UGC when the bundle is older than the product.
+  static func areaName(_ area: MeshWXNamedArea) -> String {
+    guard let name = area.name else { return area.ugc }
+    return L10n.Weather.Weather.Alerts.area(name, area.state)
+  }
+
+  /// "Llano County" for a county, the zone's own name for a zone.
+  static func shortAreaName(_ area: MeshWXNamedArea) -> String {
+    guard let name = area.name else { return area.ugc }
+    return area.isCounty ? L10n.Weather.Weather.Area.county(name) : name
+  }
+
+  /// Areas once each, in the order the product names them.
+  static func uniqueAreas(_ areas: [MeshWXNamedArea]) -> [MeshWXNamedArea] {
+    var seen: Set<String> = []
+    return areas.filter { seen.insert($0.ugc).inserted }
+  }
+
+  // MARK: - Weather values
+
+  /// Whole degrees, converted by the locale: the wire is °F, a phone set to metric is not.
+  static func temperature(fahrenheit: Int, locale: Locale = .autoupdatingCurrent) -> String {
+    Measurement(value: Double(fahrenheit), unit: UnitTemperature.fahrenheit)
+      .formatted(
+        .measurement(width: .narrow, usage: .weather, numberFormatStyle: .number.precision(.fractionLength(0)))
+          .locale(locale))
+  }
+
+  /// "SSE 12 gusting 21", "calm", or nil when the station reported no wind at all.
+  static func wind(_ reading: MeshWXWindReading) -> String? {
+    guard let speed = reading.speedMph else { return nil }
+    guard speed > 0, let direction = reading.direction else { return L10n.Weather.Weather.Wind.calm }
+    let base = L10n.Weather.Weather.Wind.speed(direction.abbreviation, Int(speed))
+    guard let gust = reading.gustMph, gust > 0 else { return base }
+    return L10n.Weather.Weather.Wind.gusting(base, Int(gust))
+  }
+
+  static func pressure(inchesOfMercury inHg: Double, locale: Locale = .autoupdatingCurrent) -> String {
+    inHg.formatted(.number.precision(.fractionLength(2)).locale(locale))
+  }
+
+  static func visibility(miles: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
+    Measurement(value: Double(miles), unit: UnitLength.miles)
+      .formatted(.measurement(width: .abbreviated, usage: .asProvided).locale(locale))
+  }
+
+  /// The word for a sky code; nil for "other", which names nothing.
+  static func condition(_ sky: MeshWXSky) -> String? {
+    switch sky {
+    case .clear: L10n.Weather.Weather.Sky.clear
+    case .few: L10n.Weather.Weather.Sky.few
+    case .scattered: L10n.Weather.Weather.Sky.scattered
+    case .broken: L10n.Weather.Weather.Sky.broken
+    case .overcast: L10n.Weather.Weather.Sky.overcast
+    case .fog: L10n.Weather.Weather.Sky.fog
+    case .smoke: L10n.Weather.Weather.Sky.smoke
+    case .haze: L10n.Weather.Weather.Sky.haze
+    case .rain: L10n.Weather.Weather.Sky.rain
+    case .snow: L10n.Weather.Weather.Sky.snow
+    case .thunderstorm: L10n.Weather.Weather.Sky.thunderstorm
+    case .drizzle: L10n.Weather.Weather.Sky.drizzle
+    case .mist: L10n.Weather.Weather.Sky.mist
+    case .squall: L10n.Weather.Weather.Sky.squall
+    case .sandOrDust: L10n.Weather.Weather.Sky.dust
+    case .other: nil
+    }
+  }
+
+  /// An observation taken between 7 PM and 6 AM on the phone's clock draws the night icon.
+  static func isNight(_ date: Date, calendar: Calendar) -> Bool {
+    let hour = calendar.component(.hour, from: date)
+    return hour < 6 || hour >= 19
+  }
+
+  // MARK: - Tags
+
   static func tagTexts(for warning: MeshWXWarning, locale: Locale = .autoupdatingCurrent) -> [String] {
     MeshWXPresentation.tags(for: warning).compactMap { tagText($0, locale: locale) }
+  }
+
+  /// Every tag on one line, for a row that truncates.
+  static func tagLine(for warning: MeshWXWarning, locale: Locale = .autoupdatingCurrent) -> String {
+    tagTexts(for: warning, locale: locale).joined(separator: " · ")
   }
 
   static func tagText(_ tag: MeshWXPresentation.Tag, locale: Locale = .autoupdatingCurrent) -> String? {
@@ -62,12 +265,10 @@ enum WeatherFormatting {
     }
   }
 
-  /// The NWS colour convention, resolved against the app's palette.
-  ///
-  /// The named greens, the lavender and the tan have no system colour that is recognisably
-  /// them, so those are literal sRGB — an approximate NWS colour is worse than none, because
-  /// a flash flood warning that reads as a plain green is a flood advisory to anyone who knows
-  /// the convention.
+  // MARK: - Colour
+
+  /// The NWS colour convention. The named greens, the lavender and the tan have no system
+  /// colour that is recognisably them, so those are literal sRGB.
   static func color(for tint: MeshWXEventTint) -> Color {
     switch tint {
     case .red: .red
@@ -88,164 +289,15 @@ enum WeatherFormatting {
     }
   }
 
-  /// The same tint for the map, which paints through UIKit.
   static func uiColor(for tint: MeshWXEventTint) -> UIColor {
     UIColor(color(for: tint))
   }
 
-  // MARK: - Areas
-
-  /// "Travis, TX" for a named area; the bare UGC when the bundle is older than the product.
-  static func areaName(_ area: MeshWXNamedArea) -> String {
-    guard let name = area.name else { return area.ugc }
-    return L10n.Weather.Weather.Warnings.area(name, area.state)
+  static func tint(for event: UInt8, tables: MeshWXTables) -> MeshWXEventTint {
+    MeshWXPresentation.tint(forVTEC: tables.vtec(for: event) ?? "")
   }
 
-  // MARK: - Observations (spec §10.3)
-
-  /// "WNW 15 gusting 26", "Calm", or nil when the station reported no wind at all.
-  ///
-  /// Nil rather than a zero: a station that did not report is not a station reporting calm.
-  static func wind(_ reading: MeshWXWindReading) -> String? {
-    guard let speed = reading.speedMph else { return nil }
-    guard speed > 0, let direction = reading.direction else {
-      return L10n.Weather.Weather.Now.calm
-    }
-    let base = L10n.Weather.Weather.Wind.speed(direction.abbreviation, Int(speed))
-    guard let gust = reading.gustMph else { return base }
-    return L10n.Weather.Weather.Wind.gusting(base, Int(gust))
-  }
-
-  /// Whole degrees, converted by the locale: the wire is °F, a phone set to metric is not.
-  static func temperature(fahrenheit: Int, locale: Locale = .autoupdatingCurrent) -> String {
-    Measurement(value: Double(fahrenheit), unit: UnitTemperature.fahrenheit)
-      .formatted(
-        .measurement(
-          width: .narrow,
-          usage: .weather,
-          numberFormatStyle: .number.precision(.fractionLength(0))
-        )
-        .locale(locale)
-      )
-  }
-
-  /// Inches of mercury to two decimals — `29.00 + raw/100`, straight from the wire byte.
-  static func pressure(rawPressure: UInt8, locale: Locale = .autoupdatingCurrent) -> String? {
-    guard let inHg = MeshWXPresentation.inchesOfMercury(fromRawPressure: rawPressure) else {
-      return nil
-    }
-    return pressure(inchesOfMercury: inHg, locale: locale)
-  }
-
-  static func pressure(inchesOfMercury inHg: Double, locale: Locale = .autoupdatingCurrent) -> String {
-    inHg.formatted(.number.precision(.fractionLength(2)).locale(locale))
-  }
-
-  /// Statute miles, converted by the locale.
-  static func visibility(miles: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
-    Measurement(value: Double(miles), unit: UnitLength.miles)
-      .formatted(.measurement(width: .abbreviated, usage: .general).locale(locale))
-  }
-
-  /// Distance to the user, in the units the phone uses for road distances.
-  static func distance(metres: Double, locale: Locale = .autoupdatingCurrent) -> String {
-    Measurement(value: metres, unit: UnitLength.meters)
-      .formatted(.measurement(width: .abbreviated, usage: .road).locale(locale))
-  }
-
-  /// The bundle's station names are ALL CAPS, which reads as shouting in a list row.
-  /// A name that is already mixed case is left alone — it was not the bundle's to shout.
-  static func stationName(_ raw: String) -> String {
-    guard raw == raw.uppercased() else { return raw }
-    return raw.capitalized
-  }
-
-  // MARK: - Forecast periods (spec §7)
-
-  /// "Today", "Tonight", "Tomorrow", "Tomorrow night", then the weekday — the labels a
-  /// person reads off a forecast, derived from the period id and the issue date.
-  static func periodLabel(
-    periodID: UInt8,
-    issuedAt: Date,
-    calendar: Calendar = .autoupdatingCurrent,
-    locale: Locale = .autoupdatingCurrent
-  ) -> String {
-    let slot = MeshWXPeriodSlot(periodID: periodID)
-    switch slot.dayOffset {
-    case 0:
-      return slot.isNight ? L10n.Weather.Weather.Forecast.Period.tonight : L10n.Weather.Weather.Forecast.Period.today
-    case 1:
-      return slot.isNight
-        ? L10n.Weather.Weather.Forecast.Period.tomorrowNight
-        : L10n.Weather.Weather.Forecast.Period.tomorrow
-    default:
-      let day = calendar.date(byAdding: .day, value: slot.dayOffset, to: issuedAt) ?? issuedAt
-      var style = Date.FormatStyle.dateTime.weekday(.wide).locale(locale)
-      style.calendar = calendar
-      style.timeZone = calendar.timeZone
-      let weekday = day.formatted(style)
-      return slot.isNight ? L10n.Weather.Weather.Forecast.Period.night(weekday) : weekday
-    }
-  }
-
-  // MARK: - Text products (spec §8.1)
-
-  static func subjectTitle(_ subject: MeshWXTextSubject) -> String {
-    switch subject {
-    case .warningNarrative: L10n.Weather.Weather.Text.Subject.warning
-    case .forecastDiscussion: L10n.Weather.Weather.Text.Subject.discussion
-    case .spaceWeather: L10n.Weather.Weather.Text.Subject.space
-    case .stormReports: L10n.Weather.Weather.Text.Subject.storm
-    case .rainfall: L10n.Weather.Weather.Text.Subject.rain
-    case .metarOrTAF: L10n.Weather.Weather.Text.Subject.metarTaf
-    case .hazardousOutlook: L10n.Weather.Weather.Text.Subject.outlook
-    case .nowcast: L10n.Weather.Weather.Text.Subject.nowcast
-    case .general: L10n.Weather.Weather.Text.Subject.general
-    case .other: L10n.Weather.Weather.Text.Subject.other
-    }
-  }
-
-  // MARK: - Request outcomes (spec §8.3)
-
-  static func notAvailableText(_ reason: MeshWXNotAvailableReason) -> String {
-    switch reason {
-    case .noData: L10n.Weather.Weather.Request.NotAvailable.noData
-    case .unknownLocation: L10n.Weather.Weather.Request.NotAvailable.unknownLocation
-    case .unsupported: L10n.Weather.Weather.Request.NotAvailable.unsupported
-    case .botError: L10n.Weather.Weather.Request.NotAvailable.botError
-    case .rateLimited: L10n.Weather.Weather.Request.NotAvailable.rateLimited
-    case .other: L10n.Weather.Weather.Request.NotAvailable.other
-    }
-  }
-}
-
-// MARK: - Asking again
-
-/// Which request would fetch a text product a second time.
-///
-/// A text reply carries a subject and a group and no echo of what was asked, so recovering a
-/// missing chunk means reconstructing the request. Some subjects are their own request; the
-/// rest name a station, a state, an office or a warning, and for those the only source of the
-/// argument is what the app last sent (``WeatherToolModel/lastTextRequests``).
-enum WeatherTextRequests {
-
-  /// The request for a subject that needs no argument, or nil for one that does.
-  static func subjectOnlyRequest(for subject: MeshWXTextSubject) -> WeatherRequest? {
-    switch subject {
-    case .spaceWeather: .spaceWeather
-    case .hazardousOutlook: .hazardousOutlook
-    case .warningNarrative, .forecastDiscussion, .stormReports, .rainfall, .metarOrTAF,
-      .nowcast, .general, .other:
-      nil
-    }
-  }
-
-  /// What "ask again" sends for an incomplete reply: the request that produced it where the
-  /// app still remembers it, otherwise the subject's own request.
-  static func repeatRequest(
-    for subject: MeshWXTextSubject,
-    lastRequests: [UInt8: WeatherRequest]
-  ) -> WeatherRequest? {
-    lastRequests[subject.rawValue] ?? subjectOnlyRequest(for: subject)
+  static func symbol(for event: UInt8, tables: MeshWXTables) -> String {
+    MeshWXPresentation.symbolName(forVTEC: tables.vtec(for: event) ?? "")
   }
 }

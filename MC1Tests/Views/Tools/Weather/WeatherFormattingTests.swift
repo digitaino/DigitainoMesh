@@ -5,204 +5,212 @@ import Testing
 
 @testable import MC1
 
-/// The Weather tool's wording rules (spec §10).
-///
-/// `MeshWX` is tested against the kit's wire vectors; this is the other half — the numbers it
-/// hands over turning into the exact strings the spec quotes. Both halves have to hold for a
-/// screen to be right, and only this one can catch "0 mph" appearing where a station reported
-/// nothing.
+/// Units, durations and names as the Weather screen writes them (docs/MESHWX_UI.md).
 @Suite("Weather formatting")
 struct WeatherFormattingTests {
+  static let locale = Locale(identifier: "en_US")
 
-  /// Unix minutes for a fixed instant, so nothing here depends on when it runs.
-  private static let nowMinutes: UInt32 = 29_500_000
-  private static var now: Date { Date(unixMinutes: nowMinutes) }
-
-  // MARK: - Expiry countdown
-
-  @Test
-  func `a warning forty-two minutes out counts down in minutes`() {
-    let text = WeatherFormatting.expiry(
-      expiresMinutes: Self.nowMinutes + 42,
-      now: Self.now
-    )
-    #expect(text == "expires in 42 min")
-  }
-
-  @Test
-  func `an expiry more than an hour out counts down in hours and minutes`() {
-    let text = WeatherFormatting.expiry(
-      expiresMinutes: Self.nowMinutes + 125,
-      now: Self.now
-    )
-    #expect(text == "expires in 2 h 5 min")
-  }
-
-  /// Zero minutes left is not "expires in 0 min": the warning is over.
-  @Test
-  func `an expiry at this minute reads as expired`() {
-    let text = WeatherFormatting.expiry(expiresMinutes: Self.nowMinutes, now: Self.now)
-    #expect(text == "expired")
-  }
-
-  @Test
-  func `a past expiry reads as expired`() {
-    let text = WeatherFormatting.expiry(expiresMinutes: Self.nowMinutes - 90, now: Self.now)
-    #expect(text == "expired")
-  }
-
-  // MARK: - Forecast period labels
-
-  /// A forecast issued on a Monday afternoon whose first period is `1` (tonight), which is the
-  /// common shape of a PFM: the first five labels a person reads down the list.
-  @Test
-  func `periods from tonight run today, tomorrow, then weekdays`() {
-    let calendar = Self.utcCalendar
-    let issuedAt = Self.mondayAfternoon
-
-    let labels = (0..<5).map { offset in
-      WeatherFormatting.periodLabel(
-        periodID: 1 + UInt8(offset),
-        issuedAt: issuedAt,
-        calendar: calendar,
-        locale: Locale(identifier: "en_US")
-      )
-    }
-
-    #expect(labels == ["Tonight", "Tomorrow", "Tomorrow night", "Wednesday", "Wednesday night"])
-  }
-
-  /// Period 0 is the issue day itself, which is "Today" and not the weekday name.
-  @Test
-  func `period zero is today`() {
-    let label = WeatherFormatting.periodLabel(
-      periodID: 0,
-      issuedAt: Self.mondayAfternoon,
-      calendar: Self.utcCalendar,
-      locale: Locale(identifier: "en_US")
-    )
-    #expect(label == "Today")
-  }
-
-  // MARK: - Wind
-
-  @Test
-  func `a reported wind reads as direction, speed and gust`() {
-    let observation = MeshWXStationObservation(
-      stationIndex: 0,
-      windDirection: .southSouthEast,
-      windMph: 12,
-      gustMph: 21
-    )
-    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: observation)) == "SSE 12 gusting 21")
-  }
-
-  @Test
-  func `a wind with no gust leaves the gust out`() {
-    let observation = MeshWXStationObservation(
-      stationIndex: 0,
-      windDirection: .south,
-      windMph: 10,
-      gustMph: 0
-    )
-    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: observation)) == "S 10")
-  }
-
-  /// Direction 0 with speed 0 is calm (spec §6), not "wind from the north".
-  @Test
-  func `zero speed from north reads as calm`() {
-    let observation = MeshWXStationObservation(
-      stationIndex: 0,
-      windDirection: .north,
-      windMph: 0,
-      gustMph: 0
-    )
-    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: observation)) == "Calm")
-  }
-
-  /// A station that reported no wind at all is not a station reporting calm, so the caller gets
-  /// nil and shows a dash rather than a number nobody measured.
-  @Test
-  func `an unreported wind has no text at all`() {
-    let observation = MeshWXStationObservation(stationIndex: 0, windDirection: .north, windMph: nil)
-    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: observation)) == nil)
-  }
-
-  // MARK: - Pressure
-
-  /// The wire carries `(inHg − 29.00) × 100`, so 92 is the standard-atmosphere 29.92.
-  @Test
-  func `the pressure byte becomes inches of mercury`() {
-    #expect(WeatherFormatting.pressure(rawPressure: 92, locale: Locale(identifier: "en_US")) == "29.92")
-    #expect(WeatherFormatting.pressure(rawPressure: 0, locale: Locale(identifier: "en_US")) == "29.00")
-  }
-
-  @Test
-  func `the unknown pressure sentinel has no text`() {
-    #expect(WeatherFormatting.pressure(rawPressure: 255, locale: Locale(identifier: "en_US")) == nil)
-  }
-
-  // MARK: - Station names
-
-  /// The bundle shouts; a list row should not.
-  @Test
-  func `an all-caps station name is title-cased`() {
-    #expect(WeatherFormatting.stationName("AUSTIN-BERGSTROM INTL") == "Austin-Bergstrom Intl")
-  }
-
-  /// A name that already carries case was written that way on purpose.
-  @Test
-  func `a mixed-case station name is left alone`() {
-    #expect(WeatherFormatting.stationName("Austin-Bergstrom Intl") == "Austin-Bergstrom Intl")
-  }
-
-  // MARK: - Tags
-
-  @Test
-  func `tags read as the spec words them`() {
-    let warning = MeshWXWarning(
-      identity: MeshWXWarningIdentity(event: 3, office: 1, etn: 42),
-      expiresMinutes: Self.nowMinutes + 30,
-      tornado: .radarIndicated,
-      floodDamage: .considerable,
-      hailQuarterInches: 4,
-      windMph: 60
-    )
-    let tags = WeatherFormatting.tagTexts(for: warning, locale: Locale(identifier: "en_US"))
-    #expect(tags == [
-      "Tornado: radar indicated",
-      "Flash flood damage: considerable",
-      "Hail 1.00 in",
-      "Wind 60 mph",
-    ])
-  }
-
-  /// A warning with no tags renders as a bare headline, not as a row of "none".
-  @Test
-  func `an untagged warning has no tags`() {
-    let warning = MeshWXWarning(
-      identity: MeshWXWarningIdentity(event: 3, office: 1, etn: 1),
-      expiresMinutes: Self.nowMinutes + 30
-    )
-    #expect(WeatherFormatting.tagTexts(for: warning).isEmpty)
-  }
-
-  // MARK: - Fixtures
-
-  private static var utcCalendar: Calendar {
+  static var calendar: Calendar {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
-    calendar.locale = Locale(identifier: "en_US")
+    calendar.timeZone = TimeZone(identifier: "America/Chicago") ?? .gmt
+    calendar.locale = locale
     return calendar
   }
 
-  /// 2026-03-02 18:00 UTC, a Monday.
-  private static var mondayAfternoon: Date {
-    var components = DateComponents()
-    components.year = 2026
-    components.month = 3
-    components.day = 2
-    components.hour = 18
-    return utcCalendar.date(from: components) ?? Date(timeIntervalSince1970: 0)
+  /// 2026-09-14 23:20 CDT.
+  static let now = Date(timeIntervalSince1970: 1_789_446_000)
+
+  /// ICU puts a narrow no-break space before AM/PM.
+  static func plain(_ text: String) -> String {
+    text.replacingOccurrences(of: "\u{202F}", with: " ").replacingOccurrences(of: "\u{00A0}", with: " ")
+  }
+
+  func clock(_ offset: TimeInterval) -> String {
+    Self.plain(WeatherFormatting.clockTime(Self.now.addingTimeInterval(offset), now: Self.now, calendar: Self.calendar, locale: Self.locale))
+  }
+
+  // MARK: - Durations
+
+  @Test
+  func `durations use the largest unit that fits`() {
+    #expect(WeatherFormatting.duration(seconds: 40) == "40 s")
+    #expect(WeatherFormatting.duration(seconds: 150) == "2 min")
+    #expect(WeatherFormatting.duration(seconds: 3 * 3600 + 1200) == "3 h")
+    #expect(WeatherFormatting.duration(seconds: 3 * 86_400) == "3 d")
+  }
+
+  @Test
+  func `ages read as ago and old, with just now for a few seconds`() {
+    #expect(WeatherFormatting.ago(Self.now.addingTimeInterval(-2), now: Self.now) == "just now")
+    #expect(WeatherFormatting.ago(Self.now.addingTimeInterval(-40), now: Self.now) == "40 s ago")
+    #expect(WeatherFormatting.ago(Self.now.addingTimeInterval(-120), now: Self.now) == "2 min ago")
+    #expect(WeatherFormatting.age(Self.now.addingTimeInterval(-3 * 3600), now: Self.now) == "3 h old")
+  }
+
+  @Test
+  func `countdowns switch to hours at sixty minutes`() {
+    #expect(WeatherFormatting.countdown(minutes: 40) == "in 40 min")
+    #expect(WeatherFormatting.countdown(minutes: 80) == "in 1 h 20 min")
+    #expect(WeatherFormatting.countdown(minutes: 120) == "in 2 h")
+  }
+
+  @Test
+  func `a quiet feed is minutes under an hour, then whole hours`() {
+    #expect(WeatherFormatting.quietDuration(minutes: 45) == "45 min")
+    #expect(WeatherFormatting.quietDuration(minutes: 300) == "5 h")
+  }
+
+  @Test
+  func `times today and soon are clock times`() {
+    #expect(clock(-18 * 60) == "11:02 PM")
+    // 12:40 AM tomorrow: a warning ending after midnight still reads as a time.
+    #expect(clock(80 * 60) == "12:40 AM")
+  }
+
+  @Test
+  func `a past time on another day never passes for today`() {
+    #expect(clock(-26 * 3600) == "yesterday 9:20 PM")
+    let older = clock(-3 * 86_400)
+    #expect(older.hasPrefix("Sep 11") && older.hasSuffix("11:20 PM") && !older.contains("2026"))
+    let later = clock(20 * 3600)
+    #expect(later.hasPrefix("Sep 15") && later.hasSuffix("7:20 PM"))
+  }
+
+  @Test
+  func `the until line names the end and counts down to it`() {
+    let text = WeatherFormatting.untilLine(
+      expiresAt: Self.now.addingTimeInterval(40 * 60), now: Self.now, calendar: Self.calendar, locale: Self.locale)
+    #expect(Self.plain(text) == "until 12:00 AM · in 40 min")
+  }
+
+  // MARK: - Distance
+
+  @Test
+  func `distances are whole kilometres with a compass point`() {
+    #expect(WeatherFormatting.kilometres(3.2) == "3 km")
+    #expect(WeatherFormatting.kilometres(0.3) == "under 1 km")
+    #expect(WeatherFormatting.distance(25.4, direction: .north) == "25 km N")
+    #expect(WeatherFormatting.distance(40, direction: .northWest) == "40 km NW")
+  }
+
+  @Test
+  func `directions point from the place towards the target`() {
+    let austin = MeshWXCoordinate(latitude: 30.27, longitude: -97.74)
+    #expect(WeatherFormatting.direction(from: austin, to: MeshWXCoordinate(latitude: 30.77, longitude: -97.74)) == .north)
+    #expect(WeatherFormatting.direction(from: austin, to: MeshWXCoordinate(latitude: 30.27, longitude: -98.74)) == .west)
+  }
+
+  // MARK: - Names
+
+  @Test
+  func `a radio heard without an advert is named by its hex id`() {
+    #expect(WeatherFormatting.botName(botID: 0x041D, bot: nil) == "Weather radio 041D")
+  }
+
+  @Test
+  func `a name starting a sentence is capitalised`() {
+    #expect(WeatherFormatting.sentenceStart("the weather radio") == "The weather radio")
+    #expect(WeatherFormatting.sentenceStart("WX-AUS") == "WX-AUS")
+  }
+
+  @Test
+  func `a place label shortens to its town`() {
+    #expect(WeatherFormatting.shortPlaceName("Round Rock, TX") == "Round Rock")
+    #expect(WeatherFormatting.shortPlaceName("this location") == "this location")
+  }
+
+  @Test
+  func `firmware versions drop the v and a trailing zero`() {
+    #expect(WeatherFormatting.firmwareVersion("v1.14.0") == "1.14")
+    #expect(WeatherFormatting.firmwareVersion("1.14.2") == "1.14.2")
+    #expect(WeatherFormatting.firmwareVersion("dev") == "dev")
+  }
+
+  @Test
+  func `a forecast point's state comes from its county and state tail`() {
+    #expect(WeatherFormatting.pointState("Austin Camp Mabry-Travis TX") == "TX")
+    #expect(WeatherFormatting.pointState("Luis Munoz Marin International Airport-San Juan") == nil)
+  }
+
+  @Test
+  func `forecast points read as places, town first when the tail is a town`() {
+    #expect(WeatherFormatting.pointLabel("Central Park-New York NY") == "Central Park, NY")
+    #expect(WeatherFormatting.pointLabel("Luis Munoz Marin International Airport-San Juan")
+      == "San Juan · Luis Munoz Marin International Airport")
+    #expect(WeatherFormatting.pointLabel("10 Mile Boxcars") == "10 Mile Boxcars")
+  }
+
+  @Test
+  func `an area named twice is listed once`() {
+    let runs = [
+      MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1),
+      MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 209, run: 1),
+      MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)
+    ]
+    let areas = MeshWXTables.shared.namedAreas(for: runs)
+    #expect(areas.count == 3)
+    #expect(WeatherFormatting.uniqueAreas(areas).map(\.ugc) == ["TXC453", "TXC209"])
+    #expect(areas.first.map(WeatherFormatting.shortAreaName) == "Travis County")
+  }
+
+  @Test
+  func `offices are named by city and unknown ones by code`() {
+    #expect(WeatherReferenceNames.officeName("EWX") == "NWS Austin/San Antonio")
+    #expect(WeatherReferenceNames.officeName("FWD") == "NWS Fort Worth")
+    #expect(WeatherReferenceNames.officeName("ZZZ") == "NWS ZZZ")
+    #expect(WeatherReferenceNames.stateName("TX") == "Texas")
+  }
+
+  // MARK: - Wind, pressure, tags
+
+  @Test
+  func `a reported wind reads as direction, speed and gust`() {
+    let gusty = MeshWXStationObservation(stationIndex: 0, windDirection: .southSouthEast, windMph: 12, gustMph: 21)
+    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: gusty)) == "SSE 12 gusting 21")
+    let steady = MeshWXStationObservation(stationIndex: 0, windDirection: .south, windMph: 10, gustMph: 0)
+    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: steady)) == "S 10")
+  }
+
+  @Test
+  func `zero speed is calm and an unreported wind has no text`() {
+    let calm = MeshWXStationObservation(stationIndex: 0, windDirection: .north, windMph: 0, gustMph: 0)
+    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: calm)) == "calm")
+    let missing = MeshWXStationObservation(stationIndex: 0, windDirection: .north, windMph: nil)
+    #expect(WeatherFormatting.wind(MeshWXWindReading(observation: missing)) == nil)
+  }
+
+  @Test
+  func `pressure is two decimals of inches of mercury`() {
+    #expect(WeatherFormatting.pressure(inchesOfMercury: 29.92, locale: Self.locale) == "29.92")
+  }
+
+  @Test
+  func `tags read as the spec words them, on one line`() {
+    let warning = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 3, office: 1, etn: 42), expiresMinutes: 29_500_030,
+      tornado: .radarIndicated, floodDamage: .considerable, hailQuarterInches: 4, windMph: 60)
+    #expect(WeatherFormatting.tagTexts(for: warning, locale: Self.locale) == [
+      "Tornado: radar indicated", "Flash flood damage: considerable", "Hail 1.00 in", "Wind 60 mph"
+    ])
+    #expect(WeatherFormatting.tagLine(for: warning, locale: Self.locale)
+      == "Tornado: radar indicated · Flash flood damage: considerable · Hail 1.00 in · Wind 60 mph")
+  }
+
+  @Test
+  func `every sky code but other has a word`() {
+    for sky in MeshWXSky.allCases {
+      #expect((WeatherFormatting.condition(sky) == nil) == (sky == .other))
+    }
+  }
+
+  @Test
+  func `the night icon runs from seven in the evening to six in the morning`() {
+    let calendar = Self.calendar
+    func at(_ hour: Int) -> Date {
+      calendar.date(from: DateComponents(year: 2026, month: 9, day: 14, hour: hour)) ?? Self.now
+    }
+    #expect(WeatherFormatting.isNight(at(23), calendar: calendar))
+    #expect(WeatherFormatting.isNight(at(5), calendar: calendar))
+    #expect(!WeatherFormatting.isNight(at(12), calendar: calendar))
   }
 }

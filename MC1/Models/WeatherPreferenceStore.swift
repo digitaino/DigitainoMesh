@@ -9,7 +9,7 @@ struct WeatherPreferenceStore {
     self.defaults = defaults
   }
 
-  /// The wire id of the bot the user picked, or nil for "nearest".
+  /// The wire id of the bot the user picked, or nil to choose automatically.
   ///
   /// The id rather than the public key, because a bot can be heard on `#meshwx` for hours
   /// before the radio collects its advert: the id is the only name that message carries, and
@@ -28,19 +28,5 @@ struct WeatherPreferenceStore {
     }
   }
 
-  /// Whether the user has dismissed the "add #meshwx" card for a given radio, so a decline
-  /// is remembered per radio and the card does not come back on every open.
-  func isChannelPromptDismissed(deviceID: UUID) -> Bool {
-    defaults.bool(forKey: Self.channelPromptDismissedKey(deviceID: deviceID))
-  }
-
-  func setChannelPromptDismissed(_ dismissed: Bool, deviceID: UUID) {
-    defaults.set(dismissed, forKey: Self.channelPromptDismissedKey(deviceID: deviceID))
-  }
-
   private static let selectedBotKey = "weather.selectedBotID"
-
-  private static func channelPromptDismissedKey(deviceID: UUID) -> String {
-    "weather.channelPromptDismissed.\(deviceID.uuidString)"
-  }
 }

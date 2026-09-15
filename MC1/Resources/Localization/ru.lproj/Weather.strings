@@ -8,133 +8,266 @@
 
 // MARK: - Tool
 
-/* Location: ToolSelection.swift - Tool selection label */
+/* Location: ToolSelection.swift - Tool selection label and screen title */
 "weather.title" = "Погода";
 
-/* Location: WeatherToolView.swift - Cancel button in dialogs and sheets */
+/* Location: WeatherToolView.swift - Shown until the first picture is built */
+"weather.loading" = "Загрузка погоды…";
+
+/* Location: WeatherToolView.swift - Cancel button in alerts and sheets */
 "weather.common.cancel" = "Отмена";
 
-/* Location: WeatherObservationRow.swift - Shown where a station reported no value */
-"weather.common.unknownValue" = "—";
+/* Location: WeatherAboutView.swift - Done button closing the sheet */
+"weather.common.done" = "Готово";
 
-// MARK: - Status
+/* Location: WeatherPlacePickerView.swift - Accessibility label for a checkmark */
+"weather.common.selected" = "Выбрано";
 
-/* Location: WeatherToolView.swift - Card title when the radio firmware predates channel datagrams */
-"weather.status.firmwareTooOld.title" = "Прошивка слишком старая";
+/* Location: WeatherToolModel.swift - Name for the source when no weather radio is known; starts lowercase, capitalised by the app at a sentence start */
+"weather.bot.generic" = "метеобот";
 
-/* Location: WeatherToolView.swift - Card body, %@ is the radio's firmware version */
-"weather.status.firmwareTooOld.body" = "На этом радио прошивка %@, которая не передаёт метеоданные. Нужна MeshCore 1.15 или новее.";
+/* Location: WeatherFormatting.swift - Name for a weather radio heard without an advert, %@ is its four-digit hex id */
+"weather.bot.heardOnly" = "Метеобот %@";
 
-/* Location: WeatherToolView.swift - Prompt card title asking to add the weather channel */
-"weather.status.channelPrompt.title" = "Добавить #meshwx на это радио?";
+// MARK: - Header
 
-/* Location: WeatherToolView.swift - Prompt card body explaining the channel */
-"weather.status.channelPrompt.body" = "#meshwx — это канал погодного бота. Его ключ выводится из названия, поэтому секретного здесь ничего нет.";
+/* Location: WeatherCopy.swift - Header second line for the phone's location */
+"weather.header.yourLocation" = "Ваше местоположение";
 
-/* Location: WeatherToolView.swift - Prompt card button that writes the channel */
-"weather.status.channelPrompt.add" = "Добавить канал";
+/* Location: WeatherCopy.swift - Header, when the source was last heard. %1$@ is the radio's name, %2$@ a time ago like "2 min ago" */
+"weather.header.heard" = "%1$@: последний сигнал %2$@";
 
-/* Location: WeatherToolView.swift - Prompt card button that dismisses the card */
-"weather.status.channelPrompt.notNow" = "Не сейчас";
+/* Location: WeatherCopy.swift - Header second line for a searched town */
+"weather.header.searched" = "Город из поиска";
 
-/* Location: WeatherToolView.swift - Compact row shown after the prompt is dismissed */
-"weather.status.channelMissing.row" = "#meshwx нет на этом радио";
+/* Location: WeatherHeaderSection.swift - Header link that returns to the phone's location */
+"weather.header.backToMyLocation" = "К моему местоположению";
 
-/* Location: WeatherToolView.swift - Button on the compact row that writes the channel */
-"weather.status.channelMissing.add" = "Добавить";
+/* Location: WeatherCopy.swift - Header title with no place */
+"weather.header.choosePlace" = "Выберите место";
 
-/* Location: WeatherToolView.swift - Shown when every channel slot is taken */
-"weather.status.channelFull" = "Нет свободного слота канала; удалите канал в Чатах, чтобы освободить место.";
+/* Location: WeatherCopy.swift - Header second line while waiting for a location fix */
+"weather.header.locating" = "Определение местоположения…";
 
-/* Location: WeatherToolView.swift - Banner above data received before the radio disconnected */
-"weather.status.disconnected.banner" = "Радио отключено — показано последнее принятое";
+/* Location: WeatherCopy.swift - Header second line when location permission is denied */
+"weather.header.locationOff" = "Геолокация выключена";
 
-/* Location: WeatherToolView.swift - Empty state title with no radio and no data */
-"weather.status.disconnected.title" = "Пока ничего не принято";
+/* Location: WeatherHeaderSection.swift - Header link opening the Settings app */
+"weather.header.settings" = "Настройки";
 
-/* Location: WeatherToolView.swift - Empty state description with no radio and no data */
-"weather.status.disconnected.description" = "Подключите радио на канале #meshwx, чтобы слышать погодного бота. То, что он присылает, сохраняется, поэтому этот экран заполнится, как только что-то придёт.";
+/* Location: WeatherHeaderSection.swift - Accessibility hint on the place title */
+"weather.header.chooseHint" = "Выберите место, для которого показывается погода";
 
-// MARK: - Bot
+// MARK: - Banners
 
-/* Location: WeatherToolView.swift - Section header for the selected weather bot */
-"weather.bot.section" = "Бот";
+/* Location: WeatherCopy.swift - Banner when your radio's firmware cannot deliver weather, %@ is the version like "1.14" */
+"weather.banner.firmware" = "На вашей рации прошивка %@. Для погоды нужна MeshCore 1.15 или новее.";
 
-/* Location: WeatherToolView.swift - Bot picker menu label */
-"weather.bot.picker" = "Погодный бот";
+/* Location: WeatherCopy.swift - Banner when no channel slot holds #meshwx */
+"weather.banner.channelMissing" = "#meshwx не настроен на вашей рации.";
 
-/* Location: WeatherToolView.swift - Bot subtitle, %1$@ is the city, %2$@ the distance */
-"weather.bot.cityDistance" = "%1$@ · %2$@ отсюда";
+/* Location: WeatherHeaderSection.swift - Banner button that offers to add #meshwx */
+"weather.banner.addChannel" = "Добавить канал";
 
-/* Location: WeatherToolView.swift - Last advert or message time, %@ is a relative time */
-"weather.bot.lastHeard" = "Последний раз слышно %@";
+/* Location: WeatherCopy.swift - Banner when no weather radio is known */
+"weather.banner.noBot" = "Ни один метеобот пока не слышен. Они видны как узлы с именами вроде WX-AUS.";
 
-/* Location: WeatherToolView.swift - Shown when the bot has never been heard */
-"weather.bot.neverHeard" = "Ещё не слышно";
+/* Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio */
+"weather.channel.alert.title" = "Добавить #meshwx на вашу рацию?";
 
-/* Location: WeatherToolView.swift - Badge when the bot's own feed is stale */
-"weather.bot.feedStale" = "Поток устарел";
+/* Location: WeatherToolView.swift - Alert message before writing #meshwx to your radio */
+"weather.channel.alert.message" = "Метеоботы вещают в канале #meshwx. Его ключ выводится из названия, поэтому никакой секрет передавать не нужно.";
 
-/* Location: WeatherToolView.swift - Explains the feed stale badge */
-"weather.bot.feedStaleDetail" = "Бот уже несколько часов не получал продуктов из своего офиса. Его молчание не означает спокойную погоду.";
+/* Location: WeatherToolView.swift - Alert button that writes #meshwx to your radio */
+"weather.channel.alert.add" = "Добавить канал";
 
-/* Location: WeatherToolView.swift - Menu row for a bot heard on the channel with no advert, %@ is its hex id */
-"weather.bot.heardOnly" = "Бот %@ (объявления ещё не было)";
+/* Location: WeatherToolModel.swift - Error when every channel slot is taken */
+"weather.channel.full" = "Нет свободного слота канала. Удалите канал в Чатах, чтобы освободить место.";
 
-/* Location: WeatherToolModel.swift - Name for a bot heard on the channel with no advert, %@ is its hex id */
-"weather.bot.heardOnlyName" = "Бот %@";
+/* Location: WeatherToolModel.swift - Error when Add is tapped before your radio's channel sync has finished */
+"weather.channel.notSynced" = "Ваша рация ещё синхронизирует каналы. Повторите, когда она закончит.";
 
-/* Location: WeatherToolView.swift - Note under a heard-only bot, whose key the app does not have */
-"weather.bot.heardOnlyNote" = "От этого бота ещё не было объявления — для запросов нужен его ключ.";
+/* Location: WeatherToolModel.swift - Error when the slot the app chose is in use on your radio, %lld is the slot number */
+"weather.channel.slotInUse" = "Слот %lld на вашей рации занят, поэтому ничего не изменено.";
 
-/* Location: WeatherToolView.swift - Title when the radio knows no weather bots */
-"weather.bot.noBots.title" = "Погодного бота пока нет";
+// MARK: - Place
 
-/* Location: WeatherToolView.swift - Description when the radio knows no weather bots */
-"weather.bot.noBots.description" = "Погодный бот объявляет себя как WX- и город, например WX-AUS. Радио добавляет его в контакты, когда слышит.";
+/* Location: WeatherAskControl.swift - Card prompt with no place */
+"weather.place.prompt" = "Для какого места показать погоду?";
 
-// MARK: - Warnings
+/* Location: WeatherAskControl.swift - Button that uses the phone's location, and asks permission if needed */
+"weather.place.useMyLocation" = "Использовать моё местоположение";
 
-/* Location: WeatherWarningRow.swift - Section header */
-"weather.warnings.section" = "Предупреждения";
+/* Location: WeatherAskControl.swift - Button that opens the place picker */
+"weather.place.searchTown" = "Найти город";
 
-/* Location: WeatherWarningRow.swift - Shown when nothing is active */
-"weather.warnings.none" = "Активных предупреждений нет";
+/* Location: WeatherScreenBuilder.swift - Label for a location with no town or station nearby */
+"weather.place.thisLocation" = "это место";
 
-/* Location: WeatherWarningRow.swift - When the bot's last list arrived, %@ is a relative time */
-"weather.warnings.lastDigest" = "Последний список бота %@";
+/* Location: WeatherAlertsSection.swift - Button asking for a fresh location fix */
+"weather.place.updateLocation" = "Обновить местоположение";
 
-/* Location: WeatherWarningRow.swift - Shown when no list has arrived yet */
-"weather.warnings.noDigestYet" = "Списка от бота ещё нет";
+/* Location: WeatherFormatting.swift - A forecast point named after a site in a town. %1$@ is the town, %2$@ the site like "Luis Munoz Marin International Airport" */
+"weather.place.pointInTown" = "%1$@ · %2$@";
 
-/* Location: WeatherFormatting.swift - Countdown to expiry, %lld is minutes */
-"weather.warnings.expiresIn" = "истекает через %lld мин";
+// MARK: - Alerts card
 
-/* Location: WeatherFormatting.swift - Countdown to expiry, %1$lld hours and %2$lld minutes */
-"weather.warnings.expiresInHours" = "истекает через %1$lld ч %2$lld мин";
+/* Location: WeatherCopy.swift - Alerts card title with no place */
+"weather.alerts.title" = "Предупреждения";
 
-/* Location: WeatherFormatting.swift - Shown once the expiry has passed */
-"weather.warnings.expired" = "истекло";
+/* Location: WeatherCopy.swift - Alerts card title, %@ is the place */
+"weather.alerts.titlePlace" = "Предупреждения для %@";
 
-/* Location: WeatherFormatting.swift - One area, %1$@ is its name and %2$@ its state */
-"weather.warnings.area" = "%1$@, %2$@";
+/* Location: WeatherFormatting.swift - When an alert ends. %1$@ is a time like "11:41 PM", %2$@ a countdown like "in 40 min" */
+"weather.alerts.until" = "до %1$@ · %2$@";
 
-/* Location: WeatherWarningRow.swift - Trailing count of unlisted areas, %lld is how many */
-"weather.warnings.andMore" = "и ещё %lld";
+/* Location: WeatherCopy.swift - Row line for a warning cancelled as upgraded whose replacement has not arrived */
+"weather.alerts.upgraded" = "Уровень повышен — замена не получена";
 
-/* Location: WeatherWarningRow.swift - Row shown after a gap in the bot's sequence */
-"weather.warnings.needsDigest" = "Некоторые сообщения были пропущены";
+/* Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min" */
+"weather.alerts.expired" = "Истекло %@ назад · обновление не получено";
 
-/* Location: WeatherWarningRow.swift - Button that asks the bot for its active-warning list */
-"weather.warnings.getDigest" = "Получить список";
+/* Location: WeatherCopy.swift - Row line while area outlines load */
+"weather.alerts.checking" = "Определяем, где это…";
 
-/* Location: WeatherWarningRow.swift - Row for a warning the bot listed but never delivered */
-"weather.warnings.missing" = "В списке бота, не получено";
+/* Location: WeatherAlertsSection.swift - Link to alert rows folded out of the card, %lld is how many */
+"weather.alerts.more" = "Ещё %lld";
 
-/* Location: WeatherWarningRow.swift - Button that asks for one missing warning */
-"weather.warnings.fetch" = "Получить";
+/* Location: WeatherAlertsSection.swift - Link to alerts away from the place. %1$lld is how many, %2$@ the radio's name */
+"weather.alerts.elsewhere" = "В других местах зоны %2$@: %1$lld";
 
-// MARK: - Warning tags
+/* Location: WeatherAlertsSection.swift - Source line under the alert status, %@ is the radio's name */
+"weather.alerts.source" = "Предупреждения Национальной метеослужбы США через %@";
+
+/* Location: WeatherAlertsSection.swift - Source line with no known radio */
+"weather.alerts.sourceGeneric" = "Предупреждения Национальной метеослужбы США через метеоботов";
+
+/* Location: WeatherFormatting.swift - One area. %1$@ is its name, %2$@ its state */
+"weather.alerts.area" = "%1$@, %2$@";
+
+/* Location: WeatherCopy.swift - Where an alert away from the place is. %1$@ is its first area like "Llano County", %2$@ a distance like "105 km W" */
+"weather.alerts.areaDistance" = "%1$@ · %2$@";
+
+/* Location: WeatherAlertsSection.swift - Accessibility summary, %lld is how many alert rows */
+"weather.alerts.accessibility.rows" = "Предупреждения здесь, рядом или ещё без привязки: %lld";
+
+/* Location: WeatherScreenBuilder.swift - A county name, %@ is the name like "Bell" */
+"weather.area.county" = "округ %@";
+
+// MARK: - Alert status line
+
+/* Location: WeatherCopy.swift - Status line with no place */
+"weather.alertStatus.noPlace" = "Выберите место, чтобы увидеть, какие предупреждения к нему относятся";
+
+/* Location: WeatherCopy.swift - Status line outside coverage. %1$@ is the place, %2$@ the radio's name */
+"weather.alertStatus.outOfCoverage" = "%1$@ вне зоны %2$@, поэтому предупреждения там неизвестны.";
+
+/* Location: WeatherCopy.swift - Status line before any alert list arrived, %@ is the radio's name */
+"weather.alertStatus.notChecked" = "Этот телефон ещё не получил список предупреждений от %@, поэтому не может сказать, действуют ли какие-либо предупреждения. Список приходит раз в 3 часа.";
+
+/* Location: WeatherCopy.swift - Status line when the radio's Weather Service feed is stale. %1$@ is the radio's name, %2$@ a duration like "5 h" */
+"weather.alertStatus.feedStale" = "%1$@ не получает данных от метеослужбы уже %2$@. Новые предупреждения могут до вас не дойти.";
+
+/* Location: WeatherCopy.swift - Status line with your radio not connected, %@ is a time like "11:02 PM" */
+"weather.alertStatus.radioOffline" = "Ваша рация не подключена. Последний список предупреждений — по состоянию на %@.";
+
+/* Location: WeatherCopy.swift - Status line after a gap in messages, %@ is the radio's name */
+"weather.alertStatus.missedMessages" = "Этот телефон пропустил сообщения от %@. Часть предупреждений может отсутствовать.";
+
+/* Location: WeatherCopy.swift - Status line for an old alert list, %@ is a time like "8:02 PM" */
+"weather.alertStatus.listOld" = "Последний список предупреждений — по состоянию на %@.";
+
+/* Location: WeatherCopy.swift - Status line for an old location fix, %@ is an age like "3 h old" */
+"weather.alertStatus.locationOld" = "Местоположение определено %@.";
+
+/* Location: WeatherCopy.swift - Status line when no station report has come in the last day, so the radio's area is unknown. %@ is the radio's name at the start of a sentence */
+"weather.alertStatus.coverageUnknown" = "%@ ещё не прислал сводку станций, поэтому зона его охвата неизвестна. Сводка приходит примерно раз в час.";
+
+/* Location: WeatherCopy.swift - Status line when the place's office may not be carried. %1$@ is the radio's name, %2$@ the county or place, %3$@ the office like "NWS Fort Worth" */
+"weather.alertStatus.officeNotCovered" = "%1$@ может не передавать предупреждения здесь: %2$@ (%3$@).";
+
+/* Location: WeatherCopy.swift - Status line with alerts only elsewhere, %@ is a time like "11:02 PM" */
+"weather.alertStatus.noneHere" = "Нет для вашего местоположения · на %@";
+
+/* Location: WeatherCopy.swift - Status line with alerts only elsewhere for a searched town. %1$@ is the town, %2$@ a time */
+"weather.alertStatus.noneHerePlace" = "Нет для %1$@ · на %2$@";
+
+/* Location: WeatherCopy.swift - Status line beside the green check, %@ is a time like "11:02 PM" */
+"weather.alertStatus.clear" = "Предупреждений не получено · на %@";
+
+// MARK: - Coverage
+
+/* Location: WeatherCopy.swift - Alert detail, %@ is the place */
+"weather.coverage.covers" = "Охватывает %@";
+
+/* Location: WeatherCopy.swift - Alert detail for an alert far away, %@ is the place */
+"weather.coverage.doesNotCover" = "Не охватывает %@";
+
+/* Location: WeatherCopy.swift - Alert detail for an alert nearby. %1$@ is the place, %2$@ a distance like "25 km N" */
+"weather.coverage.near" = "Не охватывает %1$@ (%2$@)";
+
+/* Location: WeatherCopy.swift - Alert detail while area outlines load, %@ is the place */
+"weather.coverage.checking" = "Проверяем, охватывает ли это %@…";
+
+/* Location: WeatherCopy.swift - Alert detail and row for an alert with no outline, %@ is the place */
+"weather.coverage.unknown" = "Неясно, охватывает ли %@";
+
+// MARK: - Alerts list
+
+/* Location: WeatherAlertsListView.swift - Screen title, %@ is the radio's name */
+"weather.alertsList.title" = "Предупреждения в зоне %@";
+
+/* Location: WeatherAlertsListView.swift - Accessibility label on the map header */
+"weather.alertsList.openMap" = "Карта предупреждений. Открывает полную карту.";
+
+/* Location: WeatherAlertsListView.swift - Section with no place, %@ is the radio's name */
+"weather.alertsList.all" = "В зоне %@";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts covering the place */
+"weather.alertsList.here" = "Здесь";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts not yet placed against the place */
+"weather.alertsList.unsure" = "Место пока неясно";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts within 50 km */
+"weather.alertsList.near" = "Рядом";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts farther away */
+"weather.alertsList.elsewhere" = "В других местах";
+
+/* Location: WeatherAlertsListView.swift - Section of alerts the list named that never arrived */
+"weather.alertsList.listedHeader" = "Нет на этом телефоне";
+
+/* Location: WeatherAlertsListView.swift - Row line for an alert the list named that never arrived */
+"weather.alertsList.notReceived" = "В списке, не получено";
+
+// MARK: - Alert detail
+
+/* Location: WeatherAlertDetailView.swift - Shown when the alert is no longer held; no reason is claimed */
+"weather.alertDetail.gone" = "Больше не хранится на этом телефоне";
+
+/* Location: WeatherAlertDetailView.swift - Section of the alert's tags */
+"weather.alertDetail.details" = "Подробности";
+
+/* Location: WeatherAlertDetailView.swift - Section of the areas the alert names */
+"weather.alertDetail.areas" = "Районы";
+
+/* Location: WeatherAlertDetailView.swift - Area kind */
+"weather.alertDetail.county" = "Округ";
+
+/* Location: WeatherAlertDetailView.swift - Area kind */
+"weather.alertDetail.zone" = "Зона прогноза";
+
+/* Location: WeatherAlertDetailView.swift - Section with the warning's narrative */
+"weather.alertDetail.fullText" = "Полный текст";
+
+/* Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio" */
+"weather.alertDetail.issuedBy" = "Выпущено: %@";
+
+/* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
+"weather.alertDetail.received" = "получено %@";
+
+// MARK: - Tags
 
 /* Location: WeatherFormatting.swift - Hail tag, %@ is inches */
 "weather.tag.hail" = "Град %@ in";
@@ -175,57 +308,93 @@
 /* Location: WeatherFormatting.swift - Flood damage tag value */
 "weather.floodDamageTag.catastrophic" = "катастрофический";
 
-// MARK: - Warning detail
+// MARK: - Now card
 
-/* Location: WeatherWarningDetailView.swift - Absolute expiry, %@ is a date and time */
-"weather.warningDetail.expiresAt" = "Истекает %@";
+/* Location: WeatherNowSection.swift - Accessibility label for the current conditions card, which has no visible title */
+"weather.now.summary" = "Текущие условия";
 
-/* Location: WeatherWarningDetailView.swift - Heading above the full area list */
-"weather.warningDetail.areas" = "Районы";
+/* Location: WeatherNowSection.swift - Now card with no observations, %@ is the radio's name */
+"weather.now.empty" = "Текущих условий пока нет. %@ передаёт их каждый час.";
 
-/* Location: WeatherWarningDetailView.swift - Area kind */
-"weather.warningDetail.county" = "Округ";
+/* Location: WeatherNowSection.swift - Apparent temperature, %@ is a temperature */
+"weather.now.feelsLike" = "Ощущается как %@";
 
-/* Location: WeatherWarningDetailView.swift - Area kind */
-"weather.warningDetail.zone" = "Зона";
+/* Location: WeatherNowSection.swift - Wind, %@ is like "SSE 12" */
+"weather.now.wind" = "Ветер %@";
 
-/* Location: WeatherWarningDetailView.swift - Button that asks the bot for the warning's text */
-"weather.warningDetail.readFullText" = "Читать полный текст";
-
-/* Location: WeatherWarningDetailView.swift - Shown while the bundled area outlines load */
-"weather.warningDetail.loadingAreas" = "Загрузка контуров районов";
-
-// MARK: - Observations
-
-/* Location: WeatherObservationRow.swift - Section header for current conditions */
-"weather.now.section" = "Сейчас";
-
-/* Location: WeatherObservationRow.swift - Button that asks the bot for fresh observations */
-"weather.now.refresh" = "Обновить";
-
-/* Location: WeatherObservationRow.swift - Shown when no observations have arrived */
-"weather.now.none" = "Наблюдений пока нет";
-
-/* Location: WeatherObservationRow.swift - Badge on a reading older than two hours */
-"weather.now.stale" = "Устарело";
-
-/* Location: WeatherFormatting.swift - Wind with no speed and no direction */
-"weather.now.calm" = "Штиль";
-
-/* Location: WeatherObservationRow.swift - Apparent temperature, %@ is the temperature */
-"weather.now.feelsLike" = "ощущается как %@";
-
-/* Location: WeatherObservationRow.swift - Relative humidity, %lld is percent */
+/* Location: WeatherNowSection.swift - Relative humidity, %lld is percent */
 "weather.now.humidity" = "Влажность %lld%%";
 
-/* Location: WeatherObservationRow.swift - Barometric pressure, %@ is inches of mercury */
-"weather.now.pressure" = "Давление %@ inHg";
+/* Location: WeatherCopy.swift - Which report a reading came in. %1$@ is the radio's name, %2$@ a time like "11:18 PM" */
+"weather.now.report" = "в сводке %1$@ за %2$@";
 
-/* Location: WeatherObservationRow.swift - Visibility, %@ is a distance */
-"weather.now.visibility" = "Видимость %@";
+/* Location: WeatherCopy.swift - Source line for a station more than 25 km from the place */
+"weather.now.nearestReport" = "Ближайшая сводка";
 
-/* Location: WeatherObservationRow.swift - Dew point, %@ is the temperature */
-"weather.now.dewpoint" = "Точка росы %@";
+/* Location: WeatherCopy.swift - No station within 80 km. %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance */
+"weather.now.noneNearby" = "Рядом с %1$@ нет метеостанции. Ближайшая: %2$@, %3$@.";
+
+/* Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town */
+"weather.now.noneNearbyUnknown" = "Рядом с %1$@ нет метеостанции. Ближайшая: %2$@.";
+
+/* Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name */
+"weather.now.stationsInArea" = "Станций в зоне %2$@: %1$lld";
+
+/* Location: WeatherCopy.swift - Link to the stations screen with one station in the radio's batch, %@ is the radio's name */
+"weather.now.stationsInAreaOne" = "1 станция в зоне %@";
+
+/* Location: WeatherCopy.swift - Link to the stations screen when none came in a batch, %lld is how many (two or more) */
+"weather.now.stations" = "Метеостанций: %lld";
+
+/* Location: WeatherCopy.swift - Link to the stations screen with one station, none in a batch */
+"weather.now.stationsOne" = "1 метеостанция";
+
+// MARK: - Sky
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.clear" = "Ясно";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.few" = "Малооблачно";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.scattered" = "Переменная облачность";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.broken" = "Облачно";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.overcast" = "Пасмурно";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.fog" = "Туман";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.smoke" = "Дым";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.haze" = "Мгла";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.rain" = "Дождь";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.snow" = "Снег";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.thunderstorm" = "Гроза";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.drizzle" = "Морось";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.mist" = "Дымка";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.squall" = "Шквалы";
+
+/* Location: WeatherFormatting.swift - Sky condition */
+"weather.sky.dust" = "Пыльный ветер";
 
 /* Location: WeatherFormatting.swift - Wind, %1$@ is a compass point and %2$lld the speed in mph */
 "weather.wind.speed" = "%1$@ %2$lld";
@@ -233,201 +402,454 @@
 /* Location: WeatherFormatting.swift - Wind with a gust, %1$@ is the wind and %2$lld the gust in mph */
 "weather.wind.gusting" = "%1$@ порывы %2$lld";
 
-// MARK: - Forecast
+/* Location: WeatherFormatting.swift - Wind speed zero */
+"weather.wind.calm" = "штиль";
 
-/* Location: WeatherForecastSection.swift - Section header */
-"weather.forecast.section" = "Прогноз";
+// MARK: - Forecast card
 
-/* Location: WeatherForecastSection.swift - Shown when no forecast has arrived */
-"weather.forecast.none" = "Прогноза пока нет";
+/* Location: WeatherForecastSection.swift - Forecast card title, %@ is the place */
+"weather.forecast.title" = "Прогноз для %@";
 
-/* Location: WeatherForecastSection.swift - Fallback point name, %lld is the wire index */
-"weather.forecast.point" = "Точка %lld";
+/* Location: WeatherForecastSection.swift - Forecast card title with no place */
+"weather.forecast.titleGeneric" = "Прогноз";
 
-/* Location: WeatherForecastSection.swift - Label for a forecast the bot resolved from a place, %@ is the place asked for */
-"weather.forecast.nearestPoint" = "%@ (ближайшая точка)";
+/* Location: WeatherForecastSection.swift - When the forecast was issued, %@ is a time or an age like "14 h ago" */
+"weather.forecast.issued" = "выпущен %@";
 
-/* Location: WeatherForecastSection.swift - When the forecast was issued, %@ is a date and time */
-"weather.forecast.issued" = "Выпущен %@";
+/* Location: WeatherCopy.swift - Nothing held for the place's point, %@ is the place */
+"weather.forecast.missing" = "Прогноза для %@ пока нет.";
 
-/* Location: WeatherForecastSection.swift - Badge on a forecast older than twelve hours */
-"weather.forecast.stale" = "Устарел";
+/* Location: WeatherCopy.swift - Nothing held, and the nearest point is over 10 km away. %1$@ is the place, %2$@ the point's name, %3$@ its distance like "60 km" */
+"weather.forecast.missingFar" = "Прогноза для %1$@ пока нет. Ближайшая точка прогноза — %2$@, %3$@.";
 
-/* Location: WeatherForecastSection.swift - Daytime high, %@ is the temperature */
+/* Location: WeatherCopy.swift - No forecast point close enough to speak for the place, %@ is the place */
+"weather.forecast.noPoint" = "Рядом с %@ нет точки прогноза.";
+
+/* Location: WeatherForecastSection.swift - Forecast from a nearby point. %1$@ is the point's name, %2$@ a distance */
+"weather.forecast.nearbyPoint" = "по точке %1$@, %2$@";
+
+/* Location: WeatherForecastSection.swift - Accessibility summary, %lld is how many forecast rows */
+"weather.forecast.accessibility.rows" = "Записей: %lld";
+
+/* Location: WeatherCopy.swift - High only, %@ is a temperature */
 "weather.forecast.high" = "Максимум %@";
 
-/* Location: WeatherForecastSection.swift - Overnight low, %@ is the temperature */
+/* Location: WeatherCopy.swift - Low only, %@ is a temperature */
 "weather.forecast.low" = "Минимум %@";
 
-/* Location: WeatherForecastSection.swift - Chance of precipitation, %lld is percent */
-"weather.forecast.pop" = "%lld%% дождя";
+/* Location: WeatherCopy.swift - High and low. %1$@ is the high, %2$@ the low */
+"weather.forecast.highLow" = "%1$@ / %2$@";
 
-/* Location: WeatherForecastSection.swift - Button asking for the bot's home point forecast */
-"weather.forecast.home" = "Прогноз для бота";
+/* Location: WeatherCopy.swift - Chance of rain, %lld is percent */
+"weather.forecast.rain" = "Дождь %lld%%";
 
-/* Location: WeatherForecastSection.swift - Button asking for the point nearest the phone */
-"weather.forecast.myLocation" = "Моё местоположение";
+/* Location: WeatherCopy.swift - Chance of rain carried by the night of a day row, %lld is percent */
+"weather.forecast.rainTonight" = "Дождь ночью %lld%%";
 
-/* Location: WeatherForecastSection.swift - Button opening the place search sheet */
-"weather.forecast.findPlace" = "Найти место…";
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.today" = "Сегодня";
 
-/* Location: WeatherFormatting.swift - Forecast period label */
-"weather.forecast.period.today" = "Сегодня";
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.tonight" = "Сегодня ночью";
 
-/* Location: WeatherFormatting.swift - Forecast period label */
-"weather.forecast.period.tonight" = "Сегодня ночью";
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.tomorrow" = "Завтра";
 
-/* Location: WeatherFormatting.swift - Forecast period label */
-"weather.forecast.period.tomorrow" = "Завтра";
+/* Location: WeatherCopy.swift - Forecast row label */
+"weather.forecast.label.tomorrowNight" = "Завтра ночью";
 
-/* Location: WeatherFormatting.swift - Forecast period label */
-"weather.forecast.period.tomorrowNight" = "Завтра ночью";
+/* Location: WeatherCopy.swift - Forecast row label for a later night, %@ is a weekday */
+"weather.forecast.label.night" = "%@, ночь";
 
-/* Location: WeatherFormatting.swift - Overnight period label, %@ is a weekday name */
-"weather.forecast.period.night" = "%@ ночью";
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.thunder" = "Грозы";
 
-// MARK: - Place search
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.wintry" = "Снег или гололёд";
 
-/* Location: WeatherPlaceSearchView.swift - Sheet title */
-"weather.placeSearch.title" = "Найти место";
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.windy" = "Ветрено";
 
-/* Location: WeatherPlaceSearchView.swift - Search field prompt */
-"weather.placeSearch.prompt" = "Город или посёлок";
+/* Location: WeatherCopy.swift - Forecast hazard word */
+"weather.forecast.hazard.fog" = "Туман";
 
-/* Location: WeatherPlaceSearchView.swift - Shown when a search matches nothing */
-"weather.placeSearch.empty" = "Подходящих мест нет";
+// MARK: - Stations
 
-/* Location: WeatherPlaceSearchView.swift - Place row, %1$@ is the name and %2$@ the state */
-"weather.placeSearch.place" = "%1$@, %2$@";
+/* Location: WeatherStationsView.swift - Stations screen title */
+"weather.stations.title" = "Метеостанции";
 
-/* Location: WeatherPlaceSearchView.swift - The forecast point that will be asked for, %1$@ is its name and %2$@ its distance from the place */
-"weather.placeSearch.point" = "Точка прогноза %1$@, %2$@ отсюда";
+/* Location: WeatherStationsView.swift - Stations screen header, %@ is the radio's name */
+"weather.stations.intro" = "Метеостанции аэропортов. %@ передаёт их данные каждый час.";
 
-// MARK: - Text products
+/* Location: WeatherStationsView.swift - Section of single-station answers to other people */
+"weather.stations.others" = "Ответы на запросы других";
 
-/* Location: WeatherTextSection.swift - Section header */
-"weather.text.section" = "Текстовые продукты";
+/* Location: WeatherStationsView.swift - When a reading was taken, %@ is a time */
+"weather.stations.asOf" = "данные на %@";
 
-/* Location: WeatherTextSection.swift - Button asking for the office's forecast discussion */
-"weather.text.discussion" = "Обсуждение прогноза";
+/* Location: WeatherStationsView.swift - Distance from the place. %1$@ is a distance like "3 km NW", %2$@ the place */
+"weather.stations.fromPlace" = "%1$@ от %2$@";
 
-/* Location: WeatherTextSection.swift - Button asking for the hazardous weather outlook */
-"weather.text.hazardousOutlook" = "Прогноз опасных явлений";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.temperature" = "Температура";
 
-/* Location: WeatherTextSection.swift - Button asking for the space weather summary */
-"weather.text.spaceWeather" = "Космическая погода";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.feelsLike" = "Ощущается как";
 
-/* Location: WeatherTextSection.swift - Button asking for a state's storm reports */
-"weather.text.stormReports" = "Сообщения о штормах";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.sky" = "Небо";
 
-/* Location: WeatherTextSection.swift - Button asking for a state's rainfall totals */
-"weather.text.rainfall" = "Осадки";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.wind" = "Ветер";
 
-/* Location: WeatherTextSection.swift - Button asking for a station's raw observation */
-"weather.text.metar" = "METAR";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.humidity" = "Влажность";
 
-/* Location: WeatherTextSection.swift - Button asking for a station's forecast */
-"weather.text.taf" = "TAF";
+/* Location: WeatherStationsView.swift - Percent value, %lld is percent */
+"weather.station.percent" = "%lld%%";
 
-/* Location: WeatherTextSection.swift - Picker label for the state a request names */
-"weather.text.state" = "Штат";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.dewPoint" = "Точка росы";
 
-/* Location: WeatherTextSection.swift - Picker label for the station a request names */
-"weather.text.station" = "Станция";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.pressure" = "Давление";
 
-/* Location: WeatherTextSection.swift - Badge on a reply with a chunk missing */
-"weather.text.partial" = "Частично";
+/* Location: WeatherStationsView.swift - Pressure value, %@ is inches of mercury */
+"weather.station.inchesOfMercury" = "%@ inHg";
 
-/* Location: WeatherTextDetailView.swift - Marker where a chunk never arrived */
-"weather.text.missingPart" = "\n[отсутствует часть]\n";
+/* Location: WeatherStationsView.swift - Reading field */
+"weather.station.visibility" = "Видимость";
 
-/* Location: WeatherTextDetailView.swift - Footer naming the missing chunk, %1$lld of %2$lld */
-"weather.text.missingFooter" = "Часть %1$lld из %2$lld не получена";
+/* Location: WeatherStationsView.swift - Section with METAR and TAF */
+"weather.station.airportReports" = "Сводки аэропорта (кодированные)";
 
-/* Location: WeatherTextDetailView.swift - Button that asks the bot for the reply again */
-"weather.text.askAgain" = "Запросить снова";
+// MARK: - Text reports
 
-/* Location: WeatherTextDetailView.swift - Shown when the text was cleared while open */
-"weather.text.gone" = "Этот текст больше не хранится.";
+/* Location: WeatherReportsView.swift - Reports screen title and root row */
+"weather.reports.title" = "Текстовые сводки метеослужбы";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.warning" = "Текст предупреждения";
+/* Location: WeatherReportsView.swift - Reports screen header, %@ is the radio's name */
+"weather.reports.intro" = "Тексты самой метеослужбы. %@ отправляет их, когда кто-то запрашивает.";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.discussion" = "Обсуждение прогноза";
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.discussion.title" = "Обсуждение прогноза";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.space" = "Космическая погода";
+/* Location: WeatherReportsView.swift - Product description, %@ is the office like "NWS Austin/San Antonio" */
+"weather.reports.discussion.description" = "Заметки синоптика, технические — %@";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.storm" = "Сообщения о штормах";
+/* Location: WeatherReportsView.swift - Product description with no place */
+"weather.reports.discussion.descriptionNoPlace" = "Заметки синоптика, технические — из бюро прогнозов для этого места";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.rain" = "Осадки";
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.outlook.title" = "Прогноз опасных явлений";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.metarTaf" = "METAR / TAF";
+/* Location: WeatherReportsView.swift - Product description, %@ is the radio's name */
+"weather.reports.outlook.description" = "для зоны %@";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.outlook" = "Прогноз опасных явлений";
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.storms.title" = "Сообщения о непогоде";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.nowcast" = "Ближайший прогноз";
+/* Location: WeatherReportsView.swift - Product description */
+"weather.reports.storms.description" = "Сообщения наблюдателей о граде, ветре и торнадо";
 
-/* Location: WeatherFormatting.swift - Text product title */
-"weather.text.subject.general" = "Сообщение";
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.rainfall.title" = "Количество осадков";
 
-/* Location: WeatherFormatting.swift - Text product title for an unknown subject */
-"weather.text.subject.other" = "Текст";
+/* Location: WeatherReportsView.swift - Product description */
+"weather.reports.rainfall.description" = "Недавние данные дождемеров";
+
+/* Location: WeatherReportsView.swift - Product title */
+"weather.reports.space.title" = "Космическая погода";
+
+/* Location: WeatherReportsView.swift - Product description */
+"weather.reports.space.description" = "Солнечные бури и условия радиосвязи";
+
+/* Location: WeatherReportsView.swift - Section header for products that name a state */
+"weather.reports.byState" = "По штату";
+
+/* Location: WeatherReportsView.swift - Row opening the state list, %@ is the state's name like "Texas" */
+"weather.reports.stateRow" = "Штат: %@";
+
+/* Location: WeatherReportsView.swift - State row value when no state is known */
+"weather.reports.noState" = "не задан";
+
+/* Location: WeatherReportsView.swift - State list title */
+"weather.reports.stateTitle" = "Штат";
+
+/* Location: WeatherReportsView.swift - When this phone received a text, %@ is a time */
+"weather.reports.received" = "получено %@";
+
+/* Location: WeatherReportsView.swift - Marker where a part of a text never arrived */
+"weather.reports.missingPart" = "\n[отсутствует часть]\n";
+
+/* Location: WeatherReportsView.swift - Shown instead of Ask when the request needs a place */
+"weather.reports.needsPlace" = "Выберите место, чтобы запросить это.";
+
+/* Location: WeatherReportsView.swift - Shown when nothing is held for a product */
+"weather.reports.nothingYet" = "Пока ничего не получено.";
+
+/* Location: WeatherReportsView.swift - Footer under a text somebody else asked for */
+"weather.reports.someoneElse" = "Это запросил кто-то другой в mesh-сети";
 
 // MARK: - Requests
 
-/* Location: WeatherToolView.swift - Shown while a request is on the air, %@ is the bot's name */
-"weather.request.waiting" = "Ожидание %@…";
+/* Location: WeatherAlertsSection.swift - Request button */
+"weather.request.askAlerts" = "Запросить предупреждения";
 
-/* Location: WeatherToolView.swift - Appended while the one retry is on the air */
-"weather.request.secondTry" = "(вторая попытка)";
+/* Location: WeatherNowSection.swift - Request button */
+"weather.request.askConditions" = "Запросить текущие условия";
 
-/* Location: WeatherToolView.swift - Shown when neither try was answered, %@ is the bot's name */
-"weather.request.timedOut" = "Нет ответа от %@. Возможно, он вне зоны действия.";
+/* Location: WeatherForecastSection.swift - Request button */
+"weather.request.askForecast" = "Запросить прогноз";
 
-/* Location: WeatherToolView.swift - Shown when the same request was answered minutes ago */
-"weather.request.cached" = "Уже получено за последние пять минут";
+/* Location: WeatherReportsView.swift - Request button */
+"weather.request.askLatest" = "Запросить последнее";
 
-/* Location: WeatherToolView.swift - Shown when requests are coming too fast, %lld is seconds */
-"weather.request.rateLimited" = "Подождите %lld с между запросами";
+/* Location: WeatherAlertDetailView.swift - Request button */
+"weather.request.askFullText" = "Запросить полный текст";
 
-/* Location: WeatherToolView.swift - Shown when no bot is selected */
-"weather.request.noBot" = "Сначала выберите погодного бота";
+/* Location: WeatherStationsView.swift - Request button for the coded current conditions */
+"weather.request.askMetar" = "Запросить METAR (условия)";
 
-/* Location: WeatherFormatting.swift - The bot declined the request */
-"weather.request.notAvailable.noData" = "У бота пока нет данных для этого";
+/* Location: WeatherStationsView.swift - Request button for the coded airport forecast */
+"weather.request.askTaf" = "Запросить TAF (прогноз)";
 
-/* Location: WeatherFormatting.swift - The bot declined the request */
-"weather.request.notAvailable.unknownLocation" = "Бот не знает это местоположение";
+/* Location: WeatherAskControl.swift - Note under the first request button on a screen */
+"weather.request.publicNote" = "Ответ получат все, кто слушает #meshwx.";
 
-/* Location: WeatherFormatting.swift - The bot declined the request */
-"weather.request.notAvailable.unsupported" = "Бот не поддерживает такой запрос";
+/* Location: WeatherCopy.swift - Request on the air, %@ is the radio's name */
+"weather.request.pending" = "Запрос к %@… (до 30 с)";
 
-/* Location: WeatherFormatting.swift - The bot declined the request */
-"weather.request.notAvailable.botError" = "Бот сообщил об ошибке";
+/* Location: WeatherCopy.swift - The one retry on the air */
+"weather.request.retrying" = "Повторный запрос…";
 
-/* Location: WeatherFormatting.swift - The bot declined the request */
-"weather.request.notAvailable.rateLimited" = "У бота ограничение частоты запросов; попробуйте позже";
+/* Location: WeatherCopy.swift - Another request is on the air */
+"weather.request.waiting" = "Ожидание другого ответа…";
 
-/* Location: WeatherFormatting.swift - The bot declined the request for an unknown reason */
-"weather.request.notAvailable.other" = "Бот не может на это ответить";
+/* Location: WeatherCopy.swift - An answer arrived. %1$@ is the radio's name, %2$@ a time */
+"weather.request.answeredAt" = "%1$@ ответил · %2$@";
 
-// MARK: - Menu
+/* Location: WeatherCopy.swift - An answer arrived that changed nothing. %1$@ is the radio's name, %2$@ a time */
+"weather.request.answeredNothingNew" = "%1$@ ответил · %2$@ · ничего нового";
 
-/* Location: WeatherToolView.swift - Overflow menu label */
-"weather.menu.more" = "Ещё";
+/* Location: WeatherCopy.swift - A forecast answer with nothing newer than what is shown, %@ is the radio's name */
+"weather.request.noNewerForecast" = "Более свежего прогноза от %@ нет";
 
-/* Location: WeatherToolView.swift - Overflow menu item */
-"weather.menu.clearData" = "Очистить данные этого бота";
+/* Location: WeatherCopy.swift - A readings answer with nothing newer than what is shown, %@ is the radio's name */
+"weather.request.noNewerReadings" = "Более свежих данных от %@ нет";
 
-/* Location: WeatherToolView.swift - Confirmation title, %@ is the bot's name */
-"weather.menu.clearConfirm" = "Очистить всё, полученное от %@?";
+/* Location: WeatherCopy.swift - An answer the channel already delivered, so nothing was sent. %@ is a time ago like "40 s ago" */
+"weather.request.received" = "Получено %@";
 
-/* Location: WeatherToolView.swift - Confirmation button */
-"weather.menu.clearAction" = "Очистить";
+/* Location: WeatherCopy.swift - An answer already delivered, with what it was as of. %1$@ is like "Received 40 s ago", %2$@ like "list as of 3:02 PM" */
+"weather.request.receivedContent" = "%1$@ · %2$@";
+
+/* Location: WeatherCopy.swift - Content time of an alert list or warnings answer, %@ is a time */
+"weather.request.contentList" = "список на %@";
+
+/* Location: WeatherCopy.swift - Content time of a station readings answer, %@ is a time */
+"weather.request.contentReadings" = "данные на %@";
+
+/* Location: WeatherCopy.swift - Content time of a forecast answer, %@ is a time */
+"weather.request.contentIssued" = "выпущен %@";
+
+/* Location: WeatherCopy.swift - No answer from a silent radio. %1$@ is a time, %2$@ the radio's name */
+"weather.request.noAnswer" = "Нет ответа (%1$@). Возможно, %2$@ вне зоны связи.";
+
+/* Location: WeatherCopy.swift - No answer from a radio that was heard. %1$@ is the radio's name, %2$@ a time */
+"weather.request.heardNoAnswer" = "%1$@ слышен, но не ответил (%2$@).";
+
+/* Location: WeatherCopy.swift - Your radio refused to send the request, %@ is a time */
+"weather.request.failed" = "Ваша рация не смогла отправить запрос (%@).";
+
+/* Location: WeatherToolModel.swift - Request refused inside the five-second spacing */
+"weather.request.rateLimited" = "Подождите несколько секунд между запросами";
+
+/* Location: WeatherCopy.swift - Caption for a radio not heard for 90 minutes. %1$@ is the radio's name, %2$@ a time */
+"weather.request.quiet" = "%1$@ не слышен с %2$@ — может не ответить";
+
+/* Location: WeatherCopy.swift - In place of a request button with your radio not connected, %@ is the weather radio's name */
+"weather.request.blocked.offline" = "Подключите рацию, чтобы спросить %@";
+
+/* Location: WeatherCopy.swift - In place of a request button on old firmware */
+"weather.request.blocked.firmware" = "Прошивка вашей рации не может запрашивать погоду";
+
+/* Location: WeatherCopy.swift - In place of a request button without #meshwx */
+"weather.request.blocked.channel" = "Добавьте #meshwx на рацию, чтобы спрашивать";
+
+/* Location: WeatherCopy.swift - In place of a request button with no weather radio */
+"weather.request.blocked.noBot" = "Метеобота для запроса пока нет";
+
+/* Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert */
+"weather.request.blocked.notAnnounced" = "Нельзя спросить, пока он не объявит себя";
+
+/* Location: WeatherCopy.swift - The radio has no data, %@ is its name */
+"weather.request.notAvailable.noData" = "У %@ пока нет данных для этого";
+
+/* Location: WeatherCopy.swift - The radio did not recognize the place, %@ is its name */
+"weather.request.notAvailable.unknownPlace" = "%@ не распознал это место";
+
+/* Location: WeatherCopy.swift - The radio does not support the request, %@ is its name */
+"weather.request.notAvailable.unsupported" = "%@ так не умеет";
+
+/* Location: WeatherCopy.swift - The radio reported an error, %@ is its name */
+"weather.request.notAvailable.error" = "%@ сообщил об ошибке";
+
+/* Location: WeatherCopy.swift - The radio is rate limited, %@ is its name */
+"weather.request.notAvailable.busy" = "%@ занят, повторите через несколько минут";
+
+/* Location: WeatherCopy.swift - The radio declined for an unknown reason, %@ is its name */
+"weather.request.notAvailable.other" = "%@ не может на это ответить";
+
+// MARK: - Units and time
+
+/* Location: WeatherFormatting.swift - Duration in seconds */
+"weather.unit.seconds" = "%lld с";
+
+/* Location: WeatherFormatting.swift - Duration in minutes */
+"weather.unit.minutes" = "%lld мин";
+
+/* Location: WeatherFormatting.swift - Duration in hours */
+"weather.unit.hours" = "%lld ч";
+
+/* Location: WeatherFormatting.swift - Duration in hours and minutes */
+"weather.unit.hoursMinutes" = "%1$lld ч %2$lld мин";
+
+/* Location: WeatherFormatting.swift - Duration in days */
+"weather.unit.days" = "%lld дн.";
+
+/* Location: WeatherFormatting.swift - Distance in kilometres */
+"weather.unit.kilometres" = "%lld km";
+
+/* Location: WeatherFormatting.swift - Distance under one kilometre */
+"weather.unit.underOneKilometre" = "менее 1 km";
+
+/* Location: WeatherFormatting.swift - Distance and compass direction. %1$@ is a distance, %2$@ like "NW" */
+"weather.unit.distanceDirection" = "%1$@ %2$@";
+
+/* Location: WeatherFormatting.swift - Time ago, %@ is a duration like "2 min" */
+"weather.time.ago" = "%@ назад";
+
+/* Location: WeatherFormatting.swift - Time ago under five seconds */
+"weather.time.justNow" = "только что";
+
+/* Location: WeatherFormatting.swift - Age, %@ is a duration like "3 h" */
+"weather.time.old" = "%@ назад";
+
+/* Location: WeatherFormatting.swift - Countdown, %@ is a duration like "40 min" */
+"weather.time.within" = "через %@";
+
+/* Location: WeatherFormatting.swift - A time yesterday, %@ is a time like "2:00 PM" */
+"weather.time.yesterday" = "вчера %@";
+
+// MARK: - Place picker
+
+/* Location: WeatherPlacePickerView.swift - Sheet title */
+"weather.picker.title" = "Выберите место";
+
+/* Location: WeatherPlacePickerView.swift - Search field prompt */
+"weather.picker.prompt" = "Город или посёлок";
+
+/* Location: WeatherPlacePickerView.swift - Shown when a search matches nothing */
+"weather.picker.noResults" = "Подходящих городов нет";
+
+/* Location: WeatherPlacePickerView.swift - Row for the phone's location */
+"weather.picker.yourLocation" = "Ваше местоположение";
+
+/* Location: WeatherPlacePickerView.swift - Your location row when permission is denied */
+"weather.picker.locationOff" = "Геолокация выключена";
+
+/* Location: WeatherPlacePickerView.swift - Your location row before permission is asked */
+"weather.picker.allowLocation" = "Нажмите, чтобы разрешить доступ к геопозиции";
+
+/* Location: WeatherPlacePickerView.swift - Section of forecast places other people asked for, %@ is the radio's name */
+"weather.picker.others" = "Места, о которых другие спрашивали %@";
+
+/* Location: WeatherPlacePickerView.swift - Footer under other people's places, %@ is the radio's name */
+"weather.picker.othersFooter" = "Когда кто-то спрашивает %@, ответ получают все, кто слушает. Кто спросил, не сообщается.";
+
+/* Location: WeatherPlacePickerView.swift - When somebody's forecast was heard, %@ is a time ago */
+"weather.picker.heard" = "услышан %@";
+
+// MARK: - About
+
+/* Location: WeatherAboutView.swift - Sheet title and the header's info button label */
+"weather.about.title" = "О погоде в mesh-сети";
+
+/* Location: WeatherAboutView.swift - Explainer, first line */
+"weather.about.line1" = "Метеоботы — это узлы MeshCore, которые ретранслируют данные Национальной метеослужбы США.";
+
+/* Location: WeatherAboutView.swift - Explainer, second line */
+"weather.about.line2" = "Они передают предупреждения, текущие условия и прогнозы в #meshwx.";
+
+/* Location: WeatherAboutView.swift - Explainer, what a radio's area is. %1$@ is the radio's name, %2$lld how many stations it reports on */
+"weather.about.coverage" = "%1$@ передаёт данные метеостанций (%2$lld); предупреждения относятся к территории вокруг них.";
+
+/* Location: WeatherAboutView.swift - Explainer, third line */
+"weather.about.line3" = "Этот телефон сохраняет то, что слышит ваша рация, поэтому данные видны, даже когда рация выключена.";
+
+/* Location: WeatherAboutView.swift - Explainer, fourth line */
+"weather.about.line4" = "Когда вы о чём-то спрашиваете метеобота, ответ получают все, кто слушает.";
+
+/* Location: WeatherAboutView.swift - Section of weather radios */
+"weather.about.radios" = "Метеоботы";
+
+/* Location: WeatherAboutView.swift - Footer under the weather radios */
+"weather.about.radiosFooter" = "Запросы уходят метеоботу, который используется.";
+
+/* Location: WeatherAboutView.swift - Row that lets the app choose the weather radio */
+"weather.about.automatic" = "Выбирать автоматически";
+
+/* Location: WeatherAboutView.swift - Detail under the automatic row, %@ is the radio's name */
+"weather.about.automaticDetail" = "Используется %@";
+
+/* Location: WeatherAboutView.swift - When a weather radio was heard, %@ is a time ago */
+"weather.about.heard" = "слышен %@";
+
+/* Location: WeatherAboutView.swift - A weather radio never heard */
+"weather.about.notHeard" = "ещё не слышен";
+
+/* Location: WeatherAboutView.swift - The weather radio's Weather Service feed is healthy */
+"weather.about.feedOK" = "Поток метеослужбы в норме";
+
+/* Location: WeatherAboutView.swift - The weather radio's Weather Service feed is stale, %@ is a duration like "5 h" */
+"weather.about.feedStale" = "нет данных метеослужбы уже %@";
+
+/* Location: WeatherAboutView.swift - A weather radio heard without an advert */
+"weather.about.noAdvert" = "ещё не объявил себя";
+
+/* Location: WeatherAboutView.swift - The weather radio requests go to */
+"weather.about.inUse" = "используется";
+
+/* Location: WeatherAboutView.swift - Channel slot label */
+"weather.about.channelSlot" = "Слот канала";
+
+/* Location: WeatherAboutView.swift - Channel slot value, %lld is the slot number */
+"weather.about.slot" = "Слот %lld";
+
+/* Location: WeatherAboutView.swift - Channel slot value when #meshwx is not on your radio */
+"weather.about.noSlot" = "Нет на вашей рации";
+
+/* Location: WeatherAboutView.swift - Last weather datagram label */
+"weather.about.lastMessage" = "Последнее метеосообщение";
+
+/* Location: WeatherAboutView.swift - No weather message received */
+"weather.about.noMessage" = "Ничего не получено";
+
+/* Location: WeatherAboutView.swift - Channel slot value while your radio is not connected or still syncing */
+"weather.about.radioOffline" = "Ваша рация не подключена";
+
+/* Location: WeatherAboutView.swift - Button that forgets the source radio's weather */
+"weather.about.clear" = "Очистить полученную погоду";
+
+/* Location: WeatherAboutView.swift - Footer under the clear button, %@ is the radio's name */
+"weather.about.clearFooter" = "Удаляет с этого телефона всё, что получено от %@.";
+
+/* Location: WeatherAboutView.swift - Alert title before clearing, %@ is the radio's name */
+"weather.about.alert.title" = "Очистить погоду, полученную от %@?";
+
+/* Location: WeatherAboutView.swift - Alert message before clearing, %@ is the radio's name */
+"weather.about.alert.message" = "Его предупреждения, данные, прогнозы и сводки будут удалены с этого телефона. Они вернутся, когда %@ снова их передаст.";
+
+/* Location: WeatherAboutView.swift - Alert button that clears */
+"weather.about.alert.clear" = "Очистить";

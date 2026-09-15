@@ -3,7 +3,8 @@
 Status: v2, 2026-09-14, after three adversarial reviews (first-time user and wording; severe
 weather and data honesty; SwiftUI feasibility and state completeness). Replaces the first-cut
 screen shipped in `5244d996`. §3 records every review finding that changed the design, and the
-ones that were rejected, with the reason.
+ones that were rejected, with the reason. Revised 2026-09-15 after three reviews of the built
+screen (first-time user; honesty and airtime; SwiftUI engineering); §3.1 records those.
 
 ## 1. Why the first cut failed
 
@@ -63,7 +64,7 @@ Further defects in the same data:
 | A7, M5 | Button feedback vanishes or never appears | **Adopted.** Status keyed by request, persists until the next tap, names the time |
 | A8 | Asking is public and nothing says so; New York looks like a bug | **Adopted.** Footer under ask buttons; "Asked for by others nearby" section, 24 h expiry |
 | A9, B5c | Outside coverage "none nearby" reads as calm | **Adopted.** "WX-AUS doesn't report on Dallas, so alerts there are unknown" |
-| A10, M13 | Three answers do not fit above the fold on a storm night | **Adopted.** Promise alerts + Now only; cap alert rows at 2 + "N more" (tornado warnings never fold) |
+| A10, M13 | Three answers do not fit above the fold on a storm night | **Adopted.** Promise alerts + Now only; cap alert rows at 2 + "N more" (storm warnings and unfinished upgrades never fold, §7.3) |
 | A11 | Source of stations and warnings still not on screen | **Adopted.** Source lines on both cards and screens |
 | A12 | Raw names ("Draughon-Miller Cntrl Tx Rgnl Arpt") | **Adopted.** Abbreviation expansion and suffix stripping |
 | A13 | Seven verbs for one action | **Adopted.** Every radio request starts with "Ask" |
@@ -90,15 +91,33 @@ Further defects in the same data:
 | — | Tapping a station makes it primary | **Rejected.** Details only |
 | — | Local notification for a new covering warning | **Out of scope** — product decision for Rafael (§14) |
 
+### 3.1 Implementation review decisions (2026-09-15)
+
+| # | Finding | Decision |
+|---|---|---|
+| I-B1 | With no station batch held, a list from a bot that doesn't cover the place earned the green check | **Adopted.** `coverageUnknown` status (§7.4); empty coverage never reaches "none" or the check |
+| I-B2 | A Tornado Warning 8 km away folded behind two Heat Advisories whose outlines were loading | **Adopted.** Order §7.2, fold §7.3 |
+| I-B3 | "Ask for alerts" sent `>w` whenever any bot had something outstanding, and could repeat | **Adopted.** Decided from the source bot (`WeatherAlertRequests`): `>d` for a gap, `>w <identity>` for one missing, `>w <county>` for several or an unfinished upgrade. `>w` answers fill a five-minute slot, bypassed while something is still outstanding. **Kept** the 10-min gap margin: a `>d` served from the bot's cache can predate the gap (§14 Q3) |
+| I-B4, I-B17 | Messages drained from the radio's queue at connect filled the five-minute slots and counted as hearing the bot | **Adopted.** Backlog is marked while the poller drains; it updates state but fills no slot and is not "heard" (`lastLiveHeardAt`). Slots also skip duplicates and ignored older lists, and carry the content's own time |
+| I-B5, I-B10 | Any text reply with the right subject was taken as this phone's, and text had no slot | **Adopted.** Settled and owned only on a content match (§12); a complete owned reply fills a slot |
+| I-B7 | Cross-bot dedupe by receipt time could replace an extended copy with an expired one | **Adopted.** Active copy first, then the later expiry |
+| I-B11 | "Add #meshwx" could overwrite a user's channel in slot 1 before the channel sync finished | **Adopted.** The banner and the write wait for channel sync; the slot is re-read from the radio before writing |
+| I-B14 | A place far from every forecast point got that point's forecast as its own | **Adopted.** 115 km reach (§9) |
+| I-B15 | "Asked for by others nearby" has no distance filter | **Rejected.** Retitled "Other people asked WX-AUS about"; no nearness claim is left to filter |
+| I-A3 | "Weather radio 041D" shown everywhere | **Rejected.** Simulator artefact (no contacts); the phone names the bot from its contact |
+| I-C2 | The 30 s tick ran a full rebuild with database and disk reads | **Adopted in part.** The rebuild stays (expiry on time depends on it) but reads cached inputs; no tick while inactive. Rebuilding only at computed time boundaries **rejected** as fragile |
+| I-C5 | The compact/regular shell swap (rotation, Split View) destroyed the model | **Adopted.** The model is held for the tool visit outside the view |
+| I-A | First-time user review: on a storm night Now fell below the fold; "none has arrived" read as "no alerts"; "radio" meant two things; rows never said they covered you; a purple crosshair pin; taps with no visible result | **Adopted.** Source footer folded into the status line, one-line header, "Alerts for Austin", "your radio" only for the user's device, answer confirmations with "nothing new", a bottom pending bar, plainer picker, station and detail wording. Drawing the coverage footprint on a map: not in this cut |
+
 ## 4. Information architecture
 
 ```
 Weather
 ├── Header: place (▾ picker) · source line (ⓘ About)
 ├── Status banner (only when blocking)
-├── Alerts card ──────────── Alert detail (map, covers-line, areas, narrative)
+├── Alerts card ──────────── Alert detail (map, covers-line, narrative, details, areas)
 │                            Alerts in WX-AUS's area (map + list)
-├── Now card ─────────────── Stations (list; station detail with pilot report)
+├── Now card ─────────────── Stations (list; station detail with coded airport reports)
 ├── Forecast card
 └── Reports row ──────────── Weather Service text reports → product screen
 ```
@@ -134,8 +153,8 @@ rather than answering from far away.
 
 ### 7.1 Placement
 
-Alerts are the union of all bots' held warnings, deduplicated by identity (freshest message
-wins). Each is placed relative to the place:
+Alerts are the union of all bots' held warnings, deduplicated by identity: an active copy
+beats an expired one, then the later expiry wins. Each is placed relative to the place:
 
 | Placement | Rule |
 |---|---|
@@ -146,23 +165,30 @@ wins). Each is placed relative to the place:
 | **elsewhere** | Everything else in the bot's area |
 
 Upgrade markers (spec §4 flag 2) are placed by the upgraded warning's geometry and shown as
-"Upgraded — replacement not received". A *here* alert that expired less than 15 min ago stays
+"Upgraded — replacement not received", only when no bot still holds a copy of the warning. A *here* alert that expired less than 15 min ago stays
 as "Expired 3 min ago · no update received".
 
 ### 7.2 Order
 
 Tornado Warning, Extreme Wind Warning, Flash Flood Warning with catastrophic damage tag,
 Severe Thunderstorm Warning with a tornado tag, Flash Flood Warning, Severe Thunderstorm
-Warning, then other warnings, watches, advisories, statements; within a rank, soonest expiry.
+Warning, then other warnings, watches, advisories, statements.
+
+Rows sort *here* first; then by that rank across every other placement, so a Tornado Warning
+8 km away sits above a Heat Advisory whose outlines are still loading; then *checking* and
+*unplaced* before *near*; then soonest expiry. Recently expired rows sort last.
 
 ### 7.3 Card
 
-- Rows: *here* (and upgrade/expired rows placed here) first, then *checking*/*unplaced*, then
-  *near*. At most 2 rows plus "N more"; Tornado Warnings here are never folded.
+- Rows in §7.2 order. At most 2 rows plus "N more", except that the six storm-warning ranks
+  (Tornado through Severe Thunderstorm Warning) and upgrade markers never fold, in any
+  placement (`WeatherAlertFolding`).
+- Title "Alerts for Austin" ("Alerts" with no place).
 - A row: severity colour bar, icon, event name, "until 11:41 PM · in 40 min", one truncating
-  line of tags, and for *near* "25 km N".
-- Footer: "N elsewhere in WX-AUS's area ›" when any, then the status line (§7.4), then
-  "National Weather Service alerts, relayed by WX-AUS".
+  line of tags, and for *near* "25 km N". In the alerts list an elsewhere row names its first
+  area and distance: "Llano County · 105 km W".
+- Footer: "N elsewhere in WX-AUS's area ›" when any, then the status line (§7.4) with the source
+  folded under it: "National Weather Service alerts via WX-AUS".
 
 ### 7.4 Status line
 
@@ -171,13 +197,14 @@ Evaluated in this order; the first that applies wins.
 | Condition | Line | Action |
 |---|---|---|
 | No place | "Choose a place to see which alerts cover it" | — |
-| Place out of coverage | "WX-AUS doesn't report on Dallas, so alerts there are unknown." | — |
-| No digest from any covering bot | "Alerts not checked yet. WX-AUS sends its alert list every 3 hours; none has arrived." | Ask for alerts |
+| Place out of coverage | "Dallas is outside WX-AUS's area, so alerts there are unknown." | — |
+| No digest from any covering bot | "This phone hasn't received WX-AUS's alert list yet, so it can't tell whether any alerts are active. The list comes every 3 hours." | Ask for alerts |
 | Feed stale | "WX-AUS hasn't heard from the Weather Service for 5 h. New alerts may not reach you." | — |
-| Radio offline | "Radio offline. Last alert list as of 11:02 PM." | Connect caption |
-| Gap, missing identity or upgrade marker | "This phone missed messages from WX-AUS. Some alerts may be missing." | Ask for alerts |
+| Your radio not connected | "Your radio isn't connected. Last alert list as of 11:02 PM." | Connect caption |
+| Gap, missing identity or upgrade marker | "This phone missed messages from WX-AUS. Some alerts may be missing." | Ask for alerts (`>d`, `>w <identity>` or `>w <county>`, from the source bot's state) |
 | Digest built more than 3 h 15 min ago, or before this radio session started | "Last alert list as of 8:02 PM." | Ask for alerts |
 | Last-known location | "Your location is 3 h old." | Update location |
+| No multi-station batch from any bot in 24 h, so coverage is unknown | "WX-AUS hasn't sent its station report yet, so the area it covers isn't known. It comes about every hour." | — |
 | Bot shows offices, place's office not among them | "WX-AUS may not carry alerts for Bell County (NWS Fort Worth)." | — |
 | Alerts here/near/checking/unplaced | (rows speak; no status line) | — |
 | Alerts only elsewhere | "None for your location · as of 11:02 PM" (no check) | — |
@@ -193,13 +220,17 @@ Evaluated in this order; the first that applies wins.
 - Source line: "Austin–Camp Mabry · 3 km · in WX-AUS's 11:18 PM report".
 - Stale (no fresh station within 80 km): the nearest reading in small type with "3 h old".
 - None within 80 km: "No weather station near Dallas. Nearest: Temple, 190 km."
-- Footer: "14 weather stations ›".
+- Footer: "14 stations in WX-AUS's area ›" ("14 weather stations ›" when none came in a batch).
 - Empty: "No current conditions yet. WX-AUS broadcasts them every hour." + Ask.
 
 ## 9. Forecast card
 
-- Point: the nearest bundled forecast point to the place. A held forecast for a different
-  point within 10 km of the place is used instead, and says so ("from Austin Camp Mabry, 4 km").
+- Point: the nearest bundled forecast point to the place, within 115 km. That reach is the 99th
+  percentile of every bundled place's distance to its nearest point (median 23 km, p95 68 km);
+  about 1% of places lie beyond it, mostly in New Mexico, Utah, Idaho and western Alaska, and
+  get "No forecast point near Albuquerque". A held forecast for a different point within 10 km
+  of the place is used instead, and says so ("from Austin Camp Mabry, 4 km"). Asking for a
+  point more than 10 km away names the point and its distance.
 - Shape from the data (`MeshWXForecastLayout`): **days** → one row per day with high/low;
   **periods** → day and night paired into one row, flags merged (thunder, wintry, windy, fog
   from either half), the higher rain chance with its half ("70% tonight"); **mixed** → one row
@@ -208,80 +239,108 @@ Evaluated in this order; the first that applies wins.
   are dropped.
 - Title "Forecast for Austin"; subtitle "issued 7:52 PM"; stale (> 12 h) "issued 14 h ago" in
   orange + Ask.
-- Nothing held for the place's point: "No forecast for Austin yet." + Ask for forecast.
+- Nothing held for the place's point: "No forecast for Austin yet." + Ask for forecast; when that
+  point is more than 10 km away, "No forecast for Big Spring yet. The nearest forecast point is
+  Midland, 60 km." Beyond 115 km: "No forecast point near Albuquerque." and no ask.
 
 ## 10. Header and banners
 
 ```
 Austin ▾
-Your location · WX-AUS heard 2 min ago   ⓘ
+Your location · WX-AUS last heard 2 min ago   ⓘ
 ```
+
+A searched town reads "Searched town · Back to my location". "Last heard" counts live traffic
+only; with none this session the time is left out.
 
 Banners, at most one, above the cards:
 
 | Condition | Banner |
 |---|---|
-| Firmware below v1.15 | "This radio has firmware 1.14. Weather needs MeshCore 1.15 or newer." |
-| No slot holds the `#meshwx` secret and no weather datagram this session | "#meshwx isn't set up on this radio." + Add channel (`.alert` confirmation, write after dismissal) |
+| Firmware below v1.15 | "Your radio has firmware 1.14. Weather needs MeshCore 1.15 or newer." |
+| Channel sync finished, no slot holds the `#meshwx` secret, and no weather datagram this session | "#meshwx isn't set up on your radio." + Add channel (`.alert` confirmation; after dismissal the chosen slot is read back from the radio and written only if empty) |
 | No weather bot known and nothing heard | "No weather radio heard yet. They appear as nodes named like WX-AUS." |
 
-Radio offline is part of the header's second line ("· radio offline"), not a banner. A bot
+Your radio not being connected is said by the alert status line and in place of ask buttons,
+not by a banner or the header. A bot
 heard on the channel without an advert is named "Weather radio 041D" and its ask buttons say
 "Can't ask until it announces itself".
 
 ## 11. Requests
 
-- Labels: "Ask for alerts", "Ask for current conditions", "Ask for forecast", "Ask for latest".
+- Labels: "Ask for alerts", "Ask for current conditions", "Ask for forecast", "Ask for latest",
+  "Ask for full text", "Ask for METAR (conditions)", "Ask for TAF (forecast)".
 - Under the first ask button on each screen: "Everyone listening on #meshwx gets the answer."
-- Status is keyed by the request, so any button for it shows it, and a screen-level line shows
-  it when the sender is not on screen:
+- Status is keyed by the request, so any button for it shows it, and a bar at the bottom of the
+  screen shows it when the sender is not on screen:
   - pending: "Asking WX-AUS… (up to 30 s)"; retry: "Asking again…"
-  - answered, content changed: nothing (the card updates); unchanged: "Up to date · issued 7:52 PM"
-  - served from what the channel delivered: "WX-AUS sent this 40 s ago"
+  - answered: "WX-AUS answered at 1:32 AM", with "· nothing new" when nothing it carried changed;
+    a forecast or readings answer with nothing newer than what is shown: "No newer forecast from
+    WX-AUS" / "No newer readings from WX-AUS". A complete text reply this phone owns, under 5 min
+    old, replaces its button with "WX-AUS answered at 1:32 AM".
+  - served from what the channel delivered live in the last 5 min: "Received 40 s ago · list as
+    of 3:02 PM". A slot is filled only by a message the reducer applied and that was heard live
+    (not drained from the radio's queue): lists, batches, forecasts, warnings (`>w`, `>w <area>`,
+    `>w <identity>`), and complete text replies this phone owns. `>w` is not served from a slot
+    while the source bot still has a missing identity or an unfinished upgrade.
   - timed out, bot silent: "No answer at 11:26 PM. WX-AUS may be out of range."
   - timed out, bot heard: "WX-AUS was heard but didn't answer at 11:26 PM."
   - not available: "WX-AUS has no data for that yet" / "…didn't recognise that place" /
     "…can't do that" / "…had an error" / "…is busy, try again in a few minutes"
+  - your radio refused the send: "Your radio couldn't send this at 11:26 PM."
   - rate limited: "Wait a few seconds between requests"
   - Outcomes persist until the next tap on that button or 5 minutes.
 - Other buttons while a request is pending: disabled, "Waiting for another answer…".
 - Offline: "Connect your radio to ask WX-AUS" in place of buttons.
-- Bot not heard for 90 min: caption "WX-AUS not heard since 8:02 PM — it may not answer".
+- Bot not heard live for 90 min: caption "WX-AUS not heard since 8:02 PM — it may not answer".
+  "Heard", this caption and the no-retry rule count live traffic only.
 
 ## 12. Secondary screens
 
-- **Alerts in WX-AUS's area**: a non-interactive map header (all polygons and area fills, the
-  place) that opens the full map on tap; sections Here, Near, Elsewhere; the status line;
-  "Listed, not received · Ask" rows (one request `>w <place county>` when several are missing).
-- **Alert detail**: map (location layer only when authorized), "Covers Austin" / "Doesn't cover
-  Austin (25 km N)" / "Can't tell whether this covers Austin", times, office, tags, areas,
-  "Ask for full text"; the narrative shows only when it answered this phone's request for this
-  identity.
+- **Alerts in WX-AUS's area**: a non-interactive map header (all polygons and area fills; no pin
+  for the phone's own location, a plain pin for a searched town) that opens the full map on
+  tap; sections Here, Can't place yet, Near, Elsewhere; the status line; "Missing from this
+  phone" with "Listed, not received · Ask" rows for the source bot's missing warnings (one
+  request, `WeatherAlertRequests.missingWarnings`).
+- **Alert detail**: map (location layer only when authorized; beside the details only when the
+  column is at least 700 pt wide), "Covers Austin" / "Doesn't cover Austin (25 km N)" / "Not
+  sure it covers Austin", the until-time, "received 1:28 AM" (warnings carry no issue time), the
+  office, then "Ask for full text" above Details (tags) and Areas ("County" / "Forecast zone").
+  An alert no longer held reads "No longer held by this phone", with no reason claimed; the narrative shows only when it answered this phone's request for this
+  identity: from the bot asked, naming the event and, when the warning is held with named areas,
+  one of them. A text chunk carries only its subject, so ownership is read from the words
+  (`WeatherTextMatch`): METAR and TAF by form and station, storm reports and rainfall by the
+  state code; the forecast discussion, space weather and the outlook by subject alone (§14 Q5).
 - **Stations**: "Airport weather stations. WX-AUS broadcasts their readings every hour." List
   sorted by distance from the place: footprint stations, then "Answers to other people's
-  requests". Station detail: all readings, age, and "Pilot report (coded)" with Ask for METAR
-  and Ask for TAF.
+  requests". Station detail: all readings, "as of 1:13 AM", and "Airport reports (coded)" with
+  "Ask for METAR (conditions)" and "Ask for TAF (forecast)"; a report shows "received 11:02 PM".
 - **Weather Service text reports**: Forecast discussion ("Forecaster's notes, technical —
   NWS Austin/San Antonio"), Hazardous weather outlook ("for WX-AUS's area"), Storm reports and
-  Rainfall totals ("Texas · Change"), Space weather. Each product screen shows the latest
+  Rainfall totals ("State: Texas ›"), Space weather; texts show "received 11:02 PM", never "as of". Each product screen shows the latest
   text that answered this phone's request, or labels one somebody else asked for; missing-part
   markers; Ask for latest.
-- **Place picker** (sheet, `.searchable` on its own list): Current location (with its state),
-  search results with state and distance, "Asked for by others nearby" (forecast points held
-  that this phone did not request, received in the last 24 h, excluding 0xFFFF) with the footer
+- **Place picker** (sheet, `.searchable` on its own list): Your location (with its state),
+  search results with state and distance, "Other people asked WX-AUS about" (forecast points
+  held that this phone did not request, received in the last 24 h, excluding 0xFFFF; a point
+  name without a state reads "San Juan · Luis Munoz Marin International Airport") with the footer
   "When anyone asks WX-AUS, the answer goes to everyone listening. Who asked isn't shared."
-- **About weather on the mesh** (sheet): how it works in four lines; weather radios as inline
-  rows with checkmarks (no menu) — heard time, feed health in words; `#meshwx` slot and last
-  datagram; "Clear received weather" (`.alert`).
+- **About weather on the mesh** (sheet): how it works in four lines plus "WX-AUS reports on 14
+  weather stations; alerts are for the area around them."; weather radios as inline rows with
+  checkmarks (no menu), "Choose automatically" only with two or more — live heard time, feed
+  health in words; `#meshwx` slot and last weather message; "Clear received weather" (`.alert`,
+  for the radio named when the alert opened).
 
 ## 13. Engineering
 
-- **Lifetime**: the model is owned by the tool root and is not detached on `onDisappear`;
+- **Lifetime**: the model is held for the tool visit outside the view, so it survives pushes and
+  the compact/regular shell swap, and is not detached on `onDisappear`;
   `attach` is idempotent under `.task(id: servicesVersion)`; its tasks live in a holder that
   cancels them on deinit.
 - **Snapshot**: views read one `WeatherScreenSnapshot`, rebuilt off the main actor on a service
   event, place change, bot change, location sample change, geometry load, or scene activation.
-  A 30 s tick refreshes only times.
+  A 30 s tick rebuilds with a fresh clock from cached inputs (contacts, channels, offline state,
+  place facts), and does not run while the scene is inactive.
 - **Tables and geometry**: warmed off the main actor; GeoJSON loaded only when an area-based
   alert is held, once, shared.
 - **Location**: a value struct projected from `LocationService`; `onChange` on it, never on a
@@ -293,8 +352,9 @@ heard on the channel without an advert is named "Weather radio 041D" and its ask
   truncating `Text`.
 - **Pure types** (MC1Services, `Services/Weather/Screen/`, macOS-testable): `WeatherPlace`,
   `WeatherLocationSample`, `WeatherCoverage`, `WeatherAlertPlacement`, `WeatherAlertStatus`,
-  `WeatherAlertPriority`, `WeatherPrimaryStation`, `WeatherForecastRows`, `WeatherNames`,
-  `WeatherRequestStatus`, `WeatherScreenSnapshot` + builder. Tested against the phone's real
+  `WeatherAlertPriority`, `WeatherAlertFolding`, `WeatherAlertRequests`, `WeatherPrimaryStation`,
+  `WeatherForecastRows`, `WeatherForecastCard`, `WeatherNames`, `WeatherRequestStatus`,
+  `WeatherScreenSnapshot`; `WeatherTextMatch` beside the service. Tested against the phone's real
   state and the kit vectors.
 
 ## 14. Questions for Rafael
@@ -307,9 +367,16 @@ heard on the channel without an advert is named "Weather radio 041D" and its ask
    offices in the protocol would let the app say "No alerts" with confidence.
 3. **Cached digests**: spec §8.2's five-minute answer cache can re-send an alert list that a
    newer warning has already overtaken. The app now protects itself; should the bot also drop
-   its cached `>d` answer whenever its warnings change?
+   its cached `>d` answer whenever its warnings change? It would also let the app clear "missed
+   messages" with the first `>d` answer instead of waiting for a list built 10 min after the gap.
 4. **Notifications**: should a new warning covering your location notify you when the screen is
    closed (opt-in)? It needs a severity threshold decision.
+5. **Text replies don't say what they answer.** A chunk carries only its subject, so another
+   phone's `>storm OK` looks like this phone's `>storm TX`. The app guesses from the words, and
+   state codes such as IN, OR, OK and ME are ordinary words in upper-case NWS text; the forecast
+   discussion has no key at all, and a `>wt` narrative carries no office or tracking number.
+   Could the bot echo the request's argument in the first chunk (`STORM TX`, `AFD EWX`,
+   `SV.W.EWX.42`)?
 
 ## 15. Not in this cut
 
