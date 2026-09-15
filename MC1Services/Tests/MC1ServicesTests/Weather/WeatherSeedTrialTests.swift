@@ -84,3 +84,114 @@ private extension Data {
     self.init(bytes)
   }
 }
+
+/// Screenshot and review scenarios with live timestamps, written to
+/// `WEATHER_SEED_DIR/<scenario>/state.json`: `phone` is the owner's phone as it was on the night
+/// of 2026-09-14 (WX-AUS's 14-station batch, its Austin forecast, New York and San Juan forecasts
+/// somebody else asked for, no alert list); `storm` adds a tornado warning over downtown Austin, a
+/// severe thunderstorm near Llano, a heat advisory by zones and a fresh alert list listing all
+/// three. Skipped unless the variable is set.
+///
+///     WEATHER_SEED_DIR=/path/to/seed swift test --filter WeatherSeedScenarioTests
+@Suite("Weather seed scenarios", .enabled(if: ProcessInfo.processInfo.environment["WEATHER_SEED_DIR"] != nil))
+struct WeatherSeedScenarioTests {
+  static let botID: UInt16 = 0x041D
+  static let stations: [(UInt16, Int8)] = [
+    (1929, 88), (976, 82), (593, 86), (194, 86), (875, 84), (229, 84), (202, 84),
+    (606, 88), (860, 88), (1208, 86), (296, 86), (169, 86), (1014, 86), (1723, 84)
+  ]
+
+  func header(_ seq: UInt8, _ type: MeshWXMessageType) -> MeshWXHeader {
+    MeshWXHeader(seq: seq, bot: Self.botID, type: type)
+  }
+
+  func coordinates(_ points: [(Double, Double)]) -> [MeshWXCoordinate] {
+    points.map { MeshWXCoordinate(latitude: $0.0, longitude: $0.1) }
+  }
+
+  func daily(_ point: UInt16, issued: UInt32, _ temps: [(Int8, Int8)], pop: [UInt8]) -> MeshWXForecast {
+    MeshWXForecast(
+      pointIndex: point, issuedMinutes: issued, firstPeriod: 0,
+      periods: zip(temps, pop).map { MeshWXForecastPeriod(highF: $0.0.0, lowF: $0.0.1, popPercent: $0.1, sky: $0.1 >= 30 ? .broken : .scattered, thunder: $0.1 >= 30) })
+  }
+
+  func phoneState(now: Date) -> WeatherBotState {
+    var state = WeatherBotState(botID: Self.botID)
+    let nowMinutes = MeshWXPresentation.unixMinutes(for: now)
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: header(230, .observations), payload: .observations(MeshWXObservations(
+        timestampMinutes: nowMinutes - 2,
+        stations: Self.stations.enumerated().map { offset, station in
+          MeshWXStationObservation(
+            stationIndex: station.0, tempF: station.1, dewpointF: 72, windDirection: .southSouthEast, sky: .few,
+            windMph: UInt8(5 + offset % 7), gustMph: offset % 4 == 0 ? 21 : 0, visibilityMiles: 10,
+            pressureInHg: 30.01, humidityPercent: UInt8(55 + offset), feelsDeltaF: 5)
+        }))),
+      to: &state, receivedAt: now.addingTimeInterval(-120))
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: header(231, .forecast), payload: .forecast(daily(103, issued: nowMinutes - 208,
+        [(102, 77), (100, 78), (98, 75), (97, 73), (98, 74), (99, 76), (96, 81)], pop: [5, 5, 20, 5, 0, 10, 30]))),
+      to: &state, receivedAt: now.addingTimeInterval(-540))
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: header(232, .forecast), payload: .forecast(daily(1010, issued: nowMinutes - 588,
+        [(91, 80), (93, 80), (92, 80), (93, 79), (92, 79), (92, 79), (92, 80)], pop: [50, 50, 60, 60, 40, 40, 40]))),
+      to: &state, receivedAt: now.addingTimeInterval(-540))
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: header(233, .forecast), payload: .forecast(daily(304, issued: nowMinutes - 259,
+        [(72, 60), (79, 66), (80, 68), (82, 64), (77, 66), (79, 64), (75, 66)], pop: [0, 0, 0, 20, 20, 40, 30]))),
+      to: &state, receivedAt: now.addingTimeInterval(-420))
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: header(234, .text), payload: .text(MeshWXText(
+        subject: .spaceWeather, group: 234, index: 0, total: 1,
+        text: "Kp 24h max 4, next 3d 4.7/4.7/3.7 (G1 Tue). SFI 104 SSN 51 xray B2.7."))),
+      to: &state, receivedAt: now.addingTimeInterval(-1500))
+    return state
+  }
+
+  @Test
+  func `write the phone and storm scenarios`() async throws {
+    let directory = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["WEATHER_SEED_DIR"]))
+    let now = Date()
+    let nowMinutes = MeshWXPresentation.unixMinutes(for: now)
+
+    let phone = phoneState(now: now)
+    try await FileWeatherStateStore(url: directory.appendingPathComponent("phone/state.json")).save([Self.botID: phone])
+
+    var storm = phoneState(now: now)
+    let tornado = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 1, office: 35, etn: 12), expiresMinutes: nowMinutes + 35,
+      tornado: .observed,
+      polygon: coordinates([(30.36, -97.84), (30.37, -97.66), (30.24, -97.62), (30.18, -97.78)]),
+      areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)])
+    let llanoStorm = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 3, office: 35, etn: 44), expiresMinutes: nowMinutes + 50,
+      hailQuarterInches: 5, windMph: 60,
+      polygon: coordinates([(30.85, -98.80), (30.86, -98.55), (30.66, -98.52), (30.62, -98.78)]),
+      areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 299, run: 1)])
+    let heat = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 14, office: 35, etn: 5), expiresMinutes: nowMinutes + 360,
+      areas: [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 192, run: 3)])
+    for (offset, warning) in [tornado, llanoStorm, heat].enumerated() {
+      _ = WeatherStateReducer.apply(
+        MeshWXMessage(header: header(UInt8(235 + offset), .warning), payload: .warning(warning)),
+        to: &storm, receivedAt: now.addingTimeInterval(TimeInterval(-180 + offset * 10)))
+    }
+    let digest = MeshWXDigest(
+      nowMinutes: nowMinutes - 1, feedHealth: 2,
+      entries: [tornado, llanoStorm, heat].map {
+        MeshWXDigest.Entry(
+          identity: $0.identity,
+          expiresRelativeMinutes: UInt16($0.expiresMinutes - (nowMinutes - 1)),
+          expiresMinutes: $0.expiresMinutes)
+      })
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: header(238, .digest), payload: .digest(digest)),
+      to: &storm, receivedAt: now.addingTimeInterval(-60))
+    try await FileWeatherStateStore(url: directory.appendingPathComponent("storm/state.json")).save([Self.botID: storm])
+
+    #expect(storm.warnings.count == 3)
+    #expect(storm.missingFromDigest.isEmpty)
+    #expect(!storm.needsDigest)
+    print("wrote weather scenarios to \(directory.path)")
+  }
+}
