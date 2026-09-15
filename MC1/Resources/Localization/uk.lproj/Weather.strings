@@ -337,6 +337,9 @@
 /* Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town */
 "weather.now.noneNearbyUnknown" = "Поруч із %1$@ немає метеостанції. Найближча: %2$@.";
 
+/* Location: WeatherCopy.swift - No reading held near the place, but a weather station within 80 km can be asked for. %1$@ is the place, %2$@ the station's name, %3$@ a distance like "6 km" */
+"weather.now.stationNotHeard" = "Поточної погоди для %1$@ ще немає. Найближча метеостанція — %2$@, %3$@.";
+
 /* Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name */
 "weather.now.stationsInArea" = "Станцій у зоні %2$@: %1$lld";
 
@@ -748,7 +751,7 @@
 "weather.picker.title" = "Виберіть місце";
 
 /* Location: WeatherPlacePickerView.swift - Search field prompt */
-"weather.picker.prompt" = "Місто або селище";
+"weather.picker.prompt" = "Місто, селище або код аеропорту";
 
 /* Location: WeatherPlacePickerView.swift - Shown when a search matches nothing */
 "weather.picker.noResults" = "Відповідних міст немає";

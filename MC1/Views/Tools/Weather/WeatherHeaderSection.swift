@@ -46,6 +46,16 @@ struct WeatherHeaderSection: View {
           .accessibilityHint(L10n.Weather.Weather.Header.chooseHint)
 
           subtitle(header)
+          if snapshot.place != nil {
+            // The picker also opens from the title; this says out loud that towns can be searched.
+            Button(action: onChoosePlace) {
+              Label(L10n.Weather.Weather.Place.searchTown, systemImage: "magnifyingglass")
+                .font(.subheadline)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .padding(.top, 2)
+          }
         }
         Spacer(minLength: 8)
         Button(action: onAbout) {

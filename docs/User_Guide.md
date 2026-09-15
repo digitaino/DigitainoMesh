@@ -429,7 +429,7 @@ The Weather tool shows severe weather alerts, current conditions and the forecas
 
 **The place**
 
-Everything on the screen answers for one place, named in the header. It is your location when the app has one; tap the place name to search for a town instead, for this visit, and **Back to my location** to return. With no location the screen asks **Where do you want weather for?** and offers **Use my location** and **Search a town**. A location more than an hour old is shown as last known, with its age, and never earns the green check.
+Everything on the screen answers for one place, named in the header. It is your location when the app has one; tap **Search a town**, or the place name, to pick a town or an airport code instead, for this visit, and **Back to my location** to return. Picking a place asks the bot for its forecast when the phone has none fresh for it. With no location the screen asks **Where do you want weather for?** and offers **Use my location** and **Search a town**. A location more than an hour old is shown as last known, with its age, and never earns the green check.
 
 **What the screen shows**
 
@@ -438,7 +438,7 @@ Everything on the screen answers for one place, named in the header. It is your 
    - otherwise the reason it can't tell (no alert list yet, the list is old, messages were missed, your radio isn't connected, the place is outside the bot's area), with **Ask for alerts** where asking would help.
 
    Tap an alert for its map (the storm polygon, or the zones and counties filled from bundled boundaries), whether it covers your place, its details and areas, and **Ask for full text** for the forecaster's narrative. **Alerts in WX-AUS's area** puts every alert the bot holds on one map and list.
-2. **Now**: the nearest fresh weather station's reading, with its distance and the time of the report. **Weather stations** lists every station the bot reports on; a station's page has all its readings and its coded airport reports, with **Ask for METAR (conditions)** and **Ask for TAF (forecast)**.
+2. **Now**: the nearest fresh weather station's reading, with its distance and the time of the report. When the phone holds no reading near the place, the card names the nearest weather station and offers **Ask for current conditions**. **Weather stations** lists every station the bot reports on; a station's page has all its readings and its coded airport reports, with **Ask for METAR (conditions)** and **Ask for TAF (forecast)**.
 3. **Forecast**: the forecast for the place's nearest forecast point, labelled Today, Tonight, Tomorrow and by weekday, with **Ask for forecast** when nothing is held for it. A place more than 115 km from any forecast point says so rather than borrowing a distant one.
 4. **Weather Service text reports**: the forecast discussion, hazardous weather outlook, storm reports and rainfall totals for your state (which you can change), and space weather, each with **Ask for latest**. Long replies arrive in parts; a part that never arrives is marked.
 

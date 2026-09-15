@@ -16,6 +16,7 @@ struct WeatherPlacePickerView: View {
 
   @State private var query = ""
   @State private var results: [MeshWXPlace] = []
+  @State private var stationResults: [StationResult] = []
 
   private var trimmedQuery: String {
     query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,7 +35,7 @@ struct WeatherPlacePickerView: View {
           otherPlacesSection
         } else {
           Section {
-            if results.isEmpty {
+            if results.isEmpty, stationResults.isEmpty {
               Text(L10n.Weather.Weather.Picker.noResults)
                 .foregroundStyle(.secondary)
             } else {
@@ -50,6 +51,21 @@ struct WeatherPlacePickerView: View {
             }
           }
           .themedRowBackground(theme)
+          if !stationResults.isEmpty {
+            Section(L10n.Weather.Weather.Stations.title) {
+              ForEach(stationResults, id: \.self) { result in
+                Button {
+                  pick(.place(Self.place(for: result)))
+                } label: {
+                  placeRow(
+                    title: WeatherNames.stationName(result.station.name),
+                    detail: [result.station.icao, distance(toLat: result.station.lat, lon: result.station.lon)]
+                      .compactMap { $0 }.joined(separator: " · "))
+                }
+              }
+            }
+            .themedRowBackground(theme)
+          }
         }
       }
       // Rows are buttons; the default style tints their labels with the accent colour.
@@ -160,16 +176,59 @@ struct WeatherPlacePickerView: View {
   private func search(_ text: String) async {
     guard !text.isEmpty else {
       results = []
+      stationResults = []
       return
     }
     try? await Task.sleep(for: .milliseconds(120))
     guard !Task.isCancelled else { return }
     let origin = origin
-    let found = await Task.detached(priority: .userInitiated) {
-      MeshWXTables.shared.searchPlaces(query: text, nearLat: origin?.latitude, lon: origin?.longitude, limit: 25)
+    let found = await Task.detached(priority: .userInitiated) { () -> ([MeshWXPlace], [StationResult]) in
+      let tables = MeshWXTables.shared
+      let places = tables.searchPlaces(query: text, nearLat: origin?.latitude, lon: origin?.longitude, limit: 25)
+      return (places, Self.stations(matchingCode: text, near: origin, tables: tables))
     }.value
     guard !Task.isCancelled else { return }
-    results = found
+    results = found.0
+    stationResults = found.1
+  }
+
+  /// A weather station found by its airport code, with the town it is known by.
+  struct StationResult: Sendable, Hashable {
+    var station: MeshWXStation
+    var town: MeshWXPlace?
+  }
+
+  /// "KAUS", "TJSJ", "7R5": three or four letters and digits, what an airport code looks like.
+  nonisolated static func looksLikeStationCode(_ text: String) -> Bool {
+    (3...4).contains(text.count) && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+  }
+
+  /// Up to five stations whose code starts with the query, nearest first. Codes only: a name match
+  /// would bury the towns under every "Municipal Airport".
+  nonisolated static func stations(
+    matchingCode text: String, near origin: MeshWXCoordinate?, tables: MeshWXTables
+  ) -> [StationResult] {
+    guard looksLikeStationCode(text) else { return [] }
+    let code = text.uppercased()
+    let matches = tables.stations.filter { $0.hasPrefix(code) }.compactMap { tables.station(icao: $0) }
+    let ordered = matches.sorted { lhs, rhs in
+      guard let origin else { return lhs.icao < rhs.icao }
+      let left = MeshWXGeo.distanceKilometres(fromLat: origin.latitude, lon: origin.longitude, toLat: lhs.lat, lon: lhs.lon)
+      let right = MeshWXGeo.distanceKilometres(fromLat: origin.latitude, lon: origin.longitude, toLat: rhs.lat, lon: rhs.lon)
+      return left == right ? lhs.icao < rhs.icao : left < right
+    }
+    return ordered.prefix(5).map { StationResult(station: $0, town: tables.nearestPlace(toLat: $0.lat, lon: $0.lon, within: 15)) }
+  }
+
+  /// A station found by its code, as a searched place: named by its town when one is close.
+  static func place(for result: StationResult) -> WeatherPlace {
+    let label = result.town.map { WeatherNames.placeLabel(name: $0.name, state: $0.state) }
+      ?? WeatherNames.placeLabel(name: WeatherNames.stationName(result.station.name), state: result.station.state)
+    return WeatherPlace(
+      kind: .searched,
+      coordinate: MeshWXCoordinate(latitude: result.station.lat, longitude: result.station.lon),
+      label: label,
+      uncertaintyKilometres: 5)
   }
 
   private func distance(toLat lat: Double, lon: Double) -> String? {

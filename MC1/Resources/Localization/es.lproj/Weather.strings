@@ -337,6 +337,9 @@
 /* Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town */
 "weather.now.noneNearbyUnknown" = "No hay estaciones meteorológicas cerca de %1$@. La más cercana: %2$@.";
 
+/* Location: WeatherCopy.swift - No reading held near the place, but a weather station within 80 km can be asked for. %1$@ is the place, %2$@ the station's name, %3$@ a distance like "6 km" */
+"weather.now.stationNotHeard" = "Aún no hay condiciones actuales para %1$@. La estación meteorológica más cercana es %2$@, a %3$@.";
+
 /* Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name */
 "weather.now.stationsInArea" = "%1$lld estaciones en la zona de %2$@";
 
@@ -748,7 +751,7 @@
 "weather.picker.title" = "Elige un lugar";
 
 /* Location: WeatherPlacePickerView.swift - Search field prompt */
-"weather.picker.prompt" = "Localidad o ciudad";
+"weather.picker.prompt" = "Localidad, ciudad o código de aeropuerto";
 
 /* Location: WeatherPlacePickerView.swift - Shown when a search matches nothing */
 "weather.picker.noResults" = "Ninguna localidad coincide";

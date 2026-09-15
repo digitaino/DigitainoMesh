@@ -451,6 +451,12 @@ enum WeatherCopy {
     return L10n.Weather.Weather.Now.noneNearby(placeName, nearestTown, WeatherFormatting.kilometres(kilometres))
   }
 
+  /// "No current conditions for San Juan yet. The nearest weather station is Luis Munoz Marin
+  /// International Airport, 11 km."
+  static func stationNotHeard(placeName: String, stationName: String, kilometres: Double) -> String {
+    L10n.Weather.Weather.Now.stationNotHeard(placeName, stationName, WeatherFormatting.kilometres(kilometres))
+  }
+
   /// "14 stations in WX-AUS's area", or "3 weather stations" when none came in the bot's batch.
   static func stationLink(inArea: Int, total: Int, source: String) -> String {
     if inArea > 0 {

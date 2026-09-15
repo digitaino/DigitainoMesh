@@ -176,3 +176,45 @@ struct WeatherToolModelTests {
     #expect(store.rootAppeared { true } !== model)
   }
 }
+
+/// Picking a town asks for its forecast only when the card would offer the same ask, and airport
+/// codes find stations.
+@Suite("Weather place search")
+@MainActor
+struct WeatherPlaceSearchTests {
+  @Test
+  func `a town with no forecast held asks for its point`() throws {
+    let point = try #require(MeshWXTables.shared.point(at: 103))
+    #expect(WeatherToolModel.forecastRequest(for: .missing(point: point, kilometres: 4)) == .forecast(point: 103))
+  }
+
+  @Test
+  func `a town with no forecast point near, or no place, asks for nothing`() {
+    #expect(WeatherToolModel.forecastRequest(for: .noPointNearby(nearest: nil, kilometres: nil)) == nil)
+    #expect(WeatherToolModel.forecastRequest(for: .noPlace) == nil)
+  }
+
+  @Test
+  func `airport codes are three or four letters and digits`() {
+    #expect(WeatherPlacePickerView.looksLikeStationCode("TJSJ"))
+    #expect(WeatherPlacePickerView.looksLikeStationCode("7R5"))
+    #expect(!WeatherPlacePickerView.looksLikeStationCode("San Juan"))
+    #expect(!WeatherPlacePickerView.looksLikeStationCode("sj"))
+  }
+
+  @Test
+  func `a code finds its station, and the station becomes a searched place named by its town`() throws {
+    let found = WeatherPlacePickerView.stations(matchingCode: "tjsj", near: nil, tables: .shared)
+    let result = try #require(found.first)
+    #expect(result.station.icao == "TJSJ")
+    let place = WeatherPlacePickerView.place(for: result)
+    #expect(place.kind == .searched)
+    #expect(place.coordinate == MeshWXCoordinate(latitude: result.station.lat, longitude: result.station.lon))
+    #expect(place.label.hasSuffix(", PR"))
+  }
+
+  @Test
+  func `a town name is not searched as a code`() {
+    #expect(WeatherPlacePickerView.stations(matchingCode: "Austin", near: nil, tables: .shared).isEmpty)
+  }
+}

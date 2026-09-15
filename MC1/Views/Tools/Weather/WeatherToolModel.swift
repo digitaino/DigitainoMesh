@@ -90,6 +90,8 @@ final class WeatherToolModel {
   @ObservationIgnored private var needsAnotherBuild = false
   @ObservationIgnored private var hasRequestedGeometry = false
   @ObservationIgnored private(set) var fingerprints: [WeatherRequest: Fingerprint] = [:]
+  /// A town just picked: its forecast is asked for once, from the first build that shows it.
+  @ObservationIgnored private var forecastAskOnPick: WeatherPlace?
 
   // Caches, so the 30-second rebuild reads no database, no disk and no 35,000-place table.
   @ObservationIgnored private var cachedContacts: [ContactDTO]?
@@ -368,6 +370,7 @@ final class WeatherToolModel {
     placeFacts = result.placeFacts
     stationTowns = result.stationTowns
     updatePlaceState()
+    askForecastIfPicked(result.snapshot)
 
     if result.context.needsGeometry, !hasRequestedGeometry {
       hasRequestedGeometry = true
@@ -402,11 +405,44 @@ final class WeatherToolModel {
     updatePlaceState()
   }
 
-  /// A town from the picker, for this visit only.
+  /// A town from the picker, for this visit only. Picking it also asks for its forecast when none
+  /// fresh is held (owner decision 2026-09-15, docs/MESHWX_UI.md §3.1).
   func pick(_ place: WeatherPlace) {
     searchedPlace = place
+    forecastAskOnPick = place
     endLocating()
     scheduleRebuild()
+  }
+
+  /// The one request that goes out without its own button: picking the town was the tap. Sent
+  /// once, from the first build that shows the picked town, and only when that build holds no fresh
+  /// forecast for it and nothing blocks asking.
+  private func askForecastIfPicked(_ snapshot: WeatherScreenSnapshot) {
+    guard let picked = forecastAskOnPick else { return }
+    guard searchedPlace == picked else {
+      forecastAskOnPick = nil
+      return
+    }
+    // A build that started before the pick still shows the old place.
+    guard snapshot.place == picked else { return }
+    forecastAskOnPick = nil
+    guard let request = Self.forecastRequest(for: snapshot.forecast) else { return }
+    switch status(for: request) {
+    case .idle, .settled:
+      Task { await send(request) }
+    case .pending, .waitingForOther, .blocked:
+      break
+    }
+  }
+
+  /// What "Ask for forecast" sends for a forecast card: the point's forecast when none is held or
+  /// it is stale; nothing when a fresh one is held or no point is near.
+  nonisolated static func forecastRequest(for card: WeatherForecastCard) -> WeatherRequest? {
+    switch card {
+    case let .missing(point, _): .forecast(point: point.index)
+    case let .forecast(summary) where summary.isStale: .forecast(point: summary.point.index)
+    case .forecast, .noPlace, .noPointNearby: nil
+    }
   }
 
   /// Back to the phone's location; a stale fix is refreshed, with "Locating…" meanwhile.

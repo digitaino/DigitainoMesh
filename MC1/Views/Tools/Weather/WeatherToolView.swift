@@ -154,7 +154,7 @@ private struct WeatherToolScreen: View {
     let line = WeatherAlertsSection.statusLine(snapshot, model: model)
     return (
       line?.action == .askForAlerts ? model.alertsRequest(for: snapshot.alertStatus) : nil,
-      WeatherNowSection.askRequest(snapshot),
+      WeatherNowSection.askRequest(snapshot, context: model.context),
       WeatherForecastSection.askRequest(snapshot)
     )
   }

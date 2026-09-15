@@ -46,7 +46,8 @@ Further defects in the same data:
 4. **An answer on the channel is everyone's.** Other people's answers are kept and labelled
    as theirs; this phone's own requests are said to be public before they are sent.
 5. **Asking costs everyone airtime**: one deliberate tap, a button that says what it asks,
-   progress where you can see it, nothing automatic, and no second request for anything the
+   progress where you can see it, nothing automatic (picking a town is the tap for its forecast,
+   §3.1 O-1), and no second request for anything the
    channel delivered in the last five minutes.
 6. **Details one tap away, not one scroll away.** The main screen is a summary; alerts and
    current conditions are above the fold on a 6.1" iPhone; everything else drills in.
@@ -108,6 +109,7 @@ Further defects in the same data:
 | I-C2 | The 30 s tick ran a full rebuild with database and disk reads | **Adopted in part.** The rebuild stays (expiry on time depends on it) but reads cached inputs; no tick while inactive. Rebuilding only at computed time boundaries **rejected** as fragile |
 | I-C5 | The compact/regular shell swap (rotation, Split View) destroyed the model | **Adopted.** The model is held for the tool visit outside the view |
 | I-A | First-time user review: on a storm night Now fell below the fold; "none has arrived" read as "no alerts"; "radio" meant two things; rows never said they covered you; a purple crosshair pin; taps with no visible result | **Adopted.** Source footer folded into the status line, one-line header, "Alerts for Austin", "your radio" only for the user's device, answer confirmations with "nothing new", a bottom pending bar, plainer picker, station and detail wording. Drawing the coverage footprint on a map: not in this cut |
+| O-1 | Rafael, 2026-09-15: search was hard to find, picking a town fetched nothing, and San Juan showed no current conditions | **Decided by Rafael.** A "Search a town" button under the header's second line. Picking a place asks for its forecast once, from the first build that shows it, when no fresh forecast is held and nothing blocks asking: the only request without its own button, and picking is the tap. With no held reading within 80 km, the Now card names the nearest bundled station within 80 km and offers "Ask for current conditions" (`>o <ICAO>`). The picker also finds stations by airport-code prefix |
 
 ## 4. Information architecture
 
@@ -132,8 +134,10 @@ radius r (km).
   one. r = max(accuracy, 0.5 km) + min(1 km per minute of age beyond 5 min, 25 km).
 - **Last known**: a phone fix older than 60 min. Shown as "Last known location · 3 h ago";
   never earns a green check.
-- **Searched**: a town from `places.json`, r = 5 km, labelled "For Round Rock, TX". Lasts
-  until the tool is left; the header offers "Back to my location".
+- **Searched**: a town from `places.json`, or a weather station found by its airport code and
+  named by its town, r = 5 km, labelled "For Round Rock, TX". Lasts
+  until the tool is left; the header offers "Back to my location". Picking one asks for its
+  forecast once, when the phone holds none fresh for it (§3.1 O-1).
 - **None** (location undetermined, denied, or never fixed): the header reads "Choose a place";
   the Alerts card still lists every alert in the bot's area without "here" claims; the Now and
   Forecast cards ask "Where do you want weather for?" with *Use my location* and *Search a town*.
@@ -219,7 +223,10 @@ Evaluated in this order; the first that applies wins.
   fields from one station.
 - Source line: "Austin–Camp Mabry · 3 km · in WX-AUS's 11:18 PM report".
 - Stale (no fresh station within 80 km): the nearest reading in small type with "3 h old".
-- None within 80 km: "No weather station near Dallas. Nearest: Temple, 190 km."
+- No held reading within 80 km, but a bundled station is: "No current conditions for San Juan
+  yet. The nearest weather station is Luis Munoz Marin International Airport, 11 km." + Ask for
+  current conditions (`>o TJSJ`); once answered, that reading is the primary.
+- No station of any kind within 80 km: "No weather station near Dallas. Nearest: Temple, 190 km."
 - Footer: "14 stations in WX-AUS's area ›" ("14 weather stations ›" when none came in a batch).
 - Empty: "No current conditions yet. WX-AUS broadcasts them every hour." + Ask.
 
@@ -251,7 +258,8 @@ Your location · WX-AUS last heard 2 min ago   ⓘ
 ```
 
 A searched town reads "Searched town · Back to my location". "Last heard" counts live traffic
-only; with none this session the time is left out.
+only; with none this session the time is left out. A "Search a town" button sits under that
+line whenever a place is shown; it opens the same picker as the title.
 
 Banners, at most one, above the cards:
 
@@ -321,7 +329,8 @@ heard on the channel without an advert is named "Weather radio 041D" and its ask
   text that answered this phone's request, or labels one somebody else asked for; missing-part
   markers; Ask for latest.
 - **Place picker** (sheet, `.searchable` on its own list): Your location (with its state),
-  search results with state and distance, "Other people asked WX-AUS about" (forecast points
+  town results with state and distance, weather stations whose airport code starts with a
+  three- or four-character query (up to five, nearest first), "Other people asked WX-AUS about" (forecast points
   held that this phone did not request, received in the last 24 h, excluding 0xFFFF; a point
   name without a state reads "San Juan · Luis Munoz Marin International Airport") with the footer
   "When anyone asks WX-AUS, the answer goes to everyone listening. Who asked isn't shared."

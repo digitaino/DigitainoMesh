@@ -14,11 +14,7 @@ struct WeatherForecastSection: View {
   let onSearch: () -> Void
 
   static func askRequest(_ snapshot: WeatherScreenSnapshot) -> WeatherRequest? {
-    switch snapshot.forecast {
-    case let .missing(point, _): .forecast(point: point.index)
-    case let .forecast(summary) where summary.isStale: .forecast(point: summary.point.index)
-    case .forecast, .noPlace, .noPointNearby: nil
-    }
+    WeatherToolModel.forecastRequest(for: snapshot.forecast)
   }
 
   var body: some View {

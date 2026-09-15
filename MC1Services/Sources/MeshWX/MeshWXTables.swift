@@ -380,6 +380,25 @@ public final class MeshWXTables: Sendable {
     return best
   }
 
+  /// Nearest weather station by great-circle distance, within `radiusKilometres`: the station to
+  /// ask with `>o <ICAO>` when no reading the phone holds is near a place. Nil beyond the radius:
+  /// a reading from farther away would not describe the place.
+  public func nearestStation(
+    toLat lat: Double, lon: Double, within radiusKilometres: Double = 80
+  ) -> MeshWXStation? {
+    var best: (station: MeshWXStation, distance: Double)?
+    for station in stationsByICAO.values {
+      let distance = MeshWXGeo.distanceKilometres(fromLat: lat, lon: lon, toLat: station.lat, lon: station.lon)
+      guard distance <= radiusKilometres else { continue }
+      if let current = best,
+         distance > current.distance || (distance == current.distance && station.icao >= current.station.icao) {
+        continue
+      }
+      best = (station, distance)
+    }
+    return best?.station
+  }
+
   // MARK: - Search (spec §11)
 
   /// The place to name a coordinate by ("Austin"), within `radiusKilometres`.

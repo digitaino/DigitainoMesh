@@ -213,4 +213,14 @@ struct MeshWXNearestPlaceTests {
     // 250 km out in the Gulf of Mexico.
     #expect(tables.nearestPlace(toLat: 26.5, lon: -93.5) == nil)
   }
+
+  @Test func sanJuanAirportIsItsOwnNearestStation() throws {
+    let station = try #require(tables.nearestStation(toLat: 18.433, lon: -66.011))
+    #expect(station.icao == "TJSJ")
+  }
+
+  @Test func noStationIsOfferedFromBeyondTheRadius() {
+    // The middle of the North Atlantic.
+    #expect(tables.nearestStation(toLat: 30.0, lon: -50.0) == nil)
+  }
 }

@@ -338,6 +338,9 @@
 /* Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town */
 "weather.now.noneNearbyUnknown" = "No weather station near %1$@. Nearest: %2$@.";
 
+/* Location: WeatherCopy.swift - No reading held near the place, but a weather station within 80 km can be asked for. %1$@ is the place, %2$@ the station's name, %3$@ a distance like "6 km" */
+"weather.now.stationNotHeard" = "No current conditions for %1$@ yet. The nearest weather station is %2$@, %3$@.";
+
 /* Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name */
 "weather.now.stationsInArea" = "%1$lld stations in %2$@'s area";
 
@@ -749,7 +752,7 @@
 "weather.picker.title" = "Choose a place";
 
 /* Location: WeatherPlacePickerView.swift - Search field prompt */
-"weather.picker.prompt" = "Town or city";
+"weather.picker.prompt" = "Town, city or airport code";
 
 /* Location: WeatherPlacePickerView.swift - Shown when a search matches nothing */
 "weather.picker.noResults" = "No matching town";

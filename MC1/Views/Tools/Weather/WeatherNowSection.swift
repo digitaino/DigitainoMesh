@@ -16,11 +16,13 @@ struct WeatherNowSection: View {
   let onSearch: () -> Void
 
   /// The request the card's button sends, when it shows one.
-  static func askRequest(_ snapshot: WeatherScreenSnapshot) -> WeatherRequest? {
+  static func askRequest(_ snapshot: WeatherScreenSnapshot, context: WeatherScreenContext) -> WeatherRequest? {
     switch snapshot.primaryStation {
     case .noObservations: .observations
     case let .reading(reading) where reading.isStale: WeatherToolModel.observationsRequest(for: reading)
-    case .reading, .noneNearby, .noPlace: nil
+    // No held reading near the place, but a station is: ask for that one station.
+    case .noneNearby: context.nearbyStation.map { .observation(station: $0.icao) }
+    case .reading, .noPlace: nil
     }
   }
 
@@ -56,11 +58,23 @@ struct WeatherNowSection: View {
         readingRow(reading)
       }
     case let .noneNearby(nearest):
-      Text(WeatherCopy.noStationNearby(
-        placeName: model.placeName ?? "",
-        nearestTown: model.context.nearestStationTown ?? WeatherNames.stationName(nearest.station.name),
-        kilometres: nearest.distanceKilometres))
-      .font(.subheadline)
+      if let station = model.context.nearbyStation {
+        VStack(alignment: .leading, spacing: 8) {
+          Text(WeatherCopy.stationNotHeard(
+            placeName: model.placeName ?? "", stationName: station.name, kilometres: station.kilometres))
+          .font(.subheadline)
+          WeatherAskButton(
+            model: model, title: L10n.Weather.Weather.Request.askConditions,
+            request: .observation(station: station.icao), showsFootnotes: showsAskFootnotes)
+        }
+        .padding(.vertical, 2)
+      } else {
+        Text(WeatherCopy.noStationNearby(
+          placeName: model.placeName ?? "",
+          nearestTown: model.context.nearestStationTown ?? WeatherNames.stationName(nearest.station.name),
+          kilometres: nearest.distanceKilometres))
+        .font(.subheadline)
+      }
     case .noObservations:
       VStack(alignment: .leading, spacing: 8) {
         Text(L10n.Weather.Weather.Now.empty(WeatherFormatting.sentenceStart(model.sourceName)))

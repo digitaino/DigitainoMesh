@@ -12,6 +12,17 @@ struct WeatherPlaceFacts: Sendable {
   /// Looked up once the outlines were loaded.
   var hasCounty = false
   var county: WeatherAreaName?
+  /// The nearest bundled weather station within 80 km, looked up once per place.
+  var hasNearbyStation = false
+  var nearbyStation: WeatherNearbyStation?
+}
+
+/// A weather station near the place that the phone holds no reading from ("Luis Munoz Marin
+/// International Airport, 11 km"): the one station worth asking for by its code.
+struct WeatherNearbyStation: Sendable, Hashable {
+  var icao: String
+  var name: String
+  var kilometres: Double
 }
 
 /// What the model hands to a build: references to actors, plain values, and the caches from the
@@ -85,6 +96,9 @@ struct WeatherScreenContext: Sendable {
   var isGeometryLoaded = false
   /// The town named for the nearest station when none is in reach ("Temple").
   var nearestStationTown: String?
+  /// With no held reading in reach of the place: the nearest bundled station, which can be asked
+  /// for (`>o <ICAO>`).
+  var nearbyStation: WeatherNearbyStation?
 }
 
 struct WeatherBuildResult: Sendable {
@@ -213,6 +227,24 @@ enum WeatherScreenBuilder {
         stationTowns[nearest.index] = town
         context.nearestStationTown = town
       }
+    }
+
+    if case .noneNearby = snapshot.primaryStation, let place {
+      if !facts.hasNearbyStation {
+        facts.nearbyStation = tables.nearestStation(
+          toLat: place.coordinate.latitude, lon: place.coordinate.longitude,
+          within: WeatherPrimaryStation.maxDistanceKilometres
+        ).map { station in
+          WeatherNearbyStation(
+            icao: station.icao,
+            name: WeatherNames.stationName(station.name),
+            kilometres: MeshWXGeo.distanceKilometres(
+              fromLat: place.coordinate.latitude, lon: place.coordinate.longitude,
+              toLat: station.lat, lon: station.lon))
+        }
+        facts.hasNearbyStation = true
+      }
+      context.nearbyStation = facts.nearbyStation
     }
 
     return WeatherBuildResult(
