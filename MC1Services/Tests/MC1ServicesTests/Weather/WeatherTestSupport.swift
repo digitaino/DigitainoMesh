@@ -143,6 +143,16 @@ actor FakeWeatherTransport: WeatherTransport {
   /// an absent slot is unreadable.
   private var secrets: [UInt8: Data] = [3: WeatherChannel.secret]
   private(set) var secretLookups: [UInt8] = []
+  /// Whether the fake radio is draining its queue: datagrams delivered meanwhile are backlog.
+  private var drainingBacklog = false
+
+  func isDrainingBacklog() async -> Bool {
+    drainingBacklog
+  }
+
+  func setDrainingBacklog(_ draining: Bool) {
+    drainingBacklog = draining
+  }
 
   func channelSecret(at index: UInt8) async -> Data? {
     secretLookups.append(index)

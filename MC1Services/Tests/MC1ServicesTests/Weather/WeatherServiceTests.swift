@@ -245,7 +245,7 @@ struct WeatherServiceTests {
     _ = try await h.service.send(.stormReports(state: "TX"), to: F.bot)
     _ = await h.service.ingest(F.text(seq: 1, subject: .spaceWeather, group: 1, index: 0, total: 1, text: "quiet sun"))
     #expect(await h.service.pendingRequests().count == 1)
-    _ = await h.service.ingest(F.text(seq: 2, subject: .stormReports, group: 2, index: 0, total: 2, text: "0115 HAIL"))
+    _ = await h.service.ingest(F.text(seq: 2, subject: .stormReports, group: 2, index: 0, total: 2, text: "0115 HAIL 2 N AUSTIN TRAVIS TX"))
     #expect(await weatherWaitUntil { settled.value.count == 1 })
     let state = try #require(await h.service.state(for: F.botID))
     #expect(state.texts[2]?.request == .stormReports(state: "TX"))
@@ -346,11 +346,12 @@ struct WeatherServiceTests {
     #expect(try await h.service.send(.digest, to: F.bot) == nil)
     #expect(await h.transport.sent.isEmpty)
     #expect(await weatherWaitUntil { settled.value.count == 1 })
-    guard case let .servedFromCache(receivedAt) = settled.value.first?.1 else {
+    guard case let .servedFromCache(receivedAt, contentAsOf) = settled.value.first?.1 else {
       Issue.record("expected servedFromCache, got \(String(describing: settled.value.first?.1))")
       return
     }
     #expect(receivedAt == h.clock.now.addingTimeInterval(-40))
+    #expect(contentAsOf == Date(unixMinutes: F.t0Minutes))
   }
 
   @Test
@@ -361,8 +362,9 @@ struct WeatherServiceTests {
     #expect(try await h.service.send(.observations, to: F.bot) != nil)
   }
 
+  /// Spec §8.1: a reply with a part missing may be asked for again after 20 s.
   @Test
-  func `a text request is sent again even inside the cache window`() async throws {
+  func `a text request whose reply is incomplete is sent again inside the cache window`() async throws {
     let h = makeHarness()
     let settled = collectSettlements(h.events)
     _ = try await h.service.send(.hazardousOutlook, to: F.bot)

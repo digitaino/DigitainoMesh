@@ -98,8 +98,23 @@ struct WeatherScreenSnapshotTests {
   func `a bot quiet for two hours is flagged`() {
     var state = P.state()
     state.lastHeardAt = P.now.addingTimeInterval(-2 * 3600)
+    state.lastLiveHeardAt = P.now.addingTimeInterval(-2 * 3600)
     #expect(snapshot(inputs(states: [P.botID: state])).sourceQuietSince == P.now.addingTimeInterval(-2 * 3600))
-    #expect(snapshot(inputs()).sourceQuietSince == nil)
+    var recent = P.state()
+    recent.lastLiveHeardAt = P.now.addingTimeInterval(-60)
+    #expect(snapshot(inputs(states: [P.botID: recent])).sourceQuietSince == nil)
+  }
+
+  /// A backlog drained at connect is stamped with the drain time: it cannot say the bot is in
+  /// range.
+  @Test
+  func `a backlog drained just now does not count as hearing the bot`() {
+    var state = P.state()
+    state.lastHeardAt = P.now.addingTimeInterval(-30)
+    state.lastLiveHeardAt = P.now.addingTimeInterval(-3 * 3600)
+    let screen = snapshot(inputs(states: [P.botID: state]))
+    #expect(screen.source?.lastHeardAt == P.now.addingTimeInterval(-30))
+    #expect(screen.sourceQuietSince == P.now.addingTimeInterval(-3 * 3600))
   }
 
   @Test

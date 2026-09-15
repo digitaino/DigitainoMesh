@@ -81,6 +81,8 @@ public struct WeatherScreenSnapshot: Sendable {
     /// Nil for a bot heard on the channel without an advert.
     public var bot: WeatherBot?
     public var lastHeardAt: Date?
+    /// The last message heard live, not drained from the radio's queue (`WeatherBotState`).
+    public var lastLiveHeardAt: Date?
   }
 
   public struct Inputs: Sendable {
@@ -138,7 +140,8 @@ public struct WeatherScreenSnapshot: Sendable {
   public var otherPlaces: [WeatherOtherPlace]
   public var texts: [WeatherTextItem]
   public var requestBlock: WeatherRequestBlock?
-  /// Set when the source bot has not been heard for 90 minutes: it may not answer.
+  /// Set when the source bot has not been heard live for 90 minutes: it may not answer. A
+  /// backlog drained at connect is stamped with the drain time and does not count.
   public var sourceQuietSince: Date?
   public var now: Date
 
@@ -185,8 +188,8 @@ public struct WeatherScreenSnapshot: Sendable {
       states: inputs.states, place: inputs.place, tables: tables, now: now, calendar: inputs.calendar)
     let placePoint: UInt16? = switch forecast {
     case let .forecast(summary): summary.point.index
-    case let .missing(point): point.index
-    case .noPlace: nil
+    case let .missing(point, _): point.index
+    case .noPlace, .noPointNearby: nil
     }
 
     let texts = inputs.states.flatMap { botID, state in
@@ -214,7 +217,7 @@ public struct WeatherScreenSnapshot: Sendable {
       texts: texts,
       requestBlock: requestBlock,
       sourceQuietSince: source.flatMap { source in
-        guard let heard = source.lastHeardAt, now.timeIntervalSince(heard) > quietAfter else { return nil }
+        guard let heard = source.lastLiveHeardAt, now.timeIntervalSince(heard) > quietAfter else { return nil }
         return heard
       },
       now: now
@@ -228,7 +231,8 @@ public struct WeatherScreenSnapshot: Sendable {
       Source(
         botID: botID,
         bot: inputs.bots.first { $0.botID == botID },
-        lastHeardAt: inputs.states[botID]?.lastHeardAt)
+        lastHeardAt: inputs.states[botID]?.lastHeardAt,
+        lastLiveHeardAt: inputs.states[botID]?.lastLiveHeardAt)
     }
     let advertised = Set(inputs.bots.map(\.botID))
     let heard = inputs.states.keys

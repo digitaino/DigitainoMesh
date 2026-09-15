@@ -1,0 +1,295 @@
+import Foundation
+@testable import MC1Services
+import MeshWX
+import Testing
+
+/// Alert order, dedupe across bots, folding and the requests the alert buttons send, plus the
+/// coverage and forecast-reach rules that keep a far-away answer from reading as local.
+@Suite("Weather alert rules")
+struct WeatherAlertRulesTests {
+  typealias P = WeatherPhoneFixture
+  let tables = MeshWXTables.shared
+
+  static let svw42 = MeshWXWarningIdentity(event: 3, office: 35, etn: 42)
+  static let svw43 = MeshWXWarningIdentity(event: 3, office: 35, etn: 43)
+
+  /// A box about 13 km across centred on `latitude` over central Austin's longitude.
+  func box(at latitude: Double) -> [MeshWXCoordinate] {
+    [
+      MeshWXCoordinate(latitude: latitude + 0.05, longitude: -97.80), MeshWXCoordinate(latitude: latitude + 0.05, longitude: -97.68),
+      MeshWXCoordinate(latitude: latitude - 0.05, longitude: -97.68), MeshWXCoordinate(latitude: latitude - 0.05, longitude: -97.80)
+    ]
+  }
+
+  func stored(
+    event: UInt8, etn: UInt16, minutes: Int = 60, polygonAt latitude: Double? = P.austin.latitude,
+    areas: [MeshWXAreaRun]? = nil, receivedAgo: TimeInterval = 0
+  ) -> WeatherStoredWarning {
+    WeatherStoredWarning(
+      warning: MeshWXWarning(
+        identity: MeshWXWarningIdentity(event: event, office: 35, etn: etn),
+        expiresMinutes: UInt32((P.now.timeIntervalSince1970 + Double(minutes * 60)) / 60),
+        polygon: latitude.map(box(at:)), areas: areas),
+      receivedAt: P.now.addingTimeInterval(-receivedAgo))
+  }
+
+  func state(_ warnings: [WeatherStoredWarning], bot: UInt16 = P.botID) -> WeatherBotState {
+    var state = WeatherBotState(botID: bot)
+    for warning in warnings { state.warnings[warning.identity] = warning }
+    return state
+  }
+
+  func items(
+    _ states: [UInt16: WeatherBotState], place: WeatherPlace? = P.place(P.austin),
+    geometry: any WeatherAreaGeometry = UnloadedGeometry()
+  ) -> [WeatherAlertItem] {
+    WeatherAlertItems.make(states: states, place: place, geometry: geometry, tables: tables, now: P.now)
+  }
+
+  func status(_ states: [UInt16: WeatherBotState], place: WeatherPlace) -> WeatherAlertStatus {
+    let coverage = WeatherCoverage.make(states: states, tables: tables, now: P.now)
+    return WeatherAlertStatus.evaluate(
+      place: place, coverage: coverage, states: states, items: items(states, place: place),
+      isRadioConnected: true, sessionStartedAt: P.now.addingTimeInterval(-7200), tables: tables, now: P.now)
+  }
+
+  func listOnly(_ mutate: (inout WeatherBotState) -> Void = { _ in }) -> [UInt16: WeatherBotState] {
+    var state = WeatherBotState(botID: P.botID)
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: P.header(1, .digest), payload: .digest(MeshWXDigest(nowMinutes: P.nowMinutes - 20, feedHealth: 3, entries: []))),
+      to: &state, receivedAt: P.now.addingTimeInterval(-1190))
+    mutate(&state)
+    return [P.botID: state]
+  }
+
+  let heatZone = [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 192, run: 1)]
+
+  // MARK: - Coverage unknown
+
+  /// WX-AUS's list reaching a phone in Dallas, before any station batch has shown where WX-AUS
+  /// reports: the list says nothing about Dallas.
+  @Test
+  func `a list with no station batch behind it never reads as calm`() {
+    #expect(status(listOnly(), place: P.place(P.dallas, label: "Dallas, TX")) == .coverageUnknown)
+    #expect(status(listOnly(), place: P.place(P.austin)) == .coverageUnknown)
+  }
+
+  @Test
+  func `with coverage unknown the rows are still there`() {
+    let states = listOnly { $0.warnings[Self.svw42] = self.stored(event: 3, etn: 42) }
+    #expect(items(states).contains { $0.placement == .here })
+    #expect(status(states, place: P.place(P.austin)) == .coverageUnknown)
+  }
+
+  // MARK: - Order
+
+  @Test
+  func `here first, then priority over placement, and what just expired last`() {
+    let states = [P.botID: state([
+      stored(event: 1, etn: 9, minutes: -5),                           // Tornado Warning here, expired
+      stored(event: 14, etn: 5, minutes: 30, polygonAt: nil, areas: heatZone), // Heat Advisory, outlines loading
+      stored(event: 1, etn: 12, polygonAt: 30.57),                     // Tornado Warning ~28 km north
+      stored(event: 3, etn: 44, minutes: 90)                           // Severe Thunderstorm Warning here
+    ])]
+    let order = items(states).map { "\($0.identity.event).\($0.identity.etn)" }
+    #expect(order == ["3.44", "1.12", "14.5", "1.9"])
+  }
+
+  @Test
+  func `of two bots' copies the active one wins, then the later expiry`() throws {
+    let expiredButNewer = stored(event: 3, etn: 42, minutes: -5, receivedAgo: 0)
+    let active = stored(event: 3, etn: 42, minutes: 30, receivedAgo: 3600)
+    let longer = stored(event: 3, etn: 42, minutes: 60, receivedAgo: 7200)
+
+    let pair = try #require(items([0x0001: state([expiredButNewer], bot: 0x0001), 0x0002: state([active], bot: 0x0002)]).first)
+    #expect(pair.kind == .active)
+    #expect(pair.expiresAt == active.expiresAt)
+    #expect(pair.botIDs == [0x0001, 0x0002])
+
+    let three = items([
+      0x0001: state([expiredButNewer], bot: 0x0001), 0x0002: state([active], bot: 0x0002), 0x0003: state([longer], bot: 0x0003)
+    ])
+    #expect(three.count == 1)
+    #expect(three.first?.expiresAt == longer.expiresAt)
+  }
+
+  @Test
+  func `an upgrade marker stands in only when no bot holds the warning`() {
+    let copy = stored(event: 3, etn: 42)
+    let marker = WeatherPendingUpgrade(warning: copy.warning, cancelledAt: P.now.addingTimeInterval(-600))
+    for (markerBot, warningBot) in [(UInt16(0x0001), UInt16(0xFFFE)), (0xFFFE, 0x0001)] {
+      var markerState = WeatherBotState(botID: markerBot)
+      markerState.pendingUpgrades[Self.svw42] = marker
+      let listed = items([markerBot: markerState, warningBot: state([copy], bot: warningBot)])
+      #expect(listed.count == 1)
+      #expect(listed.first?.kind == .active)
+    }
+
+    var early = WeatherBotState(botID: 0x0001)
+    early.pendingUpgrades[Self.svw42] = marker
+    var late = WeatherBotState(botID: 0x0002)
+    late.pendingUpgrades[Self.svw42] = WeatherPendingUpgrade(warning: copy.warning, cancelledAt: P.now.addingTimeInterval(-60))
+    let markers = items([0x0001: early, 0x0002: late])
+    #expect(markers.first?.kind == .upgradedAwaitingReplacement(cancelledAt: P.now.addingTimeInterval(-60)))
+    #expect(markers.first?.botIDs == [0x0001, 0x0002])
+  }
+
+  // MARK: - Folding
+
+  @Test
+  func `storm warnings and unfinished upgrades are never folded, anything else past two is`() throws {
+    let tornadoes = items([P.botID: state([1, 2, 3].map { stored(event: 1, etn: $0) })])
+    #expect(WeatherAlertFolding.fold(tornadoes, tables: tables).rows.count == 3)
+
+    let storms = items([P.botID: state([1, 2, 3].map { stored(event: 3, etn: $0) })])
+    let foldedStorms = WeatherAlertFolding.fold(storms, tables: tables)
+    #expect(foldedStorms.rows.count == 3)
+    #expect(foldedStorms.folded == 0)
+
+    let heat = items([P.botID: state([1, 2, 3].map { stored(event: 14, etn: $0) })])
+    let foldedHeat = WeatherAlertFolding.fold(heat, tables: tables)
+    #expect(foldedHeat.rows.count == 2)
+    #expect(foldedHeat.folded == 1)
+
+    let mixed = items([P.botID: state([
+      stored(event: 14, etn: 1), stored(event: 14, etn: 2), stored(event: 25, etn: 3), stored(event: 1, etn: 4, polygonAt: 30.57)
+    ])])
+    let foldedMixed = WeatherAlertFolding.fold(mixed, tables: tables)
+    #expect(foldedMixed.rows.map(\.identity.etn) == [3, 1, 4], "the near Tornado Warning stays, in its place")
+    #expect(foldedMixed.folded == 1)
+
+    var upgraded = state([1, 2].map { stored(event: 14, etn: $0) })
+    let advisory = stored(event: 14, etn: 9, minutes: 120)
+    upgraded.pendingUpgrades[advisory.identity] = WeatherPendingUpgrade(warning: advisory.warning, cancelledAt: P.now)
+    let foldedUpgrade = WeatherAlertFolding.fold(items([P.botID: upgraded]), tables: tables)
+    #expect(foldedUpgrade.rows.contains { $0.identity.etn == 9 })
+    #expect(foldedUpgrade.folded == 0)
+  }
+
+  // MARK: - Requests
+
+  @Test
+  func `missed messages ask for the list, the one warning, or the place's county`() {
+    var gap = WeatherBotState(botID: P.botID)
+    gap.needsDigest = true
+    #expect(WeatherAlertRequests.missedMessages(source: gap, placeCountyUGC: "TXC453", tables: tables) == .digest)
+
+    var one = gap
+    one.missingFromDigest = [Self.svw42]
+    #expect(WeatherAlertRequests.missedMessages(source: one, placeCountyUGC: "TXC453", tables: tables) == .warning(identity: "SV.W.EWX.42"))
+
+    var several = one
+    several.missingFromDigest = [Self.svw42, Self.svw43]
+    #expect(WeatherAlertRequests.missedMessages(source: several, placeCountyUGC: "TXC453", tables: tables) == .warningsTouching(ugc: "TXC453"))
+    #expect(WeatherAlertRequests.missedMessages(source: several, placeCountyUGC: nil, tables: tables) == .activeWarnings)
+
+    var upgraded = one
+    let hays = MeshWXWarning(identity: Self.svw43, expiresMinutes: P.nowMinutes + 30,
+                             areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 209, run: 1)])
+    upgraded.pendingUpgrades[Self.svw43] = WeatherPendingUpgrade(warning: hays, cancelledAt: P.now)
+    #expect(WeatherAlertRequests.missedMessages(source: upgraded, placeCountyUGC: "TXC453", tables: tables) == .warningsTouching(ugc: "TXC453"))
+    #expect(WeatherAlertRequests.missedMessages(source: upgraded, placeCountyUGC: nil, tables: tables) == .warningsTouching(ugc: "TXC209"))
+
+    var unplacedUpgrade = WeatherBotState(botID: P.botID)
+    unplacedUpgrade.pendingUpgrades[Self.svw43] = WeatherPendingUpgrade(
+      warning: MeshWXWarning(identity: Self.svw43, expiresMinutes: P.nowMinutes + 30), cancelledAt: P.now)
+    #expect(WeatherAlertRequests.missedMessages(source: unplacedUpgrade, placeCountyUGC: nil, tables: tables) == .activeWarnings)
+  }
+
+  @Test
+  func `missing warnings ask for the one, the county's, or nothing`() {
+    var state = WeatherBotState(botID: P.botID)
+    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: "TXC453", tables: tables) == nil)
+    state.missingFromDigest = [Self.svw43]
+    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: "TXC453", tables: tables) == .warning(identity: "SV.W.EWX.43"))
+    state.missingFromDigest = [Self.svw42, Self.svw43]
+    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: "TXC453", tables: tables) == .warningsTouching(ugc: "TXC453"))
+    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: nil, tables: tables) == .activeWarnings)
+  }
+
+  @Test
+  func `identities render as the bot spells them and read back`() {
+    #expect(WeatherAlertRequests.identityString(Self.svw42, tables: tables) == "SV.W.EWX.42")
+    #expect(WeatherAlertRequests.identity(from: "sv.w.ewx.42", tables: tables) == Self.svw42)
+    #expect(WeatherAlertRequests.identity(from: "SV.W.EWX", tables: tables) == nil)
+    #expect(WeatherAlertRequests.identity(from: "ZZ.W.EWX.42", tables: tables) == nil)
+    #expect(WeatherAlertRequests.identity(from: "SV.W.QQQ.42", tables: tables) == nil)
+    #expect(WeatherAlertRequests.identityString(MeshWXWarningIdentity(event: 250, office: 35, etn: 1), tables: tables) == nil)
+  }
+
+  // MARK: - Ported from the app's copy tests
+
+  @Test
+  func `a near alert carries its distance and direction, a checking one is still a row`() throws {
+    let near = try #require(items([P.botID: state([stored(event: 3, etn: 21, polygonAt: 30.57)])]).first)
+    guard case let .near(kilometres, direction) = near.placement else {
+      Issue.record("expected near, got \(near.placement)")
+      return
+    }
+    #expect(kilometres > 20 && kilometres < 35)
+    #expect(direction == .north)
+
+    let checking = try #require(items([P.botID: state([stored(event: 14, etn: 1, polygonAt: nil, areas: heatZone)])]).first)
+    #expect(checking.placement == .checking)
+    #expect(checking.placement.isCardRow)
+  }
+
+  @Test
+  func `a day row keeps both temperatures and says when the rain is at night`() throws {
+    let calendar = P.calendar
+    let issued = try #require(calendar.date(from: DateComponents(year: 2026, month: 9, day: 14, hour: 5)))
+    let nine = try #require(calendar.date(from: DateComponents(year: 2026, month: 9, day: 14, hour: 9)))
+    let forecast = MeshWXForecast(
+      pointIndex: 1, issuedMinutes: UInt32(issued.timeIntervalSince1970 / 60), firstPeriod: 0,
+      periods: [MeshWXForecastPeriod(highF: 90, popPercent: 10, windy: true), MeshWXForecastPeriod(lowF: 70, popPercent: 70, thunder: true)])
+    let row = try #require(WeatherForecastRows.rows(for: forecast, now: nine, calendar: calendar).first)
+    #expect(row.highF == 90 && row.lowF == 70)
+    #expect(row.popPercent == 70 && row.popIsNight)
+    #expect(row.thunder && row.windy)
+  }
+
+  // MARK: - Forecast reach
+
+  static let albuquerque = MeshWXCoordinate(latitude: 35.0844, longitude: -106.6504)
+
+  @Test
+  func `Albuquerque has no forecast point near enough to stand for it`() throws {
+    let place = P.place(Self.albuquerque, label: "Albuquerque, NM")
+    guard case let .noPointNearby(nearest, kilometres) = WeatherForecastCard.make(
+      states: [:], place: place, tables: tables, now: P.now, calendar: P.calendar) else {
+      Issue.record("expected noPointNearby")
+      return
+    }
+    #expect(nearest != nil)
+    #expect((kilometres ?? 0) > WeatherForecastCard.pointReachKilometres)
+
+    // Even a forecast held for that nearest point is somewhere else's.
+    let point = try #require(nearest)
+    var state = WeatherBotState(botID: P.botID)
+    state.forecasts[point.index] = WeatherStoredForecast(
+      forecast: P.dailyForecast(point: point.index, issuedMinutes: P.nowMinutes - 60, temps: [(90, 60)]), receivedAt: P.now)
+    guard case .noPointNearby = WeatherForecastCard.make(
+      states: [P.botID: state], place: place, tables: tables, now: P.now, calendar: P.calendar) else {
+      Issue.record("expected noPointNearby with a far forecast held")
+      return
+    }
+  }
+
+  /// The cutoff's derivation, re-measured on a fixed sample of the bundle: about one place in a
+  /// hundred with any point in its region lies beyond it.
+  @Test
+  func `the reach cutoff leaves about one place in a hundred without a point`() throws {
+    var measured = 0
+    var beyond = 0
+    for place in stride(from: 0, to: tables.places.count, by: 25).map({ tables.places[$0] }) {
+      guard let point = tables.nearestPoint(toLat: place.lat, lon: place.lon) else { continue }
+      let kilometres = MeshWXGeo.distanceKilometres(fromLat: place.lat, lon: place.lon, toLat: point.lat, lon: point.lon)
+      guard kilometres <= 1000 else { continue }
+      measured += 1
+      if kilometres > WeatherForecastCard.pointReachKilometres { beyond += 1 }
+    }
+    try #require(measured > 1000)
+    let share = Double(beyond) / Double(measured)
+    #expect(share > 0.004 && share < 0.02, "\(beyond) of \(measured) beyond \(WeatherForecastCard.pointReachKilometres) km")
+  }
+}

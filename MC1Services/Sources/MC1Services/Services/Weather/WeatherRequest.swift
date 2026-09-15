@@ -104,9 +104,11 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   public var acceptsAnswerFromAnyBot: Bool {
     switch self {
     case .forecast, .forecastForPlace, .forecastDiscussion, .stormReports, .rainfall, .metar, .taf,
-      .observation, .warning, .warningText, .spaceWeather:
+      .observation, .warning, .spaceWeather:
       true
-    case .digest, .activeWarnings, .warningsTouching, .observations, .homeForecast, .hazardousOutlook:
+    // A narrative names its event and areas but not its office or tracking number, so only the
+    // bot asked can vouch that the text is for the warning asked about.
+    case .digest, .activeWarnings, .warningsTouching, .warningText, .observations, .homeForecast, .hazardousOutlook:
       false
     }
   }
