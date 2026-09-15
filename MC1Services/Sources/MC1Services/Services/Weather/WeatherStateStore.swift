@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import Synchronization
 
 /// Where `WeatherService` keeps its per-bot state between launches.
 ///
@@ -8,27 +9,53 @@ import OSLog
 public protocol WeatherStateStore: Sendable {
   func load() async throws -> [UInt16: WeatherBotState]
   func save(_ states: [UInt16: WeatherBotState]) async throws
+  /// Loads, applies `body`, and saves, with no other load, save or modify of this store in
+  /// between: two writers each doing load-then-save would otherwise lose one of the edits.
+  func modify(_ body: @Sendable (inout [UInt16: WeatherBotState]) -> Void) async throws
 }
 
 /// The on-disk store: `Application Support/MeshWX/state.json`, written atomically.
-public struct FileWeatherStateStore: WeatherStateStore {
+///
+/// An actor, and one instance per file: `default()` and `shared(url:)` hand every caller —
+/// the connection's service and the tool's offline path alike — the same instance, so their
+/// reads and writes of the file are serialised instead of interleaved.
+public actor FileWeatherStateStore: WeatherStateStore {
   /// Bumped when the shape changes; an older file is discarded rather than migrated, since
   /// the next broadcast rebuilds everything within hours.
   static let formatVersion = 1
 
-  public let url: URL
+  public nonisolated let url: URL
   private let logger = Logger(subsystem: "com.mc1", category: "WeatherStateStore")
 
+  /// A private instance. Two instances on one file do not serialise against each other; use
+  /// `shared(url:)` for a file anything else also writes.
   public init(url: URL) {
     self.url = url
   }
 
-  /// The app's default location. Shared by every connection: state belongs to bots, not to
-  /// the radio that happened to hear them.
+  private static let instances = Mutex<[URL: FileWeatherStateStore]>([:])
+
+  /// The one instance for a file.
+  public static func shared(url: URL) -> FileWeatherStateStore {
+    let key = url.standardizedFileURL
+    return instances.withLock { stores in
+      if let existing = stores[key] { return existing }
+      let store = FileWeatherStateStore(url: key)
+      stores[key] = store
+      return store
+    }
+  }
+
+  /// The app's default location, shared. Shared by every connection too: state belongs to
+  /// bots, not to the radio that happened to hear them.
   public static func `default`() -> FileWeatherStateStore {
+    shared(url: defaultURL)
+  }
+
+  public static var defaultURL: URL {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
       ?? FileManager.default.temporaryDirectory
-    return FileWeatherStateStore(url: base.appendingPathComponent("MeshWX/state.json"))
+    return base.appendingPathComponent("MeshWX/state.json")
   }
 
   private struct Snapshot: Codable {
@@ -36,7 +63,7 @@ public struct FileWeatherStateStore: WeatherStateStore {
     var bots: [WeatherBotState]
   }
 
-  public func load() async throws -> [UInt16: WeatherBotState] {
+  public func load() throws -> [UInt16: WeatherBotState] {
     guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
     let data = try Data(contentsOf: url)
     let decoder = JSONDecoder()
@@ -55,7 +82,7 @@ public struct FileWeatherStateStore: WeatherStateStore {
     return Dictionary(snapshot.bots.map { ($0.botID, $0) }, uniquingKeysWith: { first, _ in first })
   }
 
-  public func save(_ states: [UInt16: WeatherBotState]) async throws {
+  public func save(_ states: [UInt16: WeatherBotState]) throws {
     let directory = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let encoder = JSONEncoder()
@@ -66,6 +93,14 @@ public struct FileWeatherStateStore: WeatherStateStore {
     )
     let data = try encoder.encode(snapshot)
     try data.write(to: url, options: .atomic)
+  }
+
+  /// Synchronous inside the actor, so nothing else on this instance runs between the load and
+  /// the save.
+  public func modify(_ body: @Sendable (inout [UInt16: WeatherBotState]) -> Void) throws {
+    var states = try load()
+    body(&states)
+    try save(states)
   }
 }
 
@@ -84,6 +119,11 @@ public actor InMemoryWeatherStateStore: WeatherStateStore {
 
   public func save(_ states: [UInt16: WeatherBotState]) async throws {
     self.states = states
+    saveCount += 1
+  }
+
+  public func modify(_ body: @Sendable (inout [UInt16: WeatherBotState]) -> Void) async throws {
+    body(&states)
     saveCount += 1
   }
 }

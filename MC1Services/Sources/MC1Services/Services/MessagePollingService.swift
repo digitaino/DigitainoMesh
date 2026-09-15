@@ -64,6 +64,11 @@ actor MessagePollingService {
   /// When true, the event monitor skips message events to avoid double-processing.
   private var isPolling = false
 
+  /// Whether `pollAllMessages()` is draining the firmware queue — what the radio held while the
+  /// phone was away, at connect or on resync. The weather service reads it to tell a queued
+  /// datagram from a live one.
+  var isDrainingBacklog: Bool { isPolling }
+
   // MARK: - Initialization
 
   init(

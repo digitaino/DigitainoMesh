@@ -333,7 +333,8 @@ public final class ServiceContainer {
     settingsService = SettingsService(session: session)
     deviceService = DeviceService(dataStore: dataStore)
     advertisementService = AdvertisementService(session: session, dataStore: dataStore)
-    messagePollingService = MessagePollingService(session: session, dataStore: dataStore)
+    let messagePollingService = MessagePollingService(session: session, dataStore: dataStore)
+    self.messagePollingService = messagePollingService
     binaryProtocolService = BinaryProtocolService(session: session, dataStore: dataStore)
     debugLogBuffer = DebugLogBuffer(dataStore: dataStore)
     DebugLogBuffer.shared = debugLogBuffer
@@ -353,7 +354,10 @@ public final class ServiceContainer {
         session: session,
         storedChannelSecret: { [dataStore] index in
           try? await dataStore.fetchChannel(radioID: radioID, index: index)?.secret
-        }
+        },
+        // Weather drained from the firmware queue at connect is backlog, not proof the bot
+        // is in range now.
+        isDrainingBacklog: { await messagePollingService.isDrainingBacklog }
       ),
       store: FileWeatherStateStore.default()
     )

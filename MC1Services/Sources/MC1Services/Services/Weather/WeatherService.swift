@@ -14,21 +14,31 @@ public protocol WeatherTransport: Sendable {
   func sendRequest(to publicKey: Data, text: String) async throws
   /// The 16-byte secret of a channel slot, or nil when it cannot be read.
   func channelSecret(at index: UInt8) async -> Data?
+  /// Whether the radio's message queue — what it held while the phone was away — is being
+  /// drained right now, at connect or on resync. A datagram delivered meanwhile is backlog: it
+  /// can be hours old, and it says nothing about whether the bot is in range now.
+  func isDrainingBacklog() async -> Bool
 }
 
 /// The production transport over a `MeshCoreSession`.
 public struct SessionWeatherTransport: WeatherTransport {
   private let session: any MeshCoreSessionProtocol
   private let storedChannelSecret: @Sendable (UInt8) async -> Data?
+  private let drainingBacklog: @Sendable () async -> Bool
 
-  /// - Parameter storedChannelSecret: the app's own channel table, consulted when the radio
-  ///   cannot be asked.
+  /// - Parameters:
+  ///   - storedChannelSecret: the app's own channel table, consulted when the radio
+  ///     cannot be asked.
+  ///   - isDrainingBacklog: whether the firmware queue is being drained; the container wires it
+  ///     to the message poller. The default says never, so everything reads as live.
   public init(
     session: any MeshCoreSessionProtocol,
-    storedChannelSecret: @escaping @Sendable (UInt8) async -> Data? = { _ in nil }
+    storedChannelSecret: @escaping @Sendable (UInt8) async -> Data? = { _ in nil },
+    isDrainingBacklog: @escaping @Sendable () async -> Bool = { false }
   ) {
     self.session = session
     self.storedChannelSecret = storedChannelSecret
+    drainingBacklog = isDrainingBacklog
   }
 
   public func datagramEvents() async -> AsyncStream<MeshEvent> {
@@ -46,6 +56,10 @@ public struct SessionWeatherTransport: WeatherTransport {
     if let stored = await storedChannelSecret(index), stored == WeatherChannel.secret { return stored }
     if let info = try? await session.getChannel(index: index) { return info.secret }
     return await storedChannelSecret(index)
+  }
+
+  public func isDrainingBacklog() async -> Bool {
+    await drainingBacklog()
   }
 }
 
@@ -78,12 +92,14 @@ public actor WeatherService {
   private let now: @Sendable () -> Date
   private let answerTimeout: Duration
   private let stationIndex: @Sendable (String) -> UInt16?
+  private let tables: MeshWXTables
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "WeatherService")
 
   private nonisolated let eventBroadcaster = EventBroadcaster<WeatherEvent>()
 
   private var states: [UInt16: WeatherBotState] = [:]
   private var isLoaded = false
+  private var stampTask: Task<Void, Never>?
   private var monitorTask: Task<Void, Never>?
 
   private var session = WeatherSessionInfo()
@@ -106,20 +122,39 @@ public actor WeatherService {
   /// An answer anyone on the channel has already received, for the five-minute rule. Filled
   /// on ingest — not when this phone's own request settles — so twenty phones tapping after a
   /// siren send one request between them, not twenty.
+  ///
+  /// Only from a message the reducer applied and that was heard live. A duplicate, a list older
+  /// than the one held, an out-of-order warning the reducer set aside, or anything drained from
+  /// the radio's queue at connect is not something the bot would re-send from its cache now.
   enum AnswerKey: Hashable {
     case digest
     case coverageObservations
     case station(UInt16)
     case forecast(UInt16)
+    /// `>w`: any warning or alert list from the bot.
+    case activeWarnings
+    /// `>w <county or zone>`: the same.
+    case warningsTouching
+    /// `>w <identity>`: that warning, from any bot.
+    case warning(MeshWXWarningIdentity)
+    /// A text request, by subject and argument: only a complete reply this phone owns.
+    case text(WeatherRequest)
   }
 
-  private struct AnswerSlot: Hashable {
+  struct AnswerSlot: Hashable {
     /// Nil for answers that are the same whichever bot sends them.
     let botID: UInt16?
     let key: AnswerKey
   }
 
-  private var lastAnswers: [AnswerSlot: Date] = [:]
+  struct AnswerRecord: Hashable {
+    /// Phone clock: the bot's cache runs five minutes from its answer, which receipt stands for.
+    var receivedAt: Date
+    /// The answer's own time on the bot's clock, where the message carries one.
+    var contentAsOf: Date?
+  }
+
+  private var lastAnswers: [AnswerSlot: AnswerRecord] = [:]
 
   /// - Parameters:
   ///   - transport: The radio.
@@ -128,18 +163,21 @@ public actor WeatherService {
   ///   - answerTimeout: How long to wait for an answer before the retry; tests shorten it.
   ///   - stationIndex: ICAO → wire station index, for matching a one-station answer to
   ///     its request. Defaults to the bundled tables.
+  ///   - tables: For reading warning identities and text replies against requests.
   public init(
     transport: any WeatherTransport,
     store: any WeatherStateStore,
     now: @escaping @Sendable () -> Date = { Date() },
     answerTimeout: Duration = WeatherService.answerTimeout,
-    stationIndex: @escaping @Sendable (String) -> UInt16? = { MeshWXTables.shared.stationIndex(forICAO: $0) }
+    stationIndex: @escaping @Sendable (String) -> UInt16? = { MeshWXTables.shared.stationIndex(forICAO: $0) },
+    tables: MeshWXTables = .shared
   ) {
     self.transport = transport
     self.store = store
     self.now = now
     self.answerTimeout = answerTimeout
     self.stationIndex = stationIndex
+    self.tables = tables
   }
 
   // MARK: Events
@@ -157,26 +195,47 @@ public actor WeatherService {
 
   // MARK: Lifecycle
 
+  private struct StampedDatagram: Sendable {
+    let datagram: ChannelDatagram
+    let isBacklog: Bool
+  }
+
   /// Subscribes to channel datagrams. Called before the message polling service drains the
-  /// firmware queue, so datagrams queued while the phone was away are seen too.
+  /// firmware queue, so datagrams queued while the phone was away are seen too — and marked as
+  /// backlog.
   public func startEventMonitoring() async {
     await loadIfNeeded()
+    stampTask?.cancel()
     monitorTask?.cancel()
     session = WeatherSessionInfo(startedAt: now())
     weatherSlots = []
     foreignSlotsCheckedAt = [:]
     let stream = await transport.datagramEvents()
-    monitorTask = Task { [weak self] in
+    // Each datagram is marked live or backlog as it arrives, not when ingest reaches it: ingest
+    // can wait on a radio round trip for the slot check, and by then the drain may be over and
+    // a queued datagram would read as live. The mark costs one hop to the poller; the drain's
+    // next fetch after the last queued datagram is a radio round trip, which it beats.
+    let (stamped, continuation) = AsyncStream.makeStream(of: StampedDatagram.self)
+    stampTask = Task { [transport] in
       for await event in stream {
-        guard !Task.isCancelled, let self else { break }
+        guard !Task.isCancelled else { break }
         if case let .channelDataReceived(datagram) = event {
-          await self.ingest(datagram)
+          continuation.yield(StampedDatagram(datagram: datagram, isBacklog: await transport.isDrainingBacklog()))
         }
+      }
+      continuation.finish()
+    }
+    monitorTask = Task { [weak self] in
+      for await item in stamped {
+        guard !Task.isCancelled, let self else { break }
+        await self.ingest(item.datagram, isBacklog: item.isBacklog)
       }
     }
   }
 
   public func stopEventMonitoring() {
+    stampTask?.cancel()
+    stampTask = nil
     monitorTask?.cancel()
     monitorTask = nil
     session.startedAt = nil
@@ -223,11 +282,13 @@ public actor WeatherService {
     session
   }
 
-  /// Forgets everything held for one bot.
+  /// Forgets everything held for one bot, with every answer it gave and every answer any bot
+  /// gave: a forecast or warning slot filled by another bot would otherwise still answer for
+  /// data the user just cleared.
   public func clearState(for botID: UInt16) async {
     await loadIfNeeded()
     states.removeValue(forKey: botID)
-    lastAnswers = lastAnswers.filter { $0.key.botID != botID }
+    lastAnswers = lastAnswers.filter { slot, _ in slot.botID != nil && slot.botID != botID }
     await persist()
   }
 
@@ -236,8 +297,11 @@ public actor WeatherService {
   /// Decodes and applies one datagram. Anything that is not a v5 message on the `#meshwx` slot
   /// is ignored (spec §2.1: "ignore any `data_type` other than 0xFF10"; `0xFF10` is in the
   /// development range, so another application may use it on another channel).
+  ///
+  /// - Parameter isBacklog: the datagram was drained from the radio's queue (see
+  ///   `ingest(_:isBacklog:)` for the message).
   @discardableResult
-  public func ingest(_ datagram: ChannelDatagram) async -> [WeatherStateChange]? {
+  public func ingest(_ datagram: ChannelDatagram, isBacklog: Bool = false) async -> [WeatherStateChange]? {
     guard datagram.dataType == MeshWXWire.dataType else { return nil }
     guard await isWeatherSlot(datagram.channelIndex) else {
       session.foreignDatagramsIgnored += 1
@@ -252,7 +316,7 @@ public actor WeatherService {
       return nil
     }
     session.lastChannelDatagramAt = now()
-    return await ingest(message)
+    return await ingest(message, isBacklog: isBacklog)
   }
 
   private func isWeatherSlot(_ index: UInt8) async -> Bool {
@@ -276,49 +340,78 @@ public actor WeatherService {
 
   /// Applies an already-decoded message: the reducer, then request settlement, then
   /// persistence. Public so tests and previews can feed traffic without a radio.
+  ///
+  /// - Parameter isBacklog: the message was drained from the radio's queue rather than heard
+  ///   live. It changes state like any other — a warning is a warning — but proves nothing about
+  ///   now: it answers nothing for the five-minute rule and does not count as hearing the bot.
   @discardableResult
-  public func ingest(_ message: MeshWXMessage) async -> [WeatherStateChange] {
+  public func ingest(_ message: MeshWXMessage, isBacklog: Bool = false) async -> [WeatherStateChange] {
     await loadIfNeeded()
     let botID = message.header.bot
     let receivedAt = now()
     var state = states[botID] ?? WeatherBotState(botID: botID)
     let changes = WeatherStateReducer.apply(message, to: &state, receivedAt: receivedAt)
-    states[botID] = state
 
     let isDuplicate = changes.contains { change in
       if case .duplicate = change { return true }
       return false
     }
+    if !isDuplicate, !isBacklog {
+      state.lastLiveHeardAt = max(state.lastLiveHeardAt ?? receivedAt, receivedAt)
+    }
+    states[botID] = state
     if isDuplicate {
       // A duplicate changes nothing and settles nothing.
       eventBroadcaster.yield(.received(botID: botID, message: message, changes: changes))
       return changes
     }
 
-    recordAnswer(message.payload, from: botID, at: receivedAt)
     settlePending(with: message, from: botID)
+    if !isBacklog {
+      recordAnswer(message.payload, changes: changes, from: botID, at: receivedAt)
+    }
     eventBroadcaster.yield(.received(botID: botID, message: message, changes: changes))
     await persist()
     return changes
   }
 
-  private func recordAnswer(_ payload: MeshWXPayload, from botID: UInt16, at date: Date) {
-    switch payload {
-    case .digest:
-      lastAnswers[AnswerSlot(botID: botID, key: .digest)] = date
-    case let .observations(batch):
-      if batch.stations.count > 1 {
-        lastAnswers[AnswerSlot(botID: botID, key: .coverageObservations)] = date
+  /// Fills the answer slots a live message fills — keyed off the reducer's changes, so only what
+  /// it applied counts. Runs after settlement: a text reply becomes an answer only once this
+  /// phone owns it.
+  private func recordAnswer(
+    _ payload: MeshWXPayload,
+    changes: [WeatherStateChange],
+    from botID: UInt16,
+    at receivedAt: Date
+  ) {
+    func fill(_ slotBotID: UInt16?, _ key: AnswerKey, asOf contentAsOf: Date? = nil) {
+      lastAnswers[AnswerSlot(botID: slotBotID, key: key)] = AnswerRecord(receivedAt: receivedAt, contentAsOf: contentAsOf)
+    }
+    for change in changes {
+      switch (change, payload) {
+      case let (.digestApplied, .digest(digest)):
+        let builtAt = Date(unixMinutes: digest.nowMinutes)
+        fill(botID, .digest, asOf: builtAt)
+        fill(botID, .activeWarnings, asOf: builtAt)
+        fill(botID, .warningsTouching, asOf: builtAt)
+      case let (.warningStored(identity, _), .warning):
+        fill(botID, .activeWarnings)
+        fill(botID, .warningsTouching)
+        fill(nil, .warning(identity))
+      case let (.observationsStored(stored), .observations(batch)) where !stored.isEmpty:
+        let observedAt = Date(unixMinutes: batch.timestampMinutes)
+        if batch.stations.count > 1 { fill(botID, .coverageObservations, asOf: observedAt) }
+        for station in stored { fill(nil, .station(station), asOf: observedAt) }
+      case let (.forecastStored(point), .forecast(forecast)) where !forecast.isUnbundledPoint:
+        fill(nil, .forecast(point), asOf: Date(unixMinutes: forecast.issuedMinutes))
+      case let (.textChunkStored(group, _, _), .text):
+        // Complete, so a reply still missing a part can be asked for again (spec §8.1).
+        if let assembly = states[botID]?.texts[group], assembly.isComplete, let request = assembly.request {
+          fill(botID, .text(request))
+        }
+      default:
+        break
       }
-      for station in batch.stations {
-        lastAnswers[AnswerSlot(botID: nil, key: .station(station.stationIndex))] = date
-      }
-    case let .forecast(forecast):
-      if !forecast.isUnbundledPoint {
-        lastAnswers[AnswerSlot(botID: nil, key: .forecast(forecast.pointIndex))] = date
-      }
-    default:
-      break
     }
   }
 
@@ -337,12 +430,14 @@ public actor WeatherService {
     let sentAt = now()
 
     if let slot = answerSlot(for: request, botID: bot.botID),
-       let answeredAt = lastAnswers[slot],
-       sentAt.timeIntervalSince(answeredAt) < Self.cacheWindow {
+       let answer = lastAnswers[slot],
+       sentAt.timeIntervalSince(answer.receivedAt) < Self.cacheWindow,
+       !answerLeftSomethingOutstanding(request, botID: bot.botID) {
       let served = WeatherPendingRequest(
         request: request, botID: bot.botID, botPublicKey: bot.publicKey, sentAt: sentAt
       )
-      eventBroadcaster.yield(.requestSettled(served, .servedFromCache(receivedAt: answeredAt)))
+      eventBroadcaster.yield(.requestSettled(
+        served, .servedFromCache(receivedAt: answer.receivedAt, contentAsOf: answer.contentAsOf)))
       return nil
     }
 
@@ -376,7 +471,27 @@ public actor WeatherService {
     case .observations: AnswerSlot(botID: botID, key: .coverageObservations)
     case let .observation(station): stationIndex(station).map { AnswerSlot(botID: nil, key: .station($0)) }
     case let .forecast(point): AnswerSlot(botID: nil, key: .forecast(point))
-    default: nil
+    case .activeWarnings: AnswerSlot(botID: botID, key: .activeWarnings)
+    case .warningsTouching: AnswerSlot(botID: botID, key: .warningsTouching)
+    case let .warning(identity):
+      WeatherAlertRequests.identity(from: identity, tables: tables).map { AnswerSlot(botID: nil, key: .warning($0)) }
+    case .warningText, .forecastDiscussion, .spaceWeather, .stormReports, .rainfall, .metar, .taf, .hazardousOutlook:
+      AnswerSlot(botID: botID, key: .text(request))
+    case .homeForecast, .forecastForPlace: nil
+    }
+  }
+
+  /// A `>w` or `>w <area>` is how a missing identity or an upgrade whose replacement never came
+  /// is repaired. While either is still outstanding, whatever arrived in the last five minutes
+  /// evidently did not carry it — lost on the way, or never part of it — and the bot's cached
+  /// re-send is the recovery, not waste.
+  private func answerLeftSomethingOutstanding(_ request: WeatherRequest, botID: UInt16) -> Bool {
+    switch request {
+    case .activeWarnings, .warningsTouching:
+      guard let state = states[botID] else { return false }
+      return !state.missingFromDigest.isEmpty || !state.pendingUpgrades.isEmpty
+    default:
+      return false
     }
   }
 
@@ -392,7 +507,7 @@ public actor WeatherService {
 
   private func handleTimeout(id: UUID) async {
     guard var entry = pending[id] else { return }
-    let botWasHeard = wasHeard(botID: entry.request.botID, since: entry.request.sentAt)
+    let botWasHeard = wasHeardLive(botID: entry.request.botID, since: entry.request.sentAt)
     // Retry only into silence: a bot heard since the request is in range, so a repeat would
     // only add to whatever is keeping the channel busy.
     guard entry.request.attempt == 0, !botWasHeard else {
@@ -414,8 +529,10 @@ public actor WeatherService {
     armTimer(for: id)
   }
 
-  private func wasHeard(botID: UInt16, since date: Date) -> Bool {
-    guard let heard = states[botID]?.lastHeardAt else { return false }
+  /// Live only: a backlog drained from the radio's queue after the request went out is stamped
+  /// with the drain time, and says nothing about whether the bot can hear this phone now.
+  private func wasHeardLive(botID: UInt16, since date: Date) -> Bool {
+    guard let heard = states[botID]?.lastLiveHeardAt else { return false }
     return heard > date
   }
 
@@ -444,11 +561,19 @@ public actor WeatherService {
       return
     }
 
-    for request in waiting
-    where Self.reply(message.payload, satisfies: request.request.expectedReply, stationIndex: stationIndex) {
+    for request in waiting where answers(message.payload, request: request.request, from: botID) {
       markAnswered(request, by: message.payload, from: botID)
       settle(id: request.id, outcome: .answered)
     }
+  }
+
+  /// Whether a message answers a request: its kind, and for a text reply, its words
+  /// (`WeatherTextMatch`) read over every chunk of the reply received so far.
+  private func answers(_ payload: MeshWXPayload, request: WeatherRequest, from botID: UInt16) -> Bool {
+    guard Self.reply(payload, satisfies: request.expectedReply, stationIndex: stationIndex) else { return false }
+    guard case let .text(chunk) = payload else { return true }
+    guard let assembly = states[botID]?.texts[chunk.group] else { return false }
+    return WeatherTextMatch.matches(request, assembly: assembly, states: states, tables: tables)
   }
 
   /// Records on the stored answer that this phone asked for it: the channel is shared, and a
@@ -470,8 +595,9 @@ public actor WeatherService {
     }
   }
 
-  /// Whether a message answers what a request asked for. Static and injectable so the
-  /// pairing rules are testable without a service.
+  /// Whether a message is the kind of answer a request expects. Static and injectable so the
+  /// pairing rules are testable without a service. For text this checks the subject only; the
+  /// service also reads the words (`WeatherTextMatch`) before a reply settles anything.
   static func reply(
     _ payload: MeshWXPayload,
     satisfies kind: WeatherReplyKind,

@@ -449,11 +449,13 @@ struct WeatherForecastCardTests {
 
   @Test
   func `Round Rock is not answered with Austin's forecast from twenty kilometres away`() {
-    guard case let .missing(point) = WeatherForecastCard.make(states: [P.botID: P.state()], place: P.place(P.roundRock), tables: tables, now: P.now, calendar: P.calendar) else {
+    guard case let .missing(point, kilometres) = WeatherForecastCard.make(states: [P.botID: P.state()], place: P.place(P.roundRock), tables: tables, now: P.now, calendar: P.calendar) else {
       Issue.record("expected missing")
       return
     }
     #expect(point.index != 103)
+    #expect(abs(kilometres - WeatherGeo.kilometres(P.roundRock, MeshWXCoordinate(latitude: point.lat, longitude: point.lon))) < 0.001)
+    #expect(kilometres <= WeatherForecastCard.pointReachKilometres)
   }
 
   @Test

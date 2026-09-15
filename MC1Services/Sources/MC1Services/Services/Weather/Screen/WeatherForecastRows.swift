@@ -186,11 +186,24 @@ public enum WeatherForecastCard: Sendable, Hashable {
   }
 
   case noPlace
-  /// Nothing held for the place: ask for this point.
-  case missing(point: MeshWXPoint)
+  /// Nothing held for the place: ask for this point, `kilometres` from the place.
+  case missing(point: MeshWXPoint, kilometres: Double)
+  /// The nearest bundled forecast point is too far from the place to speak for it, or the bundle
+  /// has none: there is nothing worth asking for.
+  case noPointNearby(nearest: MeshWXPoint?, kilometres: Double?)
   case forecast(Summary)
 
   public static let nearbyPointKilometres = 10.0
+
+  /// How far the nearest forecast point may be and still stand for the place.
+  ///
+  /// From the bundle's own density (2026-09-15 kit): measured from every `places.json` entry to
+  /// its nearest `pfm_points.json` point, over the 34,556 places with any point within 1,000 km
+  /// (Hawaii, American Samoa, Guam and the Northern Marianas have none), the distance is 23 km at
+  /// the median, 68 km at p95 and 114 km at p99. The cutoff is p99 rounded up. About 1% of places
+  /// lie beyond it, mostly New Mexico (Albuquerque is 213 km from its nearest point), Utah, Idaho
+  /// and western Alaska — places where the nearest point's forecast is another landscape's.
+  public static let pointReachKilometres = 115.0
 
   public static func make(
     states: [UInt16: WeatherBotState],
@@ -201,7 +214,12 @@ public enum WeatherForecastCard: Sendable, Hashable {
   ) -> WeatherForecastCard {
     guard let place else { return .noPlace }
     guard let placePoint = tables.nearestPoint(toLat: place.coordinate.latitude, lon: place.coordinate.longitude) else {
-      return .noPlace
+      return .noPointNearby(nearest: nil, kilometres: nil)
+    }
+    let placePointKilometres = WeatherGeo.kilometres(
+      place.coordinate, MeshWXCoordinate(latitude: placePoint.lat, longitude: placePoint.lon))
+    guard placePointKilometres <= pointReachKilometres else {
+      return .noPointNearby(nearest: placePoint, kilometres: placePointKilometres)
     }
 
     var newest: [UInt16: (stored: WeatherStoredForecast, botID: UInt16)] = [:]
@@ -232,7 +250,7 @@ public enum WeatherForecastCard: Sendable, Hashable {
     }.min { $0.2 < $1.2 }
     if let (point, entry, distance) = nearby { return summary(point, entry, .nearbyPoint(kilometres: distance)) }
 
-    return .missing(point: placePoint)
+    return .missing(point: placePoint, kilometres: placePointKilometres)
   }
 }
 

@@ -228,6 +228,11 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// gap and could bring a cancelled warning back.
   public var recentSeqs: [UInt8]
   public var lastHeardAt: Date?
+  /// The last message heard live from this bot — not drained from the radio's queue at
+  /// connect. What "the bot is in range" rests on: a backlog is stamped with the drain time, so
+  /// a bot that went silent hours ago would otherwise look current. Nil for a state file from
+  /// before the distinction.
+  public var lastLiveHeardAt: Date?
   /// Set on a `seq` gap or an out-of-order message; cleared only by a digest built after the
   /// gap was seen — the cue that `>d` would help and that "no alerts" cannot be claimed.
   public var needsDigest: Bool
@@ -253,6 +258,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     lastSeq = nil
     recentSeqs = []
     lastHeardAt = nil
+    lastLiveHeardAt = nil
     needsDigest = false
     gapDetectedAt = nil
     warnings = [:]
@@ -265,7 +271,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case botID, lastSeq, recentSeqs, lastHeardAt, needsDigest, gapDetectedAt, warnings,
+    case botID, lastSeq, recentSeqs, lastHeardAt, lastLiveHeardAt, needsDigest, gapDetectedAt, warnings,
       pendingUpgrades, digest, missingFromDigest, observations, forecasts, texts
   }
 
@@ -277,6 +283,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     lastSeq = try container.decodeIfPresent(UInt8.self, forKey: .lastSeq)
     recentSeqs = try container.decodeIfPresent([UInt8].self, forKey: .recentSeqs) ?? []
     lastHeardAt = try container.decodeIfPresent(Date.self, forKey: .lastHeardAt)
+    lastLiveHeardAt = try container.decodeIfPresent(Date.self, forKey: .lastLiveHeardAt)
     needsDigest = try container.decode(Bool.self, forKey: .needsDigest)
     gapDetectedAt = try container.decodeIfPresent(Date.self, forKey: .gapDetectedAt)
     warnings = try container.decode([MeshWXWarningIdentity: WeatherStoredWarning].self, forKey: .warnings)

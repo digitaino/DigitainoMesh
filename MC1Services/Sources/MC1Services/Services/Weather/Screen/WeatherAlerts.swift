@@ -30,6 +30,8 @@ public enum WeatherAlertPlacement: Sendable, Hashable {
     }
   }
 
+  /// The order among alerts of the same priority below *here*: an alert that may be here
+  /// before one known to be near, before one known to be elsewhere.
   var sortOrder: Int {
     switch self {
     case .here: 0
@@ -151,10 +153,20 @@ public struct WeatherAlertItem: Sendable, Hashable, Identifiable {
 public enum WeatherAlertItems {
   public static let expiredHold: TimeInterval = 15 * 60
 
-  /// Every alert held by any bot, deduplicated by identity (the freshest message wins),
-  /// placed against the place and sorted: here, then checking/unplaced, then near, then
-  /// elsewhere; within each, by priority and then soonest expiry. With no place, placement is
-  /// `.elsewhere` for everything — the card lists them without claiming any is here.
+  /// Every alert held by any bot, one item per identity, placed against the place and sorted.
+  ///
+  /// Two bots can hold different copies of one warning (spec §12). The copy shown is the one
+  /// still active over one that has expired — a bot that heard the extension beats one that
+  /// did not — then the one with the later expiry. An upgrade marker stands in only when no bot
+  /// holds a copy of the warning at all.
+  ///
+  /// Order: anything *here* first, then by priority whatever the placement — a Tornado Warning
+  /// 20 km away above a Heat Advisory whose outlines are still loading — then checking/unplaced
+  /// before near before elsewhere, then the soonest expiry. A covering alert that just expired
+  /// comes last: it is a note about what ended, not something to act on.
+  ///
+  /// With no place, placement is `.elsewhere` for everything — the card lists them without
+  /// claiming any is here.
   public static func make(
     states: [UInt16: WeatherBotState],
     place: WeatherPlace?,
@@ -168,33 +180,52 @@ public enum WeatherAlertItems {
       var botIDs: Set<UInt16>
     }
     var candidates: [MeshWXWarningIdentity: Candidate] = [:]
+    // Bot order fixed, so which copy wins a full tie does not depend on dictionary order.
+    let botIDs = states.keys.sorted()
 
-    func offer(_ stored: WeatherStoredWarning, kind: WeatherAlertItem.Kind, botID: UInt16) {
-      if var held = candidates[stored.identity] {
+    for botID in botIDs {
+      guard let state = states[botID] else { continue }
+      for stored in state.warnings.values {
+        let kind: WeatherAlertItem.Kind
+        if !stored.isExpired(at: now) {
+          kind = .active
+        } else if now.timeIntervalSince(stored.expiresAt) <= expiredHold {
+          kind = .expiredRecently
+        } else {
+          continue
+        }
+        guard var held = candidates[stored.identity] else {
+          candidates[stored.identity] = Candidate(stored: stored, kind: kind, botIDs: [botID])
+          continue
+        }
         held.botIDs.insert(botID)
-        if stored.receivedAt > held.stored.receivedAt {
+        if prefers(stored, kind, over: held.stored, held.kind) {
           held.stored = stored
           held.kind = kind
         }
         candidates[stored.identity] = held
-      } else {
-        candidates[stored.identity] = Candidate(stored: stored, kind: kind, botIDs: [botID])
       }
     }
 
-    for (botID, state) in states {
-      for stored in state.warnings.values {
-        if !stored.isExpired(at: now) {
-          offer(stored, kind: .active, botID: botID)
-        } else if now.timeIntervalSince(stored.expiresAt) <= expiredHold {
-          offer(stored, kind: .expiredRecently, botID: botID)
-        }
-      }
+    var markers: [MeshWXWarningIdentity: Candidate] = [:]
+    for botID in botIDs {
+      guard let state = states[botID] else { continue }
       for (identity, pending) in state.pendingUpgrades where candidates[identity] == nil {
         let stored = WeatherStoredWarning(warning: pending.warning, receivedAt: pending.cancelledAt)
-        offer(stored, kind: .upgradedAwaitingReplacement(cancelledAt: pending.cancelledAt), botID: botID)
+        let kind = WeatherAlertItem.Kind.upgradedAwaitingReplacement(cancelledAt: pending.cancelledAt)
+        guard var held = markers[identity] else {
+          markers[identity] = Candidate(stored: stored, kind: kind, botIDs: [botID])
+          continue
+        }
+        held.botIDs.insert(botID)
+        if pending.cancelledAt > held.stored.receivedAt {
+          held.stored = stored
+          held.kind = kind
+        }
+        markers[identity] = held
       }
     }
+    candidates.merge(markers) { warning, _ in warning }
 
     let items: [WeatherAlertItem] = candidates.values.compactMap { candidate in
       let placement = place.map {
@@ -213,11 +244,63 @@ public enum WeatherAlertItems {
       )
     }
     return items.sorted { lhs, rhs in
-      if lhs.placement.sortOrder != rhs.placement.sortOrder { return lhs.placement.sortOrder < rhs.placement.sortOrder }
+      let lhsExpired = lhs.kind == .expiredRecently
+      let rhsExpired = rhs.kind == .expiredRecently
+      if lhsExpired != rhsExpired { return rhsExpired }
+      let lhsHere = lhs.placement == .here
+      let rhsHere = rhs.placement == .here
+      if lhsHere != rhsHere { return lhsHere }
       if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+      if lhs.placement.sortOrder != rhs.placement.sortOrder { return lhs.placement.sortOrder < rhs.placement.sortOrder }
       if lhs.expiresAt != rhs.expiresAt { return lhs.expiresAt < rhs.expiresAt }
-      return lhs.identity.etn < rhs.identity.etn
+      if lhs.identity.etn != rhs.identity.etn { return lhs.identity.etn < rhs.identity.etn }
+      return WeatherStateReducer.identityOrder(lhs.identity, rhs.identity)
     }
+  }
+
+  /// Whether one bot's copy of a warning should be shown over another's: active over expired,
+  /// then the later expiry, then the later message.
+  private static func prefers(
+    _ stored: WeatherStoredWarning, _ kind: WeatherAlertItem.Kind,
+    over held: WeatherStoredWarning, _ heldKind: WeatherAlertItem.Kind
+  ) -> Bool {
+    let isActive = kind == .active
+    let heldIsActive = heldKind == .active
+    if isActive != heldIsActive { return isActive }
+    if stored.warning.expiresMinutes != held.warning.expiresMinutes {
+      return stored.warning.expiresMinutes > held.warning.expiresMinutes
+    }
+    return stored.receivedAt > held.receivedAt
+  }
+}
+
+// MARK: - Folding
+
+/// The alerts card's rows (docs/MESHWX_UI.md §7.3): at most `limit`, plus "N more".
+///
+/// The dangerous ones are never folded, wherever they are: the six storm warnings at the top of
+/// the priority order (`WeatherAlertPriority.rank` 0–5), and an upgrade whose replacement has
+/// not arrived — the replacement is worse than what it replaced, and this row is all the phone
+/// has of it. Only other items past the limit fold. Order is kept.
+public enum WeatherAlertFolding {
+  /// Tornado, Extreme Wind, catastrophic Flash Flood, tornado-tagged Severe Thunderstorm, Flash
+  /// Flood and Severe Thunderstorm Warnings.
+  public static let neverFoldedRank = 5
+
+  public static func fold(
+    _ items: [WeatherAlertItem],
+    limit: Int = 2,
+    tables: MeshWXTables
+  ) -> (rows: [WeatherAlertItem], folded: Int) {
+    let rows = items.enumerated().compactMap { offset, item -> WeatherAlertItem? in
+      offset < limit || isNeverFolded(item, tables: tables) ? item : nil
+    }
+    return (rows, items.count - rows.count)
+  }
+
+  public static func isNeverFolded(_ item: WeatherAlertItem, tables: MeshWXTables) -> Bool {
+    if case .upgradedAwaitingReplacement = item.kind { return true }
+    return WeatherAlertPriority.rank(item.warning, tables: tables) <= neverFoldedRank
   }
 }
 
@@ -235,6 +318,10 @@ public enum WeatherAlertStatus: Sendable, Hashable {
   case missedMessages
   case listOld(asOf: Date)
   case locationOld(since: Date)
+  /// No bot has sent a multi-station observation batch in the last day, so where any bot
+  /// reports is unknown: the list that arrived may be for somewhere else entirely, and "no
+  /// alerts" cannot be claimed from it.
+  case coverageUnknown
   case officeMayNotBeCovered(office: String)
   /// Alerts here, near, still being placed, or unplaceable: the rows say it.
   case rowsSpeak
@@ -258,6 +345,8 @@ public enum WeatherAlertStatus: Sendable, Hashable {
     guard let place else { return .noPlace }
     if !coverage.isEmpty, !coverage.contains(place.coordinate) { return .outOfCoverage }
 
+    // With no footprint yet every bot's list is considered, which is enough to say what is
+    // wrong with the list — but never enough for calm (`coverageUnknown` below).
     let covering = coverage.botIDs(covering: place.coordinate)
     let relevant = states.filter { covering.isEmpty || covering.contains($0.key) }.map(\.value)
     let withDigest = relevant.compactMap { state in state.digest.map { (state, $0) } }
@@ -275,6 +364,7 @@ public enum WeatherAlertStatus: Sendable, Hashable {
       return .listOld(asOf: digest.builtAt)
     }
     if place.kind == .lastKnown, let locatedAt = place.locatedAt { return .locationOld(since: locatedAt) }
+    if coverage.isEmpty { return .coverageUnknown }
 
     let officesShown = Set(relevant.flatMap { state in
       state.warnings.values.map(\.warning.office) + (state.digest?.digest.entries.map(\.identity.office) ?? [])

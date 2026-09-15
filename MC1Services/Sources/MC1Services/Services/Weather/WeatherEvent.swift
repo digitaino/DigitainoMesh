@@ -34,13 +34,17 @@ public enum WeatherRequestOutcome: Sendable, Hashable {
   case answered
   /// Nothing was sent: the same answer — to this phone or anyone else on the channel — arrived
   /// at `receivedAt`, within the last five minutes, and the bot would only re-send the cached
-  /// bytes (spec §13).
-  case servedFromCache(receivedAt: Date)
+  /// bytes (spec §13). `receivedAt` is the phone's clock, which is what the bot's cache runs
+  /// from; `contentAsOf` is what the answer was as of on the bot's clock where the message says —
+  /// a list's build time, a batch's observation time, a forecast's issue time — and nil for a
+  /// warning or a text.
+  case servedFromCache(receivedAt: Date, contentAsOf: Date?)
   /// The bot said it cannot serve this (spec §8.3).
   case notAvailable(MeshWXNotAvailableReason)
-  /// No answer. `botWasHeard`: the bot sent something after the request went out, so it is in
+  /// No answer. `botWasHeard`: the bot was heard live after the request went out, so it is in
   /// range and the answer was lost or never sent — the request is not repeated into a busy
-  /// channel. Otherwise nothing came from the bot through one retry: it may be out of range.
+  /// channel. Otherwise nothing came from the bot through one retry: it may be out of range. A
+  /// backlog drained from the radio's queue meanwhile does not count as hearing it.
   case timedOut(botWasHeard: Bool)
   /// The radio refused the DM (no such contact, not connected, …).
   case failed(String)
