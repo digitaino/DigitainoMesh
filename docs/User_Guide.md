@@ -417,6 +417,29 @@ The log shows:
 
 ---
 
+### Weather
+
+The Weather tool shows what a MeshWX weather bot puts on the mesh. A bot is a chat node named `WX-<city>` that receives NOAA products by satellite and broadcasts them on the `#meshwx` channel as compact binary messages; the app decodes them with tables it carries, so the tool works with no internet at all.
+
+**Requirements**
+
+- MeshCore companion firmware 1.15 or newer on the radio. Older firmware never delivers these packets; the tool tells you when that is the case.
+- The `#meshwx` channel on the radio. The tool offers to add it to a free slot; nothing is written until you tap **Add Channel**.
+- A bot in range. Bots advertise like any node; the tool lists every `WX-` contact the radio knows, nearest first, and lets you switch between them.
+
+**What the tool shows**
+
+1. **Warnings**: every active warning, watch and advisory in the bot's coverage, most severe first, with its tags (hail, wind, tornado, flood), the counties or zones it names, and a countdown to its expiry. Tap a warning for a map (the storm polygon, or the zones and counties filled from bundled boundaries), the full area list, and **Read full text** for the forecaster's narrative.
+2. **Now**: the latest reading from each METAR station the bot covers, nearest to you first. A **stale** badge appears once a reading is more than two hours old. **Refresh** asks the bot for a new batch.
+3. **Forecast**: seven-period point forecasts. **Home forecast** asks for the bot's own point, **My location** for the point nearest you, and **Find a place…** searches by name.
+4. **Text products**: the forecast discussion, hazardous weather outlook, space weather, storm reports, rainfall totals, and the raw METAR or TAF for a station. Long replies arrive in parts; a part that never arrives is marked, and **Ask again** re-requests it once 20 seconds have passed.
+
+**How requests work**
+
+Requests are direct messages to the bot; the answer comes back on `#meshwx` so every phone listening benefits. The tool sends one request per tap, keeps them five seconds apart, waits fifteen seconds and retries once, then tells you the bot may be out of range. Anything received in the last five minutes is not asked for again. The bot's own broadcasts (warnings as they change, a digest every three hours, observations hourly, the home forecast every six) are kept whether or not the tool is open, and the last picture is shown even with no radio connected.
+
+If the tool says some messages were missed, tap **Get digest**; a warning the digest lists that you never received can be fetched with one tap.
+
 ## 8. iPad Experience
 
 MeshCore One provides an optimized experience on iPad with split-view navigation and enhanced layouts.

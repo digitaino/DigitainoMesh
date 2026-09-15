@@ -173,9 +173,12 @@ public final class MeshWXTables: Sendable {
 
   // MARK: - Loading
 
-  /// The bundled `Resources` directory, or nil if the resource bundle did not build.
+  /// The bundled preload directory, or nil if the resource bundle did not build.
+  ///
+  /// Named `PreloadBundle` rather than `Resources` because `codesign` refuses a flat iOS
+  /// resource bundle that carries a top-level `Resources/` — see the target in `Package.swift`.
   public static var bundledResourceDirectory: URL? {
-    Bundle.module.resourceURL?.appendingPathComponent("Resources", isDirectory: true)
+    Bundle.module.resourceURL?.appendingPathComponent("PreloadBundle", isDirectory: true)
   }
 
   /// Load the bundled tables.

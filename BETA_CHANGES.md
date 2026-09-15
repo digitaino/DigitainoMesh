@@ -1,5 +1,15 @@
 Beta Changes -- v1.3.0
 
+Weather
+
+Tools gains **Weather**: the MeshWX bot's warnings, current conditions, forecast and narrative products, straight off the mesh. A weather bot is a chat node named `WX-<city>` (WX-AUS is on the air in Austin) that receives NOAA products by satellite and puts them on the `#meshwx` channel as compact binary messages; the tool decodes them with tables shipped inside the app, so nothing is fetched from the internet and nothing about you leaves the phone.
+
+What you see. Active warnings, watches and advisories for the bot's coverage, each with the NWS colour and icon, the storm tags the product carries (hail size, wind, whether the tornado is radar-indicated or observed), the counties or zones it names, and a countdown to its expiry. Tap one for a map: storm-based warnings draw the polygon the forecaster drew; zone-based products (winter, heat, wind, fire) fill the zones and counties from boundaries bundled in the app. Below the map, **Read full text** asks the bot for the warning's narrative. **Now** lists the METAR stations the bot covers, nearest first, with temperature, feels-like, wind, humidity, pressure and visibility, and a stale badge once a reading is two hours old. **Forecast** shows the seven-period point forecast for the bot's home point and for any point you ask for: your own location, or a place you search by name. **Text products** fetch the forecast discussion, hazardous weather outlook, space weather, storm reports and rainfall totals, and the raw METAR or TAF for a station.
+
+How it listens. Everything the bot broadcasts on its own schedule -- warnings when they change, a digest every three hours, observations hourly, the home forecast every six -- is kept whether or not the tool is open, and the last picture is still there with no radio connected. A message gap is detected from the bot's sequence numbers and shown as "some messages were missed" with a one-tap digest request; a warning the digest lists that you never received is one tap away. Requests are DMs to the bot; the answers come back on the channel so every listening phone benefits from one request. The tool never polls: one request per tap, five seconds apart, fifteen seconds and one retry before it tells you the bot may be out of range, and nothing is asked twice within five minutes.
+
+Two things to know. The radio needs MeshCore companion firmware 1.15 or newer -- older firmware drops these packets silently, and the tool says so rather than showing an empty screen. And `#meshwx` has to be on the radio: the tool offers to add it (the key derives from the name, there is no secret to exchange) but does not add it until you tap.
+
 Signal Mapper: Active Survey & Ride Mode
 
 The Signal Mapper could only ever map what your radio *heard*. It can now also measure the other direction -- how well repeaters hear **you** -- by sending them small, directed, non-flood probes and reading back the signal level they report for your transmission. That is the half of coverage no amount of listening can measure, and it is the half that decides whether your messages actually get out.

@@ -28,8 +28,7 @@ MeshWX (SwiftPM target in MC1Services/)     codec + tables + geometry, Foundatio
    ▲
 MC1Services/Services/Weather/               WeatherService actor: session ingest, state, requests
    ▲
-MC1/State/AppState+Weather.swift            WeatherModel (@Observable) mirroring the actor
-MC1/Views/Tools/Weather/                    the tool
+MC1/Views/Tools/Weather/                    WeatherToolModel (@Observable, view-owned) + the screens
 ```
 
 ### MeshWX target
@@ -37,7 +36,9 @@ MC1/Views/Tools/Weather/                    the tool
 Pure port of `reference/v5.py`. `MeshWXDecoder.decode(Data) -> MeshWXMessage`,
 `MeshWXEncoder.*` (so the vectors round-trip and tests can fabricate traffic),
 `MeshWXTables.shared` (offices / stations / states / events / places / points /
-zones / counties / offices, loaded from `Resources/`), `MeshWXGeometry` (polygon
+zones / counties / offices, loaded from `PreloadBundle/` — not `Resources/`: a
+top-level directory of that name inside the SwiftPM resource bundle reads to
+`codesign` as an old-style versioned bundle and fails the iOS build), `MeshWXGeometry` (polygon
 rings by UGC code, lazy), and `MeshWXPresentation` (sky → SF Symbol, event → tint
 and icon, staleness rules) so every rendering rule is unit-testable on macOS.
 
@@ -61,8 +62,8 @@ instead of showing an empty screen.
 
 ### State (`WeatherService`)
 
-One `MeshWXBotState` per bot (`bot` = first two public-key bytes, LE), reduced by
-`MeshWXStateReducer` — a pure function so every rule in spec §2.3, §3–§8 has a test:
+One `WeatherBotState` per bot (`bot` = first two public-key bytes, LE), reduced by
+`WeatherStateReducer` — a pure function so every rule in spec §2.3, §3–§8 has a test:
 
 - `(bot, seq)` dedupe; a gap in `seq` sets `needsDigest` (the cue for `>d`).
 - Warnings keyed by `(event, office, etn)`; a message with a known identity
@@ -76,13 +77,16 @@ One `MeshWXBotState` per bot (`bot` = first two public-key bytes, LE), reduced b
 - `feedHealth` from the last digest; "feed stale" above 60 (four hours).
 
 State is persisted as JSON under Application Support (`MeshWX/state.json`), keyed
-by bot, so the tool opens on the last-known picture with no radio. It is not
+by bot, so the tool opens on the last-known picture with no radio. The view model is
+owned by the screen (`@State`), not by `AppState`, and re-attaches on every services
+change like the other tool models; the service keeps ingesting whether or not the
+screen exists. It is not
 SwiftData: nothing joins it, and a schema migration for a cache is a cost with no
 benefit.
 
 ### Requests
 
-`MeshWXRequest` is the spec §8.2 grammar as an enum with `wireText` and the reply
+`WeatherRequest` is the spec §8.2 grammar as an enum with `wireText` and the reply
 it expects. The service enforces the etiquette (§13): one request per 5 s, an
 identical request within 5 min is served from what was already received, 15 s
 timeout then one retry, then "the bot may be out of range". Answers are matched to
@@ -97,7 +101,10 @@ above).
 
 A bot is any contact whose name starts with `WX-` (spec §12). The tool lists them
 nearest-first using the contact's advertised position and remembers the choice
-per phone (`AppStorageKey.weatherSelectedBot`). Two bots covering one place send
+per phone by wire id (`WeatherPreferenceStore`, key `weather.selectedBotID`) — by
+id, not by public key, because a bot is heard on the channel long before its
+advert is collected; such a heard-only bot is shown read-only, with requests
+disabled until the radio has its key. Two bots covering one place send
 the same warning identity; state is per bot, so both are shown under their bot.
 
 ### Channel

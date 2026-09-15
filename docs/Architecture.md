@@ -46,6 +46,7 @@ graph TD
             DS[DeviceService actor]
             HRS[HeardRepeatsService actor]
             RXS[RxLogService actor]
+            WXS[WeatherService actor]
         end
 
         subgraph RemoteServices [Remote Node Services]
@@ -101,6 +102,8 @@ graph TD
     ServiceContainer --> KS
     ServiceContainer --> NS
         ServiceContainer --> RXS
+    ServiceContainer --> WXS
+    WXS --> MCS
         ServiceContainer --> DLB
         ServiceContainer --> RS
     ServiceContainer --> DS
@@ -195,6 +198,7 @@ Note: `ElevationService`, `LocationService`, `LinkPreviewService`, and `LogExpor
 - `DeviceService`: Device information and management
 - `HeardRepeatsService`: Tracking message repeat counts for channel propagation analysis
 - `RxLogService`: RF packet capture and logging for network diagnostics
+- `WeatherService`: MeshWX weather bot traffic on `#meshwx` — channel-datagram ingest, one reduced state per bot, the app's `>` requests (docs/MESHWX.md). Built on the dependency-free `MeshWX` target (codec, preload tables, polygon geometry) that lives beside it in the package.
 - `DebugLogBuffer`: Buffered debug logging persistence for `PersistentLogger`
 
 **Remote Node Services** (depend on other services):

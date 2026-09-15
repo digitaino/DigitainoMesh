@@ -58,6 +58,9 @@ targets:
       # unreachable from any future upload code (docs/ACTIVE_SURVEY_M3_5.md §2.4).
       - package: MC1Services
         product: MapperRawLog
+      # The weather tool reads the MeshWX tables and message types directly (docs/MESHWX.md).
+      - package: MC1Services
+        product: MeshWX
       - package: Emojibase
       - package: MapLibre
       - package: MessagingUI
@@ -82,6 +85,7 @@ targets:
           - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Onboarding.strings
           - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/RemoteNodes.strings
           - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/WhatsNew.strings
+          - $(PROJECT_DIR)/MC1/Resources/Localization/en.lproj/Weather.strings
         outputFiles:
           - $(PROJECT_DIR)/MC1/Resources/Generated/L10n.swift
         basedOnDependencyAnalysis: false

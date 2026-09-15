@@ -25,6 +25,7 @@ struct ToolDestinationView<LineOfSight: View>: View {
     case .rxLog: RxLogView()
     case .trafficHeatmap: TrafficHeatmapView()
     case .signalMapper: SignalMapperCoverageView()
+    case .weather: WeatherToolView()
     case .noiseFloor: NoiseFloorView()
     case .nodeDiscovery: NodeDiscoveryView()
     case .cli: CLIToolView()

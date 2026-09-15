@@ -1,0 +1,433 @@
+/*
+  Weather.strings
+  MC1
+
+  Simplified Chinese translation of strings for the Weather tool (docs/MESHWX.md).
+  AI-translated - please verify with native speakers.
+*/
+
+// MARK: - Tool
+
+/* Location: ToolSelection.swift - Tool selection label */
+"weather.title" = "天气";
+
+/* Location: WeatherToolView.swift - Cancel button in dialogs and sheets */
+"weather.common.cancel" = "取消";
+
+/* Location: WeatherObservationRow.swift - Shown where a station reported no value */
+"weather.common.unknownValue" = "—";
+
+// MARK: - Status
+
+/* Location: WeatherToolView.swift - Card title when the radio firmware predates channel datagrams */
+"weather.status.firmwareTooOld.title" = "固件版本过旧";
+
+/* Location: WeatherToolView.swift - Card body, %@ is the radio's firmware version */
+"weather.status.firmwareTooOld.body" = "此无线电运行的固件为 %@，无法传输天气数据。需要 MeshCore 1.15 或更新版本。";
+
+/* Location: WeatherToolView.swift - Prompt card title asking to add the weather channel */
+"weather.status.channelPrompt.title" = "将 #meshwx 添加到此无线电？";
+
+/* Location: WeatherToolView.swift - Prompt card body explaining the channel */
+"weather.status.channelPrompt.body" = "#meshwx 是天气机器人的频道。其密钥由名称推导而来，因此没有需要保密的内容。";
+
+/* Location: WeatherToolView.swift - Prompt card button that writes the channel */
+"weather.status.channelPrompt.add" = "添加频道";
+
+/* Location: WeatherToolView.swift - Prompt card button that dismisses the card */
+"weather.status.channelPrompt.notNow" = "以后再说";
+
+/* Location: WeatherToolView.swift - Compact row shown after the prompt is dismissed */
+"weather.status.channelMissing.row" = "此无线电上没有 #meshwx";
+
+/* Location: WeatherToolView.swift - Button on the compact row that writes the channel */
+"weather.status.channelMissing.add" = "添加";
+
+/* Location: WeatherToolView.swift - Shown when every channel slot is taken */
+"weather.status.channelFull" = "没有空闲的频道槽位，请在聊天中删除一个频道以腾出空间。";
+
+/* Location: WeatherToolView.swift - Banner above data received before the radio disconnected */
+"weather.status.disconnected.banner" = "无线电已断开连接 — 显示最后接收到的内容";
+
+/* Location: WeatherToolView.swift - Empty state title with no radio and no data */
+"weather.status.disconnected.title" = "尚未收到任何内容";
+
+/* Location: WeatherToolView.swift - Empty state description with no radio and no data */
+"weather.status.disconnected.description" = "连接一台位于 #meshwx 频道的无线电以收听天气机器人。它发送的内容会被保留，因此一旦有数据到达，此页面就会填充。";
+
+// MARK: - Bot
+
+/* Location: WeatherToolView.swift - Section header for the selected weather bot */
+"weather.bot.section" = "机器人";
+
+/* Location: WeatherToolView.swift - Bot picker menu label */
+"weather.bot.picker" = "天气机器人";
+
+/* Location: WeatherToolView.swift - Bot subtitle, %1$@ is the city, %2$@ the distance */
+"weather.bot.cityDistance" = "%1$@ · %2$@ 外";
+
+/* Location: WeatherToolView.swift - Last advert or message time, %@ is a relative time */
+"weather.bot.lastHeard" = "最近收到 %@";
+
+/* Location: WeatherToolView.swift - Shown when the bot has never been heard */
+"weather.bot.neverHeard" = "尚未收到";
+
+/* Location: WeatherToolView.swift - Badge when the bot's own feed is stale */
+"weather.bot.feedStale" = "数据源过期";
+
+/* Location: WeatherToolView.swift - Explains the feed stale badge */
+"weather.bot.feedStaleDetail" = "该机器人已数小时未从其气象局收到产品。它的沉默并不代表天气平静。";
+
+/* Location: WeatherToolView.swift - Menu row for a bot heard on the channel with no advert, %@ is its hex id */
+"weather.bot.heardOnly" = "机器人 %@（尚无广播）";
+
+/* Location: WeatherToolModel.swift - Name for a bot heard on the channel with no advert, %@ is its hex id */
+"weather.bot.heardOnlyName" = "机器人 %@";
+
+/* Location: WeatherToolView.swift - Note under a heard-only bot, whose key the app does not have */
+"weather.bot.heardOnlyNote" = "尚未收到此机器人的广播 — 请求需要它的密钥。";
+
+/* Location: WeatherToolView.swift - Title when the radio knows no weather bots */
+"weather.bot.noBots.title" = "尚无天气机器人";
+
+/* Location: WeatherToolView.swift - Description when the radio knows no weather bots */
+"weather.bot.noBots.description" = "天气机器人以 WX- 加城市名的形式广播，例如 WX-AUS。无线电听到时会将其记录为联系人。";
+
+// MARK: - Warnings
+
+/* Location: WeatherWarningRow.swift - Section header */
+"weather.warnings.section" = "警报";
+
+/* Location: WeatherWarningRow.swift - Shown when nothing is active */
+"weather.warnings.none" = "无活动警报";
+
+/* Location: WeatherWarningRow.swift - When the bot's last list arrived, %@ is a relative time */
+"weather.warnings.lastDigest" = "机器人的最新列表 %@";
+
+/* Location: WeatherWarningRow.swift - Shown when no list has arrived yet */
+"weather.warnings.noDigestYet" = "尚未收到机器人的列表";
+
+/* Location: WeatherFormatting.swift - Countdown to expiry, %lld is minutes */
+"weather.warnings.expiresIn" = "%lld 分钟后失效";
+
+/* Location: WeatherFormatting.swift - Countdown to expiry, %1$lld hours and %2$lld minutes */
+"weather.warnings.expiresInHours" = "%1$lld 小时 %2$lld 分钟后失效";
+
+/* Location: WeatherFormatting.swift - Shown once the expiry has passed */
+"weather.warnings.expired" = "已失效";
+
+/* Location: WeatherFormatting.swift - One area, %1$@ is its name and %2$@ its state */
+"weather.warnings.area" = "%1$@, %2$@";
+
+/* Location: WeatherWarningRow.swift - Trailing count of unlisted areas, %lld is how many */
+"weather.warnings.andMore" = "另有 %lld 个";
+
+/* Location: WeatherWarningRow.swift - Row shown after a gap in the bot's sequence */
+"weather.warnings.needsDigest" = "有部分消息未收到";
+
+/* Location: WeatherWarningRow.swift - Button that asks the bot for its active-warning list */
+"weather.warnings.getDigest" = "获取列表";
+
+/* Location: WeatherWarningRow.swift - Row for a warning the bot listed but never delivered */
+"weather.warnings.missing" = "机器人已列出，但未收到";
+
+/* Location: WeatherWarningRow.swift - Button that asks for one missing warning */
+"weather.warnings.fetch" = "获取";
+
+// MARK: - Warning tags
+
+/* Location: WeatherFormatting.swift - Hail tag, %@ is inches */
+"weather.tag.hail" = "冰雹 %@ in";
+
+/* Location: WeatherFormatting.swift - Wind tag, %lld is miles per hour */
+"weather.tag.wind" = "风 %lld mph";
+
+/* Location: WeatherFormatting.swift - Tornado tag, %@ is the confidence wording */
+"weather.tag.tornado" = "龙卷风：%@";
+
+/* Location: WeatherFormatting.swift - Flood source tag, %@ is the source wording */
+"weather.tag.floodSource" = "洪水来源：%@";
+
+/* Location: WeatherFormatting.swift - Flood damage tag, %@ is the damage wording */
+"weather.tag.floodDamage" = "山洪损失：%@";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.possible" = "可能";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.radarIndicated" = "雷达显示";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.observed" = "已观测到";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.radar" = "雷达";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.radarAndGauge" = "雷达和水位计";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.observed" = "已观测到";
+
+/* Location: WeatherFormatting.swift - Flood damage tag value */
+"weather.floodDamageTag.considerable" = "较大";
+
+/* Location: WeatherFormatting.swift - Flood damage tag value */
+"weather.floodDamageTag.catastrophic" = "灾难性";
+
+// MARK: - Warning detail
+
+/* Location: WeatherWarningDetailView.swift - Absolute expiry, %@ is a date and time */
+"weather.warningDetail.expiresAt" = "%@ 失效";
+
+/* Location: WeatherWarningDetailView.swift - Heading above the full area list */
+"weather.warningDetail.areas" = "区域";
+
+/* Location: WeatherWarningDetailView.swift - Area kind */
+"weather.warningDetail.county" = "县";
+
+/* Location: WeatherWarningDetailView.swift - Area kind */
+"weather.warningDetail.zone" = "分区";
+
+/* Location: WeatherWarningDetailView.swift - Button that asks the bot for the warning's text */
+"weather.warningDetail.readFullText" = "阅读全文";
+
+/* Location: WeatherWarningDetailView.swift - Shown while the bundled area outlines load */
+"weather.warningDetail.loadingAreas" = "正在加载区域轮廓";
+
+// MARK: - Observations
+
+/* Location: WeatherObservationRow.swift - Section header for current conditions */
+"weather.now.section" = "当前";
+
+/* Location: WeatherObservationRow.swift - Button that asks the bot for fresh observations */
+"weather.now.refresh" = "刷新";
+
+/* Location: WeatherObservationRow.swift - Shown when no observations have arrived */
+"weather.now.none" = "尚无观测数据";
+
+/* Location: WeatherObservationRow.swift - Badge on a reading older than two hours */
+"weather.now.stale" = "过期";
+
+/* Location: WeatherFormatting.swift - Wind with no speed and no direction */
+"weather.now.calm" = "无风";
+
+/* Location: WeatherObservationRow.swift - Apparent temperature, %@ is the temperature */
+"weather.now.feelsLike" = "体感 %@";
+
+/* Location: WeatherObservationRow.swift - Relative humidity, %lld is percent */
+"weather.now.humidity" = "湿度 %lld%%";
+
+/* Location: WeatherObservationRow.swift - Barometric pressure, %@ is inches of mercury */
+"weather.now.pressure" = "气压 %@ inHg";
+
+/* Location: WeatherObservationRow.swift - Visibility, %@ is a distance */
+"weather.now.visibility" = "能见度 %@";
+
+/* Location: WeatherObservationRow.swift - Dew point, %@ is the temperature */
+"weather.now.dewpoint" = "露点 %@";
+
+/* Location: WeatherFormatting.swift - Wind, %1$@ is a compass point and %2$lld the speed in mph */
+"weather.wind.speed" = "%1$@ %2$lld";
+
+/* Location: WeatherFormatting.swift - Wind with a gust, %1$@ is the wind and %2$lld the gust in mph */
+"weather.wind.gusting" = "%1$@ 阵风 %2$lld";
+
+// MARK: - Forecast
+
+/* Location: WeatherForecastSection.swift - Section header */
+"weather.forecast.section" = "预报";
+
+/* Location: WeatherForecastSection.swift - Shown when no forecast has arrived */
+"weather.forecast.none" = "尚无预报";
+
+/* Location: WeatherForecastSection.swift - Fallback point name, %lld is the wire index */
+"weather.forecast.point" = "点 %lld";
+
+/* Location: WeatherForecastSection.swift - Label for a forecast the bot resolved from a place, %@ is the place asked for */
+"weather.forecast.nearestPoint" = "%@（最近的点）";
+
+/* Location: WeatherForecastSection.swift - When the forecast was issued, %@ is a date and time */
+"weather.forecast.issued" = "发布于 %@";
+
+/* Location: WeatherForecastSection.swift - Badge on a forecast older than twelve hours */
+"weather.forecast.stale" = "过期";
+
+/* Location: WeatherForecastSection.swift - Daytime high, %@ is the temperature */
+"weather.forecast.high" = "最高 %@";
+
+/* Location: WeatherForecastSection.swift - Overnight low, %@ is the temperature */
+"weather.forecast.low" = "最低 %@";
+
+/* Location: WeatherForecastSection.swift - Chance of precipitation, %lld is percent */
+"weather.forecast.pop" = "%lld%% 降雨";
+
+/* Location: WeatherForecastSection.swift - Button asking for the bot's home point forecast */
+"weather.forecast.home" = "机器人所在地预报";
+
+/* Location: WeatherForecastSection.swift - Button asking for the point nearest the phone */
+"weather.forecast.myLocation" = "我的位置";
+
+/* Location: WeatherForecastSection.swift - Button opening the place search sheet */
+"weather.forecast.findPlace" = "查找地点…";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.today" = "今天";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.tonight" = "今夜";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.tomorrow" = "明天";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.tomorrowNight" = "明天夜间";
+
+/* Location: WeatherFormatting.swift - Overnight period label, %@ is a weekday name */
+"weather.forecast.period.night" = "%@夜间";
+
+// MARK: - Place search
+
+/* Location: WeatherPlaceSearchView.swift - Sheet title */
+"weather.placeSearch.title" = "查找地点";
+
+/* Location: WeatherPlaceSearchView.swift - Search field prompt */
+"weather.placeSearch.prompt" = "城市或城镇";
+
+/* Location: WeatherPlaceSearchView.swift - Shown when a search matches nothing */
+"weather.placeSearch.empty" = "没有匹配的地点";
+
+/* Location: WeatherPlaceSearchView.swift - Place row, %1$@ is the name and %2$@ the state */
+"weather.placeSearch.place" = "%1$@, %2$@";
+
+/* Location: WeatherPlaceSearchView.swift - The forecast point that will be asked for, %1$@ is its name and %2$@ its distance from the place */
+"weather.placeSearch.point" = "预报点 %1$@，%2$@ 外";
+
+// MARK: - Text products
+
+/* Location: WeatherTextSection.swift - Section header */
+"weather.text.section" = "文本产品";
+
+/* Location: WeatherTextSection.swift - Button asking for the office's forecast discussion */
+"weather.text.discussion" = "预报讨论";
+
+/* Location: WeatherTextSection.swift - Button asking for the hazardous weather outlook */
+"weather.text.hazardousOutlook" = "灾害性天气展望";
+
+/* Location: WeatherTextSection.swift - Button asking for the space weather summary */
+"weather.text.spaceWeather" = "空间天气";
+
+/* Location: WeatherTextSection.swift - Button asking for a state's storm reports */
+"weather.text.stormReports" = "风暴报告";
+
+/* Location: WeatherTextSection.swift - Button asking for a state's rainfall totals */
+"weather.text.rainfall" = "降水";
+
+/* Location: WeatherTextSection.swift - Button asking for a station's raw observation */
+"weather.text.metar" = "METAR";
+
+/* Location: WeatherTextSection.swift - Button asking for a station's forecast */
+"weather.text.taf" = "TAF";
+
+/* Location: WeatherTextSection.swift - Picker label for the state a request names */
+"weather.text.state" = "州";
+
+/* Location: WeatherTextSection.swift - Picker label for the station a request names */
+"weather.text.station" = "站点";
+
+/* Location: WeatherTextSection.swift - Badge on a reply with a chunk missing */
+"weather.text.partial" = "不完整";
+
+/* Location: WeatherTextDetailView.swift - Marker where a chunk never arrived */
+"weather.text.missingPart" = "\n[缺失部分]\n";
+
+/* Location: WeatherTextDetailView.swift - Footer naming the missing chunk, %1$lld of %2$lld */
+"weather.text.missingFooter" = "未收到第 %1$lld 部分（共 %2$lld 部分）";
+
+/* Location: WeatherTextDetailView.swift - Button that asks the bot for the reply again */
+"weather.text.askAgain" = "再次请求";
+
+/* Location: WeatherTextDetailView.swift - Shown when the text was cleared while open */
+"weather.text.gone" = "此文本已不再保存。";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.warning" = "警报全文";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.discussion" = "预报讨论";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.space" = "空间天气";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.storm" = "风暴报告";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.rain" = "降水";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.metarTaf" = "METAR / TAF";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.outlook" = "灾害性天气展望";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.nowcast" = "临近预报";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.general" = "消息";
+
+/* Location: WeatherFormatting.swift - Text product title for an unknown subject */
+"weather.text.subject.other" = "文本";
+
+// MARK: - Requests
+
+/* Location: WeatherToolView.swift - Shown while a request is on the air, %@ is the bot's name */
+"weather.request.waiting" = "正在等待 %@…";
+
+/* Location: WeatherToolView.swift - Appended while the one retry is on the air */
+"weather.request.secondTry" = "（第二次尝试）";
+
+/* Location: WeatherToolView.swift - Shown when neither try was answered, %@ is the bot's name */
+"weather.request.timedOut" = "%@ 没有回应。可能超出通信范围。";
+
+/* Location: WeatherToolView.swift - Shown when the same request was answered minutes ago */
+"weather.request.cached" = "过去五分钟内已收到";
+
+/* Location: WeatherToolView.swift - Shown when requests are coming too fast, %lld is seconds */
+"weather.request.rateLimited" = "请求之间需间隔 %lld 秒";
+
+/* Location: WeatherToolView.swift - Shown when no bot is selected */
+"weather.request.noBot" = "请先选择一个天气机器人";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.noData" = "机器人暂无相关数据";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.unknownLocation" = "机器人不知道该位置";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.unsupported" = "机器人不支持该请求";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.botError" = "机器人报告了一个错误";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.rateLimited" = "机器人已达请求频率上限，请稍后再试";
+
+/* Location: WeatherFormatting.swift - The bot declined the request for an unknown reason */
+"weather.request.notAvailable.other" = "机器人无法回答该请求";
+
+// MARK: - Menu
+
+/* Location: WeatherToolView.swift - Overflow menu label */
+"weather.menu.more" = "更多";
+
+/* Location: WeatherToolView.swift - Overflow menu item */
+"weather.menu.clearData" = "清除此机器人的数据";
+
+/* Location: WeatherToolView.swift - Confirmation title, %@ is the bot's name */
+"weather.menu.clearConfirm" = "清除从 %@ 收到的全部内容？";
+
+/* Location: WeatherToolView.swift - Confirmation button */
+"weather.menu.clearAction" = "清除";

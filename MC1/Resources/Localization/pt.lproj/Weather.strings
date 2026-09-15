@@ -1,0 +1,433 @@
+/*
+  Weather.strings
+  MC1
+
+  Portuguese translation of strings for the Weather tool (docs/MESHWX.md).
+  AI-translated - please verify with native speakers.
+*/
+
+// MARK: - Tool
+
+/* Location: ToolSelection.swift - Tool selection label */
+"weather.title" = "Meteorologia";
+
+/* Location: WeatherToolView.swift - Cancel button in dialogs and sheets */
+"weather.common.cancel" = "Cancelar";
+
+/* Location: WeatherObservationRow.swift - Shown where a station reported no value */
+"weather.common.unknownValue" = "—";
+
+// MARK: - Status
+
+/* Location: WeatherToolView.swift - Card title when the radio firmware predates channel datagrams */
+"weather.status.firmwareTooOld.title" = "Firmware demasiado antigo";
+
+/* Location: WeatherToolView.swift - Card body, %@ is the radio's firmware version */
+"weather.status.firmwareTooOld.body" = "Este rádio usa o firmware %@, que não fornece dados meteorológicos. É necessário o MeshCore 1.15 ou mais recente.";
+
+/* Location: WeatherToolView.swift - Prompt card title asking to add the weather channel */
+"weather.status.channelPrompt.title" = "Adicionar #meshwx a este rádio?";
+
+/* Location: WeatherToolView.swift - Prompt card body explaining the channel */
+"weather.status.channelPrompt.body" = "#meshwx é o canal do bot meteorológico. A sua chave resulta do nome, por isso não há nada de secreto para partilhar.";
+
+/* Location: WeatherToolView.swift - Prompt card button that writes the channel */
+"weather.status.channelPrompt.add" = "Adicionar canal";
+
+/* Location: WeatherToolView.swift - Prompt card button that dismisses the card */
+"weather.status.channelPrompt.notNow" = "Agora não";
+
+/* Location: WeatherToolView.swift - Compact row shown after the prompt is dismissed */
+"weather.status.channelMissing.row" = "#meshwx não está neste rádio";
+
+/* Location: WeatherToolView.swift - Button on the compact row that writes the channel */
+"weather.status.channelMissing.add" = "Adicionar";
+
+/* Location: WeatherToolView.swift - Shown when every channel slot is taken */
+"weather.status.channelFull" = "Não há slot de canal livre; elimine um canal em Conversas para abrir espaço.";
+
+/* Location: WeatherToolView.swift - Banner above data received before the radio disconnected */
+"weather.status.disconnected.banner" = "Rádio desligado — a mostrar o que foi recebido por último";
+
+/* Location: WeatherToolView.swift - Empty state title with no radio and no data */
+"weather.status.disconnected.title" = "Ainda nada recebido";
+
+/* Location: WeatherToolView.swift - Empty state description with no radio and no data */
+"weather.status.disconnected.description" = "Ligue um rádio no canal #meshwx para ouvir um bot meteorológico. O que ele envia é guardado, por isso este ecrã preenche-se assim que chegar algo.";
+
+// MARK: - Bot
+
+/* Location: WeatherToolView.swift - Section header for the selected weather bot */
+"weather.bot.section" = "Bot";
+
+/* Location: WeatherToolView.swift - Bot picker menu label */
+"weather.bot.picker" = "Bot meteorológico";
+
+/* Location: WeatherToolView.swift - Bot subtitle, %1$@ is the city, %2$@ the distance */
+"weather.bot.cityDistance" = "%1$@ · a %2$@";
+
+/* Location: WeatherToolView.swift - Last advert or message time, %@ is a relative time */
+"weather.bot.lastHeard" = "Ouvido pela última vez %@";
+
+/* Location: WeatherToolView.swift - Shown when the bot has never been heard */
+"weather.bot.neverHeard" = "Ainda não foi ouvido";
+
+/* Location: WeatherToolView.swift - Badge when the bot's own feed is stale */
+"weather.bot.feedStale" = "Fluxo desatualizado";
+
+/* Location: WeatherToolView.swift - Explains the feed stale badge */
+"weather.bot.feedStaleDetail" = "O bot não recebe um produto do seu gabinete há horas. O seu silêncio não significa tempo calmo.";
+
+/* Location: WeatherToolView.swift - Menu row for a bot heard on the channel with no advert, %@ is its hex id */
+"weather.bot.heardOnly" = "Bot %@ (ainda sem Advert)";
+
+/* Location: WeatherToolModel.swift - Name for a bot heard on the channel with no advert, %@ is its hex id */
+"weather.bot.heardOnlyName" = "Bot %@";
+
+/* Location: WeatherToolView.swift - Note under a heard-only bot, whose key the app does not have */
+"weather.bot.heardOnlyNote" = "Ainda não há Advert deste bot — os pedidos precisam da sua chave.";
+
+/* Location: WeatherToolView.swift - Title when the radio knows no weather bots */
+"weather.bot.noBots.title" = "Ainda não há bot meteorológico";
+
+/* Location: WeatherToolView.swift - Description when the radio knows no weather bots */
+"weather.bot.noBots.description" = "Um bot meteorológico anuncia-se como WX- e a sua cidade, por exemplo WX-AUS. O rádio guarda-o como contacto quando ouve um.";
+
+// MARK: - Warnings
+
+/* Location: WeatherWarningRow.swift - Section header */
+"weather.warnings.section" = "Avisos";
+
+/* Location: WeatherWarningRow.swift - Shown when nothing is active */
+"weather.warnings.none" = "Sem avisos ativos";
+
+/* Location: WeatherWarningRow.swift - When the bot's last list arrived, %@ is a relative time */
+"weather.warnings.lastDigest" = "Última lista do bot %@";
+
+/* Location: WeatherWarningRow.swift - Shown when no list has arrived yet */
+"weather.warnings.noDigestYet" = "Ainda não há lista do bot";
+
+/* Location: WeatherFormatting.swift - Countdown to expiry, %lld is minutes */
+"weather.warnings.expiresIn" = "expira em %lld min";
+
+/* Location: WeatherFormatting.swift - Countdown to expiry, %1$lld hours and %2$lld minutes */
+"weather.warnings.expiresInHours" = "expira em %1$lld h %2$lld min";
+
+/* Location: WeatherFormatting.swift - Shown once the expiry has passed */
+"weather.warnings.expired" = "expirado";
+
+/* Location: WeatherFormatting.swift - One area, %1$@ is its name and %2$@ its state */
+"weather.warnings.area" = "%1$@, %2$@";
+
+/* Location: WeatherWarningRow.swift - Trailing count of unlisted areas, %lld is how many */
+"weather.warnings.andMore" = "e mais %lld";
+
+/* Location: WeatherWarningRow.swift - Row shown after a gap in the bot's sequence */
+"weather.warnings.needsDigest" = "Perderam-se algumas mensagens";
+
+/* Location: WeatherWarningRow.swift - Button that asks the bot for its active-warning list */
+"weather.warnings.getDigest" = "Obter lista";
+
+/* Location: WeatherWarningRow.swift - Row for a warning the bot listed but never delivered */
+"weather.warnings.missing" = "Listado pelo bot, não recebido";
+
+/* Location: WeatherWarningRow.swift - Button that asks for one missing warning */
+"weather.warnings.fetch" = "Obter";
+
+// MARK: - Warning tags
+
+/* Location: WeatherFormatting.swift - Hail tag, %@ is inches */
+"weather.tag.hail" = "Granizo %@ in";
+
+/* Location: WeatherFormatting.swift - Wind tag, %lld is miles per hour */
+"weather.tag.wind" = "Vento %lld mph";
+
+/* Location: WeatherFormatting.swift - Tornado tag, %@ is the confidence wording */
+"weather.tag.tornado" = "Tornado: %@";
+
+/* Location: WeatherFormatting.swift - Flood source tag, %@ is the source wording */
+"weather.tag.floodSource" = "Origem da cheia: %@";
+
+/* Location: WeatherFormatting.swift - Flood damage tag, %@ is the damage wording */
+"weather.tag.floodDamage" = "Danos de cheia repentina: %@";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.possible" = "possível";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.radarIndicated" = "indicado por radar";
+
+/* Location: WeatherFormatting.swift - Tornado tag value */
+"weather.tornadoTag.observed" = "observado";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.radar" = "radar";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.radarAndGauge" = "radar e escala hidrométrica";
+
+/* Location: WeatherFormatting.swift - Flood source tag value */
+"weather.floodSourceTag.observed" = "observado";
+
+/* Location: WeatherFormatting.swift - Flood damage tag value */
+"weather.floodDamageTag.considerable" = "consideráveis";
+
+/* Location: WeatherFormatting.swift - Flood damage tag value */
+"weather.floodDamageTag.catastrophic" = "catastróficos";
+
+// MARK: - Warning detail
+
+/* Location: WeatherWarningDetailView.swift - Absolute expiry, %@ is a date and time */
+"weather.warningDetail.expiresAt" = "Expira %@";
+
+/* Location: WeatherWarningDetailView.swift - Heading above the full area list */
+"weather.warningDetail.areas" = "Áreas";
+
+/* Location: WeatherWarningDetailView.swift - Area kind */
+"weather.warningDetail.county" = "Condado";
+
+/* Location: WeatherWarningDetailView.swift - Area kind */
+"weather.warningDetail.zone" = "Zona";
+
+/* Location: WeatherWarningDetailView.swift - Button that asks the bot for the warning's text */
+"weather.warningDetail.readFullText" = "Ler o texto completo";
+
+/* Location: WeatherWarningDetailView.swift - Shown while the bundled area outlines load */
+"weather.warningDetail.loadingAreas" = "A carregar os contornos das áreas";
+
+// MARK: - Observations
+
+/* Location: WeatherObservationRow.swift - Section header for current conditions */
+"weather.now.section" = "Agora";
+
+/* Location: WeatherObservationRow.swift - Button that asks the bot for fresh observations */
+"weather.now.refresh" = "Atualizar";
+
+/* Location: WeatherObservationRow.swift - Shown when no observations have arrived */
+"weather.now.none" = "Ainda não há observações";
+
+/* Location: WeatherObservationRow.swift - Badge on a reading older than two hours */
+"weather.now.stale" = "Desatualizado";
+
+/* Location: WeatherFormatting.swift - Wind with no speed and no direction */
+"weather.now.calm" = "Calmo";
+
+/* Location: WeatherObservationRow.swift - Apparent temperature, %@ is the temperature */
+"weather.now.feelsLike" = "sensação de %@";
+
+/* Location: WeatherObservationRow.swift - Relative humidity, %lld is percent */
+"weather.now.humidity" = "Humidade %lld%%";
+
+/* Location: WeatherObservationRow.swift - Barometric pressure, %@ is inches of mercury */
+"weather.now.pressure" = "Pressão %@ inHg";
+
+/* Location: WeatherObservationRow.swift - Visibility, %@ is a distance */
+"weather.now.visibility" = "Visibilidade %@";
+
+/* Location: WeatherObservationRow.swift - Dew point, %@ is the temperature */
+"weather.now.dewpoint" = "Ponto de orvalho %@";
+
+/* Location: WeatherFormatting.swift - Wind, %1$@ is a compass point and %2$lld the speed in mph */
+"weather.wind.speed" = "%1$@ %2$lld";
+
+/* Location: WeatherFormatting.swift - Wind with a gust, %1$@ is the wind and %2$lld the gust in mph */
+"weather.wind.gusting" = "%1$@ com rajadas de %2$lld";
+
+// MARK: - Forecast
+
+/* Location: WeatherForecastSection.swift - Section header */
+"weather.forecast.section" = "Previsão";
+
+/* Location: WeatherForecastSection.swift - Shown when no forecast has arrived */
+"weather.forecast.none" = "Ainda não há previsão";
+
+/* Location: WeatherForecastSection.swift - Fallback point name, %lld is the wire index */
+"weather.forecast.point" = "Ponto %lld";
+
+/* Location: WeatherForecastSection.swift - Label for a forecast the bot resolved from a place, %@ is the place asked for */
+"weather.forecast.nearestPoint" = "%@ (ponto mais próximo)";
+
+/* Location: WeatherForecastSection.swift - When the forecast was issued, %@ is a date and time */
+"weather.forecast.issued" = "Emitida %@";
+
+/* Location: WeatherForecastSection.swift - Badge on a forecast older than twelve hours */
+"weather.forecast.stale" = "Desatualizada";
+
+/* Location: WeatherForecastSection.swift - Daytime high, %@ is the temperature */
+"weather.forecast.high" = "Máxima %@";
+
+/* Location: WeatherForecastSection.swift - Overnight low, %@ is the temperature */
+"weather.forecast.low" = "Mínima %@";
+
+/* Location: WeatherForecastSection.swift - Chance of precipitation, %lld is percent */
+"weather.forecast.pop" = "%lld%% de chuva";
+
+/* Location: WeatherForecastSection.swift - Button asking for the bot's home point forecast */
+"weather.forecast.home" = "Previsão do bot";
+
+/* Location: WeatherForecastSection.swift - Button asking for the point nearest the phone */
+"weather.forecast.myLocation" = "A minha localização";
+
+/* Location: WeatherForecastSection.swift - Button opening the place search sheet */
+"weather.forecast.findPlace" = "Encontrar um local…";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.today" = "Hoje";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.tonight" = "Esta noite";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.tomorrow" = "Amanhã";
+
+/* Location: WeatherFormatting.swift - Forecast period label */
+"weather.forecast.period.tomorrowNight" = "Amanhã à noite";
+
+/* Location: WeatherFormatting.swift - Overnight period label, %@ is a weekday name */
+"weather.forecast.period.night" = "%@ à noite";
+
+// MARK: - Place search
+
+/* Location: WeatherPlaceSearchView.swift - Sheet title */
+"weather.placeSearch.title" = "Encontrar um local";
+
+/* Location: WeatherPlaceSearchView.swift - Search field prompt */
+"weather.placeSearch.prompt" = "Cidade ou vila";
+
+/* Location: WeatherPlaceSearchView.swift - Shown when a search matches nothing */
+"weather.placeSearch.empty" = "Nenhum local correspondente";
+
+/* Location: WeatherPlaceSearchView.swift - Place row, %1$@ is the name and %2$@ the state */
+"weather.placeSearch.place" = "%1$@, %2$@";
+
+/* Location: WeatherPlaceSearchView.swift - The forecast point that will be asked for, %1$@ is its name and %2$@ its distance from the place */
+"weather.placeSearch.point" = "Ponto de previsão %1$@, a %2$@";
+
+// MARK: - Text products
+
+/* Location: WeatherTextSection.swift - Section header */
+"weather.text.section" = "Produtos de texto";
+
+/* Location: WeatherTextSection.swift - Button asking for the office's forecast discussion */
+"weather.text.discussion" = "Discussão da previsão";
+
+/* Location: WeatherTextSection.swift - Button asking for the hazardous weather outlook */
+"weather.text.hazardousOutlook" = "Perspetiva de risco";
+
+/* Location: WeatherTextSection.swift - Button asking for the space weather summary */
+"weather.text.spaceWeather" = "Meteorologia espacial";
+
+/* Location: WeatherTextSection.swift - Button asking for a state's storm reports */
+"weather.text.stormReports" = "Relatos de tempestade";
+
+/* Location: WeatherTextSection.swift - Button asking for a state's rainfall totals */
+"weather.text.rainfall" = "Precipitação";
+
+/* Location: WeatherTextSection.swift - Button asking for a station's raw observation */
+"weather.text.metar" = "METAR";
+
+/* Location: WeatherTextSection.swift - Button asking for a station's forecast */
+"weather.text.taf" = "TAF";
+
+/* Location: WeatherTextSection.swift - Picker label for the state a request names */
+"weather.text.state" = "Estado";
+
+/* Location: WeatherTextSection.swift - Picker label for the station a request names */
+"weather.text.station" = "Estação";
+
+/* Location: WeatherTextSection.swift - Badge on a reply with a chunk missing */
+"weather.text.partial" = "Parcial";
+
+/* Location: WeatherTextDetailView.swift - Marker where a chunk never arrived */
+"weather.text.missingPart" = "\n[parte em falta]\n";
+
+/* Location: WeatherTextDetailView.swift - Footer naming the missing chunk, %1$lld of %2$lld */
+"weather.text.missingFooter" = "Parte %1$lld de %2$lld não recebida";
+
+/* Location: WeatherTextDetailView.swift - Button that asks the bot for the reply again */
+"weather.text.askAgain" = "Pedir novamente";
+
+/* Location: WeatherTextDetailView.swift - Shown when the text was cleared while open */
+"weather.text.gone" = "Este texto já não está guardado.";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.warning" = "Texto do aviso";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.discussion" = "Discussão da previsão";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.space" = "Meteorologia espacial";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.storm" = "Relatos de tempestade";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.rain" = "Precipitação";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.metarTaf" = "METAR / TAF";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.outlook" = "Perspetiva de risco";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.nowcast" = "Previsão imediata";
+
+/* Location: WeatherFormatting.swift - Text product title */
+"weather.text.subject.general" = "Mensagem";
+
+/* Location: WeatherFormatting.swift - Text product title for an unknown subject */
+"weather.text.subject.other" = "Texto";
+
+// MARK: - Requests
+
+/* Location: WeatherToolView.swift - Shown while a request is on the air, %@ is the bot's name */
+"weather.request.waiting" = "A aguardar %@…";
+
+/* Location: WeatherToolView.swift - Appended while the one retry is on the air */
+"weather.request.secondTry" = "(segunda tentativa)";
+
+/* Location: WeatherToolView.swift - Shown when neither try was answered, %@ is the bot's name */
+"weather.request.timedOut" = "Sem resposta de %@. Pode estar fora de alcance.";
+
+/* Location: WeatherToolView.swift - Shown when the same request was answered minutes ago */
+"weather.request.cached" = "Já recebido nos últimos cinco minutos";
+
+/* Location: WeatherToolView.swift - Shown when requests are coming too fast, %lld is seconds */
+"weather.request.rateLimited" = "Aguarde %lld s entre pedidos";
+
+/* Location: WeatherToolView.swift - Shown when no bot is selected */
+"weather.request.noBot" = "Escolha primeiro um bot meteorológico";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.noData" = "O bot ainda não tem dados para isso";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.unknownLocation" = "O bot não conhece essa localização";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.unsupported" = "O bot não suporta esse pedido";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.botError" = "O bot comunicou um erro";
+
+/* Location: WeatherFormatting.swift - The bot declined the request */
+"weather.request.notAvailable.rateLimited" = "O bot está limitado em frequência; tente mais tarde";
+
+/* Location: WeatherFormatting.swift - The bot declined the request for an unknown reason */
+"weather.request.notAvailable.other" = "O bot não consegue responder a isso";
+
+// MARK: - Menu
+
+/* Location: WeatherToolView.swift - Overflow menu label */
+"weather.menu.more" = "Mais";
+
+/* Location: WeatherToolView.swift - Overflow menu item */
+"weather.menu.clearData" = "Limpar os dados deste bot";
+
+/* Location: WeatherToolView.swift - Confirmation title, %@ is the bot's name */
+"weather.menu.clearConfirm" = "Limpar tudo o que foi recebido de %@?";
+
+/* Location: WeatherToolView.swift - Confirmation button */
+"weather.menu.clearAction" = "Limpar";

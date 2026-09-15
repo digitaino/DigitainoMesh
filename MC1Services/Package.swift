@@ -53,7 +53,11 @@ let package = Package(
     // Both are loaded lazily by MeshWXGeometry, never at launch.
     .target(
       name: "MeshWX",
-      resources: [.copy("Resources")]
+      // Deliberately not named `Resources`: `.copy` keeps the directory name inside the
+      // resource bundle, and a flat iOS bundle with a top-level `Resources/` is read as an
+      // old-style versioned bundle — `codesign` rejects it ("bundle format unrecognized"),
+      // which fails the app build even though `swift test` on macOS is happy.
+      resources: [.copy("PreloadBundle")]
     ),
     // THE DEPENDENCY DIRECTION IS THE PRIVACY GUARANTEE: MC1Services must never import
     // MapperRawLog (cycle = compile error), so no future upload code in MC1Services can
