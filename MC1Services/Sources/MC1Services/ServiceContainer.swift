@@ -349,7 +349,12 @@ public final class ServiceContainer {
     adaptivePowerService = AdaptivePowerService(txPowerApplier: settingsService)
     notifSyncService = NotifSyncService(session: session, dataStore: dataStore)
     weatherService = WeatherService(
-      transport: SessionWeatherTransport(session: session),
+      transport: SessionWeatherTransport(
+        session: session,
+        storedChannelSecret: { [dataStore] index in
+          try? await dataStore.fetchChannel(radioID: radioID, index: index)?.secret
+        }
+      ),
       store: FileWeatherStateStore.default()
     )
 

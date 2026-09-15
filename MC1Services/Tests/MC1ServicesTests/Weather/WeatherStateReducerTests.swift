@@ -120,8 +120,10 @@ struct WeatherStateReducerTests {
   @Test
   func `a digest removes what it omits, lists what the app lacks, and clears the gap flag`() {
     var state = fresh()
-    _ = WeatherStateReducer.apply(F.warning(seq: 1, identity: F.svw42), to: &state, receivedAt: F.t0)
-    _ = WeatherStateReducer.apply(F.warning(seq: 5, identity: F.wsw7), to: &state, receivedAt: F.t0)
+    // An hour before the list was built, so the list speaks for both.
+    let earlier = F.t0.addingTimeInterval(-3600)
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, identity: F.svw42), to: &state, receivedAt: earlier)
+    _ = WeatherStateReducer.apply(F.warning(seq: 5, identity: F.wsw7), to: &state, receivedAt: earlier)
     #expect(state.needsDigest)
 
     let changes = WeatherStateReducer.apply(
@@ -288,5 +290,194 @@ struct WeatherStateReducerTests {
     try Data("not json".utf8).write(to: url)
     #expect(try await store.load().isEmpty)
     try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+  }
+}
+
+/// Ordering on a shared, lossy channel: late copies, cached re-sends, lists drained from the
+/// radio's queue hours late, and upgrades whose replacement never arrives. Every case here is a
+/// way the phone could otherwise report calm while something is active.
+@Suite("WeatherStateReducer ordering")
+struct WeatherStateReducerOrderingTests {
+  private typealias F = WeatherFixture
+
+  private func minutes(_ value: Double) -> TimeInterval { value * 60 }
+
+  private func warning(
+    seq: UInt8, identity: MeshWXWarningIdentity, areas: [MeshWXAreaRun], polygon: [MeshWXCoordinate]? = nil
+  ) -> MeshWXMessage {
+    MeshWXMessage(
+      header: F.header(seq: seq, type: .warning),
+      payload: .warning(MeshWXWarning(
+        identity: identity, expiresMinutes: F.t0Minutes + 120, polygon: polygon, areas: areas)))
+  }
+
+  @Test
+  func `a cached empty list re-sent after a new warning does not remove it`() {
+    var state = WeatherBotState(botID: F.botID)
+    // 23:00 list, empty. 23:02 tornado warning. 23:04 the bot's cache re-sends the 23:00 list.
+    _ = WeatherStateReducer.apply(F.digest(seq: 1, nowMinutes: F.t0Minutes, entries: []), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.warning(seq: 2, identity: F.svw43), to: &state, receivedAt: F.t0.addingTimeInterval(minutes(2)))
+    let changes = WeatherStateReducer.apply(
+      F.digest(seq: 3, nowMinutes: F.t0Minutes, entries: []), to: &state, receivedAt: F.t0.addingTimeInterval(minutes(4)))
+    #expect(changes == [.digestApplied(missing: [], removed: [])])
+    #expect(state.warnings[F.svw43] != nil)
+  }
+
+  @Test
+  func `a list built before the one held changes nothing`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, identity: F.svw42), to: &state, receivedAt: F.t0.addingTimeInterval(-minutes(60)))
+    _ = WeatherStateReducer.apply(F.digest(seq: 2, nowMinutes: F.t0Minutes, entries: [(F.svw42, 45)]), to: &state, receivedAt: F.t0)
+    // An eight-hour-old list drained late from the radio's queue.
+    let changes = WeatherStateReducer.apply(
+      F.digest(seq: 3, nowMinutes: F.t0Minutes - 480, entries: []), to: &state, receivedAt: F.t0.addingTimeInterval(60))
+    #expect(changes == [.digestIgnoredOlder(builtMinutes: F.t0Minutes - 480)])
+    #expect(state.warnings[F.svw42] != nil)
+    #expect(state.digest?.digest.nowMinutes == F.t0Minutes)
+  }
+
+  @Test
+  func `a list may extend but not shorten a warning that arrived after it was built`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, expiresMinutes: F.t0Minutes + 90), to: &state, receivedAt: F.t0)
+    // Built three minutes before that warning arrived, with an earlier expiry.
+    _ = WeatherStateReducer.apply(
+      F.digest(seq: 2, nowMinutes: F.t0Minutes - 3, entries: [(F.svw42, 30)]), to: &state, receivedAt: F.t0.addingTimeInterval(60))
+    #expect(state.warnings[F.svw42]?.warning.expiresMinutes == F.t0Minutes + 90)
+  }
+
+  @Test
+  func `a gap seen after the list was built survives a cached re-send of it`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.digest(seq: 1, nowMinutes: F.t0Minutes, entries: []), to: &state, receivedAt: F.t0)
+    // seq 2 is lost; seq 3 reveals the gap three minutes later.
+    _ = WeatherStateReducer.apply(F.observations(seq: 3, stations: [(202, 88)]), to: &state, receivedAt: F.t0.addingTimeInterval(minutes(3)))
+    #expect(state.needsDigest)
+    _ = WeatherStateReducer.apply(F.digest(seq: 4, nowMinutes: F.t0Minutes, entries: []), to: &state, receivedAt: F.t0.addingTimeInterval(minutes(4)))
+    #expect(state.needsDigest, "the re-sent list was built before the gap and cannot vouch for it")
+    // A list built well after the gap clears it.
+    _ = WeatherStateReducer.apply(F.digest(seq: 5, nowMinutes: F.t0Minutes + 180, entries: []), to: &state, receivedAt: F.t0.addingTimeInterval(minutes(180)))
+    #expect(!state.needsDigest)
+  }
+
+  @Test
+  func `an upgrade leaves a marker until an overlapping replacement arrives`() {
+    var state = WeatherBotState(botID: F.botID)
+    let travis = [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)]
+    _ = WeatherStateReducer.apply(warning(seq: 1, identity: F.svw42, areas: travis), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.cancel(seq: 2, identity: F.svw42, reason: .upgraded), to: &state, receivedAt: F.t0)
+    #expect(state.warnings.isEmpty)
+    #expect(state.pendingUpgrades[F.svw42] != nil)
+
+    let tornado = MeshWXWarningIdentity(event: 1, office: 35, etn: 9)
+    _ = WeatherStateReducer.apply(warning(seq: 3, identity: tornado, areas: travis), to: &state, receivedAt: F.t0)
+    #expect(state.pendingUpgrades.isEmpty)
+  }
+
+  @Test
+  func `a warning elsewhere from the same office does not clear an upgrade marker`() {
+    var state = WeatherBotState(botID: F.botID)
+    let travis = [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)]
+    let llano = [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 299, run: 1)]
+    _ = WeatherStateReducer.apply(warning(seq: 1, identity: F.svw42, areas: travis), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.cancel(seq: 2, identity: F.svw42, reason: .upgraded), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(warning(seq: 3, identity: F.svw43, areas: llano), to: &state, receivedAt: F.t0)
+    #expect(state.pendingUpgrades[F.svw42] != nil)
+  }
+
+  @Test
+  func `a cancel that is not an upgrade leaves no marker`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 1), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.cancel(seq: 2, reason: .cancelled), to: &state, receivedAt: F.t0)
+    #expect(state.pendingUpgrades.isEmpty)
+  }
+
+  @Test
+  func `a late copy of a recent seq is a duplicate, not a gap`() {
+    var state = WeatherBotState(botID: F.botID)
+    for seq: UInt8 in 5...7 {
+      _ = WeatherStateReducer.apply(F.observations(seq: seq, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    }
+    let changes = WeatherStateReducer.apply(F.cancel(seq: 6), to: &state, receivedAt: F.t0)
+    #expect(changes == [.duplicate(seq: 6)])
+    #expect(state.lastSeq == 7)
+    #expect(!state.needsDigest)
+  }
+
+  @Test
+  func `a message far behind is out of order, its warning is not applied, and it asks for a list`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 100, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(F.warning(seq: 50), to: &state, receivedAt: F.t0)
+    #expect(changes == [.outOfOrder(seq: 50)])
+    #expect(state.warnings.isEmpty)
+    #expect(state.needsDigest)
+    #expect(state.lastSeq == 100)
+  }
+
+  @Test
+  func `after six hours of silence a repeated seq is new, and the silence is a gap`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 10, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(
+      F.observations(seq: 10, timestampMinutes: F.t0Minutes + 420, stations: [(202, 80)]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(minutes(420)))
+    #expect(changes.first == .sequenceGap(expected: 11, received: 10))
+    #expect(state.observations[202]?.observation.tempF == 80)
+    #expect(state.needsDigest)
+  }
+
+  @Test
+  func `a list's age is its build time, not its arrival`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.digest(seq: 1, nowMinutes: F.t0Minutes - 480, entries: []), to: &state, receivedAt: F.t0)
+    #expect(state.digest?.builtAt == Date(unixMinutes: F.t0Minutes - 480))
+    #expect(state.digest?.receivedAt == F.t0)
+  }
+
+  @Test
+  func `observations remember how many stations their batch carried`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 1, stations: [(202, 88), (860, 84)]), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 2, timestampMinutes: F.t0Minutes + 5, stations: [(976, 80)]), to: &state, receivedAt: F.t0)
+    #expect(state.observations[202]?.batchSize == 2)
+    #expect(state.observations[976]?.batchSize == 1)
+  }
+
+  @Test
+  func `a state file written before the new fields still loads`() async throws {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 1), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 2, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.forecast(seq: 3), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.text(seq: 4, group: 4, index: 0, total: 1, text: "x"), to: &state, receivedAt: F.t0)
+
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .secondsSince1970
+    var json = try #require(try JSONSerialization.jsonObject(with: encoder.encode(state)) as? [String: Any])
+    for key in ["recentSeqs", "gapDetectedAt", "pendingUpgrades"] { json.removeValue(forKey: key) }
+    func strip(_ collection: String, _ field: String) {
+      guard var pairs = json[collection] as? [Any] else { return }
+      for index in stride(from: 1, to: pairs.count, by: 2) {
+        if var record = pairs[index] as? [String: Any] {
+          record.removeValue(forKey: field)
+          pairs[index] = record
+        }
+      }
+      json[collection] = pairs
+    }
+    strip("observations", "batchSize")
+    strip("forecasts", "requestedHere")
+    strip("texts", "request")
+
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .secondsSince1970
+    let legacy = try decoder.decode(WeatherBotState.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(legacy.warnings.count == 1)
+    #expect(legacy.recentSeqs.isEmpty)
+    #expect(legacy.observations[202]?.batchSize == 1)
+    #expect(legacy.forecasts[102]?.requestedHere == false)
+    #expect(legacy.texts[4]?.request == nil)
   }
 }

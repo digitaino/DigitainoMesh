@@ -9,7 +9,7 @@ import Foundation
 /// and codes are carried as the strings the bot expects (`SV.W.EWX.42`, `TXC453`, `KAUS`,
 /// `EWX`); the caller renders them from the bundle tables, so this type stays free of the
 /// wire tables and of anything the UI would have to localise.
-public enum WeatherRequest: Sendable, Hashable {
+public enum WeatherRequest: Sendable, Hashable, Codable {
   /// `>d` — the active-warning digest.
   case digest
   /// `>w` — every active warning in coverage (at most 6, newest first), then a digest.
@@ -96,16 +96,19 @@ public enum WeatherRequest: Sendable, Hashable {
     }
   }
 
-  /// Whether an answer to this request within the last five minutes makes a repeat pointless
-  /// (spec §13: "do not re-request something you received in the last 5 minutes; the bot
-  /// would only re-send the cached bytes").
+  /// Whether another bot's answer to the same question settles it.
   ///
-  /// Text replies are the exception: a reply is "answered" on its first chunk, and asking
-  /// again is exactly how a missing chunk is recovered (spec §8.1: "ask again after 20 s, at
-  /// most once"). Those go out every time; the screen throttles them.
-  public var isCacheable: Bool {
-    if case .text = expectedReply { return false }
-    return true
+  /// Spec §12: a request naming a place may be answered by the bot nearest that place, and a
+  /// forecast for point 102 is the same forecast whoever broadcasts it. The alert list, the
+  /// coverage batch and the office outlook describe one bot's area and only that bot answers.
+  public var acceptsAnswerFromAnyBot: Bool {
+    switch self {
+    case .forecast, .forecastForPlace, .forecastDiscussion, .stormReports, .rainfall, .metar, .taf,
+      .observation, .warning, .warningText, .spaceWeather:
+      true
+    case .digest, .activeWarnings, .warningsTouching, .observations, .homeForecast, .hazardousOutlook:
+      false
+    }
   }
 }
 

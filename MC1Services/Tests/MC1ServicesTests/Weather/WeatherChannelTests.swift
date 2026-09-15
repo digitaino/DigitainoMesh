@@ -37,6 +37,16 @@ struct WeatherChannelTests {
     #expect(WeatherChannel.existingSlot(in: []) == nil)
   }
 
+  /// The secret is what decrypts the channel; a slot holding it is #meshwx whatever it is
+  /// called in the app's table.
+  @Test
+  func `a slot is found by the meshwx secret whatever its name`() {
+    let renamed = ChannelDTO(
+      id: UUID(), radioID: UUID(), index: 31, name: "Weather", secret: WeatherChannel.secret,
+      isEnabled: true, lastMessageDate: nil, unreadCount: 0)
+    #expect(WeatherChannel.existingSlot(in: [channel(index: 1, name: "#meshwx-discover"), renamed]) == 31)
+  }
+
   @Test
   func `the free slot skips the public channel and every used index`() {
     let channels = [channel(index: 0, name: "Public"), channel(index: 1, name: "#austin"), channel(index: 3, name: "x")]

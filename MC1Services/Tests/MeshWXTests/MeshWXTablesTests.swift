@@ -192,3 +192,25 @@ struct MeshWXTablesTests {
     #expect(fresh.places.count == 34937)
   }
 }
+
+/// Naming a coordinate for a screen header.
+@Suite("MeshWX nearest place")
+struct MeshWXNearestPlaceTests {
+  let tables = MeshWXTables.shared
+
+  @Test func downtownAustinIsNamedAustin() throws {
+    let place = try #require(tables.nearestPlace(toLat: 30.2672, lon: -97.7431))
+    #expect(place.name.uppercased() == "AUSTIN")
+    #expect(place.state == "TX")
+  }
+
+  @Test func roundRockIsNamedRoundRock() throws {
+    let place = try #require(tables.nearestPlace(toLat: 30.5083, lon: -97.6789))
+    #expect(place.name.uppercased() == "ROUND ROCK")
+  }
+
+  @Test func nothingIsNamedFromBeyondTheRadius() {
+    // 250 km out in the Gulf of Mexico.
+    #expect(tables.nearestPlace(toLat: 26.5, lon: -93.5) == nil)
+  }
+}

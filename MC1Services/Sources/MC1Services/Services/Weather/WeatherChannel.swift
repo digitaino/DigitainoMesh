@@ -15,8 +15,13 @@ public enum WeatherChannel {
   public static var secret: Data { ChannelService.hashSecret(name) }
 
   /// The slot already carrying `#meshwx`, if any.
+  ///
+  /// By secret first: the secret is what decrypts the channel, so a slot holding it *is*
+  /// `#meshwx` whatever it was named when it was added (another app, a typed variant). The name
+  /// is the fallback for a table whose secret column has not synced.
   public static func existingSlot(in channels: [ChannelDTO]) -> UInt8? {
-    channels.first { $0.name == name }?.index
+    let secret = secret
+    return channels.first { $0.secret == secret }?.index ?? channels.first { $0.name == name }?.index
   }
 
   /// The first unused slot above 0 (slot 0 is the public channel), or nil when the radio is

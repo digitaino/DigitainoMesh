@@ -100,6 +100,79 @@ public struct MeshWXPeriodSlot: Sendable, Hashable, Codable {
 ///
 /// Returns numbers and a compass point, never `"WNW 15 gusting 26"`: the unit, the word
 /// "gusting" and the order are the app's to localise.
+/// How a forecast's entries are laid out in time, read from the entries themselves.
+///
+/// Spec §7 describes 12-hour periods alternating day and night from `first`, a day period
+/// carrying only a high and a night period only a low. The live WX-AUS bot (2026-09-14)
+/// sends something else: `first` 0 and seven entries, each with both a high and a low —
+/// seven consecutive days. Trusting the period ids renders that as "Tonight: high 100°",
+/// so the layout is decided by what the entries carry, and a forecast that fits neither
+/// shape is shown without hiding any value it holds.
+public enum MeshWXForecastLayout: Sendable, Hashable {
+  /// Spec §7: alternating day and night periods, one temperature each.
+  case periods
+  /// Consecutive days, each with a high and a low.
+  case days
+  /// Some entries carry both temperatures and some one: labels follow the period ids and
+  /// every temperature present is shown.
+  case mixed
+
+  /// Days when every entry that carries a temperature carries both; spec periods when none
+  /// does and every single temperature sits in its slot (a high by day, a low by night);
+  /// mixed otherwise — including singles in the wrong slot, where the period ids and the
+  /// data disagree and neither can be trusted to label the other.
+  public init(of forecast: MeshWXForecast) {
+    var both = 0
+    var inSlot = 0
+    var outOfSlot = 0
+    for (index, period) in forecast.periods.enumerated() {
+      let isNight = (Int(forecast.firstPeriod) + index) % 2 == 1
+      switch (period.highF != nil, period.lowF != nil) {
+      case (true, true): both += 1
+      case (true, false): if isNight { outOfSlot += 1 } else { inSlot += 1 }
+      case (false, true): if isNight { inSlot += 1 } else { outOfSlot += 1 }
+      case (false, false): break
+      }
+    }
+    if both > 0, inSlot == 0, outOfSlot == 0 {
+      self = .days
+    } else if both == 0, outOfSlot == 0 {
+      self = .periods
+    } else {
+      self = .mixed
+    }
+  }
+}
+
+/// One forecast entry placed in time.
+public struct MeshWXForecastEntry: Sendable, Hashable {
+  /// Position in the message, from 0.
+  public let index: Int
+  /// Days after the issue date's calendar day.
+  public let dayOffset: Int
+  /// True or false for a 12-hour period; nil for a whole-day entry.
+  public let isNight: Bool?
+  public let period: MeshWXForecastPeriod
+
+  /// Lays out a forecast's entries per ``MeshWXForecastLayout``.
+  ///
+  /// For whole days the offset counts entries from `first ÷ 2`, the day the first period id
+  /// names; for periods it is the period id ÷ 2 and the parity says night (spec §7).
+  public static func entries(of forecast: MeshWXForecast) -> [MeshWXForecastEntry] {
+    let layout = MeshWXForecastLayout(of: forecast)
+    return forecast.periods.enumerated().map { index, period in
+      switch layout {
+      case .days:
+        return MeshWXForecastEntry(
+          index: index, dayOffset: Int(forecast.firstPeriod) / 2 + index, isNight: nil, period: period)
+      case .periods, .mixed:
+        let id = Int(forecast.firstPeriod) + index
+        return MeshWXForecastEntry(index: index, dayOffset: id / 2, isNight: id % 2 == 1, period: period)
+      }
+    }
+  }
+}
+
 public struct MeshWXWindReading: Sendable, Hashable {
   /// Nil when the wind is calm — direction 0 with speed 0 (spec §6).
   public let direction: MeshWXCompass?

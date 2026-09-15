@@ -37,6 +37,8 @@ public final class MeshWXGeometry: Sendable {
   private struct Caches {
     var zones: [String: Rings]?
     var counties: [String: Rings]?
+    var zoneBoxes: [String: Box]?
+    var countyBoxes: [String: Box]?
   }
 
   public convenience init() {
@@ -72,6 +74,178 @@ public final class MeshWXGeometry: Sendable {
   /// Outer rings for an area already resolved to a name by `MeshWXTables`.
   public func rings(for area: MeshWXNamedArea) -> Rings? {
     rings(for: area.ugc)
+  }
+
+  // MARK: - Containment
+
+  /// A latitude/longitude box around every ring of one area.
+  ///
+  /// Asking "which county am I in" against 8,600 outlines is a ray cast per vertex; asking
+  /// it against 8,600 boxes first leaves two or three outlines to cast against, which is
+  /// what makes the lookup cheap enough to run whenever the place changes.
+  public struct Box: Sendable, Hashable {
+    public var minLatitude: Double
+    public var maxLatitude: Double
+    public var minLongitude: Double
+    public var maxLongitude: Double
+
+    public init?(_ rings: Rings) {
+      var first = true
+      var minLatitude = 0.0, maxLatitude = 0.0, minLongitude = 0.0, maxLongitude = 0.0
+      for ring in rings {
+        for vertex in ring {
+          if first {
+            minLatitude = vertex.latitude; maxLatitude = vertex.latitude
+            minLongitude = vertex.longitude; maxLongitude = vertex.longitude
+            first = false
+          } else {
+            minLatitude = min(minLatitude, vertex.latitude)
+            maxLatitude = max(maxLatitude, vertex.latitude)
+            minLongitude = min(minLongitude, vertex.longitude)
+            maxLongitude = max(maxLongitude, vertex.longitude)
+          }
+        }
+      }
+      guard !first else { return nil }
+      self.minLatitude = minLatitude
+      self.maxLatitude = maxLatitude
+      self.minLongitude = minLongitude
+      self.maxLongitude = maxLongitude
+    }
+
+    public func contains(_ point: MeshWXCoordinate) -> Bool {
+      point.latitude >= minLatitude && point.latitude <= maxLatitude
+        && point.longitude >= minLongitude && point.longitude <= maxLongitude
+    }
+  }
+
+  /// Whether a ring contains a point, by ray casting in latitude/longitude.
+  ///
+  /// Planar on purpose: warning polygons and county outlines are tens of kilometres across,
+  /// where the curvature error is metres — far inside the 0.001° resolution a warning
+  /// polygon is sent at. A ring may repeat its first vertex or not; the duplicate edge has
+  /// zero height and never crosses the ray. A point exactly on an edge may land either side,
+  /// which is why callers that make safety claims must also measure distance to the edge.
+  public static func ring(_ ring: [MeshWXCoordinate], contains point: MeshWXCoordinate) -> Bool {
+    guard ring.count >= 3 else { return false }
+    var inside = false
+    var previous = ring[ring.count - 1]
+    for vertex in ring {
+      if (vertex.latitude > point.latitude) != (previous.latitude > point.latitude) {
+        let fraction = (point.latitude - vertex.latitude) / (previous.latitude - vertex.latitude)
+        let crossing = vertex.longitude + fraction * (previous.longitude - vertex.longitude)
+        if point.longitude < crossing { inside.toggle() }
+      }
+      previous = vertex
+    }
+    return inside
+  }
+
+  /// Whether the outline of a UGC code contains a point, or nil when the bundle has no
+  /// outline for that code — "no outline" is not "outside", and callers must not treat it
+  /// as such.
+  public func contains(_ point: MeshWXCoordinate, ugc: String) -> Bool? {
+    guard let rings = rings(for: ugc) else { return nil }
+    return rings.contains { Self.ring($0, contains: point) }
+  }
+
+  /// Every county and zone whose outline contains a point, sorted: normally one county and
+  /// one land zone, occasionally more where fire-weather or marine zones overlap.
+  ///
+  /// Parses both GeoJSON files on first use (see ``preload()``).
+  public func areaCodes(containing point: MeshWXCoordinate) -> [String] {
+    let counties = counties()
+    let zones = zones()
+    var hits: [String] = []
+    for (code, box) in boxes(\.countyBoxes, from: counties) where box.contains(point) {
+      if counties[code]?.contains(where: { Self.ring($0, contains: point) }) == true {
+        hits.append(code)
+      }
+    }
+    for (code, box) in boxes(\.zoneBoxes, from: zones) where box.contains(point) {
+      if zones[code]?.contains(where: { Self.ring($0, contains: point) }) == true {
+        hits.append(code)
+      }
+    }
+    return hits.sorted()
+  }
+
+  /// Distance in kilometres from a point to the nearest edge of a ring, 0 when inside.
+  ///
+  /// An equirectangular projection around the point: within the tens of kilometres a "near"
+  /// alert or a location's uncertainty radius spans, its error is well under the 0.001° a
+  /// warning polygon is sent at. A two-point ring is a line; a one-point ring is a point.
+  public static func distanceKilometres(from point: MeshWXCoordinate, to ring: [MeshWXCoordinate]) -> Double {
+    guard let first = ring.first else { return .infinity }
+    if ring.count >= 3, Self.ring(ring, contains: point) { return 0 }
+    let kilometresPerDegreeLatitude = 111.195
+    let kilometresPerDegreeLongitude = kilometresPerDegreeLatitude * cos(point.latitude * .pi / 180)
+    func projected(_ vertex: MeshWXCoordinate) -> (x: Double, y: Double) {
+      ((vertex.longitude - point.longitude) * kilometresPerDegreeLongitude,
+       (vertex.latitude - point.latitude) * kilometresPerDegreeLatitude)
+    }
+    guard ring.count >= 2 else {
+      let only = projected(first)
+      return (only.x * only.x + only.y * only.y).squareRoot()
+    }
+    var nearest = Double.infinity
+    var previous = projected(ring[ring.count - 1])
+    for vertex in ring {
+      let current = projected(vertex)
+      let dx = current.x - previous.x
+      let dy = current.y - previous.y
+      let lengthSquared = dx * dx + dy * dy
+      let fraction = lengthSquared > 0
+        ? max(0, min(1, -(previous.x * dx + previous.y * dy) / lengthSquared))
+        : 0
+      let closestX = previous.x + fraction * dx
+      let closestY = previous.y + fraction * dy
+      nearest = min(nearest, (closestX * closestX + closestY * closestY).squareRoot())
+      previous = current
+    }
+    return nearest
+  }
+
+  /// Distance from a point to a UGC area's outline, 0 inside, or nil when the bundle has no
+  /// outline for the code — "no outline" is not "far away".
+  public func distanceKilometres(from point: MeshWXCoordinate, toArea ugc: String) -> Double? {
+    guard let rings = rings(for: ugc), !rings.isEmpty else { return nil }
+    return rings.map { Self.distanceKilometres(from: point, to: $0) }.min()
+  }
+
+  /// Every county and zone whose outline contains a point or passes within a radius of it:
+  /// the areas a location with that much uncertainty might be in.
+  public func areaCodes(near point: MeshWXCoordinate, withinKilometres radius: Double) -> [String] {
+    let counties = counties()
+    let zones = zones()
+    let latitudePad = radius / 111.195
+    let longitudePad = radius / max(1, 111.195 * cos(point.latitude * .pi / 180))
+    func candidates(_ rings: [String: Rings], _ boxes: [String: Box]) -> [String] {
+      boxes.compactMap { code, box in
+        guard point.latitude >= box.minLatitude - latitudePad,
+              point.latitude <= box.maxLatitude + latitudePad,
+              point.longitude >= box.minLongitude - longitudePad,
+              point.longitude <= box.maxLongitude + longitudePad,
+              let areaRings = rings[code],
+              areaRings.contains(where: { Self.distanceKilometres(from: point, to: $0) <= radius })
+        else { return nil }
+        return code
+      }
+    }
+    return (candidates(counties, boxes(\.countyBoxes, from: counties))
+      + candidates(zones, boxes(\.zoneBoxes, from: zones))).sorted()
+  }
+
+  private func boxes(
+    _ keyPath: WritableKeyPath<Caches, [String: Box]?>, from rings: [String: Rings]
+  ) -> [String: Box] {
+    if let existing = caches.withLock({ $0[keyPath: keyPath] }) { return existing }
+    let computed = rings.compactMapValues(Box.init)
+    return caches.withLock { caches in
+      if let existing = caches[keyPath: keyPath] { return existing }
+      caches[keyPath: keyPath] = computed
+      return computed
+    }
   }
 
   /// Whether each file has been read yet, for a "preparing map" indicator.

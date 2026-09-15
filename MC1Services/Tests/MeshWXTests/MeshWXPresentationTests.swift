@@ -194,3 +194,65 @@ struct MeshWXPresentationTests {
     #expect(MeshWXPresentation.unixMinutes(for: Date(timeIntervalSince1970: -10)) == 0)
   }
 }
+
+/// The forecast shape is read from the entries, not from spec §7's period ids alone.
+@Suite("MeshWX forecast layout")
+struct MeshWXForecastLayoutTests {
+  /// The kit vector: first period 1 (tonight), alternating single temperatures.
+  let specForecast = MeshWXForecast(
+    pointIndex: 102, issuedMinutes: 29_823_780, firstPeriod: 1,
+    periods: [
+      MeshWXForecastPeriod(lowF: 73, popPercent: 20, sky: .scattered),
+      MeshWXForecastPeriod(highF: 93, popPercent: 40, sky: .broken),
+      MeshWXForecastPeriod(lowF: 72, popPercent: 30, sky: .broken),
+      MeshWXForecastPeriod(highF: 90, popPercent: 60, sky: .rain)
+    ])
+
+  /// The live WX-AUS forecast for Austin Camp Mabry on 2026-09-14, as the phone held it.
+  let liveForecast = MeshWXForecast(
+    pointIndex: 103, issuedMinutes: 29_823_380, firstPeriod: 0,
+    periods: [(102, 77), (100, 78), (98, 75), (97, 73), (98, 74), (99, 76), (96, 81)].map {
+      MeshWXForecastPeriod(highF: Int8($0.0), lowF: Int8($0.1), sky: .scattered)
+    })
+
+  @Test func theKitVectorIsSpecPeriods() {
+    #expect(MeshWXForecastLayout(of: specForecast) == .periods)
+    let entries = MeshWXForecastEntry.entries(of: specForecast)
+    #expect(entries.map(\.dayOffset) == [0, 1, 1, 2])
+    #expect(entries.map(\.isNight) == [true, false, true, false])
+  }
+
+  @Test func theLiveBotSendsWholeDays() {
+    #expect(MeshWXForecastLayout(of: liveForecast) == .days)
+    let entries = MeshWXForecastEntry.entries(of: liveForecast)
+    #expect(entries.map(\.dayOffset) == [0, 1, 2, 3, 4, 5, 6])
+    #expect(entries.allSatisfy { $0.isNight == nil })
+    #expect(entries[1].period.highF == 100 && entries[1].period.lowF == 78)
+  }
+
+  @Test func aMixedForecastKeepsPeriodLabelsAndHidesNothing() {
+    let mixed = MeshWXForecast(
+      pointIndex: 1, issuedMinutes: 0, firstPeriod: 0,
+      periods: [MeshWXForecastPeriod(highF: 90, lowF: 70), MeshWXForecastPeriod(lowF: 68)])
+    #expect(MeshWXForecastLayout(of: mixed) == .mixed)
+    let entries = MeshWXForecastEntry.entries(of: mixed)
+    #expect(entries.map(\.isNight) == [false, true])
+    #expect(entries[0].period.highF == 90 && entries[0].period.lowF == 70)
+  }
+
+  @Test func singleTemperaturesInTheWrongSlotAreMixed() {
+    // Period 0 is a day, but the entry carries only a low.
+    let wrongSlot = MeshWXForecast(
+      pointIndex: 1, issuedMinutes: 0, firstPeriod: 0,
+      periods: [MeshWXForecastPeriod(lowF: 70), MeshWXForecastPeriod(highF: 90)])
+    #expect(MeshWXForecastLayout(of: wrongSlot) == .mixed)
+  }
+
+  @Test func aForecastWithNoTemperaturesFallsBackToSpecPeriods() {
+    let bare = MeshWXForecast(
+      pointIndex: 1, issuedMinutes: 0, firstPeriod: 2,
+      periods: [MeshWXForecastPeriod(popPercent: 10), MeshWXForecastPeriod(popPercent: 20)])
+    #expect(MeshWXForecastLayout(of: bare) == .periods)
+    #expect(MeshWXForecastEntry.entries(of: bare).map(\.dayOffset) == [1, 1])
+  }
+}

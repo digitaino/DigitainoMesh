@@ -121,3 +121,114 @@ struct MeshWXGeometryTests {
     }
   }
 }
+
+/// Containment: which outline holds a point, and whether a warning polygon does.
+@Suite("MeshWX geometry containment")
+struct MeshWXGeometryContainmentTests {
+  let geometry = MeshWXGeometry.shared
+
+  /// The kit's severe thunderstorm polygon (SV.W.EWX.42), as the decoder reconstructs it.
+  let stormPolygon = [
+    MeshWXCoordinate(latitude: 30.52, longitude: -97.98),
+    MeshWXCoordinate(latitude: 30.61, longitude: -97.62),
+    MeshWXCoordinate(latitude: 30.38, longitude: -97.41),
+    MeshWXCoordinate(latitude: 30.15, longitude: -97.5),
+    MeshWXCoordinate(latitude: 30.09, longitude: -97.85),
+    MeshWXCoordinate(latitude: 30.28, longitude: -98.04)
+  ]
+
+  @Test func aPolygonContainsItsInteriorAndNotTheOutside() {
+    #expect(MeshWXGeometry.ring(stormPolygon, contains: MeshWXCoordinate(latitude: 30.35, longitude: -97.70)))
+    #expect(!MeshWXGeometry.ring(stormPolygon, contains: MeshWXCoordinate(latitude: 30.00, longitude: -97.00)))
+    // Just past the eastern vertex, where a bounding box would still say yes.
+    #expect(!MeshWXGeometry.ring(stormPolygon, contains: MeshWXCoordinate(latitude: 30.58, longitude: -97.45)))
+  }
+
+  @Test func aClosedRingAnswersTheSameAsAnOpenOne() {
+    let closed = stormPolygon + [stormPolygon[0]]
+    let inside = MeshWXCoordinate(latitude: 30.35, longitude: -97.70)
+    let outside = MeshWXCoordinate(latitude: 30.00, longitude: -97.00)
+    #expect(MeshWXGeometry.ring(closed, contains: inside))
+    #expect(!MeshWXGeometry.ring(closed, contains: outside))
+  }
+
+  @Test func degenerateRingsContainNothing() {
+    let point = MeshWXCoordinate(latitude: 30.35, longitude: -97.70)
+    #expect(!MeshWXGeometry.ring([], contains: point))
+    #expect(!MeshWXGeometry.ring(Array(stormPolygon.prefix(2)), contains: point))
+  }
+
+  /// Expected codes come from an independent Python ray cast over the same GeoJSON files.
+  @Test func downtownAustinIsInTravisCountyAndZone() {
+    let codes = geometry.areaCodes(containing: MeshWXCoordinate(latitude: 30.2672, longitude: -97.7431))
+    #expect(codes == ["TXC453", "TXZ192"])
+  }
+
+  @Test func roundRockIsInWilliamsonCounty() {
+    let codes = geometry.areaCodes(containing: MeshWXCoordinate(latitude: 30.5083, longitude: -97.6789))
+    #expect(codes == ["TXC491", "TXZ173"])
+  }
+
+  @Test func openWaterIsInAMarineZoneAndNoCounty() {
+    let codes = geometry.areaCodes(containing: MeshWXCoordinate(latitude: 28.5, longitude: -94.5))
+    #expect(codes == ["GMZ375"])
+  }
+
+  @Test func containmentByCodeDistinguishesOutsideFromNoOutline() {
+    let austin = MeshWXCoordinate(latitude: 30.2672, longitude: -97.7431)
+    #expect(geometry.contains(austin, ugc: "TXC453") == true)
+    #expect(geometry.contains(austin, ugc: "TXC491") == false)
+    // No outline is not "outside": the caller must not claim the area misses the point.
+    #expect(geometry.contains(austin, ugc: "TXC997") == nil)
+  }
+}
+
+/// How far a point is from an outline, and which areas an uncertain location might be in.
+@Suite("MeshWX geometry distance")
+struct MeshWXGeometryDistanceTests {
+  let geometry = MeshWXGeometry.shared
+
+  let stormPolygon = [
+    MeshWXCoordinate(latitude: 30.52, longitude: -97.98),
+    MeshWXCoordinate(latitude: 30.61, longitude: -97.62),
+    MeshWXCoordinate(latitude: 30.38, longitude: -97.41),
+    MeshWXCoordinate(latitude: 30.15, longitude: -97.5),
+    MeshWXCoordinate(latitude: 30.09, longitude: -97.85),
+    MeshWXCoordinate(latitude: 30.28, longitude: -98.04)
+  ]
+
+  @Test func insideIsZero() {
+    #expect(MeshWXGeometry.distanceKilometres(from: MeshWXCoordinate(latitude: 30.35, longitude: -97.7), to: stormPolygon) == 0)
+  }
+
+  @Test func eastOfTheEasternVertexIsAboutTenKilometres() {
+    // 0.1° of longitude at 30.38°N is 9.59 km, and the eastern vertex is the nearest point.
+    let distance = MeshWXGeometry.distanceKilometres(from: MeshWXCoordinate(latitude: 30.38, longitude: -97.31), to: stormPolygon)
+    #expect(distance > 9.3 && distance < 9.7, "got \(distance)")
+  }
+
+  @Test func theNearestPointCanBeOnAnEdge() {
+    // Due south of the middle of the southern edge (30.15,-97.5)–(30.09,-97.85).
+    let distance = MeshWXGeometry.distanceKilometres(from: MeshWXCoordinate(latitude: 30.0, longitude: -97.675), to: stormPolygon)
+    #expect(distance > 12 && distance < 13.5, "got \(distance)")
+  }
+
+  @Test func noOutlineIsNotFarAway() {
+    let austin = MeshWXCoordinate(latitude: 30.2672, longitude: -97.7431)
+    #expect(geometry.distanceKilometres(from: austin, toArea: "TXC997") == nil)
+    #expect(geometry.distanceKilometres(from: austin, toArea: "TXC453") == 0)
+    let bexar = geometry.distanceKilometres(from: austin, toArea: "TXC029") ?? 0
+    #expect(bexar > 60, "Bexar county is a long way from downtown Austin, got \(bexar)")
+  }
+
+  @Test func anUncertainLocationMayBeInTheNeighbouringCounties() {
+    let austin = MeshWXCoordinate(latitude: 30.2672, longitude: -97.7431)
+    let tight = geometry.areaCodes(near: austin, withinKilometres: 1)
+    #expect(tight == ["TXC453", "TXZ192"])
+    let loose = geometry.areaCodes(near: austin, withinKilometres: 35)
+    #expect(loose.contains("TXC453"))
+    #expect(loose.contains("TXC491"), "Williamson county is north of Austin")
+    #expect(loose.contains("TXC209"), "Hays county is south-west of Austin")
+    #expect(!loose.contains("TXC029"), "Bexar county is not within 35 km")
+  }
+}

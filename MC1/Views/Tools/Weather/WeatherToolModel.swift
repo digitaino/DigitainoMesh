@@ -229,7 +229,7 @@ final class WeatherToolModel {
         case let .requestSettled(request, outcome):
           lastOutcome = (request, outcome)
           pendingRequests = await services.weatherService.pendingRequests()
-          if outcome == .answered || outcome == .servedFromCache {
+          if outcome == .answered || { if case .servedFromCache = outcome { return true }; return false }() {
             await refreshStates()
           }
         }

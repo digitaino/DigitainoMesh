@@ -375,6 +375,30 @@ public final class MeshWXTables: Sendable {
 
   // MARK: - Search (spec §11)
 
+  /// The place to name a coordinate by ("Austin"), within `radiusKilometres`.
+  ///
+  /// Nearest place of at least `minimumPopulation` people first, then the nearest place of
+  /// any size: a point in central Austin is "Austin", not the 400-person village whose
+  /// census centroid happens to sit 800 m closer. Nil when nothing is within the radius —
+  /// a label from 60 km away would tell the user they are somewhere they are not.
+  public func nearestPlace(
+    toLat lat: Double, lon: Double, within radiusKilometres: Double = 25,
+    minimumPopulation: Int = 1_000
+  ) -> MeshWXPlace? {
+    var bestSizeable: (place: MeshWXPlace, distance: Double)?
+    var bestAny: (place: MeshWXPlace, distance: Double)?
+    for place in places {
+      let distance = MeshWXGeo.distanceKilometres(fromLat: lat, lon: lon, toLat: place.lat, lon: place.lon)
+      guard distance <= radiusKilometres else { continue }
+      if bestAny == nil || distance < bestAny!.distance { bestAny = (place, distance) }
+      if place.population >= minimumPopulation,
+         bestSizeable == nil || distance < bestSizeable!.distance {
+        bestSizeable = (place, distance)
+      }
+    }
+    return bestSizeable?.place ?? bestAny?.place
+  }
+
   /// Place search: prefix match on the name, then nearest to `near` if given, then the
   /// biggest (spec §11).
   ///

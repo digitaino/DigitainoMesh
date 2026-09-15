@@ -123,9 +123,9 @@ enum WeatherFixture {
   }
 
   /// Wraps an encoded message in the datagram the firmware would deliver.
-  static func datagram(_ message: MeshWXMessage, dataType: UInt16 = MeshWXWire.dataType) throws -> ChannelDatagram {
+  static func datagram(_ message: MeshWXMessage, dataType: UInt16 = MeshWXWire.dataType, channelIndex: UInt8 = 3) throws -> ChannelDatagram {
     ChannelDatagram(
-      channelIndex: 3,
+      channelIndex: channelIndex,
       pathLength: 0xFF,
       dataType: dataType,
       data: try MeshWXEncoder.encode(message),
@@ -139,6 +139,19 @@ actor FakeWeatherTransport: WeatherTransport {
   private(set) var sent: [(publicKey: Data, text: String)] = []
   var failNextSend = false
   private var continuations: [AsyncStream<MeshEvent>.Continuation] = []
+  /// Slot secrets the radio reports. Slot 3 — where fixture datagrams arrive — is `#meshwx`;
+  /// an absent slot is unreadable.
+  private var secrets: [UInt8: Data] = [3: WeatherChannel.secret]
+  private(set) var secretLookups: [UInt8] = []
+
+  func channelSecret(at index: UInt8) async -> Data? {
+    secretLookups.append(index)
+    return secrets[index]
+  }
+
+  func setSecret(_ secret: Data?, at index: UInt8) {
+    secrets[index] = secret
+  }
 
   func datagramEvents() async -> AsyncStream<MeshEvent> {
     let (stream, continuation) = AsyncStream.makeStream(of: MeshEvent.self)
