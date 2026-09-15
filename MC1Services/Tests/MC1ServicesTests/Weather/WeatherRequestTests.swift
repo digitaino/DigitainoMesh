@@ -1,0 +1,73 @@
+import Foundation
+@testable import MC1Services
+import Testing
+
+/// The request grammar is the one part of the protocol the app *sends*, so every line of the
+/// spec §8.2 table is pinned here byte for byte.
+@Suite("WeatherRequest")
+struct WeatherRequestTests {
+  @Test
+  func `every request renders the spec's wire text`() {
+    let expected: [(WeatherRequest, String)] = [
+      (.digest, ">d"),
+      (.activeWarnings, ">w"),
+      (.warning(identity: "SV.W.EWX.42"), ">w SV.W.EWX.42"),
+      (.warningsTouching(ugc: "TXC453"), ">w TXC453"),
+      (.warningsTouching(ugc: "TXZ192"), ">w TXZ192"),
+      (.warningText(identity: "SV.W.EWX.42"), ">wt SV.W.EWX.42"),
+      (.observations, ">o"),
+      (.observation(station: "KAUS"), ">o KAUS"),
+      (.homeForecast, ">f"),
+      (.forecast(point: 102), ">f 102"),
+      (.forecastForPlace("round rock tx"), ">f round rock tx"),
+      (.forecastDiscussion(office: "EWX"), ">afd EWX"),
+      (.spaceWeather, ">space"),
+      (.stormReports(state: "TX"), ">storm TX"),
+      (.rainfall(state: "TX"), ">rain TX"),
+      (.metar(station: "KAUS"), ">metar KAUS"),
+      (.taf(station: "KAUS"), ">taf KAUS"),
+      (.hazardousOutlook, ">hwo")
+    ]
+    for (request, text) in expected {
+      #expect(request.wireText == text)
+    }
+  }
+
+  /// Spec §8.3 lists the letters a Not-available reply can carry: w, o, f, a, s, r, m, t, h, d.
+  @Test
+  func `request letters are the first letter after the prefix`() {
+    #expect(WeatherRequest.digest.requestLetter == "d")
+    #expect(WeatherRequest.activeWarnings.requestLetter == "w")
+    #expect(WeatherRequest.warningText(identity: "SV.W.EWX.42").requestLetter == "w")
+    #expect(WeatherRequest.observation(station: "KAUS").requestLetter == "o")
+    #expect(WeatherRequest.forecastForPlace("austin tx").requestLetter == "f")
+    #expect(WeatherRequest.forecastDiscussion(office: "EWX").requestLetter == "a")
+    #expect(WeatherRequest.spaceWeather.requestLetter == "s")
+    #expect(WeatherRequest.stormReports(state: "TX").requestLetter == "s")
+    #expect(WeatherRequest.rainfall(state: "TX").requestLetter == "r")
+    #expect(WeatherRequest.metar(station: "KAUS").requestLetter == "m")
+    #expect(WeatherRequest.taf(station: "KAUS").requestLetter == "t")
+    #expect(WeatherRequest.hazardousOutlook.requestLetter == "h")
+  }
+
+  @Test
+  func `expected replies carry the station, point and subject the request named`() {
+    #expect(WeatherRequest.digest.expectedReply == .digest)
+    #expect(WeatherRequest.activeWarnings.expectedReply == .warnings)
+    #expect(WeatherRequest.warning(identity: "SV.W.EWX.42").expectedReply == .warnings)
+    #expect(WeatherRequest.observations.expectedReply == .observations(station: nil))
+    #expect(WeatherRequest.observation(station: "KAUS").expectedReply == .observations(station: "KAUS"))
+    #expect(WeatherRequest.homeForecast.expectedReply == .forecast(point: nil))
+    #expect(WeatherRequest.forecast(point: 102).expectedReply == .forecast(point: 102))
+    // A place is resolved by the bot; the point that comes back may even be 0xFFFF.
+    #expect(WeatherRequest.forecastForPlace("round rock tx").expectedReply == .forecast(point: nil))
+    #expect(WeatherRequest.warningText(identity: "x").expectedReply == .text(subject: 0))
+    #expect(WeatherRequest.forecastDiscussion(office: "EWX").expectedReply == .text(subject: 1))
+    #expect(WeatherRequest.spaceWeather.expectedReply == .text(subject: 2))
+    #expect(WeatherRequest.stormReports(state: "TX").expectedReply == .text(subject: 3))
+    #expect(WeatherRequest.rainfall(state: "TX").expectedReply == .text(subject: 4))
+    #expect(WeatherRequest.metar(station: "KAUS").expectedReply == .text(subject: 5))
+    #expect(WeatherRequest.taf(station: "KAUS").expectedReply == .text(subject: 5))
+    #expect(WeatherRequest.hazardousOutlook.expectedReply == .text(subject: 6))
+  }
+}

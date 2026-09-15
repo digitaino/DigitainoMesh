@@ -146,6 +146,10 @@ public final class ServiceContainer {
   /// device, not of the app.
   public let notifSyncService: NotifSyncService
 
+  /// MeshWX weather bots on `#meshwx`: channel-datagram ingest, per-bot state, and the
+  /// app's `>` requests (docs/MESHWX.md). State persists across connections in a shared file.
+  public let weatherService: WeatherService
+
   /// Classifies the connected radio's sync-registry support. Per-connection because the
   /// classification is a property of the firmware on the other end of the link; a fresh
   /// container starts back at `.unknown` so a device swap or a reflash re-probes.
@@ -344,6 +348,10 @@ public final class ServiceContainer {
     nodeSnapshotService = NodeSnapshotService(dataStore: dataStore)
     adaptivePowerService = AdaptivePowerService(txPowerApplier: settingsService)
     notifSyncService = NotifSyncService(session: session, dataStore: dataStore)
+    weatherService = WeatherService(
+      transport: SessionWeatherTransport(session: session),
+      store: FileWeatherStateStore.default()
+    )
 
     // Signal bars. The engine is built here so it exists for the whole connection, but it
     // stays idle until `AppState` probes the firmware and calls `start(mode:pathHashMode:)`
@@ -435,6 +443,10 @@ public final class ServiceContainer {
     if enableAdvertisementMonitoring {
       await advertisementService.startEventMonitoring(radioID: radioID)
     }
+    // Before the message polling service drains the firmware queue: datagrams queued while
+    // the phone was away are delivered through the same dispatcher and must find this
+    // subscriber already registered.
+    await weatherService.startEventMonitoring()
     await rxLogService.startEventMonitoring(radioID: radioID)
     await messageService.startEventMonitoring()
     await messageService.startAckExpiryChecking()
@@ -475,6 +487,7 @@ public final class ServiceContainer {
 
     await advertisementService.stopEventMonitoring()
     await rxLogService.stopEventMonitoring()
+    await weatherService.stopEventMonitoring()
     await messageService.stopEventMonitoring()
     // Do not fail in-flight DMs on disconnect. The firmware retains the
     // expected ACK and re-emits the delivery confirmation whenever it
@@ -515,6 +528,7 @@ public final class ServiceContainer {
     roomServerService.finishEvents()
     contactService.finishEvents()
     rxLogService.finishEntryStream()
+    weatherService.finishEvents()
 
     // The engine owns two long-lived tasks (event ingest and its probe loop) and a
     // broadcaster the observable façade is parked on. Stopping cancels the tasks; finishing

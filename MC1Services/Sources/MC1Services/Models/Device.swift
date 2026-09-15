@@ -444,6 +444,13 @@ public struct DeviceDTO: Sendable, Equatable, Identifiable, Codable {
     firmwareVersion >= 11
   }
 
+  /// Whether the radio delivers channel binary datagrams (`GRP_DATA`) to the app.
+  /// Firmware v11+ (MeshCore v1.15.0). Older firmware drops them silently — no error,
+  /// no event — which is why the weather tool checks this before promising anything.
+  public var supportsChannelDatagrams: Bool {
+    firmwareVersion >= 11
+  }
+
   /// Whether this device supports forcing un-scoped flood broadcasts that override
   /// the persisted default flood scope (firmware v12+).
   public var supportsUnscopedFloodSend: Bool {

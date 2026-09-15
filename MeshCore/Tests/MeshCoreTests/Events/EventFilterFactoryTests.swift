@@ -28,6 +28,25 @@ struct EventFilterFactoryTests {
     #expect(!filter.matches(.ok(value: nil)))
   }
 
+  // MARK: - anyChannelDatagram
+
+  @Test
+  func `anyChannelDatagram matches .channelDataReceived and rejects unrelated events`() {
+    let filter = EventFilter.anyChannelDatagram
+    let datagram = ChannelDatagram(
+      channelIndex: 2,
+      pathLength: 0xFF,
+      dataType: 0xFF10,
+      data: Data([0x11, 0x7A, 0x4C, 0x10]),
+      snr: 6.5
+    )
+
+    #expect(filter.matches(.channelDataReceived(datagram)))
+    #expect(!filter.matches(.advertisement(publicKey: Data([0xAA]))))
+    #expect(!filter.matches(.noMoreMessages))
+    #expect(!filter.matches(.ok(value: nil)))
+  }
+
   // MARK: - anyAdvertisement
 
   @Test

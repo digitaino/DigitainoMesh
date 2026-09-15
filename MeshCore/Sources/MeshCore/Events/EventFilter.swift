@@ -160,6 +160,19 @@ public struct EventFilter: Sendable {
     }
   }
 
+  /// Matches any channel binary datagram (`GRP_DATA`, firmware v1.15+).
+  ///
+  /// Application protocols riding on channel datagrams (the MeshWX weather bot,
+  /// `data_type 0xFF10`) subscribe with this and select on `dataType` themselves; the
+  /// filter is evaluated at dispatch time, so unrelated traffic never enters the
+  /// subscriber's bounded buffer.
+  public static var anyChannelDatagram: EventFilter {
+    EventFilter { event in
+      if case .channelDataReceived = event { return true }
+      return false
+    }
+  }
+
   /// Matches any advertisement regardless of sender prefix.
   public static var anyAdvertisement: EventFilter {
     EventFilter { event in
