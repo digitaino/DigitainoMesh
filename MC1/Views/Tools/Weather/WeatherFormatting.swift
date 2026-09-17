@@ -111,10 +111,14 @@ enum WeatherFormatting {
     return first.uppercased() + text.dropFirst()
   }
 
-  /// "Austin, TX" → "Austin".
-  static func shortPlaceName(_ label: String) -> String {
-    guard let comma = label.lastIndex(of: ","), comma != label.startIndex else { return label }
-    return String(label[..<comma])
+  /// **The one way a place is named**, everywhere the app names one (docs/MESHWX_UI.md §3.1 U-12).
+  ///
+  /// One tap used to produce three names: "Austin" in the title bar, "Austin, TX" in Places and
+  /// the station's own town in the line under the temperature, and nothing on screen said they
+  /// were the same place. The label the place carries is that name — the state stays on, because
+  /// it is what tells two Austins apart — and it is not shortened for one screen and not another.
+  static func placeName(_ label: String) -> String {
+    label.trimmingCharacters(in: .whitespaces)
   }
 
   /// "v1.14.0" → "1.14"; anything unrecognised is returned as it is.
@@ -127,25 +131,10 @@ enum WeatherFormatting {
     return parts.joined(separator: ".")
   }
 
-  /// A forecast point's state from its bundle name, "Austin Camp Mabry-Travis TX" → "TX".
-  static func pointState(_ raw: String) -> String? {
-    guard let last = raw.split(separator: " ").last, last.count == 2,
-          last.allSatisfy({ $0.isUppercase && $0.isLetter }),
-          raw.contains("-") else { return nil }
-    return String(last)
-  }
-
-  /// A forecast point as a place: "Central Park, NY" from "Central Park-New York NY", and
-  /// "San Juan · Luis Munoz Marin International Airport" from a name whose tail is a town.
-  static func pointLabel(_ raw: String) -> String {
-    let name = WeatherNames.pointName(raw)
-    if let state = pointState(raw) { return "\(name), \(state)" }
-    guard let dash = raw.lastIndex(of: "-") else { return raw }
-    let head = raw[..<dash].trimmingCharacters(in: .whitespaces)
-    let tail = raw[raw.index(after: dash)...].trimmingCharacters(in: .whitespaces)
-    guard !head.isEmpty, !tail.isEmpty else { return raw }
-    return L10n.Weather.Weather.Place.pointInTown(tail, head)
-  }
+  // A forecast point is named by `WeatherNames.pointLabel`, which is the one function every site
+  // that names one now calls (docs/MESHWX_UI.md §3.1 U-25). The two that used to live here —
+  // a state reader and a label builder — were the second and third spellings of "Austin Camp
+  // Mabry".
 
   static func eventName(_ event: UInt8, tables: MeshWXTables) -> String {
     tables.eventName(for: event)?.long ?? tables.eventLabel(for: event)
@@ -192,9 +181,14 @@ enum WeatherFormatting {
     inHg.formatted(.number.precision(.fractionLength(2)).locale(locale))
   }
 
+  /// "10 mi"; 0 reads "under 1 mi", since the bot sends whole miles rounded down (spec §6,
+  /// revision 3: 1/2SM is 0).
   static func visibility(miles: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
-    Measurement(value: Double(miles), unit: UnitLength.miles)
-      .formatted(.measurement(width: .abbreviated, usage: .asProvided).locale(locale))
+    func formatted(_ value: Double) -> String {
+      Measurement(value: value, unit: UnitLength.miles)
+        .formatted(.measurement(width: .abbreviated, usage: .asProvided).locale(locale))
+    }
+    return miles == 0 ? L10n.Weather.Weather.Unit.under(formatted(1)) : formatted(Double(miles))
   }
 
   /// The word for a sky code; nil for "other", which names nothing.

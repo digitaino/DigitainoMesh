@@ -2,50 +2,59 @@ import MC1Services
 import MeshWX
 import SwiftUI
 
-/// The airport stations whose readings the phone holds (docs/MESHWX_UI.md §12), nearest to the
-/// place first: the bot's scheduled batch, then single-station answers to other people.
+/// The airport stations whose readings the phone holds (docs/MESHWX_UI.md §12): the station the
+/// Now card is showing first, then nearest to the place, in two sections named for where the
+/// reading came from.
 struct WeatherStationsView: View {
   @Environment(\.appTheme) private var theme
   @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 28
 
-  let model: WeatherToolModel
+  /// The page this list was opened from: its order, its distances and the radio it names are
+  /// that place's.
+  let screen: WeatherPageScreen
 
   var body: some View {
     List {
-      if let snapshot = model.snapshot {
-        let footprint = snapshot.readings.filter(\.isInFootprint)
-        let others = snapshot.readings.filter { !$0.isInFootprint }
+      let snapshot = screen.snapshot
+      // Where the reading came from, which is all this phone knows: the bot's scheduled report,
+      // or a single-station answer broadcast on the channel. Who asked for that answer is never
+      // recorded, so it is never claimed — the owner's own TJSJ and KNYC requests were filed
+      // under other people's. The snapshot's order already leads with the Now card's station.
+      let scheduled = snapshot.readings.filter(\.isInFootprint)
+      let answers = snapshot.readings.filter { !$0.isInFootprint }
 
+      Section {
+        Text(L10n.Weather.Weather.Stations.intro(WeatherFormatting.sentenceStart(screen.sourceName)))
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+      }
+      .themedRowBackground(theme)
+
+      if !scheduled.isEmpty {
         Section {
-          Text(L10n.Weather.Weather.Stations.intro(WeatherFormatting.sentenceStart(model.sourceName)))
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+          WeatherCardLabel(title: L10n.Weather.Weather.Stations.scheduled, systemImage: "wind")
+          ForEach(scheduled) { reading in
+            row(reading)
+          }
         }
         .themedRowBackground(theme)
-
-        if !footprint.isEmpty {
-          Section {
-            ForEach(footprint) { reading in
-              row(reading)
-            }
+      }
+      if !answers.isEmpty {
+        Section {
+          WeatherCardLabel(title: L10n.Weather.Weather.Stations.answers, systemImage: "wind")
+          ForEach(answers) { reading in
+            row(reading)
           }
-          .themedRowBackground(theme)
         }
-        if !others.isEmpty {
-          Section(L10n.Weather.Weather.Stations.others) {
-            ForEach(others) { reading in
-              row(reading)
-            }
-          }
-          .themedRowBackground(theme)
-        }
+        .themedRowBackground(theme)
       }
     }
     .listStyle(.insetGrouped)
     .themedCanvas(theme)
     .navigationTitle(L10n.Weather.Weather.Stations.title)
     .navigationBarTitleDisplayMode(.inline)
-    .weatherPendingBar(model: model, requestsOnScreen: [])
+    .weatherPendingBar(model: screen.model, requestsOnScreen: [])
+    .weatherToolChrome()
   }
 
   private func row(_ reading: WeatherStationReading) -> some View {
@@ -56,16 +65,23 @@ struct WeatherStationsView: View {
       meta.append(WeatherFormatting.distance(kilometres, direction: reading.direction))
     }
     meta.append(reading.isStale
-      ? WeatherFormatting.age(reading.stored.observedAt, now: model.now)
+      ? WeatherFormatting.age(reading.stored.observedAt, now: screen.now)
       : L10n.Weather.Weather.Stations.asOf(WeatherFormatting.clockTime(
-        reading.stored.observedAt, now: model.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)))
+        reading.stored.observedAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)))
+    // A reading that came from another radio says so: the intro names the one this page asks.
+    if reading.botID != screen.snapshot.source?.botID {
+      meta.append(L10n.Weather.Weather.Stations.fromBot(screen.model.botName(reading.botID)))
+    }
 
     return NavigationLink {
-      WeatherStationDetailView(model: model, index: reading.index)
+      WeatherStationDetailView(screen: screen, index: reading.index)
     } label: {
       HStack(spacing: 12) {
-        Image(systemName: MeshWXPresentation.symbolName(for: observation.sky, isNight: isNight))
+        // An unknown sky keeps the column but shows nothing, rather than a made-up condition.
+        let symbol = MeshWXPresentation.observationSymbolName(for: observation.sky, isNight: isNight)
+        Image(systemName: symbol ?? "cloud")
           .symbolRenderingMode(.multicolor)
+          .opacity(symbol == nil ? 0 : 1)
           .frame(width: iconWidth)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
@@ -87,63 +103,117 @@ struct WeatherStationsView: View {
   }
 }
 
-/// One station's reading in full, and its coded airport reports on request.
+/// One station's reading in full, why it is as old as it is, and its coded airport reports on
+/// request (docs/MESHWX_UI.md §12).
+///
+/// Reached from the Now card's list and straight from a Places search by airport code, so it is
+/// built from the station rather than from a reading: a station nothing has ever arrived for has
+/// a screen too, with the one Update on it.
 struct WeatherStationDetailView: View {
   @Environment(\.appTheme) private var theme
 
-  let model: WeatherToolModel
+  /// The page this station was opened from: the distance and the "from Austin" line are from
+  /// that place, whatever the pager has since been swiped to.
+  let screen: WeatherPageScreen
   let index: UInt16
 
+  private var model: WeatherToolModel { screen.model }
+
+  private var station: MeshWXStation? { MeshWXTables.shared.station(at: index) }
+
   private var reading: WeatherStationReading? {
-    model.snapshot?.readings.first { $0.index == index }
+    screen.snapshot.readings.first { $0.index == index }
+  }
+
+  /// From the place to the station, whether or not a reading is held: the station's true
+  /// distance, never a capped one.
+  private var placement: (kilometres: Double, direction: MeshWXCompass)? {
+    guard let station, let place = screen.place else { return nil }
+    let coordinate = MeshWXCoordinate(latitude: station.lat, longitude: station.lon)
+    return (
+      MeshWXGeo.distanceKilometres(
+        fromLat: place.coordinate.latitude, lon: place.coordinate.longitude,
+        toLat: station.lat, lon: station.lon),
+      WeatherFormatting.direction(from: place.coordinate, to: coordinate))
   }
 
   var body: some View {
+    let plan = model.updatePlan(forStation: index, in: screen.snapshot)
     List {
-      if let reading {
-        summary(reading)
-        values(reading)
-        airportReports(reading)
+      if let station {
+        summary(station)
+        Section {
+          WeatherUpdateControl(screen: screen, plan: plan, showsCaption: true)
+        }
+        .themedRowBackground(theme)
+        if let reading {
+          values(reading)
+        }
+        airportReports(station)
       }
     }
     .listStyle(.insetGrouped)
     .themedCanvas(theme)
-    .navigationTitle(reading.map { WeatherNames.stationName($0.station.name) } ?? L10n.Weather.Weather.Stations.title)
+    .navigationTitle(station.map { WeatherNames.stationName($0.name) } ?? L10n.Weather.Weather.Stations.title)
     .navigationBarTitleDisplayMode(.inline)
-    .weatherPendingBar(model: model, requestsOnScreen: reading.map {
-      [.metar(station: $0.station.icao), .taf(station: $0.station.icao)]
-    } ?? [])
+    .weatherPendingBar(model: model, requestsOnScreen: requestsOnScreen(plan))
+    .weatherToolChrome()
   }
 
-  private func summary(_ reading: WeatherStationReading) -> some View {
+  private func requestsOnScreen(_ plan: WeatherUpdatePlan) -> Set<WeatherRequest> {
+    var requests = Set(plan.requests).union(screen.updateRequests)
+    if let icao = station?.icao {
+      requests.formUnion([.metar(station: icao), .taf(station: icao)])
+    }
+    return requests
+  }
+
+  private func summary(_ station: MeshWXStation) -> some View {
     Section {
       VStack(alignment: .leading, spacing: 4) {
-        Text(WeatherNames.stationName(reading.station.name))
+        Text(WeatherNames.stationName(station.name))
           .font(.headline)
-        Text("\(reading.station.icao) · \(reading.station.state)")
+        Text("\(station.icao) · \(station.state)")
           .font(.subheadline)
           .foregroundStyle(.secondary)
-        Text(WeatherCopy.stationSource(
-          stationName: reading.station.icao,
-          kilometres: reading.distanceKilometres.map { min($0, 25) },
-          direction: reading.direction,
-          botName: model.botName(reading.botID),
-          reportedAt: reading.stored.observedAt,
-          now: model.now,
-          calendar: .autoupdatingCurrent,
-          locale: .autoupdatingCurrent))
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        if let kilometres = reading.distanceKilometres, let placeName = model.placeName {
+        // How far it is **from the page this screen was opened on**, named — the one distance
+        // line on the screen (docs/MESHWX_UI.md §3.1 U-8). The station's name is the headline
+        // above and the distance was in the source line too, so the same two facts were printed
+        // three times between them.
+        if let placement, let placeName = screen.placeName {
           Text(L10n.Weather.Weather.Stations.fromPlace(
-            WeatherFormatting.distance(kilometres, direction: reading.direction), placeName))
+            WeatherFormatting.distance(placement.kilometres, direction: placement.direction), placeName))
           .font(.footnote)
           .foregroundStyle(.secondary)
         }
-        if reading.isStale {
-          Text(WeatherFormatting.age(reading.stored.observedAt, now: model.now))
-            .font(.footnote)
-            .foregroundStyle(.orange)
+        if let reading {
+          // Which message this reading arrived in, which nothing else on the screen says.
+          Text(WeatherCopy.stationReport(
+            botName: model.botName(reading.botID),
+            reportedAt: reading.stored.observedAt,
+            now: screen.now,
+            calendar: .autoupdatingCurrent,
+            locale: .autoupdatingCurrent))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+        }
+        if let reading {
+          if reading.isStale {
+            Text(WeatherFormatting.age(reading.stored.observedAt, now: screen.now))
+              .font(.footnote)
+              .foregroundStyle(.orange)
+          }
+          // Why it is as old as it is: the bot's hourly report does not carry this station, so
+          // nothing refreshes it until somebody asks for it by name.
+          if !reading.isInLatestBatch {
+            Text(L10n.Weather.Weather.Station.notInBatch)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+        } else {
+          Text(L10n.Weather.Weather.Station.nothingHeld)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
       }
       .accessibilityElement(children: .combine)
@@ -180,33 +250,43 @@ struct WeatherStationDetailView: View {
       if let visibility = observation.visibilityMiles {
         LabeledContent(L10n.Weather.Weather.Station.visibility, value: WeatherFormatting.visibility(miles: visibility))
       }
+    } footer: {
+      // When the report was taken, on the bot's clock (§12). The list row carries it too.
+      Text(L10n.Weather.Weather.Stations.asOf(WeatherFormatting.clockTime(
+        reading.stored.observedAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)))
     }
     .themedRowBackground(theme)
   }
 
-  private func airportReports(_ reading: WeatherStationReading) -> some View {
-    let icao = reading.station.icao
+  /// METAR and TAF come back as coded text and leave the reading untouched, so they keep their
+  /// own buttons: they are not what Update plans for (§8, §11).
+  private func airportReports(_ station: MeshWXStation) -> some View {
+    let icao = station.icao
+    // The Update control above already carries the reason nothing can be asked, so these two say
+    // it no further: they stay as the disabled buttons they are (docs/MESHWX_UI.md §3.1 U-24).
     return Section {
+      WeatherCardLabel(title: L10n.Weather.Weather.Station.airportReports)
       WeatherAskButton(
-        model: model, title: L10n.Weather.Weather.Request.askMetar, request: .metar(station: icao), showsFootnotes: true)
+        screen: screen, title: L10n.Weather.Weather.Request.askMetar, request: .metar(station: icao),
+        showsBlockReason: false)
       ownText(.metar(station: icao))
-      WeatherAskButton(model: model, title: L10n.Weather.Weather.Request.askTaf, request: .taf(station: icao))
+      WeatherAskButton(
+        screen: screen, title: L10n.Weather.Weather.Request.askTaf, request: .taf(station: icao),
+        showsBlockReason: false)
       ownText(.taf(station: icao))
-    } header: {
-      Text(L10n.Weather.Weather.Station.airportReports)
     }
     .themedRowBackground(theme)
   }
 
   @ViewBuilder
   private func ownText(_ request: WeatherRequest) -> some View {
-    if let item = model.snapshot?.texts.first(where: { $0.assembly.request == request }) {
+    if let item = screen.snapshot.texts.first(where: { $0.assembly.request == request }) {
       VStack(alignment: .leading, spacing: 4) {
         Text(WeatherReportText.body(item.assembly))
           .font(.system(.footnote, design: .monospaced))
           .textSelection(.enabled)
         Text(L10n.Weather.Weather.Reports.received(WeatherFormatting.clockTime(
-          item.assembly.lastReceivedAt, now: model.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)))
+          item.assembly.lastReceivedAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)))
         .font(.caption)
         .foregroundStyle(.secondary)
       }

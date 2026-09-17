@@ -163,6 +163,27 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MC1.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MC1"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
+  # Driven by hand on a real phone with a real radio, never by `make test`: the Weather tool's
+  # UI tests run against the app as the owner left it (docs/Testing.md). They live in their own
+  # scheme so the MC1 scheme's Test action stays the unit suite.
+  MC1UITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MC1UITests
+    dependencies:
+      - target: MC1
+    settings:
+      base:
+        INFOPLIST_FILE: MC1UITests/Info.plist
+        MARKETING_VERSION: 1.3.0
+        CURRENT_PROJECT_VERSION: 1
+        VERSIONING_SYSTEM: apple-generic
+        TEST_TARGET_NAME: MC1
+        # Under the app's own identifier: the runner is an app of its own and needs a profile
+        # the owner's team can issue for it.
+        PRODUCT_BUNDLE_IDENTIFIER: com.digitaino.PocketMesh.uitests
+
   MC1Widgets:
     type: app-extension
     platform: iOS
@@ -202,3 +223,18 @@ schemes:
       config: Debug
     archive:
       config: Release
+
+  # `xcodebuild -scheme MC1UITests build-for-testing` / `test-without-building`. Separate from the
+  # MC1 scheme on purpose: these drive a phone and take minutes, and `make test-app` should not.
+  MC1UITests:
+    build:
+      targets:
+        MC1: all
+        MC1UITests: [test]
+        MC1Widgets: [run]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MC1UITests

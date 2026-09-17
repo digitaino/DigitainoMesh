@@ -57,9 +57,73 @@
           "start": 453,
           "run": 1
         }
-      ]
+      ],
+      "issued_min": null
     },
     "note": "SV.W.EWX.42 over Travis and Hays counties; expires 01:45 UTC"
+  },
+  {
+    "name": "severe_thunderstorm_warning_issued",
+    "hex": "1c7a4c1203232a00c913c70183043c0630a804a80cf15a0068011affd2001affa6ffc4ffa2febe0042ff02aad10001aac501011500",
+    "decoded": {
+      "seq": 28,
+      "bot": 19578,
+      "type": 1,
+      "name": "warning",
+      "flags": 2,
+      "event": 3,
+      "office": 35,
+      "etn": 42,
+      "expires_min": 29823945,
+      "tornado": 2,
+      "flood_source": 0,
+      "flood_damage": 0,
+      "hail_qin": 4,
+      "wind_mph": 60,
+      "update": false,
+      "polygon": [
+        [
+          30.52,
+          -97.98
+        ],
+        [
+          30.61,
+          -97.62
+        ],
+        [
+          30.38,
+          -97.41
+        ],
+        [
+          30.15,
+          -97.5
+        ],
+        [
+          30.09,
+          -97.85
+        ],
+        [
+          30.28,
+          -98.04
+        ]
+      ],
+      "areas": [
+        {
+          "state": 42,
+          "county": true,
+          "start": 209,
+          "run": 1
+        },
+        {
+          "state": 42,
+          "county": true,
+          "start": 453,
+          "run": 1
+        }
+      ],
+      "issued_min": 29823924
+    },
+    "note": "SV.W.EWX.42 again, with the revision 5 issue time: 53 bytes, the two trailing bytes hold 21 = minutes between the issuance and the expiry"
   },
   {
     "name": "winter_storm_warning_zones",
@@ -94,7 +158,8 @@
           "start": 200,
           "run": 1
         }
-      ]
+      ],
+      "issued_min": null
     },
     "note": "WS.W.EWX.7, two runs: zones 191-194 and zone 200"
   },
@@ -172,7 +237,8 @@
           "visibility_mi": 10,
           "pressure_inhg": 29.92,
           "humidity_pct": 59,
-          "feels_delta_f": 7
+          "feels_delta_f": 7,
+          "age_min": null
         },
         {
           "station": 860,
@@ -186,7 +252,8 @@
           "visibility_mi": 10,
           "pressure_inhg": 29.95,
           "humidity_pct": null,
-          "feels_delta_f": 0
+          "feels_delta_f": 0,
+          "age_min": null
         },
         {
           "station": 976,
@@ -200,11 +267,72 @@
           "visibility_mi": null,
           "pressure_inhg": null,
           "humidity_pct": null,
-          "feels_delta_f": 0
+          "feels_delta_f": 0,
+          "age_min": null
         }
       ]
     },
     "note": "KGTU is calm, KHYI has only wind direction and sky"
+  },
+  {
+    "name": "observations_three_stations_ages",
+    "hex": "1d7a4c419513c70103ca005848730c150a5c3b075c0354460100000a5fff00d0038080daff00ffffff00200b",
+    "decoded": {
+      "seq": 29,
+      "bot": 19578,
+      "type": 4,
+      "name": "observations",
+      "flags": 1,
+      "ts_min": 29823893,
+      "stations": [
+        {
+          "station": 202,
+          "temp_f": 88,
+          "dewpoint_f": 72,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "sky": 3,
+          "wind_mph": 12,
+          "gust_mph": 21,
+          "visibility_mi": 10,
+          "pressure_inhg": 29.92,
+          "humidity_pct": 59,
+          "feels_delta_f": 7,
+          "age_min": 0
+        },
+        {
+          "station": 860,
+          "temp_f": 84,
+          "dewpoint_f": 70,
+          "wind_dir_deg": 0.0,
+          "wind_dir": "N",
+          "sky": 1,
+          "wind_mph": 0,
+          "gust_mph": 0,
+          "visibility_mi": 10,
+          "pressure_inhg": 29.95,
+          "humidity_pct": null,
+          "feels_delta_f": 0,
+          "age_min": 20
+        },
+        {
+          "station": 976,
+          "temp_f": null,
+          "dewpoint_f": null,
+          "wind_dir_deg": 292.5,
+          "wind_dir": "WNW",
+          "sky": 10,
+          "wind_mph": null,
+          "gust_mph": 0,
+          "visibility_mi": null,
+          "pressure_inhg": null,
+          "humidity_pct": null,
+          "feels_delta_f": 0,
+          "age_min": 110
+        }
+      ]
+    },
+    "note": "the revision 5 form: 44 bytes, ages 0 / 20 / 110 minutes packed as nibbles 0, 2 and 11 in two trailing bytes (0x20, 0x0b)"
   },
   {
     "name": "forecast_seven_periods",
@@ -312,7 +440,171 @@
         }
       ]
     },
-    "note": "point 102 = Austin Bergstrom-Travis TX"
+    "note": "point 102 = Austin Bergstrom-Travis TX; the reserved half-day form, odd first_period with alternating temperatures"
+  },
+  {
+    "name": "forecast_seven_days",
+    "hex": "1a7a4c5067006013c7010007664d000082644e000182634c1e1382624a0a0271624b000161634b0a02825f4a140372",
+    "decoded": {
+      "seq": 26,
+      "bot": 19578,
+      "type": 5,
+      "name": "forecast",
+      "flags": 0,
+      "point": 103,
+      "issued_min": 29823840,
+      "first_period": 0,
+      "periods": [
+        {
+          "high_f": 102,
+          "low_f": 77,
+          "pop_pct": 0,
+          "sky": 0,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 100,
+          "low_f": 78,
+          "pop_pct": 0,
+          "sky": 1,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 99,
+          "low_f": 76,
+          "pop_pct": 30,
+          "sky": 3,
+          "thunder": true,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 98,
+          "low_f": 74,
+          "pop_pct": 10,
+          "sky": 2,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "wind_mph": 5
+        },
+        {
+          "high_f": 98,
+          "low_f": 75,
+          "pop_pct": 0,
+          "sky": 1,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 135.0,
+          "wind_dir": "SE",
+          "wind_mph": 5
+        },
+        {
+          "high_f": 99,
+          "low_f": 75,
+          "pop_pct": 10,
+          "sky": 2,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 180.0,
+          "wind_dir": "S",
+          "wind_mph": 10
+        },
+        {
+          "high_f": 95,
+          "low_f": 74,
+          "pop_pct": 20,
+          "sky": 3,
+          "thunder": false,
+          "wintry": false,
+          "windy": false,
+          "fog": false,
+          "wind_dir_deg": 157.5,
+          "wind_dir": "SSE",
+          "wind_mph": 10
+        }
+      ]
+    },
+    "note": "point 103 = Austin Camp Mabry-Travis TX; the daily form this bot sends"
+  },
+  {
+    "name": "coverage_wx_aus",
+    "hex": "1b7a4c80509e04e915f178000d0423283371052a9b00062aaa00062aba000c2acd00072add0005",
+    "decoded": {
+      "seq": 27,
+      "bot": 19578,
+      "type": 8,
+      "name": "coverage",
+      "flags": 0,
+      "lat": 30.2672,
+      "lon": -97.7431,
+      "radius_km": 120,
+      "stations": 13,
+      "offices": [
+        35,
+        40,
+        51,
+        113
+      ],
+      "areas": [
+        {
+          "state": 42,
+          "county": false,
+          "start": 155,
+          "run": 6
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 170,
+          "run": 6
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 186,
+          "run": 12
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 205,
+          "run": 7
+        },
+        {
+          "state": 42,
+          "county": false,
+          "start": 221,
+          "run": 5
+        }
+      ],
+      "zones_cut": false,
+      "offices_cut": false
+    },
+    "note": "the live WX-AUS coverage: 36 zones as 5 runs, offices EWX/FWD/HGX/SJT, neither list cut"
   },
   {
     "name": "text_warning_narrative_chunk0",
@@ -361,5 +653,20 @@
       "request_code": 102,
       "reason": 1
     }
+  },
+  {
+    "name": "request_digest",
+    "hex": "011d0490010203040506600bac6a3e64",
+    "decoded": {
+      "seq": 1,
+      "bot": 1053,
+      "type": 9,
+      "name": "request",
+      "flags": 0,
+      "sender": "010203040506",
+      "ts": 1789660000,
+      "text": ">d"
+    },
+    "note": "app -> bot: 16 bytes, sender prefix 01..06, ts 1789660000 (2026-09-17 15:46:40 UTC); a resend repeats these bytes exactly"
   }
 ]

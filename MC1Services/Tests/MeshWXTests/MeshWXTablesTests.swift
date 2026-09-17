@@ -13,12 +13,23 @@ struct MeshWXTablesTests {
   let tables = MeshWXTables.shared
 
   @Test func bundleLoads() {
-    #expect(tables.protocolVersion == 8, "protocol.json version is 8 for v5.0")
-    #expect(tables.offices.count == 125)
+    #expect(tables.protocolVersion == 10, "protocol.json version is 10 for v5.0 revision 5")
+    #expect(tables.offices.count == 127, "125 WFOs, then NHC and WNS (spec rev 3 §9)")
     #expect(tables.stations.count == 2237)
     #expect(tables.states.count == 78)
     #expect(tables.points.count == 1873)
     #expect(tables.places.count == 34937)
+  }
+
+  @Test func nationalCentresAreAppendedAfterTheWFOs() {
+    // Appended, never sorted in: every WFO keeps its index.
+    #expect(tables.officeCode(0) == "ABQ")
+    #expect(tables.officeCode(124) == "VEF")
+    #expect(tables.officeCode(125) == "NHC")
+    #expect(tables.officeCode(126) == "WNS")
+    #expect(tables.isNationalCentre(126))
+    #expect(tables.isNationalCentre(125))
+    #expect(!tables.isNationalCentre(35))
   }
 
   @Test func wireIndicesResolveToTheDocumentedCodes() {
@@ -179,6 +190,32 @@ struct MeshWXTablesTests {
     #expect(empty.nearestPoint(toLat: 30.27, lon: -97.74) == nil)
     #expect(empty.searchPlaces(query: "round rock").isEmpty)
     #expect(empty.namedAreas(for: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)]).isEmpty)
+  }
+
+  /// The bundle appends the National Hurricane Center and the Storm Prediction Center to the
+  /// office list; neither is a forecast office.
+  @Test func nationalCentresAreKnownByCode() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("meshwx-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data(#"{"offices": ["ABQ", "EWX", "NHC", "WNS", "XYZ"], "stations": [], "states": []}"#.utf8)
+      .write(to: directory.appendingPathComponent("index.json"))
+    // The bot's rows: a centre adds a name and lists no states; `zone_count` is not read.
+    try Data(#"""
+      {"EWX": {"states": ["TX"], "lat": 29.6789, "lon": -98.614, "zone_count": 33},
+       "NHC": {"states": [], "lat": 25.7543, "lon": -80.3838, "zone_count": 0, "name": "National Hurricane Center"},
+       "XYZ": {"states": [], "lat": 1, "lon": 2, "zone_count": 0, "name": "Some Future Centre"}}
+      """#.utf8)
+      .write(to: directory.appendingPathComponent("wfos.json"))
+    let tables = MeshWXTables(resourceDirectory: directory)
+    #expect(!tables.isNationalCentre(1))
+    #expect(tables.isNationalCentre(2))
+    #expect(tables.isNationalCentre(3), "by code, with no wfos row")
+    #expect(tables.isNationalCentre(4), "by its row listing no states")
+    #expect(!tables.isNationalCentre(200), "an index the bundle does not know")
+    #expect(tables.office("EWX")?.states == ["TX"])
+    #expect(tables.office("EWX")?.name == nil)
+    #expect(tables.office("NHC")?.name == "National Hurricane Center")
   }
 
   /// Not an assertion about speed — a number for the report, and a guard that the

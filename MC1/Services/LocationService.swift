@@ -1,4 +1,5 @@
 import CoreLocation
+import MC1Services
 import OSLog
 
 enum LocationServiceError: Error, LocalizedError {
@@ -286,6 +287,14 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     Task { @MainActor in
       self.currentLocation = location
       self.isRequestingLocation = false
+      // The Weather tool's alert notifications match warnings against the last position the app
+      // knows, and the app only has one while it is in use. The store writes nothing unless
+      // My location is watched, and at most one fix a minute (docs/MESHWX_UI.md §16).
+      WeatherLastPositionStore().record(
+        latitude: location.coordinate.latitude,
+        longitude: location.coordinate.longitude,
+        horizontalAccuracy: location.horizontalAccuracy,
+        timestamp: location.timestamp)
       // `privacy: .private` because OSLog treats interpolated numerics as public by
       // default, which would put full-precision coordinates in the unified log store for
       // anyone with a sysdiagnose. Signal-mapper capture makes this fire far more often

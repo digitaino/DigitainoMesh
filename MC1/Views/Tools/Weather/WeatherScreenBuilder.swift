@@ -12,17 +12,12 @@ struct WeatherPlaceFacts: Sendable {
   /// Looked up once the outlines were loaded.
   var hasCounty = false
   var county: WeatherAreaName?
+  /// The place's forecast zone, from the same lookup: what a place outside the bot's area is
+  /// asked about by name (docs/MESHWX_UI.md §11).
+  var zoneUGC: String?
   /// The nearest bundled weather station within 80 km, looked up once per place.
   var hasNearbyStation = false
   var nearbyStation: WeatherNearbyStation?
-}
-
-/// A weather station near the place that the phone holds no reading from ("Luis Munoz Marin
-/// International Airport, 11 km"): the one station worth asking for by its code.
-struct WeatherNearbyStation: Sendable, Hashable {
-  var icao: String
-  var name: String
-  var kilometres: Double
 }
 
 /// What the model hands to a build: references to actors, plain values, and the caches from the
@@ -39,8 +34,15 @@ struct WeatherBuildRequest: Sendable {
   var dataStore: PersistenceStore?
   var radioID: UUID?
   var preferredBotID: UInt16?
+  /// The page this build answers for, stamped into the snapshot and the context it produces
+  /// (docs/MESHWX_UI.md §13). A build is asked for one page and belongs to that page for good:
+  /// the pager can be swiped while it runs, and the result must not land under another name.
+  var pageID: String
   var place: PlaceInput
   var isRadioConnected: Bool
+  /// The weather transport's own link, when it has one: only the DEBUG bridge to a real bot
+  /// does (`WeatherTransportLink`). It stands in for the radio and for the bot's advert.
+  var transportLink: WeatherTransportLink?
   var isChannelSyncDone: Bool
   var firmwareSupportsWeather: Bool?
   var firmwareVersion: String
@@ -62,9 +64,8 @@ struct WeatherBotRow: Sendable, Hashable, Identifiable {
   var lastHeardAt: Date?
   /// Heard live, not drained from your radio's queue: what "heard" means on screen.
   var lastLiveHeardAt: Date?
-  /// Minutes since the bot last heard from the Weather Service, from its last alert list.
-  var feedMinutes: Int?
-  var isFeedStale: Bool
+  /// What the bot's last alert list said about its home Weather Service office; nil before one.
+  var feed: MeshWXFeedHealth?
 
   var id: UInt16 { botID }
 }
@@ -78,6 +79,9 @@ struct WeatherAreaName: Sendable, Hashable {
 /// Facts the screen needs beyond the snapshot, computed in the same off-main pass because each
 /// needs the tables, the geometry or the raw per-bot state.
 struct WeatherScreenContext: Sendable {
+  /// The page these facts were computed for. The same key the snapshot carries: the two are one
+  /// build and are never read apart.
+  var page = WeatherPageKey()
   var bots: [WeatherBot] = []
   var botRows: [WeatherBotRow] = []
   var channelSlot: UInt8?
@@ -88,6 +92,9 @@ struct WeatherScreenContext: Sendable {
   var placeOffice: String?
   /// The county the place is in, once outlines have loaded.
   var placeCounty: WeatherAreaName?
+  /// The forecast zone it is in ("TXZ192"): zones carry the watches and advisories a county
+  /// request never finds (spec §8.2).
+  var placeZoneUGC: String?
   /// The source bot's state: its missed-messages and missing-warnings requests are chosen from it
   /// alone (`WeatherAlertRequests`).
   var sourceState: WeatherBotState?
@@ -96,14 +103,33 @@ struct WeatherScreenContext: Sendable {
   var isGeometryLoaded = false
   /// The town named for the nearest station when none is in reach ("Temple").
   var nearestStationTown: String?
-  /// With no held reading in reach of the place: the nearest bundled station, which can be asked
-  /// for (`>o <ICAO>`).
+  /// The nearest bundled station to the place, which can be asked for by code (`>o <ICAO>`).
+  /// What the page names, and what Update spends its readings packet on, whenever the reading
+  /// held is no good for the place (`WeatherConditions`).
   var nearbyStation: WeatherNearbyStation?
+  /// What the page leads with: a reading good enough to be the weather here, or the ask.
+  var conditions: WeatherConditions = .noPlace
+  /// The alert covering the place that the banner names, if any.
+  var banner: WeatherWarningBanner?
+  /// The radio row at the foot of the page, and whether it is orange.
+  var radioRow = WeatherRadioRow()
+  /// When NWS issued each held warning (spec §3, revision 5), where the wire carried it. Read
+  /// from the stored copy rather than recomputed from the wire's expiry-relative field: a digest
+  /// can extend a warning's expiry, and the instant it was issued never moves.
+  var warningIssuedAt: [MeshWXWarningIdentity: Date] = [:]
+}
+
+/// One page's build: the snapshot and the facts that came with it, which are only ever read
+/// together and only ever for that page (docs/MESHWX_UI.md §13).
+struct WeatherPageBuild: Sendable {
+  var snapshot: WeatherScreenSnapshot
+  var context: WeatherScreenContext
+
+  var pageID: String { snapshot.page.pageID }
 }
 
 struct WeatherBuildResult: Sendable {
-  var snapshot: WeatherScreenSnapshot
-  var context: WeatherScreenContext
+  var page: WeatherPageBuild
   var contacts: [ContactDTO]
   var channels: [ChannelDTO]
   var offlineStates: [UInt16: WeatherBotState]?
@@ -151,9 +177,13 @@ enum WeatherScreenBuilder {
     var facts = request.placeFacts.flatMap { $0.input == request.place ? $0 : nil }
       ?? WeatherPlaceFacts(input: request.place)
     let place = resolvePlace(request.place, facts: &facts, states: states, tables: tables, now: now)
-    let bots = WeatherBot.bots(
+    var bots = WeatherBot.bots(
       from: contacts,
       near: place.map { (latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) })
+    // The bridge's own bot, listed as announced beside the advertised ones so the About sheet
+    // and every "from" line name it. DEBUG only: nothing but `RemoteBotWeatherTransport`
+    // reports a link. The snapshot makes the same addition, so either path is complete.
+    if let link = request.transportLink { bots = link.announcing(bots) }
     let channelSlot = WeatherChannel.existingSlot(in: channels)
 
     let inputs = WeatherScreenSnapshot.Inputs(
@@ -161,7 +191,9 @@ enum WeatherScreenBuilder {
       bots: bots,
       preferredBotID: request.preferredBotID,
       place: place,
+      pageID: request.pageID,
       isRadioConnected: request.isRadioConnected,
+      transportLink: request.transportLink,
       firmwareSupportsWeather: request.firmwareSupportsWeather,
       firmwareVersion: request.firmwareVersion,
       // Before the channel sync the table is empty: no claim that #meshwx is missing.
@@ -172,6 +204,7 @@ enum WeatherScreenBuilder {
     let snapshot = WeatherScreenSnapshot.make(inputs, geometry: geometry, tables: tables)
 
     var context = WeatherScreenContext()
+    context.page = snapshot.page
     context.bots = bots
     context.channelSlot = channelSlot
     context.session = session
@@ -183,8 +216,7 @@ enum WeatherScreenBuilder {
         bot: bots.first { $0.botID == botID },
         lastHeardAt: states[botID]?.lastHeardAt,
         lastLiveHeardAt: states[botID]?.lastLiveHeardAt,
-        feedMinutes: digest.map { MeshWXPresentation.feedHealthMinutes($0.digest.feedHealth) },
-        isFeedStale: digest?.isFeedStale ?? false)
+        feed: digest?.feed)
     }
 
     switch snapshot.forecast {
@@ -200,14 +232,17 @@ enum WeatherScreenBuilder {
         facts.hasStateCode = true
       }
       if !facts.hasCounty, geometry.isLoaded {
-        let county = geometry.areaCodes(containing: place.coordinate).first { $0.count == 6 && $0.dropFirst(2).first == "C" }
+        let codes = geometry.areaCodes(containing: place.coordinate)
+        let county = codes.first { $0.count == 6 && $0.dropFirst(2).first == "C" }
         if let county, let name = tables.county(county)?.name {
           facts.county = WeatherAreaName(ugc: county, name: L10n.Weather.Weather.Area.county(name))
         }
+        facts.zoneUGC = codes.first { $0.count == 6 && $0.dropFirst(2).first == "Z" }
         facts.hasCounty = true
       }
       context.placeStateCode = facts.stateCode
       context.placeCounty = facts.county
+      context.placeZoneUGC = facts.zoneUGC
     }
 
     context.sourceState = snapshot.source.flatMap { states[$0.botID] }
@@ -229,7 +264,10 @@ enum WeatherScreenBuilder {
       }
     }
 
-    if case .noneNearby = snapshot.primaryStation, let place {
+    // The nearest bundled station is wanted for every place now, not only for one with nothing in
+    // reach: a reading from further than `goodReadingKilometres` is not the weather here either,
+    // and the page names the station the next packet would go to. Looked up once per place.
+    if let place {
       if !facts.hasNearbyStation {
         facts.nearbyStation = tables.nearestStation(
           toLat: place.coordinate.latitude, lon: place.coordinate.longitude,
@@ -247,8 +285,28 @@ enum WeatherScreenBuilder {
       context.nearbyStation = facts.nearbyStation
     }
 
+    // The issue time of every warning any bot holds, newest copy wins: an alert's detail says
+    // "issued 1:29 PM" rather than when this phone happened to hear it (spec §3, revision 5).
+    for state in states.values {
+      for stored in state.warnings.values {
+        guard let issuedAt = stored.issuedAt else { continue }
+        context.warningIssuedAt[stored.identity] = issuedAt
+      }
+      for pending in state.pendingUpgrades.values {
+        guard let issuedAt = pending.warning.issuedMinutes.map(Date.init(unixMinutes:)) else { continue }
+        context.warningIssuedAt[pending.warning.identity] = issuedAt
+      }
+    }
+
+    context.conditions = WeatherConditions.make(
+      primary: snapshot.primaryStation, nearbyStation: context.nearbyStation)
+    context.banner = WeatherWarningBanner.make(snapshot.alerts)
+    context.radioRow = WeatherRadioRow.make(
+      source: snapshot.source, state: context.sourceState, now: now)
+
     return WeatherBuildResult(
-      snapshot: snapshot, context: context, contacts: contacts, channels: channels,
+      page: WeatherPageBuild(snapshot: snapshot, context: context),
+      contacts: contacts, channels: channels,
       offlineStates: offlineStates, placeFacts: facts, stationTowns: stationTowns)
   }
 
@@ -302,7 +360,7 @@ enum WeatherScreenBuilder {
 
   /// "Temple" for KTPL: the town an airport is known by, or the station's own name.
   static func town(for station: MeshWXStation, tables: MeshWXTables) -> String {
-    stationTown(station, tables: tables).map { WeatherNames.titleCased($0.name) }
+    stationTown(station, tables: tables).map { WeatherNames.placeName($0.name) }
       ?? WeatherNames.stationName(station.name)
   }
 
@@ -323,7 +381,7 @@ enum WeatherScreenBuilder {
       return town.state
     }
     if let point = tables.nearestPoint(toLat: coordinate.latitude, lon: coordinate.longitude),
-       let state = WeatherFormatting.pointState(point.name) {
+       let state = WeatherNames.pointState(point.name) {
       return state
     }
     return readings.first?.station.state

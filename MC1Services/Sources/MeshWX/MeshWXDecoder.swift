@@ -39,10 +39,12 @@ public enum MeshWXDecoder {
       case .warning: .warning(try decodeWarning(bytes, header: header))
       case .cancel: .cancel(try decodeCancel(bytes, header: header))
       case .digest: .digest(try decodeDigest(bytes))
-      case .observations: .observations(try decodeObservations(bytes))
+      case .observations: .observations(try decodeObservations(bytes, header: header))
       case .forecast: .forecast(try decodeForecast(bytes))
       case .text: .text(try decodeText(bytes))
       case .notAvailable: .notAvailable(try decodeNotAvailable(bytes))
+      case .coverage: .coverage(try decodeCoverage(bytes, header: header))
+      case .request: .request(try decodeRequest(bytes, header: header))
       case nil: .unknown
       }
     return MeshWXMessage(header: header, payload: payload)
@@ -92,6 +94,14 @@ public enum MeshWXDecoder {
     }
     if tags & MeshWXWire.tagAreas != 0 {
       warning.areas = try decodeAreas(bytes, at: &offset)
+    }
+    // Revision 5 (spec §3): the issue time is the last two bytes, after both variable blocks, so
+    // a decoder that does not know the flag stops above and never sees them. It is relative to
+    // `expires` rather than absolute, which costs two bytes instead of four on the one message
+    // that reaches the packet limit, and cannot drift: both ends of the subtraction ride here.
+    if header.flags & MeshWXWire.flagWarningIssued != 0 {
+      try need(bytes, offset + MeshWXWire.warningIssuedSize, "warning issue time")
+      warning.issuedBeforeMinutes = u16(bytes, offset)
     }
     return warning
   }
@@ -192,19 +202,33 @@ public enum MeshWXDecoder {
 
   // MARK: - Observations (type 4, spec §6)
 
-  static func decodeObservations(_ bytes: [UInt8]) throws -> MeshWXObservations {
+  static func decodeObservations(
+    _ bytes: [UInt8], header: MeshWXHeader
+  ) throws -> MeshWXObservations {
     try need(bytes, MeshWXWire.observationsFixedSize, "observations")
     let timestamp = u32(bytes, 4)
     let count = Int(bytes[8])
-    try need(
-      bytes,
-      MeshWXWire.observationsFixedSize + MeshWXWire.observationStationSize * count,
-      "observation stations")
+    let stationsEnd = MeshWXWire.observationsFixedSize + MeshWXWire.observationStationSize * count
+    try need(bytes, stationsEnd, "observation stations")
+
+    // Revision 5 (spec §6.1): the age nibbles sit after the station records — station `i` in the
+    // low nibble of byte `i / 2` when `i` is even, the high nibble when odd — so a decoder that
+    // does not know the flag reads the batch exactly as it always did. Read ahead of the station
+    // loop because each station carries its own age.
+    var ages = [UInt16?](repeating: nil, count: count)
+    if header.flags & MeshWXWire.flagObservationAges != 0 {
+      try need(bytes, stationsEnd + (count + 1) / 2, "observation ages")
+      for index in 0..<count {
+        let byte = bytes[stationsEnd + index / 2]
+        let nibble = index % 2 == 0 ? byte & 0x0F : byte >> 4
+        ages[index] = UInt16(nibble) * MeshWXWire.observationAgeStepMinutes
+      }
+    }
 
     var stations: [MeshWXStationObservation] = []
     stations.reserveCapacity(count)
     var offset = MeshWXWire.observationsFixedSize
-    for _ in 0..<count {
+    for index in 0..<count {
       let directionAndSky = bytes[offset + 4]
       let pressure = bytes[offset + 8]
       stations.append(
@@ -222,7 +246,8 @@ public enum MeshWXDecoder {
           pressureInHg: pressure == MeshWXWire.unsignedUnknown
             ? nil : Double(2900 + Int(pressure)) / 100,
           humidityPercent: unsignedOrNil(bytes[offset + 9]),
-          feelsDeltaF: Int8(bitPattern: bytes[offset + 10])
+          feelsDeltaF: Int8(bitPattern: bytes[offset + 10]),
+          ageMinutes: ages[index]
         ))
       offset += MeshWXWire.observationStationSize
     }
@@ -290,6 +315,52 @@ public enum MeshWXDecoder {
     return MeshWXNotAvailable(
       requestCode: bytes[4],
       reason: MeshWXNotAvailableReason(rawValue: bytes[5])
+    )
+  }
+
+  // MARK: - Coverage (type 8, spec §7A)
+
+  static func decodeCoverage(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXCoverage {
+    try need(bytes, MeshWXWire.coverageFixedSize, "coverage")
+    let officeCount = Int(bytes[13])
+    let officesEnd = MeshWXWire.coverageFixedSize + officeCount
+    try need(bytes, officesEnd, "coverage offices")
+    // The runs are a Warning's area list byte for byte (spec §3), count byte included — except
+    // that a coverage message may legitimately carry none, which `decodeAreas` already allows.
+    var offset = officesEnd
+    let areas = try decodeAreas(bytes, at: &offset)
+    return MeshWXCoverage(
+      latitude: Double(i24(bytes, 4)) / 10000,
+      longitude: Double(i24(bytes, 7)) / 10000,
+      radiusKilometres: u16(bytes, 10),
+      stationCap: bytes[12],
+      officeIndices: Array(bytes[MeshWXWire.coverageFixedSize..<officesEnd]),
+      areas: areas,
+      areasCut: header.flags & MeshWXWire.flagCoverageZonesCut != 0,
+      officesCut: header.flags & MeshWXWire.flagCoverageOfficesCut != 0
+    )
+  }
+
+  // MARK: - Request (type 9, spec §7B)
+
+  /// Another phone's `>` request, heard because requests are flooded on the channel now.
+  ///
+  /// Decoded rather than dropped as an unknown type so the app can *recognise* one and leave it
+  /// alone: it is somebody else's question, it says nothing about the bot's state, and the
+  /// answer that follows is a message of its own. No length cap on the text here — the encoder
+  /// is where the 40 bytes are enforced, and a neighbour's longer request should still read.
+  static func decodeRequest(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXRequest {
+    try need(bytes, MeshWXWire.requestFixedSize, "request")
+    let senderEnd = MeshWXWire.headerSize + MeshWXWire.requestSenderPrefixSize
+    guard let text = String(bytes: bytes[MeshWXWire.requestFixedSize...], encoding: .utf8) else {
+      throw MeshWXDecodeError.badUTF8
+    }
+    return MeshWXRequest(
+      seq: header.seq,
+      botID: header.bot,
+      senderPrefix: Data(bytes[MeshWXWire.headerSize..<senderEnd]),
+      timestamp: u32(bytes, senderEnd),
+      text: text
     )
   }
 

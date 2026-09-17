@@ -7364,3 +7364,1135 @@ private final class BundleToken {
   }()
 }
 // swiftlint:enable convenience_type
+  public enum Weather {
+    public enum Weather {
+      /// Location: ToolSelection.swift - Tool selection label and screen title
+      public static let title = L10n.tr("Weather", "weather.title", fallback: "Weather")
+      public enum About {
+        /// Location: WeatherRadioView.swift - Row that lets the app choose the weather radio
+        public static let automatic = L10n.tr("Weather", "weather.about.automatic", fallback: "Choose automatically")
+        /// Location: WeatherRadioView.swift - Detail under the automatic row, %@ is the radio's name
+        public static func automaticDetail(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.about.automaticDetail", String(describing: p1), fallback: "Using %@")
+        }
+        /// Location: WeatherRadioView.swift - Channel slot label
+        public static let channelSlot = L10n.tr("Weather", "weather.about.channelSlot", fallback: "Channel slot")
+        /// Location: WeatherRadioView.swift - Button that forgets the source radio's weather
+        public static let clear = L10n.tr("Weather", "weather.about.clear", fallback: "Clear received weather")
+        /// Location: WeatherRadioView.swift - Footer under the clear button, %@ is the radio's name
+        public static func clearFooter(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.about.clearFooter", String(describing: p1), fallback: "Removes everything received from %@ from this phone.")
+        }
+        /// Location: WeatherRadioView.swift - The weather radio has never received anything from the Weather Service
+        public static let feedNone = L10n.tr("Weather", "weather.about.feedNone", fallback: "no Weather Service data received")
+        /// Location: WeatherRadioView.swift - The weather radio's Weather Service feed is healthy
+        public static let feedOK = L10n.tr("Weather", "weather.about.feedOK", fallback: "Weather Service feed OK")
+        /// Location: WeatherRadioView.swift - The weather radio's own Weather Service office has sent nothing for over 4 hours, usual on a quiet night. %@ is a duration like "5 h"
+        public static func feedQuiet(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.about.feedQuiet", String(describing: p1), fallback: "nothing from its Weather Service office for %@")
+        }
+        /// Location: WeatherRadioView.swift - When a weather radio was heard, %@ is a time ago
+        public static func heard(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.about.heard", String(describing: p1), fallback: "heard %@")
+        }
+        /// Location: WeatherRadioView.swift - Section header above the four lines that say how asking works
+        public static let howItWorks = L10n.tr("Weather", "weather.about.howItWorks", fallback: "How it works")
+        /// Location: WeatherRadioView.swift - The weather radio requests go to
+        public static let inUse = L10n.tr("Weather", "weather.about.inUse", fallback: "in use")
+        /// Location: WeatherRadioView.swift - Last weather datagram label
+        public static let lastMessage = L10n.tr("Weather", "weather.about.lastMessage", fallback: "Last weather message")
+        /// Location: WeatherRadioView.swift - How it works, first line
+        public static let line1 = L10n.tr("Weather", "weather.about.line1", fallback: "Your request goes to the weather radio as a private message.")
+        /// Location: WeatherRadioView.swift - How it works, second line
+        public static let line2 = L10n.tr("Weather", "weather.about.line2", fallback: "Its answer is broadcast on #meshwx.")
+        /// Location: WeatherRadioView.swift - How it works, third line
+        public static let line3 = L10n.tr("Weather", "weather.about.line3", fallback: "Every phone listening keeps it, including the answers to other people's requests.")
+        /// Location: WeatherRadioView.swift - How it works, fourth line
+        public static let line4 = L10n.tr("Weather", "weather.about.line4", fallback: "Asking costs airtime everyone on the channel shares.")
+        /// Location: WeatherRadioView.swift - A weather radio heard without an advert
+        public static let noAdvert = L10n.tr("Weather", "weather.about.noAdvert", fallback: "hasn't announced itself yet")
+        /// Location: WeatherRadioView.swift - No weather message received
+        public static let noMessage = L10n.tr("Weather", "weather.about.noMessage", fallback: "None received")
+        /// Location: WeatherRadioView.swift - Channel slot value when #meshwx is not on your radio
+        public static let noSlot = L10n.tr("Weather", "weather.about.noSlot", fallback: "Not on your radio")
+        /// Location: WeatherRadioView.swift - A weather radio never heard
+        public static let notHeard = L10n.tr("Weather", "weather.about.notHeard", fallback: "not heard yet")
+        /// Location: WeatherRadioView.swift - Channel slot value while your radio is not connected or still syncing
+        public static let radioOffline = L10n.tr("Weather", "weather.about.radioOffline", fallback: "Your radio isn't connected")
+        /// Location: WeatherRadioView.swift - Section of weather radios
+        public static let radios = L10n.tr("Weather", "weather.about.radios", fallback: "Weather radios")
+        /// Location: WeatherRadioView.swift - Footer under the weather radios
+        public static let radiosFooter = L10n.tr("Weather", "weather.about.radiosFooter", fallback: "Requests go to the weather radio in use.")
+        /// Location: WeatherRadioView.swift - Channel slot value, %lld is the slot number
+        public static func slot(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.about.slot", p1, fallback: "Slot %lld")
+        }
+        public enum Alert {
+          /// Location: WeatherRadioView.swift - Alert button that clears
+          public static let clear = L10n.tr("Weather", "weather.about.alert.clear", fallback: "Clear")
+          /// Location: WeatherRadioView.swift - Alert message before clearing, %@ is the radio's name
+          public static func message(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.about.alert.message", String(describing: p1), fallback: "Its alerts, readings, forecasts and reports are removed from this phone. They come back as %@ broadcasts them.")
+          }
+          /// Location: WeatherRadioView.swift - Alert title before clearing, %@ is the radio's name
+          public static func title(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.about.alert.title", String(describing: p1), fallback: "Clear weather received from %@?")
+          }
+        }
+      }
+      public enum AlertDetail {
+        /// Location: WeatherAlertDetailView.swift - Section of the areas the alert names
+        public static let areas = L10n.tr("Weather", "weather.alertDetail.areas", fallback: "Areas")
+        /// Location: WeatherAlertDetailView.swift - Area kind
+        public static let county = L10n.tr("Weather", "weather.alertDetail.county", fallback: "County")
+        /// Location: WeatherAlertDetailView.swift - Section of the alert's tags
+        public static let details = L10n.tr("Weather", "weather.alertDetail.details", fallback: "Details")
+        /// Location: WeatherAlertDetailView.swift - Section with the warning's narrative
+        public static let fullText = L10n.tr("Weather", "weather.alertDetail.fullText", fallback: "Full text")
+        /// Location: WeatherAlertDetailView.swift - Shown when the alert is no longer held; no reason is claimed
+        public static let gone = L10n.tr("Weather", "weather.alertDetail.gone", fallback: "No longer held by this phone")
+        /// Location: WeatherAlertDetailView.swift - When NWS issued the warning (spec §3, revision 5), shown in place of the receipt time whenever the wire carried it. %@ is a time
+        public static func issued(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertDetail.issued", String(describing: p1), fallback: "issued %@")
+        }
+        /// Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio"
+        public static func issuedBy(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertDetail.issuedBy", String(describing: p1), fallback: "Issued by %@")
+        }
+        /// Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time
+        public static func received(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertDetail.received", String(describing: p1), fallback: "received %@")
+        }
+        /// Location: WeatherAlertDetailView.swift - Area kind
+        public static let zone = L10n.tr("Weather", "weather.alertDetail.zone", fallback: "Forecast zone")
+      }
+      public enum AlertStatus {
+        /// Location: WeatherCopy.swift - Status line when no station report has come in the last day, so the radio's area is unknown. %@ is the radio's name at the start of a sentence
+        public static func coverageUnknown(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.coverageUnknown", String(describing: p1), fallback: "%@ hasn't sent its station report yet, so the area it covers isn't known. It comes about every hour.")
+        }
+        /// Location: WeatherCopy.swift - Status line when the radio has never received anything from the Weather Service. %@ is the radio's name at the start of a sentence
+        public static func feedNone(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.feedNone", String(describing: p1), fallback: "%@ hasn't received anything from the Weather Service. New alerts may not reach you.")
+        }
+        /// Location: WeatherCopy.swift - Status line when the radio's own Weather Service office has sent nothing for over 4 hours, which is usual on a quiet night. %1$@ is the radio's name at the start of a sentence, %2$@ a duration like "5 h"
+        public static func feedQuiet(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.feedQuiet", String(describing: p1), String(describing: p2), fallback: "%1$@ hasn't had anything from its home Weather Service office for %2$@. That's normal on a quiet night, but its feed could also be down.")
+        }
+        /// Location: WeatherCopy.swift - Status line for an old alert list, %@ is a time like "8:02 PM"
+        public static func listOld(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.listOld", String(describing: p1), fallback: "Last alert list as of %@.")
+        }
+        /// Location: WeatherCopy.swift - Status line for an old location fix, %@ is an age like "3 h old"
+        public static func locationOld(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.locationOld", String(describing: p1), fallback: "Your location is %@.")
+        }
+        /// Location: WeatherCopy.swift - Status line after a gap in messages, %@ is the radio's name
+        public static func missedMessages(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.missedMessages", String(describing: p1), fallback: "This phone missed messages from %@. Some alerts may be missing.")
+        }
+        /// Location: WeatherCopy.swift - Status line with no place
+        public static let noPlace = L10n.tr("Weather", "weather.alertStatus.noPlace", fallback: "Choose a place to see which alerts cover it")
+        /// Location: WeatherCopy.swift - Status line before any alert list arrived, %@ is the radio's name
+        public static func notChecked(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.notChecked", String(describing: p1), fallback: "This phone hasn't received %@'s alert list yet, so it can't tell whether any alerts are active. The list comes every 3 hours.")
+        }
+        /// Location: WeatherCopy.swift - Status line when the place's office may not be carried. %1$@ is the radio's name, %2$@ the county or place, %3$@ the office like "NWS Fort Worth"
+        public static func officeNotCovered(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.officeNotCovered", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "%1$@ may not carry alerts for %2$@ (%3$@).")
+        }
+        /// Location: WeatherCopy.swift - Status line outside coverage. %1$@ is the place, %2$@ the radio's name
+        public static func outOfCoverage(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.outOfCoverage", String(describing: p1), String(describing: p2), fallback: "%1$@ is outside %2$@'s area, so alerts there are unknown.")
+        }
+        /// Location: WeatherCopy.swift - Status line with your radio not connected, %@ is a time like "11:02 PM"
+        public static func radioOffline(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertStatus.radioOffline", String(describing: p1), fallback: "Your radio isn't connected. Last alert list as of %@.")
+        }
+      }
+      public enum Alerts {
+        /// Location: WeatherFormatting.swift - One area. %1$@ is its name, %2$@ its state
+        public static func area(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.area", String(describing: p1), String(describing: p2), fallback: "%1$@, %2$@")
+        }
+        /// Location: WeatherCopy.swift - Where an alert away from the place is. %1$@ is its first area like "Llano County", %2$@ a distance like "105 km W"
+        public static func areaDistance(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.areaDistance", String(describing: p1), String(describing: p2), fallback: "%1$@ · %2$@")
+        }
+        /// Location: WeatherCopy.swift - Row line while area outlines load
+        public static let checking = L10n.tr("Weather", "weather.alerts.checking", fallback: "Checking where this is…")
+        /// Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min"
+        public static func expired(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.expired", String(describing: p1), fallback: "Expired %@ ago · no update received")
+        }
+        /// Location: WeatherPlacePageView.swift - Other alerts covering the place, beside the banner, %lld is how many
+        public static func more(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.alerts.more", p1, fallback: "+%lld more")
+        }
+        /// Location: WeatherAlertsListView.swift - Source line under the alert status, %@ is the radio's name
+        public static func source(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.source", String(describing: p1), fallback: "National Weather Service alerts via %@")
+        }
+        /// Location: WeatherAlertsListView.swift - Source line with no known radio
+        public static let sourceGeneric = L10n.tr("Weather", "weather.alerts.sourceGeneric", fallback: "National Weather Service alerts via weather radios")
+        /// Location: WeatherFormatting.swift - When an alert ends. %1$@ is a time like "11:41 PM", %2$@ a countdown like "in 40 min"
+        public static func until(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.until", String(describing: p1), String(describing: p2), fallback: "until %1$@ · %2$@")
+        }
+        /// Location: WeatherCopy.swift - Row line for a warning cancelled as upgraded whose replacement has not arrived
+        public static let upgraded = L10n.tr("Weather", "weather.alerts.upgraded", fallback: "Upgraded — replacement not received")
+      }
+      public enum AlertsList {
+        /// Location: WeatherAlertsListView.swift - Section with no place, %@ is the radio's name
+        public static func all(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertsList.all", String(describing: p1), fallback: "In %@'s area")
+        }
+        /// Location: WeatherAlertsListView.swift - Section of alerts farther away
+        public static let elsewhere = L10n.tr("Weather", "weather.alertsList.elsewhere", fallback: "Elsewhere")
+        /// Location: WeatherAlertsListView.swift - Section of alerts covering the place
+        public static let here = L10n.tr("Weather", "weather.alertsList.here", fallback: "Here")
+        /// Location: WeatherAlertsListView.swift - Section of alerts the list named that never arrived
+        public static let listedHeader = L10n.tr("Weather", "weather.alertsList.listedHeader", fallback: "Missing from this phone")
+        /// Location: WeatherAlertsListView.swift - Section of alerts within 50 km
+        public static let near = L10n.tr("Weather", "weather.alertsList.near", fallback: "Near")
+        /// Location: WeatherAlertsListView.swift - Row line for an alert the list named that the radio said it didn't have when asked. %@ is the radio's name
+        public static func notAvailable(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertsList.notAvailable", String(describing: p1), fallback: "Listed, but %@ didn't have it when asked")
+        }
+        /// Location: WeatherAlertsListView.swift - Row line for an alert the list named that never arrived
+        public static let notReceived = L10n.tr("Weather", "weather.alertsList.notReceived", fallback: "Listed, not received")
+        /// Location: WeatherAlertsListView.swift - Accessibility label on the map header
+        public static let openMap = L10n.tr("Weather", "weather.alertsList.openMap", fallback: "Map of alerts. Opens the full map.")
+        /// Location: WeatherAlertsListView.swift - Screen title, %@ is the radio's name
+        public static func title(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertsList.title", String(describing: p1), fallback: "Alerts in %@'s area")
+        }
+        /// Location: WeatherAlertsListView.swift - Section of alerts not yet placed against the place
+        public static let unsure = L10n.tr("Weather", "weather.alertsList.unsure", fallback: "Can't place yet")
+      }
+      public enum Area {
+        /// Location: WeatherScreenBuilder.swift - A county name, %@ is the name like "Bell"
+        public static func county(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.area.county", String(describing: p1), fallback: "%@ County")
+        }
+      }
+      public enum Banner {
+        /// Location: WeatherPlacePageView.swift - Banner button that offers to add #meshwx
+        public static let addChannel = L10n.tr("Weather", "weather.banner.addChannel", fallback: "Add channel")
+        /// Location: WeatherCopy.swift - Banner when no channel slot holds #meshwx
+        public static let channelMissing = L10n.tr("Weather", "weather.banner.channelMissing", fallback: "#meshwx isn't set up on your radio.")
+        /// Location: WeatherCopy.swift - Banner when your radio's firmware cannot deliver weather, %@ is the version like "1.14"
+        public static func firmware(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.banner.firmware", String(describing: p1), fallback: "Your radio has firmware %@. Weather needs MeshCore 1.15 or newer.")
+        }
+        /// Location: WeatherCopy.swift - Banner when no weather radio is known
+        public static let noBot = L10n.tr("Weather", "weather.banner.noBot", fallback: "No weather radio heard yet. They appear as nodes named like WX-AUS.")
+      }
+      public enum Bot {
+        /// Location: WeatherToolModel.swift - Name for the source when no weather radio is known; starts lowercase, capitalised by the app at a sentence start
+        public static let generic = L10n.tr("Weather", "weather.bot.generic", fallback: "the weather radio")
+        /// Location: WeatherFormatting.swift - Name for a weather radio heard without an advert, %@ is its four-digit hex id
+        public static func heardOnly(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.bot.heardOnly", String(describing: p1), fallback: "Weather radio %@")
+        }
+      }
+      public enum Cache {
+        /// Location: WeatherCachedView.swift - Group of coded airport reports
+        public static let airportReports = L10n.tr("Weather", "weather.cache.airportReports", fallback: "Airport reports (METAR/TAF)")
+        /// Location: WeatherCachedView.swift - Segment showing what is held grouped by kind
+        public static let byKind = L10n.tr("Weather", "weather.cache.byKind", fallback: "By kind")
+        /// Location: WeatherCachedView.swift - Group of forecasts
+        public static let forecasts = L10n.tr("Weather", "weather.cache.forecasts", fallback: "Forecasts")
+        /// Location: WeatherCachedView.swift - Group header. %1$@ is the kind of thing, %2$lld how many are held
+        public static func group(_ p1: Any, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.cache.group", String(describing: p1), p2, fallback: "%1$@ (%2$lld)")
+        }
+        /// Location: WeatherCachedView.swift - Header saying where all of it came from
+        public static let intro = L10n.tr("Weather", "weather.cache.intro", fallback: "Everything here was overheard on #meshwx. This phone can't tell who asked for any of it.")
+        /// Location: WeatherCachedView.swift - Group of the full texts of warnings
+        public static let narratives = L10n.tr("Weather", "weather.cache.narratives", fallback: "Warning narratives")
+        /// Location: WeatherCachedView.swift - Segment showing what is held in the order it arrived
+        public static let newestFirst = L10n.tr("Weather", "weather.cache.newestFirst", fallback: "Newest first")
+        /// Location: WeatherRadioView.swift - Row opening what this phone kept from the channel, %lld is how many things
+        public static func row(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.cache.row", p1, fallback: "Cached from the channel (%lld)")
+        }
+        /// Location: WeatherCachedView.swift - Screen title
+        public static let title = L10n.tr("Weather", "weather.cache.title", fallback: "Cached from the channel")
+        /// Location: WeatherCachedView.swift - Group of warnings for places other than the one on screen
+        public static let warningsElsewhere = L10n.tr("Weather", "weather.cache.warningsElsewhere", fallback: "Warnings for places elsewhere")
+      }
+      public enum Channel {
+        /// Location: WeatherToolModel.swift - Error when every channel slot is taken
+        public static let full = L10n.tr("Weather", "weather.channel.full", fallback: "No free channel slot. Remove a channel in Chats to make room.")
+        /// Location: WeatherToolModel.swift - Error when Add is tapped before your radio's channel sync has finished
+        public static let notSynced = L10n.tr("Weather", "weather.channel.notSynced", fallback: "Your radio is still syncing its channels. Try again when it has finished.")
+        /// Location: WeatherToolModel.swift - Error when the slot the app chose is in use on your radio, %lld is the slot number
+        public static func slotInUse(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.channel.slotInUse", p1, fallback: "Slot %lld on your radio is in use, so nothing was changed.")
+        }
+        public enum Alert {
+          /// Location: WeatherToolView.swift - Alert button that writes #meshwx to your radio
+          public static let add = L10n.tr("Weather", "weather.channel.alert.add", fallback: "Add channel")
+          /// Location: WeatherToolView.swift - Alert message before writing #meshwx to your radio
+          public static let message = L10n.tr("Weather", "weather.channel.alert.message", fallback: "Weather radios broadcast on #meshwx. Its key comes from its name, so there is nothing secret to share.")
+          /// Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio
+          public static let title = L10n.tr("Weather", "weather.channel.alert.title", fallback: "Add #meshwx to your radio?")
+        }
+      }
+      public enum Common {
+        /// Location: WeatherToolView.swift - Cancel button in alerts and sheets
+        public static let cancel = L10n.tr("Weather", "weather.common.cancel", fallback: "Cancel")
+        /// Location: WeatherRadioView.swift - Done button closing the sheet
+        public static let done = L10n.tr("Weather", "weather.common.done", fallback: "Done")
+        /// Location: WeatherPlacePickerView.swift - Accessibility label for a checkmark
+        public static let selected = L10n.tr("Weather", "weather.common.selected", fallback: "Selected")
+      }
+      public enum Conditions {
+        /// Location: WeatherCopy.swift - No reading good enough for the place: the ask. %1$@ is the place, %2$@ the radio's name, %3$@ an airport code like KAQO
+        public static func ask(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
+          return L10n.tr("Weather", "weather.conditions.ask", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "No current conditions for %1$@. Pull down to ask %2$@ for %3$@.")
+        }
+        /// Location: WeatherCopy.swift - No good reading and nothing can be asked at all, so the sentence does not offer the pull. %1$@ is the place, %2$@ an airport code like KAQO
+        public static func askBlocked(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.conditions.askBlocked", String(describing: p1), String(describing: p2), fallback: "No current conditions for %1$@. The nearest station is %2$@.")
+        }
+      }
+      public enum Coverage {
+        /// Location: WeatherCopy.swift - Alert detail while area outlines load, %@ is the place
+        public static func checking(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.coverage.checking", String(describing: p1), fallback: "Checking whether this covers %@…")
+        }
+        /// Location: WeatherCopy.swift - Alert detail, %@ is the place
+        public static func covers(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.coverage.covers", String(describing: p1), fallback: "Covers %@")
+        }
+        /// Location: WeatherCopy.swift - Alert detail for an alert far away, %@ is the place
+        public static func doesNotCover(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.coverage.doesNotCover", String(describing: p1), fallback: "Doesn't cover %@")
+        }
+        /// Location: WeatherCopy.swift - Alert detail for an alert nearby. %1$@ is the place, %2$@ a distance like "25 km N"
+        public static func near(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.coverage.near", String(describing: p1), String(describing: p2), fallback: "Doesn't cover %1$@ (%2$@)")
+        }
+        /// Location: WeatherCopy.swift - Alert detail and row for an alert with no outline, %@ is the place
+        public static func unknown(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.coverage.unknown", String(describing: p1), fallback: "Not sure it covers %@")
+        }
+      }
+      public enum Covers {
+        /// Location: WeatherRadioView.swift - The radio had to cut a list to fit, so what is missing from it may still be covered. %@ is the list it did send
+        public static func andMore(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.covers.andMore", String(describing: p1), fallback: "%@, and more it didn't list")
+        }
+        /// Location: WeatherRadioView.swift - Row label for the area the radio covers
+        public static let area = L10n.tr("Weather", "weather.covers.area", fallback: "Area")
+        /// Location: WeatherRadioView.swift - The circle the radio stated. %1$@ is a radius like "120 km", %2$@ the place at its centre
+        public static func circle(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.covers.circle", String(describing: p1), String(describing: p2), fallback: "Within %1$@ of %2$@")
+        }
+        /// Location: WeatherRadioView.swift - The radio stated no area filter at all
+        public static let everywhere = L10n.tr("Weather", "weather.covers.everywhere", fallback: "Everything its Weather Service feed carries")
+        /// Location: WeatherRadioView.swift - Section header for what the weather radio says it covers
+        public static let header = L10n.tr("Weather", "weather.covers.header", fallback: "What it covers")
+        /// Location: WeatherRadioView.swift - Shown when the radio has not said what it covers, %@ is its name at the start of a sentence
+        public static func `none`(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.covers.none", String(describing: p1), fallback: "%@ hasn't said what it covers yet.")
+        }
+        /// Location: WeatherRadioView.swift - Footer under the ask, saying what the statement is for
+        public static let noneFooter = L10n.tr("Weather", "weather.covers.noneFooter", fallback: "Without it this phone can't tell a place outside its area from one it hasn't been told about, so it claims neither.")
+        /// Location: WeatherRadioView.swift - Row label for the Weather Service offices the radio carries
+        public static let offices = L10n.tr("Weather", "weather.covers.offices", fallback: "Weather Service offices")
+        /// Location: WeatherRadioView.swift - Footer saying when the radio said this. %1$@ is the radio's name, %2$@ a time
+        public static func stated(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.covers.stated", String(describing: p1), String(describing: p2), fallback: "%1$@ said this; received %2$@")
+        }
+        /// Location: WeatherRadioView.swift - The cap on one hourly report, %lld is the number
+        public static func stationCap(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.covers.stationCap", p1, fallback: "up to %lld")
+        }
+        /// Location: WeatherRadioView.swift - Row label for how many stations one hourly report can carry
+        public static let stations = L10n.tr("Weather", "weather.covers.stations", fallback: "Stations per report")
+        /// Location: WeatherRadioView.swift - How many zones the radio listed, %lld is two or more
+        public static func zoneCount(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.covers.zoneCount", p1, fallback: "%lld zones")
+        }
+        /// Location: WeatherRadioView.swift - The radio listed one zone
+        public static let zoneCountOne = L10n.tr("Weather", "weather.covers.zoneCountOne", fallback: "1 zone")
+        /// Location: WeatherRadioView.swift - Row label for the forecast zones the radio covers
+        public static let zones = L10n.tr("Weather", "weather.covers.zones", fallback: "Forecast zones")
+      }
+      public enum Empty {
+        /// Location: WeatherCopy.swift - What to do about an empty place, %@ is the radio's name
+        public static func ask(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.empty.ask", String(describing: p1), fallback: "Pull down, or tap Update, to ask %@.")
+        }
+        /// Location: WeatherCopy.swift - Nothing near enough to ask about, %@ is the place
+        public static func nothing(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.empty.nothing", String(describing: p1), fallback: "There's no weather station or forecast point near %@.")
+        }
+        /// Location: WeatherCopy.swift - The forecast point worth asking about, %1$@ is its name, %2$@ a distance
+        public static func point(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.empty.point", String(describing: p1), String(describing: p2), fallback: "Nearest forecast point %1$@, %2$@")
+        }
+        /// Location: WeatherCopy.swift - The forecast point worth asking about, distance unknown, %@ is its name
+        public static func pointOnly(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.empty.pointOnly", String(describing: p1), fallback: "Nearest forecast point %@")
+        }
+        /// Location: WeatherCopy.swift - The station worth asking about, %1$@ is an airport code like KAQO, %2$@ a distance
+        public static func station(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.empty.station", String(describing: p1), String(describing: p2), fallback: "Nearest station %1$@, %2$@")
+        }
+        /// Location: WeatherCopy.swift - The station worth asking about, distance unknown, %@ is an airport code like KAQO
+        public static func stationOnly(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.empty.stationOnly", String(describing: p1), fallback: "Nearest station %@")
+        }
+        /// Location: WeatherCopy.swift - One card for a place with no reading and no forecast, %@ is the place
+        public static func title(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.empty.title", String(describing: p1), fallback: "No weather for %@ yet.")
+        }
+      }
+      public enum FloodDamageTag {
+        /// Location: WeatherFormatting.swift - Flood damage tag value
+        public static let catastrophic = L10n.tr("Weather", "weather.floodDamageTag.catastrophic", fallback: "catastrophic")
+        /// Location: WeatherFormatting.swift - Flood damage tag value
+        public static let considerable = L10n.tr("Weather", "weather.floodDamageTag.considerable", fallback: "considerable")
+      }
+      public enum FloodSourceTag {
+        /// Location: WeatherFormatting.swift - Flood source tag value
+        public static let observed = L10n.tr("Weather", "weather.floodSourceTag.observed", fallback: "observed")
+        /// Location: WeatherFormatting.swift - Flood source tag value
+        public static let radar = L10n.tr("Weather", "weather.floodSourceTag.radar", fallback: "radar")
+        /// Location: WeatherFormatting.swift - Flood source tag value
+        public static let radarAndGauge = L10n.tr("Weather", "weather.floodSourceTag.radarAndGauge", fallback: "radar and gauge")
+      }
+      public enum Forecast {
+        /// Location: WeatherCopy.swift - High only, %@ is a temperature
+        public static func high(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.high", String(describing: p1), fallback: "High %@")
+        }
+        /// Location: WeatherCopy.swift - High and low. %1$@ is the high, %2$@ the low
+        public static func highLow(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.highLow", String(describing: p1), String(describing: p2), fallback: "%1$@ / %2$@")
+        }
+        /// Location: WeatherForecastSection.swift - When the forecast was issued, %@ is a time or an age like "14 h ago"
+        public static func issued(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.issued", String(describing: p1), fallback: "issued %@")
+        }
+        /// Location: WeatherCopy.swift - Low only, %@ is a temperature
+        public static func low(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.low", String(describing: p1), fallback: "Low %@")
+        }
+        /// Location: WeatherCopy.swift - Nothing held for the place's point, %@ is the place
+        public static func missing(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.missing", String(describing: p1), fallback: "No forecast for %@ yet.")
+        }
+        /// Location: WeatherCopy.swift - Nothing held, and the nearest point is over 10 km away. %1$@ is the place, %2$@ the point's name, %3$@ its distance like "60 km"
+        public static func missingFar(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.missingFar", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "No forecast for %1$@ yet. The nearest forecast point is %2$@, %3$@.")
+        }
+        /// Location: WeatherCopy.swift - No forecast point close enough to speak for the place, %@ is the place
+        public static func noPoint(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.noPoint", String(describing: p1), fallback: "No forecast point near %@.")
+        }
+        /// Location: WeatherCopy.swift - Chance of rain, %lld is percent
+        public static func rain(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.forecast.rain", p1, fallback: "%lld%% rain")
+        }
+        /// Location: WeatherCopy.swift - Chance of rain carried by the night of a day row, %lld is percent
+        public static func rainTonight(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.forecast.rainTonight", p1, fallback: "%lld%% rain tonight")
+        }
+        /// Location: WeatherForecastSection.swift - Forecast card title with no place
+        public static let titleGeneric = L10n.tr("Weather", "weather.forecast.titleGeneric", fallback: "Forecast")
+        public enum Accessibility {
+          /// Location: WeatherForecastSection.swift - Accessibility summary, %lld is how many forecast rows
+          public static func rows(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.forecast.accessibility.rows", p1, fallback: "%lld entries")
+          }
+        }
+        public enum Hazard {
+          /// Location: WeatherCopy.swift - Forecast hazard word
+          public static let fog = L10n.tr("Weather", "weather.forecast.hazard.fog", fallback: "Fog")
+          /// Location: WeatherCopy.swift - Forecast hazard word
+          public static let thunder = L10n.tr("Weather", "weather.forecast.hazard.thunder", fallback: "Storms")
+          /// Location: WeatherCopy.swift - Forecast hazard word
+          public static let windy = L10n.tr("Weather", "weather.forecast.hazard.windy", fallback: "Windy")
+          /// Location: WeatherCopy.swift - Forecast hazard word
+          public static let wintry = L10n.tr("Weather", "weather.forecast.hazard.wintry", fallback: "Snow or ice")
+        }
+        public enum Label {
+          /// Location: WeatherCopy.swift - Forecast row label for a later night, %@ is a weekday
+          public static func night(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.forecast.label.night", String(describing: p1), fallback: "%@ night")
+          }
+          /// Location: WeatherCopy.swift - Forecast row label
+          public static let today = L10n.tr("Weather", "weather.forecast.label.today", fallback: "Today")
+          /// Location: WeatherCopy.swift - Forecast row label
+          public static let tomorrow = L10n.tr("Weather", "weather.forecast.label.tomorrow", fallback: "Tomorrow")
+          /// Location: WeatherCopy.swift - Forecast row label
+          public static let tomorrowNight = L10n.tr("Weather", "weather.forecast.label.tomorrowNight", fallback: "Tomorrow night")
+          /// Location: WeatherCopy.swift - Forecast row label
+          public static let tonight = L10n.tr("Weather", "weather.forecast.label.tonight", fallback: "Tonight")
+        }
+      }
+      public enum Header {
+        /// Location: WeatherCopy.swift - Header second line while waiting for a location fix
+        public static let locating = L10n.tr("Weather", "weather.header.locating", fallback: "Locating…")
+        /// Location: WeatherCopy.swift - Header second line when location permission is denied
+        public static let locationOff = L10n.tr("Weather", "weather.header.locationOff", fallback: "Location is off")
+        /// Location: WeatherPlacePageView.swift - Header link opening the Settings app
+        public static let settings = L10n.tr("Weather", "weather.header.settings", fallback: "Settings")
+      }
+      public enum Heard {
+        /// Location: WeatherRadioView.swift - Footer under what the channel carried; it never says who asked
+        public static let footer = L10n.tr("Weather", "weather.heard.footer", fallback: "What the channel carried recently, broadcasts and answers alike. This phone can't tell who asked.")
+        /// Location: WeatherRadioView.swift - One message carrying several stations' readings, %lld is two or more
+        public static func readings(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.heard.readings", p1, fallback: "%lld station readings")
+        }
+        /// Location: WeatherRadioView.swift - One message carrying one station's reading
+        public static let readingsOne = L10n.tr("Weather", "weather.heard.readingsOne", fallback: "1 station reading")
+        /// Location: WeatherRadioView.swift - A text reply whose subject has no name of its own
+        public static let text = L10n.tr("Weather", "weather.heard.text", fallback: "Weather Service text")
+      }
+      public enum Notifications {
+        /// Location: WeatherAlertNotificationsView.swift - Section header over the two opt-in toggles
+        public static let alsoHeader = L10n.tr("Weather", "weather.notifications.alsoHeader", fallback: "Also notify me about")
+        /// Location: WeatherAlertNotificationsView.swift - A watched place while your radio is connected
+        public static let connected = L10n.tr("Weather", "weather.notifications.connected", fallback: "Watching · radio connected")
+        /// Location: WeatherAlertNotificationsView.swift - Shown when iOS has notifications turned off for the app
+        public static let denied = L10n.tr("Weather", "weather.notifications.denied", fallback: "Notifications are off for DigitainoMesh, so a bell can't ring.")
+        /// Location: WeatherAlertNotificationsView.swift - A watched place while your radio is not connected and the app does not know since when
+        public static let disconnected = L10n.tr("Weather", "weather.notifications.disconnected", fallback: "Not watching — your radio isn't connected")
+        /// Location: WeatherAlertNotificationsView.swift - A watched place while your radio is not connected, %@ is a time like "8:42 PM"
+        public static func disconnectedSince(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.notifications.disconnectedSince", String(describing: p1), fallback: "Not watching — radio disconnected since %@")
+        }
+        /// Location: WeatherAlertNotificationsView.swift - Shown when no place is watched
+        public static let empty = L10n.tr("Weather", "weather.notifications.empty", fallback: "No place is watched yet. Turn on the bell beside a place in Places, and a warning covering it will notify you.")
+        /// Location: WeatherAlertNotificationCopy.swift - Second line of a notification for a warning drained from the radio's queue
+        public static let late = L10n.tr("Weather", "weather.notifications.late", fallback: "Received late — sent while your radio was out of range.")
+        /// Location: WeatherAlertNotificationsView.swift - The row for the phone's own position
+        public static let myLocation = L10n.tr("Weather", "weather.notifications.myLocation", fallback: "My location")
+        /// Location: WeatherAlertNotificationCopy.swift - Name for the phone's own place in a notification when no town is near enough
+        public static let myLocationLabel = L10n.tr("Weather", "weather.notifications.myLocationLabel", fallback: "your location")
+        /// Location: WeatherAlertNotificationCopy.swift - A warning near the place, in a notification. %1$@ is a distance and direction like "25 km N", %2$@ the place
+        public static func near(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.notifications.near", String(describing: p1), String(describing: p2), fallback: "%1$@ of %2$@")
+        }
+        /// Location: WeatherAlertNotificationsView.swift - No position has been taken yet
+        public static let noPosition = L10n.tr("Weather", "weather.notifications.noPosition", fallback: "No position yet. Open Weather with location turned on to give it one.")
+        /// Location: WeatherAlertNotificationsView.swift - Button opening the Settings app
+        public static let openSettings = L10n.tr("Weather", "weather.notifications.openSettings", fallback: "Open Settings")
+        /// Location: WeatherAlertNotificationsView.swift - Toggle for warnings that are not storm warnings
+        public static let otherWarnings = L10n.tr("Weather", "weather.notifications.otherWarnings", fallback: "Other warnings")
+        /// Location: WeatherAlertNotificationsView.swift - What the other-warnings toggle covers
+        public static let otherWarningsDetail = L10n.tr("Weather", "weather.notifications.otherWarningsDetail", fallback: "Flood, winter storm, wind and the rest, delivered silently.")
+        /// Location: WeatherAlertNotificationsView.swift - Section header over the places being watched
+        public static let placesHeader = L10n.tr("Weather", "weather.notifications.placesHeader", fallback: "Watched places")
+        /// Location: WeatherAlertNotificationsView.swift - How old the position it is matched against is, %@ is an age like "3 h old"
+        public static func positionAge(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.notifications.positionAge", String(describing: p1), fallback: "Last position %@")
+        }
+        /// Location: WeatherAlertNotificationsView.swift - Footer saying exactly what this can promise
+        public static let promise = L10n.tr("Weather", "weather.notifications.promise", fallback: "Alerts arrive only while your radio is connected and in range, and while DigitainoMesh is running. This is not a substitute for a NOAA weather radio or your phone's emergency alerts.")
+        /// Location: WeatherPlacePickerView.swift - Accessibility label for a bell that is off, %@ is the place
+        public static func startWatching(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.notifications.startWatching", String(describing: p1), fallback: "Notify me about warnings for %@")
+        }
+        /// Location: WeatherPlacePickerView.swift - Accessibility label for a bell that is on, %@ is the place
+        public static func stopWatching(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.notifications.stopWatching", String(describing: p1), fallback: "Stop notifying me about warnings for %@")
+        }
+        /// Location: WeatherAlertNotificationsView.swift - Footer saying what always notifies and what never does
+        public static let stormsAlways = L10n.tr("Weather", "weather.notifications.stormsAlways", fallback: "Tornado, Extreme Wind, Flash Flood and Severe Thunderstorm Warnings covering a watched place always notify, with a sound. Watches, advisories and statements never do.")
+        /// Location: WeatherAlertNotificationsView.swift - Screen title, and the row that opens it
+        public static let title = L10n.tr("Weather", "weather.notifications.title", fallback: "Alert notifications")
+        /// Location: WeatherAlertNotificationsView.swift - Toggle for tornado warnings that do not cover the place
+        public static let tornadoNearby = L10n.tr("Weather", "weather.notifications.tornadoNearby", fallback: "Tornado warnings nearby")
+        /// Location: WeatherAlertNotificationsView.swift - What the nearby-tornado toggle covers
+        public static let tornadoNearbyDetail = L10n.tr("Weather", "weather.notifications.tornadoNearbyDetail", fallback: "Within 50 km, even when they don't cover the place.")
+        /// Location: WeatherAlertNotificationCopy.swift - When a warning ends, in a notification. %@ is a time like "9:41 PM"
+        public static func until(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.notifications.until", String(describing: p1), fallback: "until %@")
+        }
+        /// Location: WeatherRadioView.swift - How many places are watched, %lld is one or more
+        public static func watchingCount(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.notifications.watchingCount", p1, fallback: "%lld watched")
+        }
+        /// Location: WeatherRadioView.swift - Shown when nothing is watched
+        public static let watchingNone = L10n.tr("Weather", "weather.notifications.watchingNone", fallback: "Off")
+      }
+      public enum Now {
+        /// Location: WeatherConditionsSection.swift - Now card with no observations, %@ is the radio's name
+        public static func empty(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.now.empty", String(describing: p1), fallback: "No current conditions yet. %@ broadcasts them every hour.")
+        }
+        /// Location: WeatherConditionsSection.swift - Apparent temperature, %@ is a temperature
+        public static func feelsLike(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.now.feelsLike", String(describing: p1), fallback: "Feels like %@")
+        }
+        /// Location: WeatherConditionsSection.swift - Relative humidity, %lld is percent
+        public static func humidity(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.now.humidity", p1, fallback: "Humidity %lld%%")
+        }
+        /// Location: WeatherCopy.swift - No station within 80 km. %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance
+        public static func noneNearby(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
+          return L10n.tr("Weather", "weather.now.noneNearby", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "No weather station near %1$@. Nearest: %2$@, %3$@.")
+        }
+        /// Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town
+        public static func noneNearbyUnknown(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.now.noneNearbyUnknown", String(describing: p1), String(describing: p2), fallback: "No weather station near %1$@. Nearest: %2$@.")
+        }
+        /// Location: WeatherCopy.swift - Which report a reading came in. %1$@ is the radio's name, %2$@ a time like "11:18 PM"
+        public static func report(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.now.report", String(describing: p1), String(describing: p2), fallback: "in %1$@'s %2$@ report")
+        }
+        /// Location: WeatherCopy.swift - Link to the stations screen when none came in a batch, %lld is how many (two or more)
+        public static func stations(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.now.stations", p1, fallback: "%lld weather stations")
+        }
+        /// Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name
+        public static func stationsInArea(_ p1: Int, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.now.stationsInArea", p1, String(describing: p2), fallback: "%1$lld stations in %2$@'s area")
+        }
+        /// Location: WeatherCopy.swift - Link to the stations screen with one station in the radio's batch, %@ is the radio's name
+        public static func stationsInAreaOne(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.now.stationsInAreaOne", String(describing: p1), fallback: "1 station in %@'s area")
+        }
+        /// Location: WeatherCopy.swift - Link to the stations screen with one station, none in a batch
+        public static let stationsOne = L10n.tr("Weather", "weather.now.stationsOne", fallback: "1 weather station")
+        /// Location: WeatherCopy.swift - Link to the stations screen when answers to single-station requests are held as well. %1$lld is every station the screen shows, %2$lld how many came in the radio's batch, %3$@ the radio's name
+        public static func stationsWithArea(_ p1: Int, _ p2: Int, _ p3: Any) -> String {
+          return L10n.tr("Weather", "weather.now.stationsWithArea", p1, p2, String(describing: p3), fallback: "%1$lld weather stations, %2$lld in %3$@'s area")
+        }
+        /// Location: WeatherConditionsSection.swift - Accessibility label for the current conditions card, which has no visible title
+        public static let summary = L10n.tr("Weather", "weather.now.summary", fallback: "Current conditions")
+        /// Location: WeatherConditionsSection.swift - Wind, %@ is like "SSE 12"
+        public static func wind(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.now.wind", String(describing: p1), fallback: "Wind %@")
+        }
+      }
+      public enum Picker {
+        /// Location: WeatherPlacePickerView.swift - Your location row before permission is asked
+        public static let allowLocation = L10n.tr("Weather", "weather.picker.allowLocation", fallback: "Tap to allow location access")
+        /// Location: WeatherPlacePickerView.swift - Footer shown only when the phone has no fix and distances are measured from the page on screen, %@ is that place
+        public static func distancesFrom(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.picker.distancesFrom", String(describing: p1), fallback: "Distances from %@")
+        }
+        /// Location: WeatherPlacePickerView.swift - Shown in place of a distance when the phone has no fix and the tool has no place to measure from either
+        public static let distanceUnknown = L10n.tr("Weather", "weather.picker.distanceUnknown", fallback: "Distance unknown")
+        /// Location: WeatherPlacePickerView.swift - When somebody's forecast was heard, %@ is a time ago
+        public static func heard(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.picker.heard", String(describing: p1), fallback: "heard %@")
+        }
+        /// Location: WeatherPlacePickerView.swift - Section of places whose forecasts were heard on the channel; never says who asked
+        public static let heardOnChannel = L10n.tr("Weather", "weather.picker.heardOnChannel", fallback: "Heard on #meshwx")
+        /// Location: WeatherPlacePickerView.swift - Your location row when permission is denied
+        public static let locationOff = L10n.tr("Weather", "weather.picker.locationOff", fallback: "Location is off")
+        /// Location: WeatherPlacePickerView.swift - Your location row when the phone has no fix and nothing is being located
+        public static let noFix = L10n.tr("Weather", "weather.picker.noFix", fallback: "Tap to use your location")
+        /// Location: WeatherCopy.swift - A Places row with nothing held for its place
+        public static let noReading = L10n.tr("Weather", "weather.picker.noReading", fallback: "—")
+        /// Location: WeatherPlacePickerView.swift - Shown when a search matches nothing
+        public static let noResults = L10n.tr("Weather", "weather.picker.noResults", fallback: "No matching place")
+        /// Location: WeatherPlacePickerView.swift - Search field prompt
+        public static let prompt = L10n.tr("Weather", "weather.picker.prompt", fallback: "Town, ZIP or airport code")
+        /// Location: WeatherPlacePickerView.swift - Swipe action that takes a place off the list
+        public static let remove = L10n.tr("Weather", "weather.picker.remove", fallback: "Remove")
+        /// Location: WeatherPlacePickerView.swift - Section of the places kept on this phone
+        public static let saved = L10n.tr("Weather", "weather.picker.saved", fallback: "Saved places")
+        /// Location: WeatherPlacePickerView.swift - Row for a US ZIP code the phone's ZIP list doesn't have, %@ is the 5-digit ZIP like "20500"
+        public static func unknownZip(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.picker.unknownZip", String(describing: p1), fallback: "ZIP code %@ isn't known")
+        }
+        /// Location: WeatherPlacePickerView.swift - Second line of the unknown ZIP code row
+        public static let unknownZipHint = L10n.tr("Weather", "weather.picker.unknownZipHint", fallback: "PO box and some business ZIP codes aren't listed. Try the town instead.")
+        /// Location: WeatherPlacePickerView.swift - Row for the phone's location
+        public static let yourLocation = L10n.tr("Weather", "weather.picker.yourLocation", fallback: "My location")
+      }
+      public enum Place {
+        /// Location: WeatherConditionsSection.swift - Card line with no place chosen
+        public static let choosePrompt = L10n.tr("Weather", "weather.place.choosePrompt", fallback: "Choose a place in Places to see weather for it.")
+        /// Location: WeatherToolView.swift - Item in the title's menu that opens the Places sheet
+        public static let manage = L10n.tr("Weather", "weather.place.manage", fallback: "Add or edit places…")
+        /// Location: WeatherConditionsSection.swift - Quiet line for a place outside the radio's area; never says there are no alerts
+        public static let outsideArea = L10n.tr("Weather", "weather.place.outsideArea", fallback: "Warnings aren't pushed here — pull to check.")
+        /// Location: WeatherToolView.swift - Accessibility label for the pager's dots, %1$lld is the page on screen and %2$lld how many there are
+        public static func pageOf(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.place.pageOf", p1, p2, fallback: "Page %1$lld of %2$lld")
+        }
+        /// Location: WeatherUpdateControl.swift - Button and sheet title for the one place control
+        public static let places = L10n.tr("Weather", "weather.place.places", fallback: "Places")
+        /// Location: WeatherScreenBuilder.swift - Label for a location with no town or station nearby
+        public static let thisLocation = L10n.tr("Weather", "weather.place.thisLocation", fallback: "this location")
+        /// Location: WeatherAlertRow.swift - Button asking for a fresh location fix
+        public static let updateLocation = L10n.tr("Weather", "weather.place.updateLocation", fallback: "Update location")
+        /// Location: WeatherConditionsSection.swift - The one button that may ask for location permission
+        public static let useMyLocation = L10n.tr("Weather", "weather.place.useMyLocation", fallback: "Use my location")
+        /// Location: WeatherConditionsSection.swift - My location page before permission, above the one tap that asks for it
+        public static let useMyLocationPrompt = L10n.tr("Weather", "weather.place.useMyLocationPrompt", fallback: "See the weather where you are.")
+      }
+      public enum RadioRow {
+        /// Location: WeatherCopy.swift - Radio row, how old the alert list is. %@ is a time like "8:02 PM"
+        public static func alertsAsOf(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.radioRow.alertsAsOf", String(describing: p1), fallback: "alerts as of %@")
+        }
+        /// Location: WeatherCopy.swift - Radio row when no alert list has ever arrived
+        public static let noAlertList = L10n.tr("Weather", "weather.radioRow.noAlertList", fallback: "no alert list yet")
+      }
+      public enum Reports {
+        /// Location: WeatherReportsView.swift - Marker where a part of a text never arrived
+        public static let missingPart = L10n.tr("Weather", "weather.reports.missingPart", fallback: "\n[missing part]\n")
+        /// Location: WeatherReportsView.swift - Shown instead of Ask when the request needs a place
+        public static let needsPlace = L10n.tr("Weather", "weather.reports.needsPlace", fallback: "Choose a place to ask for this.")
+        /// Location: WeatherReportsView.swift - State row value when no state is known
+        public static let noState = L10n.tr("Weather", "weather.reports.noState", fallback: "not set")
+        /// Location: WeatherReportsView.swift - Shown when nothing is held for a product
+        public static let nothingYet = L10n.tr("Weather", "weather.reports.nothingYet", fallback: "Nothing received yet.")
+        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift - Header part for an answer this phone never asked for; lowercase, joined with a middot
+        public static let overheard = L10n.tr("Weather", "weather.reports.overheard", fallback: "heard on #meshwx")
+        /// Location: WeatherReportsView.swift - When this phone received a text, %@ is a time
+        public static func received(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.reports.received", String(describing: p1), fallback: "received %@")
+        }
+        /// Location: WeatherReportsView.swift - Row opening the state list, %@ is the state's name like "Texas"
+        public static func stateRow(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.reports.stateRow", String(describing: p1), fallback: "State: %@")
+        }
+        /// Location: WeatherReportsView.swift - State list title
+        public static let stateTitle = L10n.tr("Weather", "weather.reports.stateTitle", fallback: "State")
+        /// Location: WeatherReportsView.swift - Reports screen title and root row
+        public static let title = L10n.tr("Weather", "weather.reports.title", fallback: "Weather Service text reports")
+        /// Location: WeatherReportsView.swift - Header part for a text nobody here asked for, whose office or state the wire never carries
+        public static let unknownArea = L10n.tr("Weather", "weather.reports.unknownArea", fallback: "area unknown")
+        public enum Discussion {
+          /// Location: WeatherReportsView.swift - Product description; says what the product is, never where a copy came from
+          public static let description = L10n.tr("Weather", "weather.reports.discussion.description", fallback: "Forecaster's notes, technical")
+          /// Location: WeatherReportsView.swift - Product title
+          public static let title = L10n.tr("Weather", "weather.reports.discussion.title", fallback: "Forecast discussion")
+        }
+        public enum Outlook {
+          /// Location: WeatherReportsView.swift - Product description; says what the product is, never where a copy came from
+          public static let description = L10n.tr("Weather", "weather.reports.outlook.description", fallback: "Hazards expected over the next week")
+          /// Location: WeatherReportsView.swift - Product title
+          public static let title = L10n.tr("Weather", "weather.reports.outlook.title", fallback: "Hazardous weather outlook")
+        }
+        public enum Rainfall {
+          /// Location: WeatherReportsView.swift - Product description
+          public static let description = L10n.tr("Weather", "weather.reports.rainfall.description", fallback: "Recent rain gauge totals")
+          /// Location: WeatherReportsView.swift - Product title
+          public static let title = L10n.tr("Weather", "weather.reports.rainfall.title", fallback: "Rainfall totals")
+        }
+        public enum Space {
+          /// Location: WeatherReportsView.swift - Product description
+          public static let description = L10n.tr("Weather", "weather.reports.space.description", fallback: "Solar storms and radio conditions")
+          /// Location: WeatherReportsView.swift - Product title
+          public static let title = L10n.tr("Weather", "weather.reports.space.title", fallback: "Space weather")
+        }
+        public enum Storms {
+          /// Location: WeatherReportsView.swift - Product description
+          public static let description = L10n.tr("Weather", "weather.reports.storms.description", fallback: "Hail, wind and tornado reports from spotters")
+          /// Location: WeatherReportsView.swift - Product title
+          public static let title = L10n.tr("Weather", "weather.reports.storms.title", fallback: "Storm reports")
+        }
+      }
+      public enum Request {
+        /// Location: WeatherCopy.swift - An answer arrived. %1$@ is the radio's name, %2$@ a time
+        public static func answeredAt(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.request.answeredAt", String(describing: p1), String(describing: p2), fallback: "%1$@ answered at %2$@")
+        }
+        /// Location: WeatherCopy.swift - An answer arrived that changed nothing. %1$@ is the radio's name, %2$@ a time
+        public static func answeredNothingNew(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.request.answeredNothingNew", String(describing: p1), String(describing: p2), fallback: "%1$@ answered at %2$@ · nothing new")
+        }
+        /// Location: WeatherAlertRow.swift - Request button
+        public static let askAlerts = L10n.tr("Weather", "weather.request.askAlerts", fallback: "Ask for alerts")
+        /// Location: WeatherRadioView.swift - Request button asking the radio what it covers
+        public static let askCoverage = L10n.tr("Weather", "weather.request.askCoverage", fallback: "Ask what it covers")
+        /// Location: WeatherAlertDetailView.swift - Request button
+        public static let askFullText = L10n.tr("Weather", "weather.request.askFullText", fallback: "Ask for full text")
+        /// Location: WeatherReportsView.swift - Request button
+        public static let askLatest = L10n.tr("Weather", "weather.request.askLatest", fallback: "Ask for latest")
+        /// Location: WeatherStationsView.swift - Request button for the coded current conditions
+        public static let askMetar = L10n.tr("Weather", "weather.request.askMetar", fallback: "Ask for METAR (conditions)")
+        /// Location: WeatherStationsView.swift - Request button for the coded airport forecast
+        public static let askTaf = L10n.tr("Weather", "weather.request.askTaf", fallback: "Ask for TAF (forecast)")
+        /// Location: WeatherCopy.swift - Request button that asks for one alert the list named but this phone never received, %@ is the alert's name like "Tornado Warning"
+        public static func askWarning(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.askWarning", String(describing: p1), fallback: "Ask for %@")
+        }
+        /// Location: WeatherCopy.swift - Content time of a forecast answer, %@ is a time
+        public static func contentIssued(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.contentIssued", String(describing: p1), fallback: "issued %@")
+        }
+        /// Location: WeatherCopy.swift - Content time of an alert list or warnings answer, %@ is a time
+        public static func contentList(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.contentList", String(describing: p1), fallback: "list as of %@")
+        }
+        /// Location: WeatherCopy.swift - Content time of a station readings answer, %@ is a time
+        public static func contentReadings(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.contentReadings", String(describing: p1), fallback: "readings as of %@")
+        }
+        /// Location: WeatherCopy.swift - Your radio refused to send the request, %@ is a time
+        public static func failed(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.failed", String(describing: p1), fallback: "Your radio couldn't send this at %@.")
+        }
+        /// Location: WeatherCopy.swift - Status while the third send of a request goes out by flood, after the route to the radio was forgotten
+        public static let flooding = L10n.tr("Weather", "weather.request.flooding", fallback: "Asking again by flood…")
+        /// Location: WeatherCopy.swift - No answer from a radio that was heard, which drops requests silently when busy. %1$@ is the radio's name, %2$@ a time
+        public static func heardNoAnswer(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.request.heardNoAnswer", String(describing: p1), String(describing: p2), fallback: "%1$@ was heard but didn't answer at %2$@. It may be busy.")
+        }
+        /// Location: WeatherCopy.swift - No answer from a silent radio, which may be out of range or dropping requests because it is busy. %1$@ is a time, %2$@ the radio's name
+        public static func noAnswer(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.request.noAnswer", String(describing: p1), String(describing: p2), fallback: "No answer at %1$@. %2$@ may be out of range or busy.")
+        }
+        /// Location: WeatherCopy.swift - A forecast answer with nothing newer than what is shown, %@ is the radio's name
+        public static func noNewerForecast(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.noNewerForecast", String(describing: p1), fallback: "No newer forecast from %@")
+        }
+        /// Location: WeatherCopy.swift - A readings answer with nothing newer than what is shown, %@ is the radio's name
+        public static func noNewerReadings(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.noNewerReadings", String(describing: p1), fallback: "No newer readings from %@")
+        }
+        /// Location: WeatherCopy.swift - Request on the air, %@ is the radio's name
+        public static func pending(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.pending", String(describing: p1), fallback: "Asking %@…")
+        }
+        /// Location: WeatherAskControl.swift - Note under the first request button on a screen
+        public static let publicNote = L10n.tr("Weather", "weather.request.publicNote", fallback: "Everyone listening on #meshwx gets the answer.")
+        /// Location: WeatherCopy.swift - Caption for a radio not heard for 90 minutes. %1$@ is the radio's name, %2$@ a time
+        public static func quiet(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.request.quiet", String(describing: p1), String(describing: p2), fallback: "%1$@ not heard since %2$@ — it may not answer")
+        }
+        /// Location: WeatherToolModel.swift - Request refused inside the five-second spacing
+        public static let rateLimited = L10n.tr("Weather", "weather.request.rateLimited", fallback: "Wait a few seconds between requests")
+        /// Location: WeatherCopy.swift - An answer the channel already delivered, so nothing was sent. %@ is a time ago like "40 s ago"
+        public static func received(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.request.received", String(describing: p1), fallback: "Received %@")
+        }
+        /// Location: WeatherCopy.swift - An answer already delivered, with what it was as of. %1$@ is like "Received 40 s ago", %2$@ like "list as of 3:02 PM"
+        public static func receivedContent(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.request.receivedContent", String(describing: p1), String(describing: p2), fallback: "%1$@ · %2$@")
+        }
+        /// Location: WeatherCopy.swift - No answer although your radio confirmed the weather radio received the request: it may be busy, or its answer was lost on the way back. %1$@ is the radio's name, %2$@ a time
+        public static func receivedNoAnswer(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.request.receivedNoAnswer", String(describing: p1), String(describing: p2), fallback: "%1$@ received the request, but no answer reached this phone by %2$@. It may be busy, or its answer was lost.")
+        }
+        /// Location: WeatherCopy.swift - The one retry on the air
+        public static let retrying = L10n.tr("Weather", "weather.request.retrying", fallback: "Asking again…")
+        /// Location: WeatherCopy.swift - Another request is on the air
+        public static let waiting = L10n.tr("Weather", "weather.request.waiting", fallback: "Waiting for another answer…")
+        public enum Blocked {
+          /// Location: WeatherCopy.swift - In place of a request button without #meshwx
+          public static let channel = L10n.tr("Weather", "weather.request.blocked.channel", fallback: "Add #meshwx to your radio to ask")
+          /// Location: WeatherCopy.swift - In place of a request button on old firmware
+          public static let firmware = L10n.tr("Weather", "weather.request.blocked.firmware", fallback: "Your radio's firmware can't ask for weather")
+          /// Location: WeatherCopy.swift - In place of a request button with no weather radio
+          public static let noBot = L10n.tr("Weather", "weather.request.blocked.noBot", fallback: "No weather radio to ask yet")
+          /// Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert
+          public static let notAnnounced = L10n.tr("Weather", "weather.request.blocked.notAnnounced", fallback: "Can't ask until it announces itself")
+          /// Location: WeatherCopy.swift - In place of a request button with your radio not connected, %@ is the weather radio's name
+          public static func offline(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.request.blocked.offline", String(describing: p1), fallback: "Connect your radio to ask %@")
+          }
+        }
+        public enum NotAvailable {
+          /// Location: WeatherCopy.swift - The radio is rate limited, %@ is its name
+          public static func busy(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.request.notAvailable.busy", String(describing: p1), fallback: "%@ is busy, try again in a few minutes")
+          }
+          /// Location: WeatherCopy.swift - The radio reported an error, %@ is its name
+          public static func error(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.request.notAvailable.error", String(describing: p1), fallback: "%@ had an error")
+          }
+          /// Location: WeatherCopy.swift - The radio has no data, %@ is its name
+          public static func noData(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.request.notAvailable.noData", String(describing: p1), fallback: "%@ has no data for that yet")
+          }
+          /// Location: WeatherCopy.swift - The radio declined for an unknown reason, %@ is its name
+          public static func other(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.request.notAvailable.other", String(describing: p1), fallback: "%@ can't answer that")
+          }
+          /// Location: WeatherCopy.swift - The radio did not recognize the place, %@ is its name
+          public static func unknownPlace(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.request.notAvailable.unknownPlace", String(describing: p1), fallback: "%@ didn't recognize that place")
+          }
+          /// Location: WeatherCopy.swift - The radio does not support the request, %@ is its name
+          public static func unsupported(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.request.notAvailable.unsupported", String(describing: p1), fallback: "%@ can't do that")
+          }
+        }
+      }
+      public enum RequestName {
+        /// Location: WeatherCopy.swift - Name of a request for every active warning
+        public static let activeWarnings = L10n.tr("Weather", "weather.requestName.activeWarnings", fallback: "Active warnings")
+        /// Location: WeatherCopy.swift - Name of a request for the radio's alert list
+        public static let alertList = L10n.tr("Weather", "weather.requestName.alertList", fallback: "Alert list")
+        /// Location: WeatherCopy.swift - Name of a request for warnings naming one area, %@ is a county or zone code like TXZ192
+        public static func areaWarnings(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.areaWarnings", String(describing: p1), fallback: "Alerts for %@")
+        }
+        /// Location: WeatherCopy.swift - Name of a request asking the radio what it covers
+        public static let coverage = L10n.tr("Weather", "weather.requestName.coverage", fallback: "What it covers")
+        /// Location: WeatherCopy.swift - Name of a request for a forecast, %@ is a place or forecast point
+        public static func forecast(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.forecast", String(describing: p1), fallback: "Forecast for %@")
+        }
+        /// Location: WeatherCopy.swift - Name of a request for the coded current conditions
+        public static let metar = L10n.tr("Weather", "weather.requestName.metar", fallback: "METAR")
+        /// Location: WeatherCopy.swift - Name of a request for the hourly station readings
+        public static let readings = L10n.tr("Weather", "weather.requestName.readings", fallback: "Station readings")
+        /// Location: WeatherCopy.swift - Name of a request for one station, %@ is an airport code like KAUS
+        public static func stationReading(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.stationReading", String(describing: p1), fallback: "Readings for %@")
+        }
+        /// Location: WeatherCopy.swift - Name of a request for the coded airport forecast
+        public static let taf = L10n.tr("Weather", "weather.requestName.taf", fallback: "TAF")
+        /// Location: WeatherCopy.swift - Name of a request for a warning's full text, %@ is the alert's name like "Tornado Warning"
+        public static func warningText(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.warningText", String(describing: p1), fallback: "Full text of %@")
+        }
+        /// Location: WeatherCopy.swift - A request and what it named. %1$@ is what was asked for, %2$@ its subject like a state, an office or an airport code
+        public static func withSubject(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.withSubject", String(describing: p1), String(describing: p2), fallback: "%1$@ · %2$@")
+        }
+      }
+      public enum Requests {
+        /// Location: WeatherRadioView.swift - How a request ended: the answer arrived
+        public static let answered = L10n.tr("Weather", "weather.requests.answered", fallback: "answered")
+        /// Location: WeatherRadioView.swift - Footer under the requests this phone sent
+        public static let footer = L10n.tr("Weather", "weather.requests.footer", fallback: "What this phone asked for. Every answer was broadcast, so everyone listening got it too.")
+        /// Location: WeatherRadioView.swift - Section header for the requests this phone sent
+        public static let header = L10n.tr("Weather", "weather.requests.header", fallback: "Your requests")
+        /// Location: WeatherRadioView.swift - How a request ended: nothing came back
+        public static let noAnswer = L10n.tr("Weather", "weather.requests.noAnswer", fallback: "no answer")
+        /// Location: WeatherRadioView.swift - Shown when this phone has asked for nothing
+        public static let `none` = L10n.tr("Weather", "weather.requests.none", fallback: "This phone hasn't asked for anything yet.")
+        /// Location: WeatherRadioView.swift - How a request ended: the radio said it can't serve it
+        public static let notAvailable = L10n.tr("Weather", "weather.requests.notAvailable", fallback: "not available")
+        /// Location: WeatherRadioView.swift - A request still on the air
+        public static let pending = L10n.tr("Weather", "weather.requests.pending", fallback: "waiting for an answer")
+        /// Location: WeatherRadioView.swift - How a request ended: your own radio would not send it
+        public static let refused = L10n.tr("Weather", "weather.requests.refused", fallback: "your radio couldn't send it")
+      }
+      public enum Sky {
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let broken = L10n.tr("Weather", "weather.sky.broken", fallback: "Mostly cloudy")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let clear = L10n.tr("Weather", "weather.sky.clear", fallback: "Clear")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let drizzle = L10n.tr("Weather", "weather.sky.drizzle", fallback: "Drizzle")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let dust = L10n.tr("Weather", "weather.sky.dust", fallback: "Blowing dust")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let few = L10n.tr("Weather", "weather.sky.few", fallback: "Mostly clear")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let fog = L10n.tr("Weather", "weather.sky.fog", fallback: "Fog")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let haze = L10n.tr("Weather", "weather.sky.haze", fallback: "Haze")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let mist = L10n.tr("Weather", "weather.sky.mist", fallback: "Mist")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let overcast = L10n.tr("Weather", "weather.sky.overcast", fallback: "Overcast")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let rain = L10n.tr("Weather", "weather.sky.rain", fallback: "Rain")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let scattered = L10n.tr("Weather", "weather.sky.scattered", fallback: "Partly cloudy")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let smoke = L10n.tr("Weather", "weather.sky.smoke", fallback: "Smoke")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let snow = L10n.tr("Weather", "weather.sky.snow", fallback: "Snow")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let squall = L10n.tr("Weather", "weather.sky.squall", fallback: "Squalls")
+        /// Location: WeatherFormatting.swift - Sky condition
+        public static let thunderstorm = L10n.tr("Weather", "weather.sky.thunderstorm", fallback: "Thunderstorm")
+      }
+      public enum Station {
+        /// Location: WeatherStationsView.swift - Section with METAR and TAF
+        public static let airportReports = L10n.tr("Weather", "weather.station.airportReports", fallback: "Airport reports (coded)")
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let dewPoint = L10n.tr("Weather", "weather.station.dewPoint", fallback: "Dew point")
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let feelsLike = L10n.tr("Weather", "weather.station.feelsLike", fallback: "Feels like")
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let humidity = L10n.tr("Weather", "weather.station.humidity", fallback: "Humidity")
+        /// Location: WeatherStationsView.swift - Pressure value, %@ is inches of mercury
+        public static func inchesOfMercury(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.station.inchesOfMercury", String(describing: p1), fallback: "%@ inHg")
+        }
+        /// Location: WeatherStationsView.swift - Station screen with no reading received yet
+        public static let nothingHeld = L10n.tr("Weather", "weather.station.nothingHeld", fallback: "No reading from this station yet.")
+        /// Location: WeatherStationsView.swift - Why a station's reading is old: the radio's hourly report does not carry it
+        public static let notInBatch = L10n.tr("Weather", "weather.station.notInBatch", fallback: "Answered on request, not in the hourly batch")
+        /// Location: WeatherStationsView.swift - Percent value, %lld is percent
+        public static func percent(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.station.percent", p1, fallback: "%lld%%")
+        }
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let pressure = L10n.tr("Weather", "weather.station.pressure", fallback: "Pressure")
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let sky = L10n.tr("Weather", "weather.station.sky", fallback: "Sky")
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let temperature = L10n.tr("Weather", "weather.station.temperature", fallback: "Temperature")
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let visibility = L10n.tr("Weather", "weather.station.visibility", fallback: "Visibility")
+        /// Location: WeatherStationsView.swift - Reading field
+        public static let wind = L10n.tr("Weather", "weather.station.wind", fallback: "Wind")
+      }
+      public enum Stations {
+        /// Location: WeatherStationsView.swift - Section of stations from single-station answers seen on the channel; never says who asked
+        public static let answers = L10n.tr("Weather", "weather.stations.answers", fallback: "From answers on the channel")
+        /// Location: WeatherStationsView.swift - When a reading was taken, %@ is a time
+        public static func asOf(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.stations.asOf", String(describing: p1), fallback: "as of %@")
+        }
+        /// Location: WeatherStationsView.swift - Row detail when a reading came from another radio, %@ is that radio's name
+        public static func fromBot(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.stations.fromBot", String(describing: p1), fallback: "from %@")
+        }
+        /// Location: WeatherStationsView.swift - Distance from the place. %1$@ is a distance like "3 km NW", %2$@ the place
+        public static func fromPlace(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.stations.fromPlace", String(describing: p1), String(describing: p2), fallback: "%1$@ from %2$@")
+        }
+        /// Location: WeatherStationsView.swift - Stations screen header, %@ is the radio's name
+        public static func intro(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.stations.intro", String(describing: p1), fallback: "Airport weather stations. %@ broadcasts their readings every hour.")
+        }
+        /// Location: WeatherStationsView.swift - Section of stations from the radio's scheduled hourly report
+        public static let scheduled = L10n.tr("Weather", "weather.stations.scheduled", fallback: "From the hourly report")
+        /// Location: WeatherStationsView.swift - Stations screen title
+        public static let title = L10n.tr("Weather", "weather.stations.title", fallback: "Weather stations")
+      }
+      public enum Tag {
+        /// Location: WeatherFormatting.swift - Flood damage tag, %@ is the damage wording
+        public static func floodDamage(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.tag.floodDamage", String(describing: p1), fallback: "Flash flood damage: %@")
+        }
+        /// Location: WeatherFormatting.swift - Flood source tag, %@ is the source wording
+        public static func floodSource(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.tag.floodSource", String(describing: p1), fallback: "Flood source: %@")
+        }
+        /// Location: WeatherFormatting.swift - Hail tag, %@ is inches
+        public static func hail(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.tag.hail", String(describing: p1), fallback: "Hail %@ in")
+        }
+        /// Location: WeatherFormatting.swift - Tornado tag, %@ is the confidence wording
+        public static func tornado(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.tag.tornado", String(describing: p1), fallback: "Tornado: %@")
+        }
+        /// Location: WeatherFormatting.swift - Wind tag, %lld is miles per hour
+        public static func wind(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.tag.wind", p1, fallback: "Wind %lld mph")
+        }
+      }
+      public enum Time {
+        /// Location: WeatherFormatting.swift - Time ago, %@ is a duration like "2 min"
+        public static func ago(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.time.ago", String(describing: p1), fallback: "%@ ago")
+        }
+        /// Location: WeatherFormatting.swift - Time ago under five seconds
+        public static let justNow = L10n.tr("Weather", "weather.time.justNow", fallback: "just now")
+        /// Location: WeatherFormatting.swift - Age, %@ is a duration like "3 h"
+        public static func old(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.time.old", String(describing: p1), fallback: "%@ old")
+        }
+        /// Location: WeatherFormatting.swift - Countdown, %@ is a duration like "40 min"
+        public static func within(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.time.within", String(describing: p1), fallback: "in %@")
+        }
+        /// Location: WeatherFormatting.swift - A time yesterday, %@ is a time like "2:00 PM"
+        public static func yesterday(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.time.yesterday", String(describing: p1), fallback: "yesterday %@")
+        }
+      }
+      public enum TornadoTag {
+        /// Location: WeatherFormatting.swift - Tornado tag value
+        public static let observed = L10n.tr("Weather", "weather.tornadoTag.observed", fallback: "observed")
+        /// Location: WeatherFormatting.swift - Tornado tag value
+        public static let possible = L10n.tr("Weather", "weather.tornadoTag.possible", fallback: "possible")
+        /// Location: WeatherFormatting.swift - Tornado tag value
+        public static let radarIndicated = L10n.tr("Weather", "weather.tornadoTag.radarIndicated", fallback: "radar indicated")
+      }
+      public enum Unit {
+        /// Location: WeatherFormatting.swift - Duration in days
+        public static func days(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.unit.days", p1, fallback: "%lld d")
+        }
+        /// Location: WeatherFormatting.swift - Distance and compass direction. %1$@ is a distance, %2$@ like "NW"
+        public static func distanceDirection(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.unit.distanceDirection", String(describing: p1), String(describing: p2), fallback: "%1$@ %2$@")
+        }
+        /// Location: WeatherFormatting.swift - Duration in hours
+        public static func hours(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.unit.hours", p1, fallback: "%lld h")
+        }
+        /// Location: WeatherFormatting.swift - Duration in hours and minutes
+        public static func hoursMinutes(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.unit.hoursMinutes", p1, p2, fallback: "%1$lld h %2$lld min")
+        }
+        /// Location: WeatherFormatting.swift - Distance in kilometres
+        public static func kilometres(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.unit.kilometres", p1, fallback: "%lld km")
+        }
+        /// Location: WeatherFormatting.swift - Duration in minutes
+        public static func minutes(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.unit.minutes", p1, fallback: "%lld min")
+        }
+        /// Location: WeatherFormatting.swift - Duration in seconds
+        public static func seconds(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.unit.seconds", p1, fallback: "%lld s")
+        }
+        /// Location: WeatherFormatting.swift - Visibility below the smallest whole unit the weather radio sends, %@ is a distance like "1 mi"
+        public static func under(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.unit.under", String(describing: p1), fallback: "under %@")
+        }
+        /// Location: WeatherFormatting.swift - Distance under one kilometre
+        public static let underOneKilometre = L10n.tr("Weather", "weather.unit.underOneKilometre", fallback: "under 1 km")
+      }
+      public enum Update {
+        /// Location: WeatherCopy.swift - What a pull or the Update button will ask for. %1$@ is the radio's name, %2$@ a list like "alert list, readings"
+        public static func asks(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.update.asks", String(describing: p1), String(describing: p2), fallback: "Asking %1$@ for: %2$@")
+        }
+        /// Location: WeatherUpdateControl.swift - The one request button on a place or station screen
+        public static let button = L10n.tr("Weather", "weather.update.button", fallback: "Update")
+        /// Location: WeatherCopy.swift - Nothing worth asking for. %1$@ is the radio's name, %2$@ the time the oldest thing held is current as of
+        public static func current(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.update.current", String(describing: p1), String(describing: p2), fallback: "Everything is current · %1$@ %2$@")
+        }
+        /// Location: WeatherCopy.swift - Nothing worth asking for, with no content time to name
+        public static let currentUnknown = L10n.tr("Weather", "weather.update.currentUnknown", fallback: "Everything is current")
+        /// Location: WeatherCopy.swift - Nothing sent because the channel just delivered it, which is not the same as being current. %@ is the radio's name at the start of a sentence
+        public static func justReceived(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.update.justReceived", String(describing: p1), fallback: "%@ answered in the last 5 minutes")
+        }
+        public enum Item {
+          /// Location: WeatherCopy.swift - One thing Update asks for, in a list
+          public static let alerts = L10n.tr("Weather", "weather.update.item.alerts", fallback: "alert list")
+          /// Location: WeatherCopy.swift - One thing Update asks for, outside the radio's own area
+          public static let areaAlerts = L10n.tr("Weather", "weather.update.item.areaAlerts", fallback: "alerts for this county and zone")
+          /// Location: WeatherCopy.swift - One thing Update asks for, in a list
+          public static let coverage = L10n.tr("Weather", "weather.update.item.coverage", fallback: "what it covers")
+          /// Location: WeatherCopy.swift - One thing Update asks for, in a list
+          public static let forecast = L10n.tr("Weather", "weather.update.item.forecast", fallback: "forecast")
+          /// Location: WeatherCopy.swift - One thing Update asks for, in a list
+          public static let readings = L10n.tr("Weather", "weather.update.item.readings", fallback: "readings")
+        }
+      }
+      public enum Wind {
+        /// Location: WeatherFormatting.swift - Wind speed zero
+        public static let calm = L10n.tr("Weather", "weather.wind.calm", fallback: "calm")
+        /// Location: WeatherFormatting.swift - Wind with a gust, %1$@ is the wind and %2$lld the gust in mph
+        public static func gusting(_ p1: Any, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.wind.gusting", String(describing: p1), p2, fallback: "%1$@ gusting %2$lld")
+        }
+        /// Location: WeatherFormatting.swift - Wind, %1$@ is a compass point and %2$lld the speed in mph
+        public static func speed(_ p1: Any, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.wind.speed", String(describing: p1), p2, fallback: "%1$@ %2$lld")
+        }
+      }
+    }
+  }

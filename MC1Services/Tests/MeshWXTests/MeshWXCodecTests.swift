@@ -320,6 +320,72 @@ struct MeshWXCodecTests {
     }
   }
 
+  // MARK: - Request (type 9, spec §7B)
+
+  @Test func aRequestRefusesWhatTheBotCouldNotRead() {
+    let sender = Data([0x01, 0x02, 0x03, 0x04, 0x05, 0x06])
+    // Not six bytes of key: the bot pairs a datagram with the same phone's DMs on this prefix.
+    #expect(throws: MeshWXEncodeError.badCount(what: "request sender", count: 5, allowed: 6...6)) {
+      _ = try MeshWXEncoder.request(
+        seq: 0, bot: 1, senderPrefix: sender.prefix(5), timestamp: 1, text: ">d")
+    }
+    // Not a `>` request, or nothing after the `>`.
+    #expect(throws: MeshWXEncodeError.emptyRequest) {
+      _ = try MeshWXEncoder.request(seq: 0, bot: 1, senderPrefix: sender, timestamp: 1, text: "d")
+    }
+    #expect(throws: MeshWXEncodeError.emptyRequest) {
+      _ = try MeshWXEncoder.request(seq: 0, bot: 1, senderPrefix: sender, timestamp: 1, text: ">")
+    }
+    // 41 bytes of text: one past what §7B allows.
+    let long = ">f " + String(repeating: "x", count: 38)
+    #expect(throws: MeshWXEncodeError.oversize(what: "request text", bytes: 41)) {
+      _ = try MeshWXEncoder.request(seq: 0, bot: 1, senderPrefix: sender, timestamp: 1, text: long)
+    }
+    #expect(throws: Never.self) {
+      _ = try MeshWXEncoder.request(
+        seq: 0, bot: 1, senderPrefix: sender, timestamp: 1, text: String(long.dropLast()))
+    }
+  }
+
+  @Test func aRequestRoundTripsItsTextAndTimeWhoeverSentIt() throws {
+    // Another phone's request, as it arrives on the channel: the whole grammar of §8.2 at its
+    // longest, to a bot named `0xFFFF` — every bot on the channel.
+    let request = MeshWXRequest(
+      seq: 200, botID: MeshWXRequest.anyBot,
+      senderPrefix: Data([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
+      timestamp: 1_789_660_000, text: ">metar round rock tx")
+    let data = try request.encode()
+    #expect(data.count == MeshWXWire.requestFixedSize + 20)
+    let message = try MeshWXDecoder.decode(data)
+    guard case let .request(decoded) = message.payload else {
+      Issue.record("expected a request")
+      return
+    }
+    #expect(decoded == request)
+    #expect(decoded.text == ">metar round rock tx")
+    #expect(try MeshWXEncoder.encode(message) == data)
+  }
+
+  @Test func aTruncatedRequestIsRefusedRatherThanReadPastItsEnd() {
+    // Header plus five of the six sender bytes: one short of the fixed part.
+    let short = Data([0x01, 0x1D, 0x04, 0x90, 0x01, 0x02, 0x03, 0x04, 0x05])
+    #expect(throws: MeshWXDecodeError.truncated(what: "request", need: 14, have: 9)) {
+      _ = try MeshWXDecoder.decode(short)
+    }
+  }
+
+  @Test func aRequestWithNoTextDecodesAsEmptyRatherThanTrapping() throws {
+    // The encoder never makes one, but the bytes can arrive: the packet ends where the text
+    // would start.
+    let bare = Data([0x01, 0x1D, 0x04, 0x90, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x60, 0x0B, 0xAC, 0x6A])
+    guard case let .request(decoded) = try MeshWXDecoder.decode(bare).payload else {
+      Issue.record("expected a request")
+      return
+    }
+    #expect(decoded.text.isEmpty)
+    #expect(decoded.timestamp == 1_789_660_000)
+  }
+
   @Test func observationSentinelsSurviveARoundTrip() throws {
     // Every optional field at its sentinel at once: the case a real station with a dead
     // sensor produces, and the one where an off-by-one in the field order shows up.
@@ -365,5 +431,319 @@ struct MeshWXCodecTests {
     }
     #expect(warning.polygon == nil)
     #expect(warning.areas == nil)
+  }
+
+  // MARK: - Per-station ages (spec §6.1, revision 5)
+
+  private func observationsBody(_ data: Data) throws -> MeshWXObservations? {
+    guard case let .observations(batch) = try MeshWXDecoder.decode(data).payload else { return nil }
+    return batch
+  }
+
+  private func station(_ index: UInt16, age: UInt16? = nil) -> MeshWXStationObservation {
+    MeshWXStationObservation(stationIndex: index, tempF: 88, sky: .few, ageMinutes: age)
+  }
+
+  /// Station `i` is the low nibble of byte `i / 2` when `i` is even and the high nibble when it is
+  /// odd, so an even count fills both nibbles of its last byte and an odd count pads the high one.
+  @Test func agePlacementIsLowNibbleFirstAndAnOddCountPadsTheLastByte() throws {
+    let odd = try MeshWXEncoder.observations(
+      seq: 29, bot: 19578, timestampMinutes: 29_823_893,
+      stations: [station(202, age: 0), station(860, age: 20), station(976, age: 110)])
+    #expect(odd.count == MeshWXWire.observationsFixedSize + 33 + 2)
+    #expect(odd[3] & 0x0F == MeshWXWire.flagObservationAges)
+    // 0 and 20 share a byte (2 in the high nibble), 110 pads: the vector's own 0x20, 0x0b.
+    #expect(odd.suffix(2) == Data([0x20, 0x0B]))
+    let oddBatch = try #require(try observationsBody(odd))
+    #expect(oddBatch.stations.map(\.ageMinutes) == [0, 20, 110])
+
+    let even = try MeshWXEncoder.observations(
+      seq: 30, bot: 19578, timestampMinutes: 29_823_893,
+      stations: [
+        station(202, age: 10), station(860, age: 30), station(976, age: 40), station(1, age: 150),
+      ])
+    #expect(even.count == MeshWXWire.observationsFixedSize + 44 + 2, "four stations, two bytes")
+    #expect(even.suffix(2) == Data([0x31, 0xF4]))
+    let evenBatch = try #require(try observationsBody(even))
+    #expect(evenBatch.stations.map(\.ageMinutes) == [10, 30, 40, 150])
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(even)) == even)
+  }
+
+  /// The old form: no flag, no block, and every station's age nil — which is "the batch does not
+  /// say", not "this station is the batch time".
+  @Test func aBatchWithoutTheAgesFlagCarriesNoAgesAtAll() throws {
+    let data = try MeshWXEncoder.observations(
+      seq: 21, bot: 19578, timestampMinutes: 29_823_893,
+      stations: [station(202), station(860), station(976)])
+    #expect(data.count == MeshWXWire.observationsFixedSize + 33, "no block on the end")
+    #expect(data[3] & 0x0F == 0)
+    let batch = try #require(try observationsBody(data))
+    #expect(batch.stations.allSatisfy { $0.ageMinutes == nil })
+    #expect(!batch.carriesAges)
+    // Every station reads as the batch time, which is all a revision 4 batch states.
+    #expect(batch.stations.allSatisfy { batch.reportMinutes(for: $0) == 29_823_893 })
+  }
+
+  /// 15 steps is a saturation, not a reading: it means "150 minutes or more", so anything past it
+  /// clamps rather than wrapping to a fresh-looking 0.
+  @Test func theAgeNibbleRoundsHalfUpAndSaturatesAtOneHundredAndFifty() throws {
+    let data = try MeshWXEncoder.observations(
+      seq: 1, bot: 1, timestampMinutes: 1000,
+      stations: [
+        station(1, age: 4), station(2, age: 5), station(3, age: 144), station(4, age: 145),
+        station(5, age: 900),
+      ])
+    let batch = try #require(try observationsBody(data))
+    #expect(batch.stations.map(\.ageMinutes) == [0, 10, 140, 150, 150])
+    #expect(batch.stations.map(\.isAgeSaturated) == [false, false, false, true, true])
+    // A saturated station is at least that old, so its report time is a ceiling.
+    #expect(batch.reportMinutes(for: batch.stations[4]) == 850)
+  }
+
+  /// All or nothing (spec §6.1): a batch honest about two stations and silent about the third
+  /// would leave the third to be guessed at, which is worse than saying nothing.
+  @Test func aBatchWhereOnlySomeStationsKnowTheirAgeIsRefused() {
+    #expect(throws: MeshWXEncodeError.partialObservationAges(known: 2, stations: 3)) {
+      _ = try MeshWXEncoder.observations(
+        seq: 1, bot: 1, timestampMinutes: 1000,
+        stations: [station(1, age: 0), station(2, age: 20), station(3)])
+    }
+  }
+
+  /// Spec §6.1: 14 stations are 163 bytes and the nibbles cost 7 more, so a full batch with ages
+  /// does not fit — the ages cost the fourteenth station, never the other way round.
+  @Test func aBatchOfFourteenWithAgesDoesNotFitOnePacket() throws {
+    let thirteen = (0..<MeshWXWire.maxStationsWithAges).map {
+      station(UInt16($0), age: UInt16($0 * 10))
+    }
+    let data = try MeshWXEncoder.observations(
+      seq: 1, bot: 1, timestampMinutes: 1000, stations: thirteen)
+    #expect(data.count == 159)
+    #expect(data.count <= MeshWXWire.maxData)
+
+    let fourteen = thirteen + [station(99, age: 30)]
+    #expect(throws: MeshWXEncodeError.oversize(what: "observations", bytes: 170)) {
+      _ = try MeshWXEncoder.observations(
+        seq: 1, bot: 1, timestampMinutes: 1000, stations: fourteen)
+    }
+    // Without the ages the same fourteen still fit, as they always did.
+    let bare = fourteen.map { MeshWXStationObservation(stationIndex: $0.stationIndex, sky: .few) }
+    #expect(try MeshWXEncoder.observations(
+      seq: 1, bot: 1, timestampMinutes: 1000, stations: bare).count == 163)
+  }
+
+  @Test func truncatedAgeBlockThrows() {
+    // Flags nibble 1 promises the ages; two stations need one byte and none follows.
+    var data = Data([0x1D, 0x7A, 0x4C, 0x41])
+    data.append(contentsOf: [0x95, 0x13, 0xC7, 0x01, 0x02])
+    data.append(contentsOf: [0xCA, 0x00, 0x58, 0x48, 0x73, 0x0C, 0x15, 0x0A, 0x5C, 0x3B, 0x07])
+    data.append(contentsOf: [0x5C, 0x03, 0x54, 0x46, 0x01, 0x00, 0x00, 0x0A, 0x5F, 0xFF, 0x00])
+    #expect(throws: MeshWXDecodeError.truncated(what: "observation ages", need: 32, have: 31)) {
+      _ = try MeshWXDecoder.decode(data)
+    }
+  }
+
+  // MARK: - Warning issue time (spec §3, revision 5)
+
+  private func warningBody(_ data: Data) throws -> MeshWXWarning? {
+    guard case let .warning(warning) = try MeshWXDecoder.decode(data).payload else { return nil }
+    return warning
+  }
+
+  private let svw = MeshWXWarningIdentity(event: 3, office: 35, etn: 42)
+
+  /// The wire carries the gap, not the instant, so the issue time survives a message drained from
+  /// an offline queue hours late: both ends of the subtraction ride in the same packet.
+  @Test func theIssueTimeIsMinutesBeforeTheExpiryAndSetsItsOwnFlagBit() throws {
+    let expires: UInt32 = 29_823_945
+    let data = try MeshWXEncoder.warning(
+      seq: 28, bot: 19578, identity: svw, expiresMinutes: expires,
+      issuedMinutes: expires - 90)
+    #expect(data.count == MeshWXWire.warningFixedSize + MeshWXWire.warningIssuedSize)
+    #expect(data[3] & 0x0F == MeshWXWire.flagWarningIssued)
+    let warning = try #require(try warningBody(data))
+    #expect(warning.issuedBeforeMinutes == 90)
+    #expect(warning.issuedMinutes == expires - 90)
+    #expect(!warning.isIssueTimeSaturated)
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+
+    // The update bit is bit 0 and the issue time bit 1: both fit in the same nibble.
+    let both = try MeshWXEncoder.warning(
+      seq: 29, bot: 19578, identity: svw, expiresMinutes: expires, isUpdate: true,
+      issuedMinutes: expires - 5)
+    #expect(both[3] & 0x0F == 0x3)
+    let updated = try #require(try warningBody(both))
+    #expect(updated.isUpdate)
+    #expect(updated.issuedBeforeMinutes == 5)
+  }
+
+  @Test func aWarningWithoutTheIssuedFlagHasNoIssueTime() throws {
+    let data = try MeshWXEncoder.warning(
+      seq: 17, bot: 19578, identity: svw, expiresMinutes: 29_823_945)
+    #expect(data.count == MeshWXWire.warningFixedSize)
+    #expect(data[3] & 0x0F == 0)
+    let warning = try #require(try warningBody(data))
+    #expect(warning.issuedBeforeMinutes == nil)
+    #expect(warning.issuedMinutes == nil)
+    #expect(!warning.isIssueTimeSaturated)
+  }
+
+  /// 65535 minutes is 45.5 days, longer than any NWS product runs from issuance to expiry, so the
+  /// u16 saturates rather than wrapping — and a product issued after its own expiry, which no real
+  /// one is, encodes as 0 rather than failing the message.
+  @Test func theIssueTimeSaturatesRatherThanWrapping() throws {
+    let expires: UInt32 = 30_000_000
+    let ancient = try MeshWXEncoder.warning(
+      seq: 1, bot: 1, identity: svw, expiresMinutes: expires, issuedMinutes: expires - 200_000)
+    let saturated = try #require(try warningBody(ancient))
+    #expect(saturated.issuedBeforeMinutes == MeshWXWire.issuedBeforeSaturatedMinutes)
+    #expect(saturated.isIssueTimeSaturated)
+    #expect(saturated.issuedMinutes == expires - 65535, "a ceiling: issued at or before this")
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(ancient)) == ancient)
+
+    let backwards = try MeshWXEncoder.warning(
+      seq: 2, bot: 1, identity: svw, expiresMinutes: expires, issuedMinutes: expires + 10)
+    let clamped = try #require(try warningBody(backwards))
+    #expect(clamped.issuedBeforeMinutes == 0)
+    #expect(clamped.issuedMinutes == expires)
+  }
+
+  @Test func truncatedIssueTimeThrows() {
+    // Flags nibble 2 promises the two bytes; the fixed part stops without them.
+    var data = Data([0x1C, 0x7A, 0x4C, 0x12])
+    data.append(contentsOf: [0x03, 0x23, 0x2A, 0x00, 0xC9, 0x13, 0xC7, 0x01, 0x00, 0x04, 0x3C])
+    data.append(0x15)
+    #expect(throws: MeshWXDecodeError.truncated(what: "warning issue time", need: 17, have: 16)) {
+      _ = try MeshWXDecoder.decode(data)
+    }
+  }
+
+  // MARK: - Coverage (type 8, spec §7A)
+
+  private func coverageBody(_ data: Data) throws -> MeshWXCoverage? {
+    guard case let .coverage(coverage) = try MeshWXDecoder.decode(data).payload else { return nil }
+    return coverage
+  }
+
+  /// The two flags are separate bits and each one alone is enough to stop a denial.
+  @Test func eachCutFlagIsItsOwnBitAndEitherWithholdsCompleteness() throws {
+    let runs = [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 155, run: 6)]
+    for (areasCut, officesCut, nibble) in [
+      (false, false, UInt8(0)), (true, false, UInt8(1)), (false, true, UInt8(2)), (true, true, UInt8(3)),
+    ] {
+      let data = try MeshWXEncoder.coverage(
+        seq: 9, bot: 19578, latitude: 30.2672, longitude: -97.7431, radiusKilometres: 120,
+        stationCap: 14, officeIndices: [35, 40], areas: runs, areasCut: areasCut,
+        officesCut: officesCut)
+      #expect(data[3] & 0x0F == nibble)
+      let statement = try #require(try coverageBody(data))
+      #expect(statement.areasCut == areasCut)
+      #expect(statement.officesCut == officesCut)
+      #expect(statement.isComplete == (!areasCut && !officesCut))
+      // A cut list is never the whole area, so it can never be read as "no filter" either.
+      #expect(!statement.hasNoAreaFilter)
+      #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+    }
+  }
+
+  /// `n` = 0 and `k` = 0: no area filter at all, which is an answer, not an empty message.
+  @Test func noOfficesAndNoRunsMeanNoAreaFilterAtAll() throws {
+    let data = try MeshWXEncoder.coverage(
+      seq: 1, bot: 1, latitude: 0, longitude: 0, radiusKilometres: 0, stationCap: 0,
+      officeIndices: [], areas: [])
+    #expect(data.count == MeshWXWire.coverageFixedSize + 1, "the empty run list is still counted")
+    let statement = try #require(try coverageBody(data))
+    #expect(statement.hasNoAreaFilter)
+    #expect(statement.officeIndices.isEmpty)
+    #expect(statement.areas.isEmpty)
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+  }
+
+  /// 0,0 with radius 0 is the bot saying it has no centre — the same non-position an advert
+  /// carries (spec §1) — so the runs are the whole answer.
+  @Test func aStatementWithNoCentreIsReadFromItsRunsAlone() throws {
+    let states = MeshWXTables.shared.states
+    let runs = [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 186, run: 12)]
+    let data = try MeshWXEncoder.coverage(
+      seq: 2, bot: 1, latitude: 0, longitude: 0, radiusKilometres: 0, stationCap: 0,
+      officeIndices: [35], areas: runs)
+    let statement = try #require(try coverageBody(data))
+    #expect(statement.centre == nil)
+    #expect(!statement.hasNoAreaFilter)
+    #expect(!statement.circleContains(MeshWXCoordinate(latitude: 0, longitude: 0)))
+    #expect(statement.covers(ugc: "TXZ192", states: states))
+    #expect(!statement.covers(ugc: "TXZ198", states: states))
+    #expect(!statement.covers(ugc: "TXC192", states: states), "a county is not the zone of that number")
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+  }
+
+  /// A centre with radius 0 states no circle either: the field, not the coordinate, is what says
+  /// there is one.
+  @Test func theStatedCircleIsKilometresFromTheCentreAndZeroIsNoCircle() {
+    let austin = MeshWXCoordinate(latitude: 30.2672, longitude: -97.7431)
+    let roundRock = MeshWXCoordinate(latitude: 30.5083, longitude: -97.6789)
+    let dallas = MeshWXCoordinate(latitude: 32.7767, longitude: -96.7970)
+    let circle = MeshWXCoverage(
+      latitude: austin.latitude, longitude: austin.longitude, radiusKilometres: 120,
+      stationCap: 14, officeIndices: [35], areas: [])
+    #expect(circle.circleContains(austin))
+    #expect(circle.circleContains(roundRock))
+    #expect(!circle.circleContains(dallas))
+
+    var noRadius = circle
+    noRadius.radiusKilometres = 0
+    #expect(noRadius.centre != nil, "a centre was stated; only the circle was not")
+    #expect(!noRadius.circleContains(austin))
+  }
+
+  @Test func truncatedCoverageOfficesAndRunsThrow() {
+    // 14 fixed bytes saying four offices follow.
+    var fixed = Data([0x1B, 0x7A, 0x4C, 0x80])
+    fixed.append(contentsOf: [0x50, 0x9E, 0x04, 0xE9, 0x15, 0xF1, 0x78, 0x00, 0x0E, 0x04])
+    #expect(throws: MeshWXDecodeError.truncated(what: "coverage", need: 14, have: 12)) {
+      _ = try MeshWXDecoder.decode(Data(fixed.prefix(12)))
+    }
+
+    let twoOffices = fixed + Data([0x23, 0x28])
+    #expect(throws: MeshWXDecodeError.truncated(what: "coverage offices", need: 18, have: 16)) {
+      _ = try MeshWXDecoder.decode(twoOffices)
+    }
+
+    // Offices complete, `k` says five runs, one follows. The runs are the warning's own list, so
+    // the failure names it.
+    let oneRun = fixed + Data([0x23, 0x28, 0x33, 0x71]) + Data([0x05, 0x2A, 0x9B, 0x00, 0x06])
+    #expect(throws: MeshWXDecodeError.truncated(what: "area runs", need: 39, have: 23)) {
+      _ = try MeshWXDecoder.decode(oneRun)
+    }
+  }
+
+  @Test func coverageRefusesListsPastTheirCaps() {
+    let runs = [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 155, run: 6)]
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.coverage(
+        seq: 0, bot: 1, latitude: 0, longitude: 0, radiusKilometres: 0, stationCap: 0,
+        officeIndices: Array(repeating: 35, count: 25), areas: runs)
+    }
+    let thirtyOne = (0..<31).map {
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: UInt16(100 + $0 * 2), run: 1)
+    }
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.coverage(
+        seq: 0, bot: 1, latitude: 0, longitude: 0, radiusKilometres: 0, stationCap: 0,
+        officeIndices: [], areas: thirtyOne)
+    }
+  }
+
+  /// Spec §7A: the two caps are chosen so a full list never costs the other one.
+  @Test func theFullestCoverageStillFitsOnePacket() throws {
+    let offices = (0..<MeshWXWire.maxCoverageOffices).map { UInt8($0) }
+    let runs = (0..<MeshWXWire.maxAreaRuns).map {
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: UInt16(100 + $0 * 2), run: 1)
+    }
+    let data = try MeshWXEncoder.coverage(
+      seq: 1, bot: 1, latitude: 30.2672, longitude: -97.7431, radiusKilometres: 120,
+      stationCap: 14, officeIndices: offices, areas: runs)
+    #expect(data.count == 159)
+    #expect(data.count <= MeshWXWire.maxData)
   }
 }

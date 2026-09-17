@@ -38,7 +38,7 @@ let package = Package(
     // CoreBluetooth entitlement in the way. Foundation (and OSLog) only; nothing here
     // imports SwiftUI, MapKit or MeshCore.
     //
-    // Resources are the ten files of the spec §9 preload bundle: the wire carries
+    // Resources are the eleven files of the spec §9 preload bundle: the wire carries
     // indices (office byte, station u16, state byte, event byte) and never a name, so an
     // app without the tables can decode a warning but cannot say what or where it is.
     //

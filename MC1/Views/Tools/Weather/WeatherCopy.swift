@@ -29,56 +29,6 @@ enum WeatherAnswerNote: Sendable, Hashable {
 /// The sentences the Weather screen is built from (docs/MESHWX_UI.md §7.4, §10, §11), each a
 /// pure function of the snapshot's values.
 enum WeatherCopy {
-  // MARK: - Header (§10)
-
-  struct Header: Equatable {
-    enum Action: Equatable {
-      case backToMyLocation
-      case openSettings
-    }
-
-    var title: String
-    var subtitle: String
-    var action: Action?
-  }
-
-  /// One line under the place: where it comes from and when the source was last heard. Radio
-  /// offline is not repeated here; the status line and the ask captions say it.
-  static func header(
-    place: WeatherPlace?,
-    placeState: WeatherPlaceState,
-    sourceName: String?,
-    sourceHeardAt: Date?,
-    now: Date
-  ) -> Header {
-    let heard: String? = sourceName.flatMap { name in
-      sourceHeardAt.map { L10n.Weather.Weather.Header.heard(name, WeatherFormatting.ago($0, now: now)) }
-    }
-    var parts: [String] = []
-    var action: Header.Action?
-    let title = place.map { WeatherFormatting.shortPlaceName($0.label) } ?? L10n.Weather.Weather.Header.choosePlace
-
-    if let place, place.kind == .searched {
-      parts.append(L10n.Weather.Weather.Header.searched)
-      action = .backToMyLocation
-    } else if placeState == .locating {
-      parts.append(L10n.Weather.Weather.Header.locating)
-    } else if let place {
-      parts.append(L10n.Weather.Weather.Header.yourLocation)
-      if place.kind == .lastKnown, let locatedAt = place.locatedAt {
-        parts.append(WeatherFormatting.age(locatedAt, now: now))
-      } else if let heard {
-        parts.append(heard)
-      }
-    } else if placeState == .denied {
-      parts.append(L10n.Weather.Weather.Header.locationOff)
-      action = .openSettings
-    } else if let heard {
-      parts.append(heard)
-    }
-    return Header(title: title, subtitle: parts.joined(separator: " · "), action: action)
-  }
-
   // MARK: - Banners (§10)
 
   static func banner(_ banner: WeatherScreenSnapshot.Banner) -> String {
@@ -101,8 +51,6 @@ enum WeatherCopy {
     }
 
     var text: String
-    /// The green check: only for `.clear`.
-    var showsCheck = false
     var action: Action?
     /// A second line under the text, for the offline case.
     var caption: String?
@@ -120,7 +68,7 @@ enum WeatherCopy {
     func time(_ date: Date) -> String {
       WeatherFormatting.clockTime(date, now: now, calendar: calendar, locale: locale)
     }
-    let placeName = place.map { WeatherFormatting.shortPlaceName($0.label) } ?? ""
+    let placeName = place.map { WeatherFormatting.placeName($0.label) } ?? ""
     let sourceStart = WeatherFormatting.sentenceStart(source)
 
     switch status {
@@ -130,9 +78,8 @@ enum WeatherCopy {
       return AlertStatusLine(text: L10n.Weather.Weather.AlertStatus.outOfCoverage(placeName, source))
     case .notChecked:
       return AlertStatusLine(text: L10n.Weather.Weather.AlertStatus.notChecked(source), action: .askForAlerts)
-    case let .feedStale(minutes):
-      return AlertStatusLine(
-        text: L10n.Weather.Weather.AlertStatus.feedStale(sourceStart, WeatherFormatting.quietDuration(minutes: minutes)))
+    case .feedNeverReceived:
+      return AlertStatusLine(text: L10n.Weather.Weather.AlertStatus.feedNone(sourceStart))
     case let .radioOffline(listAsOf):
       return AlertStatusLine(
         text: L10n.Weather.Weather.AlertStatus.radioOffline(time(listAsOf)),
@@ -153,19 +100,15 @@ enum WeatherCopy {
           sourceStart, areaName ?? placeName, WeatherReferenceNames.officeName(office)))
     case .rowsSpeak:
       return nil
-    case let .noneHere(_, asOf):
-      let text = place?.kind == .searched
-        ? L10n.Weather.Weather.AlertStatus.noneHerePlace(placeName, time(asOf))
-        : L10n.Weather.Weather.AlertStatus.noneHere(time(asOf))
-      return AlertStatusLine(text: text)
-    case let .clear(asOf):
-      return AlertStatusLine(text: L10n.Weather.Weather.AlertStatus.clear(time(asOf)), showsCheck: true)
+    case let .feedQuiet(minutes):
+      return AlertStatusLine(
+        text: L10n.Weather.Weather.AlertStatus.feedQuiet(sourceStart, WeatherFormatting.quietDuration(minutes: minutes)))
+    case .noneHere, .clear:
+      // Nothing is said on a quiet day: no green check, no "none for your location", no status
+      // line at all. Silence is still not calm — but the owner put that honesty in the radio row
+      // and on the radio page, and a line here would be the reassurance he took out.
+      return nil
     }
-  }
-
-  /// "Alerts for Austin", or "Alerts" with no place.
-  static func alertsTitle(placeName: String?) -> String {
-    placeName.map { L10n.Weather.Weather.Alerts.titlePlace($0) } ?? L10n.Weather.Weather.Alerts.title
   }
 
   // MARK: - Alert rows (§7.3)
@@ -288,7 +231,13 @@ enum WeatherCopy {
     case let .blocked(block):
       return requestBlocked(block, source: source)
     case let .pending(attempt, _):
-      return attempt == 0 ? L10n.Weather.Weather.Request.pending(source) : L10n.Weather.Weather.Request.retrying
+      // Attempt 0 on the route, 1 the same again, 2 by flood after the route was forgotten
+      // (`WeatherService.floodAttempt`).
+      switch attempt {
+      case 0: return L10n.Weather.Weather.Request.pending(source)
+      case 1: return L10n.Weather.Weather.Request.retrying
+      default: return L10n.Weather.Weather.Request.flooding
+      }
     case .waitingForOther:
       return L10n.Weather.Weather.Request.waiting
     case let .settled(outcome, at):
@@ -300,12 +249,16 @@ enum WeatherCopy {
         case .unchanged(.other): return L10n.Weather.Weather.Request.answeredNothingNew(sourceStart, time(at))
         case .changed, nil: return L10n.Weather.Weather.Request.answeredAt(sourceStart, time(at))
         }
-      case let .servedFromCache(receivedAt, contentAsOf):
+      case let .alreadyReceived(receivedAt, contentAsOf):
         // Receipt says how fresh the copy is; the content time says how fresh the weather is.
         let received = L10n.Weather.Weather.Request.received(WeatherFormatting.ago(receivedAt, now: now))
-        guard let contentAsOf, let content = cachedContent(request, time: time(contentAsOf)) else { return received }
+        guard let contentAsOf, let content = heldContent(request, time: time(contentAsOf)) else { return received }
         return L10n.Weather.Weather.Request.receivedContent(received, content)
-      case let .timedOut(botWasHeard):
+      case let .timedOut(botWasHeard, botRadioReceived):
+        // The bot's radio confirmed the request, so range is not why no answer came.
+        if botRadioReceived {
+          return L10n.Weather.Weather.Request.receivedNoAnswer(sourceStart, time(at))
+        }
         return botWasHeard
           ? L10n.Weather.Weather.Request.heardNoAnswer(sourceStart, time(at))
           : L10n.Weather.Weather.Request.noAnswer(time(at), source)
@@ -389,7 +342,7 @@ enum WeatherCopy {
       return L10n.Weather.Weather.Forecast.missing(placeName)
     }
     return L10n.Weather.Weather.Forecast.missingFar(
-      placeName, WeatherNames.pointName(point.name), WeatherFormatting.kilometres(kilometres))
+      placeName, WeatherNames.pointLabel(point.name), WeatherFormatting.kilometres(kilometres))
   }
 
   /// "No forecast point near Albuquerque."
@@ -399,9 +352,18 @@ enum WeatherCopy {
 
   // MARK: - Answers already held (§11)
 
+  /// "Ask for Tornado Warning" when the tap asks for one warning by identity, "Ask for alerts"
+  /// otherwise.
+  static func askAlertsTitle(for request: WeatherRequest, tables: MeshWXTables) -> String {
+    guard case let .warning(identity) = request,
+          let parsed = WeatherAlertRequests.identity(from: identity, tables: tables)
+    else { return L10n.Weather.Weather.Request.askAlerts }
+    return L10n.Weather.Weather.Request.askWarning(WeatherFormatting.eventName(parsed.event, tables: tables))
+  }
+
   /// "list as of 3:02 PM", "readings as of 1:13 AM", "issued 7:52 PM": what an answer already
   /// received was as of, in the words for what was asked.
-  static func cachedContent(_ request: WeatherRequest?, time: String) -> String? {
+  static func heldContent(_ request: WeatherRequest?, time: String) -> String? {
     guard let request else { return nil }
     switch request {
     case .digest, .activeWarnings, .warning, .warningsTouching:
@@ -421,28 +383,51 @@ enum WeatherCopy {
       WeatherFormatting.sentenceStart(source), WeatherFormatting.clockTime(at, now: now, calendar: calendar, locale: locale))
   }
 
+  // MARK: - Update (§11)
+
+  /// "Asks WX-AUS for: alert list, readings" — every tap says what it will spend airtime on
+  /// before it spends it.
+  static func updateAsks(_ plan: WeatherUpdatePlan, source: String) -> String {
+    L10n.Weather.Weather.Update.asks(source, plan.items.map(itemName).joined(separator: ", "))
+  }
+
+  static func itemName(_ item: WeatherUpdatePlan.Item) -> String {
+    switch item {
+    case .alerts: L10n.Weather.Weather.Update.Item.alerts
+    case .areaAlerts: L10n.Weather.Weather.Update.Item.areaAlerts
+    case .readings: L10n.Weather.Weather.Update.Item.readings
+    case .forecast: L10n.Weather.Weather.Update.Item.forecast
+    case .coverage: L10n.Weather.Weather.Update.Item.coverage
+    }
+  }
+
+  /// "Everything is current · WX-AUS 4:25 PM": true as of the oldest of the things the plan
+  /// checked, on the bot's clock.
+  static func everythingCurrent(
+    source: String, asOf: Date?, now: Date, calendar: Calendar, locale: Locale
+  ) -> String {
+    guard let asOf else { return L10n.Weather.Weather.Update.currentUnknown }
+    return L10n.Weather.Weather.Update.current(
+      source, WeatherFormatting.clockTime(asOf, now: now, calendar: calendar, locale: locale))
+  }
+
+  /// Nothing to ask for because the channel just delivered it — which is not the same as
+  /// everything being current (spec §13).
+  static func updateJustReceived(source: String) -> String {
+    L10n.Weather.Weather.Update.justReceived(WeatherFormatting.sentenceStart(source))
+  }
+
   // MARK: - Now (§8)
 
-  /// Within 25 km: "Austin-Camp Mabry · 6 km NNW · in WX-AUS's 11:18 PM report"; beyond it,
-  /// "Nearest report · 40 km NW · in WX-AUS's 11:18 PM report".
-  static func stationSource(
-    stationName: String,
-    kilometres: Double?,
-    direction: MeshWXCompass?,
-    botName: String,
-    reportedAt: Date,
-    now: Date,
-    calendar: Calendar,
-    locale: Locale
-  ) -> String {
-    let report = L10n.Weather.Weather.Now.report(
+  /// "in WX-AUS's 9:40 AM report" — which message a reading arrived in, and nothing else.
+  ///
+  /// The station screen already carries the station's name as its headline and its distance from
+  /// the place on its own line, so `stationSource` said both of them a second and third time
+  /// ("Austin-Bergstrom International Airport · under 1 km N · in …'s 9:40 AM report", above
+  /// "under 1 km N from Austin"). This is the part that is not said anywhere else.
+  static func stationReport(botName: String, reportedAt: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+    L10n.Weather.Weather.Now.report(
       botName, WeatherFormatting.clockTime(reportedAt, now: now, calendar: calendar, locale: locale))
-    guard let kilometres else { return "\(stationName) · \(report)" }
-    let distance = WeatherFormatting.distance(kilometres, direction: direction)
-    if kilometres > 25 {
-      return "\(L10n.Weather.Weather.Now.nearestReport) · \(distance) · \(report)"
-    }
-    return "\(stationName) · \(distance) · \(report)"
   }
 
   /// "No weather station near Dallas. Nearest: Temple, 190 km."
@@ -451,19 +436,280 @@ enum WeatherCopy {
     return L10n.Weather.Weather.Now.noneNearby(placeName, nearestTown, WeatherFormatting.kilometres(kilometres))
   }
 
-  /// "No current conditions for San Juan yet. The nearest weather station is Luis Munoz Marin
-  /// International Airport, 11 km."
-  static func stationNotHeard(placeName: String, stationName: String, kilometres: Double) -> String {
-    L10n.Weather.Weather.Now.stationNotHeard(placeName, stationName, WeatherFormatting.kilometres(kilometres))
+  /// The one line under the temperature: "Camp Mabry · 6 km · as of 8:24 PM" (docs/MESHWX_UI.md
+  /// §8). The station, how far it is, and when it read — and nothing else on the page unless it
+  /// is tapped. The radio that carried it is named by the radio row, once, at the foot.
+  static func conditionsSource(
+    stationName: String,
+    kilometres: Double?,
+    observedAt: Date,
+    now: Date,
+    calendar: Calendar,
+    locale: Locale
+  ) -> String {
+    let asOf = L10n.Weather.Weather.Stations.asOf(
+      WeatherFormatting.clockTime(observedAt, now: now, calendar: calendar, locale: locale))
+    guard let kilometres else { return "\(stationName) · \(asOf)" }
+    return "\(stationName) · \(WeatherFormatting.kilometres(kilometres)) · \(asOf)"
+  }
+
+  /// No reading good enough to be the weather here: the ask, and the station a refresh would
+  /// spend airtime on — "No current conditions for Llano. Pull down to ask WX-AUS for KAQO."
+  ///
+  /// With something blocking every request, the sentence **stops offering the pull**: the gesture
+  /// cannot send anything, and telling someone to pull while a disconnected radio makes it inert
+  /// is the app describing a screen it does not have (docs/MESHWX_UI.md §3.1 U-6). It names the
+  /// station and leaves it there; the reason is already at the top of the list.
+  static func conditionsAsk(
+    placeName: String, source: String, icao: String, block: WeatherRequestBlock? = nil
+  ) -> String {
+    guard block == nil else { return L10n.Weather.Weather.Conditions.askBlocked(placeName, icao) }
+    return L10n.Weather.Weather.Conditions.ask(placeName, source, icao)
+  }
+
+  // MARK: - A place with nothing held (§3.1 U-13)
+
+  /// "No weather for Llano yet."
+  static func emptyPlaceTitle(placeName: String) -> String {
+    L10n.Weather.Weather.Empty.title(placeName)
+  }
+
+  /// What is nearest, in one line: "Nearest station Burnet Municipal Cradock Field Airport, 18 km
+  /// · Nearest forecast point Burnet Airport, 43 km". Nil when neither is in reach — then the
+  /// action line says so instead.
+  ///
+  /// **Both halves name their subject.** The sentence used to code the station and name the point
+  /// — "Nearest station TJIG, 1 km · Nearest forecast point Luis Munoz Marin International
+  /// Airport-San Juan, 12 km" — so one clause was for a pilot and the other for a reader
+  /// (docs/MESHWX_UI.md §3.1 U-27). The airport code is on the station's own screen, which this
+  /// card's Update opens onto.
+  static func emptyPlaceNearest(_ empty: WeatherEmptyPlace, tables: MeshWXTables = .shared) -> String? {
+    var parts: [String] = []
+    if let icao = empty.stationICAO {
+      let station = tables.station(icao: icao).map { WeatherNames.stationName($0.name) } ?? icao
+      parts.append(empty.stationKilometres.map {
+        L10n.Weather.Weather.Empty.station(station, WeatherFormatting.kilometres($0))
+      } ?? L10n.Weather.Weather.Empty.stationOnly(station))
+    }
+    if let point = empty.pointName {
+      parts.append(empty.pointKilometres.map {
+        L10n.Weather.Weather.Empty.point(WeatherNames.pointLabel(point), WeatherFormatting.kilometres($0))
+      } ?? L10n.Weather.Weather.Empty.pointOnly(WeatherNames.pointLabel(point)))
+    }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
+  /// The one thing to do about it: ask, or — with nothing in reach to ask about — that there is
+  /// nothing to ask for.
+  ///
+  /// Nil when nothing can be asked at all. **The reason is said once on the page** and this is
+  /// not where: the caption at the top, or the banner when there is one, already carries it, and
+  /// this card printed a third copy of "Your radio's firmware can't ask for weather" two lines
+  /// under the second (docs/MESHWX_UI.md §3.1 U-24).
+  static func emptyPlaceAction(
+    _ empty: WeatherEmptyPlace, placeName: String, source: String, block: WeatherRequestBlock?
+  ) -> String? {
+    guard block == nil else { return nil }
+    guard !empty.hasNothingToAsk else { return L10n.Weather.Weather.Empty.nothing(placeName) }
+    return L10n.Weather.Weather.Empty.ask(source)
   }
 
   /// "14 stations in WX-AUS's area", or "3 weather stations" when none came in the bot's batch.
+  /// The link names every row the screen it opens will show: with single-station answers held on
+  /// top of the batch, "19 weather stations, 14 in WX-AUS's area" — the area count alone promised
+  /// 14 rows and opened 19.
   static func stationLink(inArea: Int, total: Int, source: String) -> String {
-    if inArea > 0 {
+    guard inArea > 0 else {
+      return total == 1 ? L10n.Weather.Weather.Now.stationsOne : L10n.Weather.Weather.Now.stations(total)
+    }
+    guard total > inArea else {
       return inArea == 1
         ? L10n.Weather.Weather.Now.stationsInAreaOne(source)
         : L10n.Weather.Weather.Now.stationsInArea(inArea, source)
     }
-    return total == 1 ? L10n.Weather.Weather.Now.stationsOne : L10n.Weather.Weather.Now.stations(total)
+    return L10n.Weather.Weather.Now.stationsWithArea(total, inArea, source)
+  }
+
+  // MARK: - The radio row (§10)
+
+  /// "WX-AUS · heard 2 min ago · alerts as of 8:02 PM", the row at the foot of every place page.
+  /// It is the only thing on the page that mentions the alert list, and it never leaves the list
+  /// out: with none held it says so rather than saying nothing.
+  static func radioRow(
+    _ row: WeatherRadioRow,
+    source: String,
+    now: Date,
+    calendar: Calendar,
+    locale: Locale
+  ) -> String {
+    var parts = [source]
+    if let heardAt = row.heardAt {
+      parts.append(L10n.Weather.Weather.About.heard(WeatherFormatting.ago(heardAt, now: now)))
+    } else {
+      parts.append(L10n.Weather.Weather.About.notHeard)
+    }
+    if let builtAt = row.listBuiltAt {
+      parts.append(L10n.Weather.Weather.RadioRow.alertsAsOf(
+        WeatherFormatting.clockTime(builtAt, now: now, calendar: calendar, locale: locale)))
+    } else {
+      parts.append(L10n.Weather.Weather.RadioRow.noAlertList)
+    }
+    return parts.joined(separator: " · ")
+  }
+
+  // MARK: - Places rows (§12)
+
+  /// "86° Cloudy", and "—" when the place's own page would show no temperature either
+  /// (docs/MESHWX_UI.md §12, §3.1 U-2). The row and the page ask the same question of the same
+  /// reading, so they can never disagree about the same town one tap apart.
+  static func placeRow(_ reading: WeatherPlaceRowReading, now: Date, locale: Locale = .autoupdatingCurrent) -> String {
+    guard let observedAt = reading.observedAt else { return L10n.Weather.Weather.Picker.noReading }
+    var parts: [String] = []
+    if let tempF = reading.tempF {
+      parts.append(WeatherFormatting.temperature(fahrenheit: Int(tempF), locale: locale))
+    }
+    if let sky = reading.sky, let condition = WeatherFormatting.condition(sky) {
+      parts.append(condition)
+    }
+    let head = parts.joined(separator: " ")
+    guard reading.isStale else { return head.isEmpty ? L10n.Weather.Weather.Picker.noReading : head }
+    let age = WeatherFormatting.age(observedAt, now: now)
+    return head.isEmpty ? age : "\(head) · \(age)"
+  }
+
+  // MARK: - The weather radio's page (§12)
+
+  /// What a request asked for, in a few words: for the log of this phone's own requests, and for
+  /// the rows of what the channel carried. It names what was asked for and never who asked.
+  static func requestName(_ request: WeatherRequest, tables: MeshWXTables = .shared) -> String {
+    func withSubject(_ name: String, _ subject: String) -> String {
+      L10n.Weather.Weather.RequestName.withSubject(name, subject)
+    }
+    switch request {
+    case .digest:
+      return L10n.Weather.Weather.RequestName.alertList
+    case .activeWarnings:
+      return L10n.Weather.Weather.RequestName.activeWarnings
+    case let .warning(identity):
+      return warningName(identity, tables: tables)
+    case let .warningsTouching(ugc):
+      return L10n.Weather.Weather.RequestName.areaWarnings(ugc)
+    case let .warningText(identity):
+      return L10n.Weather.Weather.RequestName.warningText(warningName(identity, tables: tables))
+    case .observations:
+      return L10n.Weather.Weather.RequestName.readings
+    case let .observation(station):
+      return L10n.Weather.Weather.RequestName.stationReading(station)
+    case .homeForecast:
+      return L10n.Weather.Weather.Forecast.titleGeneric
+    case let .forecast(point):
+      return L10n.Weather.Weather.RequestName.forecast(pointName(point, tables: tables) ?? String(point))
+    case let .forecastForPlace(place):
+      return L10n.Weather.Weather.RequestName.forecast(place)
+    case let .forecastDiscussion(office):
+      return withSubject(L10n.Weather.Weather.Reports.Discussion.title, WeatherReferenceNames.officeName(office))
+    case .spaceWeather:
+      return L10n.Weather.Weather.Reports.Space.title
+    case let .stormReports(state):
+      return withSubject(L10n.Weather.Weather.Reports.Storms.title, WeatherReferenceNames.stateName(state))
+    case let .rainfall(state):
+      return withSubject(L10n.Weather.Weather.Reports.Rainfall.title, WeatherReferenceNames.stateName(state))
+    case let .metar(station):
+      return withSubject(L10n.Weather.Weather.RequestName.metar, station)
+    case let .taf(station):
+      return withSubject(L10n.Weather.Weather.RequestName.taf, station)
+    case .hazardousOutlook:
+      return L10n.Weather.Weather.Reports.Outlook.title
+    case .coverage:
+      return L10n.Weather.Weather.RequestName.coverage
+    }
+  }
+
+  /// "Tornado Warning" for an identity the tables can read; the identity itself when a newer bot
+  /// names an event this bundle does not have.
+  static func warningName(_ identity: String, tables: MeshWXTables) -> String {
+    guard let parsed = WeatherAlertRequests.identity(from: identity, tables: tables) else { return identity }
+    return WeatherFormatting.eventName(parsed.event, tables: tables)
+  }
+
+  static func pointName(_ point: UInt16, tables: MeshWXTables) -> String? {
+    tables.point(at: point).map { WeatherNames.pointLabel($0.name) }
+  }
+
+  /// How one of this phone's requests ended (§12). Four outcomes; which reason the bot gave, and
+  /// whether its radio confirmed the request, stay under the button that sent it (§11.2).
+  static func requestOutcome(_ outcome: WeatherRequestLogEntry.Outcome?) -> String {
+    switch outcome {
+    case .answered: L10n.Weather.Weather.Requests.answered
+    case .noAnswer: L10n.Weather.Weather.Requests.noAnswer
+    case .notAvailable: L10n.Weather.Weather.Requests.notAvailable
+    case .refused: L10n.Weather.Weather.Requests.refused
+    case nil: L10n.Weather.Weather.Requests.pending
+    }
+  }
+
+  /// What one thing on the channel was, in words. A name for the row, never a claim about who
+  /// asked for it.
+  static func channelSubject(_ subject: WeatherChannelSubject, tables: MeshWXTables = .shared) -> String {
+    switch subject {
+    case .alertList:
+      return L10n.Weather.Weather.RequestName.alertList
+    case let .warning(identity):
+      return WeatherFormatting.eventName(identity.event, tables: tables)
+    case let .readings(stations):
+      return stations == 1
+        ? L10n.Weather.Weather.Heard.readingsOne
+        : L10n.Weather.Weather.Heard.readings(stations)
+    case let .reading(station):
+      return tables.station(at: station).map { WeatherNames.stationName($0.name) }
+        ?? L10n.Weather.Weather.RequestName.readings
+    case let .forecast(point, label):
+      // A forecast the bot resolved from a place string has no bundled point, and the request
+      // that fetched it is the only name it has (spec §7).
+      let name = pointName(point, tables: tables) ?? label ?? String(point)
+      return L10n.Weather.Weather.RequestName.forecast(name)
+    case let .text(subject, request):
+      // A chunk carries only its subject: with no request of this phone's behind it, the subject
+      // is all the row can say.
+      return request.map { requestName($0, tables: tables) } ?? textSubjectName(subject)
+    case .coverage:
+      return L10n.Weather.Weather.RequestName.coverage
+    }
+  }
+
+  static func textSubjectName(_ subject: MeshWXTextSubject) -> String {
+    switch subject {
+    case .warningNarrative: L10n.Weather.Weather.AlertDetail.fullText
+    case .forecastDiscussion: L10n.Weather.Weather.Reports.Discussion.title
+    case .spaceWeather: L10n.Weather.Weather.Reports.Space.title
+    case .stormReports: L10n.Weather.Weather.Reports.Storms.title
+    case .rainfall: L10n.Weather.Weather.Reports.Rainfall.title
+    case .metarOrTAF: L10n.Weather.Weather.Station.airportReports
+    case .hazardousOutlook: L10n.Weather.Weather.Reports.Outlook.title
+    case .nowcast, .general, .other: L10n.Weather.Weather.Heard.text
+    }
+  }
+
+  /// "as of 1:13 AM · received 1:14 AM": the content's own time on the bot's clock and when this
+  /// phone got it. A message that carries no time of its own says only the second (§2).
+  static func channelTimes(
+    contentAt: Date?, receivedAt: Date, now: Date, calendar: Calendar, locale: Locale
+  ) -> String {
+    func time(_ date: Date) -> String {
+      WeatherFormatting.clockTime(date, now: now, calendar: calendar, locale: locale)
+    }
+    let received = L10n.Weather.Weather.Reports.received(time(receivedAt))
+    guard let contentAt else { return received }
+    return "\(L10n.Weather.Weather.Stations.asOf(time(contentAt))) · \(received)"
+  }
+
+  static func cacheGroup(_ group: WeatherCacheGroup) -> String {
+    switch group {
+    case .readings: L10n.Weather.Weather.RequestName.readings
+    case .forecasts: L10n.Weather.Weather.Cache.forecasts
+    case .airportReports: L10n.Weather.Weather.Cache.airportReports
+    case .warningNarratives: L10n.Weather.Weather.Cache.narratives
+    case .warningsElsewhere: L10n.Weather.Weather.Cache.warningsElsewhere
+    }
   }
 }

@@ -11,13 +11,10 @@
 /* Location: ToolSelection.swift - Tool selection label and screen title */
 "weather.title" = "天气";
 
-/* Location: WeatherToolView.swift - Shown until the first picture is built */
-"weather.loading" = "正在加载天气…";
-
 /* Location: WeatherToolView.swift - Cancel button in alerts and sheets */
 "weather.common.cancel" = "取消";
 
-/* Location: WeatherAboutView.swift - Done button closing the sheet */
+/* Location: WeatherRadioView.swift - Done button closing the sheet */
 "weather.common.done" = "完成";
 
 /* Location: WeatherPlacePickerView.swift - Accessibility label for a checkmark */
@@ -31,32 +28,14 @@
 
 // MARK: - Header
 
-/* Location: WeatherCopy.swift - Header second line for the phone's location */
-"weather.header.yourLocation" = "你的位置";
-
-/* Location: WeatherCopy.swift - Header, when the source was last heard. %1$@ is the radio's name, %2$@ a time ago like "2 min ago" */
-"weather.header.heard" = "上次听到 %1$@：%2$@";
-
-/* Location: WeatherCopy.swift - Header second line for a searched town */
-"weather.header.searched" = "搜索的城镇";
-
-/* Location: WeatherHeaderSection.swift - Header link that returns to the phone's location */
-"weather.header.backToMyLocation" = "回到我的位置";
-
-/* Location: WeatherCopy.swift - Header title with no place */
-"weather.header.choosePlace" = "选择地点";
-
 /* Location: WeatherCopy.swift - Header second line while waiting for a location fix */
 "weather.header.locating" = "正在定位…";
 
 /* Location: WeatherCopy.swift - Header second line when location permission is denied */
 "weather.header.locationOff" = "定位已关闭";
 
-/* Location: WeatherHeaderSection.swift - Header link opening the Settings app */
+/* Location: WeatherPlacePageView.swift - Header link opening the Settings app */
 "weather.header.settings" = "设置";
-
-/* Location: WeatherHeaderSection.swift - Accessibility hint on the place title */
-"weather.header.chooseHint" = "选择要显示天气的地点";
 
 // MARK: - Banners
 
@@ -66,7 +45,7 @@
 /* Location: WeatherCopy.swift - Banner when no channel slot holds #meshwx */
 "weather.banner.channelMissing" = "你的电台尚未设置 #meshwx。";
 
-/* Location: WeatherHeaderSection.swift - Banner button that offers to add #meshwx */
+/* Location: WeatherPlacePageView.swift - Banner button that offers to add #meshwx */
 "weather.banner.addChannel" = "添加频道";
 
 /* Location: WeatherCopy.swift - Banner when no weather radio is known */
@@ -92,31 +71,42 @@
 
 // MARK: - Place
 
-/* Location: WeatherAskControl.swift - Card prompt with no place */
-"weather.place.prompt" = "你想查看哪里的天气？";
-
-/* Location: WeatherAskControl.swift - Button that uses the phone's location, and asks permission if needed */
-"weather.place.useMyLocation" = "使用我的位置";
-
-/* Location: WeatherAskControl.swift - Button that opens the place picker */
-"weather.place.searchTown" = "搜索城镇";
-
 /* Location: WeatherScreenBuilder.swift - Label for a location with no town or station nearby */
 "weather.place.thisLocation" = "此位置";
 
-/* Location: WeatherAlertsSection.swift - Button asking for a fresh location fix */
+/* Location: WeatherUpdateControl.swift - Button and sheet title for the one place control */
+"weather.place.places" = "地点";
+
+/* Location: WeatherToolView.swift - Item in the title's menu that opens the Places sheet */
+"weather.place.manage" = "添加或编辑地点…";
+
+/* Location: WeatherToolView.swift - Accessibility label for the pager's dots, %1$lld is the page on screen and %2$lld how many there are */
+"weather.place.pageOf" = "第 %1$lld 页，共 %2$lld 页";
+
+/* Location: WeatherConditionsSection.swift - Card line with no place chosen */
+"weather.place.choosePrompt" = "在“地点”中选择一个地点以查看天气。";
+
+/* Location: WeatherAlertRow.swift - Button asking for a fresh location fix */
 "weather.place.updateLocation" = "更新位置";
 
+/* Location: WeatherConditionsSection.swift - Quiet line for a place outside the radio's area; never says there are no alerts */
+"weather.place.outsideArea" = "这里不会主动推送预警——下拉即可查询。";
+
+/* Location: WeatherConditionsSection.swift - The one button that may ask for location permission */
+"weather.place.useMyLocation" = "使用我的位置";
+
+/* Location: WeatherConditionsSection.swift - My location page before permission, above the one tap that asks for it */
+"weather.place.useMyLocationPrompt" = "查看你所在位置的天气。";
+
+/* Location: WeatherCopy.swift - Radio row, how old the alert list is. %@ is a time like "8:02 PM" */
+"weather.radioRow.alertsAsOf" = "预警截至 %@";
+
+/* Location: WeatherCopy.swift - Radio row when no alert list has ever arrived */
+"weather.radioRow.noAlertList" = "暂无预警列表";
+
 /* Location: WeatherFormatting.swift - A forecast point named after a site in a town. %1$@ is the town, %2$@ the site like "Luis Munoz Marin International Airport" */
-"weather.place.pointInTown" = "%1$@ · %2$@";
 
 // MARK: - Alerts card
-
-/* Location: WeatherCopy.swift - Alerts card title with no place */
-"weather.alerts.title" = "预警";
-
-/* Location: WeatherCopy.swift - Alerts card title, %@ is the place */
-"weather.alerts.titlePlace" = "%@ 的预警";
 
 /* Location: WeatherFormatting.swift - When an alert ends. %1$@ is a time like "11:41 PM", %2$@ a countdown like "in 40 min" */
 "weather.alerts.until" = "至 %1$@ · %2$@";
@@ -130,16 +120,13 @@
 /* Location: WeatherCopy.swift - Row line while area outlines load */
 "weather.alerts.checking" = "正在确认位置…";
 
-/* Location: WeatherAlertsSection.swift - Link to alert rows folded out of the card, %lld is how many */
-"weather.alerts.more" = "另外 %lld 条";
+/* Location: WeatherPlacePageView.swift - Other alerts covering the place, beside the banner, %lld is how many */
+"weather.alerts.more" = "+%lld 条";
 
-/* Location: WeatherAlertsSection.swift - Link to alerts away from the place. %1$lld is how many, %2$@ the radio's name */
-"weather.alerts.elsewhere" = "%2$@ 区域内其他地方 %1$lld 条";
-
-/* Location: WeatherAlertsSection.swift - Source line under the alert status, %@ is the radio's name */
+/* Location: WeatherAlertsListView.swift - Source line under the alert status, %@ is the radio's name */
 "weather.alerts.source" = "美国国家气象局预警，经由 %@";
 
-/* Location: WeatherAlertsSection.swift - Source line with no known radio */
+/* Location: WeatherAlertsListView.swift - Source line with no known radio */
 "weather.alerts.sourceGeneric" = "美国国家气象局预警，经由气象电台";
 
 /* Location: WeatherFormatting.swift - One area. %1$@ is its name, %2$@ its state */
@@ -147,9 +134,6 @@
 
 /* Location: WeatherCopy.swift - Where an alert away from the place is. %1$@ is its first area like "Llano County", %2$@ a distance like "105 km W" */
 "weather.alerts.areaDistance" = "%1$@ · %2$@";
-
-/* Location: WeatherAlertsSection.swift - Accessibility summary, %lld is how many alert rows */
-"weather.alerts.accessibility.rows" = "%lld 条覆盖、邻近或尚未定位的预警";
 
 /* Location: WeatherScreenBuilder.swift - A county name, %@ is the name like "Bell" */
 "weather.area.county" = "%@ 县";
@@ -165,8 +149,11 @@
 /* Location: WeatherCopy.swift - Status line before any alert list arrived, %@ is the radio's name */
 "weather.alertStatus.notChecked" = "此手机尚未收到 %@ 的预警列表，因此无法判断是否有生效的预警。该列表每 3 小时发送一次。";
 
-/* Location: WeatherCopy.swift - Status line when the radio's Weather Service feed is stale. %1$@ is the radio's name, %2$@ a duration like "5 h" */
-"weather.alertStatus.feedStale" = "%1$@ 已有 %2$@ 未收到气象局的数据。新的预警可能无法送达。";
+/* Location: WeatherCopy.swift - Status line when the radio has never received anything from the Weather Service. %@ is the radio's name at the start of a sentence */
+"weather.alertStatus.feedNone" = "%@ 未从气象局收到任何数据。新的预警可能无法送达。";
+
+/* Location: WeatherCopy.swift - Status line when the radio's own Weather Service office has sent nothing for over 4 hours, which is usual on a quiet night. %1$@ is the radio's name at the start of a sentence, %2$@ a duration like "5 h" */
+"weather.alertStatus.feedQuiet" = "%1$@ 已有 %2$@ 未收到其所属气象局预报办公室的任何内容。在天气平静的夜晚这很正常，但也可能是其数据源中断了。";
 
 /* Location: WeatherCopy.swift - Status line with your radio not connected, %@ is a time like "11:02 PM" */
 "weather.alertStatus.radioOffline" = "你的电台未连接。最新预警列表截至 %@。";
@@ -185,15 +172,6 @@
 
 /* Location: WeatherCopy.swift - Status line when the place's office may not be carried. %1$@ is the radio's name, %2$@ the county or place, %3$@ the office like "NWS Fort Worth" */
 "weather.alertStatus.officeNotCovered" = "%1$@ 可能不转发 %2$@ 的预警（%3$@）。";
-
-/* Location: WeatherCopy.swift - Status line with alerts only elsewhere, %@ is a time like "11:02 PM" */
-"weather.alertStatus.noneHere" = "你的位置无预警 · 截至 %@";
-
-/* Location: WeatherCopy.swift - Status line with alerts only elsewhere for a searched town. %1$@ is the town, %2$@ a time */
-"weather.alertStatus.noneHerePlace" = "%1$@ 无预警 · 截至 %2$@";
-
-/* Location: WeatherCopy.swift - Status line beside the green check, %@ is a time like "11:02 PM" */
-"weather.alertStatus.clear" = "未收到预警 · 截至 %@";
 
 // MARK: - Coverage
 
@@ -241,6 +219,9 @@
 /* Location: WeatherAlertsListView.swift - Row line for an alert the list named that never arrived */
 "weather.alertsList.notReceived" = "已列出，未收到";
 
+/* Location: WeatherAlertsListView.swift - Row line for an alert the list named that the radio said it didn't have when asked. %@ is the radio's name */
+"weather.alertsList.notAvailable" = "已列出，但请求时 %@ 没有该预警";
+
 // MARK: - Alert detail
 
 /* Location: WeatherAlertDetailView.swift - Shown when the alert is no longer held; no reason is claimed */
@@ -266,6 +247,9 @@
 
 /* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
 "weather.alertDetail.received" = "收到于 %@";
+
+/* Location: WeatherAlertDetailView.swift - When NWS issued the warning (spec §3, revision 5), shown in place of the receipt time whenever the wire carried it. %@ is a time */
+"weather.alertDetail.issued" = "发布于 %@";
 
 // MARK: - Tags
 
@@ -310,26 +294,50 @@
 
 // MARK: - Now card
 
-/* Location: WeatherNowSection.swift - Accessibility label for the current conditions card, which has no visible title */
+/* Location: WeatherConditionsSection.swift - Accessibility label for the current conditions card, which has no visible title */
 "weather.now.summary" = "当前状况";
 
-/* Location: WeatherNowSection.swift - Now card with no observations, %@ is the radio's name */
+/* Location: WeatherConditionsSection.swift - Now card with no observations, %@ is the radio's name */
 "weather.now.empty" = "暂无当前状况。%@ 每小时广播一次。";
 
-/* Location: WeatherNowSection.swift - Apparent temperature, %@ is a temperature */
+/* Location: WeatherCopy.swift - No reading good enough for the place: the ask. %1$@ is the place, %2$@ the radio's name, %3$@ an airport code like KAQO */
+"weather.conditions.ask" = "暂无 %1$@ 的当前天气。下拉即可向 %2$@ 请求 %3$@。";
+
+/* Location: WeatherCopy.swift - No good reading and nothing can be asked at all, so the sentence does not offer the pull. %1$@ is the place, %2$@ an airport code like KAQO */
+"weather.conditions.askBlocked" = "暂无 %1$@ 的当前天气。最近的站点是 %2$@。";
+
+/* Location: WeatherCopy.swift - One card for a place with no reading and no forecast, %@ is the place */
+"weather.empty.title" = "暂无 %@ 的天气。";
+
+/* Location: WeatherCopy.swift - The station worth asking about, %1$@ is an airport code like KAQO, %2$@ a distance */
+"weather.empty.station" = "最近站点 %1$@，%2$@";
+
+/* Location: WeatherCopy.swift - The station worth asking about, distance unknown, %@ is an airport code like KAQO */
+"weather.empty.stationOnly" = "最近站点 %@";
+
+/* Location: WeatherCopy.swift - The forecast point worth asking about, %1$@ is its name, %2$@ a distance */
+"weather.empty.point" = "最近预报点 %1$@，%2$@";
+
+/* Location: WeatherCopy.swift - The forecast point worth asking about, distance unknown, %@ is its name */
+"weather.empty.pointOnly" = "最近预报点 %@";
+
+/* Location: WeatherCopy.swift - What to do about an empty place, %@ is the radio's name */
+"weather.empty.ask" = "下拉或点按“更新”即可向 %@ 请求。";
+
+/* Location: WeatherCopy.swift - Nothing near enough to ask about, %@ is the place */
+"weather.empty.nothing" = "%@ 附近没有气象站或预报点。";
+
+/* Location: WeatherConditionsSection.swift - Apparent temperature, %@ is a temperature */
 "weather.now.feelsLike" = "体感 %@";
 
-/* Location: WeatherNowSection.swift - Wind, %@ is like "SSE 12" */
+/* Location: WeatherConditionsSection.swift - Wind, %@ is like "SSE 12" */
 "weather.now.wind" = "风 %@";
 
-/* Location: WeatherNowSection.swift - Relative humidity, %lld is percent */
+/* Location: WeatherConditionsSection.swift - Relative humidity, %lld is percent */
 "weather.now.humidity" = "湿度 %lld%%";
 
 /* Location: WeatherCopy.swift - Which report a reading came in. %1$@ is the radio's name, %2$@ a time like "11:18 PM" */
 "weather.now.report" = "见 %1$@ %2$@ 的报告";
-
-/* Location: WeatherCopy.swift - Source line for a station more than 25 km from the place */
-"weather.now.nearestReport" = "最近的报告";
 
 /* Location: WeatherCopy.swift - No station within 80 km. %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance */
 "weather.now.noneNearby" = "%1$@ 附近没有气象站。最近的：%2$@，%3$@。";
@@ -337,14 +345,14 @@
 /* Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town */
 "weather.now.noneNearbyUnknown" = "%1$@ 附近没有气象站。最近的：%2$@。";
 
-/* Location: WeatherCopy.swift - No reading held near the place, but a weather station within 80 km can be asked for. %1$@ is the place, %2$@ the station's name, %3$@ a distance like "6 km" */
-"weather.now.stationNotHeard" = "暂无 %1$@ 的当前天气。最近的气象站是 %2$@，%3$@。";
-
 /* Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name */
 "weather.now.stationsInArea" = "%2$@ 区域内有 %1$lld 个站点";
 
 /* Location: WeatherCopy.swift - Link to the stations screen with one station in the radio's batch, %@ is the radio's name */
 "weather.now.stationsInAreaOne" = "%@ 区域内有 1 个站点";
+
+/* Location: WeatherCopy.swift - Link to the stations screen when answers to single-station requests are held as well. %1$lld is every station the screen shows, %2$lld how many came in the radio's batch, %3$@ the radio's name */
+"weather.now.stationsWithArea" = "%1$lld 个气象站，其中 %2$lld 个在 %3$@ 区域内";
 
 /* Location: WeatherCopy.swift - Link to the stations screen when none came in a batch, %lld is how many (two or more) */
 "weather.now.stations" = "%lld 个气象站";
@@ -410,9 +418,6 @@
 
 // MARK: - Forecast card
 
-/* Location: WeatherForecastSection.swift - Forecast card title, %@ is the place */
-"weather.forecast.title" = "%@ 的预报";
-
 /* Location: WeatherForecastSection.swift - Forecast card title with no place */
 "weather.forecast.titleGeneric" = "预报";
 
@@ -427,9 +432,6 @@
 
 /* Location: WeatherCopy.swift - No forecast point close enough to speak for the place, %@ is the place */
 "weather.forecast.noPoint" = "%@ 附近没有预报点。";
-
-/* Location: WeatherForecastSection.swift - Forecast from a nearby point. %1$@ is the point's name, %2$@ a distance */
-"weather.forecast.nearbyPoint" = "来自 %1$@，%2$@";
 
 /* Location: WeatherForecastSection.swift - Accessibility summary, %lld is how many forecast rows */
 "weather.forecast.accessibility.rows" = "%lld 条";
@@ -484,8 +486,14 @@
 /* Location: WeatherStationsView.swift - Stations screen header, %@ is the radio's name */
 "weather.stations.intro" = "机场气象站。%@ 每小时广播其观测数据。";
 
-/* Location: WeatherStationsView.swift - Section of single-station answers to other people */
-"weather.stations.others" = "对他人请求的回复";
+/* Location: WeatherStationsView.swift - Section of stations from the radio's scheduled hourly report */
+"weather.stations.scheduled" = "来自每小时报告";
+
+/* Location: WeatherStationsView.swift - Section of stations from single-station answers seen on the channel; never says who asked */
+"weather.stations.answers" = "来自频道上的回复";
+
+/* Location: WeatherStationsView.swift - Row detail when a reading came from another radio, %@ is that radio's name */
+"weather.stations.fromBot" = "来自 %@";
 
 /* Location: WeatherStationsView.swift - When a reading was taken, %@ is a time */
 "weather.stations.asOf" = "截至 %@";
@@ -526,28 +534,28 @@
 /* Location: WeatherStationsView.swift - Section with METAR and TAF */
 "weather.station.airportReports" = "机场报告（编码）";
 
+/* Location: WeatherStationsView.swift - Why a station's reading is old: the radio's hourly report does not carry it */
+"weather.station.notInBatch" = "应请求提供，不在每小时报告中";
+
+/* Location: WeatherStationsView.swift - Station screen with no reading received yet */
+"weather.station.nothingHeld" = "尚未收到该站的观测值。";
+
 // MARK: - Text reports
 
 /* Location: WeatherReportsView.swift - Reports screen title and root row */
 "weather.reports.title" = "气象局文本报告";
 
-/* Location: WeatherReportsView.swift - Reports screen header, %@ is the radio's name */
-"weather.reports.intro" = "气象局的原文。有人请求时，%@ 会发送一份。";
-
 /* Location: WeatherReportsView.swift - Product title */
 "weather.reports.discussion.title" = "预报讨论";
 
-/* Location: WeatherReportsView.swift - Product description, %@ is the office like "NWS Austin/San Antonio" */
-"weather.reports.discussion.description" = "预报员的技术说明 — %@";
-
-/* Location: WeatherReportsView.swift - Product description with no place */
-"weather.reports.discussion.descriptionNoPlace" = "预报员的技术说明 — 来自该地点的预报办公室";
+/* Location: WeatherReportsView.swift - Product description; says what the product is, never where a copy came from */
+"weather.reports.discussion.description" = "预报员笔记，技术性内容";
 
 /* Location: WeatherReportsView.swift - Product title */
 "weather.reports.outlook.title" = "灾害性天气展望";
 
-/* Location: WeatherReportsView.swift - Product description, %@ is the radio's name */
-"weather.reports.outlook.description" = "%@ 的区域";
+/* Location: WeatherReportsView.swift - Product description; says what the product is, never where a copy came from */
+"weather.reports.outlook.description" = "未来一周预计出现的危险天气";
 
 /* Location: WeatherReportsView.swift - Product title */
 "weather.reports.storms.title" = "风暴报告";
@@ -566,9 +574,6 @@
 
 /* Location: WeatherReportsView.swift - Product description */
 "weather.reports.space.description" = "太阳风暴与无线电传播条件";
-
-/* Location: WeatherReportsView.swift - Section header for products that name a state */
-"weather.reports.byState" = "按州";
 
 /* Location: WeatherReportsView.swift - Row opening the state list, %@ is the state's name like "Texas" */
 "weather.reports.stateRow" = "州：%@";
@@ -591,19 +596,19 @@
 /* Location: WeatherReportsView.swift - Shown when nothing is held for a product */
 "weather.reports.nothingYet" = "尚未收到任何内容。";
 
-/* Location: WeatherReportsView.swift - Footer under a text somebody else asked for */
-"weather.reports.someoneElse" = "这是 Mesh 网络中其他人请求的";
+/* Location: WeatherReportsView.swift - Header part for a text nobody here asked for, whose office or state the wire never carries */
+"weather.reports.unknownArea" = "区域未知";
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift - Header part for an answer this phone never asked for; lowercase, joined with a middot */
+"weather.reports.overheard" = "在 #meshwx 上听到";
 
 // MARK: - Requests
 
-/* Location: WeatherAlertsSection.swift - Request button */
+/* Location: WeatherAlertRow.swift - Request button */
 "weather.request.askAlerts" = "请求预警";
 
-/* Location: WeatherNowSection.swift - Request button */
-"weather.request.askConditions" = "请求当前状况";
-
-/* Location: WeatherForecastSection.swift - Request button */
-"weather.request.askForecast" = "请求预报";
+/* Location: WeatherCopy.swift - Request button that asks for one alert the list named but this phone never received, %@ is the alert's name like "Tornado Warning" */
+"weather.request.askWarning" = "请求 %@";
 
 /* Location: WeatherReportsView.swift - Request button */
 "weather.request.askLatest" = "请求最新内容";
@@ -621,10 +626,13 @@
 "weather.request.publicNote" = "所有收听 #meshwx 的人都会收到回复。";
 
 /* Location: WeatherCopy.swift - Request on the air, %@ is the radio's name */
-"weather.request.pending" = "正在询问 %@…（最多 30 秒）";
+"weather.request.pending" = "正在询问 %@…";
 
 /* Location: WeatherCopy.swift - The one retry on the air */
 "weather.request.retrying" = "正在重新询问…";
+
+/* Location: WeatherCopy.swift - Status while the third send of a request goes out by flood, after the route to the radio was forgotten */
+"weather.request.flooding" = "正在通过 flood 重新询问…";
 
 /* Location: WeatherCopy.swift - Another request is on the air */
 "weather.request.waiting" = "正在等待另一个回复…";
@@ -656,11 +664,14 @@
 /* Location: WeatherCopy.swift - Content time of a forecast answer, %@ is a time */
 "weather.request.contentIssued" = "发布于 %@";
 
-/* Location: WeatherCopy.swift - No answer from a silent radio. %1$@ is a time, %2$@ the radio's name */
-"weather.request.noAnswer" = "%1$@ 无回复。%2$@ 可能超出通信范围。";
+/* Location: WeatherCopy.swift - No answer from a silent radio, which may be out of range or dropping requests because it is busy. %1$@ is a time, %2$@ the radio's name */
+"weather.request.noAnswer" = "%1$@ 无回复。%2$@ 可能超出通信范围或正忙。";
 
-/* Location: WeatherCopy.swift - No answer from a radio that was heard. %1$@ is the radio's name, %2$@ a time */
-"weather.request.heardNoAnswer" = "听到了 %1$@，但它在 %2$@ 未回复。";
+/* Location: WeatherCopy.swift - No answer from a radio that was heard, which drops requests silently when busy. %1$@ is the radio's name, %2$@ a time */
+"weather.request.heardNoAnswer" = "听到了 %1$@，但它在 %2$@ 未回复。它可能正忙。";
+
+/* Location: WeatherCopy.swift - No answer although your radio confirmed the weather radio received the request: it may be busy, or its answer was lost on the way back. %1$@ is the radio's name, %2$@ a time */
+"weather.request.receivedNoAnswer" = "%1$@ 已收到请求，但截至 %2$@ 此手机仍未收到回复。它可能正忙，也可能回复已丢失。";
 
 /* Location: WeatherCopy.swift - Your radio refused to send the request, %@ is a time */
 "weather.request.failed" = "你的电台在 %@ 未能发送此请求。";
@@ -704,6 +715,35 @@
 /* Location: WeatherCopy.swift - The radio declined for an unknown reason, %@ is its name */
 "weather.request.notAvailable.other" = "%@ 无法回复此请求";
 
+// MARK: - Update
+
+/* Location: WeatherUpdateControl.swift - The one request button on a place or station screen */
+"weather.update.button" = "更新";
+
+/* Location: WeatherCopy.swift - What a pull or the Update button will ask for. %1$@ is the radio's name, %2$@ a list like "alert list, readings" */
+"weather.update.asks" = "正在向 %1$@ 请求：%2$@";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.alerts" = "警报列表";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, outside the radio's own area */
+"weather.update.item.areaAlerts" = "该县和该区的警报";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.readings" = "观测值";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.forecast" = "预报";
+
+/* Location: WeatherCopy.swift - Nothing worth asking for. %1$@ is the radio's name, %2$@ the time the oldest thing held is current as of */
+"weather.update.current" = "全部是最新的 · %1$@ %2$@";
+
+/* Location: WeatherCopy.swift - Nothing worth asking for, with no content time to name */
+"weather.update.currentUnknown" = "全部是最新的";
+
+/* Location: WeatherCopy.swift - Nothing sent because the channel just delivered it, which is not the same as being current. %@ is the radio's name at the start of a sentence */
+"weather.update.justReceived" = "%@ 在过去 5 分钟内已回答";
+
 // MARK: - Units and time
 
 /* Location: WeatherFormatting.swift - Duration in seconds */
@@ -727,6 +767,9 @@
 /* Location: WeatherFormatting.swift - Distance under one kilometre */
 "weather.unit.underOneKilometre" = "不到 1 km";
 
+/* Location: WeatherFormatting.swift - Visibility below the smallest whole unit the weather radio sends, %@ is a distance like "1 mi" */
+"weather.unit.under" = "不到 %@";
+
 /* Location: WeatherFormatting.swift - Distance and compass direction. %1$@ is a distance, %2$@ like "NW" */
 "weather.unit.distanceDirection" = "%1$@ %2$@";
 
@@ -747,17 +790,20 @@
 
 // MARK: - Place picker
 
-/* Location: WeatherPlacePickerView.swift - Sheet title */
-"weather.picker.title" = "选择地点";
-
 /* Location: WeatherPlacePickerView.swift - Search field prompt */
-"weather.picker.prompt" = "城镇、城市或机场代码";
+"weather.picker.prompt" = "城镇、ZIP 邮编或机场代码";
 
 /* Location: WeatherPlacePickerView.swift - Shown when a search matches nothing */
-"weather.picker.noResults" = "没有匹配的城镇";
+"weather.picker.noResults" = "没有匹配的地点";
+
+/* Location: WeatherPlacePickerView.swift - Row for a US ZIP code the phone's ZIP list doesn't have, %@ is the 5-digit ZIP like "20500" */
+"weather.picker.unknownZip" = "ZIP 邮编 %@ 未知";
+
+/* Location: WeatherPlacePickerView.swift - Second line of the unknown ZIP code row */
+"weather.picker.unknownZipHint" = "邮政信箱和部分企业的 ZIP 邮编未收录。请改为搜索城镇。";
 
 /* Location: WeatherPlacePickerView.swift - Row for the phone's location */
-"weather.picker.yourLocation" = "你的位置";
+"weather.picker.yourLocation" = "我的位置";
 
 /* Location: WeatherPlacePickerView.swift - Your location row when permission is denied */
 "weather.picker.locationOff" = "定位已关闭";
@@ -765,94 +811,350 @@
 /* Location: WeatherPlacePickerView.swift - Your location row before permission is asked */
 "weather.picker.allowLocation" = "轻点以允许访问位置";
 
-/* Location: WeatherPlacePickerView.swift - Section of forecast places other people asked for, %@ is the radio's name */
-"weather.picker.others" = "其他人向 %@ 询问过的地点";
+/* Location: WeatherPlacePickerView.swift - Your location row when the phone has no fix and nothing is being located */
+"weather.picker.noFix" = "轻点以使用你的位置";
 
-/* Location: WeatherPlacePickerView.swift - Footer under other people's places, %@ is the radio's name */
-"weather.picker.othersFooter" = "任何人向 %@ 询问时，回复都会发给所有收听者。不会透露询问者是谁。";
+/* Location: WeatherPlacePickerView.swift - Section of the places kept on this phone */
+"weather.picker.saved" = "已存地点";
+
+/* Location: WeatherPlacePickerView.swift - Footer shown only when the phone has no fix and distances are measured from the page on screen, %@ is that place */
+"weather.picker.distancesFrom" = "距离以 %@ 为起点";
+
+/* Location: WeatherPlacePickerView.swift - Shown in place of a distance when the phone has no fix and the tool has no place to measure from either */
+"weather.picker.distanceUnknown" = "距离未知";
+
+/* Location: WeatherCopy.swift - A Places row with nothing held for its place */
+"weather.picker.noReading" = "—";
+
+/* Location: WeatherPlacePickerView.swift - Swipe action that takes a place off the list */
+"weather.picker.remove" = "移除";
+
+/* Location: WeatherPlacePickerView.swift - Section of places whose forecasts were heard on the channel; never says who asked */
+"weather.picker.heardOnChannel" = "在 #meshwx 上听到";
 
 /* Location: WeatherPlacePickerView.swift - When somebody's forecast was heard, %@ is a time ago */
 "weather.picker.heard" = "%@听到";
 
 // MARK: - About
 
-/* Location: WeatherAboutView.swift - Sheet title and the header's info button label */
-"weather.about.title" = "关于 Mesh 网络上的天气";
+/* Location: WeatherRadioView.swift - Section header above the four lines that say how asking works */
+"weather.about.howItWorks" = "工作方式";
 
-/* Location: WeatherAboutView.swift - Explainer, first line */
-"weather.about.line1" = "气象电台是转发美国国家气象局数据的 MeshCore 节点。";
+/* Location: WeatherRadioView.swift - How it works, first line */
+"weather.about.line1" = "你的请求以私信发送给气象电台。";
 
-/* Location: WeatherAboutView.swift - Explainer, second line */
-"weather.about.line2" = "它们在 #meshwx 上广播预警、当前状况和预报。";
+/* Location: WeatherRadioView.swift - How it works, second line */
+"weather.about.line2" = "它的回答在 #meshwx 上广播。";
 
-/* Location: WeatherAboutView.swift - Explainer, what a radio's area is. %1$@ is the radio's name, %2$lld how many stations it reports on */
-"weather.about.coverage" = "%1$@ 报告 %2$lld 个气象站的数据；预警针对这些站点周边的区域。";
+/* Location: WeatherRadioView.swift - How it works, third line */
+"weather.about.line3" = "每一台收听的手机都会保留它，包括别人请求的回答。";
 
-/* Location: WeatherAboutView.swift - Explainer, third line */
-"weather.about.line3" = "此手机会保存你的电台听到的内容，因此即使电台关闭也仍可显示。";
+/* Location: WeatherRadioView.swift - How it works, fourth line */
+"weather.about.line4" = "请求会占用大家共用的空中时间。";
 
-/* Location: WeatherAboutView.swift - Explainer, fourth line */
-"weather.about.line4" = "当你向气象电台请求内容时，所有收听者都会收到回复。";
-
-/* Location: WeatherAboutView.swift - Section of weather radios */
+/* Location: WeatherRadioView.swift - Section of weather radios */
 "weather.about.radios" = "气象电台";
 
-/* Location: WeatherAboutView.swift - Footer under the weather radios */
+/* Location: WeatherRadioView.swift - Footer under the weather radios */
 "weather.about.radiosFooter" = "请求会发送到当前使用的气象电台。";
 
-/* Location: WeatherAboutView.swift - Row that lets the app choose the weather radio */
+/* Location: WeatherRadioView.swift - Row that lets the app choose the weather radio */
 "weather.about.automatic" = "自动选择";
 
-/* Location: WeatherAboutView.swift - Detail under the automatic row, %@ is the radio's name */
+/* Location: WeatherRadioView.swift - Detail under the automatic row, %@ is the radio's name */
 "weather.about.automaticDetail" = "正在使用 %@";
 
-/* Location: WeatherAboutView.swift - When a weather radio was heard, %@ is a time ago */
+/* Location: WeatherRadioView.swift - When a weather radio was heard, %@ is a time ago */
 "weather.about.heard" = "%@听到";
 
-/* Location: WeatherAboutView.swift - A weather radio never heard */
+/* Location: WeatherRadioView.swift - A weather radio never heard */
 "weather.about.notHeard" = "尚未听到";
 
-/* Location: WeatherAboutView.swift - The weather radio's Weather Service feed is healthy */
+/* Location: WeatherRadioView.swift - The weather radio's Weather Service feed is healthy */
 "weather.about.feedOK" = "气象局数据源正常";
 
-/* Location: WeatherAboutView.swift - The weather radio's Weather Service feed is stale, %@ is a duration like "5 h" */
-"weather.about.feedStale" = "已 %@ 无气象局数据";
+/* Location: WeatherRadioView.swift - The weather radio's own Weather Service office has sent nothing for over 4 hours, usual on a quiet night. %@ is a duration like "5 h" */
+"weather.about.feedQuiet" = "已 %@ 未收到其气象局办公室的内容";
 
-/* Location: WeatherAboutView.swift - A weather radio heard without an advert */
+/* Location: WeatherRadioView.swift - The weather radio has never received anything from the Weather Service */
+"weather.about.feedNone" = "未收到气象局数据";
+
+/* Location: WeatherRadioView.swift - A weather radio heard without an advert */
 "weather.about.noAdvert" = "尚未发送广播通告";
 
-/* Location: WeatherAboutView.swift - The weather radio requests go to */
+/* Location: WeatherRadioView.swift - The weather radio requests go to */
 "weather.about.inUse" = "使用中";
 
-/* Location: WeatherAboutView.swift - Channel slot label */
+/* Location: WeatherRadioView.swift - Channel slot label */
 "weather.about.channelSlot" = "频道槽位";
 
-/* Location: WeatherAboutView.swift - Channel slot value, %lld is the slot number */
+/* Location: WeatherRadioView.swift - Channel slot value, %lld is the slot number */
 "weather.about.slot" = "槽位 %lld";
 
-/* Location: WeatherAboutView.swift - Channel slot value when #meshwx is not on your radio */
+/* Location: WeatherRadioView.swift - Channel slot value when #meshwx is not on your radio */
 "weather.about.noSlot" = "不在你的电台上";
 
-/* Location: WeatherAboutView.swift - Last weather datagram label */
+/* Location: WeatherRadioView.swift - Last weather datagram label */
 "weather.about.lastMessage" = "最近的天气消息";
 
-/* Location: WeatherAboutView.swift - No weather message received */
+/* Location: WeatherRadioView.swift - No weather message received */
 "weather.about.noMessage" = "未收到";
 
-/* Location: WeatherAboutView.swift - Channel slot value while your radio is not connected or still syncing */
+/* Location: WeatherRadioView.swift - Channel slot value while your radio is not connected or still syncing */
 "weather.about.radioOffline" = "你的电台未连接";
 
-/* Location: WeatherAboutView.swift - Button that forgets the source radio's weather */
+/* Location: WeatherRadioView.swift - Button that forgets the source radio's weather */
 "weather.about.clear" = "清除已收到的天气";
 
-/* Location: WeatherAboutView.swift - Footer under the clear button, %@ is the radio's name */
+/* Location: WeatherRadioView.swift - Footer under the clear button, %@ is the radio's name */
 "weather.about.clearFooter" = "从此手机中删除从 %@ 收到的所有内容。";
 
-/* Location: WeatherAboutView.swift - Alert title before clearing, %@ is the radio's name */
+/* Location: WeatherRadioView.swift - Alert title before clearing, %@ is the radio's name */
 "weather.about.alert.title" = "清除从 %@ 收到的天气？";
 
-/* Location: WeatherAboutView.swift - Alert message before clearing, %@ is the radio's name */
+/* Location: WeatherRadioView.swift - Alert message before clearing, %@ is the radio's name */
 "weather.about.alert.message" = "其预警、观测、预报和报告将从此手机中删除。%@ 再次广播时，它们会重新出现。";
 
-/* Location: WeatherAboutView.swift - Alert button that clears */
+/* Location: WeatherRadioView.swift - Alert button that clears */
 "weather.about.alert.clear" = "清除";
+
+// MARK: - What the weather radio covers
+
+/* Location: WeatherRadioView.swift - Section header for what the weather radio says it covers */
+"weather.covers.header" = "覆盖范围";
+
+/* Location: WeatherRadioView.swift - Row label for the area the radio covers */
+"weather.covers.area" = "区域";
+
+/* Location: WeatherRadioView.swift - The circle the radio stated. %1$@ is a radius like "120 km", %2$@ the place at its centre */
+"weather.covers.circle" = "%2$@ 周围 %1$@ 以内";
+
+/* Location: WeatherRadioView.swift - The radio stated no area filter at all */
+"weather.covers.everywhere" = "其气象局数据源提供的全部内容";
+
+/* Location: WeatherRadioView.swift - Row label for the forecast zones the radio covers */
+"weather.covers.zones" = "预报区";
+
+/* Location: WeatherRadioView.swift - How many zones the radio listed, %lld is two or more */
+"weather.covers.zoneCount" = "%lld 个预报区";
+
+/* Location: WeatherRadioView.swift - The radio listed one zone */
+"weather.covers.zoneCountOne" = "1 个预报区";
+
+/* Location: WeatherRadioView.swift - The radio had to cut a list to fit, so what is missing from it may still be covered. %@ is the list it did send */
+"weather.covers.andMore" = "%@，以及未列出的其他部分";
+
+/* Location: WeatherRadioView.swift - Row label for the Weather Service offices the radio carries */
+"weather.covers.offices" = "气象局办公室";
+
+/* Location: WeatherRadioView.swift - Row label for how many stations one hourly report can carry */
+"weather.covers.stations" = "每份报告的站点数";
+
+/* Location: WeatherRadioView.swift - The cap on one hourly report, %lld is the number */
+"weather.covers.stationCap" = "最多 %lld 个";
+
+/* Location: WeatherRadioView.swift - Footer saying when the radio said this. %1$@ is the radio's name, %2$@ a time */
+"weather.covers.stated" = "%1$@ 如此说明；收到于 %2$@";
+
+/* Location: WeatherRadioView.swift - Shown when the radio has not said what it covers, %@ is its name at the start of a sentence */
+"weather.covers.none" = "%@ 尚未说明其覆盖范围。";
+
+/* Location: WeatherRadioView.swift - Footer under the ask, saying what the statement is for */
+"weather.covers.noneFooter" = "没有这项说明，本机无法区分「在覆盖区外的地点」和「未被告知的地点」，因此两者都不作断言。";
+
+/* Location: WeatherRadioView.swift - Request button asking the radio what it covers */
+"weather.request.askCoverage" = "询问覆盖范围";
+
+/* Location: WeatherCopy.swift - One thing Update asks for, in a list */
+"weather.update.item.coverage" = "覆盖范围";
+
+
+// MARK: - Your requests
+
+/* Location: WeatherRadioView.swift - Section header for the requests this phone sent */
+"weather.requests.header" = "你的请求";
+
+/* Location: WeatherRadioView.swift - Footer under the requests this phone sent */
+"weather.requests.footer" = "本机请求过的内容。每个回答都是广播发出的，所以所有收听的人也都收到了。";
+
+/* Location: WeatherRadioView.swift - Shown when this phone has asked for nothing */
+"weather.requests.none" = "本机尚未请求过任何内容。";
+
+/* Location: WeatherRadioView.swift - How a request ended: the answer arrived */
+"weather.requests.answered" = "已回答";
+
+/* Location: WeatherRadioView.swift - How a request ended: nothing came back */
+"weather.requests.noAnswer" = "无回答";
+
+/* Location: WeatherRadioView.swift - How a request ended: the radio said it can't serve it */
+"weather.requests.notAvailable" = "不可用";
+
+/* Location: WeatherRadioView.swift - How a request ended: your own radio would not send it */
+"weather.requests.refused" = "你的电台无法发送";
+
+/* Location: WeatherRadioView.swift - A request still on the air */
+"weather.requests.pending" = "等待回答";
+
+
+// MARK: - Request names
+
+/* Location: WeatherCopy.swift - A request and what it named. %1$@ is what was asked for, %2$@ its subject like a state, an office or an airport code */
+"weather.requestName.withSubject" = "%1$@ · %2$@";
+
+/* Location: WeatherCopy.swift - Name of a request for the radio's alert list */
+"weather.requestName.alertList" = "预警列表";
+
+/* Location: WeatherCopy.swift - Name of a request for every active warning */
+"weather.requestName.activeWarnings" = "生效中的预警";
+
+/* Location: WeatherCopy.swift - Name of a request for warnings naming one area, %@ is a county or zone code like TXZ192 */
+"weather.requestName.areaWarnings" = "%@ 的预警";
+
+/* Location: WeatherCopy.swift - Name of a request for a warning's full text, %@ is the alert's name like "Tornado Warning" */
+"weather.requestName.warningText" = "%@ 的全文";
+
+/* Location: WeatherCopy.swift - Name of a request for the hourly station readings */
+"weather.requestName.readings" = "站点观测值";
+
+/* Location: WeatherCopy.swift - Name of a request for one station, %@ is an airport code like KAUS */
+"weather.requestName.stationReading" = "%@ 的观测值";
+
+/* Location: WeatherCopy.swift - Name of a request for a forecast, %@ is a place or forecast point */
+"weather.requestName.forecast" = "%@ 的预报";
+
+/* Location: WeatherCopy.swift - Name of a request for the coded current conditions */
+"weather.requestName.metar" = "METAR";
+
+/* Location: WeatherCopy.swift - Name of a request for the coded airport forecast */
+"weather.requestName.taf" = "TAF";
+
+/* Location: WeatherCopy.swift - Name of a request asking the radio what it covers */
+"weather.requestName.coverage" = "覆盖范围";
+
+
+// MARK: - Heard on the channel
+
+/* Location: WeatherRadioView.swift - Footer under what the channel carried; it never says who asked */
+"weather.heard.footer" = "频道最近传送的内容，广播和回答都在内。本机无法知道是谁请求的。";
+
+/* Location: WeatherRadioView.swift - One message carrying several stations' readings, %lld is two or more */
+"weather.heard.readings" = "%lld 条站点观测值";
+
+/* Location: WeatherRadioView.swift - One message carrying one station's reading */
+"weather.heard.readingsOne" = "1 条站点观测值";
+
+/* Location: WeatherRadioView.swift - A text reply whose subject has no name of its own */
+"weather.heard.text" = "气象局文本";
+
+
+// MARK: - Cached from the channel
+
+/* Location: WeatherRadioView.swift - Row opening what this phone kept from the channel, %lld is how many things */
+"weather.cache.row" = "来自频道的缓存（%lld）";
+
+/* Location: WeatherCachedView.swift - Screen title */
+"weather.cache.title" = "来自频道的缓存";
+
+/* Location: WeatherCachedView.swift - Header saying where all of it came from */
+"weather.cache.intro" = "这里的一切都是在 #meshwx 上听到的。本机无法知道其中任何一项是谁请求的。";
+
+/* Location: WeatherCachedView.swift - Segment showing what is held grouped by kind */
+"weather.cache.byKind" = "按类型";
+
+/* Location: WeatherCachedView.swift - Segment showing what is held in the order it arrived */
+"weather.cache.newestFirst" = "最新在前";
+
+/* Location: WeatherCachedView.swift - Group header. %1$@ is the kind of thing, %2$lld how many are held */
+"weather.cache.group" = "%1$@（%2$lld）";
+
+/* Location: WeatherCachedView.swift - Group of forecasts */
+"weather.cache.forecasts" = "预报";
+
+/* Location: WeatherCachedView.swift - Group of coded airport reports */
+"weather.cache.airportReports" = "机场报告（METAR/TAF）";
+
+/* Location: WeatherCachedView.swift - Group of the full texts of warnings */
+"weather.cache.narratives" = "预警全文";
+
+/* Location: WeatherCachedView.swift - Group of warnings for places other than the one on screen */
+"weather.cache.warningsElsewhere" = "其他地点的预警";
+
+// MARK: - 预警通知
+
+/* Location: WeatherAlertNotificationsView.swift - Screen title, and the row that opens it */
+"weather.notifications.title" = "预警通知";
+
+/* Location: WeatherAlertNotificationsView.swift - Section header over the places being watched */
+"weather.notifications.placesHeader" = "关注的地点";
+
+/* Location: WeatherAlertNotificationsView.swift - Shown when no place is watched */
+"weather.notifications.empty" = "还没有关注任何地点。在「地点」里打开某个地点旁边的铃铛，覆盖它的预警就会通知你。";
+
+/* Location: WeatherAlertNotificationsView.swift - A watched place while your radio is connected */
+"weather.notifications.connected" = "关注中 · 电台已连接";
+
+/* Location: WeatherAlertNotificationsView.swift - A watched place while your radio is not connected and the app does not know since when */
+"weather.notifications.disconnected" = "未在关注 — 你的电台未连接";
+
+/* Location: WeatherAlertNotificationsView.swift - A watched place while your radio is not connected, %@ is a time like "8:42 PM" */
+"weather.notifications.disconnectedSince" = "未在关注 — 电台自 %@ 起断开";
+
+/* Location: WeatherAlertNotificationsView.swift - The row for the phone's own position */
+"weather.notifications.myLocation" = "我的位置";
+
+/* Location: WeatherAlertNotificationsView.swift - How old the position it is matched against is, %@ is an age like "3 h old" */
+"weather.notifications.positionAge" = "上次定位 %@";
+
+/* Location: WeatherAlertNotificationsView.swift - No position has been taken yet */
+"weather.notifications.noPosition" = "还没有定位。打开定位后进入「天气」，就会记下一次。";
+
+/* Location: WeatherAlertNotificationsView.swift - Section header over the two opt-in toggles */
+"weather.notifications.alsoHeader" = "也通知我";
+
+/* Location: WeatherAlertNotificationsView.swift - Toggle for warnings that are not storm warnings */
+"weather.notifications.otherWarnings" = "其他预警";
+
+/* Location: WeatherAlertNotificationsView.swift - What the other-warnings toggle covers */
+"weather.notifications.otherWarningsDetail" = "洪水、冬季风暴、大风等，静默送达。";
+
+/* Location: WeatherAlertNotificationsView.swift - Toggle for tornado warnings that do not cover the place */
+"weather.notifications.tornadoNearby" = "附近的龙卷风预警";
+
+/* Location: WeatherAlertNotificationsView.swift - What the nearby-tornado toggle covers */
+"weather.notifications.tornadoNearbyDetail" = "50 公里以内，即使没有覆盖该地点。";
+
+/* Location: WeatherAlertNotificationsView.swift - Footer saying what always notifies and what never does */
+"weather.notifications.stormsAlways" = "覆盖关注地点的龙卷风、极端大风、山洪和强雷暴预警始终会通知，并带提示音。观察、提示和声明则从不通知。";
+
+/* Location: WeatherAlertNotificationsView.swift - Footer saying exactly what this can promise */
+"weather.notifications.promise" = "只有在你的电台已连接且在通信范围内、并且 DigitainoMesh 正在运行时，预警才会到达。这不能替代 NOAA 气象广播，也不能替代手机的紧急警报。";
+
+/* Location: WeatherAlertNotificationsView.swift - Shown when iOS has notifications turned off for the app */
+"weather.notifications.denied" = "DigitainoMesh 的通知已关闭，铃铛响不了。";
+
+/* Location: WeatherAlertNotificationsView.swift - Button opening the Settings app */
+"weather.notifications.openSettings" = "打开设置";
+
+/* Location: WeatherPlacePickerView.swift - Accessibility label for a bell that is off, %@ is the place */
+"weather.notifications.startWatching" = "通知我 %@ 的预警";
+
+/* Location: WeatherPlacePickerView.swift - Accessibility label for a bell that is on, %@ is the place */
+"weather.notifications.stopWatching" = "不再通知我 %@ 的预警";
+
+/* Location: WeatherRadioView.swift - How many places are watched, %lld is one or more */
+"weather.notifications.watchingCount" = "已关注 %lld 个";
+
+/* Location: WeatherRadioView.swift - Shown when nothing is watched */
+"weather.notifications.watchingNone" = "关闭";
+
+/* Location: WeatherAlertNotificationCopy.swift - Name for the phone's own place in a notification when no town is near enough */
+"weather.notifications.myLocationLabel" = "你的位置";
+
+/* Location: WeatherAlertNotificationCopy.swift - When a warning ends, in a notification. %@ is a time like "9:41 PM" */
+"weather.notifications.until" = "至 %@";
+
+/* Location: WeatherAlertNotificationCopy.swift - A warning near the place, in a notification. %1$@ is a distance and direction like "25 km N", %2$@ the place */
+"weather.notifications.near" = "距 %2$@ %1$@";
+
+/* Location: WeatherAlertNotificationCopy.swift - Second line of a notification for a warning drained from the radio's queue */
+"weather.notifications.late" = "延迟收到 — 发送时你的电台不在通信范围内。";

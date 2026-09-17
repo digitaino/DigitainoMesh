@@ -13,6 +13,10 @@ public enum MeshWXEncodeError: Error, Sendable, Hashable {
   case oversize(what: String, bytes: Int)
   /// A repeated field had the wrong number of elements (vertices, runs, periods…).
   case badCount(what: String, count: Int, allowed: ClosedRange<Int>)
+  /// Some stations in a batch carried an age and some did not. The ages are all or nothing
+  /// (spec §6.1): a batch that told the truth about a few stations and left the rest to be
+  /// guessed at would be worse than one that says nothing.
+  case partialObservationAges(known: Int, stations: Int)
   /// A polygon vertex was more than ±32.767° from the previous one, so the 0.001°
   /// delta does not fit in an i16. Re-anchor or split the polygon.
   case polygonDeltaTooLarge(vertex: Int, axis: String, degrees: Double)
@@ -68,7 +72,8 @@ public enum MeshWXEncoder {
     windMph: UInt8 = 0,
     polygon: [MeshWXCoordinate]? = nil,
     areas: [MeshWXAreaRun]? = nil,
-    isUpdate: Bool = false
+    isUpdate: Bool = false,
+    issuedMinutes: UInt32? = nil
   ) throws -> Data {
     var tags =
       (tornado.rawValue << 6) | (floodSource.rawValue << 4) | (floodDamage.rawValue << 2)
@@ -79,8 +84,10 @@ public enum MeshWXEncoder {
     if hasPolygon { tags |= MeshWXWire.tagPolygon }
     if hasAreas { tags |= MeshWXWire.tagAreas }
 
-    var out = try header(
-      seq: seq, bot: bot, type: .warning, flags: isUpdate ? MeshWXWire.flagWarningUpdate : 0)
+    var flags: UInt8 = isUpdate ? MeshWXWire.flagWarningUpdate : 0
+    if issuedMinutes != nil { flags |= MeshWXWire.flagWarningIssued }
+
+    var out = try header(seq: seq, bot: bot, type: .warning, flags: flags)
     out.append(identity.event)
     out.append(identity.office)
     out.appendU16(identity.etn)
@@ -91,6 +98,14 @@ public enum MeshWXEncoder {
 
     if hasPolygon, let polygon { out.append(try encodePolygon(polygon)) }
     if hasAreas, let areas { out.append(try encodeAreas(areas)) }
+    // Last of all, so a revision 4 decoder stops after the area list (spec §3). The gap
+    // saturates rather than wrapping, and a product issued after its own expiry — which no real
+    // one is — encodes as 0 rather than failing the message over a bad clock.
+    if let issuedMinutes {
+      let before = Int(expiresMinutes) - Int(issuedMinutes)
+      out.appendU16(
+        UInt16(max(0, min(Int(MeshWXWire.issuedBeforeSaturatedMinutes), before))))
+    }
     return try checkSize(out, "warning")
   }
 
@@ -108,7 +123,10 @@ public enum MeshWXEncoder {
       windMph: warning.windMph,
       polygon: warning.polygon,
       areas: warning.areas,
-      isUpdate: warning.isUpdate
+      isUpdate: warning.isUpdate,
+      // Resolved and subtracted back: `expires − (expires − before)` is the same two bytes,
+      // saturation included, so the round trip stays byte-identical.
+      issuedMinutes: warning.issuedMinutes
     )
   }
 
@@ -150,10 +168,15 @@ public enum MeshWXEncoder {
     return out
   }
 
-  private static func encodeAreas(_ areas: [MeshWXAreaRun]) throws -> Data {
-    guard (1...MeshWXWire.maxAreaRuns).contains(areas.count) else {
-      throw MeshWXEncodeError.badCount(
-        what: "area runs", count: areas.count, allowed: 1...MeshWXWire.maxAreaRuns)
+  /// The counted run list of spec §3. A warning sets the tag bit only when it has runs, so an
+  /// empty list has no encoding there; a Coverage message counts them the same way but may
+  /// legitimately carry none (`k` = 0, spec §7A), hence `allowingEmpty`.
+  private static func encodeAreas(
+    _ areas: [MeshWXAreaRun], what: String = "area runs", allowingEmpty: Bool = false
+  ) throws -> Data {
+    let allowed = (allowingEmpty ? 0 : 1)...MeshWXWire.maxAreaRuns
+    guard allowed.contains(areas.count) else {
+      throw MeshWXEncodeError.badCount(what: what, count: areas.count, allowed: allowed)
     }
     var out = Data()
     out.append(UInt8(areas.count))
@@ -231,6 +254,11 @@ public enum MeshWXEncoder {
 
   // MARK: - Observations (type 4, spec §6)
 
+  /// A station carrying ``MeshWXStationObservation/ageMinutes`` puts the batch into the
+  /// revision 5 form: flags nibble bit 0 and a trailing block of age nibbles (spec §6.1). The
+  /// ages are all or nothing, and because the block costs `ceil(n / 2)` bytes on top of an
+  /// already 163-byte full batch, 14 stations with ages do not fit in one packet — the size
+  /// check below is what refuses them (``MeshWXWire/maxStationsWithAges``).
   public static func observations(
     seq: UInt8, bot: UInt16, timestampMinutes: UInt32, stations: [MeshWXStationObservation]
   ) throws -> Data {
@@ -238,7 +266,17 @@ public enum MeshWXEncoder {
       throw MeshWXEncodeError.badCount(
         what: "observation stations", count: stations.count, allowed: 1...MeshWXWire.maxStations)
     }
-    var out = try header(seq: seq, bot: bot, type: .observations)
+    let ages = stations.map(\.ageMinutes)
+    let known = ages.compactMap { $0 }
+    guard known.isEmpty || known.count == stations.count else {
+      throw MeshWXEncodeError.partialObservationAges(
+        known: known.count, stations: stations.count)
+    }
+    let hasAges = known.count == stations.count
+
+    var out = try header(
+      seq: seq, bot: bot, type: .observations,
+      flags: hasAges ? MeshWXWire.flagObservationAges : 0)
     out.appendU32(timestampMinutes)
     out.append(UInt8(stations.count))
     for station in stations {
@@ -253,6 +291,7 @@ public enum MeshWXEncoder {
       out.append(station.humidityPercent ?? MeshWXWire.unsignedUnknown)
       out.append(UInt8(bitPattern: station.feelsDeltaF))
     }
+    if hasAges { out.append(encodeAges(known)) }
     return try checkSize(out, "observations")
   }
 
@@ -262,6 +301,27 @@ public enum MeshWXEncoder {
     try self.observations(
       seq: seq, bot: bot, timestampMinutes: observations.timestampMinutes,
       stations: observations.stations)
+  }
+
+  /// The per-station age block: one nibble each, two stations to a byte, station `i` in the low
+  /// nibble of byte `i / 2` when `i` is even and the high nibble when it is odd. An odd station
+  /// count leaves the last high nibble as 0 padding (spec §6.1).
+  private static func encodeAges(_ ages: [UInt16]) -> Data {
+    var block = [UInt8](repeating: 0, count: (ages.count + 1) / 2)
+    for (index, age) in ages.enumerated() {
+      let nibble = ageNibble(age)
+      block[index / 2] |= index % 2 == 0 ? nibble : nibble << 4
+    }
+    return Data(block)
+  }
+
+  /// One station's age as a 10-minute step, 0…15, rounding half up — the reference's
+  /// `_age_nibble`. To the nearest step rather than down, which keeps the error symmetric: a
+  /// reading is never presented as more than 4 minutes fresher than it is. 15 is a saturation,
+  /// so anything past 150 minutes clamps to "150 or more" instead of wrapping.
+  private static func ageNibble(_ minutes: UInt16) -> UInt8 {
+    let step = Int(MeshWXWire.observationAgeStepMinutes)
+    return UInt8(min(15, (Int(minutes) + step / 2) / step))
   }
 
   /// `(inHg − 29.00) × 100`, so the byte covers 29.00 to 31.54 inHg. Sea-level pressure
@@ -414,6 +474,103 @@ public enum MeshWXEncoder {
       seq: seq, bot: bot, requestCode: message.requestCode, reason: message.reason)
   }
 
+  // MARK: - Coverage (type 8, spec §7A)
+
+  /// The app never sends this — only a bot states its own coverage — but the vector round trip
+  /// and the coverage tests both need the bytes, and a codec exercised in one direction drifts.
+  ///
+  /// The offices go out in the order given: the bot sends them ascending, and sorting them here
+  /// would hide a caller that did not rather than reproduce what arrived.
+  public static func coverage(
+    seq: UInt8,
+    bot: UInt16,
+    latitude: Double,
+    longitude: Double,
+    radiusKilometres: UInt16,
+    stationCap: UInt8,
+    officeIndices: [UInt8],
+    areas: [MeshWXAreaRun],
+    areasCut: Bool = false,
+    officesCut: Bool = false
+  ) throws -> Data {
+    guard officeIndices.count <= MeshWXWire.maxCoverageOffices else {
+      throw MeshWXEncodeError.badCount(
+        what: "coverage offices", count: officeIndices.count,
+        allowed: 0...MeshWXWire.maxCoverageOffices)
+    }
+    var flags: UInt8 = 0
+    if areasCut { flags |= MeshWXWire.flagCoverageZonesCut }
+    if officesCut { flags |= MeshWXWire.flagCoverageOfficesCut }
+
+    var out = try header(seq: seq, bot: bot, type: .coverage, flags: flags)
+    try out.appendI24(Int((latitude * 10000).rounded(.toNearestOrEven)), field: "coverage lat")
+    try out.appendI24(Int((longitude * 10000).rounded(.toNearestOrEven)), field: "coverage lon")
+    out.appendU16(radiusKilometres)
+    out.append(stationCap)
+    out.append(UInt8(officeIndices.count))
+    out.append(contentsOf: officeIndices)
+    out.append(try encodeAreas(areas, what: "coverage runs", allowingEmpty: true))
+    return try checkSize(out, "coverage")
+  }
+
+  public static func coverage(seq: UInt8, bot: UInt16, _ coverage: MeshWXCoverage) throws -> Data {
+    try self.coverage(
+      seq: seq,
+      bot: bot,
+      latitude: coverage.latitude,
+      longitude: coverage.longitude,
+      radiusKilometres: coverage.radiusKilometres,
+      stationCap: coverage.stationCap,
+      officeIndices: coverage.officeIndices,
+      areas: coverage.areas,
+      areasCut: coverage.areasCut,
+      officesCut: coverage.officesCut
+    )
+  }
+
+  // MARK: - Request (type 9, spec §7B)
+
+  /// The app's own `>` request, as the datagram it is flooded on `#meshwx` as.
+  ///
+  /// The one message this app transmits, so this is the one encoder whose output goes on the
+  /// air rather than into a test. Strict about all three variable things — a six-byte key
+  /// prefix, a non-empty text that starts with `>`, and 40 bytes of it at most — because a
+  /// request the bot cannot parse is silence, and silence is what the datagram exists to fix.
+  ///
+  /// - Parameters:
+  ///   - seq: the **sender's** counter, repeated on a resend.
+  ///   - bot: the bot asked; ``MeshWXRequest/anyBot`` asks them all.
+  ///   - senderPrefix: the first six bytes of this phone's public key, in key order.
+  ///   - timestamp: Unix seconds on the sender's clock; a resend repeats it.
+  ///   - text: the §8.2 request, starting with `>`.
+  public static func request(
+    seq: UInt8, bot: UInt16, senderPrefix: Data, timestamp: UInt32, text: String
+  ) throws -> Data {
+    guard senderPrefix.count == MeshWXWire.requestSenderPrefixSize else {
+      throw MeshWXEncodeError.badCount(
+        what: "request sender", count: senderPrefix.count,
+        allowed: MeshWXWire.requestSenderPrefixSize...MeshWXWire.requestSenderPrefixSize)
+    }
+    let bytes = Array(text.utf8)
+    guard text.hasPrefix(">"), bytes.count > 1 else { throw MeshWXEncodeError.emptyRequest }
+    guard bytes.count <= MeshWXWire.maxRequestTextBytes else {
+      throw MeshWXEncodeError.oversize(what: "request text", bytes: bytes.count)
+    }
+    var out = try header(seq: seq, bot: bot, type: .request)
+    out.append(senderPrefix)
+    out.appendU32(timestamp)
+    out.append(contentsOf: bytes)
+    return try checkSize(out, "request")
+  }
+
+  /// The body's own fields under the header fields given, so a re-encode takes `seq` and `bot`
+  /// from the message's header exactly as every other type does.
+  public static func request(seq: UInt8, bot: UInt16, _ request: MeshWXRequest) throws -> Data {
+    try self.request(
+      seq: seq, bot: bot, senderPrefix: request.senderPrefix, timestamp: request.timestamp,
+      text: request.text)
+  }
+
   // MARK: - Round trip
 
   /// Re-encode a decoded message, header and all.
@@ -433,6 +590,8 @@ public enum MeshWXEncoder {
     case .forecast(let forecast): return try self.forecast(seq: seq, bot: bot, forecast)
     case .text(let text): return try self.text(seq: seq, bot: bot, text)
     case .notAvailable(let na): return try notAvailable(seq: seq, bot: bot, na)
+    case .coverage(let coverage): return try self.coverage(seq: seq, bot: bot, coverage)
+    case .request(let request): return try self.request(seq: seq, bot: bot, request)
     case .unknown:
       throw MeshWXEncodeError.outOfRange(field: "type", value: Int(message.header.rawType))
     }

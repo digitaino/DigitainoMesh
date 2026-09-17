@@ -125,6 +125,24 @@ struct MeshWXPresentationTests {
     #expect(MeshWXPresentation.feedHealthMinutes(255) == 1020)
   }
 
+  /// Spec §6 (revision 3): sky 15 is a report with no cloud or weather group.
+  @Test func anObservationWithNoSkyGroupHasNoIcon() {
+    #expect(MeshWXPresentation.observationSymbolName(for: .other) == nil)
+    #expect(MeshWXPresentation.observationSymbolName(for: .clear, isNight: true) == "moon.stars")
+  }
+
+  /// Spec §5: the byte is one office's quiet, and only 255 says nothing ever arrived.
+  @Test func feedHealthSplitsAQuietOfficeFromAFeedThatNeverDelivered() {
+    #expect(MeshWXFeedHealth(feedHealth: 0) == .recent(minutes: 0))
+    #expect(MeshWXFeedHealth(feedHealth: 60) == .recent(minutes: 240))
+    #expect(MeshWXFeedHealth(feedHealth: 61) == .quiet(minutes: 244))
+    #expect(MeshWXFeedHealth(feedHealth: 254) == .quiet(minutes: 1016))
+    #expect(MeshWXFeedHealth(feedHealth: 255) == .neverReceived)
+    #expect(!MeshWXFeedHealth.recent(minutes: 240).withholdsCalm)
+    #expect(MeshWXFeedHealth.quiet(minutes: 244).withholdsCalm)
+    #expect(MeshWXFeedHealth.neverReceived.withholdsCalm)
+  }
+
   @Test func expiryCountsDownAndThenStops() {
     #expect(MeshWXPresentation.minutesUntilExpiry(expiresMinutes: 1042, now: 1000) == 42)
     #expect(MeshWXPresentation.minutesUntilExpiry(expiresMinutes: 1000, now: 1000) == nil)
@@ -230,13 +248,34 @@ struct MeshWXForecastLayoutTests {
     #expect(entries[1].period.highF == 100 && entries[1].period.lowF == 78)
   }
 
-  @Test func aMixedForecastKeepsPeriodLabelsAndHidesNothing() {
-    let mixed = MeshWXForecast(
+  /// Spec §7 (revision 3): a 127 at the edge of the forecast window is half a day missing, not a
+  /// night.
+  @Test func aDayMissingOneTemperatureIsStillADay() {
+    let edge = MeshWXForecast(
       pointIndex: 1, issuedMinutes: 0, firstPeriod: 0,
       periods: [MeshWXForecastPeriod(highF: 90, lowF: 70), MeshWXForecastPeriod(lowF: 68)])
+    #expect(MeshWXForecastLayout(of: edge) == .days)
+    let entries = MeshWXForecastEntry.entries(of: edge)
+    #expect(entries.map(\.isNight) == [nil, nil])
+    #expect(entries.map(\.dayOffset) == [0, 1])
+  }
+
+  /// Spec §7 (revision 3): `first` counts half-days from the issue date, and an evening issue with
+  /// no usable rest of today sends 2, so its first entry is tomorrow.
+  @Test func anEveningIssueStartsTomorrow() {
+    let evening = MeshWXForecast(
+      pointIndex: 103, issuedMinutes: 29_823_380, firstPeriod: 2, periods: liveForecast.periods)
+    #expect(MeshWXForecastLayout(of: evening) == .days)
+    #expect(MeshWXForecastEntry.entries(of: evening).map(\.dayOffset) == [1, 2, 3, 4, 5, 6, 7])
+  }
+
+  @Test func wholeDaysFromAnOddFirstAreMixedAndHideNothing() {
+    let mixed = MeshWXForecast(
+      pointIndex: 1, issuedMinutes: 0, firstPeriod: 1,
+      periods: [MeshWXForecastPeriod(highF: 90, lowF: 70), MeshWXForecastPeriod(highF: 91)])
     #expect(MeshWXForecastLayout(of: mixed) == .mixed)
     let entries = MeshWXForecastEntry.entries(of: mixed)
-    #expect(entries.map(\.isNight) == [false, true])
+    #expect(entries.map(\.isNight) == [true, false])
     #expect(entries[0].period.highF == 90 && entries[0].period.lowF == 70)
   }
 

@@ -181,6 +181,10 @@ struct MC1App: App {
         // Self-latching, so this is a single defaults read on every later launch.
         LegacyNotificationSwitchMigration.run()
 
+        // The weather alert evaluator runs in the service layer, which has no string tables and
+        // no navigation: this hands it both (docs/MESHWX_UI.md §16).
+        WeatherAlertNotificationRouting.install(appState: appState)
+
         try? Tips.configure([
           .displayFrequency(.immediate)
         ])

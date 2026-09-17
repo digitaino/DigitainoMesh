@@ -27,6 +27,8 @@ public enum MeshWXWire {
   // named rather than inlined as magic offsets.
 
   static let warningFixedSize = 15
+  /// The issue time a revision 5 warning appends after the polygon and the areas (spec §3).
+  static let warningIssuedSize = 2
   static let cancelSize = 8
   static let digestFixedSize = 10
   static let digestEntrySize = 6
@@ -36,6 +38,11 @@ public enum MeshWXWire {
   static let forecastPeriodSize = 5
   static let textFixedSize = 8
   static let notAvailableSize = 6
+  /// Header, centre, radius, station cap and the office count, before the offices themselves
+  /// and the counted run list (spec §7A).
+  static let coverageFixedSize = 14
+  /// Header, the sender's key prefix and the request's own time, before the text (spec §7B).
+  static let requestFixedSize = 14
 
   // MARK: Counts and limits (spec §3, §5, §6, §7, §8.1)
 
@@ -48,7 +55,22 @@ public enum MeshWXWire {
   public static let maxAreaRuns = 30
   public static let maxDigestEntries = 25
   public static let maxStations = 14
+  /// Stations one batch may carry when it also carries the per-station ages (spec §6.1). A full
+  /// batch is already 163 bytes and the nibbles cost `ceil(n / 2)` more, so 14 with ages is 170
+  /// and does not fit: the bot drops the farthest station — the list is nearest first — and never
+  /// the ages, because a batch honest about some stations and silent about the rest is worse than
+  /// one that says nothing. Not enforced separately; the packet budget is what refuses the 14th.
+  public static let maxStationsWithAges = 13
   public static let maxPeriods = 14
+  /// Offices one Coverage message may list (spec §7A). 24 offices and 30 runs together are 159
+  /// bytes, so a full list of either never costs the other one; past it the bot cuts and says so.
+  public static let maxCoverageOffices = 24
+  /// Bytes of the sender's public key a Request carries: the same six-byte prefix a DM
+  /// identifies the phone by, so one phone's DM and its datagram are one sender (spec §7B).
+  public static let requestSenderPrefixSize = 6
+  /// UTF-8 bytes a Request's text may take (spec §7B). Well under the packet budget: the whole
+  /// §8.2 grammar fits, and a request is not the place to spend airtime.
+  public static let maxRequestTextBytes = 40
 
   // MARK: Sentinels (spec §6, §7)
   //
@@ -58,12 +80,27 @@ public enum MeshWXWire {
 
   /// Observation temperature/dewpoint: unknown.
   public static let temperatureUnknown: Int8 = -128
-  /// Forecast high/low: not given for this period (nights have no high, days no low).
+  /// Forecast high/low: not given for this entry — half of a whole day missing at the edge of the
+  /// forecast window (spec §7, revision 3), not a night; a revision 1 day/night period carried one.
   public static let forecastTemperatureNotGiven: Int8 = 127
   /// Wind speed, visibility, pressure, humidity: unknown.
   public static let unsignedUnknown: UInt8 = 255
   /// Forecast point index: the bot resolved a place that has no bundled point.
   public static let unbundledPoint: UInt16 = 0xFFFF
+
+  // MARK: Revision 5 times (spec §3, §6.1)
+  //
+  // Both are trailing blocks announced by a flags-nibble bit, so a decoder written before
+  // revision 5 stops after the field it knows and reads the same message it always did.
+
+  /// One age nibble step, in minutes.
+  public static let observationAgeStepMinutes: UInt16 = 10
+  /// The largest age a nibble carries: 15 steps. It is a saturation, not a reading — 150 means
+  /// "150 minutes or more" — so a station at this value is reported as at least that old.
+  public static let observationAgeSaturatedMinutes: UInt16 = 150
+  /// The largest issue-to-expiry gap the u16 carries (45.5 days). Saturated rather than wrapped:
+  /// at this value the product was issued *at or before* `expires − 65535`.
+  public static let issuedBeforeSaturatedMinutes: UInt16 = .max
 
   // MARK: Warning tag byte (spec §3)
 
@@ -72,14 +109,33 @@ public enum MeshWXWire {
 
   /// Warning flags nibble, bit 0: this identity was already sent.
   static let flagWarningUpdate: UInt8 = 0x1
+  /// Warning flags nibble, bit 1: the issue time follows the polygon and the area list (spec §3,
+  /// revision 5). In the flags nibble rather than in the tag byte because that byte has no spare
+  /// bit: 7-6 tornado, 5-4 flood source, 3-2 flood damage, 1 polygon, 0 areas.
+  static let flagWarningIssued: UInt8 = 0x2
+
+  // MARK: Observations flags nibble (spec §6.1)
+
+  /// Bit 0: the per-station ages follow the station records.
+  static let flagObservationAges: UInt8 = 0x1
+
+  // MARK: Coverage flags nibble (spec §7A)
+  //
+  // Both mean "this list is incomplete", never "this place is not covered". They are the reason
+  // the message can be read as a denial at all: with them clear the lists are the whole area.
+
+  /// Bit 0: the zone runs were cut.
+  static let flagCoverageZonesCut: UInt8 = 0x1
+  /// Bit 1: the office list was cut.
+  static let flagCoverageOfficesCut: UInt8 = 0x2
 
   /// Area run state byte, bit 7: the run numbers counties, not forecast zones.
   static let areaCountyBit: UInt8 = 0x80
 }
 
-/// The seven structured message types (spec §2.2, high nibble of the type byte).
+/// The nine structured message types (spec §2.2, high nibble of the type byte).
 ///
-/// Types 8-11 are reserved and 12-15 are free for third-party experiments, so this is
+/// Types 10-11 are reserved and 12-15 are free for third-party experiments, so this is
 /// deliberately not exhaustive over the nibble: ``MeshWXHeader/rawType`` keeps the byte
 /// and receivers ignore what they do not know.
 public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable {
@@ -90,6 +146,11 @@ public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable 
   case forecast = 5
   case text = 6
   case notAvailable = 7
+  /// Spec revision 4, §7A: what the bot carries, stated by the bot.
+  case coverage = 8
+  /// Spec revision 6, §7B: an app's `>` request, flooded on `#meshwx` as a datagram. The one
+  /// type this app *sends*; another phone's, heard on the channel, is not ours to act on.
+  case request = 9
 }
 
 /// The decoded 4-byte common header (spec §2.2).

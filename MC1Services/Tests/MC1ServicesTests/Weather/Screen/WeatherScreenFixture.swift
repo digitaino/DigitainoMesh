@@ -63,6 +63,36 @@ enum WeatherPhoneFixture {
     return state
   }
 
+  /// WX-AUS's own statement of its area (spec §7A, the vector `coverage_wx_aus`).
+  static let statement = MeshWXCoverage(
+    latitude: 30.2672, longitude: -97.7431, radiusKilometres: 120, stationCap: 14,
+    officeIndices: [35, 40, 51, 113],
+    areas: [
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 155, run: 6),
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 170, run: 6),
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 186, run: 12),
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 205, run: 7),
+      MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 221, run: 5)
+    ])
+
+  /// The bot stating its coverage on top of a state, through the reducer as the wire would.
+  static func stating(
+    _ coverage: MeshWXCoverage,
+    on state: WeatherBotState = state(),
+    seq: UInt8 = 239,
+    at receivedAt: Date = now
+  ) -> WeatherBotState {
+    var state = state
+    // Flags nibble: bit 0 the zones were cut, bit 1 the offices were (spec §7A).
+    let flags: UInt8 = (coverage.areasCut ? 1 : 0) | (coverage.officesCut ? 2 : 0)
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(
+        header: MeshWXHeader(seq: seq, bot: state.botID, type: .coverage, flags: flags),
+        payload: .coverage(coverage)),
+      to: &state, receivedAt: receivedAt)
+    return state
+  }
+
   static func place(_ coordinate: MeshWXCoordinate, kind: WeatherPlace.Kind = .current, radius: Double = 0.5, label: String = "Austin, TX") -> WeatherPlace {
     WeatherPlace(kind: kind, coordinate: coordinate, label: label, uncertaintyKilometres: radius, locatedAt: now)
   }

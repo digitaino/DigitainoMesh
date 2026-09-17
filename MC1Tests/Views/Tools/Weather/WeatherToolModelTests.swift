@@ -59,6 +59,46 @@ struct WeatherToolModelTests {
     #expect(model.status(for: .digest) == .blocked(.noBot))
   }
 
+  /// With a snapshot and nothing blocking, every request used to read "No weather radio to ask
+  /// yet" and nothing was sent, picking a town included.
+  @Test
+  func `a snapshot with no block can be asked, and only no snapshot means no weather radio`() {
+    let now = WeatherFormattingTests.now
+    let bot = WeatherBot(
+      publicKey: Data([0x1D, 0x04]) + Data(repeating: 0x55, count: 30), name: "WX-AUS", latitude: 0, longitude: 0,
+      lastAdvert: nil)
+    func snapshot(connected: Bool) -> WeatherScreenSnapshot {
+      WeatherScreenSnapshot.make(
+        WeatherScreenSnapshot.Inputs(
+          states: [:], bots: [bot], preferredBotID: nil, place: nil, isRadioConnected: connected,
+          firmwareSupportsWeather: true, firmwareVersion: "v1.15.0", hasWeatherChannel: true,
+          session: WeatherSessionInfo(startedAt: now), now: now, calendar: WeatherFormattingTests.calendar),
+        geometry: MeshWXGeometry.shared, tables: .shared)
+    }
+    func status(_ snapshot: WeatherScreenSnapshot?) -> WeatherRequestStatus {
+      WeatherToolModel.status(for: .forecast(point: 103), snapshot: snapshot, pending: [], inFlight: [], outcomes: [:], now: now)
+    }
+
+    let ready = snapshot(connected: true)
+    #expect(ready.requestBlock == nil)
+    #expect(status(ready) == .idle)
+    #expect(status(snapshot(connected: false)) == .blocked(.radioOffline))
+    #expect(status(nil) == .blocked(.noBot))
+  }
+
+  @Test
+  func `a missing warning refused since its list arrived is passed over`() {
+    let listed = WeatherFormattingTests.now
+    let outcomes: [WeatherRequest: WeatherSettledOutcome] = [
+      .warning(identity: "SV.W.EWX.42"): WeatherSettledOutcome(outcome: .notAvailable(.noData), at: listed.addingTimeInterval(60)),
+      .warning(identity: "SV.W.EWX.43"): WeatherSettledOutcome(outcome: .timedOut(botWasHeard: false), at: listed.addingTimeInterval(60)),
+      .warning(identity: "SV.W.EWX.44"): WeatherSettledOutcome(outcome: .notAvailable(.noData), at: listed.addingTimeInterval(-60)),
+      .digest: WeatherSettledOutcome(outcome: .notAvailable(.noData), at: listed.addingTimeInterval(60))
+    ]
+    #expect(WeatherToolModel.notAvailableIdentities(outcomes: outcomes, since: listed)
+      == [MeshWXWarningIdentity(event: 3, office: 35, etn: 42)])
+  }
+
   @Test
   func `a second call clears only the fingerprint it recorded`() {
     let model = WeatherToolModel()
@@ -133,15 +173,53 @@ struct WeatherToolModelTests {
     #expect(!WeatherToolModel.isFreshOwnedReply(overheard, for: .metar(station: "KAUS"), now: now))
   }
 
+  /// A bare `>o` comes back with the batch the bot would send now, so it can refresh a station
+  /// that batch still carries and nothing else. Being in the footprint — any multi-station batch
+  /// of the last day — is not enough.
   @Test
-  func `a pick from a picker is applied, and your location without permission asks the caller`() {
-    let model = WeatherToolModel()
-    let town = WeatherPlace(
-      kind: .searched, coordinate: MeshWXCoordinate(latitude: 30.5, longitude: -97.7), label: "Round Rock, TX",
-      uncertaintyKilometres: 5)
+  func `a station the newest batch no longer carries is asked for by its code`() throws {
+    let now = WeatherFormattingTests.now
+    let nowMinutes = UInt32(now.timeIntervalSince1970 / 60)
+    let place = WeatherPlace(
+      kind: .current, coordinate: MeshWXCoordinate(latitude: 30.2672, longitude: -97.7431), label: "Austin, TX",
+      uncertaintyKilometres: 0.5, locatedAt: now)
+    var state = WeatherBotState(botID: Self.botID)
+    func batch(_ seq: UInt8, _ minutes: UInt32, _ stations: [UInt16]) {
+      _ = WeatherStateReducer.apply(
+        MeshWXMessage(
+          header: MeshWXHeader(seq: seq, bot: Self.botID, type: .observations),
+          payload: .observations(MeshWXObservations(
+            timestampMinutes: minutes,
+            stations: stations.map { MeshWXStationObservation(stationIndex: $0, tempF: 88, sky: .few) }))),
+        to: &state, receivedAt: now)
+    }
+    batch(1, nowMinutes - 60, [202, 860, 194])
+    batch(2, nowMinutes, [202, 860])
+
+    let states = [Self.botID: state]
+    let coverage = WeatherCoverage.make(states: states, tables: .shared, now: now)
+    let readings = WeatherStations.readings(states: states, coverage: coverage, place: place, tables: .shared, now: now)
+    let carried = try #require(readings.first { $0.index == 202 })
+    #expect(WeatherUpdatePlan.readingsRequest(for: carried) == .observations)
+
+    let dropped = try #require(readings.first { $0.index == 194 })
+    #expect(dropped.isInFootprint)
+    #expect(WeatherUpdatePlan.readingsRequest(for: dropped) == .observation(station: dropped.station.icao))
+  }
+
+  /// Picking keeps the place and sends nothing: the automatic forecast request on a pick is gone
+  /// (docs/MESHWX_UI.md §3.1 O-1, overturned), and Update is on the screen behind.
+  @Test
+  func `a pick from Places is applied and kept, and sends nothing`() {
+    let model = WeatherToolModel(savedPlacesStore: WeatherPlaceSearchTests.emptyStore(#function))
+    let town = WeatherSavedPlace(label: "Round Rock, TX", latitude: 30.5, longitude: -97.7, chosenAt: .now)
     model.pendingPlaceAction = .place(town)
     #expect(model.applyPendingPlaceAction(isLocationAuthorized: false) == false)
-    #expect(model.searchedPlace == town)
+    #expect(model.searchedPlace == town.place)
+    #expect(model.savedPlaces.map(\.id) == [town.id])
+    #expect(model.stationToOpen == nil)
+    #expect(model.pending.isEmpty)
+    #expect(model.inFlight.isEmpty)
     #expect(model.pendingPlaceAction == nil)
 
     model.pendingPlaceAction = .currentLocation
@@ -175,23 +253,102 @@ struct WeatherToolModelTests {
     #expect(store.model == nil)
     #expect(store.rootAppeared { true } !== model)
   }
+
+  // MARK: - One build per page (docs/MESHWX_UI.md §13)
+
+  /// The state storm reports and rainfall ask about is one page's answer to "which state". It
+  /// was one value for the whole visit, so picking Texas on one page sent `>storm TX` from every
+  /// page — including one in Puerto Rico.
+  @Test
+  func `a state picked on one page is that page's alone`() {
+    let model = WeatherToolModel()
+    let dallas = "at:32.777,-96.797"
+    model.setReportState("TX", forPageID: dallas)
+    #expect(model.reportState(for: dallas) == "TX")
+    #expect(model.reportState(for: WeatherPage.myLocationID) == nil)
+    model.setReportState("PR", forPageID: WeatherPage.myLocationID)
+    #expect(model.reportState(for: dallas) == "TX")
+    #expect(model.reportState(for: WeatherPage.myLocationID) == "PR")
+  }
+
+  /// The swipe window: the title already names the new place while its build is still coming.
+  /// A page with no build has no plan, so Update is disabled and a pull sends nothing — rather
+  /// than sending the previous place's requests under this page's name.
+  @Test
+  func `a page with no build has no plan, no screen and no update run`() {
+    let model = WeatherToolModel()
+    #expect(model.screen(for: WeatherPage.myLocationID) == nil)
+    #expect(model.build(for: WeatherPage.myLocationID) == nil)
+    #expect(model.plan(for: WeatherPage.myLocationID).isEmpty)
+    #expect(model.plan(for: "at:32.777,-96.797").isEmpty)
+    #expect(!model.isUpdating(pageID: WeatherPage.myLocationID))
+    #expect(model.updateRequests(pageID: WeatherPage.myLocationID).isEmpty)
+    #expect(model.updateStatusText(pageID: WeatherPage.myLocationID) == nil)
+    // A tap in that window starts nothing at all.
+    model.update(model.plan(for: WeatherPage.myLocationID), pageID: WeatherPage.myLocationID)
+    #expect(!model.isUpdating(pageID: WeatherPage.myLocationID))
+  }
+
+  /// A selection pointing at a page that is gone is a page nothing can be built for, and a
+  /// spinner on every page until the next swipe. It is resolved and written back.
+  @Test
+  func `a page id nothing answers to leaves the pager on my location`() {
+    let model = WeatherToolModel()
+    model.showPage("at:32.777,-96.797")
+    #expect(model.selectedPageID == WeatherPage.myLocationID)
+    #expect(model.pages.map(\.id) == [WeatherPage.myLocationID])
+  }
 }
 
-/// Picking a town asks for its forecast only when the card would offer the same ask, and airport
-/// codes find stations.
+/// What Places finds, and what picking it keeps.
 @Suite("Weather place search")
 @MainActor
 struct WeatherPlaceSearchTests {
+  /// **An airport code opens the station screen and nothing else** (docs/MESHWX_UI.md §3.1 U-3).
+  ///
+  /// It used to do three things at once: push the station, save a place and add a page. KAUS
+  /// produced a second page called "Austin" beside the one already there; TJSJ produced a page
+  /// called "Eleanor Roosevelt", named after the town nearest the airport. An airport code is a
+  /// question about a station, not a place someone asked to keep.
   @Test
-  func `a town with no forecast held asks for its point`() throws {
-    let point = try #require(MeshWXTables.shared.point(at: 103))
-    #expect(WeatherToolModel.forecastRequest(for: .missing(point: point, kilometres: 4)) == .forecast(point: 103))
+  func `an airport code opens its station and creates no place`() throws {
+    let index = try #require(MeshWXTables.shared.stationIndex(forICAO: "TJSJ"))
+    let model = WeatherToolModel(savedPlacesStore: Self.emptyStore(#function))
+
+    model.pendingPlaceAction = .station(index: index)
+    #expect(model.applyPendingPlaceAction(isLocationAuthorized: false) == false)
+    #expect(model.stationToOpen?.index == index)
+    #expect(model.savedPlaces.isEmpty)
+    #expect(model.pages.map(\.id) == [WeatherPage.myLocationID])
+    // And it is pushed over the page the user was already on.
+    #expect(model.stationToOpen?.pageID == model.selectedPageID)
   }
 
+  /// A search by airport code still finds the station; what changed is what picking it does.
   @Test
-  func `a town with no forecast point near, or no place, asks for nothing`() {
-    #expect(WeatherToolModel.forecastRequest(for: .noPointNearby(nearest: nil, kilometres: nil)) == nil)
-    #expect(WeatherToolModel.forecastRequest(for: .noPlace) == nil)
+  func `an airport code still finds its station by prefix`() throws {
+    let result = try #require(WeatherPlacePickerView.stations(matchingCode: "tjsj", near: nil, tables: .shared).first)
+    #expect(result.station.icao == "TJSJ")
+  }
+
+  /// Each destination is judged against the page it was opened from, not the page the pager has
+  /// since landed on (docs/MESHWX_UI.md §3.1 U-18).
+  @Test
+  func `a tapped alert carries the page it was raised for`() {
+    let model = WeatherToolModel(savedPlacesStore: Self.emptyStore(#function))
+    let identity = MeshWXWarningIdentity(event: 0, office: 1, etn: 42)
+    model.alertToOpen = WeatherAlertTarget(pageID: "at:30.510,-97.679", identity: identity)
+    #expect(model.alertToOpen?.pageID == "at:30.510,-97.679")
+    #expect(model.alertToOpen?.identity == identity)
+  }
+
+  /// A defaults suite of this test's own: the model writes through the real store now, and the
+  /// user's saved places are not a fixture.
+  static func emptyStore(_ name: String) -> WeatherSavedPlacesStore {
+    let suite = "weather.tests.\(name)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    return WeatherSavedPlacesStore(defaults: defaults)
   }
 
   @Test
@@ -202,19 +359,78 @@ struct WeatherPlaceSearchTests {
     #expect(!WeatherPlacePickerView.looksLikeStationCode("sj"))
   }
 
+  /// A code finds its station and stops there: there is no `WeatherPlace` built from a station
+  /// any more, because that is what named a saved page "Eleanor Roosevelt" after picking TJSJ
+  /// (docs/MESHWX_UI.md §3.1 U-3).
   @Test
-  func `a code finds its station, and the station becomes a searched place named by its town`() throws {
+  func `a code finds its station, and the station stays a station`() throws {
     let found = WeatherPlacePickerView.stations(matchingCode: "tjsj", near: nil, tables: .shared)
     let result = try #require(found.first)
     #expect(result.station.icao == "TJSJ")
-    let place = WeatherPlacePickerView.place(for: result)
-    #expect(place.kind == .searched)
-    #expect(place.coordinate == MeshWXCoordinate(latitude: result.station.lat, longitude: result.station.lon))
-    #expect(place.label.hasSuffix(", PR"))
+    #expect(MeshWXTables.shared.stationIndex(forICAO: result.station.icao) != nil)
   }
 
   @Test
   func `a town name is not searched as a code`() {
     #expect(WeatherPlacePickerView.stations(matchingCode: "Austin", near: nil, tables: .shared).isEmpty)
+  }
+
+  @Test
+  func `five digits or ZIP+4 is a ZIP and never an airport code, three or four characters may be one`() {
+    #expect(WeatherPlacePickerView.queryKind("78701") == .zip("78701"))
+    #expect(WeatherPlacePickerView.queryKind("00901") == .zip("00901"))
+    #expect(WeatherPlacePickerView.queryKind("78701-1234") == .zip("78701"))
+    #expect(WeatherPlacePickerView.queryKind("KAUS") == .townOrAirportCode)
+    #expect(WeatherPlacePickerView.queryKind("7R5") == .townOrAirportCode)
+    #expect(WeatherPlacePickerView.queryKind("Round Rock") == .town)
+    #expect(WeatherPlacePickerView.queryKind("787011") == .town)
+    #expect(WeatherPlacePickerView.queryKind("78701-12") == .town)
+    #expect(!WeatherPlacePickerView.looksLikeStationCode("78701"))
+    #expect(WeatherPlacePickerView.stations(matchingCode: "78701", near: nil, tables: .shared).isEmpty)
+  }
+
+  @Test
+  func `a ZIP shows one row, labelled as the bot labels it, that picks the ZIP's point`() throws {
+    let found = WeatherPlacePickerView.results(for: "78701", near: nil, tables: .shared)
+    #expect(found.places.isEmpty)
+    #expect(found.stations.isEmpty)
+    guard case let .found(zip) = try #require(found.zip) else {
+      Issue.record("expected a ZIP row, got \(String(describing: found.zip))")
+      return
+    }
+    #expect(zip.label == "Austin, TX 78701")
+    let place = WeatherPlace.zip(zip)
+    #expect(place.kind == .searched)
+    #expect(place.label == "Austin, TX 78701")
+    #expect(place.coordinate == MeshWXCoordinate(latitude: 30.2706, longitude: -97.7426))
+  }
+
+  @Test
+  func `a ZIP+4 and a leading zero find their ZIP`() throws {
+    let tables = MeshWXTables.shared
+    let austin = try #require(tables.zip("78701"))
+    let sanJuan = try #require(tables.zip("00901"))
+    #expect(WeatherPlacePickerView.results(for: "78701-1234", near: nil, tables: tables).zip == .found(austin))
+    #expect(WeatherPlacePickerView.results(for: "00901", near: nil, tables: tables).zip == .found(sanJuan))
+    #expect(sanJuan.label == "San Juan, PR 00901")
+  }
+
+  @Test
+  func `an unknown ZIP gets a row saying so, not an empty list`() {
+    let unknown = WeatherPlacePickerView.results(for: "99999", near: nil, tables: .shared)
+    #expect(unknown.zip == .unknown("99999"))
+    #expect(!unknown.isEmpty)
+    #expect(WeatherPlacePickerView.results(for: "20500-0001", near: nil, tables: .shared).zip == .unknown("20500"))
+  }
+
+  @Test
+  func `airport codes and towns search as before`() {
+    let code = WeatherPlacePickerView.results(for: "KAUS", near: nil, tables: .shared)
+    #expect(code.zip == nil)
+    #expect(code.stations.first?.station.icao == "KAUS")
+    let town = WeatherPlacePickerView.results(for: "round rock", near: nil, tables: .shared)
+    #expect(town.zip == nil)
+    #expect(town.stations.isEmpty)
+    #expect(town.places.first?.name == "ROUND ROCK")
   }
 }

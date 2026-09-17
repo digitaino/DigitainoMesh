@@ -183,6 +183,18 @@ public enum WeatherForecastCard: Sendable, Hashable {
     public var rows: [WeatherForecastRow]
     public var source: Source
     public var isStale: Bool
+    /// How far the point is from the place, in kilometres.
+    ///
+    /// A forecast is for a *point*, and two towns twenty kilometres apart share one. The header
+    /// names the point and this distance whenever the point is not the place itself, so a page
+    /// never shows a forecast without saying what it is a forecast of — which is how Round Rock
+    /// and Austin came to show the same seven rows with nothing to tell them apart
+    /// (docs/MESHWX_UI.md §3.1 U-9).
+    public var kilometres: Double
+
+    /// The forecast was answered to a request of this phone's. False for one overheard on the
+    /// channel, which the header says (docs/MESHWX_UI.md §3.1 U-14).
+    public var isOwn: Bool { stored.requestedHere }
   }
 
   case noPlace
@@ -230,7 +242,10 @@ public enum WeatherForecastCard: Sendable, Hashable {
       }
     }
 
-    func summary(_ point: MeshWXPoint, _ entry: (stored: WeatherStoredForecast, botID: UInt16), _ source: Summary.Source) -> WeatherForecastCard {
+    func summary(
+      _ point: MeshWXPoint, _ entry: (stored: WeatherStoredForecast, botID: UInt16),
+      _ source: Summary.Source, _ kilometres: Double
+    ) -> WeatherForecastCard {
       .forecast(Summary(
         point: point,
         stored: entry.stored,
@@ -238,17 +253,22 @@ public enum WeatherForecastCard: Sendable, Hashable {
         layout: MeshWXForecastLayout(of: entry.stored.forecast),
         rows: WeatherForecastRows.rows(for: entry.stored.forecast, now: now, calendar: calendar),
         source: source,
-        isStale: entry.stored.isStale(at: now)))
+        isStale: entry.stored.isStale(at: now),
+        kilometres: kilometres))
     }
 
-    if let held = newest[placePoint.index] { return summary(placePoint, held, .placePoint) }
+    if let held = newest[placePoint.index] {
+      return summary(placePoint, held, .placePoint, placePointKilometres)
+    }
 
     let nearby = newest.compactMap { index, entry -> (MeshWXPoint, (stored: WeatherStoredForecast, botID: UInt16), Double)? in
       guard let point = tables.point(at: index) else { return nil }
       let distance = WeatherGeo.kilometres(place.coordinate, MeshWXCoordinate(latitude: point.lat, longitude: point.lon))
       return distance <= nearbyPointKilometres ? (point, entry, distance) : nil
     }.min { $0.2 < $1.2 }
-    if let (point, entry, distance) = nearby { return summary(point, entry, .nearbyPoint(kilometres: distance)) }
+    if let (point, entry, distance) = nearby {
+      return summary(point, entry, .nearbyPoint(kilometres: distance), distance)
+    }
 
     return .missing(point: placePoint, kilometres: placePointKilometres)
   }

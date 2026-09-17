@@ -5,13 +5,17 @@ import SwiftUI
 /// One alert in full (docs/MESHWX_UI.md §12): the ground it covers, whether that includes the
 /// place, when it ends, who issued it, its narrative on request, its tags and areas.
 ///
-/// Read from the model by identity rather than held as a value, so an update or a cancel that
-/// arrives while the screen is open shows here.
+/// Read from the page's build by identity rather than held as a value, so an update or a cancel
+/// that arrives while the screen is open shows here.
 struct WeatherAlertDetailView: View {
   @Environment(\.appTheme) private var theme
 
-  let model: WeatherToolModel
+  /// The page this alert was opened from. "Covers Austin" and the map's framing are that
+  /// place's — including for an alert a notification opened, which named the place it watched.
+  let screen: WeatherPageScreen
   let identity: MeshWXWarningIdentity
+
+  private var model: WeatherToolModel { screen.model }
 
   @State private var drawing = WeatherMapDrawing()
   @State private var isWide = false
@@ -26,7 +30,7 @@ struct WeatherAlertDetailView: View {
   }
 
   private var item: WeatherAlertItem? {
-    model.snapshot?.alerts.first { $0.identity == identity }
+    screen.snapshot.alerts.first { $0.identity == identity }
   }
 
   private var eventName: String {
@@ -66,6 +70,7 @@ struct WeatherAlertDetailView: View {
     .navigationTitle(eventName)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(model: model, requestsOnScreen: Set([identityString.map { WeatherRequest.warningText(identity: $0) }].compactMap { $0 }))
+    .weatherToolChrome()
     .task(id: drawingKey) {
       guard let key = drawingKey else { return }
       // The outlines are a large parse on a cold cache; never on the main actor.
@@ -84,7 +89,7 @@ struct WeatherAlertDetailView: View {
     case .checking, .unplaced, .elsewhere: false
     }
     return DrawingKey(
-      map: WeatherMapKey(warnings: [item.warning], place: model.snapshot?.place, isGeometryLoaded: model.context.isGeometryLoaded),
+      map: WeatherMapKey(warnings: [item.warning], place: screen.place, isGeometryLoaded: screen.context.isGeometryLoaded),
       framesPlace: framesPlace)
   }
 
@@ -100,9 +105,10 @@ struct WeatherAlertDetailView: View {
       .themedRowBackground(theme)
 
       if let identityString {
-        Section(L10n.Weather.Weather.AlertDetail.fullText) {
+        Section {
+          WeatherCardLabel(title: L10n.Weather.Weather.AlertDetail.fullText)
           WeatherAskButton(
-            model: model, title: L10n.Weather.Weather.Request.askFullText,
+            screen: screen, title: L10n.Weather.Weather.Request.askFullText,
             request: .warningText(identity: identityString), showsFootnotes: true)
           if let narrative = narrative(identityString) {
             Text(WeatherReportText.body(narrative.assembly))
@@ -114,7 +120,8 @@ struct WeatherAlertDetailView: View {
       }
 
       if !tags.isEmpty {
-        Section(L10n.Weather.Weather.AlertDetail.details) {
+        Section {
+          WeatherCardLabel(title: L10n.Weather.Weather.AlertDetail.details)
           ForEach(tags, id: \.self) { tag in
             Text(tag)
           }
@@ -123,7 +130,8 @@ struct WeatherAlertDetailView: View {
       }
 
       if !areas.isEmpty {
-        Section(L10n.Weather.Weather.AlertDetail.areas) {
+        Section {
+          WeatherCardLabel(title: L10n.Weather.Weather.AlertDetail.areas, systemImage: "map")
           ForEach(areas, id: \.ugc) { area in
             LabeledContent(WeatherFormatting.areaName(area)) {
               Text(area.isCounty ? L10n.Weather.Weather.AlertDetail.county : L10n.Weather.Weather.AlertDetail.zone)
@@ -149,27 +157,29 @@ struct WeatherAlertDetailView: View {
         Text(eventName)
           .font(.title3.weight(.semibold))
       }
-      if let placeName = model.placeName {
+      if let placeName = screen.placeName {
         Text(WeatherCopy.coversLine(item.placement, placeName: placeName))
           .font(.subheadline.weight(.medium))
       }
       switch item.kind {
       case .active:
         Text(WeatherFormatting.untilLine(
-          expiresAt: item.expiresAt, now: model.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
+          expiresAt: item.expiresAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
         .font(.subheadline)
       case .upgradedAwaitingReplacement, .expiredRecently:
-        if let qualifier = WeatherCopy.alertQualifier(item, placeName: nil, now: model.now) {
+        if let qualifier = WeatherCopy.alertQualifier(item, placeName: nil, now: screen.now) {
           Text(qualifier)
             .font(.subheadline)
             .foregroundStyle(.orange)
         }
       }
-      // Warnings carry no issue time on the wire; when this phone received it is what is known.
-      Text(L10n.Weather.Weather.AlertDetail.received(WeatherFormatting.clockTime(
-        item.receivedAt, now: model.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)))
-      .font(.footnote)
-      .foregroundStyle(.secondary)
+      // Since revision 5 the wire carries when NWS issued the warning, and that is the time worth
+      // showing: a radio out of range for three hours still says *issued 1:29 PM*. Receipt is the
+      // fallback, for a bot older than revision 5 and for an issue time the wire had to saturate,
+      // which is a ceiling rather than a time (spec §3).
+      Text(timeLine(item))
+        .font(.footnote)
+        .foregroundStyle(.secondary)
       if let office = tables.officeCode(item.warning.office) {
         Text(L10n.Weather.Weather.AlertDetail.issuedBy(WeatherReferenceNames.officeName(office)))
           .font(.footnote)
@@ -180,9 +190,23 @@ struct WeatherAlertDetailView: View {
     .accessibilityElement(children: .combine)
   }
 
+  /// "issued 1:29 PM" when the wire carried the issue time, "received 1:28 AM" when it did not.
+  /// The two are different claims: one is when the Weather Service said it, the other is when
+  /// this radio happened to be in range — and only the first is the warning's own age.
+  private func timeLine(_ item: WeatherAlertItem) -> String {
+    func time(_ date: Date) -> String {
+      WeatherFormatting.clockTime(date, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
+    }
+    // A saturated field is a ceiling, not a time (spec §3): the receipt time is the honest one.
+    if let issuedAt = screen.context.warningIssuedAt[item.identity], !item.warning.isIssueTimeSaturated {
+      return L10n.Weather.Weather.AlertDetail.issued(time(issuedAt))
+    }
+    return L10n.Weather.Weather.AlertDetail.received(time(item.receivedAt))
+  }
+
   /// The narrative, only when it answered this phone's request for this identity: a text reply
   /// names its subject and nothing else.
   private func narrative(_ identityString: String) -> WeatherTextItem? {
-    model.snapshot?.texts.first { $0.assembly.request == .warningText(identity: identityString) }
+    screen.snapshot.texts.first { $0.assembly.request == .warningText(identity: identityString) }
   }
 }

@@ -18,8 +18,11 @@ struct WeatherServiceAnswerTests {
     let events: AsyncStream<WeatherEvent>
   }
 
+  /// The fake radio cannot flood a Request datagram here (spec §7B), so every request in this
+  /// suite goes out as the DM of §8.2 and the assertions on `transport.sent` still read the
+  /// send they were written for. The channel path has its own section in `WeatherServiceTests`.
   private func makeHarness(answerTimeout: Duration = .seconds(15)) -> Harness {
-    let transport = FakeWeatherTransport()
+    let transport = FakeWeatherTransport(channelRequestsSupported: false)
     let clock = WeatherTestClock()
     let service = WeatherService(
       transport: transport,
@@ -100,15 +103,35 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.digest, to: F.bot) == nil)
     #expect(await weatherWaitUntil { settled.value.count == 3 })
     #expect(settled.value.map(\.1) == [
-      .servedFromCache(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 7)),
-      .servedFromCache(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 30)),
-      .servedFromCache(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 2))
+      .alreadyReceived(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 7)),
+      .alreadyReceived(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 30)),
+      .alreadyReceived(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 2))
     ])
     #expect(await h.transport.sent.isEmpty)
   }
 
   @Test
-  func `a list older than the one held, or out of order, answers nothing`() async throws {
+  func `a station's slot is as of that station's own report, not the batch's`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    // Revision 5 (spec §6.1): KAUS filed 40 minutes before the newest station in the batch. Its
+    // slot must say so; the batch's own slot keeps the batch time.
+    _ = await h.service.ingest(F.observations(
+      seq: 1, timestampMinutes: F.t0Minutes - 7, stations: [(202, 88), (860, 84)], ages: [40, 0]))
+    h.clock.advance(by: 60)
+
+    #expect(try await h.service.send(.observation(station: "KAUS"), to: F.bot) == nil)
+    #expect(try await h.service.send(.observations, to: F.bot) == nil)
+    #expect(await weatherWaitUntil { settled.value.count == 2 })
+    #expect(settled.value.map(\.1) == [
+      .alreadyReceived(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 7 - 40)),
+      .alreadyReceived(receivedAt: F.t0, contentAsOf: Date(unixMinutes: F.t0Minutes - 7))
+    ])
+    #expect(await h.transport.sent.isEmpty)
+  }
+
+  @Test
+  func `a list older than the one held answers nothing, in order or late`() async throws {
     let h = makeHarness()
     _ = await h.service.ingest(F.digest(seq: 10, nowMinutes: F.t0Minutes, entries: []))
     h.clock.advance(by: 6 * 60)
@@ -118,16 +141,16 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.digest, to: F.bot) != nil)
 
     h.clock.advance(by: 6 * 60)
-    let late = await h.service.ingest(F.digest(seq: 5, nowMinutes: F.t0Minutes + 20, entries: []))
-    #expect(late.contains(.outOfOrder(seq: 5)))
+    let late = await h.service.ingest(F.digest(seq: 5, nowMinutes: F.t0Minutes - 20, entries: []))
+    #expect(late == [.outOfOrder(seq: 5), .digestIgnoredOlder(builtMinutes: F.t0Minutes - 20)])
     #expect(try await h.service.send(.digest, to: F.bot) != nil)
   }
 
   @Test
-  func `an out-of-order warning the reducer set aside answers nothing`() async throws {
+  func `a late warning the reducer set aside answers nothing`() async throws {
     let h = makeHarness()
-    _ = await h.service.ingest(F.warning(seq: 10, identity: F.svw43))
-    _ = await h.service.ingest(F.warning(seq: 5, identity: F.svw42))
+    _ = await h.service.ingest(F.cancel(seq: 10, identity: F.svw42))
+    _ = await h.service.ingest(F.warning(seq: 8, identity: F.svw42))
     #expect(await h.service.state(for: F.botID)?.warnings[F.svw42] == nil)
     #expect(try await h.service.send(.warning(identity: "SV.W.EWX.42"), to: F.bot) != nil)
   }
@@ -151,8 +174,8 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.activeWarnings, to: other) != nil, "another bot's list is not this one's")
   }
 
-  /// The list itself is what shows a warning never arrived; asking for it again is the repair,
-  /// and the bot's cached re-send may carry exactly the packet that was lost.
+  /// The list itself is what shows a warning never arrived; asking again is the repair, and the
+  /// rebuilt answer may carry exactly the packet that was lost.
   @Test
   func `warnings requests are sent while the bot's list names a warning this phone lacks`() async throws {
     let h = makeHarness()
@@ -160,6 +183,16 @@ struct WeatherServiceAnswerTests {
     _ = await h.service.ingest(F.warning(seq: 2, identity: F.svw42))
     #expect(await h.service.state(for: F.botID)?.missingFromDigest == [F.svw43])
     #expect(try await h.service.send(.warningsTouching(ugc: "TXC453"), to: F.bot) != nil)
+  }
+
+  /// Asking for missing warnings one at a time ends in `>d` once the bot has said it has none of
+  /// them; that last ask must not wait out the five minutes behind the list it wants replaced.
+  @Test
+  func `a list request is sent while the bot's list names a warning this phone lacks`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.digest(seq: 1, entries: [(F.svw43, 30)]))
+    #expect(await h.service.state(for: F.botID)?.missingFromDigest == [F.svw43])
+    #expect(try await h.service.send(.digest, to: F.bot) != nil)
   }
 
   @Test
@@ -173,6 +206,40 @@ struct WeatherServiceAnswerTests {
     #expect(await weatherWaitUntil { settled.value.count == 1 })
     h.clock.advance(by: 30)
     #expect(try await h.service.send(.hazardousOutlook, to: F.bot) == nil)
+  }
+
+  // MARK: - Coverage
+
+  /// Spec §7A, §8.2: `>cov` asks a bot what it carries. The statement carries no time of its
+  /// own — it describes the bot, not an hour — so the five-minute rule runs from receipt and the
+  /// answer names nothing it is "as of".
+  @Test
+  func `a statement answers the request that asked for it, and fills its slot`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    let pending = try #require(try await h.service.send(.coverage, to: F.bot))
+    #expect(await h.transport.sent.map(\.text) == [">cov"])
+
+    h.clock.advance(by: 2)
+    _ = await h.service.ingest(F.coverage(seq: 1))
+    #expect(await weatherWaitUntil { settled.value.count == 1 })
+    #expect(settled.value.first?.0.id == pending.id)
+    #expect(settled.value.first?.1 == .answered)
+    #expect(await h.service.state(for: F.botID)?.coverage?.coverage.radiusKilometres == 120)
+
+    h.clock.advance(by: 30)
+    #expect(try await h.service.send(.coverage, to: F.bot) == nil)
+    #expect(await weatherWaitUntil { settled.value.count == 2 })
+    #expect(settled.value.last?.1 == .alreadyReceived(receivedAt: F.t0.addingTimeInterval(2), contentAsOf: nil))
+  }
+
+  /// A statement describes whichever bot sent it, so another bot's answer — to this phone or to
+  /// anybody else — settles nothing here.
+  @Test
+  func `another bot's statement is not this bot's`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.coverage(seq: 1, bot: 0x0102))
+    #expect(try await h.service.send(.coverage, to: F.bot) != nil)
   }
 
   @Test
@@ -222,7 +289,9 @@ struct WeatherServiceAnswerTests {
     _ = try await h.service.send(.spaceWeather, to: F.bot)
     h.clock.advance(by: 1)
     _ = await h.service.ingest(F.observations(seq: 1, stations: [(202, 88), (860, 84)]), isBacklog: true)
-    #expect(await weatherWaitUntil { await h.transport.sent.count == 2 })
+    // Backlog is not "heard": the resend goes along the route, and the flood follows it.
+    #expect(await weatherWaitUntil { await h.transport.sent.count == 3 })
+    #expect(await h.transport.sent.map(\.attempt) == [0, 1, 2])
     #expect(await weatherWaitUntil { settled.value.count == 1 })
     #expect(settled.value.first?.1 == .timedOut(botWasHeard: false))
   }

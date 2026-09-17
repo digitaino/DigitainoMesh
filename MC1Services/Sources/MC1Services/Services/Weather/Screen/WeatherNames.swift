@@ -5,7 +5,8 @@ import MeshWX
 ///
 /// The tables are NOAA's: station names in capitals with aviation abbreviations
 /// ("DRAUGHON-MILLER CNTRL TX RGNL ARPT"), forecast points with a county and state stuck on
-/// the end ("Austin Camp Mabry-Travis TX"), census places in capitals.
+/// the end ("Austin Camp Mabry-Travis TX"), census places in capitals. Places follow spec §9.1
+/// (``MeshWXPlaceNames``), the weather bot's rule; station names add state codes and abbreviations.
 public enum WeatherNames {
   static let stateCodes: Set<String> = [
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS",
@@ -14,9 +15,6 @@ public enum WeatherNames {
     "WI", "WY", "DC", "PR", "VI", "GU", "AS", "MP"
   ]
 
-  /// Words that stay in capitals: military field designators and similar initialisms.
-  static let initialisms: Set<String> = ["AFB", "AAF", "ARB", "ANGB", "NAS", "NAF", "NOLF", "MCAS", "USCG", "II", "III"]
-
   static let stationAbbreviations: [String: String] = [
     "ARPT": "Airport", "AIRPT": "Airport", "AP": "Airport",
     "INTL": "International", "RGNL": "Regional", "REGL": "Regional", "CNTRL": "Central",
@@ -24,56 +22,93 @@ public enum WeatherNames {
     "FT": "Fort", "ST": "St"
   ]
 
-  /// Capitals to title case, word by word, keeping state codes and initialisms as they are.
+  /// Capitals to title case by the place rule's word casing (``MeshWXPlaceNames``), keeping state
+  /// codes in capitals too, as station names carry them ("CNTRL TX RGNL ARPT").
   /// A name already in mixed case is left alone: it was not the bundle's to shout.
   public static func titleCased(_ raw: String, expanding abbreviations: [String: String] = [:]) -> String {
     guard raw == raw.uppercased() else { return raw }
-    var result = ""
-    var word = ""
-    func flush() {
-      guard !word.isEmpty else { return }
-      let upper = word.uppercased()
-      if let expanded = abbreviations[upper] {
-        result += expanded
-      } else if (upper.count == 2 && stateCodes.contains(upper)) || initialisms.contains(upper) {
-        result += upper
-      } else {
-        result += upper.prefix(1) + upper.dropFirst().lowercased()
-      }
-      word = ""
-    }
-    for character in raw {
-      if character.isLetter || character.isNumber || character == "'" {
-        word.append(character)
-      } else {
-        flush()
-        result.append(character)
-      }
-    }
-    flush()
-    return result
+    return MeshWXPlaceNames.titleCased(raw, keepingUpper: stateCodes, expanding: abbreviations)
+  }
+
+  /// A `places.json` name as shown (spec §9.1): "ADJUNTAS ZONA URBANA" → "Adjuntas".
+  public static func placeName(_ raw: String) -> String {
+    MeshWXPlaceNames.placeName(raw)
+  }
+
+  /// **The one function a bundle name is shown through** (docs/MESHWX_UI.md §3.1 U-25, U-26).
+  ///
+  /// One site read "Austin-Camp Mabry", the next "Austin Camp Mabry" and the third "Austin Camp
+  /// Mabry, TX", because three call sites each did their own tidying. Every name on screen comes
+  /// through here now, and `qualified` is the **only** thing that varies: whether the bundle's
+  /// trailing "-…" is a qualifier this name can be shown without.
+  ///
+  /// It has to vary, because the two tables mean opposite things by a hyphen. A station's is part
+  /// of its name — "OCALA INTERNATIONAL AIRPORT-JIM TAYLOR FIELD", "AUSTIN-BERGSTROM INTL
+  /// AIRPORT" — and 81 of the 205 hyphenated station names would lose half of themselves to the
+  /// point rule. A forecast point's hyphen always separates the name from where it is.
+  ///
+  /// The casing is judged on the **whole** name, before any tail comes off: "351001
+  /// (PATJENS)-Sherman OR" is a mixed-case name the bundle did not shout, and stripping first
+  /// would leave an all-capitals head to be title-cased into "351001 (Patjens)".
+  ///
+  /// - Parameter qualified: the name carries a bundle qualifier after a hyphen (a forecast point).
+  static func displayName(_ raw: String, qualified: Bool) -> String {
+    let cased = titleCased(raw, expanding: stationAbbreviations)
+    return qualified ? withoutQualifier(cased) : cased
   }
 
   /// "DRAUGHON-MILLER CNTRL TX RGNL ARPT" → "Draughon-Miller Central TX Regional Airport".
   public static func stationName(_ raw: String) -> String {
-    titleCased(raw, expanding: stationAbbreviations)
+    displayName(raw, qualified: false)
   }
 
-  /// "Austin Camp Mabry-Travis TX" → "Austin Camp Mabry". A name without the county-and-state
-  /// tail ("…Airport-San Juan") is returned as it is.
-  public static func pointName(_ raw: String) -> String {
+  /// A forecast point's name without the bundle's tail: "Austin Camp Mabry-Travis TX" → "Austin
+  /// Camp Mabry", "Luis Munoz Marin International Airport-San Juan" → "Luis Munoz Marin
+  /// International Airport".
+  ///
+  /// Internal on purpose: a point is **shown** by ``pointLabel(_:)``, which keeps the state on, so
+  /// no screen can show the bare head while its neighbour shows the labelled one.
+  static func pointName(_ raw: String) -> String {
+    displayName(raw, qualified: true)
+  }
+
+  /// "Austin Camp Mabry, TX" — **the way a forecast point is named**, everywhere one is named:
+  /// the forecast header, the Places rows for what was heard on the channel, and the empty
+  /// place's "nearest forecast point" line (docs/MESHWX_UI.md §3.1 U-25). The state stays on for
+  /// the reason a place's does (`WeatherFormatting.placeName`): it is what tells two of them
+  /// apart. A point whose tail is a town, not a state, is left with its name alone.
+  public static func pointLabel(_ raw: String) -> String {
+    let name = pointName(raw)
+    guard let state = pointState(raw) else { return name }
+    return "\(name), \(state)"
+  }
+
+  /// A forecast point's state from its bundle name, "Austin Camp Mabry-Travis TX" → "TX".
+  public static func pointState(_ raw: String) -> String? {
+    guard raw.contains("-"), let last = raw.split(separator: " ").last, last.count == 2,
+          last.allSatisfy({ $0.isUppercase && $0.isLetter }) else { return nil }
+    return String(last)
+  }
+
+  /// The bundle's tail on a forecast point's name, dropped once: a county and state ("-Travis
+  /// TX"), or the town the point is named for ("-San Juan"). The town form is only a qualifier
+  /// when the head is a name on its own — more than one word — so a point called "Boerne-Kendall
+  /// TX" keeps its county rule and one called "Foo-Bar" keeps its name.
+  static func withoutQualifier(_ raw: String) -> String {
     guard let dash = raw.lastIndex(of: "-") else { return raw }
-    let tail = raw[raw.index(after: dash)...].split(separator: " ")
-    guard tail.count >= 2, let last = tail.last, last.count == 2, stateCodes.contains(String(last)) else {
-      return raw
-    }
     let head = raw[..<dash].trimmingCharacters(in: .whitespaces)
-    return head.isEmpty ? raw : head
+    let tail = raw[raw.index(after: dash)...].trimmingCharacters(in: .whitespaces)
+    guard !head.isEmpty, !tail.isEmpty else { return raw }
+    let words = tail.split(separator: " ")
+    let isCountyAndState = words.count >= 2 && words[words.count - 1].count == 2
+      && stateCodes.contains(String(words[words.count - 1]))
+    guard isCountyAndState || head.contains(" ") else { return raw }
+    return head
   }
 
-  /// "ROUND ROCK", "TX" → "Round Rock, TX".
+  /// "ROUND ROCK", "TX" → "Round Rock, TX"; "HELL'S KITCHEN", "NY" → "Hell's Kitchen, NY" (spec §9.1).
   public static func placeLabel(name: String, state: String) -> String {
-    "\(titleCased(name)), \(state)"
+    MeshWXPlaceNames.label(name: name, state: state)
   }
 
   /// The label for a coordinate: the nearest place of any size worth naming within 25 km.

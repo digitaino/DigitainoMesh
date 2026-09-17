@@ -168,43 +168,67 @@ struct WeatherAlertRulesTests {
 
   // MARK: - Requests
 
+  func missedMessages(_ source: WeatherBotState, county: String?, office: String? = "EWX") -> WeatherRequest {
+    WeatherAlertRequests.missedMessages(source: source, placeCountyUGC: county, placeOffice: office, tables: tables)
+  }
+
   @Test
-  func `missed messages ask for the list, the one warning, or the place's county`() {
+  func `missed messages ask for the list, one missing warning, or the county under an upgrade`() {
     var gap = WeatherBotState(botID: P.botID)
     gap.needsDigest = true
-    #expect(WeatherAlertRequests.missedMessages(source: gap, placeCountyUGC: "TXC453", tables: tables) == .digest)
+    #expect(missedMessages(gap, county: "TXC453") == .digest)
 
     var one = gap
     one.missingFromDigest = [Self.svw42]
-    #expect(WeatherAlertRequests.missedMessages(source: one, placeCountyUGC: "TXC453", tables: tables) == .warning(identity: "SV.W.EWX.42"))
+    #expect(missedMessages(one, county: "TXC453") == .warning(identity: "SV.W.EWX.42"))
 
+    // `>w <county>` would miss zone-coded warnings and stop at six: one identity per tap instead.
     var several = one
-    several.missingFromDigest = [Self.svw42, Self.svw43]
-    #expect(WeatherAlertRequests.missedMessages(source: several, placeCountyUGC: "TXC453", tables: tables) == .warningsTouching(ugc: "TXC453"))
-    #expect(WeatherAlertRequests.missedMessages(source: several, placeCountyUGC: nil, tables: tables) == .activeWarnings)
+    several.missingFromDigest = [Self.svw43, Self.svw42]
+    #expect(missedMessages(several, county: "TXC453") == .warning(identity: "SV.W.EWX.42"))
+    #expect(missedMessages(several, county: nil) == .warning(identity: "SV.W.EWX.42"))
 
+    // Upgrades are storm-based warnings, which carry county codes.
     var upgraded = one
     let hays = MeshWXWarning(identity: Self.svw43, expiresMinutes: P.nowMinutes + 30,
                              areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 209, run: 1)])
     upgraded.pendingUpgrades[Self.svw43] = WeatherPendingUpgrade(warning: hays, cancelledAt: P.now)
-    #expect(WeatherAlertRequests.missedMessages(source: upgraded, placeCountyUGC: "TXC453", tables: tables) == .warningsTouching(ugc: "TXC453"))
-    #expect(WeatherAlertRequests.missedMessages(source: upgraded, placeCountyUGC: nil, tables: tables) == .warningsTouching(ugc: "TXC209"))
+    #expect(missedMessages(upgraded, county: "TXC453") == .warningsTouching(ugc: "TXC453"))
+    #expect(missedMessages(upgraded, county: nil) == .warningsTouching(ugc: "TXC209"))
 
     var unplacedUpgrade = WeatherBotState(botID: P.botID)
     unplacedUpgrade.pendingUpgrades[Self.svw43] = WeatherPendingUpgrade(
       warning: MeshWXWarning(identity: Self.svw43, expiresMinutes: P.nowMinutes + 30), cancelledAt: P.now)
-    #expect(WeatherAlertRequests.missedMessages(source: unplacedUpgrade, placeCountyUGC: nil, tables: tables) == .activeWarnings)
+    #expect(missedMessages(unplacedUpgrade, county: nil) == .activeWarnings)
   }
 
   @Test
-  func `missing warnings ask for the one, the county's, or nothing`() {
+  func `missing warnings are asked for one per tap, the most important first`() throws {
+    let fortWorth = try #require(tables.offices.firstIndex(of: "FWD").flatMap { UInt8(exactly: $0) })
+    let heat = MeshWXWarningIdentity(event: 14, office: 35, etn: 5)
+    let tornadoFortWorth = MeshWXWarningIdentity(event: 1, office: fortWorth, etn: 20)
+    let tornadoAustin = MeshWXWarningIdentity(event: 1, office: 35, etn: 30)
+    func ask(_ state: WeatherBotState, office: String?, refused: Set<MeshWXWarningIdentity> = []) -> WeatherRequest? {
+      WeatherAlertRequests.missingWarnings(source: state, placeOffice: office, notAvailable: refused, tables: tables)
+    }
+
     var state = WeatherBotState(botID: P.botID)
-    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: "TXC453", tables: tables) == nil)
-    state.missingFromDigest = [Self.svw43]
-    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: "TXC453", tables: tables) == .warning(identity: "SV.W.EWX.43"))
-    state.missingFromDigest = [Self.svw42, Self.svw43]
-    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: "TXC453", tables: tables) == .warningsTouching(ugc: "TXC453"))
-    #expect(WeatherAlertRequests.missingWarnings(source: state, placeCountyUGC: nil, tables: tables) == .activeWarnings)
+    #expect(ask(state, office: "EWX") == nil)
+    state.missingFromDigest = [heat, tornadoFortWorth, tornadoAustin]
+    // Tornado warnings before the heat advisory; of two, the place's own office's.
+    #expect(ask(state, office: "EWX") == .warning(identity: "TO.W.EWX.30"))
+    #expect(ask(state, office: "FWD") == .warning(identity: "TO.W.FWD.20"))
+    #expect(ask(state, office: nil) == .warning(identity: "TO.W.EWX.30"))
+
+    // What the bot said it lacks is passed over; once all have been, a new list.
+    #expect(ask(state, office: "EWX", refused: [tornadoAustin]) == .warning(identity: "TO.W.FWD.20"))
+    #expect(ask(state, office: "EWX", refused: [tornadoAustin, tornadoFortWorth]) == .warning(identity: "HT.Y.EWX.5"))
+    #expect(ask(state, office: "EWX", refused: [tornadoAustin, tornadoFortWorth, heat]) == .digest)
+    #expect(missedMessages(state, county: "TXC453") == .warning(identity: "TO.W.EWX.30"))
+
+    // Nothing the bundle can spell: the whole list.
+    state.missingFromDigest = [MeshWXWarningIdentity(event: 250, office: 35, etn: 1)]
+    #expect(ask(state, office: "EWX") == .activeWarnings)
   }
 
   @Test

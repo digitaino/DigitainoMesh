@@ -96,31 +96,29 @@ public struct MeshWXPeriodSlot: Sendable, Hashable, Codable {
   }
 }
 
-/// A wind reading broken into its pieces, ready to be formatted.
-///
-/// Returns numbers and a compass point, never `"WNW 15 gusting 26"`: the unit, the word
-/// "gusting" and the order are the app's to localise.
 /// How a forecast's entries are laid out in time, read from the entries themselves.
 ///
-/// Spec §7 describes 12-hour periods alternating day and night from `first`, a day period
-/// carrying only a high and a night period only a low. The live WX-AUS bot (2026-09-14)
-/// sends something else: `first` 0 and seven entries, each with both a high and a low —
-/// seven consecutive days. Trusting the period ids renders that as "Tonight: high 100°",
-/// so the layout is decided by what the entries carry, and a forecast that fits neither
+/// Spec §7 (revision 3): the bot sends whole days, `first` even, each entry with a high and a
+/// low; a 127 in either marks that half of the day missing at the edge of the forecast window,
+/// not a night. The spec keeps revision 1's form for a later bot — 12-hour periods alternating
+/// day and night from `first`, one temperature each — recognisable by an odd `first` or by one
+/// temperature always missing. Trusting the period ids renders whole days as "Tonight: high
+/// 100°", so the layout is decided by what the entries carry, and a forecast that fits neither
 /// shape is shown without hiding any value it holds.
 public enum MeshWXForecastLayout: Sendable, Hashable {
-  /// Spec §7: alternating day and night periods, one temperature each.
+  /// Spec §7's reserved form: alternating day and night periods, one temperature each.
   case periods
-  /// Consecutive days, each with a high and a low.
+  /// Consecutive days, each with a high and a low, one of which may be missing at the edge of
+  /// the window.
   case days
-  /// Some entries carry both temperatures and some one: labels follow the period ids and
-  /// every temperature present is shown.
+  /// Neither: labels follow the period ids and every temperature present is shown.
   case mixed
 
-  /// Days when every entry that carries a temperature carries both; spec periods when none
-  /// does and every single temperature sits in its slot (a high by day, a low by night);
-  /// mixed otherwise — including singles in the wrong slot, where the period ids and the
-  /// data disagree and neither can be trusted to label the other.
+  /// Days when `first` is even and any entry carries both temperatures (a day with one is cut at
+  /// the window's edge); spec periods when none carries both and every single temperature sits in
+  /// its slot (a high by day, a low by night); mixed otherwise — an odd `first` with whole days,
+  /// or singles in the wrong slot, where the period ids and the data disagree and neither can be
+  /// trusted to label the other.
   public init(of forecast: MeshWXForecast) {
     var both = 0
     var inSlot = 0
@@ -134,7 +132,7 @@ public enum MeshWXForecastLayout: Sendable, Hashable {
       case (false, false): break
       }
     }
-    if both > 0, inSlot == 0, outOfSlot == 0 {
+    if both > 0, forecast.firstPeriod % 2 == 0 {
       self = .days
     } else if both == 0, outOfSlot == 0 {
       self = .periods
@@ -173,6 +171,10 @@ public struct MeshWXForecastEntry: Sendable, Hashable {
   }
 }
 
+/// A wind reading broken into its pieces, ready to be formatted.
+///
+/// Returns numbers and a compass point, never `"WNW 15 gusting 26"`: the unit, the word
+/// "gusting" and the order are the app's to localise.
 public struct MeshWXWindReading: Sendable, Hashable {
   /// Nil when the wind is calm — direction 0 with speed 0 (spec §6).
   public let direction: MeshWXCompass?
@@ -198,11 +200,52 @@ public struct MeshWXWindReading: Sendable, Hashable {
   }
 }
 
+/// What a digest's `feed_health` byte can honestly say (spec §5).
+///
+/// The byte counts minutes since the bot's *home office* last issued anything (EWX for WX-AUS),
+/// not the health of the satellite feed: a quiet office passes four hours on a calm night with
+/// the feed working. Only "never received" says alerts may not be reaching the bot at all.
+public enum MeshWXFeedHealth: Sendable, Hashable {
+  /// A product from the home office within four hours.
+  case recent(minutes: Int)
+  /// Nothing from the home office for longer than four hours: normal for a quiet office, and
+  /// also what a broken feed looks like. The byte cannot tell the two apart.
+  case quiet(minutes: Int)
+  /// 255: nothing has ever been received.
+  case neverReceived
+
+  public init(feedHealth: UInt8) {
+    if feedHealth == MeshWXPresentation.feedNeverReceived {
+      self = .neverReceived
+    } else if MeshWXPresentation.isFeedStale(feedHealth: feedHealth) {
+      self = .quiet(minutes: MeshWXPresentation.feedHealthMinutes(feedHealth))
+    } else {
+      self = .recent(minutes: MeshWXPresentation.feedHealthMinutes(feedHealth))
+    }
+  }
+
+  /// Quiet and never-received both withhold "no alerts": the bot's silence is evidence of calm
+  /// only while its feed is known to be delivering.
+  public var withholdsCalm: Bool {
+    switch self {
+    case .recent: false
+    case .quiet, .neverReceived: true
+    }
+  }
+}
+
 /// The pure half of spec §10 and §11: icons, tints, staleness and unit conversions,
 /// with no UI framework anywhere near them so every rule is a unit test.
 public enum MeshWXPresentation {
 
   // MARK: - Sky and condition icons (spec §10.1)
+
+  /// SF Symbol for an observation's sky, or nil for sky 15, which in an observation means the
+  /// report had no cloud or weather group (spec §6, revision 3): no icon rather than an
+  /// invented condition.
+  public static func observationSymbolName(for sky: MeshWXSky, isNight: Bool = false) -> String? {
+    sky == .other ? nil : symbolName(for: sky, isNight: isNight)
+  }
 
   /// SF Symbol for a sky code. The night variants matter: `sun.max` on an overnight
   /// forecast period is the kind of detail that makes an app look wrong at a glance.
@@ -347,6 +390,8 @@ public enum MeshWXPresentation {
   /// `feed_health` above this (4-minute units, so ~4 hours) means the bot's silence
   /// stops being evidence of calm weather.
   public static let feedStaleThreshold: UInt8 = 60
+  /// `feed_health` 255: the bot has never received a product from its home office (spec §5).
+  public static let feedNeverReceived: UInt8 = 255
 
   /// Unix minutes for a date, the unit every timestamp on the wire uses.
   public static func unixMinutes(for date: Date) -> UInt32 {
@@ -363,6 +408,7 @@ public enum MeshWXPresentation {
     now > issuedMinutes &+ forecastStaleAfterMinutes
   }
 
+  /// Quiet or never received: either way silence is no evidence of calm (``MeshWXFeedHealth``).
   public static func isFeedStale(feedHealth: UInt8) -> Bool {
     feedHealth > feedStaleThreshold
   }

@@ -17,13 +17,15 @@ struct WeatherScreenSnapshotTests {
     bots: [WeatherBot]? = nil,
     place: WeatherPlace? = WeatherPhoneFixture.place(WeatherPhoneFixture.austin),
     connected: Bool = true,
+    link: WeatherTransportLink? = nil,
     firmware: Bool? = true,
     channel: Bool = true,
     session: WeatherSessionInfo = WeatherSessionInfo(startedAt: WeatherPhoneFixture.now.addingTimeInterval(-3600))
   ) -> WeatherScreenSnapshot.Inputs {
     WeatherScreenSnapshot.Inputs(
       states: states ?? [P.botID: P.state()], bots: bots ?? [wxAus], preferredBotID: nil, place: place,
-      isRadioConnected: connected, firmwareSupportsWeather: firmware, firmwareVersion: "v1.14.0",
+      isRadioConnected: connected, transportLink: link, firmwareSupportsWeather: firmware,
+      firmwareVersion: "v1.14.0",
       hasWeatherChannel: channel, session: session, now: P.now, calendar: P.calendar)
   }
 
@@ -61,6 +63,53 @@ struct WeatherScreenSnapshotTests {
     #expect(screen.requestBlock == .radioOffline)
     #expect(screen.banner == nil)
     #expect(screen.readings.count == 14)
+  }
+
+  /// The DEBUG bridge to a real bot is a transport with a link of its own: no radio, no advert,
+  /// no contact, and the tool can still ask (`WeatherTransportLink`).
+  @Test
+  func `a transport with its own link stands in for the radio and announces its bot`() {
+    let screen = snapshot(inputs(bots: [], connected: false, link: .up(bot: wxAus)))
+    #expect(screen.requestBlock == nil)
+    #expect(screen.source?.botID == P.botID)
+    #expect(screen.source?.bot?.name == "WX-AUS")
+    #expect(screen.source?.bot?.publicKey == wxAus.publicKey)
+    #expect(screen.knownBotIDs.contains(P.botID))
+    #expect(screen.banner == nil)
+  }
+
+  /// §3.1 U-20: the firmware claim is about the transport the request goes out on. With the
+  /// bridge up, the radio's firmware — the simulator's mock reports 8 — is not the one asking,
+  /// and Update stayed disabled saying it was.
+  @Test
+  func `a transport with its own link answers for the firmware too`() {
+    let screen = snapshot(inputs(bots: [], connected: false, link: .up(bot: wxAus), firmware: false))
+    #expect(screen.requestBlock == nil)
+    #expect(screen.banner == nil)
+    // Never heard of a radio at all: the bridge still asks.
+    #expect(snapshot(inputs(bots: [], connected: false, link: .up(bot: wxAus), firmware: nil)).requestBlock == nil)
+    // Over a radio the old firmware is still the block it always was.
+    #expect(snapshot(inputs(firmware: false)).requestBlock == .firmwareTooOld)
+  }
+
+  @Test
+  func `the link's bot never displaces the contact for the same bot`() {
+    let advertised = WeatherBot(
+      publicKey: wxAus.publicKey, name: "WX-AUS", latitude: 30.27, longitude: -97.74,
+      lastAdvert: P.now.addingTimeInterval(-600))
+    let screen = snapshot(inputs(bots: [advertised], connected: false, link: .up(bot: wxAus)))
+    #expect(screen.requestBlock == nil)
+    #expect(screen.source?.bot?.lastAdvert == advertised.lastAdvert)
+    #expect(screen.knownBotIDs == [P.botID])
+  }
+
+  @Test
+  func `with no link of its own the radio still decides`() {
+    // Every build over a radio: the link is nil and nothing about the block changes.
+    #expect(snapshot(inputs(connected: false, link: nil)).requestBlock == .radioOffline)
+    // Heard on the channel, no contact for it: still the block it always was.
+    #expect(snapshot(inputs(bots: [], connected: true, link: nil)).requestBlock == .botNotAnnounced)
+    #expect(snapshot(inputs(states: [:], bots: [], connected: true, link: nil)).requestBlock == .noBot)
   }
 
   @Test

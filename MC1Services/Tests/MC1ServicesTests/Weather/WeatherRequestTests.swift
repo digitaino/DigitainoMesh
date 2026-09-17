@@ -26,7 +26,8 @@ struct WeatherRequestTests {
       (.rainfall(state: "TX"), ">rain TX"),
       (.metar(station: "KAUS"), ">metar KAUS"),
       (.taf(station: "KAUS"), ">taf KAUS"),
-      (.hazardousOutlook, ">hwo")
+      (.hazardousOutlook, ">hwo"),
+      (.coverage, ">cov")
     ]
     for (request, text) in expected {
       #expect(request.wireText == text)
@@ -48,13 +49,25 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.metar(station: "KAUS").requestLetter == "m")
     #expect(WeatherRequest.taf(station: "KAUS").requestLetter == "t")
     #expect(WeatherRequest.hazardousOutlook.requestLetter == "h")
+    #expect(WeatherRequest.coverage.requestLetter == "c")
+  }
+
+  /// Spec §7A: a statement describes the bot that sent it, so another bot's — or another
+  /// bot's answer to somebody else — says nothing about this one's area.
+  @Test
+  func `only the bot asked can answer for its own area`() {
+    #expect(!WeatherRequest.coverage.acceptsAnswerFromAnyBot)
+    #expect(!WeatherRequest.observations.acceptsAnswerFromAnyBot)
+    #expect(WeatherRequest.observation(station: "KAUS").acceptsAnswerFromAnyBot)
   }
 
   @Test
   func `expected replies carry the station, point and subject the request named`() {
     #expect(WeatherRequest.digest.expectedReply == .digest)
     #expect(WeatherRequest.activeWarnings.expectedReply == .warnings)
-    #expect(WeatherRequest.warning(identity: "SV.W.EWX.42").expectedReply == .warnings)
+    // Only the bare `>w` ends with a digest; the other two are that warning, or warnings naming that area.
+    #expect(WeatherRequest.warning(identity: "SV.W.EWX.42").expectedReply == .warning(identity: "SV.W.EWX.42"))
+    #expect(WeatherRequest.warningsTouching(ugc: "TXZ192").expectedReply == .warningsTouching(ugc: "TXZ192"))
     #expect(WeatherRequest.observations.expectedReply == .observations(station: nil))
     #expect(WeatherRequest.observation(station: "KAUS").expectedReply == .observations(station: "KAUS"))
     #expect(WeatherRequest.homeForecast.expectedReply == .forecast(point: nil))
@@ -69,5 +82,6 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.metar(station: "KAUS").expectedReply == .text(subject: 5))
     #expect(WeatherRequest.taf(station: "KAUS").expectedReply == .text(subject: 5))
     #expect(WeatherRequest.hazardousOutlook.expectedReply == .text(subject: 6))
+    #expect(WeatherRequest.coverage.expectedReply == .coverage)
   }
 }

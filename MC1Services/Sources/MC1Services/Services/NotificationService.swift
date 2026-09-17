@@ -886,6 +886,14 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
       return []
     }
 
+    // A weather alert posted silently — a replacement, or the opt-in "other warnings" — is
+    // Notification Center only, in the foreground too: `.passive` is what says so, and the
+    // options below would turn it back into a banner (docs/MESHWX_UI.md §16).
+    if userInfo[WeatherAlertNotificationKeys.type] as? String == WeatherAlertNotificationKeys.weatherAlert,
+       notification.request.content.interruptionLevel == .passive {
+      return [.list]
+    }
+
     // Show banner and sound for other notifications
     return [.banner, .sound, .badge]
   }
@@ -947,6 +955,11 @@ extension NotificationService: @preconcurrency UNUserNotificationCenterDelegate 
       // User tapped the notification
       let notificationType = userInfo["type"] as? String
 
+      // A weather alert names no contact, channel or room: it is left for the Weather tool to
+      // open, which is the one screen that can show it (docs/MESHWX_UI.md §16).
+      if notificationType == WeatherAlertNotificationKeys.weatherAlert {
+        WeatherAlertNotificationTap.shared.receive(userInfo: userInfo)
+      }
       // Handle reaction notifications (includes messageID for scroll-to)
       if notificationType == "reaction",
          let messageIDString = userInfo["messageID"] as? String,

@@ -18,8 +18,46 @@ struct WeatherNamesTests {
   func `forecast point names drop their county and state tail`() {
     #expect(WeatherNames.pointName("Austin Camp Mabry-Travis TX") == "Austin Camp Mabry")
     #expect(WeatherNames.pointName("Central Park-New York NY") == "Central Park")
-    #expect(WeatherNames.pointName("Luis Munoz Marin International Airport-San Juan") == "Luis Munoz Marin International Airport-San Juan")
     #expect(WeatherNames.pointName("10 Mile Boxcars") == "10 Mile Boxcars")
+  }
+
+  /// §3.1 U-26: the tail is a qualifier whatever it is, not only "-County ST". A town tail is
+  /// one when the head is a name on its own, which is what keeps a hyphenated station name — and
+  /// a point whose own name has a hyphen in it — whole.
+  @Test
+  func `a forecast point's tail is dropped when it is a town too`() {
+    #expect(WeatherNames.pointName("Luis Munoz Marin International Airport-San Juan")
+      == "Luis Munoz Marin International Airport")
+    #expect(WeatherNames.pointName("Boerne-Kendall TX") == "Boerne")
+    #expect(WeatherNames.pointName("Foo-Bar") == "Foo-Bar")
+    #expect(WeatherNames.pointName("351001 (PATJENS)-Sherman OR") == "351001 (PATJENS)")
+    // Station names never go through the point rule, and would not survive it: they are
+    // rendered by `stationName`, which leaves every hyphen where the bundle put it.
+    #expect(WeatherNames.stationName("OCALA INTERNATIONAL AIRPORT-JIM TAYLOR FIELD")
+      == "Ocala International Airport-Jim Taylor Field")
+  }
+
+  /// §3.1 U-25: one forecast point read three ways on one drive — "Austin-Camp Mabry" from the
+  /// station beside it, "Austin Camp Mabry" in the forecast header, "Austin Camp Mabry, TX" in
+  /// Places. Every site that names a point now calls ``WeatherNames/pointLabel(_:)``: the forecast
+  /// header (`WeatherForecastSection.pointParts`), the Places rows for what was heard
+  /// (`WeatherPlacePickerView.heardSection`, `WeatherCopy.pointName`) and the empty place's
+  /// nearest line (`WeatherCopy.emptyPlaceNearest`) — so there is one spelling to agree on.
+  @Test
+  func `the three sites that name a forecast point agree`() {
+    let raw = "Austin Camp Mabry-Travis TX"
+    let label = WeatherNames.pointLabel(raw)
+    #expect(label == "Austin Camp Mabry, TX")
+    // The header, the Places row and the nearest line are the same call, so they are the same
+    // string; the bare head is internal and no screen can reach for it instead.
+    #expect(WeatherNames.pointLabel(raw) == label)
+    #expect(WeatherNames.pointName(raw) == "Austin Camp Mabry")
+    #expect(WeatherNames.pointState(raw) == "TX")
+    // A point whose tail is a town has no state to keep, and reads as its name alone.
+    #expect(WeatherNames.pointLabel("Luis Munoz Marin International Airport-San Juan")
+      == "Luis Munoz Marin International Airport")
+    #expect(WeatherNames.pointLabel("Central Park-New York NY") == "Central Park, NY")
+    #expect(WeatherNames.pointLabel("10 Mile Boxcars") == "10 Mile Boxcars")
   }
 
   @Test
@@ -86,6 +124,45 @@ struct WeatherCoverageTests {
   }
 
   @Test
+  func `a place inside the ring of stations is covered, however far from the nearest`() throws {
+    let coverage = WeatherCoverage.make(states: [P.botID: P.state()], tables: .shared, now: P.now)
+    // Between Temple, Caldwell and Austin Executive: about 50 km from each.
+    let middle = MeshWXCoordinate(latitude: 30.75, longitude: -97.15)
+    #expect(try #require(coverage.nearest(to: middle)).kilometres > 40)
+    #expect(coverage.contains(middle))
+  }
+
+  /// WX-AUS relays alerts for about 120 km around Austin, and its farthest station is 96 km out:
+  /// 80 km around every station reached 176 km, past where it sends anything.
+  @Test
+  func `a place past the outer stations is outside, though one is within 80 km`() throws {
+    let coverage = WeatherCoverage.make(states: [P.botID: P.state()], tables: .shared, now: P.now)
+    // North of Lampasas, and east of Caldwell.
+    for outside in [MeshWXCoordinate(latitude: 31.6, longitude: -98.2), MeshWXCoordinate(latitude: 30.3, longitude: -96.3)] {
+      let nearest = try #require(coverage.nearest(to: outside)).kilometres
+      #expect(nearest > WeatherCoverage.stationReachKilometres && nearest < 80)
+      #expect(!coverage.contains(outside))
+      #expect(coverage.botIDs(covering: outside).isEmpty)
+    }
+    // Just west of Llano's station, outside the ring but within its reach.
+    #expect(coverage.contains(MeshWXCoordinate(latitude: 30.784, longitude: -98.85)))
+  }
+
+  @Test
+  func `each bot covers its own ring, and two stations reach twenty kilometres`() {
+    var second = WeatherBotState(botID: 0x0102)
+    // Austin-Bergstrom and Camp Mabry: two stations, no ring.
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: MeshWXHeader(seq: 1, bot: 0x0102, type: .observations), payload: .observations(MeshWXObservations(
+        timestampMinutes: P.nowMinutes, stations: [MeshWXStationObservation(stationIndex: 202, tempF: 80), MeshWXStationObservation(stationIndex: 194, tempF: 81)]))),
+      to: &second, receivedAt: P.now)
+    let coverage = WeatherCoverage.make(states: [P.botID: P.state(), 0x0102: second], tables: .shared, now: P.now)
+    #expect(coverage.stations.count == 16, "a station both bots report is in both footprints")
+    #expect(coverage.botIDs(covering: P.austin) == [P.botID, 0x0102])
+    #expect(coverage.botIDs(covering: MeshWXCoordinate(latitude: 30.75, longitude: -97.15)) == [P.botID])
+  }
+
+  @Test
   func `a single-station answer and a day-old batch are not coverage`() {
     var state = P.state(observationsAgo: 25 * 3600)
     _ = WeatherStateReducer.apply(
@@ -93,6 +170,24 @@ struct WeatherCoverageTests {
         timestampMinutes: P.nowMinutes, stations: [MeshWXStationObservation(stationIndex: 1000, tempF: 70)]))),
       to: &state, receivedAt: P.now)
     #expect(WeatherCoverage.make(states: [P.botID: state], tables: .shared, now: P.now).isEmpty)
+  }
+
+  /// Anybody's `>o KATT` is broadcast to everyone, and every phone keeps the newer reading. It must
+  /// not also take Camp Mabry out of WX-AUS's area, shrink the outline or change the count the Now
+  /// card's link shows.
+  @Test
+  func `a single-station answer leaves the station in the footprint it was reported in`() {
+    var state = P.state()
+    let before = WeatherCoverage.make(states: [P.botID: state], tables: .shared, now: P.now)
+    #expect(before.stations.count == 14)
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: P.header(240, .observations), payload: .observations(MeshWXObservations(
+        timestampMinutes: P.nowMinutes, stations: [MeshWXStationObservation(stationIndex: 202, tempF: 91)]))),
+      to: &state, receivedAt: P.now)
+    let after = WeatherCoverage.make(states: [P.botID: state], tables: .shared, now: P.now)
+    #expect(after.stations.map(\.index) == before.stations.map(\.index))
+    #expect(after.contains(P.austin))
+    #expect(state.observations[202]?.observation.tempF == 91, "the newer reading is still what is shown")
   }
 }
 
@@ -232,15 +327,56 @@ struct WeatherAlertStatusTests {
   func `offline, stale feed, missed messages, and an old list each withhold the check`() {
     #expect(status(listening(), place: P.place(P.austin), connected: false) == .radioOffline(listAsOf: Date(unixMinutes: P.nowMinutes - 20)))
 
-    var stale = P.state()
-    _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, feedHealth: 75), to: &stale, receivedAt: P.now)
-    #expect(status([P.botID: stale], place: P.place(P.austin)) == .feedStale(minutesSinceProduct: 300))
+    var quiet = P.state()
+    _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, feedHealth: 75), to: &quiet, receivedAt: P.now)
+    #expect(status([P.botID: quiet], place: P.place(P.austin)) == .feedQuiet(minutesSinceProduct: 300))
 
     #expect(status(listening { $0.needsDigest = true }, place: P.place(P.austin)) == .missedMessages)
 
     var old = P.state()
     _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 200), to: &old, receivedAt: P.now.addingTimeInterval(-12_000))
     #expect(status([P.botID: old], place: P.place(P.austin)) == .listOld(asOf: Date(unixMinutes: P.nowMinutes - 200)))
+  }
+
+  /// Spec §5: a quiet home office passes four hours on a healthy feed, so it says nothing is wrong
+  /// and yields to whatever asks for something; only a feed that never delivered comes first.
+  @Test
+  func `a quiet home office withholds calm below the other statuses, a feed that never delivered above them`() {
+    var quiet = P.state()
+    _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, feedHealth: 75), to: &quiet, receivedAt: P.now)
+    quiet.needsDigest = true
+    #expect(status([P.botID: quiet], place: P.place(P.austin)) == .missedMessages)
+    #expect(status([P.botID: quiet], place: P.place(P.austin), connected: false) == .radioOffline(listAsOf: Date(unixMinutes: P.nowMinutes - 20)))
+
+    var never = P.state()
+    _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, feedHealth: 255), to: &never, receivedAt: P.now)
+    never.needsDigest = true
+    #expect(status([P.botID: never], place: P.place(P.austin)) == .feedNeverReceived)
+    #expect(status([P.botID: never], place: P.place(P.austin), connected: false) == .feedNeverReceived)
+  }
+
+  @Test
+  func `a watch the bot sends as office 0 does not say which office it carries`() throws {
+    // A revision 2 bot, without the Storm Prediction Center in its bundle, sent its watches as office 0.
+    let tornadoWatch = try #require(tables.eventByCode["TO.A"])
+    let entry = MeshWXDigest.Entry(identity: MeshWXWarningIdentity(event: tornadoWatch, office: 0, etn: 612), expiresRelativeMinutes: 300, expiresMinutes: P.nowMinutes + 280)
+    var state = P.state()
+    _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, entries: [entry]), to: &state, receivedAt: P.now.addingTimeInterval(-1190))
+    state.missingFromDigest = []
+    #expect(status([P.botID: state], place: P.place(P.austin)) == .clear(asOf: Date(unixMinutes: P.nowMinutes - 20)))
+  }
+
+  @Test
+  func `a national centre's product does not say which office the bot carries`() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("meshwx-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data(#"{"offices": ["ABQ", "EWX", "NHC", "WNS"], "stations": [], "states": []}"#.utf8)
+      .write(to: directory.appendingPathComponent("index.json"))
+    let updated = MeshWXTables(resourceDirectory: directory)
+    #expect(WeatherAlertStatus.showsOffice(MeshWXWarningIdentity(event: 3, office: 1, etn: 42), tables: updated))
+    #expect(!WeatherAlertStatus.showsOffice(MeshWXWarningIdentity(event: 3, office: 2, etn: 9), tables: updated))
+    #expect(!WeatherAlertStatus.showsOffice(MeshWXWarningIdentity(event: 3, office: 3, etn: 612), tables: updated))
   }
 
   @Test
@@ -268,8 +404,12 @@ struct WeatherAlertStatusTests {
     #expect(status(elsewhere, place: P.place(P.austin)) == .noneHere(elsewhere: 1, asOf: Date(unixMinutes: P.nowMinutes - 20)))
   }
 
+  /// `.officeMayNotBeCovered` is no longer produced (docs/MESHWX_UI.md §3.1 I-B18): the offices a
+  /// bot has *shown* are whichever products happen to be active, so an hour in which the Austin
+  /// advisories expired and only a Fort Worth warning was left said WX-AUS might not carry its own
+  /// home county. A place in the footprint is answered for by the list it has.
   @Test
-  func `a place served by an office the bot has not shown may not be covered`() throws {
+  func `a place forecast by an office the list does not name is not called uncovered`() throws {
     // Temple is in the footprint (KTPL) but forecast by NWS Fort Worth; WX-AUS's list names Austin/San Antonio.
     let temple = MeshWXCoordinate(latitude: 31.10, longitude: -97.34)
     let office = try #require(tables.nearestPoint(toLat: temple.latitude, lon: temple.longitude)?.office)
@@ -278,7 +418,7 @@ struct WeatherAlertStatusTests {
     var state = P.state()
     _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, entries: [entry]), to: &state, receivedAt: P.now.addingTimeInterval(-1190))
     state.missingFromDigest = []
-    #expect(status([P.botID: state], place: P.place(temple, label: "Temple, TX")) == .officeMayNotBeCovered(office: office))
+    #expect(status([P.botID: state], place: P.place(temple, label: "Temple, TX")) == .clear(asOf: Date(unixMinutes: P.nowMinutes - 20)))
   }
 
   @Test
@@ -314,11 +454,58 @@ struct WeatherAlertStatusTests {
 struct WeatherStationTests {
   typealias P = WeatherPhoneFixture
 
-  func primary(_ state: WeatherBotState, at place: WeatherPlace?) -> WeatherPrimaryStation {
+  func readings(_ state: WeatherBotState, at place: WeatherPlace?) -> [WeatherStationReading] {
     let states = [P.botID: state]
     let coverage = WeatherCoverage.make(states: states, tables: .shared, now: P.now)
-    let readings = WeatherStations.readings(states: states, coverage: coverage, place: place, tables: .shared, now: P.now)
-    return WeatherPrimaryStation.pick(readings: readings, place: place)
+    return WeatherStations.readings(states: states, coverage: coverage, place: place, tables: .shared, now: P.now)
+  }
+
+  func primary(_ state: WeatherBotState, at place: WeatherPlace?) -> WeatherPrimaryStation {
+    WeatherPrimaryStation.pick(readings: readings(state, at: place), place: place)
+  }
+
+  /// A bare `>o` comes back with the batch the bot would send *now*, so only a station that batch
+  /// still carries can be refreshed by it. One the bot has dropped since, or one held only from
+  /// somebody's single-station answer, has to be asked for by its code.
+  @Test
+  func `only a station in the newest batch can be refreshed by the bot's batch`() throws {
+    var state = P.state()
+    // Somebody's `>o` for a station the bot's batch never carries.
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: P.header(240, .observations), payload: .observations(MeshWXObservations(
+        timestampMinutes: P.nowMinutes, stations: [MeshWXStationObservation(stationIndex: 1000, tempF: 70)]))),
+      to: &state, receivedAt: P.now)
+    // The next hourly batch, without Llano (1929).
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: P.header(241, .observations), payload: .observations(MeshWXObservations(
+        timestampMinutes: P.nowMinutes + 58,
+        stations: P.stations.dropFirst().map { MeshWXStationObservation(stationIndex: $0.0, tempF: $0.1, sky: .few) }))),
+      to: &state, receivedAt: P.now)
+
+    let held = readings(state, at: P.place(P.austin))
+    func reading(_ index: UInt16) throws -> WeatherStationReading {
+      try #require(held.first { $0.index == index })
+    }
+    #expect(try reading(202).isInLatestBatch)
+    let dropped = try reading(1929)
+    #expect(dropped.isInFootprint, "still in the area it was reported in an hour ago")
+    #expect(!dropped.isInLatestBatch, "a bare `>o` would come back without it")
+    let answered = try reading(1000)
+    #expect(!answered.isInFootprint)
+    #expect(!answered.isInLatestBatch)
+  }
+
+  /// The list the Now card's link opens starts with the station the card names. The card's station
+  /// is not always the first by distance: a nearer stale one sorts ahead of it.
+  @Test
+  func `the list leads with the station the Now card is showing`() throws {
+    let place = P.place(P.austin)
+    let held = readings(P.state(), at: place)
+    let index = try #require(WeatherPrimaryStation.pick(readings: held, place: place).index)
+    let moved = Array(held.dropFirst()) + [held[0]]
+    #expect(WeatherStations.ordered(moved, leading: index).first?.index == index)
+    #expect(WeatherStations.ordered(moved, leading: index).count == held.count)
+    #expect(WeatherStations.ordered(held, leading: nil) == held)
   }
 
   @Test
@@ -378,6 +565,16 @@ struct WeatherForecastRowTests {
     #expect(rows[0].label == .today && rows[0].highF == 102 && rows[0].lowF == 77)
     #expect(rows[1].label == .tomorrow && rows[1].highF == 100 && rows[1].lowF == 78)
     #expect(rows[2].label == .day(date(16, 0)))
+  }
+
+  /// Spec §7 (revision 3): entry i is the issue date plus `first / 2 + i` days.
+  @Test
+  func `an evening issue that starts tomorrow is labelled tomorrow`() {
+    let evening = MeshWXForecast(pointIndex: 103, issuedMinutes: live.issuedMinutes, firstPeriod: 2, periods: live.periods)
+    let rows = WeatherForecastRows.rows(for: evening, now: date(14, 23), calendar: calendar)
+    #expect(rows.count == 7)
+    #expect(rows[0].label == .tomorrow && rows[0].highF == 102)
+    #expect(rows[1].label == .day(date(16, 0)))
   }
 
   @Test
@@ -456,6 +653,43 @@ struct WeatherForecastCardTests {
     #expect(point.index != 103)
     #expect(abs(kilometres - WeatherGeo.kilometres(P.roundRock, MeshWXCoordinate(latitude: point.lat, longitude: point.lon))) < 0.001)
     #expect(kilometres <= WeatherForecastCard.pointReachKilometres)
+  }
+
+  /// **The forecast carries the point it is for, and how far away it is** (docs/MESHWX_UI.md
+  /// §3.1 U-9), so the header can name both. Round Rock and Austin showed the same seven rows
+  /// with nothing on either page to say they were one Camp Mabry forecast rather than two.
+  @Test
+  func `a forecast knows its point's distance from the place, and whether this phone asked`() throws {
+    guard case let .forecast(summary) = WeatherForecastCard.make(
+      states: [P.botID: P.state()], place: P.place(P.austin), tables: tables, now: P.now,
+      calendar: P.calendar)
+    else {
+      Issue.record("expected a forecast")
+      return
+    }
+    let point = MeshWXCoordinate(latitude: summary.point.lat, longitude: summary.point.lon)
+    #expect(abs(summary.kilometres - WeatherGeo.kilometres(P.austin, point)) < 0.001)
+    // The fixture's forecasts came off the channel; nothing here asked for them.
+    #expect(summary.isOwn == false)
+  }
+
+  @Test
+  func `a point standing in for the place measures from the place, not from the point it replaced`() throws {
+    // Round Rock's own point holds nothing, so a forecast within 10 km may stand in for it.
+    var state = P.state()
+    let roundRockPoint = try #require(tables.nearestPoint(toLat: P.roundRock.latitude, lon: P.roundRock.longitude))
+    let held = try #require(state.forecasts[103])
+    state.forecasts[roundRockPoint.index] = nil
+    guard case let .forecast(summary) = WeatherForecastCard.make(
+      states: [P.botID: state], place: P.place(P.roundRock), tables: tables, now: P.now,
+      calendar: P.calendar), case let .nearbyPoint(kilometres) = summary.source
+    else {
+      // Camp Mabry is more than 10 km from Round Rock, so this is `missing`; the distance the
+      // card carries is still the place's own.
+      _ = held
+      return
+    }
+    #expect(abs(summary.kilometres - kilometres) < 0.001)
   }
 
   @Test

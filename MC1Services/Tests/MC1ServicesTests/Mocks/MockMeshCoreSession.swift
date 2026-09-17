@@ -88,6 +88,9 @@ public actor MockMeshCoreSession: MeshCoreSessionProtocol, AdvertisingSessionOps
   /// Result to return from sendChannelMessage
   public var stubbedSendChannelMessageError: Error?
 
+  /// Result to return from sendChannelData (the binary datagram command, 0x3E)
+  public var stubbedSendChannelDataError: Error?
+
   /// Contacts to return from getContacts
   public var stubbedContacts: [MeshContact] = []
 
@@ -200,6 +203,14 @@ public actor MockMeshCoreSession: MeshCoreSessionProtocol, AdvertisingSessionOps
     public let timestamp: Date
   }
 
+  public struct SendChannelDataInvocation: Sendable, Equatable {
+    public let channelIndex: UInt8
+    public let dataType: UInt16
+    public let payload: Data
+    public let pathLength: UInt8
+    public let pathBytes: Data
+  }
+
   public struct AddContactInvocation: Sendable, Equatable {
     public let contact: MeshContact
   }
@@ -227,6 +238,7 @@ public actor MockMeshCoreSession: MeshCoreSessionProtocol, AdvertisingSessionOps
 
   public private(set) var sendMessageInvocations: [SendMessageInvocation] = []
   public private(set) var sendChannelMessageInvocations: [SendChannelMessageInvocation] = []
+  public private(set) var sendChannelDataInvocations: [SendChannelDataInvocation] = []
   public private(set) var getContactsInvocations: [Date?] = []
   public private(set) var getContactPublicKeys: [Data] = []
   public private(set) var addContactInvocations: [AddContactInvocation] = []
@@ -270,6 +282,11 @@ public actor MockMeshCoreSession: MeshCoreSessionProtocol, AdvertisingSessionOps
   /// for the same actor-isolation reason as `setStubbedContacts`.
   public func setCurrentSelfInfo(_ selfInfo: SelfInfo?) {
     currentSelfInfo = selfInfo
+  }
+
+  /// Sets what `getChannel(index:)` answers for one slot (isolated setter).
+  public func setStubbedChannel(_ channel: ChannelInfo?, at index: UInt8) {
+    stubbedChannels[index] = channel
   }
 
   /// Sets the results returned by successive `sendLogin` calls (isolated setter).
@@ -372,6 +389,17 @@ public actor MockMeshCoreSession: MeshCoreSessionProtocol, AdvertisingSessionOps
   public func sendChannelMessage(channel: UInt8, text: String, timestamp: Date) async throws {
     sendChannelMessageInvocations.append(SendChannelMessageInvocation(channel: channel, text: text, timestamp: timestamp))
     if let error = stubbedSendChannelMessageError {
+      throw error
+    }
+  }
+
+  public func sendChannelData(
+    channelIndex: UInt8, dataType: UInt16, payload: Data, pathLength: UInt8, pathBytes: Data
+  ) async throws {
+    sendChannelDataInvocations.append(SendChannelDataInvocation(
+      channelIndex: channelIndex, dataType: dataType, payload: payload,
+      pathLength: pathLength, pathBytes: pathBytes))
+    if let error = stubbedSendChannelDataError {
       throw error
     }
   }
@@ -543,6 +571,7 @@ public actor MockMeshCoreSession: MeshCoreSessionProtocol, AdvertisingSessionOps
   public func reset() {
     sendMessageInvocations = []
     sendChannelMessageInvocations = []
+    sendChannelDataInvocations = []
     getContactsInvocations = []
     getContactPublicKeys = []
     addContactInvocations = []

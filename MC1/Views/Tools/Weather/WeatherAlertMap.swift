@@ -91,9 +91,13 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
     if let place {
       let centre = coordinate(place.coordinate)
       if place.kind != .current {
+        // A neutral dot, never the pink dropped pin: on a map whose whole subject is warning
+        // polygons in red and orange, a hot-pink marker for *you* reads as one more warning
+        // (docs/MESHWX_UI.md §3.1 U-17). The freshest location-fix dot is the one marker in the
+        // app's palette that is deliberately not an alert colour.
         points.append(MapPoint(
-          id: pointID("place"), coordinate: centre, pinStyle: .droppedPin,
-          label: nil, isClusterable: false, hopIndex: nil, badgeText: nil))
+          id: pointID("place"), coordinate: centre, pinStyle: .locationFix,
+          label: nil, isClusterable: false, hopIndex: 0, badgeText: nil))
       }
       if framesPlace || framed.isEmpty { framed.append(centre) }
     }

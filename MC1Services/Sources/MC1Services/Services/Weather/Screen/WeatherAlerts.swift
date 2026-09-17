@@ -101,12 +101,21 @@ public enum WeatherAlertPlacement: Sendable, Hashable {
 public enum WeatherAlertPriority {
   /// Lower is more urgent.
   public static func rank(_ warning: MeshWXWarning, tables: MeshWXTables) -> Int {
-    let vtec = tables.vtec(for: warning.event) ?? ""
+    rank(vtec: tables.vtec(for: warning.event) ?? "", floodDamage: warning.floodDamage, tornado: warning.tornado)
+  }
+
+  /// The rank of an event alone, for a warning known only by its identity: as though it carried
+  /// no tags.
+  public static func rank(event: UInt8, tables: MeshWXTables) -> Int {
+    rank(vtec: tables.vtec(for: event) ?? "", floodDamage: .none, tornado: .none)
+  }
+
+  private static func rank(vtec: String, floodDamage: MeshWXFloodDamage, tornado: MeshWXTornadoTag) -> Int {
     switch vtec {
     case "TO.W": return 0
     case "EW.W": return 1
-    case "FF.W" where warning.floodDamage == .catastrophic: return 2
-    case "SV.W" where warning.tornado != .none: return 3
+    case "FF.W" where floodDamage == .catastrophic: return 2
+    case "SV.W" where tornado != .none: return 3
     case "FF.W": return 4
     case "SV.W": return 5
     default:
@@ -310,21 +319,32 @@ public enum WeatherAlertFolding {
 /// Evaluated top to bottom; the first condition that holds wins.
 public enum WeatherAlertStatus: Sendable, Hashable {
   case noPlace
+  /// The place is outside every bot's area, on the bots' own complete statements (spec §7A) or,
+  /// for a bot that has stated nothing, on its station footprint.
   case outOfCoverage
   /// No alert list from any bot covering the place.
   case notChecked
-  case feedStale(minutesSinceProduct: Int)
+  /// The bot has never received anything from its home office (`feed_health` 255): new alerts
+  /// may not reach it at all.
+  case feedNeverReceived
   case radioOffline(listAsOf: Date)
   case missedMessages
   case listOld(asOf: Date)
   case locationOld(since: Date)
-  /// No bot has sent a multi-station observation batch in the last day, so where any bot
-  /// reports is unknown: the list that arrived may be for somewhere else entirely, and "no
-  /// alerts" cannot be claimed from it.
+  /// No bot's evidence places this place: none has stated its coverage or sent a multi-station
+  /// batch in the last day, a statement's lists were cut, or the outlines have not loaded. The
+  /// list that arrived may be for somewhere else entirely, and "no alerts" cannot be claimed
+  /// from it.
   case coverageUnknown
+  /// A bot answering for the place states its offices, with the office-cut flag clear, and the
+  /// place's forecast office is not among them.
   case officeMayNotBeCovered(office: String)
   /// Alerts here, near, still being placed, or unplaceable: the rows say it.
   case rowsSpeak
+  /// Nothing from the bot's home office for over four hours (spec §5). Normal for a quiet office
+  /// overnight and also what a broken feed looks like, so it withholds "none" and the check
+  /// without saying anything is wrong; below every status that asks for something.
+  case feedQuiet(minutesSinceProduct: Int)
   case noneHere(elsewhere: Int, asOf: Date)
   /// The green check: no alert received, and this phone would have received one.
   case clear(asOf: Date)
@@ -343,18 +363,20 @@ public enum WeatherAlertStatus: Sendable, Hashable {
     now: Date
   ) -> WeatherAlertStatus {
     guard let place else { return .noPlace }
-    if !coverage.isEmpty, !coverage.contains(place.coordinate) { return .outOfCoverage }
+    // Only a bot's own complete statement (spec §7A), or its station footprint where it has
+    // stated nothing, can put a place outside an area. A list the bot had to cut means "not
+    // listed", which is `.unknown` and lands on `coverageUnknown` below.
+    let verdict = coverage.verdict(for: place)
+    if verdict == .outside { return .outOfCoverage }
 
-    // With no footprint yet every bot's list is considered, which is enough to say what is
-    // wrong with the list — but never enough for calm (`coverageUnknown` below).
-    let covering = coverage.botIDs(covering: place.coordinate)
+    // Where no bot's area is known to cover the place, every bot's list is considered, which is
+    // enough to say what is wrong with the list — but never enough for calm (`coverageUnknown`).
+    let covering = coverage.botIDs(covering: place)
     let relevant = states.filter { covering.isEmpty || covering.contains($0.key) }.map(\.value)
     let withDigest = relevant.compactMap { state in state.digest.map { (state, $0) } }
     guard let (_, digest) = withDigest.max(by: { $0.1.builtAt < $1.1.builtAt }) else { return .notChecked }
 
-    if digest.isFeedStale {
-      return .feedStale(minutesSinceProduct: MeshWXPresentation.feedHealthMinutes(digest.digest.feedHealth))
-    }
+    if digest.feed == .neverReceived { return .feedNeverReceived }
     if !isRadioConnected { return .radioOffline(listAsOf: digest.builtAt) }
     if relevant.contains(where: { $0.needsDigest || !$0.missingFromDigest.isEmpty || !$0.pendingUpgrades.isEmpty }) {
       return .missedMessages
@@ -364,20 +386,38 @@ public enum WeatherAlertStatus: Sendable, Hashable {
       return .listOld(asOf: digest.builtAt)
     }
     if place.kind == .lastKnown, let locatedAt = place.locatedAt { return .locationOld(since: locatedAt) }
-    if coverage.isEmpty { return .coverageUnknown }
+    if verdict == .unknown { return .coverageUnknown }
 
-    let officesShown = Set(relevant.flatMap { state in
-      state.warnings.values.map(\.warning.office) + (state.digest?.digest.entries.map(\.identity.office) ?? [])
-    }.compactMap { tables.officeCode($0) })
-    if !officesShown.isEmpty,
-       let placeOffice = tables.nearestPoint(toLat: place.coordinate.latitude, lon: place.coordinate.longitude)?.office,
-       !officesShown.contains(placeOffice) {
-      return .officeMayNotBeCovered(office: placeOffice)
+    // The office claim rests on the bot's own coverage message and nothing weaker
+    // (docs/MESHWX_UI.md §3.1 I-B18): stated offices, the office-cut flag clear, and the place's
+    // office not among them. The offices a bot has *shown* are whichever products happen to be
+    // active this hour — the weather, not the coverage — and a quiet hour turned the bot's own
+    // home county into "may not be covered".
+    if let office = coverage.uncarriedOffice(for: place) {
+      return .officeMayNotBeCovered(office: office)
     }
 
     if items.contains(where: { $0.placement.isCardRow }) { return .rowsSpeak }
+    if case let .quiet(minutes) = digest.feed { return .feedQuiet(minutesSinceProduct: minutes) }
     let elsewhere = items.filter { $0.placement == .elsewhere }.count
     if elsewhere > 0 { return .noneHere(elsewhere: elsewhere, asOf: digest.builtAt) }
     return .clear(asOf: digest.builtAt)
+  }
+
+  /// Whether a warning shows that the bot carries its issuer's forecast office. A national
+  /// centre's product covers many offices' areas and shows none of them. Nor does a tornado or
+  /// severe thunderstorm watch under office 0: a revision 2 bot, whose bundle had no Storm
+  /// Prediction Center, sent its watches as office 0, which reads as Albuquerque.
+  ///
+  /// Not what `.officeMayNotBeCovered` rests on: since spec revision 4 a bot states its offices
+  /// itself (`WeatherCoverage.uncarriedOffice`), which is evidence, and the offices seen on
+  /// warnings are not. This stays as the rule for reading the issuer of a warning that arrived
+  /// (docs/MESHWX_UI.md §3.1 I-B18, §14 Q2).
+  static func showsOffice(_ identity: MeshWXWarningIdentity, tables: MeshWXTables) -> Bool {
+    if tables.isNationalCentre(identity.office) { return false }
+    if identity.office == 0, let vtec = tables.vtec(for: identity.event), vtec == "TO.A" || vtec == "SV.A" {
+      return false
+    }
+    return true
   }
 }

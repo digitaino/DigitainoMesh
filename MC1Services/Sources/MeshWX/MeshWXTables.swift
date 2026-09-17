@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import Synchronization
 
 // MARK: - Table records
 
@@ -60,12 +61,15 @@ public struct MeshWXCounty: Sendable, Hashable, Codable {
   public let lon: Double
 }
 
-/// An NWS forecast office (`wfos.json`).
+/// An NWS forecast office (`wfos.json`), or a national centre listed with them.
 public struct MeshWXOffice: Sendable, Hashable, Codable {
   public let code: String
+  /// The states its zones lie in; empty for a national centre, which has none.
   public let states: [String]
   public let lat: Double
   public let lon: Double
+  /// The bundle's name for a national centre ("Storm Prediction Center"); nil for a forecast office.
+  public let name: String?
 }
 
 /// The two names a VTEC event has: a wire-era abbreviation for a badge and a full name
@@ -130,7 +134,8 @@ public enum MeshWXGeo {
 /// decoded warning is `event 3, office 35, state 42` and nothing an app can draw.
 ///
 /// Immutable after construction, so the whole thing is `Sendable` and ``shared`` can be
-/// touched from any actor. Loading is by `JSONDecoder`, which measured roughly three
+/// touched from any actor. The one exception is `zips.json`, read on the first ZIP query
+/// into a cache behind a `Mutex` (MeshWXZips.swift), so app launch never pays for it. Loading is by `JSONDecoder`, which measured roughly three
 /// times faster than `JSONSerialization` plus manual casting on the 1.4 MB places file
 /// (≈21 ms against ≈64 ms); the whole bundle loads in well under a tenth of a second.
 ///
@@ -145,7 +150,7 @@ public final class MeshWXTables: Sendable {
 
   // MARK: Wire index tables (index.json)
 
-  /// `protocol.json` `version` — 8 for v5.0.
+  /// `protocol.json` `version` — 10 for v5.0 revision 5.
   public let protocolVersion: Int
   /// NWS office codes, ordered; the `office` byte indexes this.
   public let offices: [String]
@@ -178,6 +183,11 @@ public final class MeshWXTables: Sendable {
   private let countiesByUGC: [String: MeshWXCounty]
   private let officesByCode: [String: MeshWXOffice]
 
+  /// Where the tables were read from; `zips.json` is read from here on the first ZIP query.
+  let resourceDirectory: URL?
+  /// `zips.json` by ZIP, nil until the first ZIP query (MeshWXZips.swift).
+  let zipTable = Mutex<[String: MeshWXZipRow]?>(nil)
+
   // MARK: - Loading
 
   /// The bundled preload directory, or nil if the resource bundle did not build.
@@ -196,6 +206,7 @@ public final class MeshWXTables: Sendable {
   /// Load the eight JSON tables from a directory — the designated initializer, so a
   /// tool or a test can point at an updated bundle without rebuilding the app.
   public init(resourceDirectory: URL?) {
+    self.resourceDirectory = resourceDirectory
     let decoder = JSONDecoder()
 
     let protocolFile: ProtocolFile? = Self.load("protocol", from: resourceDirectory, decoder)
@@ -266,11 +277,12 @@ public final class MeshWXTables: Sendable {
     }
     officesByCode = (wfosFile ?? [:]).reduce(into: [:]) { result, entry in
       result[entry.key] = MeshWXOffice(
-        code: entry.key, states: entry.value.states, lat: entry.value.lat, lon: entry.value.lon)
+        code: entry.key, states: entry.value.states ?? [], lat: entry.value.lat, lon: entry.value.lon,
+        name: entry.value.name)
     }
   }
 
-  private static func load<T: Decodable>(
+  static func load<T: Decodable>(
     _ name: String, from directory: URL?, _ decoder: JSONDecoder
   ) -> T? {
     guard let directory else {
@@ -294,6 +306,19 @@ public final class MeshWXTables: Sendable {
 
   public func officeCode(_ index: UInt8) -> String? {
     offices.indices.contains(Int(index)) ? offices[Int(index)] : nil
+  }
+
+  /// Issuers in the `offices` list that are national centres rather than forecast offices:
+  /// `NHC` (the National Hurricane Center, index 125) and `WNS` (the Storm Prediction Center,
+  /// 126, which issues tornado and severe thunderstorm watches). Their products cover many
+  /// forecast offices' areas, so they say nothing about which office a bot carries.
+  public static let nationalCentreCodes: Set<String> = ["NHC", "WNS"]
+
+  /// Whether an office byte names a national centre: one of ``nationalCentreCodes``, or an
+  /// office whose `wfos.json` row lists no states. False for an index the bundle does not know.
+  public func isNationalCentre(_ index: UInt8) -> Bool {
+    guard let code = officeCode(index) else { return false }
+    return Self.nationalCentreCodes.contains(code) || office(code)?.states.isEmpty == true
   }
 
   public func stationICAO(_ index: UInt16) -> String? {
@@ -644,9 +669,12 @@ extension MeshWXTables {
     let lon: Double
   }
 
+  /// A forecast office's row, or a national centre's, which adds `name` and lists no states.
+  /// Keys not read here (`zone_count`) are ignored.
   private struct OfficeRecord: Decodable {
-    let states: [String]
+    let states: [String]?
     let lat: Double
     let lon: Double
+    let name: String?
   }
 }

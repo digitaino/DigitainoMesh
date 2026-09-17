@@ -24,11 +24,12 @@ struct WeatherStateReducerTests {
   }
 
   @Test
-  func `the same seq twice is a duplicate and changes nothing`() {
+  func `the same message twice is a duplicate and changes nothing`() {
     var state = fresh()
     _ = WeatherStateReducer.apply(F.warning(seq: 17), to: &state, receivedAt: F.t0)
     let before = state
-    let changes = WeatherStateReducer.apply(F.cancel(seq: 17), to: &state, receivedAt: F.t0.addingTimeInterval(1))
+    // The bot's resend of an unechoed packet, 9 s later.
+    let changes = WeatherStateReducer.apply(F.warning(seq: 17), to: &state, receivedAt: F.t0.addingTimeInterval(9))
     #expect(changes == [.duplicate(seq: 17)])
     #expect(state == before)
   }
@@ -65,6 +66,62 @@ struct WeatherStateReducerTests {
     #expect(stored.warning.expiresMinutes == F.t0Minutes + 90)
     #expect(stored.updateCount == 1)
     #expect(stored.receivedAt == F.t0.addingTimeInterval(60))
+  }
+
+  /// Spec §3 and §10.5: a warning says when NWS issued it, and that is not when the packet
+  /// arrived. A replacement carries its own; one that carries none — an older bot — leaves the
+  /// known time alone, since an identity's issuance never moves.
+  @Test
+  func `a warning's issue time is stored, replaced, and never erased by a message without one`() {
+    var state = fresh()
+    // Heard 21 minutes after NWS issued it, which is the line the phone must show.
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 1, issuedMinutes: F.t0Minutes - 21), to: &state,
+      receivedAt: F.t0.addingTimeInterval(180 * 60)
+    )
+    var stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.issuedAt == Date(unixMinutes: F.t0Minutes - 21))
+    #expect(stored.issuedAt != stored.receivedAt, "three hours out of range does not restamp it")
+    #expect(stored.warning.isIssueTimeSaturated == false)
+
+    // A re-issued product under the same identity brings its own time.
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 2, isUpdate: true, issuedMinutes: F.t0Minutes - 5), to: &state,
+      receivedAt: F.t0.addingTimeInterval(181 * 60)
+    )
+    stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.issuedAt == Date(unixMinutes: F.t0Minutes - 5))
+
+    // The revision 4 form of the same warning: no issue time on the wire, and the one already
+    // known stands rather than being wiped.
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 3, isUpdate: true), to: &state, receivedAt: F.t0.addingTimeInterval(182 * 60)
+    )
+    stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.issuedAt == Date(unixMinutes: F.t0Minutes - 5))
+    #expect(stored.warning.issuedMinutes == nil, "the message itself carried none")
+  }
+
+  /// The wire states the issue time as minutes *before the expiry*, and a digest may extend that
+  /// expiry — so the stored instant is resolved once, on arrival, and does not walk forward with
+  /// it.
+  @Test
+  func `a digest extending the expiry leaves the issue time where it was`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 1, expiresMinutes: F.t0Minutes + 45, issuedMinutes: F.t0Minutes - 21),
+      to: &state, receivedAt: F.t0
+    )
+    _ = WeatherStateReducer.apply(
+      F.digest(seq: 2, nowMinutes: F.t0Minutes, entries: [(F.svw42, 120)]), to: &state,
+      receivedAt: F.t0
+    )
+    let stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.warning.expiresMinutes == F.t0Minutes + 120, "the digest extended it")
+    #expect(stored.issuedAt == Date(unixMinutes: F.t0Minutes - 21))
+    // Recomputed from the wire's relative field it would now be 75 minutes late, which is exactly
+    // why the resolved instant is the one kept.
+    #expect(stored.warning.issuedMinutes == F.t0Minutes + 54)
   }
 
   @Test
@@ -157,12 +214,53 @@ struct WeatherStateReducerTests {
   }
 
   @Test
-  func `feed staleness follows the four-hour threshold`() {
+  func `feed staleness follows the four-hour threshold, and 255 is never received`() {
     var state = fresh()
     _ = WeatherStateReducer.apply(F.digest(seq: 1, feedHealth: 60, entries: []), to: &state, receivedAt: F.t0)
     #expect(state.digest?.isFeedStale == false)
+    #expect(state.digest?.feed == .recent(minutes: 240))
     _ = WeatherStateReducer.apply(F.digest(seq: 2, feedHealth: 61, entries: []), to: &state, receivedAt: F.t0)
     #expect(state.digest?.isFeedStale == true)
+    #expect(state.digest?.feed == .quiet(minutes: 244))
+    _ = WeatherStateReducer.apply(F.digest(seq: 3, feedHealth: 255, entries: []), to: &state, receivedAt: F.t0)
+    #expect(state.digest?.isFeedStale == true)
+    #expect(state.digest?.feed == .neverReceived)
+  }
+
+  @Test
+  func `a list removes an omitted warning received over two minutes before it was built, not one received since`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, identity: F.svw42), to: &state, receivedAt: F.t0.addingTimeInterval(-3 * 60))
+    _ = WeatherStateReducer.apply(F.warning(seq: 2, identity: F.svw43), to: &state, receivedAt: F.t0.addingTimeInterval(-60))
+    let changes = WeatherStateReducer.apply(F.digest(seq: 3, entries: []), to: &state, receivedAt: F.t0)
+    #expect(changes == [.digestApplied(missing: [], removed: [F.svw42])])
+    #expect(Set(state.warnings.keys) == [F.svw43])
+  }
+
+  @Test
+  func `a full list says nothing about a warning expiring after its last entry`() {
+    let earlier = F.t0.addingTimeInterval(-3600)
+    let late = MeshWXWarningIdentity(event: 3, office: 35, etn: 900)
+    let soon = MeshWXWarningIdentity(event: 3, office: 35, etn: 901)
+    // Twenty-five heat advisories expiring 61 to 85 minutes after the list, soonest first.
+    let entries = (1...MeshWXWire.maxDigestEntries).map { (MeshWXWarningIdentity(event: 14, office: 35, etn: UInt16($0)), UInt16(60 + $0)) }
+
+    func held() -> WeatherBotState {
+      var state = WeatherBotState(botID: F.botID)
+      _ = WeatherStateReducer.apply(F.warning(seq: 1, identity: late, expiresMinutes: F.t0Minutes + 600), to: &state, receivedAt: earlier)
+      _ = WeatherStateReducer.apply(F.warning(seq: 2, identity: soon, expiresMinutes: F.t0Minutes + 30), to: &state, receivedAt: earlier)
+      return state
+    }
+
+    var full = held()
+    let changes = WeatherStateReducer.apply(F.digest(seq: 3, entries: entries), to: &full, receivedAt: F.t0)
+    // The one expiring before the last entry would have been listed; the later one may have been cut.
+    #expect(changes == [.digestApplied(missing: entries.map(\.0), removed: [soon])])
+    #expect(full.warnings[late] != nil)
+
+    var short = held()
+    _ = WeatherStateReducer.apply(F.digest(seq: 3, entries: Array(entries.dropLast())), to: &short, receivedAt: F.t0)
+    #expect(short.warnings.isEmpty, "a list with room to spare speaks for everything")
   }
 
   // MARK: - Observations and forecasts
@@ -200,6 +298,84 @@ struct WeatherStateReducerTests {
     let held = try! #require(state.observations[202])
     #expect(!held.isStale(at: F.t0.addingTimeInterval(119 * 60)))
     #expect(held.isStale(at: F.t0.addingTimeInterval(121 * 60)))
+  }
+
+  /// Spec §6.1: `ts` is the newest station's time and the rest say how far behind they are, so a
+  /// reading is stored at the time its own station measured it. Everything a screen asks a
+  /// reading — "as of", stale, which copy is newer — reads that one field, so all of it becomes
+  /// per station at once.
+  @Test
+  func `each station is stored at its own report time, and the batch time stays on the row`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.observations(
+        seq: 1, timestampMinutes: F.t0Minutes, stations: [(202, 88), (860, 84), (976, 70)],
+        ages: [0, 20, 110]),
+      to: &state, receivedAt: F.t0
+    )
+    #expect(state.observations[202]?.timestampMinutes == F.t0Minutes, "the newest reads the batch time")
+    #expect(state.observations[860]?.timestampMinutes == F.t0Minutes - 20)
+    #expect(state.observations[976]?.timestampMinutes == F.t0Minutes - 110)
+    #expect(state.observations[976]?.observedAt == Date(unixMinutes: F.t0Minutes - 110))
+    // The batch time is not lost with them: it is what says these three arrived in one scheduled
+    // broadcast, which is what the bot's area is read from.
+    #expect(state.observations.values.allSatisfy { $0.lastBatchMinutes == F.t0Minutes })
+    #expect(state.latestObservationMinutes == F.t0Minutes)
+
+    // Without the ages a batch states only its `ts`, and every station in it still reads that.
+    var old = fresh()
+    _ = WeatherStateReducer.apply(
+      F.observations(seq: 1, timestampMinutes: F.t0Minutes, stations: [(202, 88), (860, 84)]),
+      to: &old, receivedAt: F.t0
+    )
+    #expect(old.observations.values.allSatisfy { $0.timestampMinutes == F.t0Minutes })
+    #expect(old.observations[860]?.observation.ageMinutes == nil)
+  }
+
+  /// A station two hours behind its batch is stale two hours before the batch is. Until the ages
+  /// it did not look stale until two hours after a time that was never its own.
+  @Test
+  func `a station far behind its batch goes stale ahead of the rest of it`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.observations(
+        seq: 1, timestampMinutes: F.t0Minutes, stations: [(202, 88), (860, 84)], ages: [0, 120]),
+      to: &state, receivedAt: F.t0
+    )
+    let newest = try! #require(state.observations[202])
+    let behind = try! #require(state.observations[860])
+    // Two hours is the threshold, measured from each station's own reading.
+    #expect(!behind.isStale(at: F.t0))
+    #expect(behind.isStale(at: F.t0.addingTimeInterval(2 * 60)))
+    #expect(!newest.isStale(at: F.t0.addingTimeInterval(119 * 60)))
+    #expect(newest.isStale(at: F.t0.addingTimeInterval(121 * 60)))
+  }
+
+  /// Newest wins per station, and "newest" is the station's own time: a later batch whose copy of
+  /// a station's report is older than the one held must not roll that row back — though the row
+  /// was still named by that batch, which is what the bot's area is read from.
+  @Test
+  func `a newer batch carrying an older report for one station does not roll it back`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.observations(
+        seq: 1, timestampMinutes: F.t0Minutes, stations: [(202, 88), (860, 84)], ages: [0, 0]),
+      to: &state, receivedAt: F.t0
+    )
+    // The next hour: KAUS filed again, KGTU's newest METAR is now 90 minutes behind the batch —
+    // older than the copy already held.
+    let changes = WeatherStateReducer.apply(
+      F.observations(
+        seq: 2, timestampMinutes: F.t0Minutes + 60, stations: [(202, 90), (860, 70)],
+        ages: [0, 90]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(60 * 60)
+    )
+    #expect(changes == [.observationsStored(stations: [202])])
+    #expect(state.observations[202]?.observation.tempF == 90)
+    #expect(state.observations[202]?.timestampMinutes == F.t0Minutes + 60)
+    #expect(state.observations[860]?.observation.tempF == 84, "the reading held is the newer one")
+    #expect(state.observations[860]?.timestampMinutes == F.t0Minutes)
+    #expect(state.observations[860]?.lastBatchMinutes == F.t0Minutes + 60, "it was in that batch all the same")
   }
 
   @Test
@@ -293,9 +469,65 @@ struct WeatherStateReducerTests {
   }
 }
 
-/// Ordering on a shared, lossy channel: late copies, cached re-sends, lists drained from the
-/// radio's queue hours late, and upgrades whose replacement never arrives. Every case here is a
-/// way the phone could otherwise report calm while something is active.
+/// Ordering on a shared, lossy channel: late copies, a bot that restarts its counter, lists
+/// drained from the radio's queue hours late, and upgrades whose replacement never arrives. Every
+/// case here is a way the phone could otherwise report calm while something is active.
+/// Spec §7A: the bot's own statement of what it carries, which has no time of its own.
+@Suite("WeatherStateReducer coverage")
+struct WeatherStateReducerCoverageTests {
+  private typealias F = WeatherFixture
+
+  @Test
+  func `a statement is stored with when it arrived`() {
+    var state = WeatherBotState(botID: F.botID)
+    let changes = WeatherStateReducer.apply(F.coverage(seq: 1), to: &state, receivedAt: F.t0)
+    #expect(changes == [.coverageStored])
+    #expect(state.coverage?.coverage == F.austinCoverage)
+    #expect(state.coverage?.receivedAt == F.t0)
+  }
+
+  @Test
+  func `the newest statement replaces the one held`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.coverage(seq: 1), to: &state, receivedAt: F.t0)
+
+    var widened = F.austinCoverage
+    widened.radiusKilometres = 200
+    let changes = WeatherStateReducer.apply(
+      F.coverage(seq: 2, widened), to: &state, receivedAt: F.t0.addingTimeInterval(3 * 3600))
+    #expect(changes == [.coverageStored])
+    #expect(state.coverage?.coverage.radiusKilometres == 200)
+    #expect(state.coverage?.receivedAt == F.t0.addingTimeInterval(3 * 3600))
+  }
+
+  /// A late resend arriving behind a newer statement was sent first; the held one stands.
+  @Test
+  func `a statement arriving out of order leaves the newer one alone`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.coverage(seq: 40), to: &state, receivedAt: F.t0)
+
+    var older = F.austinCoverage
+    older.radiusKilometres = 80
+    let changes = WeatherStateReducer.apply(
+      F.coverage(seq: 20, older), to: &state, receivedAt: F.t0.addingTimeInterval(10))
+    #expect(changes.contains(.outOfOrder(seq: 20)))
+    #expect(changes.contains(.coverageIgnoredOlder))
+    #expect(state.coverage?.coverage.radiusKilometres == 120)
+  }
+
+  /// The same bytes twice — the bot's resend of an unechoed packet — change nothing.
+  @Test
+  func `a copy of a statement is a duplicate`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.coverage(seq: 1), to: &state, receivedAt: F.t0)
+    let before = state
+    let changes = WeatherStateReducer.apply(
+      F.coverage(seq: 1), to: &state, receivedAt: F.t0.addingTimeInterval(9))
+    #expect(changes == [.duplicate(seq: 1)])
+    #expect(state == before)
+  }
+}
+
 @Suite("WeatherStateReducer ordering")
 struct WeatherStateReducerOrderingTests {
   private typealias F = WeatherFixture
@@ -312,9 +544,9 @@ struct WeatherStateReducerOrderingTests {
   }
 
   @Test
-  func `a cached empty list re-sent after a new warning does not remove it`() {
+  func `an empty list built before a new warning arrived does not remove it, however late it comes`() {
     var state = WeatherBotState(botID: F.botID)
-    // 23:00 list, empty. 23:02 tornado warning. 23:04 the bot's cache re-sends the 23:00 list.
+    // 23:00 list, empty. 23:02 tornado warning. 23:04 a copy of the 23:00 list arrives late.
     _ = WeatherStateReducer.apply(F.digest(seq: 1, nowMinutes: F.t0Minutes, entries: []), to: &state, receivedAt: F.t0)
     _ = WeatherStateReducer.apply(F.warning(seq: 2, identity: F.svw43), to: &state, receivedAt: F.t0.addingTimeInterval(minutes(2)))
     let changes = WeatherStateReducer.apply(
@@ -347,7 +579,19 @@ struct WeatherStateReducerOrderingTests {
   }
 
   @Test
-  func `a gap seen after the list was built survives a cached re-send of it`() {
+  func `a list built within two minutes of a gap does not clear it, one built later does`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 1, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    // seq 2 is lost; seq 3 reveals the gap at t0.
+    _ = WeatherStateReducer.apply(F.observations(seq: 3, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.digest(seq: 4, nowMinutes: F.t0Minutes + 1, entries: []), to: &state, receivedAt: F.t0.addingTimeInterval(60))
+    #expect(state.needsDigest, "a minute after the gap, the two clocks could still disagree about the order")
+    _ = WeatherStateReducer.apply(F.digest(seq: 5, nowMinutes: F.t0Minutes + 3, entries: []), to: &state, receivedAt: F.t0.addingTimeInterval(180))
+    #expect(!state.needsDigest)
+  }
+
+  @Test
+  func `a gap seen after the list was built survives a late copy of it`() {
     var state = WeatherBotState(botID: F.botID)
     _ = WeatherStateReducer.apply(F.digest(seq: 1, nowMinutes: F.t0Minutes, entries: []), to: &state, receivedAt: F.t0)
     // seq 2 is lost; seq 3 reveals the gap three minutes later.
@@ -394,26 +638,145 @@ struct WeatherStateReducerOrderingTests {
   }
 
   @Test
-  func `a late copy of a recent seq is a duplicate, not a gap`() {
+  func `a late copy of a recent message is a duplicate, not a gap`() {
     var state = WeatherBotState(botID: F.botID)
     for seq: UInt8 in 5...7 {
       _ = WeatherStateReducer.apply(F.observations(seq: seq, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
     }
-    let changes = WeatherStateReducer.apply(F.cancel(seq: 6), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(F.observations(seq: 6, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
     #expect(changes == [.duplicate(seq: 6)])
     #expect(state.lastSeq == 7)
     #expect(!state.needsDigest)
   }
 
   @Test
-  func `a message far behind is out of order, its warning is not applied, and it asks for a list`() {
+  func `a late warning for an identity held from a newer message is not applied, and asks for a list`() {
     var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 98, windMph: 70), to: &state, receivedAt: F.t0)
     _ = WeatherStateReducer.apply(F.observations(seq: 100, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
-    let changes = WeatherStateReducer.apply(F.warning(seq: 50), to: &state, receivedAt: F.t0)
-    #expect(changes == [.outOfOrder(seq: 50)])
-    #expect(state.warnings.isEmpty)
+    let changes = WeatherStateReducer.apply(F.warning(seq: 97, windMph: 60), to: &state, receivedAt: F.t0)
+    #expect(changes == [.outOfOrder(seq: 97)])
+    #expect(state.warnings[F.svw42]?.warning.windMph == 70)
     #expect(state.needsDigest)
     #expect(state.lastSeq == 100)
+  }
+
+  @Test
+  func `the bot's late resend of an update replaces the older copy it updates`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 95, windMph: 60), to: &state, receivedAt: F.t0)
+    // 96, the update, is missed; 97 arrives; 96's resend follows nine seconds later.
+    _ = WeatherStateReducer.apply(F.observations(seq: 97, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(
+      F.warning(seq: 96, windMph: 70), to: &state, receivedAt: F.t0.addingTimeInterval(9))
+    #expect(changes == [.outOfOrder(seq: 96), .warningStored(F.svw42, replacedExisting: true)])
+    #expect(state.warnings[F.svw42]?.warning.windMph == 70)
+    #expect(state.warnings[F.svw42]?.seq == 96)
+    #expect(state.lastSeq == 97)
+  }
+
+  @Test
+  func `out of order across the wrap from 255 to 0 is still out of order, not a restart`() {
+    var state = WeatherBotState(botID: F.botID)
+    for seq: UInt8 in [255, 0, 1] {
+      _ = WeatherStateReducer.apply(F.observations(seq: seq, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    }
+    let changes = WeatherStateReducer.apply(F.warning(seq: 254, identity: F.svw43), to: &state, receivedAt: F.t0)
+    #expect(changes == [.outOfOrder(seq: 254), .warningStored(F.svw43, replacedExisting: false)])
+    #expect(state.lastSeq == 1)
+  }
+
+  @Test
+  func `a late warning for an identity not held is stored, since it is the only copy`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 100, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(F.warning(seq: 96, identity: F.svw43), to: &state, receivedAt: F.t0)
+    #expect(changes == [.outOfOrder(seq: 96), .warningStored(F.svw43, replacedExisting: false)])
+    #expect(state.lastSeq == 100)
+  }
+
+  @Test
+  func `a late warning for an identity cancelled in the last hour is not brought back`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.cancel(seq: 100, identity: F.svw42), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(F.warning(seq: 98, identity: F.svw42), to: &state, receivedAt: F.t0.addingTimeInterval(10))
+    #expect(changes == [.outOfOrder(seq: 98)])
+    #expect(state.warnings.isEmpty)
+    #expect(state.recentCancels[F.svw42] == F.t0)
+
+    _ = WeatherStateReducer.apply(F.observations(seq: 101, stations: [(202, 88)]), to: &state, receivedAt: F.t0.addingTimeInterval(61 * 60))
+    #expect(state.recentCancels.isEmpty, "remembered for an hour")
+  }
+
+  @Test
+  func `a late cancel still ends its warning`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 10), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 12, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(F.cancel(seq: 11), to: &state, receivedAt: F.t0)
+    #expect(changes == [.outOfOrder(seq: 11), .warningRemoved(F.svw42, reason: .expiredEarly)])
+    #expect(state.warnings.isEmpty)
+  }
+
+  @Test
+  func `a late upgrade cancel leaves no marker when its replacement is already held`() {
+    var state = WeatherBotState(botID: F.botID)
+    let travis = [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)]
+    let tornado = MeshWXWarningIdentity(event: 1, office: 35, etn: 9)
+    _ = WeatherStateReducer.apply(warning(seq: 10, identity: F.svw42, areas: travis), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(warning(seq: 12, identity: tornado, areas: travis), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.cancel(seq: 11, identity: F.svw42, reason: .upgraded), to: &state, receivedAt: F.t0)
+    #expect(Set(state.warnings.keys) == [tornado])
+    #expect(state.pendingUpgrades.isEmpty)
+  }
+
+  @Test
+  func `a late list goes through the build-time check like any other`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.digest(seq: 10, entries: []), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 12, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    #expect(WeatherStateReducer.apply(F.digest(seq: 11, nowMinutes: F.t0Minutes - 30, entries: []), to: &state, receivedAt: F.t0)
+      == [.outOfOrder(seq: 11), .digestIgnoredOlder(builtMinutes: F.t0Minutes - 30)])
+    #expect(WeatherStateReducer.apply(F.digest(seq: 9, nowMinutes: F.t0Minutes + 5, entries: [(F.svw43, 30)]), to: &state, receivedAt: F.t0)
+      == [.outOfOrder(seq: 9), .digestApplied(missing: [F.svw43], removed: [])])
+  }
+
+  @Test
+  func `a seq far behind is a restart: a new stream, applied normally, and a gap`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 100, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(F.warning(seq: 50), to: &state, receivedAt: F.t0.addingTimeInterval(60))
+    #expect(changes == [.sequenceRestart(last: 100, received: 50), .warningStored(F.svw42, replacedExisting: false)])
+    #expect(state.lastSeq == 50)
+    #expect(state.needsDigest)
+    #expect(state.recentMessages.map(\.seq) == [50])
+    // The new stream goes on from there without another gap.
+    #expect(WeatherStateReducer.apply(F.observations(seq: 51, stations: [(202, 88)]), to: &state, receivedAt: F.t0.addingTimeInterval(62))
+      == [.observationsStored(stations: [202])])
+  }
+
+  @Test
+  func `reordering reaches 32 places back, and 33 is a restart`() {
+    func after100(_ seq: UInt8) -> WeatherStateChange? {
+      var state = WeatherBotState(botID: F.botID)
+      _ = WeatherStateReducer.apply(F.observations(seq: 100, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+      return WeatherStateReducer.apply(F.observations(seq: seq, timestampMinutes: F.t0Minutes - 1, stations: [(860, 80)]), to: &state, receivedAt: F.t0).first
+    }
+    #expect(after100(99) == .outOfOrder(seq: 99))
+    #expect(after100(68) == .outOfOrder(seq: 68))
+    #expect(after100(67) == .sequenceRestart(last: 100, received: 67))
+  }
+
+  @Test
+  func `a new message under the newest seq after a restart is not taken for a copy`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.warning(seq: 40), to: &state, receivedAt: F.t0)
+    // The bot restarts and its counter lands on 40 again.
+    let changes = WeatherStateReducer.apply(F.cancel(seq: 40), to: &state, receivedAt: F.t0.addingTimeInterval(120))
+    #expect(changes == [.sequenceRestart(last: 40, received: 40), .warningRemoved(F.svw42, reason: .expiredEarly)])
+    #expect(state.warnings.isEmpty)
+    // The bot's resend of that cancel is a copy.
+    #expect(WeatherStateReducer.apply(F.cancel(seq: 40), to: &state, receivedAt: F.t0.addingTimeInterval(129)) == [.duplicate(seq: 40)])
   }
 
   @Test
@@ -445,6 +808,58 @@ struct WeatherStateReducerOrderingTests {
     #expect(state.observations[976]?.batchSize == 1)
   }
 
+  /// A single-station answer is somebody's `>o KAUS`, broadcast to everyone. The newer reading is
+  /// the one to show, but it says nothing about the bot's area, so it must not wipe out the record
+  /// that a scheduled batch named the station (docs/MESHWX_UI.md §6).
+  @Test
+  func `a single-station answer replaces the reading but not the batch it was in`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 1, stations: [(202, 88), (860, 84)]), to: &state, receivedAt: F.t0)
+    #expect(state.observations[202]?.lastBatchMinutes == F.t0Minutes)
+
+    _ = WeatherStateReducer.apply(
+      F.observations(seq: 2, timestampMinutes: F.t0Minutes + 5, stations: [(202, 90)]), to: &state, receivedAt: F.t0)
+    #expect(state.observations[202]?.observation.tempF == 90, "the newer reading is what is shown")
+    #expect(state.observations[202]?.batchSize == 1, "and it came in a batch of one")
+    #expect(state.observations[202]?.lastBatchMinutes == F.t0Minutes, "it was in the scheduled batch, and still is")
+
+    // A station nothing but a single answer has ever named has no batch behind it.
+    _ = WeatherStateReducer.apply(
+      F.observations(seq: 3, timestampMinutes: F.t0Minutes + 6, stations: [(976, 70)]), to: &state, receivedAt: F.t0)
+    #expect(state.observations[976]?.lastBatchMinutes == nil)
+
+    // A scheduled batch drained late, older than the single answer, is still evidence.
+    _ = WeatherStateReducer.apply(
+      F.observations(seq: 4, timestampMinutes: F.t0Minutes + 2, stations: [(976, 71), (860, 85)]), to: &state, receivedAt: F.t0)
+    #expect(state.observations[976]?.observation.tempF == 70, "the newer single reading stands")
+    #expect(state.observations[976]?.lastBatchMinutes == F.t0Minutes + 2)
+  }
+
+  /// A state file written before the batch was recorded separately: a reading that came in a batch
+  /// is its own evidence, which is exactly what `batchSize` alone used to say.
+  @Test
+  func `a reading from a file without the batch record keeps its batch`() throws {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.observations(seq: 1, stations: [(202, 88), (860, 84)]), to: &state, receivedAt: F.t0)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .secondsSince1970
+    var json = try #require(try JSONSerialization.jsonObject(with: encoder.encode(state)) as? [String: Any])
+    var pairs = try #require(json["observations"] as? [Any])
+    for index in stride(from: 1, to: pairs.count, by: 2) {
+      if var record = pairs[index] as? [String: Any] {
+        record.removeValue(forKey: "lastBatchMinutes")
+        pairs[index] = record
+      }
+    }
+    json["observations"] = pairs
+
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .secondsSince1970
+    let legacy = try decoder.decode(WeatherBotState.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(legacy.observations[202]?.lastBatchMinutes == F.t0Minutes)
+    #expect(legacy.observations[202]?.batchSize == 2)
+  }
+
   @Test
   func `a state file written before the new fields still loads`() async throws {
     var state = WeatherBotState(botID: F.botID)
@@ -456,7 +871,9 @@ struct WeatherStateReducerOrderingTests {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .secondsSince1970
     var json = try #require(try JSONSerialization.jsonObject(with: encoder.encode(state)) as? [String: Any])
-    for key in ["recentSeqs", "gapDetectedAt", "pendingUpgrades"] { json.removeValue(forKey: key) }
+    for key in ["recentMessages", "gapDetectedAt", "pendingUpgrades", "recentCancels"] { json.removeValue(forKey: key) }
+    // Before fingerprints the window was bare seq values.
+    json["recentSeqs"] = [3, 4]
     func strip(_ collection: String, _ field: String) {
       guard var pairs = json[collection] as? [Any] else { return }
       for index in stride(from: 1, to: pairs.count, by: 2) {
@@ -475,9 +892,125 @@ struct WeatherStateReducerOrderingTests {
     decoder.dateDecodingStrategy = .secondsSince1970
     let legacy = try decoder.decode(WeatherBotState.self, from: JSONSerialization.data(withJSONObject: json))
     #expect(legacy.warnings.count == 1)
-    #expect(legacy.recentSeqs.isEmpty)
+    #expect(legacy.recentMessages == [WeatherSeenMessage(seq: 3, fingerprint: nil), WeatherSeenMessage(seq: 4, fingerprint: nil)])
+    #expect(legacy.recentCancels.isEmpty)
     #expect(legacy.observations[202]?.batchSize == 1)
     #expect(legacy.forecasts[102]?.requestedHere == false)
     #expect(legacy.texts[4]?.request == nil)
+
+    // An entry without a fingerprint matches on seq alone, as it did.
+    var reloaded = legacy
+    #expect(WeatherStateReducer.apply(F.observations(seq: 4, stations: [(202, 70)]), to: &reloaded, receivedAt: F.t0) == [.duplicate(seq: 4)])
+  }
+}
+
+/// Texts and forecasts get the treatment readings have always had: an age and a ceiling, so the
+/// answers the channel carries to everybody else cannot pile up for ever. What a screen would
+/// still show survives both rules, however old it is (docs/MESHWX_UI.md §12).
+@Suite("Weather retention")
+struct WeatherRetentionTests {
+  private typealias F = WeatherFixture
+
+  private let cutoff = WeatherFixture.t0.addingTimeInterval(-48 * 3600)
+
+  private func reply(
+    group: UInt8,
+    subject: MeshWXTextSubject = .hazardousOutlook,
+    request: WeatherRequest? = nil,
+    hoursAgo: Double
+  ) -> WeatherTextAssembly {
+    let at = F.t0.addingTimeInterval(-hoursAgo * 3600)
+    return WeatherTextAssembly(
+      subject: subject, group: group, total: 1, chunks: [0: "text"],
+      firstReceivedAt: at, lastReceivedAt: at, request: request)
+  }
+
+  private func state(texts: [WeatherTextAssembly]) -> WeatherBotState {
+    var state = WeatherBotState(botID: F.botID)
+    for text in texts { state.texts[text.group] = text }
+    return state
+  }
+
+  private func forecast(point: UInt16, hoursAgo: Double, requestedHere: Bool = false) -> WeatherStoredForecast {
+    WeatherStoredForecast(
+      forecast: MeshWXForecast(
+        pointIndex: point, issuedMinutes: F.t0Minutes - UInt32(hoursAgo * 60), firstPeriod: 0, periods: []),
+      receivedAt: F.t0.addingTimeInterval(-hoursAgo * 3600),
+      requestedHere: requestedHere)
+  }
+
+  private func state(forecasts: [WeatherStoredForecast]) -> WeatherBotState {
+    var state = WeatherBotState(botID: F.botID)
+    for forecast in forecasts { state.forecasts[forecast.forecast.pointIndex] = forecast }
+    return state
+  }
+
+  // MARK: - Texts
+
+  @Test
+  func `a reply the channel carried two days ago goes`() {
+    var state = state(texts: [
+      reply(group: 1, subject: .stormReports, hoursAgo: 49),
+      reply(group: 2, subject: .stormReports, hoursAgo: 1)
+    ])
+    WeatherStateReducer.pruneTexts(&state, receivedBefore: cutoff, limit: 24)
+    #expect(state.texts.keys.sorted() == [2])
+  }
+
+  /// The product screen shows the newest reply on its subject, whoever asked for it: dropping it
+  /// on age would empty a screen that has something to show.
+  @Test
+  func `the newest reply on a subject stays however old it is`() {
+    var state = state(texts: [reply(group: 1, subject: .stormReports, hoursAgo: 200)])
+    WeatherStateReducer.pruneTexts(&state, receivedBefore: cutoff, limit: 24)
+    #expect(state.texts.keys.sorted() == [1])
+  }
+
+  /// A screen shows this phone's own reply first and falls back to the overheard one, so both
+  /// survive — and nothing older than either does.
+  @Test
+  func `this phone's own reply and the newest overheard one both stay`() {
+    var state = state(texts: [
+      reply(group: 1, subject: .stormReports, request: .stormReports(state: "TX"), hoursAgo: 60),
+      reply(group: 2, subject: .stormReports, hoursAgo: 55),
+      reply(group: 3, subject: .stormReports, hoursAgo: 70)
+    ])
+    WeatherStateReducer.pruneTexts(&state, receivedBefore: cutoff, limit: 24)
+    #expect(state.texts.keys.sorted() == [1, 2])
+  }
+
+  @Test
+  func `the ceiling keeps the newest and never drops what is shown`() {
+    var state = state(texts: (0..<30).map { reply(group: UInt8($0), subject: .general, hoursAgo: Double($0)) })
+    WeatherStateReducer.pruneTexts(&state, receivedBefore: cutoff, limit: 5)
+    #expect(state.texts.count == 5)
+    #expect(state.texts.keys.sorted() == [0, 1, 2, 3, 4])
+  }
+
+  // MARK: - Forecasts
+
+  @Test
+  func `a forecast the channel carried two days ago goes`() {
+    var state = state(forecasts: [forecast(point: 500, hoursAgo: 49), forecast(point: 501, hoursAgo: 2)])
+    WeatherStateReducer.pruneForecasts(&state, receivedBefore: cutoff, limit: 24)
+    #expect(state.forecasts.keys.sorted() == [501])
+  }
+
+  /// The place's own forecast is what the Forecast card is showing; its age is said on the card,
+  /// and forgetting it would empty the card instead.
+  @Test
+  func `the forecast this phone asked for stays however old it is`() {
+    var state = state(forecasts: [forecast(point: 103, hoursAgo: 200, requestedHere: true)])
+    WeatherStateReducer.pruneForecasts(&state, receivedBefore: cutoff, limit: 24)
+    #expect(state.forecasts.keys.sorted() == [103])
+  }
+
+  @Test
+  func `under the ceiling this phone's own forecasts outlast the ones it overheard`() {
+    var state = state(forecasts:
+      (0..<10).map { forecast(point: UInt16(600 + $0), hoursAgo: Double($0)) }
+        + [forecast(point: 103, hoursAgo: 20, requestedHere: true), forecast(point: 104, hoursAgo: 30, requestedHere: true)])
+    WeatherStateReducer.pruneForecasts(&state, receivedBefore: cutoff, limit: 3)
+    #expect(state.forecasts.keys.sorted() == [103, 104, 600])
   }
 }

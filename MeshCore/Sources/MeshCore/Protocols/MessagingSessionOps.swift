@@ -35,6 +35,30 @@ public protocol MessagingSessionOps: Actor {
     text: String,
     timestamp: Date
   ) async throws
+
+  /// Sends a binary datagram to a channel (`CMD_SEND_CHANNEL_DATA`, 0x3E).
+  ///
+  /// Requires firmware v11+ (MeshCore v1.15.0+); older firmware has no such command. The
+  /// counterpart of the `GRP_DATA` packets the radio delivers as
+  /// ``MeshEvent/channelDataReceived(_:)``, and the way an app puts one of its own on the
+  /// channel — MeshWX's `>` requests are the first (docs/MESHWX.md, "Requests").
+  ///
+  /// - Parameters:
+  ///   - channelIndex: The channel slot index.
+  ///   - dataType: Application data-type namespace. `0x0000` is rejected by firmware;
+  ///     `0xFF00-0xFFFF` is the developer namespace.
+  ///   - payload: Binary payload, clamped to 163 bytes by the builder.
+  ///   - pathLength: Encoded `path_len` byte; `0xFF` (``PacketBuilder/floodPathSentinel``)
+  ///     floods, which is what a datagram to nobody in particular wants.
+  ///   - pathBytes: Path bytes, written verbatim and ignored when flooding.
+  /// - Throws: `MeshCoreError` if the datagram fails to send.
+  func sendChannelData(
+    channelIndex: UInt8,
+    dataType: UInt16,
+    payload: Data,
+    pathLength: UInt8,
+    pathBytes: Data
+  ) async throws
 }
 
 // MARK: - Default Implementations

@@ -9,11 +9,13 @@ import MeshWX
 /// read back out of the words, and a reply that does not show it neither settles the request nor
 /// becomes this phone's.
 ///
-/// The keys, per request, as far as the kit shows the bot's wording (vector
-/// `text_warning_narrative_chunk0`, and the bot's human `metar` / `taf` replies):
-/// - `>metar KAUS`: the first chunk opens as a METAR (`METAR`, `SPECI`, or the station followed by
-///   a `DDHHMMZ` time) and names the station in its first words.
-/// - `>taf KAUS`: the first chunk opens with `TAF` and names the station in its first words.
+/// The keys, per request, as the bot words its replies (spec §8.2, revision 3, and vector
+/// `text_warning_narrative_chunk0`):
+/// - `>metar KAUS`: the first chunk opens `METAR KAUS` and names the station in its first words
+///   (`SPECI`, or the station followed by a `DDHHMMZ` time, are accepted too). The bot never
+///   answers with another station's report; without one it sends Not available `m`.
+/// - `>taf KAUS`: the first chunk opens `TAF KAUS` (an amendment `TAF KAUS AMD`) and names the
+///   station in its first words; without one, Not available `t`.
 /// - `>wt SV.W.EWX.42`: the first chunk names the event ("SEVERE THUNDERSTORM WARNING"), and when
 ///   the warning is held with named areas, the text names one of them. The text carries neither
 ///   the office nor the tracking number.

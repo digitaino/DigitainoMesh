@@ -92,6 +92,8 @@ public enum MeshWXSky: UInt8, Sendable, Hashable, Codable, CaseIterable {
   case mist = 12
   case squall = 13
   case sandOrDust = 14
+  /// In an observation: the report had no cloud or weather group, so the sky is unknown (spec
+  /// §6, revision 3).
   case other = 15
 
   /// Never fails: the nibble is masked, and all 16 values are defined.
@@ -208,6 +210,31 @@ public struct MeshWXAreaRun: Sendable, Hashable, Codable {
     return text.count >= 3 ? text : String(repeating: "0", count: 3 - text.count) + text
   }
 
+  /// Whether this run covers a UGC code (`"TXZ192"`, `"TXC453"`), read against `index.json`
+  /// `states`. False for a malformed code and for one whose state the bundle does not know: an
+  /// old bundle loses the *match*, and a caller must not read that as "not covered".
+  public func covers(ugc: String, states: [String]) -> Bool {
+    guard let key = Self.key(forUGC: ugc, states: states) else { return false }
+    guard key.stateIndex == stateIndex, key.isCounty == isCounty else { return false }
+    // In Int: `start + run` can pass the u16 ceiling for an out-of-spec run.
+    return Int(key.number) >= Int(start) && Int(key.number) < Int(start) + Int(run)
+  }
+
+  /// Split a UGC code into the fields a run carries, or nil when it is malformed or its state is
+  /// not in `index.json` `states`.
+  public static func key(
+    forUGC ugc: String, states: [String]
+  ) -> (stateIndex: UInt8, isCounty: Bool, number: UInt16)? {
+    let code = Array(ugc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
+    guard code.count == 6 else { return nil }
+    let kind = code[2]
+    guard kind == "C" || kind == "Z" else { return nil }
+    guard code[3...].allSatisfy(\.isNumber), let number = UInt16(String(code[3...])) else { return nil }
+    // Only bits 6-0 carry the state, so an index past 127 has no run to match.
+    guard let index = states.firstIndex(of: String(code[0...1])), index <= 127 else { return nil }
+    return (UInt8(index), kind == "C", number)
+  }
+
   /// Turn NWS UGC codes into runs — the reference's `areas_from_ugcs`.
   ///
   /// Codes whose state is not in `states` are skipped (the bundle is append-only, so an
@@ -287,6 +314,13 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
   public var polygon: [MeshWXCoordinate]?
   /// The counties or forecast zones the product names.
   public var areas: [MeshWXAreaRun]?
+  /// Minutes between the NWS product's own issuance and ``expiresMinutes``, exactly as the wire
+  /// carries it (spec §3, revision 5); nil when the message did not carry an issue time.
+  ///
+  /// The wire value rather than the instant, for the same reason ``MeshWXCompass`` keeps its
+  /// nibble: a re-encode has to reproduce the two bytes. It also keeps the saturation readable —
+  /// 65535 means "45.5 days or more", which an absolute time alone cannot say.
+  public var issuedBeforeMinutes: UInt16?
 
   public init(
     identity: MeshWXWarningIdentity,
@@ -298,7 +332,8 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
     windMph: UInt8 = 0,
     isUpdate: Bool = false,
     polygon: [MeshWXCoordinate]? = nil,
-    areas: [MeshWXAreaRun]? = nil
+    areas: [MeshWXAreaRun]? = nil,
+    issuedBeforeMinutes: UInt16? = nil
   ) {
     self.identity = identity
     self.expiresMinutes = expiresMinutes
@@ -310,11 +345,30 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
     self.isUpdate = isUpdate
     self.polygon = polygon
     self.areas = areas
+    self.issuedBeforeMinutes = issuedBeforeMinutes
   }
 
   public var event: UInt8 { identity.event }
   public var office: UInt8 { identity.office }
   public var etn: UInt16 { identity.etn }
+
+  /// When NWS issued the product, in Unix minutes: `expires − issued_before` (spec §3). Nil when
+  /// the warning carries no issue time — a bot older than revision 5.
+  ///
+  /// This is the product's own header time, kept across continuations, so an SVS update does not
+  /// restamp a warning as newly issued. It is never when the bot read the file and never when the
+  /// phone heard the packet (spec §10.5): a radio out of range for three hours must still say
+  /// *issued 1:29 PM*. With ``isIssueTimeSaturated`` the product was issued at or before this.
+  public var issuedMinutes: UInt32? {
+    issuedBeforeMinutes.map { expiresMinutes &- UInt32($0) }
+  }
+
+  /// The gap ran past the u16 and saturated (spec §3), so ``issuedMinutes`` is a ceiling: the
+  /// product was issued 45.5 days before its expiry *or more*. No NWS product runs that long from
+  /// issuance to expiry, so this is a guard against a wrap, not a case a screen will meet.
+  public var isIssueTimeSaturated: Bool {
+    issuedBeforeMinutes == MeshWXWire.issuedBeforeSaturatedMinutes
+  }
 
   /// Hail tag in inches, or nil when there is no tag. The *number* is returned, not a
   /// string, because the unit and the decimal separator are the app's to localise.
@@ -433,6 +487,15 @@ public struct MeshWXStationObservation: Sendable, Hashable, Codable {
   /// Feels-like minus temperature. 0 = the same, which is also "no heat index or wind
   /// chill applies"; the two are not distinguished on the wire.
   public var feelsDeltaF: Int8
+  /// How far behind the batch's ``MeshWXObservations/timestampMinutes`` this station's own report
+  /// is, in the wire's 10-minute steps (spec §6.1, revision 5): 0 to 150, where
+  /// ``MeshWXWire/observationAgeSaturatedMinutes`` means "150 minutes or more"
+  /// (``isAgeSaturated``).
+  ///
+  /// Nil when the batch carried no ages — a bot older than revision 5 — which is *not* 0: "this
+  /// station's report is the batch time" and "the batch does not say" are different answers, and
+  /// only the second one leaves a phone guessing.
+  public var ageMinutes: UInt16?
 
   public init(
     stationIndex: UInt16,
@@ -445,7 +508,8 @@ public struct MeshWXStationObservation: Sendable, Hashable, Codable {
     visibilityMiles: UInt8? = nil,
     pressureInHg: Double? = nil,
     humidityPercent: UInt8? = nil,
-    feelsDeltaF: Int8 = 0
+    feelsDeltaF: Int8 = 0,
+    ageMinutes: UInt16? = nil
   ) {
     self.stationIndex = stationIndex
     self.tempF = tempF
@@ -458,18 +522,27 @@ public struct MeshWXStationObservation: Sendable, Hashable, Codable {
     self.pressureInHg = pressureInHg
     self.humidityPercent = humidityPercent
     self.feelsDeltaF = feelsDeltaF
+    self.ageMinutes = ageMinutes
   }
 
   /// Apparent temperature, or nil when the temperature itself is unknown.
   public var feelsLikeF: Int? {
     tempF.map { Int($0) + Int(feelsDeltaF) }
   }
+
+  /// The age nibble saturated (spec §6.1): this report is 150 minutes old *or more*. The bot
+  /// admits stations up to 120 minutes old, so a saturated station is one whose report aged
+  /// further while the batch waited.
+  public var isAgeSaturated: Bool {
+    ageMinutes == MeshWXWire.observationAgeSaturatedMinutes
+  }
 }
 
 /// A batch of current conditions (type 4, spec §6).
 public struct MeshWXObservations: Sendable, Hashable, Codable {
-  /// Unix minutes of the *newest* observation in the batch; staleness is judged from it
-  /// for the whole batch (spec §10.3).
+  /// Unix minutes of the *newest* observation in the batch. A station in the same batch may have
+  /// filed its METAR up to 120 minutes earlier; from revision 5 each one says by how much
+  /// (``MeshWXStationObservation/ageMinutes``), and ``reportMinutes(for:)`` is the time to show.
   public var timestampMinutes: UInt32
   public var stations: [MeshWXStationObservation]
 
@@ -477,15 +550,30 @@ public struct MeshWXObservations: Sendable, Hashable, Codable {
     self.timestampMinutes = timestampMinutes
     self.stations = stations
   }
+
+  /// Whether this batch carries per-station ages. All or nothing (spec §6.1): the flag means
+  /// every station in the batch has one.
+  public var carriesAges: Bool {
+    !stations.isEmpty && stations.allSatisfy { $0.ageMinutes != nil }
+  }
+
+  /// One station's own report time, in Unix minutes: the batch `ts` less its age (spec §6.1).
+  ///
+  /// The batch time itself for a batch without ages, which is all such a batch says — and what an
+  /// app had to show under every reading before revision 5, wrong about most of them.
+  public func reportMinutes(for station: MeshWXStationObservation) -> UInt32 {
+    timestampMinutes &- UInt32(station.ageMinutes ?? 0)
+  }
 }
 
 // MARK: - Forecast
 
 /// One forecast period (spec §7, 5 bytes on the wire).
 public struct MeshWXForecastPeriod: Sendable, Hashable, Codable {
-  /// Nil on night periods.
+  /// Nil when the entry has no high: a whole day whose first half is missing at the edge of the
+  /// forecast window (spec §7, revision 3), or a revision 1 night period.
   public var highF: Int8?
-  /// Nil on day periods.
+  /// Nil when the entry has no low: the edge of the window, or a revision 1 day period.
   public var lowF: Int8?
   public var popPercent: UInt8?
   public var sky: MeshWXSky
@@ -693,6 +781,143 @@ public struct MeshWXNotAvailable: Sendable, Hashable, Codable {
   }
 }
 
+// MARK: - Coverage
+
+/// What a bot carries, stated by the bot (type 8, spec §7A).
+///
+/// The only thing an app may read a bot's area from. Inferring it from the stations in the hourly
+/// batches and from the offices of whatever warnings happened to be active told a real phone that
+/// WX-AUS "may not carry alerts for Travis County" — the bot's own home county — because the one
+/// warning active that minute came from a neighbouring office. The stations are recomputed every
+/// hour and warnings come and go; neither describes coverage. This does.
+///
+/// Read a cut list as incomplete, **never** as a denial: with ``areasCut`` or ``officesCut`` set,
+/// an absence means "not listed", and nothing may be called outside the area on the strength of
+/// it. With both clear the lists are the whole area, which is what lets an app say a place is
+/// outside at all.
+public struct MeshWXCoverage: Sendable, Hashable, Codable {
+  /// The coverage circle's centre — the bot's home point — in degrees. 0,0 with
+  /// ``radiusKilometres`` 0 means no centre was stated; read ``centre``, which is nil for that,
+  /// rather than these two.
+  public var latitude: Double
+  public var longitude: Double
+  /// Kilometres. 0 = no circle stated; the area is then whatever the runs list.
+  public var radiusKilometres: UInt16
+  /// The most stations one hourly Observations batch can carry (13 for WX-AUS, which sends the
+  /// per-station ages and pays a station for them — spec §6.1); 0 = this bot broadcasts none. A
+  /// cap, not a count: the batch is rebuilt every hour (spec §6), so a count would describe this
+  /// hour rather than the coverage.
+  public var stationCap: UInt8
+  /// Indices into `index.json` `offices`, ascending: every office whose zones the bot covers,
+  /// plus any the operator named outright.
+  public var officeIndices: [UInt8]
+  /// The forecast zones (or counties) covered, in exactly a Warning's area-run encoding (spec §3).
+  public var areas: [MeshWXAreaRun]
+  /// Flags bit 0: the runs were cut to fit, so a zone absent from them may still be covered.
+  public var areasCut: Bool
+  /// Flags bit 1: the office list was cut, so an office absent from it may still be carried.
+  public var officesCut: Bool
+
+  public init(
+    latitude: Double,
+    longitude: Double,
+    radiusKilometres: UInt16,
+    stationCap: UInt8,
+    officeIndices: [UInt8],
+    areas: [MeshWXAreaRun],
+    areasCut: Bool = false,
+    officesCut: Bool = false
+  ) {
+    self.latitude = latitude
+    self.longitude = longitude
+    self.radiusKilometres = radiusKilometres
+    self.stationCap = stationCap
+    self.officeIndices = officeIndices
+    self.areas = areas
+    self.areasCut = areasCut
+    self.officesCut = officesCut
+  }
+
+  /// The centre of the coverage circle, or nil when the bot stated none: its area came from
+  /// states or offices rather than a circle, and 0,0 is the non-position an advert carries
+  /// (spec §1), not the Gulf of Guinea.
+  public var centre: MeshWXCoordinate? {
+    latitude == 0 && longitude == 0 && radiusKilometres == 0
+      ? nil : MeshWXCoordinate(latitude: latitude, longitude: longitude)
+  }
+
+  /// Whether the stated circle contains a point.
+  ///
+  /// False when no circle was stated — which is not "outside": a bot without a centre still
+  /// covers whatever its runs list, so callers must go on to ``covers(ugc:states:)``.
+  public func circleContains(_ point: MeshWXCoordinate) -> Bool {
+    guard let centre, radiusKilometres > 0 else { return false }
+    let distance = MeshWXGeo.distanceKilometres(
+      fromLat: centre.latitude, lon: centre.longitude, toLat: point.latitude, lon: point.longitude)
+    return distance <= Double(radiusKilometres)
+  }
+
+  /// Whether a stated run covers a UGC code.
+  public func covers(ugc: String, states: [String]) -> Bool {
+    areas.contains { $0.covers(ugc: ugc, states: states) }
+  }
+
+  /// `n` = 0 and `k` = 0 with neither list cut: the operator set no area filter at all, so the
+  /// bot carries every product its feed does and no place is outside it (spec §7A). That is an
+  /// answer, not an empty message.
+  public var hasNoAreaFilter: Bool {
+    officeIndices.isEmpty && areas.isEmpty && isComplete
+  }
+
+  /// Whether both lists are whole. Only a complete statement can put a place outside the area.
+  public var isComplete: Bool { !areasCut && !officesCut }
+}
+
+// MARK: - Request
+
+/// An app's `>` request, flooded on `#meshwx` as a datagram (type 9, spec §7B).
+///
+/// The one v5 message this app transmits. A DM rides one stored route hop by hop and fails
+/// silently once that route has gone stale — the field record of 16 September lost seven
+/// requests in six minutes to a bot that was on the air and answering everyone else — while a
+/// flood needs no route and costs about what a DM costs by its second try.
+///
+/// The header fields ride here as well as on ``MeshWXMessage/header``: this is a value the app
+/// builds and sends on its own (``encode()``), not only a body the decoder hands back. The two
+/// never disagree for a decoded message, and ``MeshWXEncoder/encode(_:)`` writes the header's.
+public struct MeshWXRequest: Sendable, Hashable, Codable {
+  /// The **sender's** counter, one more per new request and repeated on a resend (spec §7B).
+  /// Informational to the bot, which keys copies on ``timestamp``.
+  public var seq: UInt8
+  /// The bot asked, as in every message: the first two bytes of its public key. `0xFFFF` asks
+  /// every bot on the channel.
+  public var botID: UInt16
+  /// The first six bytes of the sender's public key, in key order — the prefix a DM identifies
+  /// the same phone by, so one phone's DM and its datagram are one sender to the bot's limits.
+  public var senderPrefix: Data
+  /// Unix **seconds** (not minutes) on the sender's clock: the request's own time. A resend
+  /// repeats it, and that is what makes it a copy rather than a second request.
+  public var timestamp: UInt32
+  /// The request exactly as spec §8.2 writes it, starting with `>`.
+  public var text: String
+
+  /// Every bot on the channel, for an app that has not chosen one (spec §7B, §12).
+  public static let anyBot: UInt16 = 0xFFFF
+
+  public init(seq: UInt8, botID: UInt16, senderPrefix: Data, timestamp: UInt32, text: String) {
+    self.seq = seq
+    self.botID = botID
+    self.senderPrefix = senderPrefix
+    self.timestamp = timestamp
+    self.text = text
+  }
+
+  /// The datagram's bytes, header and all.
+  public func encode() throws -> Data {
+    try MeshWXEncoder.request(seq: seq, bot: botID, self)
+  }
+}
+
 // MARK: - Message
 
 /// The decoded body of a v5 message.
@@ -704,6 +929,10 @@ public enum MeshWXPayload: Sendable, Hashable {
   case forecast(MeshWXForecast)
   case text(MeshWXText)
   case notAvailable(MeshWXNotAvailable)
+  case coverage(MeshWXCoverage)
+  /// An app's request (spec §7B). Only ever *heard* from another phone on the channel: this
+  /// app sends its own and never acts on somebody else's.
+  case request(MeshWXRequest)
   /// A reserved or third-party type (spec §2.2, nibbles 8-15). Receivers ignore these,
   /// but the header still decoded, so `(bot, seq)` tracking keeps working.
   case unknown

@@ -3,24 +3,43 @@ import Testing
 
 @testable import MeshWX
 
-/// The nine official wire vectors from the v5 developer kit.
+/// The official wire vectors.
 ///
-/// The fixture is the publisher's own file, byte for byte: `meshwx_v5_vectors.json` from
-/// `MeshWX_iOS_Kit_2026-09-15`. A codec checked only against itself passes forever while
-/// being wrong, so nothing in this file is derived from the Swift implementation.
+/// The fixture is the publisher's own file, byte for byte: `docs/meshwx_v5_vectors.json` from
+/// the bot's repository (thirteen at revision 5, which added the two vectors carrying the new
+/// times beside the revision 4 form of the same two messages).
+/// A codec checked only against itself passes forever while being wrong, so nothing in this
+/// file is derived from the Swift implementation.
 enum MeshWXVectors {
-  /// Every vector, or an empty array if the fixture did not copy (which
-  /// ``MeshWXVectorTests/fixtureIsPresent()`` turns into a failure rather than a silent
+  /// Every vector, or an empty array if the fixture did not copy or any vector failed to read
+  /// (which ``MeshWXVectorTests/fixtureIsPresent()`` turns into a failure rather than a silent
   /// pass over nothing).
   static let all: [Vector] = load()
 
-  private static func load() -> [Vector] {
+  /// How many vectors the file holds, counted without the fixture type; nil when it did not load.
+  static let fileCount: Int? = fixtureData().flatMap { data in
+    (try? JSONSerialization.jsonObject(with: data) as? [Any])?.count
+  }
+
+  /// `request_digest`, the revision 6 Request vector (spec §7B): `>d` to bot `0x041D` from the
+  /// sender `01 02 03 04 05 06` at `ts` 1789660000 with `seq` 1 — sixteen bytes.
+  ///
+  /// Quoted from the spec rather than read from the fixture: the publisher's
+  /// `meshwx_v5_vectors.json` still holds the thirteen vectors of revision 5, and this file is
+  /// its copy byte for byte. Move it into the JSON the day the bot's repository ships it.
+  static let requestDigestHex = "011d0490010203040506600bac6a3e64"
+
+  private static func fixtureData() -> Data? {
     guard
       let url = Bundle.module.url(
         forResource: "meshwx_v5_vectors", withExtension: "json", subdirectory: "Fixtures")
-        ?? Bundle.module.url(forResource: "meshwx_v5_vectors", withExtension: "json"),
-      let data = try? Data(contentsOf: url)
-    else { return [] }
+        ?? Bundle.module.url(forResource: "meshwx_v5_vectors", withExtension: "json")
+    else { return nil }
+    return try? Data(contentsOf: url)
+  }
+
+  private static func load() -> [Vector] {
+    guard let data = fixtureData() else { return [] }
     let decoder = JSONDecoder()
     decoder.keyDecodingStrategy = .convertFromSnakeCase
     return (try? decoder.decode([Vector].self, from: data)) ?? []
@@ -70,9 +89,12 @@ enum MeshWXVectors {
 
     // Observations
     let tsMin: UInt32?
-    let stations: [Station]?
+    /// The station list of an Observations vector, or the hourly cap of a Coverage one: the wire
+    /// key is the same word for both, so one flat fixture type has to read either shape.
+    let stations: StationsField?
 
-    // Forecast
+    // Forecast, and — since revision 5 — the warning's own issue time, which the bot's
+    // decoder resolves to the same absolute minutes under the same key.
     let point: UInt16?
     let issuedMin: UInt32?
     let firstPeriod: UInt8?
@@ -88,6 +110,40 @@ enum MeshWXVectors {
     // Not available
     let request: String?
     let requestCode: UInt8?
+
+    // Coverage (the zone runs arrive in `areas`, the warning's own shape)
+    let lat: Double?
+    let lon: Double?
+    let radiusKm: UInt16?
+    let offices: [UInt8]?
+    let zonesCut: Bool?
+    let officesCut: Bool?
+
+    /// `stations` in two shapes, told apart by what the JSON holds rather than by the vector's
+    /// name, so a mis-typed field surfaces as a decode failure rather than a silent nil.
+    enum StationsField: Decodable, Sendable {
+      case list([Station])
+      case cap(UInt8)
+
+      init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let cap = try? container.decode(UInt8.self) {
+          self = .cap(cap)
+        } else {
+          self = .list(try container.decode([Station].self))
+        }
+      }
+
+      var list: [Station]? {
+        guard case let .list(stations) = self else { return nil }
+        return stations
+      }
+
+      var cap: UInt8? {
+        guard case let .cap(cap) = self else { return nil }
+        return cap
+      }
+    }
 
     struct Area: Decodable, Sendable {
       let state: UInt8
@@ -117,6 +173,9 @@ enum MeshWXVectors {
       let pressureInhg: Double?
       let humidityPct: UInt8?
       let feelsDeltaF: Int8
+      /// Revision 5: minutes this station's own report is older than the batch `ts`. Null in
+      /// the revision 4 vectors, which carry no ages at all.
+      let ageMin: UInt16?
     }
 
     struct Period: Decodable, Sendable {

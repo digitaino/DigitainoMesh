@@ -11,11 +11,31 @@ public struct WeatherStoredWarning: Sendable, Hashable, Codable {
   public var receivedAt: Date
   /// How many times a later message replaced this identity (spec §3). Informational.
   public var updateCount: Int
+  /// The `seq` of the message this copy came in, so a late resend can be told apart from an older
+  /// message. Nil in state saved before copies carried one.
+  public var seq: UInt8?
+  /// When NWS issued the product (spec §3, revision 5), resolved once from the message that
+  /// carried it. Nil for a warning from a bot older than revision 5, and in state saved before
+  /// the app could read it.
+  ///
+  /// Stored rather than computed from ``MeshWXWarning/issuedMinutes`` because the wire states the
+  /// issue time *relative to the expiry*, and a digest may later extend that expiry
+  /// (`WeatherStateReducer.applyDigest`): recomputing would then walk the issue time forward with
+  /// it. The instant a warning was issued never moves.
+  public var issuedAt: Date?
 
-  public init(warning: MeshWXWarning, receivedAt: Date, updateCount: Int = 0) {
+  public init(
+    warning: MeshWXWarning,
+    receivedAt: Date,
+    updateCount: Int = 0,
+    seq: UInt8? = nil,
+    issuedAt: Date? = nil
+  ) {
     self.warning = warning
     self.receivedAt = receivedAt
     self.updateCount = updateCount
+    self.seq = seq
+    self.issuedAt = issuedAt
   }
 
   public var identity: MeshWXWarningIdentity { warning.identity }
@@ -58,36 +78,71 @@ public struct WeatherStoredDigest: Sendable, Hashable, Codable {
   public var builtAt: Date { Date(unixMinutes: digest.nowMinutes) }
 
   /// Spec §5: minutes since the bot last received a product from its home office, in units of
-  /// four minutes, capped.
+  /// four minutes, capped. Quiet or never received; either withholds calm.
   public var isFeedStale: Bool { MeshWXPresentation.isFeedStale(feedHealth: digest.feedHealth) }
+
+  /// What `feed_health` says, split so a quiet office is not worded as a broken feed.
+  public var feed: MeshWXFeedHealth { MeshWXFeedHealth(feedHealth: digest.feedHealth) }
 }
 
-/// One station's latest reading, stamped with the batch time it arrived in.
+/// The bot's own statement of what it carries (spec §7A), and when it arrived.
+///
+/// The message carries no time of its own: it says what the bot covers at the moment it is sent,
+/// so its age is receipt. It does not go stale either — it is broadcast every three hours, and a
+/// statement from yesterday is still what the bot said about itself, which is the only evidence
+/// there is for "is this place in its area".
+public struct WeatherStoredCoverage: Sendable, Hashable, Codable {
+  public var coverage: MeshWXCoverage
+  public var receivedAt: Date
+
+  public init(coverage: MeshWXCoverage, receivedAt: Date) {
+    self.coverage = coverage
+    self.receivedAt = receivedAt
+  }
+}
+
+/// One station's latest reading, stamped with the time that station measured it.
 public struct WeatherStoredObservation: Sendable, Hashable, Codable {
   public var observation: MeshWXStationObservation
-  /// The batch's `ts`: Unix minutes of the newest observation in the batch (spec §6) — the
-  /// report's time, not necessarily this station's.
+  /// This station's own report time in Unix minutes: the batch's `ts` less the station's age
+  /// (spec §6.1). For a batch from a bot older than revision 5, which states no ages, it is the
+  /// batch `ts` — all such a batch says about any of its stations.
+  ///
+  /// Everything time-like about a reading reads this — ``observedAt``, ``isStale(at:)``, and the
+  /// newest-wins merge in the reducer — so all three are per station the moment the bot sends the
+  /// ages. The batch time itself lives on in ``lastBatchMinutes``.
   public var timestampMinutes: UInt32
   public var receivedAt: Date
   /// Stations in the batch this reading came in. The bot's scheduled broadcast covers its
   /// area; a batch of one is the answer to somebody's single-station request, which says
   /// nothing about where the bot's coverage is.
   public var batchSize: Int
+  /// The `ts` of the newest multi-station batch that named this station — the batch's own time,
+  /// not this station's report time — whether or not that batch carried the reading held now.
+  ///
+  /// It is the evidence that the station is in the bot's area (docs/MESHWX_UI.md §6): a
+  /// single-station answer to somebody's `>o KATT` carries a newer reading and replaces it, but
+  /// must not take Camp Mabry out of the bot's area, shrink the coverage outline or change what
+  /// its button asks for. Nil for a station only ever seen in a batch of one. Since revision 5 it
+  /// is also the only place the batch time survives, ``timestampMinutes`` being the station's own.
+  public var lastBatchMinutes: UInt32?
 
   public init(
     observation: MeshWXStationObservation,
     timestampMinutes: UInt32,
     receivedAt: Date,
-    batchSize: Int = 1
+    batchSize: Int = 1,
+    lastBatchMinutes: UInt32? = nil
   ) {
     self.observation = observation
     self.timestampMinutes = timestampMinutes
     self.receivedAt = receivedAt
     self.batchSize = batchSize
+    self.lastBatchMinutes = lastBatchMinutes
   }
 
   private enum CodingKeys: String, CodingKey {
-    case observation, timestampMinutes, receivedAt, batchSize
+    case observation, timestampMinutes, receivedAt, batchSize, lastBatchMinutes
   }
 
   public init(from decoder: any Decoder) throws {
@@ -96,9 +151,18 @@ public struct WeatherStoredObservation: Sendable, Hashable, Codable {
     timestampMinutes = try container.decode(UInt32.self, forKey: .timestampMinutes)
     receivedAt = try container.decode(Date.self, forKey: .receivedAt)
     batchSize = try container.decodeIfPresent(Int.self, forKey: .batchSize) ?? 1
+    // A file written before the batch was remembered separately: a reading that came in a batch
+    // is its own evidence, which is exactly what the app read from `batchSize` then.
+    lastBatchMinutes = try container.decodeIfPresent(UInt32.self, forKey: .lastBatchMinutes)
+      ?? (batchSize > 1 ? timestampMinutes : nil)
   }
 
+  /// When this station measured what it reported — the *as of* time (spec §10.5), never when the
+  /// packet arrived.
   public var observedAt: Date { Date(unixMinutes: timestampMinutes) }
+
+  /// When this station was last in one of the bot's scheduled batches, on the bot's clock.
+  public var lastBatchAt: Date? { lastBatchMinutes.map { Date(unixMinutes: $0) } }
 
   public func isStale(at now: Date) -> Bool {
     MeshWXPresentation.isObservationStale(
@@ -154,9 +218,9 @@ public struct WeatherStoredForecast: Sendable, Hashable, Codable {
 
 /// A text reply being reassembled by `(bot, group)` in `idx` order (spec §8.1).
 ///
-/// A re-sent reply (the bot's five-minute cache, or the app asking again after 20 s) carries
-/// the *original* group byte, so it merges into the same assembly and fills whatever was
-/// missing — which is exactly the recovery the spec describes.
+/// A chunk the bot transmits a second time — the same bytes, when no repeater echoed the first —
+/// carries the *original* group byte, so it merges into the same assembly and fills the hole.
+/// Asking again gets a reply built afresh (the bot keeps no cache), under a new group byte.
 public struct WeatherTextAssembly: Sendable, Hashable, Codable {
   public var subject: MeshWXTextSubject
   public var group: UInt8
@@ -218,15 +282,37 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
 
 // MARK: - Per-bot state
 
+/// One accepted message in the duplicate window: its `seq`, and a fingerprint of its content so
+/// a new message that reuses a `seq` after the bot restarts is not taken for a copy.
+public struct WeatherSeenMessage: Sendable, Hashable, Codable {
+  public var seq: UInt8
+  /// `WeatherStateReducer.fingerprint(of:)`. Nil for an entry from a state file written before
+  /// fingerprints, or for a message the codec cannot re-encode.
+  public var fingerprint: UInt64?
+
+  public init(seq: UInt8, fingerprint: UInt64?) {
+    self.seq = seq
+    self.fingerprint = fingerprint
+  }
+
+  /// A copy has the same `seq` and, where both fingerprints are known, the same content. With
+  /// either unknown the `seq` alone decides, as it did before fingerprints.
+  func isCopy(seq: UInt8, fingerprint: UInt64?) -> Bool {
+    guard seq == self.seq else { return false }
+    guard let fingerprint, let known = self.fingerprint else { return true }
+    return fingerprint == known
+  }
+}
+
 /// Everything the app holds for one bot (spec §12: "keep separate state per bot").
 public struct WeatherBotState: Sendable, Hashable, Codable {
   public var botID: UInt16
   /// The newest `seq` accepted, for gap detection (spec §2.3).
   public var lastSeq: UInt8?
-  /// The last few accepted `seq` values, newest last. A copy of any of them is a duplicate
-  /// however late it arrives; comparing against `lastSeq` alone let a late copy through as a
-  /// gap and could bring a cancelled warning back.
-  public var recentSeqs: [UInt8]
+  /// The last few accepted messages, newest last. A copy of any of them is a duplicate however
+  /// late it arrives; comparing against `lastSeq` alone let a late copy through as a gap and
+  /// could bring a cancelled warning back.
+  public var recentMessages: [WeatherSeenMessage]
   public var lastHeardAt: Date?
   /// The last message heard live from this bot — not drained from the radio's queue at
   /// connect. What "the bot is in range" rests on: a backlog is stamped with the drain time, so
@@ -236,12 +322,15 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// Set on a `seq` gap or an out-of-order message; cleared only by a digest built after the
   /// gap was seen — the cue that `>d` would help and that "no alerts" cannot be claimed.
   public var needsDigest: Bool
-  /// Phone time the outstanding gap was detected, so a digest built before it (a cached
-  /// re-send) does not clear it.
+  /// Phone time the outstanding gap was detected, so a digest built before it — delivered late,
+  /// or drained from the radio's queue — does not clear it.
   public var gapDetectedAt: Date?
   public var warnings: [MeshWXWarningIdentity: WeatherStoredWarning]
   /// Upgraded warnings whose replacement has not been received.
   public var pendingUpgrades: [MeshWXWarningIdentity: WeatherPendingUpgrade]
+  /// Identities cancelled in the last hour, and when. A warning for one of them arriving out of
+  /// order was sent before its cancel, and is not stored again.
+  public var recentCancels: [MeshWXWarningIdentity: Date]
   public var digest: WeatherStoredDigest?
   /// Identities the last digest listed that the app does not hold: each is one
   /// `>w <identity>` away (spec §5).
@@ -252,27 +341,37 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   public var forecasts: [UInt16: WeatherStoredForecast]
   /// By group.
   public var texts: [UInt8: WeatherTextAssembly]
+  /// What the bot says it carries (spec §7A). Nil until it has said: the station footprint is
+  /// the fallback then, and nothing the bot has not stated may put a place outside its area.
+  public var coverage: WeatherStoredCoverage?
 
   public init(botID: UInt16) {
     self.botID = botID
     lastSeq = nil
-    recentSeqs = []
+    recentMessages = []
     lastHeardAt = nil
     lastLiveHeardAt = nil
     needsDigest = false
     gapDetectedAt = nil
     warnings = [:]
     pendingUpgrades = [:]
+    recentCancels = [:]
     digest = nil
     missingFromDigest = []
     observations = [:]
     forecasts = [:]
     texts = [:]
+    coverage = nil
   }
 
   private enum CodingKeys: String, CodingKey {
-    case botID, lastSeq, recentSeqs, lastHeardAt, lastLiveHeardAt, needsDigest, gapDetectedAt, warnings,
-      pendingUpgrades, digest, missingFromDigest, observations, forecasts, texts
+    case botID, lastSeq, recentMessages, lastHeardAt, lastLiveHeardAt, needsDigest, gapDetectedAt, warnings,
+      pendingUpgrades, recentCancels, digest, missingFromDigest, observations, forecasts, texts, coverage
+  }
+
+  private enum LegacyCodingKeys: String, CodingKey {
+    /// The duplicate window before fingerprints: bare `seq` values.
+    case recentSeqs
   }
 
   /// Fields added after the first release decode as absent rather than failing the whole file:
@@ -281,7 +380,13 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     botID = try container.decode(UInt16.self, forKey: .botID)
     lastSeq = try container.decodeIfPresent(UInt8.self, forKey: .lastSeq)
-    recentSeqs = try container.decodeIfPresent([UInt8].self, forKey: .recentSeqs) ?? []
+    if let seen = try container.decodeIfPresent([WeatherSeenMessage].self, forKey: .recentMessages) {
+      recentMessages = seen
+    } else {
+      let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+      recentMessages = (try legacy.decodeIfPresent([UInt8].self, forKey: .recentSeqs) ?? [])
+        .map { WeatherSeenMessage(seq: $0, fingerprint: nil) }
+    }
     lastHeardAt = try container.decodeIfPresent(Date.self, forKey: .lastHeardAt)
     lastLiveHeardAt = try container.decodeIfPresent(Date.self, forKey: .lastLiveHeardAt)
     needsDigest = try container.decode(Bool.self, forKey: .needsDigest)
@@ -289,11 +394,15 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     warnings = try container.decode([MeshWXWarningIdentity: WeatherStoredWarning].self, forKey: .warnings)
     pendingUpgrades = try container.decodeIfPresent(
       [MeshWXWarningIdentity: WeatherPendingUpgrade].self, forKey: .pendingUpgrades) ?? [:]
+    recentCancels = try container.decodeIfPresent([MeshWXWarningIdentity: Date].self, forKey: .recentCancels) ?? [:]
     digest = try container.decodeIfPresent(WeatherStoredDigest.self, forKey: .digest)
     missingFromDigest = try container.decode([MeshWXWarningIdentity].self, forKey: .missingFromDigest)
     observations = try container.decode([UInt16: WeatherStoredObservation].self, forKey: .observations)
     forecasts = try container.decode([UInt16: WeatherStoredForecast].self, forKey: .forecasts)
     texts = try container.decode([UInt8: WeatherTextAssembly].self, forKey: .texts)
+    // A file written before the bot stated anything, or before the app could read it: absent is
+    // "has not said", which falls back to the station footprint rather than failing the file.
+    coverage = try container.decodeIfPresent(WeatherStoredCoverage.self, forKey: .coverage)
   }
 
   /// Warnings not yet expired at `now`, in the spec's display order (§10.2): the most severe
@@ -311,7 +420,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
       }
   }
 
-  /// The newest observation batch time across stations, if any.
+  /// The newest reading held, by the time its station measured it (spec §6.1), if any.
   public var latestObservationMinutes: UInt32? {
     observations.values.map(\.timestampMinutes).max()
   }

@@ -41,7 +41,7 @@ struct WeatherCopyTests {
   @Test
   func `no place and out of coverage say what cannot be known`() {
     #expect(status(.noPlace, place: nil)?.text == "Choose a place to see which alerts cover it")
-    #expect(status(.outOfCoverage, place: Self.dallas)?.text == "Dallas is outside WX-AUS's area, so alerts there are unknown.")
+    #expect(status(.outOfCoverage, place: Self.dallas)?.text == "Dallas, TX is outside WX-AUS's area, so alerts there are unknown.")
   }
 
   @Test
@@ -50,13 +50,20 @@ struct WeatherCopyTests {
     #expect(line?.text
       == "This phone hasn't received WX-AUS's alert list yet, so it can't tell whether any alerts are active. The list comes every 3 hours.")
     #expect(line?.action == .askForAlerts)
-    #expect(line?.showsCheck == false)
   }
 
   @Test
-  func `a stale feed has no button, since asking cannot help`() {
-    let line = status(.feedStale(minutesSinceProduct: 300))
-    #expect(line?.text == "WX-AUS hasn't heard from the Weather Service for 5 h. New alerts may not reach you.")
+  func `a quiet home office says it may be normal, never that alerts may not arrive, and has no button`() {
+    let line = status(.feedQuiet(minutesSinceProduct: 300))
+    #expect(line?.text
+      == "WX-AUS hasn't had anything from its home Weather Service office for 5 h. That's normal on a quiet night, but its feed could also be down.")
+    #expect(line?.action == nil)
+  }
+
+  @Test
+  func `a feed that never delivered says new alerts may not reach you, with no button`() {
+    let line = status(.feedNeverReceived)
+    #expect(line?.text == "WX-AUS hasn't received anything from the Weather Service. New alerts may not reach you.")
     #expect(line?.action == nil)
   }
 
@@ -71,8 +78,8 @@ struct WeatherCopyTests {
 
   @Test
   func `a generic source is capitalised where it starts a sentence`() {
-    #expect(status(.feedStale(minutesSinceProduct: 300), source: "the weather radio")?.text
-      == "The weather radio hasn't heard from the Weather Service for 5 h. New alerts may not reach you.")
+    #expect(status(.feedNeverReceived, source: "the weather radio")?.text
+      == "The weather radio hasn't received anything from the Weather Service. New alerts may not reach you.")
   }
 
   @Test
@@ -102,7 +109,7 @@ struct WeatherCopyTests {
     #expect(status(.officeMayNotBeCovered(office: "FWD"), area: "Bell County")?.text
       == "WX-AUS may not carry alerts for Bell County (NWS Fort Worth).")
     #expect(status(.officeMayNotBeCovered(office: "FWD"))?.text
-      == "WX-AUS may not carry alerts for Austin (NWS Fort Worth).")
+      == "WX-AUS may not carry alerts for Austin, TX (NWS Fort Worth).")
   }
 
   @Test
@@ -110,26 +117,13 @@ struct WeatherCopyTests {
     #expect(status(.rowsSpeak) == nil)
   }
 
+  /// Answer 13: nothing about alerts on a quiet day. No check, no "none for your location", no
+  /// status line — the honesty moved to the radio row and the radio page.
   @Test
-  func `alerts only elsewhere never earn the check`() {
-    let line = status(.noneHere(elsewhere: 2, asOf: Self.elevenOhTwo))
-    #expect(line?.text == "None for your location · as of 11:02 PM")
-    #expect(line?.showsCheck == false)
-    #expect(status(.noneHere(elsewhere: 2, asOf: Self.elevenOhTwo), place: Self.roundRock)?.text
-      == "None for Round Rock · as of 11:02 PM")
-  }
-
-  @Test
-  func `only nothing anywhere is the green check`() {
-    let line = status(.clear(asOf: Self.elevenOhTwo))
-    #expect(line?.text == "No alerts received · as of 11:02 PM")
-    #expect(line?.showsCheck == true)
-  }
-
-  @Test
-  func `the alerts card is titled for the place`() {
-    #expect(WeatherCopy.alertsTitle(placeName: "Austin") == "Alerts for Austin")
-    #expect(WeatherCopy.alertsTitle(placeName: nil) == "Alerts")
+  func `a quiet day says nothing at all`() {
+    #expect(status(.noneHere(elsewhere: 2, asOf: Self.elevenOhTwo)) == nil)
+    #expect(status(.noneHere(elsewhere: 2, asOf: Self.elevenOhTwo), place: Self.roundRock) == nil)
+    #expect(status(.clear(asOf: Self.elevenOhTwo)) == nil)
   }
 
   // MARK: - Request status (§11)
@@ -153,9 +147,13 @@ struct WeatherCopyTests {
   }
 
   @Test
-  func `pending, retrying and waiting`() {
-    #expect(request(.pending(attempt: 0, sentAt: Self.now)) == "Asking WX-AUS… (up to 30 s)")
+  func `pending, retrying, flooding and waiting`() {
+    // No duration in the pending line: a channel request settles within 20 s, the DM fallback
+    // within 45 s, and one number would be wrong for the other.
+    #expect(request(.pending(attempt: 0, sentAt: Self.now)) == "Asking WX-AUS…")
     #expect(request(.pending(attempt: 1, sentAt: Self.now)) == "Asking again…")
+    // The DM ladder's third send, after the route was forgotten.
+    #expect(request(.pending(attempt: 2, sentAt: Self.now)) == "Asking again by flood…")
     #expect(request(.waitingForOther) == "Waiting for another answer…")
   }
 
@@ -177,7 +175,7 @@ struct WeatherCopyTests {
   @Test
   func `an answer the channel already delivered names its age and what it was as of`() {
     let received = Self.now.addingTimeInterval(-40)
-    let settled = { (asOf: Date?) in WeatherRequestStatus.settled(.servedFromCache(receivedAt: received, contentAsOf: asOf), at: Self.now) }
+    let settled = { (asOf: Date?) in WeatherRequestStatus.settled(.alreadyReceived(receivedAt: received, contentAsOf: asOf), at: Self.now) }
     #expect(request(settled(nil), for: .spaceWeather) == "Received 40 s ago")
     #expect(request(settled(Self.elevenOhTwo), for: .digest) == "Received 40 s ago · list as of 11:02 PM")
     #expect(request(settled(Self.elevenOhTwo), for: .activeWarnings) == "Received 40 s ago · list as of 11:02 PM")
@@ -193,11 +191,32 @@ struct WeatherCopyTests {
       == "WX-AUS answered at 11:02 PM")
   }
 
+  /// Out of range, one request per sender every five seconds, and 60 answers an hour all end in
+  /// silence (spec §8.3): the copy allows for all three.
   @Test
-  func `timeouts blame the right cause and name the time`() {
+  func `timeouts allow for range and a busy radio, and name the time`() {
     let at = Self.now.addingTimeInterval(6 * 60)
-    #expect(request(.settled(.timedOut(botWasHeard: false), at: at)) == "No answer at 11:26 PM. WX-AUS may be out of range.")
-    #expect(request(.settled(.timedOut(botWasHeard: true), at: at)) == "WX-AUS was heard but didn't answer at 11:26 PM.")
+    #expect(request(.settled(.timedOut(botWasHeard: false), at: at)) == "No answer at 11:26 PM. WX-AUS may be out of range or busy.")
+    #expect(request(.settled(.timedOut(botWasHeard: true), at: at)) == "WX-AUS was heard but didn't answer at 11:26 PM. It may be busy.")
+  }
+
+  /// The bot's radio confirmed the request, so the copy leaves out range: the bot may be busy, or
+  /// its answer was lost. Unconfirmed keeps "may be out of range or busy".
+  @Test
+  func `a timeout the bot's radio confirmed says the request arrived`() {
+    let at = Self.now.addingTimeInterval(6 * 60)
+    let received = "WX-AUS received the request, but no answer reached this phone by 11:26 PM. It may be busy, or its answer was lost."
+    #expect(request(.settled(.timedOut(botWasHeard: false, botRadioReceived: true), at: at)) == received)
+    #expect(request(.settled(.timedOut(botWasHeard: true, botRadioReceived: true), at: at)) == received)
+    #expect(request(.settled(.timedOut(botWasHeard: false, botRadioReceived: false), at: at))
+      == "No answer at 11:26 PM. WX-AUS may be out of range or busy.")
+  }
+
+  @Test
+  func `an ask for one missing warning names it`() {
+    #expect(WeatherCopy.askAlertsTitle(for: .warning(identity: "TO.W.EWX.30"), tables: .shared) == "Ask for Tornado Warning")
+    #expect(WeatherCopy.askAlertsTitle(for: .digest, tables: .shared) == "Ask for alerts")
+    #expect(WeatherCopy.askAlertsTitle(for: .warningsTouching(ugc: "TXC453"), tables: .shared) == "Ask for alerts")
   }
 
   @Test
@@ -219,51 +238,64 @@ struct WeatherCopyTests {
       == "WX-AUS not heard since 8:02 PM — it may not answer")
   }
 
-  // MARK: - Header (§10)
+  // MARK: - The radio row (§10)
 
-  func header(
-    _ place: WeatherPlace?, state: WeatherPlaceState = .resolved, heard: Date? = WeatherCopyTests.now.addingTimeInterval(-120)
-  ) -> WeatherCopy.Header {
-    WeatherCopy.header(place: place, placeState: state, sourceName: "WX-AUS", sourceHeardAt: heard, now: Self.now)
+  func radioRow(
+    _ row: WeatherRadioRow, source: String = "WX-AUS"
+  ) -> String {
+    F.plain(WeatherCopy.radioRow(row, source: source, now: Self.now, calendar: F.calendar, locale: F.locale))
   }
 
   @Test
-  func `your location names the radio and when it was last heard, on one line`() {
-    let line = header(Self.austin)
-    #expect(line.title == "Austin")
-    #expect(line.subtitle == "Your location · WX-AUS last heard 2 min ago")
-    #expect(line.action == nil)
+  func `the radio row names the radio, when it was heard, and how old the list is`() {
+    #expect(radioRow(WeatherRadioRow(
+      heardAt: Self.now.addingTimeInterval(-120), listBuiltAt: Self.eightOhTwo,
+      missedMessages: false, listIsOld: false))
+      == "WX-AUS · heard 2 min ago · alerts as of 8:02 PM")
   }
 
+  /// The row never leaves the alert list out: with none held it says so, because the page above
+  /// it now says nothing about alerts at all.
   @Test
-  func `a searched town says so without repeating its name, and offers the way back`() {
-    let line = header(Self.roundRock)
-    #expect(line.title == "Round Rock")
-    #expect(line.subtitle == "Searched town")
-    #expect(line.action == .backToMyLocation)
+  func `no list and nothing heard are both said, not left out`() {
+    #expect(radioRow(WeatherRadioRow()) == "WX-AUS · not heard yet · no alert list yet")
   }
 
-  @Test
-  func `an old fix is still your location, with its age`() {
-    var place = Self.austin
-    place.kind = .lastKnown
-    place.locatedAt = Self.now.addingTimeInterval(-3 * 3600)
-    #expect(header(place).subtitle == "Your location · 3 h old")
-  }
+  // MARK: - The temperature block (§8)
 
   @Test
-  func `locating shows while a fix is on its way, even over an older one`() {
-    #expect(header(Self.austin, state: .locating).subtitle == "Locating…")
-    #expect(header(Self.roundRock, state: .locating).subtitle == "Searched town")
-    #expect(header(nil, state: .locating).subtitle == "Locating…")
+  func `the one line under the temperature is the station, the distance and the reading's own time`() {
+    #expect(F.plain(WeatherCopy.conditionsSource(
+      stationName: "Austin-Camp Mabry", kilometres: 6.2, observedAt: Self.now.addingTimeInterval(-2 * 60),
+      now: Self.now, calendar: F.calendar, locale: F.locale)) == "Austin-Camp Mabry · 6 km · as of 11:18 PM")
+    // No place, no distance: the time still stands, because the reading has one of its own.
+    #expect(F.plain(WeatherCopy.conditionsSource(
+      stationName: "Llano Municipal Airport", kilometres: nil, observedAt: Self.now.addingTimeInterval(-2 * 60),
+      now: Self.now, calendar: F.calendar, locale: F.locale)) == "Llano Municipal Airport · as of 11:18 PM")
   }
 
+  /// No good reading means no temperature at all — only the ask, and the code it would spend
+  /// airtime on (answer 11).
   @Test
-  func `no place asks for one and says why`() {
-    #expect(header(nil, state: .needsPermission).title == "Choose a place")
-    let denied = header(nil, state: .denied)
-    #expect(denied.subtitle == "Location is off")
-    #expect(denied.action == .openSettings)
+  func `no good reading names the place, the radio and the station's code`() {
+    #expect(WeatherCopy.conditionsAsk(placeName: "Llano", source: "WX-AUS", icao: "KAQO")
+      == "No current conditions for Llano. Pull down to ask WX-AUS for KAQO.")
+  }
+
+  // MARK: - Places rows (§12)
+
+  @Test
+  func `a places row is the temperature and the condition, aged when stale and a dash when empty`() {
+    let fresh = WeatherPlaceRowReading(
+      tempF: 86, sky: .broken, observedAt: Self.now.addingTimeInterval(-12 * 60), isStale: false)
+    #expect(F.plain(WeatherCopy.placeRow(fresh, now: Self.now, locale: F.locale)) == "86° Mostly cloudy")
+
+    var stale = fresh
+    stale.observedAt = Self.now.addingTimeInterval(-3 * 3600)
+    stale.isStale = true
+    #expect(F.plain(WeatherCopy.placeRow(stale, now: Self.now, locale: F.locale)) == "86° Mostly cloudy · 3 h old")
+
+    #expect(WeatherCopy.placeRow(WeatherPlaceRowReading(), now: Self.now, locale: F.locale) == "—")
   }
 
   @Test
@@ -369,7 +401,7 @@ struct WeatherCopyTests {
   @Test
   func `a missing forecast names a far point, and no point says so`() throws {
     let point = try #require(MeshWXTables.shared.point(at: 103))
-    let name = WeatherNames.pointName(point.name)
+    let name = WeatherNames.pointLabel(point.name)
     #expect(WeatherCopy.forecastMissing(placeName: "Austin", point: point, kilometres: 4) == "No forecast for Austin yet.")
     #expect(WeatherCopy.forecastMissing(placeName: "Big Spring", point: point, kilometres: 60)
       == "No forecast for Big Spring yet. The nearest forecast point is \(name), 60 km.")
@@ -378,15 +410,14 @@ struct WeatherCopyTests {
 
   // MARK: - Now (§8)
 
+  /// The station screen says each fact once: the name is its headline, the distance is its
+  /// "from Austin" line, and this is the message the reading arrived in (§3.1 U-8).
   @Test
-  func `the source line names the station with its direction, or the nearest report beyond 25 km`() {
+  func `the report line names the radio and the message, and nothing the screen already says`() {
     let reported = Self.now.addingTimeInterval(-2 * 60)
-    #expect(F.plain(WeatherCopy.stationSource(
-      stationName: "Austin-Camp Mabry", kilometres: 6.2, direction: .northNorthWest, botName: "WX-AUS", reportedAt: reported,
-      now: Self.now, calendar: F.calendar, locale: F.locale)) == "Austin-Camp Mabry · 6 km NNW · in WX-AUS's 11:18 PM report")
-    #expect(F.plain(WeatherCopy.stationSource(
-      stationName: "Llano Municipal Airport", kilometres: 40, direction: .northWest, botName: "WX-AUS", reportedAt: reported,
-      now: Self.now, calendar: F.calendar, locale: F.locale)) == "Nearest report · 40 km NW · in WX-AUS's 11:18 PM report")
+    #expect(F.plain(WeatherCopy.stationReport(
+      botName: "WX-AUS", reportedAt: reported, now: Self.now, calendar: F.calendar, locale: F.locale))
+      == "in WX-AUS's 11:18 PM report")
   }
 
   @Test
@@ -394,7 +425,10 @@ struct WeatherCopyTests {
     #expect(WeatherCopy.noStationNearby(placeName: "Dallas", nearestTown: "Temple", kilometres: 190)
       == "No weather station near Dallas. Nearest: Temple, 190 km.")
     #expect(WeatherCopy.stationLink(inArea: 14, total: 14, source: "WX-AUS") == "14 stations in WX-AUS's area")
-    #expect(WeatherCopy.stationLink(inArea: 1, total: 3, source: "WX-AUS") == "1 station in WX-AUS's area")
+    #expect(WeatherCopy.stationLink(inArea: 1, total: 1, source: "WX-AUS") == "1 station in WX-AUS's area")
+    // The link promised 14 rows and opened 19: it names every station the screen will show.
+    #expect(WeatherCopy.stationLink(inArea: 14, total: 19, source: "WX-AUS") == "19 weather stations, 14 in WX-AUS's area")
+    #expect(WeatherCopy.stationLink(inArea: 1, total: 3, source: "WX-AUS") == "3 weather stations, 1 in WX-AUS's area")
     #expect(WeatherCopy.stationLink(inArea: 0, total: 3, source: "WX-AUS") == "3 weather stations")
     #expect(WeatherCopy.stationLink(inArea: 0, total: 1, source: "WX-AUS") == "1 weather station")
   }

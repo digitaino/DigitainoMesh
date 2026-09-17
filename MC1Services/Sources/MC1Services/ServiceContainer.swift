@@ -150,6 +150,12 @@ public final class ServiceContainer {
   /// app's `>` requests (docs/MESHWX.md). State persists across connections in a shared file.
   public let weatherService: WeatherService
 
+  /// Raises a local notification for a warning covering a watched place (docs/MESHWX_UI.md
+  /// §16). It lives here rather than on the Weather tool's model because the model exists only
+  /// while the tool is open, and the whole point is a notification with it closed. Subscriptions
+  /// are read from the phone's own saved places; nothing is watched until a bell is turned on.
+  public let weatherAlertNotifier: WeatherAlertNotifier
+
   /// Classifies the connected radio's sync-registry support. Per-connection because the
   /// classification is a property of the firmware on the other end of the link; a fresh
   /// container starts back at `.unknown` so a device swap or a reflash re-probes.
@@ -349,17 +355,44 @@ public final class ServiceContainer {
     nodeSnapshotService = NodeSnapshotService(dataStore: dataStore)
     adaptivePowerService = AdaptivePowerService(txPowerApplier: settingsService)
     notifSyncService = NotifSyncService(session: session, dataStore: dataStore)
+    let sessionWeatherTransport = SessionWeatherTransport(
+      session: session,
+      storedChannelSecret: { [dataStore] index in
+        try? await dataStore.fetchChannel(radioID: radioID, index: index)?.secret
+      },
+      // Weather drained from the firmware queue at connect is backlog, not proof the bot
+      // is in range now.
+      isDrainingBacklog: { await messagePollingService.isDrainingBacklog },
+      // Whether a `>` request can go out as a flooded datagram at all (spec §7B): the same
+      // firmware gate the screen reads as `firmwareSupportsWeather`. Older radios have no
+      // send-channel-data command and keep the DM.
+      supportsChannelData: { [dataStore] in
+        (try? await dataStore.fetchDevice(radioID: radioID)?.supportsChannelDatagrams) ?? false
+      }
+    )
+    #if DEBUG
+    // Development only: with MESHWX_BRIDGE_URL and MESHWX_BRIDGE_TOKEN in the launch
+    // environment, the weather tool talks to a real bot over its debug bridge and not to
+    // this radio (RemoteBotWeatherTransport). Absent them, nothing changes.
+    let weatherTransport: any WeatherTransport =
+      RemoteBotWeatherTransport.fromEnvironment() ?? sessionWeatherTransport
+    #else
+    let weatherTransport: any WeatherTransport = sessionWeatherTransport
+    #endif
     weatherService = WeatherService(
-      transport: SessionWeatherTransport(
-        session: session,
-        storedChannelSecret: { [dataStore] index in
-          try? await dataStore.fetchChannel(radioID: radioID, index: index)?.secret
-        },
-        // Weather drained from the firmware queue at connect is backlog, not proof the bot
-        // is in range now.
-        isDrainingBacklog: { await messagePollingService.isDrainingBacklog }
-      ),
+      transport: weatherTransport,
       store: FileWeatherStateStore.default()
+    )
+    let weatherService = weatherService
+    weatherAlertNotifier = WeatherAlertNotifier(
+      states: { await weatherService.allStates() },
+      events: { weatherService.events() },
+      // The bot's own name for the notification's source line, read once per bot from the
+      // contact its advert created.
+      botName: { [dataStore] botID in
+        let contacts = try? await dataStore.fetchContacts(radioID: radioID)
+        return contacts?.lazy.compactMap(WeatherBot.init(contact:)).first { $0.botID == botID }?.name
+      }
     )
 
     // Signal bars. The engine is built here so it exists for the whole connection, but it
@@ -456,6 +489,9 @@ public final class ServiceContainer {
     // the phone was away are delivered through the same dispatcher and must find this
     // subscriber already registered.
     await weatherService.startEventMonitoring()
+    // After the service, whose subscription is registered synchronously: the notifier watches the
+    // same stream and a warning in the connect-time backlog must reach both.
+    await weatherAlertNotifier.start()
     await rxLogService.startEventMonitoring(radioID: radioID)
     await messageService.startEventMonitoring()
     await messageService.startAckExpiryChecking()
@@ -496,6 +532,7 @@ public final class ServiceContainer {
 
     await advertisementService.stopEventMonitoring()
     await rxLogService.stopEventMonitoring()
+    await weatherAlertNotifier.stop()
     await weatherService.stopEventMonitoring()
     await messageService.stopEventMonitoring()
     // Do not fail in-flight DMs on disconnect. The firmware retains the

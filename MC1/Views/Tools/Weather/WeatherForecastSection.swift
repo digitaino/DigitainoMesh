@@ -2,88 +2,83 @@ import MC1Services
 import MeshWX
 import SwiftUI
 
-/// The Forecast card (docs/MESHWX_UI.md §9): the forecast for the point nearest the place, one
-/// row per day or day-and-night, labelled against now.
+/// The forecast (docs/MESHWX_UI.md §9): the forecast for the point nearest the place, one row per
+/// day or day-and-night, labelled against now.
+///
+/// It is a card on the place's page, not a card that opens one. Its label carries the one time it
+/// has — "FORECAST · ISSUED 4:02 PM" — and its last line names the point the rows are for, and
+/// how far that is from the place. The place is named by the screen, not repeated here. Nothing
+/// here asks the radio: a missing or stale forecast is what the pull and Update plan for (§11).
 struct WeatherForecastSection: View {
   @Environment(\.appTheme) private var theme
 
-  let model: WeatherToolModel
-  let snapshot: WeatherScreenSnapshot
-  let showsAskFootnotes: Bool
-  let onUseMyLocation: () -> Void
-  let onSearch: () -> Void
+  /// The page this forecast answers for.
+  let screen: WeatherPageScreen
 
-  static func askRequest(_ snapshot: WeatherScreenSnapshot) -> WeatherRequest? {
-    WeatherToolModel.forecastRequest(for: snapshot.forecast)
-  }
+  private var snapshot: WeatherScreenSnapshot { screen.snapshot }
 
   var body: some View {
-    let title = model.placeName.map { L10n.Weather.Weather.Forecast.title($0) } ?? L10n.Weather.Weather.Forecast.titleGeneric
+    let title = L10n.Weather.Weather.Forecast.titleGeneric
     Section {
+      WeatherCardLabel(
+        title: title, systemImage: "calendar", trailing: issuedText,
+        accessibilityLabel: summaryLabel(title: title))
       switch snapshot.forecast {
       case .noPlace:
-        WeatherPlacePrompt(onUseMyLocation: onUseMyLocation, onSearch: onSearch)
+        Text(L10n.Weather.Weather.Place.choosePrompt)
+          .font(.subheadline)
       case .noPointNearby:
         // No point close enough to speak for the place: nothing worth asking for.
-        Text(WeatherCopy.noForecastPoint(placeName: model.placeName ?? ""))
+        Text(WeatherCopy.noForecastPoint(placeName: screen.placeName ?? ""))
           .font(.subheadline)
       case let .missing(point, kilometres):
-        VStack(alignment: .leading, spacing: 8) {
-          Text(WeatherCopy.forecastMissing(placeName: model.placeName ?? "", point: point, kilometres: kilometres))
-            .font(.subheadline)
-          WeatherAskButton(
-            model: model, title: L10n.Weather.Weather.Request.askForecast, request: .forecast(point: point.index),
-            showsFootnotes: showsAskFootnotes)
-        }
-        .padding(.vertical, 2)
+        Text(WeatherCopy.forecastMissing(placeName: screen.placeName ?? "", point: point, kilometres: kilometres))
+          .font(.subheadline)
+          .padding(.vertical, 2)
       case let .forecast(summary):
-        issuedRow(summary)
         ForEach(summary.rows) { row in
           WeatherForecastRowView(row: row)
             .equatable()
         }
+        // **The card names its point** (docs/MESHWX_UI.md §3.1 U-9). A forecast is for a point,
+        // and two towns twenty kilometres apart share one: Round Rock and Austin showed the same
+        // seven rows with nothing on either page to say they were one Camp Mabry forecast rather
+        // than two forecasts that happened to agree. And "heard on #meshwx" for one this phone
+        // never asked for (§3.1 U-14).
+        Text(pointLine(summary))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .listRowSeparator(.hidden)
       }
-    } header: {
-      VStack(alignment: .leading) {
-        Text(title)
-      }
-      .accessibilityElement(children: .contain)
-      .accessibilityLabel(summaryLabel(title: title))
     }
     .themedRowBackground(theme)
   }
 
-  private func issuedText(_ summary: WeatherForecastCard.Summary) -> String {
+  /// "issued 4:02 PM", or "issued 14 h ago" once it is stale. Nothing until there is a forecast.
+  private var issuedText: String? {
+    guard case let .forecast(summary) = snapshot.forecast else { return nil }
     let issuedAt = summary.stored.issuedAt
     return summary.isStale
-      ? L10n.Weather.Weather.Forecast.issued(WeatherFormatting.ago(issuedAt, now: model.now))
+      ? L10n.Weather.Weather.Forecast.issued(WeatherFormatting.ago(issuedAt, now: screen.now))
       : L10n.Weather.Weather.Forecast.issued(WeatherFormatting.clockTime(
-        issuedAt, now: model.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
+        issuedAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
+  }
+
+  /// "Austin Camp Mabry · 6 km", the distance left out when the point is the place, and
+  /// "· heard on #meshwx" when somebody else on the channel asked for it.
+  private func pointLine(_ summary: WeatherForecastCard.Summary) -> String {
+    var parts = [WeatherNames.pointLabel(summary.point.name)]
+    if summary.kilometres >= 1 { parts.append(WeatherFormatting.kilometres(summary.kilometres)) }
+    if !summary.isOwn { parts.append(L10n.Weather.Weather.Reports.overheard) }
+    return parts.joined(separator: " · ")
   }
 
   private func summaryLabel(title: String) -> String {
     guard case let .forecast(summary) = snapshot.forecast else { return title }
-    return [title, issuedText(summary), L10n.Weather.Weather.Forecast.Accessibility.rows(summary.rows.count)]
+    return [title, issuedText, pointLine(summary),
+            L10n.Weather.Weather.Forecast.Accessibility.rows(summary.rows.count)]
+      .compactMap { $0 }
       .joined(separator: ". ")
-  }
-
-  private func issuedRow(_ summary: WeatherForecastCard.Summary) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(issuedText(summary))
-        .font(.subheadline)
-        .foregroundStyle(summary.isStale ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
-      if case let .nearbyPoint(kilometres) = summary.source {
-        Text(L10n.Weather.Weather.Forecast.nearbyPoint(
-          WeatherNames.pointName(summary.point.name), WeatherFormatting.kilometres(kilometres)))
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-      }
-      if summary.isStale {
-        WeatherAskButton(
-          model: model, title: L10n.Weather.Weather.Request.askForecast,
-          request: .forecast(point: summary.point.index), showsFootnotes: showsAskFootnotes)
-      }
-    }
   }
 }
 

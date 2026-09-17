@@ -10,20 +10,31 @@ import SwiftUI
 /// first ask button on a screen: it carries the "everyone gets the answer" note and the quiet-bot
 /// caption.
 struct WeatherAskButton: View {
-  let model: WeatherToolModel
+  /// The page this button is on, so the bot it names and the reason it is blocked are that
+  /// page's and not the pager's last build (docs/MESHWX_UI.md §13).
+  let screen: WeatherPageScreen
   let title: String
   let request: WeatherRequest
   var showsFootnotes = false
+  /// This button is the screen's own voice for why nothing can be asked. False on a screen that
+  /// already says it once — the station screen's Update control carries it above these buttons,
+  /// and METAR and TAF printed the same sentence twice more under it (docs/MESHWX_UI.md §3.1
+  /// U-24). The button then stays, disabled, which is the same fact without the third telling.
+  var showsBlockReason = true
+
+  private var model: WeatherToolModel { screen.model }
 
   var body: some View {
     let status = model.status(for: request)
-    let text = model.statusText(for: request)
+    let text = model.statusText(for: request, source: screen.sourceName)
+    let saysBlock = isBlocked(status) && showsBlockReason
     VStack(alignment: .leading, spacing: 4) {
-      if case .blocked = status {
+      if saysBlock {
         Text(text ?? "")
           .font(.footnote)
           .foregroundStyle(.secondary)
       } else if isAskable(status), let reply = model.freshOwnedReply(for: request) {
+        // Named from the reply's own bot: the answer on screen came from whoever sent it.
         Text(text ?? WeatherCopy.ownedReply(
           source: model.botName(reply.botID), at: reply.assembly.lastReceivedAt, now: model.now,
           calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
@@ -44,17 +55,25 @@ struct WeatherAskButton: View {
         .disabled(isDisabled(status))
         .accessibilityValue(text ?? "")
 
-        if let text {
+        // The blocked text is the screen's, not this row's, whenever the screen says it itself:
+        // the button's accessibility value still carries it, so VoiceOver is not left guessing
+        // why the button is disabled.
+        if let text, !isBlocked(status) {
           Text(text)
             .font(.footnote)
             .foregroundStyle(.secondary)
             .accessibilityHidden(true)
         }
         if showsFootnotes {
-          WeatherAskFootnotes(model: model)
+          WeatherAskFootnotes(screen: screen)
         }
       }
     }
+  }
+
+  private func isBlocked(_ status: WeatherRequestStatus) -> Bool {
+    if case .blocked = status { return true }
+    return false
   }
 
   private func isAskable(_ status: WeatherRequestStatus) -> Bool {
@@ -74,16 +93,16 @@ struct WeatherAskButton: View {
 
 /// "Everyone listening on #meshwx gets the answer." and, for a quiet bot, that it may not answer.
 struct WeatherAskFootnotes: View {
-  let model: WeatherToolModel
+  let screen: WeatherPageScreen
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(L10n.Weather.Weather.Request.publicNote)
         .font(.caption)
         .foregroundStyle(.secondary)
-      if let since = model.snapshot?.sourceQuietSince {
+      if let since = screen.snapshot.sourceQuietSince {
         Text(WeatherCopy.quietCaption(
-          source: model.sourceName, since: since, now: model.now, calendar: .autoupdatingCurrent,
+          source: screen.sourceName, since: since, now: screen.now, calendar: .autoupdatingCurrent,
           locale: .autoupdatingCurrent))
         .font(.caption)
         .foregroundStyle(.orange)
@@ -123,28 +142,18 @@ extension View {
       WeatherPendingBar(model: model, requestsOnScreen: requestsOnScreen)
     }
   }
-}
 
-/// "Where do you want weather for?" with the two ways to answer it.
-struct WeatherPlacePrompt: View {
-  let onUseMyLocation: () -> Void
-  let onSearch: () -> Void
-
-  var body: some View {
-    // Stacked, always: side by side the two labels do not fit a phone row, and every attempt to
-    // choose a layout by measuring wrapped, truncated or collapsed one of them.
-    VStack(alignment: .leading, spacing: 8) {
-      Text(L10n.Weather.Weather.Place.prompt)
-        .font(.headline)
-      Button(action: onUseMyLocation) {
-        Label(L10n.Weather.Weather.Place.useMyLocation, systemImage: "location")
-      }
-      .buttonStyle(.bordered)
-      Button(action: onSearch) {
-        Label(L10n.Weather.Weather.Place.searchTown, systemImage: "magnifyingglass")
-      }
-      .buttonStyle(.bordered)
-    }
-    .padding(.vertical, 4)
+  /// Every screen of the tool — the pager and everything pushed over it — takes the app's tab bar
+  /// off the screen while it is up (docs/MESHWX_UI.md §4).
+  ///
+  /// The tool owns the bottom edge. The place pages put Places, the page dots and Update there
+  /// in a bottom toolbar of the system's own, the way Apple Weather and Photos do, and a pushed
+  /// screen simply ends at the home indicator. The tool's own glass capsule floating over the
+  /// app's glass tab bar was two bars stacked at the foot of every page — the "disjointed" the
+  /// owner named on 16 September — and the 49 pt inset every pushed screen carried to stay clear
+  /// of the tab bar goes with it. Chats does the same inside a conversation, and the mapper
+  /// during a ride.
+  func weatherToolChrome() -> some View {
+    toolbar(.hidden, for: .tabBar)
   }
 }

@@ -113,10 +113,15 @@ struct WeatherFormattingTests {
     #expect(WeatherFormatting.sentenceStart("WX-AUS") == "WX-AUS")
   }
 
+  /// **One label per place** (docs/MESHWX_UI.md §3.1 U-12). The label a place carries is the name
+  /// it is shown by everywhere — the title bar, Places, every sentence that names it — and the
+  /// state stays on, because it is what tells two Austins apart. One tap used to produce
+  /// "Austin" in the title, "Austin, TX" in Places and a station's own town in the source line.
   @Test
-  func `a place label shortens to its town`() {
-    #expect(WeatherFormatting.shortPlaceName("Round Rock, TX") == "Round Rock")
-    #expect(WeatherFormatting.shortPlaceName("this location") == "this location")
+  func `a place is named the same way everywhere`() {
+    #expect(WeatherFormatting.placeName("Round Rock, TX") == "Round Rock, TX")
+    #expect(WeatherFormatting.placeName("this location") == "this location")
+    #expect(WeatherFormatting.placeName(" Austin, TX ") == "Austin, TX")
   }
 
   @Test
@@ -126,18 +131,18 @@ struct WeatherFormattingTests {
     #expect(WeatherFormatting.firmwareVersion("dev") == "dev")
   }
 
+  /// A forecast point is named by `WeatherNames.pointLabel`, the one function every site that
+  /// names one calls (docs/MESHWX_UI.md §3.1 U-25); the rule itself is tested where it lives
+  /// (`WeatherScreenTests`). This is the app's side of it: the point's name, its state when it
+  /// has one, and nothing else.
   @Test
-  func `a forecast point's state comes from its county and state tail`() {
-    #expect(WeatherFormatting.pointState("Austin Camp Mabry-Travis TX") == "TX")
-    #expect(WeatherFormatting.pointState("Luis Munoz Marin International Airport-San Juan") == nil)
-  }
-
-  @Test
-  func `forecast points read as places, town first when the tail is a town`() {
-    #expect(WeatherFormatting.pointLabel("Central Park-New York NY") == "Central Park, NY")
-    #expect(WeatherFormatting.pointLabel("Luis Munoz Marin International Airport-San Juan")
-      == "San Juan · Luis Munoz Marin International Airport")
-    #expect(WeatherFormatting.pointLabel("10 Mile Boxcars") == "10 Mile Boxcars")
+  func `forecast points read as places, by the one function that names them`() {
+    #expect(WeatherNames.pointState("Austin Camp Mabry-Travis TX") == "TX")
+    #expect(WeatherNames.pointState("Luis Munoz Marin International Airport-San Juan") == nil)
+    #expect(WeatherNames.pointLabel("Central Park-New York NY") == "Central Park, NY")
+    #expect(WeatherNames.pointLabel("Luis Munoz Marin International Airport-San Juan")
+      == "Luis Munoz Marin International Airport")
+    #expect(WeatherNames.pointLabel("10 Mile Boxcars") == "10 Mile Boxcars")
   }
 
   @Test
@@ -158,7 +163,17 @@ struct WeatherFormattingTests {
     #expect(WeatherReferenceNames.officeName("EWX") == "NWS Austin/San Antonio")
     #expect(WeatherReferenceNames.officeName("FWD") == "NWS Fort Worth")
     #expect(WeatherReferenceNames.officeName("ZZZ") == "NWS ZZZ")
+    #expect(WeatherReferenceNames.officeName("WNS") == "Storm Prediction Center")
+    #expect(WeatherReferenceNames.officeName("NHC") == "National Hurricane Center")
     #expect(WeatherReferenceNames.stateName("TX") == "Texas")
+  }
+
+  /// Spec §6 (revision 3): whole miles rounded down, so 1/2SM arrives as 0.
+  @Test
+  func `visibility under a mile reads under 1 mi, not 0`() {
+    let english = Locale(identifier: "en_US")
+    #expect(WeatherFormatting.visibility(miles: 0, locale: english) == "under 1 mi")
+    #expect(WeatherFormatting.visibility(miles: 10, locale: english) == "10 mi")
   }
 
   // MARK: - Wind, pressure, tags

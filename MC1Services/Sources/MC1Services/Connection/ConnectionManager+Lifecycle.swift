@@ -683,6 +683,16 @@ public extension ConnectionManager {
       await newServices.chatSendQueueService.hydrate()
       services = newServices
 
+      #if DEBUG
+        // The debug bridge (RemoteBotWeatherTransport) feeds the weather service from the real
+        // bot over HTTP. The mock session carries no radio events and nothing else on this path
+        // starts event monitoring, so the weather side is started here or the feed never opens.
+        if ProcessInfo.processInfo.environment["MESHWX_BRIDGE_URL"] != nil {
+          await newServices.weatherService.startEventMonitoring()
+          await newServices.weatherAlertNotifier.start()
+        }
+      #endif
+
       // Seed mock data
       try await simulatorMode.seedDataStore(newServices.dataStore)
 

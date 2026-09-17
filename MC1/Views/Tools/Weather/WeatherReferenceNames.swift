@@ -6,11 +6,18 @@ import Foundation
 /// Proper nouns rather than prose, so they are not in `Weather.strings`; a code the table does
 /// not know falls back to the code itself.
 enum WeatherReferenceNames {
-  /// "EWX" → "NWS Austin/San Antonio".
+  /// "EWX" → "NWS Austin/San Antonio"; "WNS" → "Storm Prediction Center".
   static func officeName(_ code: String) -> String {
     let upper = code.uppercased()
+    if let centre = nationalCentres[upper] { return centre }
     return "NWS \(officeCities[upper] ?? upper)"
   }
+
+  /// The national centres in the bot's office list (`MeshWXTables.nationalCentreCodes`), which are
+  /// not forecast offices and have no city.
+  static let nationalCentres: [String: String] = [
+    "NHC": "National Hurricane Center", "WNS": "Storm Prediction Center"
+  ]
 
   /// "TX" → "Texas".
   static func stateName(_ code: String) -> String {

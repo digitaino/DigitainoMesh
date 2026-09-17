@@ -54,33 +54,85 @@ struct WeatherStateStoreTests {
     state.lastLiveHeardAt = Date(timeIntervalSince1970: 999_000)
     #expect(try decoder.decode(WeatherBotState.self, from: encoder.encode(state)) == state)
   }
+
+  /// Spec §3, revision 5. A file written before the app could read the issue time — or one
+  /// holding a warning from a bot that does not send it — is still the last picture the bot sent:
+  /// the field decodes as absent, and the warning shows its arrival as it always did.
+  @Test
+  func `a warning's issue time round-trips, and a file from before it decodes with it absent`() throws {
+    var state = WeatherBotState(botID: 7)
+    let issued = Date(timeIntervalSince1970: 1_789_436_700)
+    guard case let .warning(warning) = WeatherFixture.warning(seq: 1).payload else {
+      Issue.record("expected a warning")
+      return
+    }
+    state.warnings[warning.identity] = WeatherStoredWarning(
+      warning: warning, receivedAt: Date(timeIntervalSince1970: 1_789_440_000), seq: 1)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .secondsSince1970
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .secondsSince1970
+
+    let old = try encoder.encode(state)
+    #expect(!String(decoding: old, as: UTF8.self).contains("issuedAt"))
+    let fromOldFile = try decoder.decode(WeatherBotState.self, from: old)
+    #expect(fromOldFile.warnings[warning.identity]?.issuedAt == nil)
+    #expect(fromOldFile == state)
+
+    state.warnings[warning.identity]?.issuedAt = issued
+    let decoded = try decoder.decode(WeatherBotState.self, from: encoder.encode(state))
+    #expect(decoded == state)
+    #expect(decoded.warnings[warning.identity]?.issuedAt == issued)
+  }
+
+  /// Spec §7A. A file written before the bot could state its coverage is still the last picture
+  /// it sent: the field decodes as absent, which falls back to the station footprint.
+  @Test
+  func `a coverage statement round-trips, and a file from before it decodes with it absent`() throws {
+    var state = WeatherBotState(botID: 7)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .secondsSince1970
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .secondsSince1970
+
+    let old = try encoder.encode(state)
+    let object = try #require(try JSONSerialization.jsonObject(with: old) as? [String: Any])
+    #expect(object["coverage"] == nil)
+    #expect(try decoder.decode(WeatherBotState.self, from: old).coverage == nil)
+
+    state.coverage = WeatherStoredCoverage(
+      coverage: WeatherFixture.austinCoverage, receivedAt: Date(timeIntervalSince1970: 1_789_000_000))
+    let decoded = try decoder.decode(WeatherBotState.self, from: encoder.encode(state))
+    #expect(decoded == state)
+    #expect(decoded.coverage?.coverage.radiusKilometres == 120)
+    #expect(decoded.coverage?.coverage.covers(ugc: "TXZ192", states: MeshWXTables.shared.states) == true)
+  }
 }
 
 @Suite("Weather digest margin")
 struct WeatherDigestMarginTests {
   private typealias F = WeatherFixture
 
-  /// The bot answers an identical request from its five-minute cache (spec §8.2), so the `>d` a
-  /// phone sends after a gap can come back as a list built *before* the gap. The ten-minute
-  /// margin is what stops that list clearing the gap. The cost is deliberate: a genuinely fresh
-  /// list built within ten minutes of the gap does not clear it either, and the card keeps saying
-  /// messages were missed until a later list does.
+  /// The bot keeps no answer cache (spec §8.2, revision 2): a list is built when it is sent, so the
+  /// margin only absorbs the phone's and the bot's clocks disagreeing and the minute `now` is
+  /// truncated to. A list built within two minutes of the gap could still, on those clocks, be
+  /// from before it; the card keeps saying messages were missed until a later list clears it.
   @Test
-  func `a list built within ten minutes of a gap leaves the gap open`() {
+  func `a list built within two minutes of a gap leaves the gap open`() {
     var state = WeatherBotState(botID: F.botID)
     _ = WeatherStateReducer.apply(F.warning(seq: 1), to: &state, receivedAt: F.t0)
     _ = WeatherStateReducer.apply(F.observations(seq: 3, stations: [(202, 88)]), to: &state, receivedAt: F.t0.addingTimeInterval(60))
     #expect(state.needsDigest)
 
-    // `>d` answered five minutes later with a list built four minutes after t0.
+    // `>d` answered at once, with a list built in the gap's own minute.
     _ = WeatherStateReducer.apply(
-      F.digest(seq: 4, nowMinutes: F.t0Minutes + 4, entries: [(F.svw42, 45)]), to: &state, receivedAt: F.t0.addingTimeInterval(300))
+      F.digest(seq: 4, nowMinutes: F.t0Minutes + 1, entries: [(F.svw42, 45)]), to: &state, receivedAt: F.t0.addingTimeInterval(70))
     #expect(state.needsDigest)
-    #expect(state.digest?.digest.nowMinutes == F.t0Minutes + 4)
+    #expect(state.digest?.digest.nowMinutes == F.t0Minutes + 1)
 
-    // Built eleven minutes after the gap: it cannot be a cached list from before it.
+    // Built four minutes after t0, three after the gap: it was built after it.
     _ = WeatherStateReducer.apply(
-      F.digest(seq: 5, nowMinutes: F.t0Minutes + 12, entries: [(F.svw42, 45)]), to: &state, receivedAt: F.t0.addingTimeInterval(750))
+      F.digest(seq: 5, nowMinutes: F.t0Minutes + 4, entries: [(F.svw42, 45)]), to: &state, receivedAt: F.t0.addingTimeInterval(240))
     #expect(!state.needsDigest)
   }
 }
