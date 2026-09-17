@@ -817,6 +817,28 @@ struct WeatherServiceTests {
     #expect(await session.sendMessageInvocations.isEmpty)
   }
 
+  /// The owner's radio keeps `#meshwx` in slot 31 (17 September): the first cut scanned 0-7 and
+  /// sent every request as a DM. The app's own table names the slot without a round trip; and
+  /// with no table at all the scan reaches it.
+  @Test
+  func `the session transport finds meshwx in a high slot, from the table first and by scanning otherwise`() async throws {
+    let session = MockMeshCoreSession()
+    await session.setCurrentSelfInfo(F.selfInfo())
+    await session.setStubbedChannel(
+      ChannelInfo(index: 31, name: WeatherChannel.name, secret: WeatherChannel.secret), at: 31)
+
+    let fromTable = SessionWeatherTransport(session: session, storedWeatherSlot: { 31 })
+    try await fromTable.sendChannelRequest(text: ">d", botID: F.botID, timestamp: F.t0, seq: 0)
+    #expect(await session.sendChannelDataInvocations.last?.channelIndex == 31)
+    #expect(await session.getChannelIndices.isEmpty, "the table answered; the radio was not asked")
+
+    let scanning = SessionWeatherTransport(session: session)
+    try await scanning.sendChannelRequest(text: ">d", botID: F.botID, timestamp: F.t0, seq: 0)
+    #expect(await session.sendChannelDataInvocations.last?.channelIndex == 31)
+    #expect(await session.getChannelIndices.contains(31))
+    #expect(await session.sendMessageInvocations.isEmpty, "nothing went out as a DM")
+  }
+
   @Test
   func `the session transport refuses a channel request it cannot make`() async throws {
     // No slot carries #meshwx.

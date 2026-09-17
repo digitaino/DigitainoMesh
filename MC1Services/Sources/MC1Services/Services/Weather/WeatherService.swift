@@ -93,14 +93,20 @@ public extension WeatherTransport {
 
 /// The production transport over a `MeshCoreSession`.
 public struct SessionWeatherTransport: WeatherTransport {
-  /// Channel slots searched for `#meshwx` when a request is about to go out. MeshCore's
-  /// companion protocol indexes channels 0-7; a radio with fewer simply answers for fewer.
-  static let channelSlots: UInt8 = 8
+  /// Channel slots searched for `#meshwx` when a request is about to go out and the app's own
+  /// table does not name it: the companion firmware's `MAX_GROUP_CHANNELS`, 40. The first cut
+  /// scanned 0-7 and the owner's radio keeps `#meshwx` in slot 31, so every request went out as
+  /// a DM with "no slot on this radio carries #meshwx" in the log (17 September). A radio with
+  /// fewer slots answers an error past its last one, which reads as "not here" and moves on.
+  static let channelSlots: UInt8 = 40
 
   private let session: any MeshCoreSessionProtocol
   private let storedChannelSecret: @Sendable (UInt8) async -> Data?
   private let drainingBacklog: @Sendable () async -> Bool
   private let channelDataSupported: @Sendable () async -> Bool
+  /// The slot the app's own channel table holds `#meshwx` in, by secret first and then by
+  /// name — what the radio reported at the last channel sync, so no radio round trip.
+  private let storedWeatherSlot: @Sendable () async -> UInt8?
   /// The slot proven to carry `#meshwx`, once one has been found. Only positive answers are
   /// kept: a slot is what the user just wrote the channel into, so "not there" must not stick.
   private let weatherSlot = OSAllocatedUnfairLock<UInt8?>(initialState: nil)
@@ -115,16 +121,21 @@ public struct SessionWeatherTransport: WeatherTransport {
   ///     `DeviceDTO.supportsChannelDatagrams`, the same gate the screen's
   ///     `firmwareSupportsWeather` is read from; the default assumes it can, and a radio that
   ///     cannot refuses the command anyway.
+  ///   - storedWeatherSlot: the slot the app's channel table holds `#meshwx` in, if it holds
+  ///     it at all — asked before any slot is scanned. The container wires it to the table;
+  ///     the default knows nothing and leaves it to the scan.
   public init(
     session: any MeshCoreSessionProtocol,
     storedChannelSecret: @escaping @Sendable (UInt8) async -> Data? = { _ in nil },
     isDrainingBacklog: @escaping @Sendable () async -> Bool = { false },
-    supportsChannelData: @escaping @Sendable () async -> Bool = { true }
+    supportsChannelData: @escaping @Sendable () async -> Bool = { true },
+    storedWeatherSlot: @escaping @Sendable () async -> UInt8? = { nil }
   ) {
     self.session = session
     self.storedChannelSecret = storedChannelSecret
     drainingBacklog = isDrainingBacklog
     channelDataSupported = supportsChannelData
+    self.storedWeatherSlot = storedWeatherSlot
   }
 
   public func datagramEvents() async -> AsyncStream<MeshEvent> {
@@ -186,6 +197,12 @@ public struct SessionWeatherTransport: WeatherTransport {
   /// The slot carrying `#meshwx`, by secret, cached for the session once found.
   private func meshWXSlot() async -> UInt8? {
     if let known = weatherSlot.withLock({ $0 }) { return known }
+    // The table first: it is what the radio said at the last sync, and it knows slot 31 without
+    // thirty-one round trips.
+    if let stored = await storedWeatherSlot() {
+      weatherSlot.withLock { $0 = stored }
+      return stored
+    }
     for index in 0..<Self.channelSlots where await channelSecret(at: index) == WeatherChannel.secret {
       weatherSlot.withLock { $0 = index }
       return index

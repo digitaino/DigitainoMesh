@@ -368,6 +368,13 @@ public final class ServiceContainer {
       // send-channel-data command and keep the DM.
       supportsChannelData: { [dataStore] in
         (try? await dataStore.fetchDevice(radioID: radioID)?.supportsChannelDatagrams) ?? false
+      },
+      // The slot `#meshwx` is in, from the table the channel sync fills: by secret, which is
+      // what decrypts the channel, then by name for a row whose secret has not synced.
+      storedWeatherSlot: { [dataStore] in
+        guard let channels = try? await dataStore.fetchChannels(radioID: radioID) else { return nil }
+        return (channels.first { $0.secret == WeatherChannel.secret }
+          ?? channels.first { $0.name == WeatherChannel.name })?.index
       }
     )
     #if DEBUG
