@@ -380,6 +380,12 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
 // MARK: - Cancel
 
 /// Why a warning ended early (spec §4, the cancel flags nibble).
+///
+/// **The one type whose flags nibble is not shared.** Since revision 7 bits 3-2 of every other
+/// type's nibble carry ``MeshWXDataSource``; a Cancel spends the *whole* nibble on this reason,
+/// so reason 12 is `other(12)` and never "mixed". ``MeshWXHeader/dataSource`` returns
+/// ``MeshWXDataSource/unstated`` for a Cancel for that reason, and a Cancel's nibble is decoded
+/// and re-encoded exactly as it was before revision 7.
 public enum MeshWXCancelReason: Sendable, Hashable, Codable {
   case cancelled
   case expiredEarly
@@ -711,13 +717,29 @@ public struct MeshWXText: Sendable, Hashable, Codable {
   public var index: UInt8
   public var total: UInt8
   public var text: String
+  /// Flags bit 0 (spec §8.1, revision 7): the product ran past ``MeshWXWire/maxTextChunks``
+  /// chunks and the bot dropped the tail, cutting at a sentence boundary.
+  ///
+  /// Set on every chunk of a cut reply, so a phone that never received the last one still knows
+  /// the reply is short of the product. It is not the same claim as a missing chunk: a hole is
+  /// something the air ate and asking again may fix, while this is the whole reply the bot will
+  /// ever send for that request.
+  public var wasCut: Bool
 
-  public init(subject: MeshWXTextSubject, group: UInt8, index: UInt8, total: UInt8, text: String) {
+  public init(
+    subject: MeshWXTextSubject,
+    group: UInt8,
+    index: UInt8,
+    total: UInt8,
+    text: String,
+    wasCut: Bool = false
+  ) {
     self.subject = subject
     self.group = group
     self.index = index
     self.total = total
     self.text = text
+    self.wasCut = wasCut
   }
 }
 

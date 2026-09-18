@@ -746,4 +746,143 @@ struct MeshWXCodecTests {
     #expect(data.count == 159)
     #expect(data.count <= MeshWXWire.maxData)
   }
+
+  // MARK: - Data source (spec §2.2, revision 7)
+
+  private func textBody(_ data: Data) throws -> MeshWXText? {
+    guard case let .text(text) = try MeshWXDecoder.decode(data).payload else { return nil }
+    return text
+  }
+
+  /// One message of every type that carries weather, under one source.
+  private func weatherMessages(from source: MeshWXDataSource) throws -> [(String, Data)] {
+    [
+      ("warning", try MeshWXEncoder.warning(
+        seq: 1, bot: 19578, identity: svw, expiresMinutes: 29_823_945, source: source)),
+      ("digest", try MeshWXEncoder.digest(
+        seq: 2, bot: 19578, nowMinutes: 29_823_900, feedHealth: 7,
+        entries: [(svw, 29_823_945)], source: source)),
+      ("observations", try MeshWXEncoder.observations(
+        seq: 3, bot: 19578, timestampMinutes: 29_823_893,
+        stations: [station(202, age: 20), station(860, age: 40)], source: source)),
+      ("forecast", try MeshWXEncoder.forecast(
+        seq: 4, bot: 19578, pointIndex: 102, issuedMinutes: 29_823_880, firstPeriod: 1,
+        periods: [MeshWXForecastPeriod(lowF: 73, popPercent: 20, sky: .scattered)],
+        source: source)),
+      ("text", try MeshWXEncoder.text(
+        seq: 5, bot: 19578, subject: .forecastDiscussion, group: 5, index: 0, total: 1,
+        text: "AREA FORECAST DISCUSSION", source: source))
+    ]
+  }
+
+  /// Every type that carries weather states where it came from, and the statement has to survive
+  /// a re-encode byte for byte: it rides on the header, so an encoder that took it only from the
+  /// body would drop it silently.
+  @Test(arguments: MeshWXDataSource.allCases)
+  func theDataSourceRoundTripsOnEveryTypeThatCarriesWeather(_ source: MeshWXDataSource) throws {
+    for (name, data) in try weatherMessages(from: source) {
+      let message = try MeshWXDecoder.decode(data)
+      #expect(message.header.dataSource == source, "\(name)")
+      #expect(try MeshWXEncoder.encode(message) == data, "\(name) re-encodes to the same bytes")
+    }
+  }
+
+  /// Bits 3-2, which is the one place in the nibble that was free: the update bit and the issue
+  /// time bit keep bits 0 and 1, and each type's own flags are untouched.
+  @Test func theSourceSitsInBitsThreeAndTwoAndLeavesTheOtherFlagsAlone() throws {
+    let expires: UInt32 = 29_823_945
+    let data = try MeshWXEncoder.warning(
+      seq: 28, bot: 19578, identity: svw, expiresMinutes: expires, isUpdate: true,
+      issuedMinutes: expires - 90, source: .internet)
+    // internet = 2, shifted up two: 0b1000, beside the update (0b1) and issued (0b10) bits.
+    #expect(data[3] & 0x0F == 0b1011)
+    let warning = try #require(try warningBody(data))
+    #expect(warning.isUpdate)
+    #expect(warning.issuedBeforeMinutes == 90)
+    #expect(try MeshWXDecoder.decodeHeader(data).dataSource == .internet)
+
+    // And on a batch that also carries the per-station ages (spec §6.1), which own bit 0.
+    let batch = try MeshWXEncoder.observations(
+      seq: 29, bot: 19578, timestampMinutes: 29_823_893,
+      stations: [station(202, age: 20)], source: .mixed)
+    #expect(batch[3] & 0x0F == 0b1101)
+    #expect(try #require(try observationsBody(batch)).stations.map(\.ageMinutes) == [20])
+    #expect(try MeshWXDecoder.decodeHeader(batch).dataSource == .mixed)
+  }
+
+  /// A bot older than revision 7 sets none of these bits, and that is not a claim: it reads as
+  /// unstated on every type, and the bytes are the ones it always sent.
+  @Test func aBotThatStatesNothingIsUnstatedRatherThanGoes() throws {
+    for (name, data) in try weatherMessages(from: .unstated) {
+      #expect(data[3] & MeshWXWire.flagDataSourceMask == 0, "\(name)")
+      #expect(try MeshWXDecoder.decodeHeader(data).dataSource == .unstated, "\(name)")
+    }
+    // The types with no weather product behind them always send 0 (spec §2.2, revision 7).
+    let notAvailable = try MeshWXEncoder.notAvailable(
+      seq: 6, bot: 19578, requestCode: 102, reason: .noData)
+    let coverage = try MeshWXEncoder.coverage(
+      seq: 7, bot: 19578, latitude: 30.2672, longitude: -97.7431, radiusKilometres: 120,
+      stationCap: 14, officeIndices: [35], areas: [])
+    let request = try MeshWXEncoder.request(
+      seq: 8, bot: 19578, senderPrefix: Data([1, 2, 3, 4, 5, 6]), timestamp: 1_789_436_700,
+      text: ">d")
+    for data in [notAvailable, coverage, request] {
+      #expect(try MeshWXDecoder.decodeHeader(data).dataSource == .unstated)
+    }
+  }
+
+  /// **The Cancel exception.** Its whole nibble is a reason code (spec §4), so reason 12 is
+  /// `other(12)` and never "mixed": reading bits 3-2 there would invent a source out of the
+  /// reason a warning ended, and re-encoding what was read would rewrite the reason.
+  @Test func aCancelsNibbleIsStillAllReasonAndStatesNoSource() throws {
+    for raw in UInt8(0)...15 {
+      let reason = MeshWXCancelReason(rawValue: raw)
+      let data = try MeshWXEncoder.cancel(seq: 9, bot: 19578, identity: svw, reason: reason)
+      let message = try MeshWXDecoder.decode(data)
+      #expect(message.header.flags == raw)
+      #expect(message.header.dataSource == .unstated, "reason \(raw) is not a source")
+      guard case let .cancel(cancel) = message.payload else {
+        Issue.record("expected a cancel payload")
+        return
+      }
+      #expect(cancel.reason == reason)
+      #expect(cancel.reason.rawValue == raw)
+      #expect(try MeshWXEncoder.encode(message) == data)
+    }
+  }
+
+  // MARK: - Text cut for the air (spec §8.1, revision 7)
+
+  /// Bit 0 of a Text's nibble: the product was longer than eight packets and the bot dropped the
+  /// tail. It sits beside the source bits and survives a re-encode.
+  @Test func theTextCutFlagIsBitZeroAndRoundTrips() throws {
+    let cut = try MeshWXEncoder.text(
+      seq: 5, bot: 19578, subject: .forecastDiscussion, group: 5, index: 3, total: 4,
+      text: "…SHORT TERM…", wasCut: true, source: .goesSatellite)
+    #expect(cut[3] & 0x0F == 0b0101, "cut on bit 0, GOES on bits 3-2")
+    let text = try #require(try textBody(cut))
+    #expect(text.wasCut)
+    #expect(try MeshWXDecoder.decodeHeader(cut).dataSource == .goesSatellite)
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(cut)) == cut)
+
+    let whole = try MeshWXEncoder.text(
+      seq: 6, bot: 19578, subject: .forecastDiscussion, group: 6, index: 0, total: 1,
+      text: "…SHORT TERM…")
+    #expect(whole[3] & 0x0F == 0)
+    #expect(try #require(try textBody(whole)).wasCut == false)
+  }
+
+  /// The bot marks *every* chunk, not only the last: a phone that never receives the last one
+  /// still has to know the reply is short of the product.
+  @Test func aCutReplyMarksEveryChunkOfIt() throws {
+    let chunks = try MeshWXEncoder.textChunks(
+      seqStart: 40, bot: 19578, subject: .forecastDiscussion,
+      text: String(repeating: "x", count: 400), wasCut: true, source: .internet)
+    #expect(chunks.count == 3)
+    for chunk in chunks {
+      #expect(try #require(try textBody(chunk)).wasCut)
+      #expect(try MeshWXDecoder.decodeHeader(chunk).dataSource == .internet)
+      #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(chunk)) == chunk)
+    }
+  }
 }

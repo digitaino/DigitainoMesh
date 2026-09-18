@@ -274,6 +274,19 @@ struct WeatherCopyTests {
       now: Self.now, calendar: F.calendar, locale: F.locale)) == "Llano Municipal Airport · as of 11:18 PM")
   }
 
+  /// From 25 to 40 km the reading is shown, but under its station: the station and distance lead,
+  /// above the number, and the line at the foot keeps only the time (§3.1 U-2a).
+  @Test
+  func `a reading from 25 to 40 km names its station above the number and its time below`() {
+    #expect(F.plain(WeatherCopy.nearbyReadingLead(stationName: "San Marcos", kilometres: 25.51))
+      == "Nearest report: San Marcos, 26 km away")
+    #expect(F.plain(WeatherCopy.nearbyReadingLead(stationName: "San Marcos", kilometres: nil))
+      == "Nearest report: San Marcos")
+    #expect(F.plain(WeatherCopy.conditionsSource(
+      stationName: nil, kilometres: nil, observedAt: Self.now.addingTimeInterval(-2 * 60),
+      now: Self.now, calendar: F.calendar, locale: F.locale)) == "As of 11:18 PM")
+  }
+
   /// No good reading means no temperature at all — only the ask, and the code it would spend
   /// airtime on (answer 11).
   @Test
@@ -296,6 +309,12 @@ struct WeatherCopyTests {
     #expect(F.plain(WeatherCopy.placeRow(stale, now: Self.now, locale: F.locale)) == "86° Mostly cloudy · 3 h old")
 
     #expect(WeatherCopy.placeRow(WeatherPlaceRowReading(), now: Self.now, locale: F.locale) == "—")
+
+    // From 25 to 40 km the page names the station, so the row does too.
+    var attributed = fresh
+    attributed.attributedStation = "San Marcos"
+    #expect(F.plain(WeatherCopy.placeRow(attributed, now: Self.now, locale: F.locale))
+      == "86° Mostly cloudy · San Marcos")
   }
 
   @Test
@@ -431,5 +450,26 @@ struct WeatherCopyTests {
     #expect(WeatherCopy.stationLink(inArea: 1, total: 3, source: "WX-AUS") == "3 weather stations, 1 in WX-AUS's area")
     #expect(WeatherCopy.stationLink(inArea: 0, total: 3, source: "WX-AUS") == "3 weather stations")
     #expect(WeatherCopy.stationLink(inArea: 0, total: 1, source: "WX-AUS") == "1 weather station")
+  }
+
+  // MARK: - Where the data came from (§12.1)
+
+  @Test
+  func `the source line names the path the data took, and says nothing when the radio did not`() {
+    #expect(WeatherCopy.dataSource(.goesSatellite) == "From the GOES satellite")
+    #expect(WeatherCopy.dataSource(.internet) == "From the internet")
+    #expect(WeatherCopy.dataSource(.mixed) == "From GOES and the internet")
+    // A radio older than revision 7 has made no claim, and no screen may invent one for it.
+    #expect(WeatherCopy.dataSource(.unstated) == nil)
+  }
+
+  @Test
+  func `a cut reply says the rest did not fit, beside the source when there is one`() {
+    #expect(WeatherCopy.reportFootnote(source: .goesSatellite, wasCut: false) == "From the GOES satellite")
+    #expect(WeatherCopy.reportFootnote(source: .unstated, wasCut: true) == "The rest didn't fit on the radio.")
+    #expect(WeatherCopy.reportFootnote(source: .internet, wasCut: true)
+      == "From the internet · The rest didn't fit on the radio.")
+    // Neither fact: no row at all, so a card from an older radio reads exactly as it did.
+    #expect(WeatherCopy.reportFootnote(source: .unstated, wasCut: false) == nil)
   }
 }

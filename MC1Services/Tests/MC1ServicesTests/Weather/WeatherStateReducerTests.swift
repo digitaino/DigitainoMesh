@@ -421,6 +421,76 @@ struct WeatherStateReducerTests {
     #expect(assembly.orderedChunks == ["new"])
   }
 
+  // MARK: - Where the data came from (spec §2.2, revision 7)
+
+  @Test
+  func `the source rides from each message's header into the record the screen reads`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, source: .goesSatellite), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 2, stations: [(202, 88)], source: .internet), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.forecast(seq: 3, source: .mixed), to: &state, receivedAt: F.t0)
+    #expect(state.warnings[F.svw42]?.source == .goesSatellite)
+    #expect(state.observations[202]?.source == .internet)
+    #expect(state.forecasts[102]?.source == .mixed)
+  }
+
+  /// A bot older than revision 7 states nothing, and nothing is what the record holds: unstated
+  /// is not a fourth source, and no screen may read it as one.
+  @Test
+  func `a bot that states no source leaves every record unstated`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.warning(seq: 1), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 2, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.forecast(seq: 3), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.text(seq: 4, group: 4, index: 0, total: 1, text: "x"), to: &state, receivedAt: F.t0)
+    #expect(state.warnings[F.svw42]?.source == .unstated)
+    #expect(state.observations[202]?.source == .unstated)
+    #expect(state.forecasts[102]?.source == .unstated)
+    #expect(state.texts[4]?.source == .unstated)
+    #expect(state.texts[4]?.wasCut == false)
+  }
+
+  /// A Cancel's nibble is its reason (spec §4), so nothing about it is a source — and the reason
+  /// still decodes as it always did whatever the value.
+  @Test
+  func `a cancel whose reason fills the source bits is still only a reason`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.warning(seq: 1), to: &state, receivedAt: F.t0)
+    // Reason 12 has bits 3-2 set: read as a source it would say "mixed".
+    let cancel = F.cancel(seq: 2, reason: .other(12))
+    #expect(cancel.header.dataSource == .unstated)
+    let changes = WeatherStateReducer.apply(cancel, to: &state, receivedAt: F.t0)
+    #expect(changes == [.warningRemoved(F.svw42, reason: .other(12))])
+  }
+
+  @Test
+  func `an assembly takes the source from its chunks and is cut if any chunk says so`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.text(seq: 7, group: 7, index: 0, total: 3, text: "SEVERE ", wasCut: true, source: .goesSatellite),
+      to: &state, receivedAt: F.t0)
+    #expect(state.texts[7]?.source == .goesSatellite)
+    #expect(state.texts[7]?.wasCut == true)
+
+    // The cut mark is the reply's, not one chunk's: a later chunk without the flag — which the
+    // bot never sends, but a lost-and-resent packet could look like — does not unmark it.
+    _ = WeatherStateReducer.apply(
+      F.text(seq: 8, group: 7, index: 1, total: 3, text: "THUNDERSTORM ", source: .goesSatellite),
+      to: &state, receivedAt: F.t0)
+    #expect(state.texts[7]?.wasCut == true)
+
+    // A chunk that states nothing never erases a source already stated; one that states
+    // something disagreeing is the newest word on it.
+    _ = WeatherStateReducer.apply(
+      F.text(seq: 9, group: 7, index: 2, total: 3, text: "indicated."), to: &state, receivedAt: F.t0)
+    #expect(state.texts[7]?.source == .goesSatellite)
+    _ = WeatherStateReducer.apply(
+      F.text(seq: 10, group: 7, index: 2, total: 3, text: "indicated.", source: .mixed),
+      to: &state, receivedAt: F.t0)
+    #expect(state.texts[7]?.source == .mixed)
+    #expect(state.texts[7]?.isComplete == true)
+  }
+
   // MARK: - Other types
 
   @Test
@@ -863,10 +933,12 @@ struct WeatherStateReducerOrderingTests {
   @Test
   func `a state file written before the new fields still loads`() async throws {
     var state = WeatherBotState(botID: F.botID)
-    _ = WeatherStateReducer.apply(F.warning(seq: 1), to: &state, receivedAt: F.t0)
-    _ = WeatherStateReducer.apply(F.observations(seq: 2, stations: [(202, 88)]), to: &state, receivedAt: F.t0)
-    _ = WeatherStateReducer.apply(F.forecast(seq: 3), to: &state, receivedAt: F.t0)
-    _ = WeatherStateReducer.apply(F.text(seq: 4, group: 4, index: 0, total: 1, text: "x"), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, source: .internet), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 2, stations: [(202, 88)], source: .internet), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.forecast(seq: 3, source: .internet), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(
+      F.text(seq: 4, group: 4, index: 0, total: 1, text: "x", wasCut: true, source: .internet),
+      to: &state, receivedAt: F.t0)
 
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .secondsSince1970
@@ -887,6 +959,12 @@ struct WeatherStateReducerOrderingTests {
     strip("observations", "batchSize")
     strip("forecasts", "requestedHere")
     strip("texts", "request")
+    // Revision 7 (spec §2.2, §8.1): a file from Rafael's phone written before the app could read
+    // either of these decodes as "the radio didn't say", not as a failure to load the file.
+    for collection in ["warnings", "observations", "forecasts", "texts"] {
+      strip(collection, "source")
+    }
+    strip("texts", "wasCut")
 
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .secondsSince1970
@@ -897,6 +975,11 @@ struct WeatherStateReducerOrderingTests {
     #expect(legacy.observations[202]?.batchSize == 1)
     #expect(legacy.forecasts[102]?.requestedHere == false)
     #expect(legacy.texts[4]?.request == nil)
+    #expect(legacy.warnings[F.svw42]?.source == .unstated)
+    #expect(legacy.observations[202]?.source == .unstated)
+    #expect(legacy.forecasts[102]?.source == .unstated)
+    #expect(legacy.texts[4]?.source == .unstated)
+    #expect(legacy.texts[4]?.wasCut == false)
 
     // An entry without a fingerprint matches on seq alone, as it did.
     var reloaded = legacy

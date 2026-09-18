@@ -19,15 +19,26 @@ public struct WeatherNearbyStation: Sendable, Hashable {
 ///
 /// A temperature on the page is a claim about the weather *here*. The owner's threshold decides
 /// when that claim can be made: the reading the phone holds must be within
-/// ``goodReadingKilometres`` of the place and not stale. Anything else is no temperature at all —
-/// a reading from sixty kilometres away, or three hours old, answers a different question — and
-/// the page shows the ask instead, naming the station a refresh would spend airtime on.
+/// ``goodReadingKilometres`` of the place and not stale.
 ///
-/// The station named is the one ``WeatherUpdatePlan`` would ask for, so the sentence on the page
-/// and the packet on the air are always the same station.
+/// Past that, up to ``labelledReadingKilometres``, a fresh reading is still shown, **attributed to
+/// its station** — "Nearest report: San Marcos, 26 km away" — rather than passed off as the town's
+/// (owner decision 2026-09-18, docs/MESHWX_UI.md §3.1 U-2a). Wimberley's nearest station is 25.5 km
+/// off: under a hard 25 km cliff its page asked, the answer arrived, and the page threw it away.
+/// Further than that, or three hours old, a reading answers a different question and the page
+/// shows the ask instead, naming the station a refresh would spend airtime on — or, when no
+/// station is close enough for its answer to be shown, says so and asks for nothing.
+///
+/// ``WeatherUpdatePlan`` reads its readings step **off this verdict**, so the sentence on the page
+/// and the packet on the air are always the same station. They used to be worked out twice, and
+/// the two drifted: the page offered to ask about a station while Update called it current.
 public enum WeatherConditions: Sendable, Hashable {
   /// A good reading: this is the weather here.
   case reading(WeatherStationReading)
+  /// A fresh reading too far off to be the weather here but near enough to show, under its
+  /// station's name and distance. `nearer` is a closer bundled station worth asking by code: the
+  /// page shows what it holds, and Update asks for something better.
+  case nearby(WeatherStationReading, nearer: WeatherNearbyStation?)
   /// No good reading, and a station to ask about by code.
   case ask(icao: String, kilometres: Double?)
   /// Nothing has ever arrived: the hourly batch is what fills this in, and it is not a place
@@ -43,10 +54,18 @@ public enum WeatherConditions: Sendable, Hashable {
   /// to print one number and call it the temperature here.
   public static let goodReadingKilometres = 25.0
 
+  /// **Tunable** (docs/MESHWX_UI.md §3.1 U-2a): how close a reading has to be to be shown at all,
+  /// attributed to its station, when it is too far to be the temperature here. Also the furthest
+  /// the page will spend a packet on: asking a station further than this would bring back a
+  /// reading the page will not show.
+  public static let labelledReadingKilometres = 40.0
+
   /// The station whose reading is on the page, when one is.
   public var reading: WeatherStationReading? {
-    guard case let .reading(reading) = self else { return nil }
-    return reading
+    switch self {
+    case let .reading(reading), let .nearby(reading, _): reading
+    default: nil
+    }
   }
 
   /// **The one rule**, for the page and for a Places row alike (docs/MESHWX_UI.md §3.1 U-2): a
@@ -61,6 +80,13 @@ public enum WeatherConditions: Sendable, Hashable {
     return kilometres <= goodReadingKilometres
   }
 
+  /// A reading the page will show at all: good, or fresh and within ``labelledReadingKilometres``
+  /// to be shown under its station's name. The same rule for a Places row.
+  public static func isShowable(kilometres: Double?, isStale: Bool) -> Bool {
+    guard let kilometres, !isStale else { return false }
+    return kilometres <= labelledReadingKilometres
+  }
+
   public static func make(
     primary: WeatherPrimaryStation,
     nearbyStation: WeatherNearbyStation?
@@ -70,14 +96,26 @@ public enum WeatherConditions: Sendable, Hashable {
       let kilometres = reading.distanceKilometres ?? .infinity
       if isGood(kilometres: reading.distanceKilometres, isStale: reading.isStale) { return .reading(reading) }
       // Too far to speak for the place: asking that same station again would not bring it closer,
-      // so the ask names the nearest bundled station instead — which is what the plan sends.
-      if let nearbyStation, nearbyStation.icao != reading.station.icao, kilometres > goodReadingKilometres {
-        return .ask(icao: nearbyStation.icao, kilometres: nearbyStation.kilometres)
+      // so a nearer bundled station is the one worth a packet — while its answer could be shown.
+      let nearer = nearbyStation.flatMap { station in
+        station.icao != reading.station.icao && kilometres > goodReadingKilometres
+          && station.kilometres <= labelledReadingKilometres ? station : nil
       }
-      // Near enough, but stale: the station itself is the right one to ask about again.
-      return .ask(icao: reading.station.icao, kilometres: reading.distanceKilometres)
+      // Fresh and near enough to show: shown under its own name, never as the town's.
+      if isShowable(kilometres: reading.distanceKilometres, isStale: reading.isStale) {
+        return .nearby(reading, nearer: nearer)
+      }
+      if let nearer { return .ask(icao: nearer.icao, kilometres: nearer.kilometres) }
+      // Near enough to show once it is fresh: the station itself is the one to ask about again.
+      if kilometres <= labelledReadingKilometres {
+        return .ask(icao: reading.station.icao, kilometres: reading.distanceKilometres)
+      }
+      // Nothing close enough for an answer to be shown: say so, and spend nothing.
+      return .noStation(nearest: reading)
     case let .noneNearby(nearest):
-      guard let nearbyStation else { return .noStation(nearest: nearest) }
+      guard let nearbyStation, nearbyStation.kilometres <= labelledReadingKilometres else {
+        return .noStation(nearest: nearest)
+      }
       return .ask(icao: nearbyStation.icao, kilometres: nearbyStation.kilometres)
     case .noObservations:
       return .noneYet
@@ -100,12 +138,20 @@ public struct WeatherPlaceRowReading: Sendable, Hashable {
   /// The reading's own time, on the bot's clock.
   public var observedAt: Date?
   public var isStale: Bool
+  /// The station's name when the reading is shown attributed to it — further than
+  /// ``WeatherConditions/goodReadingKilometres`` — exactly as the page attributes it. Nil for a
+  /// reading that is the weather here.
+  public var attributedStation: String?
 
-  public init(tempF: Int8? = nil, sky: MeshWXSky? = nil, observedAt: Date? = nil, isStale: Bool = false) {
+  public init(
+    tempF: Int8? = nil, sky: MeshWXSky? = nil, observedAt: Date? = nil, isStale: Bool = false,
+    attributedStation: String? = nil
+  ) {
     self.tempF = tempF
     self.sky = sky
     self.observedAt = observedAt
     self.isStale = isStale
+    self.attributedStation = attributedStation
   }
 
   /// Nothing is held for this place: the row reads "—" rather than a bare degree sign.
@@ -117,8 +163,8 @@ public struct WeatherPlaceRowReading: Sendable, Hashable {
     now: Date
   ) -> WeatherPlaceRowReading {
     guard let near = WeatherStations.nearestReading(
-      in: readings, to: coordinate, within: WeatherConditions.goodReadingKilometres),
-      WeatherConditions.isGood(kilometres: near.kilometres, isStale: near.reading.stored.isStale(at: now))
+      in: readings, to: coordinate, within: WeatherConditions.labelledReadingKilometres),
+      WeatherConditions.isShowable(kilometres: near.kilometres, isStale: near.reading.stored.isStale(at: now))
     else {
       return WeatherPlaceRowReading()
     }
@@ -128,7 +174,9 @@ public struct WeatherPlaceRowReading: Sendable, Hashable {
       // No cloud or weather group in the report: no condition word rather than a made-up sky.
       sky: observation.sky == .other ? nil : observation.sky,
       observedAt: near.reading.stored.observedAt,
-      isStale: near.reading.stored.isStale(at: now))
+      isStale: near.reading.stored.isStale(at: now),
+      attributedStation: near.kilometres > WeatherConditions.goodReadingKilometres
+        ? WeatherNames.stationName(near.reading.station.name) : nil)
   }
 }
 
@@ -171,7 +219,7 @@ public struct WeatherEmptyPlace: Sendable, Hashable {
     forecast: WeatherForecastCard
   ) -> WeatherEmptyPlace? {
     switch conditions {
-    case .reading, .noPlace: return nil
+    case .reading, .nearby, .noPlace: return nil
     case .ask, .noneYet, .noStation: break
     }
     var empty = WeatherEmptyPlace()

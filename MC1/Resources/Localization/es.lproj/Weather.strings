@@ -339,11 +339,17 @@
 /* Location: WeatherCopy.swift - Which report a reading came in. %1$@ is the radio's name, %2$@ a time like "11:18 PM" */
 "weather.now.report" = "en el informe de %1$@ (%2$@)";
 
-/* Location: WeatherCopy.swift - No station within 80 km. %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance */
+/* Location: WeatherCopy.swift - No station close enough for its reading to be shown (40 km). %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance */
 "weather.now.noneNearby" = "No hay estaciones meteorológicas cerca de %1$@. La más cercana: %2$@, %3$@.";
 
-/* Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town */
+/* Location: WeatherCopy.swift - No station close enough for its reading to be shown (40 km), distance unknown. %1$@ is the place, %2$@ the nearest station's town */
 "weather.now.noneNearbyUnknown" = "No hay estaciones meteorológicas cerca de %1$@. La más cercana: %2$@.";
+
+/* Location: WeatherConditionsSection.swift - Above the temperature when the reading is 25-40 km off: shown, but attributed to its station, never as the town's. %1$@ is the station's town, %2$@ a distance */
+"weather.now.nearbyReading" = "Informe más cercano: %1$@, a %2$@";
+
+/* Location: WeatherConditionsSection.swift - The same, distance unknown. %1$@ is the station's town */
+"weather.now.nearbyReadingUnknown" = "Informe más cercano: %1$@";
 
 /* Location: WeatherCopy.swift - Link to the stations screen, %1$lld is how many stations came in the radio's batch (two or more), %2$@ the radio's name */
 "weather.now.stationsInArea" = "%1$lld estaciones en la zona de %2$@";
@@ -601,6 +607,20 @@
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift - Header part for an answer this phone never asked for; lowercase, joined with a middot */
 "weather.reports.overheard" = "escuchado en #meshwx";
+
+/* Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot */
+"weather.reports.cut" = "El resto no cabía en la radio.";
+
+// MARK: - Where the data came from
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say. */
+"weather.source.goes" = "Del satélite GOES";
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet */
+"weather.source.internet" = "De internet";
+
+/* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet */
+"weather.source.mixed" = "De GOES y de internet";
 
 // MARK: - Requests
 

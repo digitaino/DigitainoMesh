@@ -459,10 +459,9 @@ public struct WeatherUpdatePlan: Sendable, Hashable {
   /// - Parameters:
   ///   - sourceState: the bot the requests would go to. Its gaps and missing identities are the
   ///     only ones a request to it can repair (`WeatherAlertRequests`).
-  ///   - nearbyStationICAO: the nearest bundled station to the place, which can be asked for by
-  ///     code. It is what the plan spends its readings packet on whenever the reading held is no
-  ///     good for the place — none in reach, or one from further than
-  ///     ``WeatherConditions/goodReadingKilometres``.
+  ///   - nearbyStation: the nearest bundled station to the place, which can be asked for by code.
+  ///     The readings step is read off ``WeatherConditions`` built with it, so what Update asks
+  ///     for is always the station the page names (docs/MESHWX_UI.md §3.1 U-2a).
   ///   - notAvailable: identities this bot has already said it does not have, so a tap moves on
   ///     to the next one instead of asking again.
   ///   - coverageAlreadyAsked: this phone has already asked this bot what it covers on this
@@ -473,7 +472,7 @@ public struct WeatherUpdatePlan: Sendable, Hashable {
     placeCountyUGC: String? = nil,
     placeZoneUGC: String? = nil,
     placeOffice: String? = nil,
-    nearbyStationICAO: String? = nil,
+    nearbyStation: WeatherNearbyStation? = nil,
     notAvailable: Set<MeshWXWarningIdentity> = [],
     coverageAlreadyAsked: Bool = false,
     tables: MeshWXTables,
@@ -530,32 +529,41 @@ public struct WeatherUpdatePlan: Sendable, Hashable {
       }
     }
 
-    // Readings.
-    switch snapshot.primaryStation {
-    case let .reading(reading):
-      if let icao = nearbyStationICAO, icao != reading.station.icao,
-         (reading.distanceKilometres ?? .infinity) > WeatherConditions.goodReadingKilometres {
-        // The reading held is too far away to be the weather here (`WeatherConditions`), so the
-        // page shows the ask rather than a temperature. Asking that same station again would not
-        // bring it closer: the packet goes to the nearest station instead, the one the page named.
-        steps.append(Step(item: .readings, request: .observation(station: icao)))
-      } else if now.timeIntervalSince(reading.stored.observedAt) > readingFreshFor {
-        if isJustReceived(reading.stored.receivedAt) {
-          justReceived.append(.readings)
-        } else {
-          steps.append(Step(item: .readings, request: readingsRequest(for: reading)))
-        }
+    // Readings: off the page's own verdict, so the page and the packet never disagree. They were
+    // worked out twice and drifted — a Wimberley page asked about San Marcos while Update, holding
+    // a fresh San Marcos reading, called everything current (docs/MESHWX_UI.md §3.1 U-2a).
+    //
+    // Two ages, on purpose: the page stops showing a reading after two hours (`isStale`), but one
+    // over ``readingFreshFor`` has missed an hourly batch and is already worth a packet.
+    func refresh(_ held: WeatherStationReading) {
+      if now.timeIntervalSince(held.stored.observedAt) <= readingFreshFor {
+        currentTimes.append(held.stored.observedAt)
+      } else if isJustReceived(held.stored.receivedAt) {
+        justReceived.append(.readings)
       } else {
-        currentTimes.append(reading.stored.observedAt)
+        steps.append(Step(item: .readings, request: readingsRequest(for: held)))
       }
-    case .noneNearby:
-      // Nothing held in reach of the place, but a bundled station is: that one station by code.
-      if let icao = nearbyStationICAO {
+    }
+    switch WeatherConditions.make(primary: snapshot.primaryStation, nearbyStation: nearbyStation) {
+    case let .reading(reading), let .nearby(reading, nearer: nil):
+      refresh(reading)
+    case let .nearby(_, nearer: nearer?):
+      // Shown under its station's name, and a nearer station could be the weather here: that one
+      // by code. The page keeps what it holds meanwhile.
+      steps.append(Step(item: .readings, request: .observation(station: nearer.icao)))
+    case let .ask(icao, _):
+      if case let .reading(held) = snapshot.primaryStation, held.station.icao == icao {
+        // The held station itself, gone stale.
+        refresh(held)
+      } else {
+        // Nothing held from it: that one station by code.
         steps.append(Step(item: .readings, request: .observation(station: icao)))
       }
-    case .noObservations:
+    case .noneYet:
       steps.append(Step(item: .readings, request: .observations))
-    case .noPlace:
+    case .noStation, .noPlace:
+      // No station close enough for its answer to be shown: a packet would bring back a reading
+      // the page refuses.
       break
     }
 

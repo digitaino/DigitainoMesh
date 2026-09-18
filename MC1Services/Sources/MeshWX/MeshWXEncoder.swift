@@ -73,7 +73,8 @@ public enum MeshWXEncoder {
     polygon: [MeshWXCoordinate]? = nil,
     areas: [MeshWXAreaRun]? = nil,
     isUpdate: Bool = false,
-    issuedMinutes: UInt32? = nil
+    issuedMinutes: UInt32? = nil,
+    source: MeshWXDataSource = .unstated
   ) throws -> Data {
     var tags =
       (tornado.rawValue << 6) | (floodSource.rawValue << 4) | (floodDamage.rawValue << 2)
@@ -86,6 +87,7 @@ public enum MeshWXEncoder {
 
     var flags: UInt8 = isUpdate ? MeshWXWire.flagWarningUpdate : 0
     if issuedMinutes != nil { flags |= MeshWXWire.flagWarningIssued }
+    flags |= source.flagBits
 
     var out = try header(seq: seq, bot: bot, type: .warning, flags: flags)
     out.append(identity.event)
@@ -110,7 +112,12 @@ public enum MeshWXEncoder {
   }
 
   /// Convenience for the round trip: re-encode a decoded warning under a fresh header.
-  public static func warning(seq: UInt8, bot: UInt16, _ warning: MeshWXWarning) throws -> Data {
+  ///
+  /// `source` rides on the header rather than in the body, so it has to be handed back in for the
+  /// bytes to match; ``encode(_:)`` takes it from the decoded header.
+  public static func warning(
+    seq: UInt8, bot: UInt16, _ warning: MeshWXWarning, source: MeshWXDataSource = .unstated
+  ) throws -> Data {
     try self.warning(
       seq: seq,
       bot: bot,
@@ -126,7 +133,8 @@ public enum MeshWXEncoder {
       isUpdate: warning.isUpdate,
       // Resolved and subtracted back: `expires − (expires − before)` is the same two bytes,
       // saturation included, so the round trip stays byte-identical.
-      issuedMinutes: warning.issuedMinutes
+      issuedMinutes: warning.issuedMinutes,
+      source: source
     )
   }
 
@@ -222,13 +230,14 @@ public enum MeshWXEncoder {
     bot: UInt16,
     nowMinutes: UInt32,
     feedHealth: UInt8,
-    entries: [(identity: MeshWXWarningIdentity, expiresMinutes: UInt32)]
+    entries: [(identity: MeshWXWarningIdentity, expiresMinutes: UInt32)],
+    source: MeshWXDataSource = .unstated
   ) throws -> Data {
     guard entries.count <= MeshWXWire.maxDigestEntries else {
       throw MeshWXEncodeError.badCount(
         what: "digest entries", count: entries.count, allowed: 0...MeshWXWire.maxDigestEntries)
     }
-    var out = try header(seq: seq, bot: bot, type: .digest)
+    var out = try header(seq: seq, bot: bot, type: .digest, flags: source.flagBits)
     out.appendU32(nowMinutes)
     out.append(feedHealth)
     out.append(UInt8(entries.count))
@@ -242,13 +251,16 @@ public enum MeshWXEncoder {
     return try checkSize(out, "digest")
   }
 
-  public static func digest(seq: UInt8, bot: UInt16, _ digest: MeshWXDigest) throws -> Data {
+  public static func digest(
+    seq: UInt8, bot: UInt16, _ digest: MeshWXDigest, source: MeshWXDataSource = .unstated
+  ) throws -> Data {
     try self.digest(
       seq: seq,
       bot: bot,
       nowMinutes: digest.nowMinutes,
       feedHealth: digest.feedHealth,
-      entries: digest.entries.map { ($0.identity, $0.expiresMinutes) }
+      entries: digest.entries.map { ($0.identity, $0.expiresMinutes) },
+      source: source
     )
   }
 
@@ -260,7 +272,8 @@ public enum MeshWXEncoder {
   /// already 163-byte full batch, 14 stations with ages do not fit in one packet — the size
   /// check below is what refuses them (``MeshWXWire/maxStationsWithAges``).
   public static func observations(
-    seq: UInt8, bot: UInt16, timestampMinutes: UInt32, stations: [MeshWXStationObservation]
+    seq: UInt8, bot: UInt16, timestampMinutes: UInt32, stations: [MeshWXStationObservation],
+    source: MeshWXDataSource = .unstated
   ) throws -> Data {
     guard (1...MeshWXWire.maxStations).contains(stations.count) else {
       throw MeshWXEncodeError.badCount(
@@ -276,7 +289,7 @@ public enum MeshWXEncoder {
 
     var out = try header(
       seq: seq, bot: bot, type: .observations,
-      flags: hasAges ? MeshWXWire.flagObservationAges : 0)
+      flags: (hasAges ? MeshWXWire.flagObservationAges : 0) | source.flagBits)
     out.appendU32(timestampMinutes)
     out.append(UInt8(stations.count))
     for station in stations {
@@ -296,11 +309,12 @@ public enum MeshWXEncoder {
   }
 
   public static func observations(
-    seq: UInt8, bot: UInt16, _ observations: MeshWXObservations
+    seq: UInt8, bot: UInt16, _ observations: MeshWXObservations,
+    source: MeshWXDataSource = .unstated
   ) throws -> Data {
     try self.observations(
       seq: seq, bot: bot, timestampMinutes: observations.timestampMinutes,
-      stations: observations.stations)
+      stations: observations.stations, source: source)
   }
 
   /// The per-station age block: one nibble each, two stations to a byte, station `i` in the low
@@ -339,13 +353,13 @@ public enum MeshWXEncoder {
 
   public static func forecast(
     seq: UInt8, bot: UInt16, pointIndex: UInt16, issuedMinutes: UInt32, firstPeriod: UInt8,
-    periods: [MeshWXForecastPeriod]
+    periods: [MeshWXForecastPeriod], source: MeshWXDataSource = .unstated
   ) throws -> Data {
     guard (1...MeshWXWire.maxPeriods).contains(periods.count) else {
       throw MeshWXEncodeError.badCount(
         what: "forecast periods", count: periods.count, allowed: 1...MeshWXWire.maxPeriods)
     }
-    var out = try header(seq: seq, bot: bot, type: .forecast)
+    var out = try header(seq: seq, bot: bot, type: .forecast, flags: source.flagBits)
     out.appendU16(pointIndex)
     out.appendU32(issuedMinutes)
     out.append(firstPeriod)
@@ -368,17 +382,21 @@ public enum MeshWXEncoder {
     return try checkSize(out, "forecast")
   }
 
-  public static func forecast(seq: UInt8, bot: UInt16, _ forecast: MeshWXForecast) throws -> Data {
+  public static func forecast(
+    seq: UInt8, bot: UInt16, _ forecast: MeshWXForecast, source: MeshWXDataSource = .unstated
+  ) throws -> Data {
     try self.forecast(
       seq: seq, bot: bot, pointIndex: forecast.pointIndex, issuedMinutes: forecast.issuedMinutes,
-      firstPeriod: forecast.firstPeriod, periods: forecast.periods)
+      firstPeriod: forecast.firstPeriod, periods: forecast.periods, source: source)
   }
 
   // MARK: - Text (type 6, spec §8.1)
 
+  /// - Parameter wasCut: the reply ran past ``MeshWXWire/maxTextChunks`` and the bot dropped the
+  ///   tail (spec §8.1, revision 7). Every chunk of a cut reply carries it, not only the last.
   public static func text(
     seq: UInt8, bot: UInt16, subject: MeshWXTextSubject, group: UInt8, index: UInt8, total: UInt8,
-    text: String
+    text: String, wasCut: Bool = false, source: MeshWXDataSource = .unstated
   ) throws -> Data {
     guard (1...MeshWXWire.maxTextChunks).contains(Int(total)) else {
       throw MeshWXEncodeError.badCount(
@@ -391,7 +409,9 @@ public enum MeshWXEncoder {
     guard body.count <= MeshWXWire.maxTextBytes else {
       throw MeshWXEncodeError.oversize(what: "text chunk", bytes: body.count)
     }
-    var out = try header(seq: seq, bot: bot, type: .text)
+    var out = try header(
+      seq: seq, bot: bot, type: .text,
+      flags: (wasCut ? MeshWXWire.flagTextCut : 0) | source.flagBits)
     out.append(subject.rawValue)
     out.append(group)
     out.append(index)
@@ -400,10 +420,12 @@ public enum MeshWXEncoder {
     return try checkSize(out, "text")
   }
 
-  public static func text(seq: UInt8, bot: UInt16, _ message: MeshWXText) throws -> Data {
+  public static func text(
+    seq: UInt8, bot: UInt16, _ message: MeshWXText, source: MeshWXDataSource = .unstated
+  ) throws -> Data {
     try text(
       seq: seq, bot: bot, subject: message.subject, group: message.group, index: message.index,
-      total: message.total, text: message.text)
+      total: message.total, text: message.text, wasCut: message.wasCut, source: source)
   }
 
   /// Split a reply into Text chunks.
@@ -411,8 +433,15 @@ public enum MeshWXEncoder {
   /// Chunks never split a UTF-8 code point — an accented place name cut in half is two
   /// unreadable chunks, not one — carry at most 157 text bytes, share
   /// `group = seqStart`, and take consecutive sequence numbers wrapping 255 → 0.
+  ///
+  /// - Parameter wasCut: the caller already dropped the product's tail to make it fit (spec
+  ///   §8.1, revision 7). Marked on every chunk, because a reader missing the last one still
+  ///   has to know the reply is short of the product. The cutting itself is the bot's, at a
+  ///   sentence boundary; this never truncates on its own — past
+  ///   ``MeshWXWire/maxTextChunks`` it still throws.
   public static func textChunks(
-    seqStart: UInt8, bot: UInt16, subject: MeshWXTextSubject, text: String
+    seqStart: UInt8, bot: UInt16, subject: MeshWXTextSubject, text: String, wasCut: Bool = false,
+    source: MeshWXDataSource = .unstated
   ) throws -> [Data] {
     let body = Array(text.utf8)
     var parts: [ArraySlice<UInt8>] = []
@@ -440,7 +469,7 @@ public enum MeshWXEncoder {
       }
       return try self.text(
         seq: seqStart &+ UInt8(offset), bot: bot, subject: subject, group: seqStart,
-        index: UInt8(offset), total: total, text: chunk)
+        index: UInt8(offset), total: total, text: chunk, wasCut: wasCut, source: source)
     }
   }
 
@@ -582,13 +611,17 @@ public enum MeshWXEncoder {
   public static func encode(_ message: MeshWXMessage) throws -> Data {
     let seq = message.header.seq
     let bot = message.header.bot
+    // Flags bits 3-2 live on the header, not in any body, so they have to be handed back to the
+    // encoder for the bytes to match. A Cancel's nibble is its reason and never this (spec §2.2,
+    // revision 7), which is why `dataSource` answers `.unstated` for one.
+    let source = message.header.dataSource
     switch message.payload {
-    case .warning(let warning): return try self.warning(seq: seq, bot: bot, warning)
+    case .warning(let warning): return try self.warning(seq: seq, bot: bot, warning, source: source)
     case .cancel(let cancel): return try self.cancel(seq: seq, bot: bot, cancel)
-    case .digest(let digest): return try self.digest(seq: seq, bot: bot, digest)
-    case .observations(let obs): return try observations(seq: seq, bot: bot, obs)
-    case .forecast(let forecast): return try self.forecast(seq: seq, bot: bot, forecast)
-    case .text(let text): return try self.text(seq: seq, bot: bot, text)
+    case .digest(let digest): return try self.digest(seq: seq, bot: bot, digest, source: source)
+    case .observations(let obs): return try observations(seq: seq, bot: bot, obs, source: source)
+    case .forecast(let forecast): return try self.forecast(seq: seq, bot: bot, forecast, source: source)
+    case .text(let text): return try self.text(seq: seq, bot: bot, text, source: source)
     case .notAvailable(let na): return try notAvailable(seq: seq, bot: bot, na)
     case .coverage(let coverage): return try self.coverage(seq: seq, bot: bot, coverage)
     case .request(let request): return try self.request(seq: seq, bot: bot, request)

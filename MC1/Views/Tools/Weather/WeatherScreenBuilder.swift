@@ -117,6 +117,11 @@ struct WeatherScreenContext: Sendable {
   /// from the stored copy rather than recomputed from the wire's expiry-relative field: a digest
   /// can extend a warning's expiry, and the instant it was issued never moves.
   var warningIssuedAt: [MeshWXWarningIdentity: Date] = [:]
+  /// Where each held warning came from (spec §2.2, revision 7), read from the stored copy the way
+  /// ``warningIssuedAt`` is: the wire carries it on the header, not in the warning, so an alert's
+  /// detail can only get at it through the state it was stored in. Absent means the radio did not
+  /// say, and the screen then says nothing.
+  var warningSource: [MeshWXWarningIdentity: MeshWXDataSource] = [:]
 }
 
 /// One page's build: the snapshot and the facts that came with it, which are only ever read
@@ -289,6 +294,9 @@ enum WeatherScreenBuilder {
     // "issued 1:29 PM" rather than when this phone happened to hear it (spec §3, revision 5).
     for state in states.values {
       for stored in state.warnings.values {
+        // Whichever bot stated a source wins; one that stated none never clears it (spec §2.2,
+        // revision 7), the same way an issue time is only ever filled in, never erased.
+        if stored.source != .unstated { context.warningSource[stored.identity] = stored.source }
         guard let issuedAt = stored.issuedAt else { continue }
         context.warningIssuedAt[stored.identity] = issuedAt
       }

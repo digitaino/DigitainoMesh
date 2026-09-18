@@ -23,19 +23,41 @@ public struct WeatherStoredWarning: Sendable, Hashable, Codable {
   /// (`WeatherStateReducer.applyDigest`): recomputing would then walk the issue time forward with
   /// it. The instant a warning was issued never moves.
   public var issuedAt: Date?
+  /// Where the bot got this warning (spec §2.2, revision 7), from the header of the message that
+  /// carried it. ``MeshWXDataSource/unstated`` for a bot older than revision 7 and for state
+  /// saved before the app could read it — which is not a source, and says nothing on screen.
+  public var source: MeshWXDataSource
 
   public init(
     warning: MeshWXWarning,
     receivedAt: Date,
     updateCount: Int = 0,
     seq: UInt8? = nil,
-    issuedAt: Date? = nil
+    issuedAt: Date? = nil,
+    source: MeshWXDataSource = .unstated
   ) {
     self.warning = warning
     self.receivedAt = receivedAt
     self.updateCount = updateCount
     self.seq = seq
     self.issuedAt = issuedAt
+    self.source = source
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case warning, receivedAt, updateCount, seq, issuedAt, source
+  }
+
+  /// `source` arrived with revision 7, so a state file written before it decodes as unstated
+  /// rather than failing: the warning is still the last one the bot sent.
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    warning = try container.decode(MeshWXWarning.self, forKey: .warning)
+    receivedAt = try container.decode(Date.self, forKey: .receivedAt)
+    updateCount = try container.decode(Int.self, forKey: .updateCount)
+    seq = try container.decodeIfPresent(UInt8.self, forKey: .seq)
+    issuedAt = try container.decodeIfPresent(Date.self, forKey: .issuedAt)
+    source = try container.decodeIfPresent(MeshWXDataSource.self, forKey: .source) ?? .unstated
   }
 
   public var identity: MeshWXWarningIdentity { warning.identity }
@@ -126,23 +148,29 @@ public struct WeatherStoredObservation: Sendable, Hashable, Codable {
   /// its button asks for. Nil for a station only ever seen in a batch of one. Since revision 5 it
   /// is also the only place the batch time survives, ``timestampMinutes`` being the station's own.
   public var lastBatchMinutes: UInt32?
+  /// Where the bot got this reading (spec §2.2, revision 7), from the header of the batch that
+  /// carried it. Unstated for a bot older than revision 7 and for state saved before the app
+  /// could read it.
+  public var source: MeshWXDataSource
 
   public init(
     observation: MeshWXStationObservation,
     timestampMinutes: UInt32,
     receivedAt: Date,
     batchSize: Int = 1,
-    lastBatchMinutes: UInt32? = nil
+    lastBatchMinutes: UInt32? = nil,
+    source: MeshWXDataSource = .unstated
   ) {
     self.observation = observation
     self.timestampMinutes = timestampMinutes
     self.receivedAt = receivedAt
     self.batchSize = batchSize
     self.lastBatchMinutes = lastBatchMinutes
+    self.source = source
   }
 
   private enum CodingKeys: String, CodingKey {
-    case observation, timestampMinutes, receivedAt, batchSize, lastBatchMinutes
+    case observation, timestampMinutes, receivedAt, batchSize, lastBatchMinutes, source
   }
 
   public init(from decoder: any Decoder) throws {
@@ -155,6 +183,7 @@ public struct WeatherStoredObservation: Sendable, Hashable, Codable {
     // is its own evidence, which is exactly what the app read from `batchSize` then.
     lastBatchMinutes = try container.decodeIfPresent(UInt32.self, forKey: .lastBatchMinutes)
       ?? (batchSize > 1 ? timestampMinutes : nil)
+    source = try container.decodeIfPresent(MeshWXDataSource.self, forKey: .source) ?? .unstated
   }
 
   /// When this station measured what it reported — the *as of* time (spec §10.5), never when the
@@ -181,21 +210,27 @@ public struct WeatherStoredForecast: Sendable, Hashable, Codable {
   /// Whether this phone asked for this point. Answers to other phones' requests land here too
   /// (the channel is shared); they are someone else's places and are labelled so.
   public var requestedHere: Bool
+  /// Where the bot got this forecast (spec §2.2, revision 7), from the header of the message that
+  /// carried it. Unstated for a bot older than revision 7 and for state saved before the app
+  /// could read it.
+  public var source: MeshWXDataSource
 
   public init(
     forecast: MeshWXForecast,
     receivedAt: Date,
     requestLabel: String? = nil,
-    requestedHere: Bool = false
+    requestedHere: Bool = false,
+    source: MeshWXDataSource = .unstated
   ) {
     self.forecast = forecast
     self.receivedAt = receivedAt
     self.requestLabel = requestLabel
     self.requestedHere = requestedHere
+    self.source = source
   }
 
   private enum CodingKeys: String, CodingKey {
-    case forecast, receivedAt, requestLabel, requestedHere
+    case forecast, receivedAt, requestLabel, requestedHere, source
   }
 
   public init(from decoder: any Decoder) throws {
@@ -204,6 +239,7 @@ public struct WeatherStoredForecast: Sendable, Hashable, Codable {
     receivedAt = try container.decode(Date.self, forKey: .receivedAt)
     requestLabel = try container.decodeIfPresent(String.self, forKey: .requestLabel)
     requestedHere = try container.decodeIfPresent(Bool.self, forKey: .requestedHere) ?? false
+    source = try container.decodeIfPresent(MeshWXDataSource.self, forKey: .source) ?? .unstated
   }
 
   public var issuedAt: Date { Date(unixMinutes: forecast.issuedMinutes) }
@@ -233,6 +269,18 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
   /// subject: without this, somebody else's `>storm OK` is indistinguishable from the storm
   /// reports this phone asked for Texas.
   public var request: WeatherRequest?
+  /// Where the bot got the product this reply is of (spec §2.2, revision 7), taken from the
+  /// chunks. They agree — one reply is built from one product — so this is the newest stated
+  /// value, and a chunk that states nothing never erases one that did.
+  public var source: MeshWXDataSource
+  /// Any chunk said the product was longer than 8 packets and the bot dropped the tail (spec
+  /// §8.1, revision 7).
+  ///
+  /// Not the same claim as a hole in ``orderedChunks``: a hole is a chunk the air ate, and asking
+  /// again may fill it. This is the whole reply the bot will ever send for that request, cut at a
+  /// sentence boundary, so the screen says so rather than leaving the reader to wonder whether
+  /// their radio missed something.
+  public var wasCut: Bool
 
   public init(
     subject: MeshWXTextSubject,
@@ -241,7 +289,9 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
     chunks: [UInt8: String] = [:],
     firstReceivedAt: Date,
     lastReceivedAt: Date,
-    request: WeatherRequest? = nil
+    request: WeatherRequest? = nil,
+    source: MeshWXDataSource = .unstated,
+    wasCut: Bool = false
   ) {
     self.subject = subject
     self.group = group
@@ -250,10 +300,12 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
     self.firstReceivedAt = firstReceivedAt
     self.lastReceivedAt = lastReceivedAt
     self.request = request
+    self.source = source
+    self.wasCut = wasCut
   }
 
   private enum CodingKeys: String, CodingKey {
-    case subject, group, total, chunks, firstReceivedAt, lastReceivedAt, request
+    case subject, group, total, chunks, firstReceivedAt, lastReceivedAt, request, source, wasCut
   }
 
   public init(from decoder: any Decoder) throws {
@@ -265,6 +317,10 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
     firstReceivedAt = try container.decode(Date.self, forKey: .firstReceivedAt)
     lastReceivedAt = try container.decode(Date.self, forKey: .lastReceivedAt)
     request = try container.decodeIfPresent(WeatherRequest.self, forKey: .request)
+    // Both arrived with revision 7. A reply saved before them is still the reply that was
+    // received; it just says nothing about where it came from or whether it was cut.
+    source = try container.decodeIfPresent(MeshWXDataSource.self, forKey: .source) ?? .unstated
+    wasCut = try container.decodeIfPresent(Bool.self, forKey: .wasCut) ?? false
   }
 
   public var missingIndexes: [UInt8] {

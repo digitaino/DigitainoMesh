@@ -350,6 +350,35 @@ enum WeatherCopy {
     L10n.Weather.Weather.Forecast.noPoint(placeName)
   }
 
+  // MARK: - Where the data came from (§12.1)
+
+  /// "From the GOES satellite", "From the internet", "From GOES and the internet" — and **nil**
+  /// when the radio did not say (spec §2.2, revision 7).
+  ///
+  /// Nil rather than a phrase, because a bot older than revision 7 has made no claim and a screen
+  /// that filled the silence with one would be inventing provenance. A page fed by such a bot
+  /// looks exactly as it did.
+  static func dataSource(_ source: MeshWXDataSource) -> String? {
+    switch source {
+    case .unstated: nil
+    case .goesSatellite: L10n.Weather.Weather.Source.goes
+    case .internet: L10n.Weather.Weather.Source.internet
+    case .mixed: L10n.Weather.Weather.Source.mixed
+    }
+  }
+
+  /// The last line of a text reply's card: where the product came from, and whether the bot had to
+  /// drop its tail. Nil when it would say neither.
+  ///
+  /// The cut is worth its own sentence rather than a marker in the body: a hole in the text is a
+  /// chunk the air ate and asking again may fill it, while this is the whole reply that bot will
+  /// ever send for that request (spec §8.1, revision 7).
+  static func reportFootnote(source: MeshWXDataSource, wasCut: Bool) -> String? {
+    let parts = [dataSource(source), wasCut ? L10n.Weather.Weather.Reports.cut : nil]
+      .compactMap { $0 }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
   // MARK: - Answers already held (§11)
 
   /// "Ask for Tornado Warning" when the tap asks for one warning by identity, "Ask for alerts"
@@ -439,8 +468,11 @@ enum WeatherCopy {
   /// The one line under the temperature: "Camp Mabry · 6 km · as of 8:24 PM" (docs/MESHWX_UI.md
   /// §8). The station, how far it is, and when it read — and nothing else on the page unless it
   /// is tapped. The radio that carried it is named by the radio row, once, at the foot.
+  ///
+  /// With no station name — a reading the block already attributes above its number (§3.1 U-2a)
+  /// — it is the time alone: "As of 6:56 AM".
   static func conditionsSource(
-    stationName: String,
+    stationName: String?,
     kilometres: Double?,
     observedAt: Date,
     now: Date,
@@ -449,8 +481,17 @@ enum WeatherCopy {
   ) -> String {
     let asOf = L10n.Weather.Weather.Stations.asOf(
       WeatherFormatting.clockTime(observedAt, now: now, calendar: calendar, locale: locale))
+    guard let stationName else { return WeatherFormatting.sentenceStart(asOf) }
     guard let kilometres else { return "\(stationName) · \(asOf)" }
     return "\(stationName) · \(WeatherFormatting.kilometres(kilometres)) · \(asOf)"
+  }
+
+  /// A fresh reading too far off to be the weather here, shown anyway under its station: "Nearest
+  /// report: San Marcos, 26 km away" (docs/MESHWX_UI.md §3.1 U-2a). It sits above the number, so
+  /// the number is never read as the town's.
+  static func nearbyReadingLead(stationName: String, kilometres: Double?) -> String {
+    guard let kilometres else { return L10n.Weather.Weather.Now.nearbyReadingUnknown(stationName) }
+    return L10n.Weather.Weather.Now.nearbyReading(stationName, WeatherFormatting.kilometres(kilometres))
   }
 
   /// No reading good enough to be the weather here: the ask, and the station a refresh would
@@ -571,7 +612,9 @@ enum WeatherCopy {
     if let sky = reading.sky, let condition = WeatherFormatting.condition(sky) {
       parts.append(condition)
     }
-    let head = parts.joined(separator: " ")
+    var head = parts.joined(separator: " ")
+    // Shown under its station on the page, so under its station here (§3.1 U-2a).
+    if let station = reading.attributedStation, !head.isEmpty { head += " · \(station)" }
     guard reading.isStale else { return head.isEmpty ? L10n.Weather.Weather.Picker.noReading : head }
     let age = WeatherFormatting.age(observedAt, now: now)
     return head.isEmpty ? age : "\(head) · \(age)"

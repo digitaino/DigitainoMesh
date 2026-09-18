@@ -129,6 +129,25 @@ public enum MeshWXWire {
   /// Bit 1: the office list was cut.
   static let flagCoverageOfficesCut: UInt8 = 0x2
 
+  // MARK: Text flags nibble (spec §8.1)
+
+  /// Bit 0: the product was longer than ``maxTextChunks`` chunks of ``maxTextBytes`` and the bot
+  /// dropped the tail (spec §8.1, revision 7). The bot sets it on *every* chunk of a cut reply,
+  /// not only the last: a phone missing the last chunk would otherwise be the one phone that
+  /// cannot tell a reply with a hole in it from one that ends early on purpose.
+  static let flagTextCut: UInt8 = 0x1
+
+  // MARK: Data source (spec §2.2, revision 7)
+  //
+  // Bits 3-2 of the flags nibble, on every type that carries weather. The one exception is a
+  // Cancel, whose *whole* nibble is a reason code (``MeshWXCancelReason``): bits 3-2 there are
+  // part of the reason and say nothing about where anything came from.
+
+  /// Flags bits 3-2: where the weather in the message came from (``MeshWXDataSource``).
+  static let flagDataSourceMask: UInt8 = 0x0C
+  /// How far down in the nibble ``flagDataSourceMask`` sits.
+  static let flagDataSourceShift: UInt8 = 2
+
   /// Area run state byte, bit 7: the run numbers counties, not forecast zones.
   static let areaCountyBit: UInt8 = 0x80
 }
@@ -153,6 +172,35 @@ public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable 
   case request = 9
 }
 
+/// Where the weather in a message came from (spec §2.2, revision 7: flags bits 3-2).
+///
+/// A bot with a dish reads its products off the GOES satellite broadcast; a bot on a wire fetches
+/// them from NOAA; a bot with both fills the gaps in a satellite product from the internet and
+/// says so. The difference is worth a line on screen because the two paths fail differently: a
+/// dish loses products to rain fade in exactly the weather this app is for, and an internet feed
+/// is only ever as current as the bot's last successful poll.
+///
+/// ``unstated`` is not a fourth kind of source. It is every bot older than revision 7, and every
+/// message with no weather product behind it, so nothing on screen may read it as a claim.
+public enum MeshWXDataSource: UInt8, Sendable, Hashable, Codable, CaseIterable {
+  /// Not stated: a bot older than revision 7, or a message not built from a weather product.
+  case unstated = 0
+  /// Received off the GOES satellite by the bot's own dish.
+  case goesSatellite = 1
+  /// Fetched from NOAA over the internet.
+  case internet = 2
+  /// Built from products of both kinds.
+  case mixed = 3
+
+  /// Never fails: the field is two bits wide and all four values are defined.
+  public init(bits: UInt8) {
+    self = MeshWXDataSource(rawValue: bits & 0x3) ?? .unstated
+  }
+
+  /// This source's place in a flags nibble, ready to be ORed into one.
+  var flagBits: UInt8 { rawValue << MeshWXWire.flagDataSourceShift }
+}
+
 /// The decoded 4-byte common header (spec §2.2).
 ///
 /// `bot` is the first two bytes of the bot's public key, which is how an app keeps
@@ -171,6 +219,17 @@ public struct MeshWXHeader: Sendable, Hashable, Codable {
 
   /// The known type, or nil for a reserved or experimental nibble.
   public var type: MeshWXMessageType? { MeshWXMessageType(rawValue: rawType) }
+
+  /// Where the weather in this message came from (spec §2.2, revision 7), read off flags bits
+  /// 3-2. ``MeshWXDataSource/unstated`` for a bot older than revision 7 and for the types that
+  /// carry no weather product — Not available, Coverage and Request always send 0.
+  ///
+  /// A Cancel never carries it: its whole nibble is a ``MeshWXCancelReason``, so reason 12 would
+  /// otherwise read as "mixed". Unstated is the only honest answer for one.
+  public var dataSource: MeshWXDataSource {
+    guard type != .cancel else { return .unstated }
+    return MeshWXDataSource(bits: (flags & MeshWXWire.flagDataSourceMask) >> MeshWXWire.flagDataSourceShift)
+  }
 
   public init(seq: UInt8, bot: UInt16, rawType: UInt8, flags: UInt8) {
     self.seq = seq

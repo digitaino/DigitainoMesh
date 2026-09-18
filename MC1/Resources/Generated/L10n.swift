@@ -7937,11 +7937,19 @@ private final class BundleToken {
         public static func humidity(_ p1: Int) -> String {
           return L10n.tr("Weather", "weather.now.humidity", p1, fallback: "Humidity %lld%%")
         }
-        /// Location: WeatherCopy.swift - No station within 80 km. %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance
+        /// Location: WeatherConditionsSection.swift - Above the temperature when the reading is 25-40 km off: shown, but attributed to its station, never as the town's. %1$@ is the station's town, %2$@ a distance
+        public static func nearbyReading(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.now.nearbyReading", String(describing: p1), String(describing: p2), fallback: "Nearest report: %1$@, %2$@ away")
+        }
+        /// Location: WeatherConditionsSection.swift - The same, distance unknown. %1$@ is the station's town
+        public static func nearbyReadingUnknown(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.now.nearbyReadingUnknown", String(describing: p1), fallback: "Nearest report: %1$@")
+        }
+        /// Location: WeatherCopy.swift - No station close enough for its reading to be shown (40 km). %1$@ is the place, %2$@ the nearest station's town, %3$@ a distance
         public static func noneNearby(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
           return L10n.tr("Weather", "weather.now.noneNearby", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "No weather station near %1$@. Nearest: %2$@, %3$@.")
         }
-        /// Location: WeatherCopy.swift - No station within 80 km, distance unknown. %1$@ is the place, %2$@ the nearest station's town
+        /// Location: WeatherCopy.swift - No station close enough for its reading to be shown (40 km), distance unknown. %1$@ is the place, %2$@ the nearest station's town
         public static func noneNearbyUnknown(_ p1: Any, _ p2: Any) -> String {
           return L10n.tr("Weather", "weather.now.noneNearbyUnknown", String(describing: p1), String(describing: p2), fallback: "No weather station near %1$@. Nearest: %2$@.")
         }
@@ -8135,6 +8143,8 @@ private final class BundleToken {
         public static func contentReadings(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.request.contentReadings", String(describing: p1), fallback: "readings as of %@")
         }
+        /// Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot
+        public static let cut = L10n.tr("Weather", "weather.reports.cut", fallback: "The rest didn't fit on the radio.")
         /// Location: WeatherCopy.swift - Your radio refused to send the request, %@ is a time
         public static func failed(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.request.failed", String(describing: p1), fallback: "Your radio couldn't send this at %@.")
@@ -8402,6 +8412,14 @@ private final class BundleToken {
         /// Location: WeatherFormatting.swift - Countdown, %@ is a duration like "40 min"
         public static func within(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.time.within", String(describing: p1), fallback: "in %@")
+      public enum Source {
+        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say.
+        public static let goes = L10n.tr("Weather", "weather.source.goes", fallback: "From the GOES satellite")
+        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet
+        public static let internet = L10n.tr("Weather", "weather.source.internet", fallback: "From the internet")
+        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet
+        public static let mixed = L10n.tr("Weather", "weather.source.mixed", fallback: "From GOES and the internet")
+      }
         }
         /// Location: WeatherFormatting.swift - A time yesterday, %@ is a time like "2:00 PM"
         public static func yesterday(_ p1: Any) -> String {

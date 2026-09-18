@@ -162,6 +162,18 @@ struct WeatherReportProductView: View {
           Text(WeatherReportText.body(choice.item.assembly))
             .font(.system(.footnote, design: .monospaced))
             .textSelection(.enabled)
+          // Where the bot got the product, and whether it had to drop its tail (spec §2.2 and
+          // §8.1, revision 7). Under the text, in the footnote voice the point line and the
+          // overheard note already use: it is provenance, not a warning, and a radio that has
+          // said neither leaves the card exactly as it was.
+          if let footnote = WeatherCopy.reportFootnote(
+            source: choice.item.assembly.source, wasCut: choice.item.assembly.wasCut) {
+            Text(footnote)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .listRowSeparator(.hidden)
+              .accessibilityIdentifier("weather.report.footnote")
+          }
         }
         .themedRowBackground(theme)
       } else {

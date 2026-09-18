@@ -25,6 +25,13 @@ enum WeatherFixture {
     MeshWXHeader(seq: seq, bot: bot, type: type, flags: flags)
   }
 
+  /// Where the weather came from, in its place in the flags nibble (spec §2.2, revision 7: bits
+  /// 3-2). Spelled out here rather than taken from the module, because these fixtures build the
+  /// nibble by hand so the header and the body can never disagree.
+  static func sourceBits(_ source: MeshWXDataSource) -> UInt8 {
+    source.rawValue << 2
+  }
+
   /// `issuedMinutes` puts the warning into the revision 5 form (spec §3): flags nibble bit 1 and
   /// the two trailing bytes, which the wire carries as the gap back from `expiresMinutes`.
   static func warning(
@@ -34,11 +41,12 @@ enum WeatherFixture {
     isUpdate: Bool = false,
     windMph: UInt8 = 60,
     issuedMinutes: UInt32? = nil,
+    source: MeshWXDataSource = .unstated,
     bot: UInt16 = botID
   ) -> MeshWXMessage {
-    // Flags nibble: bit 0 update, bit 1 the issue time follows. Set here so the header and the
-    // body cannot disagree.
-    let flags: UInt8 = (isUpdate ? 1 : 0) | (issuedMinutes == nil ? 0 : 2)
+    // Flags nibble: bit 0 update, bit 1 the issue time follows, bits 3-2 where the data came
+    // from. Set here so the header and the body cannot disagree.
+    let flags: UInt8 = (isUpdate ? 1 : 0) | (issuedMinutes == nil ? 0 : 2) | sourceBits(source)
     return MeshWXMessage(
       header: header(seq: seq, type: .warning, flags: flags, bot: bot),
       payload: .warning(MeshWXWarning(
@@ -93,10 +101,12 @@ enum WeatherFixture {
     timestampMinutes: UInt32 = t0Minutes,
     stations: [(UInt16, Int8?)],
     ages: [UInt16]? = nil,
+    source: MeshWXDataSource = .unstated,
     bot: UInt16 = botID
   ) -> MeshWXMessage {
     MeshWXMessage(
-      header: header(seq: seq, type: .observations, flags: ages == nil ? 0 : 1, bot: bot),
+      header: header(
+        seq: seq, type: .observations, flags: (ages == nil ? 0 : 1) | sourceBits(source), bot: bot),
       payload: .observations(MeshWXObservations(
         timestampMinutes: timestampMinutes,
         stations: stations.enumerated().map { position, station in
@@ -107,9 +117,15 @@ enum WeatherFixture {
     )
   }
 
-  static func forecast(seq: UInt8, point: UInt16 = 102, issuedMinutes: UInt32 = t0Minutes, bot: UInt16 = botID) -> MeshWXMessage {
+  static func forecast(
+    seq: UInt8,
+    point: UInt16 = 102,
+    issuedMinutes: UInt32 = t0Minutes,
+    source: MeshWXDataSource = .unstated,
+    bot: UInt16 = botID
+  ) -> MeshWXMessage {
     MeshWXMessage(
-      header: header(seq: seq, type: .forecast, bot: bot),
+      header: header(seq: seq, type: .forecast, flags: sourceBits(source), bot: bot),
       payload: .forecast(MeshWXForecast(
         pointIndex: point,
         issuedMinutes: issuedMinutes,
@@ -122,10 +138,24 @@ enum WeatherFixture {
     )
   }
 
-  static func text(seq: UInt8, subject: MeshWXTextSubject = .warningNarrative, group: UInt8, index: UInt8, total: UInt8, text: String, bot: UInt16 = botID) -> MeshWXMessage {
+  /// `wasCut` puts the chunk into the revision 7 form (spec §8.1): flags nibble bit 0, which the
+  /// bot sets on every chunk of a reply whose tail it had to drop.
+  static func text(
+    seq: UInt8,
+    subject: MeshWXTextSubject = .warningNarrative,
+    group: UInt8,
+    index: UInt8,
+    total: UInt8,
+    text: String,
+    wasCut: Bool = false,
+    source: MeshWXDataSource = .unstated,
+    bot: UInt16 = botID
+  ) -> MeshWXMessage {
     MeshWXMessage(
-      header: header(seq: seq, type: .text, bot: bot),
-      payload: .text(MeshWXText(subject: subject, group: group, index: index, total: total, text: text))
+      header: header(
+        seq: seq, type: .text, flags: (wasCut ? 1 : 0) | sourceBits(source), bot: bot),
+      payload: .text(MeshWXText(
+        subject: subject, group: group, index: index, total: total, text: text, wasCut: wasCut))
     )
   }
 

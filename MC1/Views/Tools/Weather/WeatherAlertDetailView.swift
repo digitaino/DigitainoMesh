@@ -185,6 +185,13 @@ struct WeatherAlertDetailView: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
+      // How the radio came by this warning (spec §2.2, revision 7): the last of the quiet lines,
+      // under who issued it, and absent entirely when the radio did not say.
+      if let source = WeatherCopy.dataSource(screen.context.warningSource[item.identity] ?? .unstated) {
+        Text(source)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
     }
     .padding(.vertical, 2)
     .accessibilityElement(children: .combine)

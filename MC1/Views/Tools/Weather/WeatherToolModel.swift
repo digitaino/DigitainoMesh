@@ -1252,7 +1252,7 @@ final class WeatherToolModel {
       placeCountyUGC: context.placeCounty?.ugc,
       placeZoneUGC: context.placeZoneUGC,
       placeOffice: context.placeOffice,
-      nearbyStationICAO: context.nearbyStation?.icao,
+      nearbyStation: context.nearbyStation,
       notAvailable: missingNotAvailable(in: context),
       coverageAlreadyAsked: hasAskedCoverage,
       tables: .shared,

@@ -100,17 +100,61 @@ struct WeatherPlacePageTests {
     #expect(WeatherConditions.make(primary: .reading(edge), nearbyStation: nearby) == .reading(edge))
   }
 
-  /// Beyond the threshold there is no temperature at all — only the ask, and it names the nearest
-  /// station rather than the far one whose reading is held: asking that one again would not bring
-  /// it closer, and the packet the plan sends goes to the near one.
+  /// Beyond 40 km there is no temperature at all — only the ask, and it names the nearest station
+  /// rather than the far one whose reading is held: asking that one again would not bring it
+  /// closer, and the packet the plan sends goes to the near one.
   @Test
   func `a reading from too far away is no temperature, and the ask names the nearest station`() {
     let far = reading(kilometres: 60, icao: "KATT", minutesAgo: 20)
     #expect(WeatherConditions.make(primary: .reading(far), nearbyStation: nearby)
       == .ask(icao: "KAQO", kilometres: 4))
-    // With no nearer station there is nothing better to ask about than the one held.
-    #expect(WeatherConditions.make(primary: .reading(far), nearbyStation: nil)
-      == .ask(icao: far.station.icao, kilometres: 60))
+    // With no nearer station there is nothing worth a packet: its answer would come back from 60
+    // km and the page would refuse it again. It says there is no station near enough instead.
+    #expect(WeatherConditions.make(primary: .reading(far), nearbyStation: nil) == .noStation(nearest: far))
+  }
+
+  // MARK: - 25 to 40 km: shown under the station's name (§3.1 U-2a)
+
+  /// Wimberley: San Marcos is 25.5 km off. Fresh, it is shown — attributed, never as the town's.
+  @Test
+  func `a fresh reading between 25 and 40 km is shown under its station`() {
+    let off = reading(kilometres: 25.5, icao: "KHYI", minutesAgo: 20)
+    let same = WeatherNearbyStation(icao: "KHYI", name: "San Marcos", kilometres: 25.5)
+    #expect(WeatherConditions.make(primary: .reading(off), nearbyStation: same) == .nearby(off, nearer: nil))
+    #expect(WeatherConditions.make(primary: .reading(off), nearbyStation: nil) == .nearby(off, nearer: nil))
+    #expect(WeatherConditions.make(primary: .reading(off), nearbyStation: same).reading == off)
+    // The edge is inside.
+    let edge = reading(kilometres: WeatherConditions.labelledReadingKilometres, icao: "KHYI", minutesAgo: 20)
+    #expect(WeatherConditions.make(primary: .reading(edge), nearbyStation: nil) == .nearby(edge, nearer: nil))
+  }
+
+  /// A nearer bundled station could be the weather here: the page keeps what it holds, and names
+  /// the nearer one for Update to ask about.
+  @Test
+  func `an attributed reading carries a nearer station worth asking about`() {
+    let off = reading(kilometres: 30, icao: "KATT", minutesAgo: 20)
+    #expect(WeatherConditions.make(primary: .reading(off), nearbyStation: nearby) == .nearby(off, nearer: nearby))
+    // A "nearer" one past 40 km could never be shown, so it is not worth a packet.
+    let tooFar = WeatherNearbyStation(icao: "KAQO", name: "Llano", kilometres: 45)
+    #expect(WeatherConditions.make(primary: .reading(off), nearbyStation: tooFar) == .nearby(off, nearer: nil))
+  }
+
+  /// Stale in the band: the station itself is asked about again, as it would be at 6 km.
+  @Test
+  func `a stale reading between 25 and 40 km asks about its own station`() {
+    let stale = reading(kilometres: 30, icao: "KATT", minutesAgo: 8 * 60)
+    #expect(WeatherConditions.make(primary: .reading(stale), nearbyStation: nil)
+      == .ask(icao: "KATT", kilometres: 30))
+  }
+
+  /// Nothing held in reach and the nearest bundled station past 40 km: asking would bring back a
+  /// reading the page will not show.
+  @Test
+  func `with nothing held and every station past 40 km there is nothing to ask`() {
+    let far = reading(kilometres: 190, icao: "KTPL", minutesAgo: 20)
+    let distant = WeatherNearbyStation(icao: "KAQO", name: "Llano", kilometres: 55)
+    #expect(WeatherConditions.make(primary: .noneNearby(nearest: far), nearbyStation: distant)
+      == .noStation(nearest: far))
   }
 
   /// Near enough but stale: that station is the right one to ask about again.
@@ -268,23 +312,47 @@ struct WeatherPlacePageTests {
   }
 
   /// The other half of the same contradiction: a reading inside the readings' own 80 km reach but
-  /// beyond the page's 25 km is not the row's either.
+  /// beyond the page's 40 km is not the row's either.
   @Test
   func `a reading beyond the page's reach is no good for the row`() throws {
     let readings = WeatherStations.readings(
       states: [P.botID: P.state()], coverage: WeatherCoverage(stations: []), place: nil,
       tables: .shared, now: now)
-    // A point between the page's 25 km and the readings' own 80 km reach: the band where the row
+    // A point between the page's 40 km and the readings' own 80 km reach: the band where the row
     // used to show a temperature the page refused to.
     let between = try #require(
       stride(from: 0.1, through: 1.5, by: 0.05).lazy.map { offset in
         MeshWXCoordinate(latitude: P.austin.latitude + offset, longitude: P.austin.longitude)
       }.first { coordinate in
         guard let near = WeatherStations.nearestReading(in: readings, to: coordinate) else { return false }
-        return near.kilometres > WeatherConditions.goodReadingKilometres
+        return near.kilometres > WeatherConditions.labelledReadingKilometres
       },
-      "the fixture should hold a reading between 25 km and 80 km of somewhere north of Austin")
+      "the fixture should hold a reading between 40 km and 80 km of somewhere north of Austin")
     #expect(WeatherPlaceRowReading.make(readings: readings, at: between, now: now).isEmpty)
+  }
+
+  /// From 25 to 40 km the page shows the reading under its station, so the row does too — with the
+  /// station's name, never as the town's own temperature.
+  @Test
+  func `a reading between 25 and 40 km is the row's, under its station`() throws {
+    let readings = WeatherStations.readings(
+      states: [P.botID: P.state()], coverage: WeatherCoverage(stations: []), place: nil,
+      tables: .shared, now: now)
+    let band = try #require(
+      stride(from: 0.1, through: 1.5, by: 0.02).lazy.map { offset in
+        MeshWXCoordinate(latitude: P.austin.latitude + offset, longitude: P.austin.longitude)
+      }.first { coordinate in
+        guard let near = WeatherStations.nearestReading(in: readings, to: coordinate) else { return false }
+        return near.kilometres > WeatherConditions.goodReadingKilometres
+          && near.kilometres <= WeatherConditions.labelledReadingKilometres
+      },
+      "the fixture should hold a reading between 25 km and 40 km of somewhere north of Austin")
+    let row = WeatherPlaceRowReading.make(readings: readings, at: band, now: now)
+    #expect(!row.isEmpty)
+    #expect(row.tempF != nil)
+    #expect(row.attributedStation?.isEmpty == false)
+    // Within 25 km it is the town's own, with no station named.
+    #expect(WeatherPlaceRowReading.make(readings: readings, at: P.austin, now: now).attributedStation == nil)
   }
 
   /// Nothing held in reach: the row says so rather than printing a bare degree sign.

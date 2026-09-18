@@ -13,8 +13,10 @@ import SwiftUI
 ///     Camp Mabry · 6 km · as of 8:24 PM ›  ← opens the station
 ///     Everything is current · WX-AUS 4:25 PM  ← what Update and the pull would ask for (§11.1)
 ///
-/// A temperature here is a claim about the weather *here*, so it is only shown for a reading
-/// good enough to make it (`WeatherConditions`). Otherwise the block is the sentence that says
+/// A temperature here is a claim about the weather *here*, so it is only shown bare for a reading
+/// good enough to make it (`WeatherConditions`). A fresh one from 25 to 40 km off is shown under
+/// the station it came from, named above the number — "Nearest report: San Marcos, 26 km away" —
+/// and the line at the foot then says only when (§3.1 U-2a). Otherwise the block is the sentence that says
 /// what to do about it, set as the page's statement rather than as a footnote: the same sections
 /// follow whatever the phone holds, which is how the shape can be learned (§3.2 Q3).
 struct WeatherConditionsSection: View {
@@ -97,7 +99,9 @@ struct WeatherConditionsSection: View {
     } else {
       switch screen.context.conditions {
       case let .reading(reading):
-        readingBlock(reading)
+        readingBlock(reading, attributed: false)
+      case let .nearby(reading, _):
+        readingBlock(reading, attributed: true)
       case let .ask(icao, _):
         // With every request blocked the sentence does not offer a pull that cannot send
         // anything (docs/MESHWX_UI.md §3.1 U-6).
@@ -135,13 +139,23 @@ struct WeatherConditionsSection: View {
 
   // MARK: - A good reading
 
-  private func readingBlock(_ reading: WeatherStationReading) -> some View {
+  /// - Parameter attributed: the reading is not the weather here, only the nearest report: the
+  ///   station and its distance lead, above the number, so nobody reads 79° as the town's.
+  private func readingBlock(_ reading: WeatherStationReading, attributed: Bool) -> some View {
     let observation = reading.stored.observation
     let calendar = Calendar.autoupdatingCurrent
     let symbol = MeshWXPresentation.observationSymbolName(
       for: observation.sky, isNight: WeatherFormatting.isNight(reading.stored.observedAt, calendar: calendar))
 
     return VStack(spacing: 4) {
+      if attributed {
+        Text(WeatherCopy.nearbyReadingLead(
+          stationName: WeatherNames.stationName(reading.station.name),
+          kilometres: reading.distanceKilometres))
+          .font(.subheadline.weight(.medium))
+          .foregroundStyle(.secondary)
+          .accessibilityIdentifier("weather.nearbyReading")
+      }
       if let tempF = observation.tempF {
         Text(WeatherFormatting.temperature(fahrenheit: Int(tempF)))
           .font(.system(size: temperatureSize, weight: .thin))
@@ -170,7 +184,7 @@ struct WeatherConditionsSection: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
-      sourceLine(reading)
+      sourceLine(reading, attributed: attributed)
     }
   }
 
@@ -206,15 +220,16 @@ struct WeatherConditionsSection: View {
   }
 
   /// The one honesty line, and the way to the station behind it.
-  private func sourceLine(_ reading: WeatherStationReading) -> some View {
+  /// With `attributed`, the station and distance already lead the block, so this says when only.
+  private func sourceLine(_ reading: WeatherStationReading, attributed: Bool) -> some View {
     Button {
       // This page's, so the station screen measures and names its distance from this place.
       screen.model.stationToOpen = WeatherStationTarget(pageID: screen.pageID, index: reading.index)
     } label: {
       HStack(spacing: 3) {
         Text(WeatherCopy.conditionsSource(
-          stationName: WeatherNames.stationName(reading.station.name),
-          kilometres: reading.distanceKilometres,
+          stationName: attributed ? nil : WeatherNames.stationName(reading.station.name),
+          kilometres: attributed ? nil : reading.distanceKilometres,
           observedAt: reading.stored.observedAt,
           now: screen.now,
           calendar: .autoupdatingCurrent,

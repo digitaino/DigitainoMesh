@@ -41,7 +41,7 @@ public enum MeshWXDecoder {
       case .digest: .digest(try decodeDigest(bytes))
       case .observations: .observations(try decodeObservations(bytes, header: header))
       case .forecast: .forecast(try decodeForecast(bytes))
-      case .text: .text(try decodeText(bytes))
+      case .text: .text(try decodeText(bytes, header: header))
       case .notAvailable: .notAvailable(try decodeNotAvailable(bytes))
       case .coverage: .coverage(try decodeCoverage(bytes, header: header))
       case .request: .request(try decodeRequest(bytes, header: header))
@@ -293,7 +293,7 @@ public enum MeshWXDecoder {
 
   // MARK: - Text (type 6, spec §8.1)
 
-  static func decodeText(_ bytes: [UInt8]) throws -> MeshWXText {
+  static func decodeText(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXText {
     try need(bytes, MeshWXWire.textFixedSize, "text")
     let body = bytes[MeshWXWire.textFixedSize...]
     guard let text = String(bytes: body, encoding: .utf8) else {
@@ -304,7 +304,10 @@ public enum MeshWXDecoder {
       group: bytes[5],
       index: bytes[6],
       total: bytes[7],
-      text: text
+      text: text,
+      // Revision 7 (spec §8.1): the bot ran out of packets and dropped the tail. A decoder
+      // written before the flag reads the same chunk it always did, one bit poorer.
+      wasCut: header.flags & MeshWXWire.flagTextCut != 0
     )
   }
 

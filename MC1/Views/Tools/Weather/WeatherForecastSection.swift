@@ -49,6 +49,15 @@ struct WeatherForecastSection: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
           .listRowSeparator(.hidden)
+        // Where the bot got this forecast (spec §2.2, revision 7), under the point line and in
+        // the same voice. Nothing at all when it did not say, so a radio older than revision 7
+        // leaves the card as it was.
+        if let source = WeatherCopy.dataSource(summary.stored.source) {
+          Text(source)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .listRowSeparator(.hidden)
+        }
       }
     }
     .themedRowBackground(theme)
@@ -75,7 +84,7 @@ struct WeatherForecastSection: View {
 
   private func summaryLabel(title: String) -> String {
     guard case let .forecast(summary) = snapshot.forecast else { return title }
-    return [title, issuedText, pointLine(summary),
+    return [title, issuedText, pointLine(summary), WeatherCopy.dataSource(summary.stored.source),
             L10n.Weather.Weather.Forecast.Accessibility.rows(summary.rows.count)]
       .compactMap { $0 }
       .joined(separator: ". ")

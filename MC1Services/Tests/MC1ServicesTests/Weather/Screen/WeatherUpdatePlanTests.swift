@@ -35,8 +35,18 @@ struct WeatherUpdatePlanTests {
   ) -> WeatherUpdatePlan {
     WeatherUpdatePlan.make(
       snapshot: snapshot(state, place: place, now: now), sourceState: state,
-      placeCountyUGC: county, placeZoneUGC: zone, nearbyStationICAO: nearbyStation,
+      placeCountyUGC: county, placeZoneUGC: zone,
+      nearbyStation: nearbyStation.flatMap { Self.nearby($0, to: place?.coordinate) },
       coverageAlreadyAsked: askedCoverage, tables: .shared, now: now)
+  }
+
+  /// A bundled station as the screen builder hands it over: its distance from the place.
+  static func nearby(_ icao: String, to coordinate: MeshWXCoordinate?) -> WeatherNearbyStation? {
+    guard let coordinate, let station = MeshWXTables.shared.station(icao: icao) else { return nil }
+    return WeatherNearbyStation(
+      icao: icao, name: station.name,
+      kilometres: MeshWXGeo.distanceKilometres(
+        fromLat: coordinate.latitude, lon: coordinate.longitude, toLat: station.lat, lon: station.lon))
   }
 
   /// A list built `minutesAgo` before now and received then too, unless `receivedAt` says
@@ -177,6 +187,74 @@ struct WeatherUpdatePlanTests {
     state.lastHeardAt = P.now
     let plan = plan(state)
     #expect(plan.steps.map(\.request) == [.digest, .observations, .forecast(point: 103)])
+  }
+
+  // MARK: - A reading from 25 to 40 km (docs/MESHWX_UI.md §3.1 U-2a)
+
+  /// Wimberley, TX as saved on Rafael's phone. Its nearest station, San Marcos (KHYI), is 25.5 km
+  /// away: half a kilometre past the "weather here" threshold.
+  static let wimberley = MeshWXCoordinate(latitude: 29.9974, longitude: -98.0986)
+
+  /// One KHYI reading, `minutesAgo` old, in a batch with one other station.
+  func sanMarcos(minutesAgo: Double) -> WeatherBotState {
+    var state = WeatherBotState(botID: P.botID)
+    let khyi = MeshWXTables.shared.stationIndex(forICAO: "KHYI")!
+    let kaus = MeshWXTables.shared.stationIndex(forICAO: "KAUS")!
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: P.header(230, .observations), payload: .observations(MeshWXObservations(
+        timestampMinutes: UInt32((P.now.timeIntervalSince1970 - minutesAgo * 60) / 60),
+        stations: [
+          MeshWXStationObservation(stationIndex: khyi, tempF: 79, sky: .few, windMph: 4),
+          MeshWXStationObservation(stationIndex: kaus, tempF: 78, sky: .few, windMph: 3),
+        ]))),
+      to: &state, receivedAt: P.now.addingTimeInterval(-minutesAgo * 60))
+    return state
+  }
+
+  /// The field report: the answer came back and the page threw it away, while Update called
+  /// everything current. Now the page shows it under San Marcos' name, and Update agrees.
+  @Test
+  func `a fresh reading 25.5 km off is shown attributed, and Update has nothing to ask`() throws {
+    let place = P.place(Self.wimberley, kind: .searched, label: "Wimberley, TX")
+    let state = sanMarcos(minutesAgo: 20)
+    let nearby = try #require(Self.nearby("KHYI", to: Self.wimberley))
+    #expect(nearby.kilometres > WeatherConditions.goodReadingKilometres)
+    #expect(nearby.kilometres < WeatherConditions.labelledReadingKilometres)
+
+    let snap = snapshot(state, place: place, now: P.now)
+    let conditions = WeatherConditions.make(primary: snap.primaryStation, nearbyStation: nearby)
+    guard case let .nearby(reading, nearer) = conditions else {
+      Issue.record("expected an attributed reading, got \(conditions)")
+      return
+    }
+    #expect(reading.station.icao == "KHYI")
+    #expect(nearer == nil)
+
+    let plan = plan(state, place: place, nearbyStation: "KHYI")
+    #expect(!plan.items.contains(.readings))
+  }
+
+  /// Past an hourly batch it is asked for again, exactly as a reading here would be.
+  @Test
+  func `an attributed reading that missed its batch is asked for again`() {
+    let place = P.place(Self.wimberley, kind: .searched, label: "Wimberley, TX")
+    let plan = plan(sanMarcos(minutesAgo: 80), place: place, nearbyStation: "KHYI")
+    let readings = plan.steps.filter { $0.item == .readings }.map(\.request)
+    #expect(readings.count == 1)
+    #expect(readings.first == .observations || readings.first == .observation(station: "KHYI"))
+  }
+
+  /// A place whose every station is beyond 40 km: asking would bring back a reading the page will
+  /// not show, so the page says so and Update spends nothing.
+  @Test
+  func `with no station within 40 km the plan asks for no reading`() throws {
+    // Dallas, holding only the Austin-area fixture readings, 290 km away, and no bundled station
+    // offered: the verdict is no station, and the plan agrees.
+    let place = P.place(P.dallas, kind: .searched, label: "Dallas, TX")
+    let snap = snapshot(P.state(), place: place, now: P.now)
+    let conditions = WeatherConditions.make(primary: snap.primaryStation, nearbyStation: nil)
+    if case .noStation = conditions {} else { Issue.record("expected no station, got \(conditions)") }
+    #expect(!plan(P.state(), place: place).items.contains(.readings))
   }
 
   // MARK: - Forecast
@@ -506,7 +584,7 @@ struct WeatherUpdatePlanCoverageTests {
       geometry: MeshWXGeometry.shared, tables: .shared)
     return WeatherUpdatePlan.make(
       snapshot: snapshot, sourceState: state, placeCountyUGC: "TXC113", placeZoneUGC: "TXZ103",
-      nearbyStationICAO: "KDAL", tables: .shared, now: P.now)
+      nearbyStation: WeatherUpdatePlanTests.nearby("KDAL", to: P.dallas), tables: .shared, now: P.now)
   }
 
   @Test

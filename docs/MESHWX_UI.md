@@ -164,6 +164,7 @@ walkthrough found and what was changed.
 |---|---|---|
 | U-1 | Four saved places became one, renamed to an airport's town and moved to its coordinates, after the app was killed mid-swipe | **Adopted.** A save-before-load race: `WeatherToolModel.savedPlaces` is empty until `start` reads the store, and a pick in that window persisted a one-place list over everything saved. Every change is now a `WeatherSavedPlaces.Edit` value applied by `WeatherSavedPlacesStore.apply` **to the list the store holds**; the model never writes a list it did not first load, and a write that would drop a place nobody asked to drop is refused outright. Only `.remove` may take a row out, and only the ceiling may shorten a list that just grew |
 | U-2 | A Places row read "86° Partly cloudy · 3 h old" for a place whose own page said "No current conditions" | **Adopted.** One rule for both: `WeatherConditions.isGood(kilometres:isStale:)` — within `goodReadingKilometres` and not stale — decides the page's temperature *and* the row's. The row's separate 80 km reach is gone; with no good reading it shows "—". This narrows §3.2 Q9's "dimmed with 3 h when stale": a row is a hint, but a hint that contradicts the page it opens is worse than no hint |
+| U-2a | 2026-09-18, field report: Wimberley, TX asked for conditions, the batch came back carrying San Marcos (KHYI) at 06:56, and the page still showed no temperature. KHYI is the nearest station there is, **25.5 km** off — half a kilometre past the cliff — so no answer could ever be shown. Worse, the page offered to ask about KHYI while Update, holding a fresh KHYI reading, called everything current: the page and the plan each worked the rule out on their own and had drifted | **Owner decision: label it.** From 25 to **`labelledReadingKilometres` = 40 km** a fresh reading is shown, attributed: "Nearest report: San Marcos, 26 km away" above the number, and the foot line keeps only "As of 6:56 AM" (`WeatherConditions.nearby`). 25 km and under is still the weather *here*, shown bare. Beyond 40 km the page says no station is near enough and **asks for nothing**, since an answer from there would be refused again. A Places row follows (`isShowable`), naming the station: "79° Cloudy · San Marcos". `WeatherUpdatePlan` now reads its readings step off `WeatherConditions.make` itself, keeping only its own 70-minute refresh age, so the page and the packet cannot disagree again |
 | U-3 | Picking KAUS pushed the station **and** saved a place called "Austin, TX", so a second Austin page appeared; TJSJ made a page called "Eleanor Roosevelt" | **Adopted.** An airport code opens the station screen and nothing else (`WeatherPlacePickerAction.station`). No page, no saved place, no move of the pager. The `WeatherPlace` that used to be built from a station is deleted |
 | U-4 | Edit mode offered only drag handles, a swipe on a row opened the place, and picking a place moved it to the front over a manual order | **Adopted.** Swipe-to-delete is a `swipeActions` destructive button on the row itself; drag-to-reorder is `onMove` with no Edit mode; the Edit capsule is gone. `WeatherSavedPlaces.remember` puts a **new** place at the front and leaves a place already on the list exactly where it is — picking is "show me this", not "reorder these". A drag is written back by id, not by index, so it can be applied to a list that has grown since |
 | U-5 | Every station screen printed the blocking reason twice, one line apart | **Adopted.** `WeatherUpdateControl.caption` already returns the reason when there is one, so the separate `requestBlocked` view was the same sentence twice. The reason is the caption |
@@ -475,13 +476,18 @@ good enough to make it. **Good** is:
 > the nearest reading the phone holds is within **`WeatherConditions.goodReadingKilometres`
 > = 25 km** of the place, and is not stale.
 
+From 25 km out to **`WeatherConditions.labelledReadingKilometres` = 40 km** a fresh reading is
+still shown, **attributed to its station** — "Nearest report: San Marcos, 26 km away" above the
+number — and never as the town's own (§3.1 U-2a). Past 40 km nothing is shown and nothing asked.
+
 **This is the tunable** (§3.2 Q11). Readings still reach 80 km
 (`WeatherPrimaryStation.maxDistanceKilometres`) for the **stations list**. Twenty-five kilometres
 is the distance at which the app is willing to print one number and call it the temperature here.
 Lowering it shows the ask more often; raising it back to 80 puts the 14 September screen's
 "Nearest report · 40 km NW" behaviour back.
 
-**A Places row obeys the same rule** (`WeatherConditions.isGood(kilometres:isStale:)`, §3.1 U-2).
+**A Places row obeys the same rule** (`WeatherConditions.isShowable(kilometres:isStale:)`, §3.1 U-2
+and U-2a), and names the station when the page does: "79° Cloudy · San Marcos".
 The row used to reach 80 km and show whatever it found, stale or not, so Places read "86° Partly
 cloudy · 3 h old" beside a page that said "No current conditions" — the list and the page
 contradicting each other about the same town, one tap apart. A row with no good reading shows "—".
@@ -493,9 +499,10 @@ the page it opens is worse than no hint.
 | Case | The page |
 |---|---|
 | A good reading | A hero on the canvas, centred, no card (§3.1.2 V-1): the temperature at 80 pt thin, then the sky icon (night variant after sunset hours) and condition word, then today's "High 92° · Low 71°" from the forecast held, then "Feels like 91° · Wind SSE 12 · Humidity 59%" in footnote. All observation fields from that one station |
-| Held, but stale or beyond 25 km | **No temperature at all**: the block is the statement "No current conditions for Llano. Pull down to ask WX-AUS for KAQO." |
-| Nothing in reach, a bundled station near | The same ask, naming that station |
-| Nothing in reach, no station near | "No weather station near Dallas. Nearest: Temple, 190 km." |
+| Fresh, 25 to 40 km | The same hero, led by "Nearest report: San Marcos, 26 km away" in subheadline above the number; the foot line says "As of 6:56 AM ›" only. When a nearer bundled station exists, Update asks for it by code while the page keeps what it holds |
+| Held, but stale, or beyond 40 km with a nearer station to ask | **No temperature at all**: the block is the statement "No current conditions for Llano. Pull down to ask WX-AUS for KAQO." |
+| Nothing in reach, a bundled station within 40 km | The same ask, naming that station |
+| Nothing within 40 km worth asking | "No weather station near Dallas. Nearest: Temple, 190 km." Update asks for no reading |
 | Nothing ever received | "No current conditions yet. WX-AUS broadcasts them every hour." |
 
 The station the ask names is **the station Update would send for**, always: near-but-stale asks
@@ -612,7 +619,7 @@ will ask for, a gesture cannot" (§3.1 O-4); the caption is how the gesture says
 |---|---|---|
 | alerts | no list is held; the list was built more than 3 h 15 min ago; or a gap, a warning the list named that never arrived, or an unfinished upgrade is outstanding | `>d`, or the missed-messages request of §7.4 (`>w <identity>` by priority, `>w <county>` under an upgrade) |
 | alerts outside the bot's area | the evidence puts the place **outside** — a complete statement, or a footprint from a bot that has stated none (§6). `.unknown` never fires it | `>w <zone>` then `>w <county>` for the place's own codes — the bot serves place-named requests nationwide |
-| readings | the reading on the page is no good for the place (§8) — beyond 25 km with a nearer station to ask about; or it was read more than 70 minutes ago (an hourly batch plus ten); or none is held | `>o <ICAO>` for the station the page named; bare `>o` when a stale station is in the bot's **newest** batch; bare `>o` when nothing at all is held, which brings the whole batch for one packet |
+| readings | read off `WeatherConditions` (§8, §3.1 U-2a): a nearer station than the one shown or held, within 40 km; or the reading was read more than 70 minutes ago (an hourly batch plus ten); or none is held. Nothing when no station within 40 km could answer with something the page would show | `>o <ICAO>` for the station the page named; bare `>o` when a stale station is in the bot's **newest** batch; bare `>o` when nothing at all is held, which brings the whole batch for one packet |
 | forecast | none is held for the place's point, or it was issued more than 12 h ago | `>f <point>` |
 | what it covers | the bot has been heard, has stated no coverage, and has not been asked on this visit | `>cov`, sent last |
 
@@ -783,6 +790,26 @@ Four drill-ins from a place page, and what the radio page holds (§3.2 Q3, Q8).
     rows. Each row carries the content's own time where the message has one and the receipt time
     always, under "This phone can't tell who asked."
 
+
+### 12.1 Where the data came from, and a reply cut for the air
+
+Since revision 7 every message that carries weather says where the bot got it (spec §2.2, the
+flags nibble's bits 3-2): off its own GOES dish, from NOAA over the internet, or both. The app
+says it in one quiet line in the footnote voice — "From the GOES satellite", "From the internet",
+"From GOES and the internet" — never a badge and never a colour, because it is provenance and not
+a warning. It sits under the text on a **product screen**, under the point line on the
+**forecast** card, and under the issuing office on **alert detail**.
+
+A radio that has not said shows **nothing at all**. There is no fourth phrase for "didn't say", so
+a page fed by a bot older than revision 7 reads exactly as it did. A Cancel never carries it — the
+whole of that message's nibble is the reason the warning ended (spec §4) — so nothing is ever
+inferred from one.
+
+A text reply the bot had to cut adds a second clause on the same line, joined with a middot: "The
+rest didn't fit on the radio." That is a different claim from the missing-part marker in the body.
+A marker is a chunk the air ate and Ask for latest may fill it; this is the whole reply that radio
+will ever send for that request, and the bot now cuts at a sentence boundary rather than mid-word,
+so the text ends where a sentence does.
 
 ## 13. Engineering
 

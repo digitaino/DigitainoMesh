@@ -143,21 +143,26 @@ public enum WeatherStateReducer {
     state.lastHeardAt = max(state.lastHeardAt ?? receivedAt, receivedAt)
     state.recentCancels = state.recentCancels.filter { receivedAt.timeIntervalSince($0.value) < recentCancelRetention }
 
+    // Where the bot got what it is about to say (spec §2.2, revision 7). It rides on the header,
+    // so every `store` below is handed it rather than digging it out of a body that does not
+    // carry it. `.unstated` for a bot older than revision 7, and for a Cancel always.
+    let source = message.header.dataSource
+
     switch message.payload {
     case let .warning(warning):
       if !(isOutOfOrder && wouldRollBack(warning, seq: seq, state: state, receivedAt: receivedAt)) {
-        changes.append(store(warning, in: &state, receivedAt: receivedAt, seq: seq))
+        changes.append(store(warning, in: &state, receivedAt: receivedAt, seq: seq, source: source))
       }
     case let .cancel(cancel):
       changes.append(remove(cancel, from: &state, receivedAt: receivedAt, isOutOfOrder: isOutOfOrder))
     case let .digest(digest):
       changes.append(applyDigest(digest, to: &state, receivedAt: receivedAt))
     case let .observations(batch):
-      changes.append(store(batch, in: &state, receivedAt: receivedAt))
+      changes.append(store(batch, in: &state, receivedAt: receivedAt, source: source))
     case let .forecast(forecast):
-      changes.append(store(forecast, in: &state, receivedAt: receivedAt))
+      changes.append(store(forecast, in: &state, receivedAt: receivedAt, source: source))
     case let .text(chunk):
-      changes.append(store(chunk, in: &state, receivedAt: receivedAt))
+      changes.append(store(chunk, in: &state, receivedAt: receivedAt, source: source))
     case let .coverage(coverage):
       changes.append(store(coverage, in: &state, receivedAt: receivedAt, isOutOfOrder: isOutOfOrder))
     case let .notAvailable(notAvailable):
@@ -319,7 +324,8 @@ public enum WeatherStateReducer {
     _ warning: MeshWXWarning,
     in state: inout WeatherBotState,
     receivedAt: Date,
-    seq: UInt8
+    seq: UInt8,
+    source: MeshWXDataSource
   ) -> WeatherStateChange {
     // Spec §2.3: keyed by identity, not by seq — a known identity is replaced either way,
     // whether or not the bot set the update flag.
@@ -333,7 +339,8 @@ public enum WeatherStateReducer {
       // issuance never moves. A replacement that does not carry one — an older bot, or a message
       // sent before the bot spoke revision 5 — therefore leaves what is already known alone
       // rather than erasing it.
-      issuedAt: warning.issuedMinutes.map { Date(unixMinutes: $0) } ?? existing?.issuedAt
+      issuedAt: warning.issuedMinutes.map { Date(unixMinutes: $0) } ?? existing?.issuedAt,
+      source: source
     )
     state.missingFromDigest.removeAll { $0 == warning.identity }
     // The replacement for an upgraded warning comes from the same office over the same
@@ -461,7 +468,8 @@ public enum WeatherStateReducer {
   private static func store(
     _ batch: MeshWXObservations,
     in state: inout WeatherBotState,
-    receivedAt: Date
+    receivedAt: Date,
+    source: MeshWXDataSource
   ) -> WeatherStateChange {
     var stored: [UInt16] = []
     // More than one station is the bot's scheduled report, and the only thing that says where the
@@ -493,7 +501,8 @@ public enum WeatherStateReducer {
         timestampMinutes: observedMinutes,
         receivedAt: receivedAt,
         batchSize: batch.stations.count,
-        lastBatchMinutes: lastBatchMinutes
+        lastBatchMinutes: lastBatchMinutes,
+        source: source
       )
       stored.append(observation.stationIndex)
     }
@@ -503,7 +512,8 @@ public enum WeatherStateReducer {
   private static func store(
     _ forecast: MeshWXForecast,
     in state: inout WeatherBotState,
-    receivedAt: Date
+    receivedAt: Date,
+    source: MeshWXDataSource
   ) -> WeatherStateChange {
     let held = state.forecasts[forecast.pointIndex]
     if let held, held.forecast.issuedMinutes > forecast.issuedMinutes {
@@ -516,7 +526,8 @@ public enum WeatherStateReducer {
       forecast: forecast,
       receivedAt: receivedAt,
       requestLabel: nil,
-      requestedHere: forecast.isUnbundledPoint ? false : (held?.requestedHere ?? false)
+      requestedHere: forecast.isUnbundledPoint ? false : (held?.requestedHere ?? false),
+      source: source
     )
     return .forecastStored(point: forecast.pointIndex)
   }
@@ -526,7 +537,8 @@ public enum WeatherStateReducer {
   private static func store(
     _ chunk: MeshWXText,
     in state: inout WeatherBotState,
-    receivedAt: Date
+    receivedAt: Date,
+    source: MeshWXDataSource
   ) -> WeatherStateChange {
     var assembly: WeatherTextAssembly
     if let held = state.texts[chunk.group],
@@ -546,6 +558,14 @@ public enum WeatherStateReducer {
     }
     assembly.chunks[chunk.index] = chunk.text
     assembly.lastReceivedAt = receivedAt
+    // Spec §8.1, revision 7: the bot sets the cut flag on *every* chunk of a cut reply, so any
+    // chunk saying so is the reply saying so — which is what makes the mark survive the one chunk
+    // that never arrived.
+    assembly.wasCut = assembly.wasCut || chunk.wasCut
+    // One reply is built from one product, so the chunks agree. If a resend somehow disagrees,
+    // this chunk is the newest word on it — but a chunk that states nothing (an older bot, or a
+    // message with no product behind it) never erases a source already stated.
+    if source != .unstated { assembly.source = source }
     state.texts[chunk.group] = assembly
     return .textChunkStored(group: chunk.group, index: chunk.index, isComplete: assembly.isComplete)
   }
