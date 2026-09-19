@@ -324,6 +324,29 @@ struct WeatherServiceTests {
     #expect(await weatherWaitUntil { await h.service.pendingRequests().isEmpty })
   }
 
+  /// Revision 8: Wright-Patterson (KFFO) never reports, so the bot answers `>o KFFO` with Dayton
+  /// International (KDAY), 16.6 km away, alone and under KDAY's index. That is the answer, from the
+  /// bot asked; a neighbour inside somebody else's batch, or anything past 40 km, is not.
+  @Test
+  func `a station request takes the nearest reporting station, alone, from the bot asked`() {
+    let tables = MeshWXTables.shared
+    func batch(_ icaos: [String]) -> MeshWXPayload {
+      .observations(MeshWXObservations(
+        timestampMinutes: 29_000_000,
+        stations: icaos.map { MeshWXStationObservation(stationIndex: tables.stationIndex(forICAO: $0)!, tempF: 72) }))
+    }
+    func settles(_ payload: MeshWXPayload, fromAddressedBot: Bool = true) -> Bool {
+      WeatherService.reply(
+        payload, satisfies: .observations(station: "KFFO"), fromAddressedBot: fromAddressedBot,
+        stationIndex: { tables.stationIndex(forICAO: $0) }, tables: tables)
+    }
+    #expect(settles(batch(["KFFO"])))
+    #expect(settles(batch(["KDAY"])), "16.6 km: the stand-in the bot chose")
+    #expect(!settles(batch(["KDAY"]), fromAddressedBot: false))
+    #expect(!settles(batch(["KDAY", "KMGY"])), "a batch that does not name it is somebody else's")
+    #expect(!settles(batch(["KCMH"])), "Columbus is about 100 km away")
+  }
+
   @Test
   func `a text request is settled by its subject's first chunk and remembered on the reply`() async throws {
     let h = makeHarness()

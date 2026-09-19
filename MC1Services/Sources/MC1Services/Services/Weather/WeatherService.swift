@@ -255,6 +255,10 @@ public actor WeatherService {
   /// The bot answers `>f <index>` with the forecast for that point's coordinates, which may come
   /// from a nearby point up to this far away.
   static let forecastSubstituteKilometres = 80.0
+  /// The bot answers `>o <ICAO>` for a station with no fresh report with the nearest station within
+  /// this distance of it that has one, as a batch of one under that station's own index (spec §6,
+  /// revision 8): Dayton's nearest bundled station, Wright-Patterson AFB, never reports.
+  static let observationSubstituteKilometres = 40.0
   /// Retention for finished text replies and forecasts per bot, newest kept.
   static let maxTextsPerBot = 24
   static let maxForecastsPerBot = 24
@@ -1058,7 +1062,16 @@ public actor WeatherService {
       // `>o` is answered by the bot's batch whatever its size: one station when only one reported.
       guard let station else { return true }
       guard let index = stationIndex(station) else { return fromAddressedBot }
-      return batch.stations.contains { $0.stationIndex == index }
+      if batch.stations.contains(where: { $0.stationIndex == index }) { return true }
+      // The named station had nothing fresh, so the bot sent the nearest one that did (spec §6,
+      // revision 8). Only from the bot asked, only alone: somebody else's batch that happens to
+      // hold a neighbour is not this request's answer.
+      guard fromAddressedBot, batch.stations.count == 1,
+            let asked = tables.station(icao: station),
+            let answered = tables.station(at: batch.stations[0].stationIndex)
+      else { return false }
+      return MeshWXGeo.distanceKilometres(fromLat: asked.lat, lon: asked.lon, toLat: answered.lat, lon: answered.lon)
+        <= observationSubstituteKilometres
     case let (.forecast(point), .forecast(forecast)):
       guard let point else { return true }
       if forecast.pointIndex == point { return true }
