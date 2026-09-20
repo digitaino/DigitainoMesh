@@ -95,9 +95,22 @@ targets:
       # Archive builds only: fetch the release's published dSYM for the pinned
       # version, check its UUIDs against the embedded framework, and add it to
       # the archive's dSYMs folder. See ci/include-maplibre-dsym.sh.
+      #
+      # User script sandboxing is on (ENABLE_USER_SCRIPT_SANDBOXING above), so the
+      # script, the files it reads and the dSYM it writes are declared here: with
+      # none declared the sandbox refused bash the script itself ("Operation not
+      # permitted") and every archive since 2 September failed on this phase. The
+      # `||` keeps the script's own promise if anything else is refused: a missing
+      # MapLibre dSYM is a warning, never a failed archive.
       - name: Include MapLibre dSYM in archives
         script: |
-          "${PROJECT_DIR}/ci/include-maplibre-dsym.sh"
+          "${PROJECT_DIR}/ci/include-maplibre-dsym.sh" || echo "warning: include-maplibre-dsym could not run (exit $?); the archive goes up without MapLibre symbols"
+        inputFiles:
+          - $(PROJECT_DIR)/ci/include-maplibre-dsym.sh
+          - $(PROJECT_DIR)/project.yml
+          - $(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/MapLibre.framework/MapLibre
+        outputFiles:
+          - $(DWARF_DSYM_FOLDER_PATH)/MapLibre.framework.dSYM
         runOnlyWhenInstalling: true
         basedOnDependencyAnalysis: false
     settings:

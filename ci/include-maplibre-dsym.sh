@@ -10,7 +10,7 @@
 #
 # MapLibre publishes the matching dSYM with each release. This phase runs on
 # archive builds only, fetches that dSYM for the version pinned in
-# project.yml (cached per version under ~/Library/Caches), checks its UUIDs
+# project.yml (cached per version in the target's derived files), checks its UUIDs
 # against the framework actually embedded in the archive, and copies it into
 # the archive's dSYMs folder beside the app's own. A mismatch or a failed
 # download is a warning, never a failed archive: the build is still valid,
@@ -39,7 +39,11 @@ if [ ! -f "${FRAMEWORK_BINARY}" ]; then
   exit 0
 fi
 
-CACHE_DIR="${HOME}/Library/Caches/DigitainoMesh/MapLibre-dSYM/${VERSION}"
+# The phase is sandboxed (ENABLE_USER_SCRIPT_SANDBOXING), which refuses writes
+# to ~/Library/Caches; the target's derived-file folder is its own to write.
+# CI or a hand run outside Xcode has no DERIVED_FILE_DIR and keeps the old cache.
+CACHE_ROOT="${DERIVED_FILE_DIR:-${HOME}/Library/Caches/DigitainoMesh}"
+CACHE_DIR="${CACHE_ROOT}/MapLibre-dSYM/${VERSION}"
 DSYM="${CACHE_DIR}/MapLibre.framework.dSYM"
 # MAPLIBRE_DSYM_DIR lets a CI runner or a test point at a dSYM it already has.
 if [ -n "${MAPLIBRE_DSYM_DIR:-}" ] && [ -d "${MAPLIBRE_DSYM_DIR}" ]; then
