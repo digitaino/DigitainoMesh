@@ -27,12 +27,14 @@ struct WeatherForecastSection: View {
       case .noPlace:
         Text(L10n.Weather.Weather.Place.choosePrompt)
           .font(.subheadline)
-      case .noPointNearby:
-        // No point close enough to speak for the place: nothing worth asking for.
-        Text(WeatherCopy.noForecastPoint(placeName: screen.placeName ?? ""))
-          .font(.subheadline)
       case let .missing(point, kilometres):
-        Text(WeatherCopy.forecastMissing(placeName: screen.placeName ?? "", point: point, kilometres: kilometres))
+        // Revision 10: `.noPointNearby` is gone — a place with a coordinate always has something
+        // to ask for (spec §1.3) — so a card with no bundled point to name says only that there
+        // is no forecast for the place yet, and Update asks for one (docs/MESHWX_UI.md §9,
+        // §3.1 U-38). The card carries no button of its own: Update is right there, and a second
+        // ask beside it is the pattern O-4 took out.
+        Text(WeatherCopy.forecastMissing(
+          placeName: screen.placeName ?? "", point: point, kilometres: kilometres))
           .font(.subheadline)
           .padding(.vertical, 2)
       case let .forecast(summary):
@@ -75,8 +77,18 @@ struct WeatherForecastSection: View {
 
   /// "Austin Camp Mabry · 6 km", the distance left out when the point is the place, and
   /// "· heard on #meshwx" when somebody else on the channel asked for it.
+  ///
+  /// A forecast the **bot** picked the point for has no bundled point to name (spec revision 10,
+  /// §1.3): the answer came back for a point this app's tables do not carry, which is the whole
+  /// reason `>f <lat>,<lon>` exists. The card says so rather than leaving a forecast on screen
+  /// with nothing to say what it is a forecast of (docs/MESHWX_UI.md §3.1 U-9).
   private func pointLine(_ summary: WeatherForecastCard.Summary) -> String {
-    var parts = [WeatherNames.pointLabel(summary.point.name)]
+    var parts: [String] = []
+    if let point = summary.point {
+      parts.append(WeatherNames.pointLabel(point.name))
+    } else if case .botChosenPoint = summary.source {
+      parts.append(L10n.Weather.Weather.Forecast.chosenByBot(screen.model.botName(summary.botID)))
+    }
     if summary.kilometres >= 1 { parts.append(WeatherFormatting.kilometres(summary.kilometres)) }
     if !summary.isOwn { parts.append(L10n.Weather.Weather.Reports.overheard) }
     return parts.joined(separator: " · ")

@@ -24,9 +24,11 @@ enum MeshWXVectors {
   /// `request_digest`, the revision 6 Request vector (spec §7B): `>d` to bot `0x041D` from the
   /// sender `01 02 03 04 05 06` at `ts` 1789660000 with `seq` 1 — sixteen bytes.
   ///
-  /// Quoted from the spec rather than read from the fixture: the publisher's
-  /// `meshwx_v5_vectors.json` still holds the thirteen vectors of revision 5, and this file is
-  /// its copy byte for byte. Move it into the JSON the day the bot's repository ships it.
+  /// Quoted from the spec, and since revision 10 also in the publisher's file. It is kept here
+  /// because the spec printed these bytes before any vector carried them, and
+  /// ``MeshWXVectorTests/theRequestVectorsAreTheBytesTheSpecPrints()`` checks the two against each
+  /// other: a vector file that silently disagreed with the printed spec is the one failure this
+  /// constant can still catch.
   static let requestDigestHex = "011d0490010203040506600bac6a3e64"
 
   private static func fixtureData() -> Data? {
@@ -95,6 +97,12 @@ enum MeshWXVectors {
     let builtMin: UInt32?
     let cut: Bool?
     let advisories: Bool?
+    /// Revision 10, §1.2: the reference JSON adds both to **every** decoded Area sweep, so a
+    /// national one reads `scoped: false, scope: []`. Optional here because the file this is a
+    /// copy of held only revision 9 vectors when the fields were written; a revision 9 vector
+    /// therefore reads as national, which is what it was.
+    let scoped: Bool?
+    let scope: [UInt8]?
 
     /// The build time of an Area sweep, whichever key the vector carries it under.
     var sweepBuiltMinutes: UInt32? { builtMin ?? built }
@@ -122,6 +130,11 @@ enum MeshWXVectors {
     // Not available
     let request: String?
     let requestCode: UInt8?
+
+    // Request (spec §7B). `text` is shared with Text above; `sender` is the six-byte key prefix
+    // as lower-case hex and `ts` is Unix **seconds**, not the minutes every other time here is.
+    let sender: String?
+    let ts: UInt32?
 
     // Coverage (the zone runs arrive in `areas`, the warning's own shape)
     let lat: Double?

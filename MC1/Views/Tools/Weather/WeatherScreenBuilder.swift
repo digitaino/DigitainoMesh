@@ -225,10 +225,11 @@ enum WeatherScreenBuilder {
     }
 
     switch snapshot.forecast {
-    case let .forecast(summary): context.placeOffice = summary.point.office
-    case let .missing(point, _): context.placeOffice = point.office
-    // Too far for its forecast, but offices cover wide areas: still the office to ask.
-    case let .noPointNearby(nearest, _): context.placeOffice = nearest?.office
+    // Revision 10: a card can hold a forecast the bot chose the point for, and an empty card can
+    // have no bundled point in reach. Either way there is no office to read off a point that is
+    // not there, and the office falls back to the place's own lookup below.
+    case let .forecast(summary): context.placeOffice = summary.point?.office
+    case let .missing(point, _): context.placeOffice = point?.office
     case .noPlace: context.placeOffice = nil
     }
     if let place {

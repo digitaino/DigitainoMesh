@@ -274,35 +274,47 @@ struct WeatherAlertRulesTests {
 
   // MARK: - Forecast reach
 
-  static let albuquerque = MeshWXCoordinate(latitude: 35.0844, longitude: -106.6504)
+  /// Pago Pago, American Samoa. The office PPG is one of the nine `pfm_points.json` version 1 had
+  /// no point at all for, and version 2 filled six of them in; the Pacific territories are still
+  /// thousands of kilometres from the nearest point, which is what this test needs.
+  static let pagoPago = MeshWXCoordinate(latitude: -14.2756, longitude: -170.7020)
 
+  /// Spec revision 10, §1.3, and the case the whole ask exists for. The card used to be
+  /// `.noPointNearby` with **no ask at all** — "No forecast point near Albuquerque" — which is
+  /// what the owner saw as "forecast works in chat but not in the app". A place with a coordinate
+  /// always has something to ask for now.
   @Test
-  func `Albuquerque has no forecast point near enough to stand for it`() throws {
-    let place = P.place(Self.albuquerque, label: "Albuquerque, NM")
-    guard case let .noPointNearby(nearest, kilometres) = WeatherForecastCard.make(
-      states: [:], place: place, tables: tables, now: P.now, calendar: P.calendar) else {
-      Issue.record("expected noPointNearby")
-      return
-    }
-    #expect(nearest != nil)
-    #expect((kilometres ?? 0) > WeatherForecastCard.pointReachKilometres)
+  func `a place with no bundled point in reach is still asked about, by coordinate`() throws {
+    let place = P.place(Self.pagoPago, label: "Pago Pago, AS")
+    let nearest = tables.nearestPoint(toLat: Self.pagoPago.latitude, lon: Self.pagoPago.longitude)
+    try #require(nearest == nil || MeshWXGeo.distanceKilometres(
+      fromLat: Self.pagoPago.latitude, lon: Self.pagoPago.longitude,
+      toLat: nearest!.lat, lon: nearest!.lon) > WeatherForecastCard.pointReachKilometres)
 
-    // Even a forecast held for that nearest point is somewhere else's.
-    let point = try #require(nearest)
-    var state = WeatherBotState(botID: P.botID)
-    state.forecasts[point.index] = WeatherStoredForecast(
-      forecast: P.dailyForecast(point: point.index, issuedMinutes: P.nowMinutes - 60, temps: [(90, 60)]), receivedAt: P.now)
-    guard case .noPointNearby = WeatherForecastCard.make(
-      states: [P.botID: state], place: place, tables: tables, now: P.now, calendar: P.calendar) else {
-      Issue.record("expected noPointNearby with a far forecast held")
+    guard case let .missing(point, kilometres) = WeatherForecastCard.make(
+      states: [:], place: place, tables: tables, now: P.now, calendar: P.calendar) else {
+      Issue.record("expected an empty card with an ask")
       return
     }
+    #expect(point == nil, "no bundled point stands for the place")
+    #expect(kilometres == nil)
   }
 
-  /// The cutoff's derivation, re-measured on a fixed sample of the bundle: about one place in a
-  /// hundred with any point in its region lies beyond it.
+  /// The cutoff's derivation, re-measured on a fixed sample of the bundle: about three places in
+  /// a thousand with any point in their region lie beyond it.
+  ///
+  /// It was about one in a hundred when 115 km was chosen, and `pfm_points.json` version 2 is why
+  /// it is not any more: eighty-five points were appended for the nine offices the first cut had
+  /// none for (spec revision 10, §1.3). Over the whole bundle the distance from a place to its
+  /// nearest point is now 22.5 km at the median, 62.6 km at p95 and 90.2 km at p99, with 109 of
+  /// 34,909 places beyond 115 km — so the cutoff has quietly moved from p99 to about p99.7.
+  ///
+  /// It is left where it is on purpose. The number this rule decides is not "is there a point"
+  /// but "is that point's forecast this place's weather", and the answer to that did not change
+  /// when the bundle grew. A place beyond it is no longer left with nothing either: since
+  /// revision 10 it is asked about by coordinate.
   @Test
-  func `the reach cutoff leaves about one place in a hundred without a point`() throws {
+  func `the reach cutoff leaves about three places in a thousand without a point`() throws {
     var measured = 0
     var beyond = 0
     for place in stride(from: 0, to: tables.places.count, by: 25).map({ tables.places[$0] }) {
@@ -314,6 +326,6 @@ struct WeatherAlertRulesTests {
     }
     try #require(measured > 1000)
     let share = Double(beyond) / Double(measured)
-    #expect(share > 0.004 && share < 0.02, "\(beyond) of \(measured) beyond \(WeatherForecastCard.pointReachKilometres) km")
+    #expect(share > 0.0005 && share < 0.01, "\(beyond) of \(measured) beyond \(WeatherForecastCard.pointReachKilometres) km")
   }
 }

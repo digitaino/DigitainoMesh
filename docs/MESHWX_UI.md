@@ -197,6 +197,20 @@ walkthrough found and what was changed.
 | U-31 | 2026-09-20: "'from the GOES satellite' — the 'the' is weird" and "'the rest didn't fit on the radio' — what the fuck does that mean?" | **Adopted.** The source line is a path, not a sentence: "Via GOES satellite", "Via internet", "Via GOES and internet". The cut note says what was done to the text rather than narrating the radio: "Shortened for radio" |
 | U-32 | 2026-09-20, first look at the national map: "it's way too deep... I see the map but I can't zoom or click on anything to request more details? also there is no list?" It sat three taps down (place page → radio row → alerts list → map), its card was a still whose only content had hit testing off — so the row that opens the full map had no hit area at all — and the screen showed colours with nothing that named them | **Adopted.** The map is a row in the **title menu**, beside the page picker and "Add or edit places", so it is one tap from anywhere in the tool; the radio page's alerts list keeps its row. The card gets a `contentShape` and an explicit "Open the full map ›" line, and the full map zooms, pans and answers a tap on an area. A **"What's in this map"** section lists one row per alert kind with how many areas are under it, opening that kind's areas by name ("Travis County, TX"), each a tap that asks the radio about that area — the same request the map's tap sends |
 | U-33 | 2026-09-20: "the app just flashes when I click on a shaded area on the map". The full map carried the tap hint as a **top** safe-area inset and the pending bar as a **bottom** one. A tap swaps them — the hint goes as the bar arrives — so the map view was resized at both edges in the same frame, and a full-bleed MapLibre view relays out its style when it is resized | **Adopted.** Both bars are overlays now, so the map's frame never changes and nothing it has drawn is thrown away. Neither takes touches, so pan, zoom and the tap still reach the map underneath, and the swap is animated rather than instant |
+| U-34 | 2026-09-20: a tap on a shaded area put `>w <ugc>` on the air and showed nothing at all. The answer landed in state, the map never mentioned it, and the owner tapped area after area for nothing | **Adopted.** A tap **opens the area's own screen** instead of sending. That screen already knows what the map said about the area — no airtime — and asks only when asked to. A tap on empty land still asks for nothing rather than guessing at a county |
+
+The six rows below are the owner's own asks of 20 September, written after an afternoon on the
+phone with the national map. They are one design across the bot, the iOS app and the web client
+(`docs/MESHWX_REV10.md`), which stays the cross-client contract; these rows are the screen half.
+
+| # | Finding | Decision |
+|---|---|---|
+| U-35 | 2026-09-20, looking at a map that read "4 of 7 parts arrived": *should allow me to re-request the missing data.* The only offer beside it was the whole map again — eight packets on a shared channel to fill three holes | **Adopted.** `>part <group> <idx>…` (spec revision 10, §1.1): the bot resends the bytes it transmitted, so what comes back fills the assembly already on screen. **Offered, never automatic** (`WeatherPartsOffer`): the assembly is incomplete, its newest packet is at least 15 s old (the bot's own echo resend has had its chance) and its first is under 10 minutes old (past that the bot no longer holds the bytes). The button sits under the part it belongs to, on the alert map and above the ordinary ask on a text report, and says its exact cost — "Ask for the 3 missing parts", "3 packets" — because that is what it will send, packet for packet |
+| U-36 | 2026-09-20, on the screen a tap on a shaded area opens: *this "on the map" vs "what the phone holds" is weird.* Two cards saying one thing twice — the map's event on top, the alerts this phone holds underneath — and a reader had to work out for themselves that they were the same alert | **Adopted.** **One card** (§17.3), titled with the area's name and carrying its UGC code as the quiet value: the held alerts as ordinary alert rows, then the ask. The map's own event gets a row **only when no held alert of that kind is already above it** — "On the map as of 1:20 PM. Details not received." — which is the one case the two cards were ever telling apart (`WeatherAreaMapCopy.unheldMapWord`). "On the map" and "What this phone holds" are gone as headers |
+| U-37 | 2026-09-20: *Can we go from national alert map to just alert map, and have a way for the user to select which areas they want to request the warnings for. One, a few, or all. That way we don't default to sending everything.* Every tap on the map asked for the country, eight packets at a time | **Adopted.** The screen is **"Alert map"** (§17), and under it **Areas to ask for** opens a pushed picker: `.searchable`, "The whole country" first, then the page's own state, then every state, each a row with a checkmark and a count of what is chosen. It is **saved as it changes** (`WeatherAreaSelectionStore`, device-local) and has no Done — there is nothing to commit. The default before anybody chooses is the state of the page's place, because somebody opening the map from their own town wants their own state and one state is usually one packet. More than 15 states cannot be named in a forty-byte request, so the tap asks for the country and the screen says so **before** it, not after. The ask button names the selection ("Ask for Oklahoma and Texas", "Ask for the whole country") and the cost above it is read from the map actually held (`WeatherAreaSweepCost`). A phone can now hold several sweeps at once, so the status card is **one line per part** — what each is the newest word on, its own "as of" and age, its own level, its own cut and its own holes — and with nothing national held it says which states the map covers and that the rest of the country was not asked for: an unshaded state outside the scope is **unknown**, never clear |
+| U-38 | 2026-09-20: *Forecast works in chat (`forecast santa fe nm`) but not in the app. I thought we were using the same engine.* `pfm_points.json` version 1 was built from one day's products and has no point at all for nine offices, so the app showed "No forecast point near Albuquerque" and offered nothing while the bot held a forecast fifteen kilometres away | **Adopted.** `>f <lat>,<lon>` (spec revision 10, §1.3) and a bundle that fills the missing points in. **"No forecast point near X" no longer exists**, and neither does `.noPointNearby`: a place with a coordinate can always be asked about, so the empty card says only that there is no forecast for the place yet and the page's **Update** sends the ask. A forecast the bot picked the point for has no point this bundle can name, so the card says "Forecast point chosen by WX-AUS" rather than leaving the rows unattributed (§9, §3.1 U-9) |
+| U-39 | 2026-09-20: *Your requests is way too long of a list.* Forty rows of a ledger in the middle of a page whose other nine sections are one row each, so everything under it was below the fold | **Adopted.** The radio page shows the **newest three** and an "All requests (27)" row that pushes the whole list. The log itself is untouched — still 40 rows and a week, still only what actually went on the air (§12). What was wrong was the page, not the record |
+| U-40 | 2026-09-20: *a way to see all the GRP_DATA traffic on a channel like we do a chat.* Nothing in the app showed the wire: "nothing arrived" and "eight packets arrived and every one of them was a copy" looked identical on every screen | **Adopted.** **Channel traffic**, from the `#meshwx` card on the radio page (§12): a chat-style timeline of `WeatherTrafficEntry`, oldest at the top, received bubbles leading under the radio's name and this phone's requests trailing, opened at the newest and following new arrivals unless the reader has scrolled up. Each bubble is the summary's title and then what is known — "159 B · seq 212 · SNR 12 dB · 2 hops · 1:35 PM" — with "from the radio's queue" for a backlog drain and "duplicate" for a copy, which are the two facts no other screen records. A tap pushes the decoded fields and the hex, monospaced and selectable; a datagram the codec cannot read says so and claims nothing else. A confirmed **Clear** empties the log, and the weather the phone has stored is not touched. Nothing on the screen spends airtime |
 
 ### 3.1.2 Visual pass against the Human Interface Guidelines, 16 September (afternoon)
 
@@ -539,9 +553,15 @@ which it cannot know; it says what is not pushed, and what to do about it.
 
 - Point: the nearest bundled forecast point to the place, within 115 km. That reach is the 99th
   percentile of every bundled place's distance to its nearest point (median 23 km, p95 68 km);
-  about 1% of places lie beyond it, mostly in New Mexico, Utah, Idaho and western Alaska, and
-  get "No forecast point near Albuquerque". A held forecast for a different point within 10 km
-  of the place is used instead, and says so ("from Austin Camp Mabry, 4 km").
+  about 1% of places lie beyond it, mostly in New Mexico, Utah, Idaho and western Alaska. A held
+  forecast for a different point within 10 km of the place is used instead, and says so ("from
+  Austin Camp Mabry, 4 km").
+- **The bundle is not the authority on what the bot holds** (spec revision 10, §1.3; §3.1 U-38).
+  A place with no bundled point in reach is asked about **by coordinate**, `>f <lat>,<lon>`, and
+  the answer comes back for the nearest point the *bot* holds a forecast for. A held answer whose
+  asked coordinate is within 25 km of the place is that place's forecast, and the card labels it
+  "Forecast point chosen by WX-AUS" — the point has no index this bundle can name, which is the
+  whole reason the ask exists.
 - Shape from the data (`MeshWXForecastLayout`): **days** (what the bot sends, spec §7 revision 3:
   even `first`, entry `i` dated the issue date plus `first / 2 + i`, and a day missing one
   temperature at the window's edge is still a day) → one row per day with high/low;
@@ -560,8 +580,11 @@ which it cannot know; it says what is not pushed, and what to do about it.
   phone never asked for adds "· heard on #meshwx" (§3.1 U-14) — the wire does not say who asked,
   but the phone knows what *it* asked, on that last line.
 - Nothing held for the place's point: "No forecast for Austin yet."; when the point is more than
-  10 km away, "The nearest forecast point is Midland, 60 km." Beyond 115 km: "No forecast point
-  near Albuquerque." and no ask.
+  10 km away, "The nearest forecast point is Midland, 60 km." **There is no "No forecast point
+  near X" state**, and no state with nothing to ask for: a place with a coordinate can always be
+  asked about, so a card with no bundled point to name says only that there is no forecast yet and
+  the page's Update sends the ask (§3.1 U-38). The card carries no button of its own — Update is
+  right there, and a second ask beside it is the pattern O-4 took out.
 
 ## 10. The radio row, and banners
 
@@ -777,10 +800,40 @@ Four drill-ins from a place page, and what the radio page holds (§3.2 Q3, Q8).
     since the statement carries none of its own. Having said nothing is not having said "nothing":
     "WX-AUS hasn't said what it covers yet." with **Ask what it covers**.
   - **Your requests**: this phone's own, newest first, each with when it went out and how it
-    ended. Persisted, at most 40 rows and a week, and only what actually went on the air.
+    ended. Persisted, at most 40 rows and a week, and only what actually went on the air. The page
+    lists the **newest three** and an "All requests (27) ›" row that pushes the rest (§3.1 U-39):
+    forty rows of a ledger in the middle of a page of one-row sections put everything under it
+    below the fold. A scoped alert map names its states in the row ("Alert map · Oklahoma and
+    Texas"), a `>part` names what it is filling in ("Missing parts of Alert map") and a `>f
+    <lat>,<lon>` names the coordinate that was asked about, because the log is where somebody
+    works out what those packets were spent on.
   - **Weather radios** as inline rows with checkmarks, "Choose automatically" only with two or
-    more; `#meshwx` slot and last weather message; **Cached from the channel (37) ›**; "Clear
-    received weather".
+    more; `#meshwx` slot, last weather message and **Channel traffic ›**; **Cached from the
+    channel (37) ›**; "Clear received weather".
+- **Channel traffic** (`WeatherTrafficView`), from the `#meshwx` card and nowhere else (§3.1
+  U-40). The owner's sixth ask: *a way to see all the GRP_DATA traffic on a channel like we do a
+  chat.* So it is the **wire, not the model**: every datagram that reached the weather slot is
+  there — decodable or not, duplicate or not, live or drained from the radio's queue — and so is
+  every Request datagram this phone put on the air. A ring of 300, persisted beside the weather
+  state (`WeatherTrafficLog`), which is a window on the channel and deliberately not a record of
+  one.
+  - A chat timeline, oldest at the top: received bubbles leading under the radio's name, this
+    phone's requests trailing, the sender's name shown only when it changes. It opens scrolled to
+    the newest and follows new arrivals **unless the reader has scrolled up**.
+  - Each bubble is the summary's title and then the facts the packet actually carries —
+    "Observations · 13 stations", "Alert map · part 3 of 7 · 38 areas · the whole country",
+    "Request from 0A1B2C · `>o KAUS`", "Not available · f · unknown location" — over "159 B · seq
+    212 · SNR 12 dB · 2 hops · 1:35 PM", with "from the radio's queue" when it was a backlog drain
+    and "duplicate" when the reducer took it for a copy. Those last two are the reason the screen
+    exists: everywhere else in the app, "nothing arrived" and "eight packets arrived and every one
+    of them was a copy" look exactly the same.
+  - A tap pushes one datagram: its own facts as rows (time, sender, size, sequence, signal, hops,
+    channel slot, message type, data type), what the decoded message says, and the payload as hex
+    in a monospaced, selectable, wrapping block. The summary is **decoded again from the stored
+    bytes** rather than read off the entry's header fields, so a row can only ever say what is in
+    the packet; bytes this build cannot read say exactly that and claim nothing else.
+  - **Clear** (confirmed) empties the log. Nothing else depends on it and the weather the phone
+    has stored is not touched. Nothing on this screen spends airtime: there is no ask on it at all.
 - **Cached from the channel** (`WeatherCachedView`), from the radio page and nowhere else: what the
   phone is holding from the channel, in two views of one pile chosen with a segmented control
   (§3.1 U-16).
@@ -1067,82 +1120,158 @@ demand: it is parked, the outlines are loaded once, and it is judged again.
 
 The common case is two lines: nothing in the message touched a warning, or nothing is watched, and
 the evaluator reads no state at all.
+## 17. The alert map
 
-## 17. The national alert map
+One request answered with a compact sweep of every area under an alert, shaded on the app's own
+zone and county outlines (spec §7C, message type 10). It answers the one question the place pages
+cannot: *where is anything happening at all?*
 
-One request answered with a compact sweep of every area in the country under an alert, shaded on
-the app's own zone and county outlines (spec §7C, message type 10). It answers the one question
-the place pages cannot: *where is anything happening at all?*
+It was the **national** alert map until revision 10. The owner, 20 September: *Can we go from
+national alert map to just alert map, and have a way for the user to select which areas they want
+to request the warnings for. One, a few, or all. That way we don't default to sending everything.*
+So a sweep can now cover the country or up to fifteen states (spec revision 10, §1.2), a phone can
+hold several at once, and the screen's job is to say which part of what you are looking at came
+from where (§3.1 U-37).
 
-It is reached from the alerts list, as a row under the map: **National alert map**, with when the
-held sweep was built, or "Not asked for yet" — which is what the row says almost always, because
-nothing in the app asks for a sweep without a tap.
+It is a row in the **title menu**, one tap from anywhere in the tool, and a row under the map on
+the radio page's alerts list, with when the newest sweep was built or "Not asked for yet" — which
+is what that row says almost always, because nothing in the app asks for a sweep without a tap.
 
 ### 17.1 Airtime is the constraint
 
-A sweep is up to **eight packets**, broadcast to everyone listening on `#meshwx`. That is the
-most expensive answer in the protocol, and it is the whole design of this screen:
+A sweep of the country is up to **eight packets**, broadcast to everyone listening on `#meshwx`.
+That is the most expensive answer in the protocol, and it is the whole design of this screen:
 
 - **Nothing asks on its own.** No request on appear, none on a pull to refresh, none on a timer,
-  and Update never plans one. The only thing that sends is a tap on the button.
+  and Update never plans one. The only thing that sends is a tap on a button.
 - **The tap says what it costs before it is spent** — "About 7 packets on the shared channel." —
   above the button, not under it, because a reader who has already tapped does not need telling
-  afterwards. The wider scope says 8.
+  afterwards. The estimate is read from the map actually held (`WeatherAreaSweepCost`): the last
+  national sweep's own packet count for the country, and for a scope, the runs this phone believes
+  are active in those states plus one scope entry each, over 38 entries to a packet. With nothing
+  held at all it is four states to a packet, and four packets for the country (seven with
+  advisories) — what the bot measurably sent on 2026-09-20.
+- **Asking for less is the cheap path, and it is the default.** The selection starts as the state
+  of the page's own place, because somebody opening the map from their own town wants their own
+  state and one state is usually one packet.
 - **The answer is public**, and the button carries the same footnote every other ask button does:
   "Everyone listening on #meshwx gets the answer."
-- **Two scopes.** Warnings and watches is the default and sends `>wmap`; "Also advisories" is the
-  wider one and sends `>wmap all`. Both share one five-minute answer slot, because the narrow
-  sweep is a subset of the wide one and spending eight more packets a minute later to widen it is
-  exactly what that rule exists to stop.
+- **Two levels.** Warnings and watches is the default and sends `>wmap`; "Also advisories" is the
+  wider one and sends `>wmap all`. The five-minute rule is **per state** (spec revision 10, §1.2):
+  a request is refused only when every state it asks for was covered that recently at the same or
+  a higher level.
 
 A rate-limited refusal (Not available, reason 4) is **not an error and not the radio being busy**.
-Somebody else has just spent those eight packets, so this phone is about to be handed the same
-map: "Another radio asked WX-AUS for the map recently — try again in a few minutes." Every other
-request keeps the §11.2 wording it had.
+Somebody else has just spent those packets, so this phone is about to be handed the same map:
+"Another radio asked WX-AUS for the map recently — try again in a few minutes." Every other
+request keeps the §11.2 wording it had. The refusal **keeps what is held on screen**: a map that
+arrived four minutes ago is the map.
 
 ### 17.2 What the screen says
 
-The map itself, then four kinds of sentence, then the legend and the ask:
+The map itself, then the status card, then the legend and the ask.
 
-- **When it was built**, on the radio's clock, and how old that makes it: "Map as of 8:02 PM ·
-  3 h old". Never when the packets arrived (§10.5).
-- **Which scope arrived** — read off the sweep's own flag, not off the button that asked for it:
-  a radio may answer the wider request with the narrower sweep.
-- **How many areas are under an alert**, or, for a sweep that is whole and uncut and found none,
-  that the country is clear. A sweep that was **cut** or is **missing packets** may not say that:
-  it says nothing about the areas it never named, and a gap in it is not calm weather. Both facts
-  are orange lines of their own — "Cut to fit — an area not shaded here may still be under an
-  alert" and "3 of 8 parts arrived — some of the country is missing".
+The status card is **one line per part** (`WeatherAlertMapPicture.Part`), newest first. A part is
+one sweep, and what it is the newest word on:
+
+- **What it covers.** "Oklahoma and Texas" for a scoped part, named by the states it *asked for*;
+  "The whole country" for a national part, or "The rest of the country" once something scoped and
+  newer has taken states off it. A scoped part whose first packet never arrived cannot say what it
+  covers at all, and says so: "Part of the country, states not known". Past three states the names
+  are a wall and the count is the fact ("6 states").
+- **When it was built**, on the radio's clock, and how old that makes it: "as of 1:40 PM · 2 min
+  old". Never when the packets arrived (§10.5).
+- **Which level arrived** — read off the sweep's own flag, not off the button that asked for it: a
+  radio may answer the wider request with the narrower sweep.
+- **Its holes**, both orange, because a gap in a cut or partial sweep is not calm weather: "Cut to
+  fit — an area not shaded here may still be under an alert" and "4 of 7 parts arrived". Under the
+  second, while it is offered, **Ask for the 3 missing parts** and its exact cost, "3 packets"
+  (§3.1 U-35).
+- **That a newer part has replaced it**: "A newer part above covers these states." — the part
+  asked for them and no longer speaks for any of them, which is why it is still named for them.
+
+Then, for the map as a whole:
+
+- **What it covers, when no part of it is national**: "This map covers Oklahoma and Texas." and
+  "The rest of the country was not asked for. A state outside this map is unknown, not clear." An
+  unshaded state outside every scope is the one thing this screen can be read wrongly about.
+- **How many areas are under an alert**, or, for a map that speaks for the whole country with no
+  hole in any part and found none, that the country is clear. A part that was cut or is missing
+  packets silences that sentence, and so does a map with no national part: neither says anything
+  about the areas it never named.
 - **Areas the app cannot draw.** The bundle is a cut in time and the UGC tables grow, so a code
   with no outline is a normal outcome (§9). Those areas are counted and said out loud rather than
   swallowed, so nobody reads the missing shape as clear weather.
 
+One rule decides what is drawn: **for each state the newest sweep whose scope includes it wins,
+and only that sweep's entries for that state are drawn.** Merging two sweeps' entries for one
+state would draw this hour's tornado warning beside last hour's expired one. The exception is a
+scoped sweep whose scope has not arrived: it wins no state, but its entries are still drawn — a
+shaded area is evidence and an unshaded one never is.
+
 A **partial sweep is still drawn**. Six packets of eight is most of a country, and a map with two
 states missing, labelled as such, is worth more than an empty screen.
 
-The **legend** lists the events actually in the sweep, most severe first, each beside the colour
-it is drawn in — not the colour names, which mean nothing on their own. The shading is the same
+Under the map: **Areas to ask for**, which pushes the state picker and shows what is chosen beside
+it; the level picker; the cost; and the ask button, whose title names the selection — "Ask for
+Oklahoma and Texas", "Ask for the whole country". More than fifteen states cannot be named in a
+forty-byte request, so the tap asks for the country and the screen says so **before** it: "More
+than 15 states asks for the whole country."
+
+The **legend** lists the events actually on the map, most severe first, each beside the colour it
+is drawn in — not the colour names, which mean nothing on their own. The shading is the same
 lookup an alert's own map does: `MeshWXGeometry.rings(for:)` for the outline, `MeshWXEventTint`
 for the colour, laid down through `WeatherMapDrawing.overlays`, so the two maps cannot drift
 apart. Areas are deduplicated, first entry wins — entries arrive most severe first, so a county
 under both a Tornado Warning and a Flood Advisory draws red, once.
 
+**The state picker** (pushed): `.searchable` by code or by name, "The whole country" first, then
+the page's own state, then every state, each a row with a checkmark, and a count of what is
+chosen. Picking a state turns the whole country off — the two are one answer to one question. It
+is **saved as it changes** (`WeatherAreaSelectionStore`, one device-local defaults key) and has no
+Done: there is nothing to commit, and the back chevron is the only way out this tool offers from a
+pushed screen (§3.1 U-11).
+
 ### 17.3 Tapping an area
 
-On the full map, a tap on a shaded area asks that area for detail with the existing
-`>w <area>` request — **one packet, not a sweep**. A tap on empty land asks for nothing rather
-than guessing at a county, and a tap while anything else is on the air does nothing. The hint
-above the map says what a tap does, and disappears while a request is pending or while everything
-is blocked, so the page never tells someone to tap while nothing would go out (§3.1 U-24).
+On the full map, a tap on a shaded area opens **that area's own screen** rather than putting
+anything on the air (§3.1 U-34). A tap on empty land opens nothing rather than guessing at a
+county. The hint above the map says what a tap does, and disappears while a request is pending or
+while everything is blocked, so the page never tells someone to tap while nothing would go out
+(§3.1 U-24). Both the hint and the pending bar are **overlays**, never safe-area insets: swapping
+an inset resizes a full-bleed MapLibre view and throws away its style, which is the flash the
+owner saw on every tap (§3.1 U-33).
+
+That screen is **one card** (§3.1 U-36), titled with the area's name and carrying its UGC code as
+the quiet value:
+
+- the alerts this device holds that touch the area, as ordinary alert rows, each opening the
+  alert's own screen;
+- then, **only when the map's event for the area is not among them**, one row for it: the event
+  name and "On the map as of 1:20 PM. Details not received." The "as of" is the build time of the
+  part that shaded it, on the radio's clock;
+- then the ask — "Ask about this area" / "Ask again" — which is one `>w <area>` packet, not a
+  sweep.
+
+There is no "On the map" card and no "What this phone holds" card. For the ordinary case they said
+one thing twice, and a reader had to work out for themselves that the coloured word on top and the
+warning underneath were the same alert.
 
 ### 17.4 State
 
-One sweep per bot, the newest, complete or partial (`WeatherBotState.areaSweep`). Packets
-assemble by `group` the way Text chunks do (§8.1), but a **newer `built` replaces the held sweep
-outright** rather than merging into it: two sweeps are two pictures of the same country, and
-merging them draws this hour's Texas beside last hour's Montana. A sweep built before the one
-held — a backlog drained from the radio at connect — changes nothing. The same build time under a
-new `group` is the radio sending the sweep again, so that assembly starts over too.
+**Several sweeps per bot** (`WeatherBotState.areaSweeps`, newest first, at most 8). Packets
+assemble by `group` the way Text chunks do (§8.1), and a sweep is never merged into another one:
+two sweeps are two pictures, and merging them draws this hour's Texas beside last hour's Montana.
+Retention is applied by the reducer on every store — a **national** sweep drops every sweep older
+than it, and a **scoped** sweep drops older scoped sweeps whose scope it fully contains — so the
+pile stays the smallest set that still covers what the phone has been told.
 
-The field is `decodeIfPresent` with no default beyond nil, so a state file written before this
-shipped still loads: absent means "no sweep", which is exactly right — nobody had asked for one.
+`WeatherAreaSweepAssembly.isScoped` and `.scope` carry what the wire says: `[]` national, the
+state indices when scoped and packet 0 is held, **nil** when scoped and packet 0 is missing. The
+scoped flag rides on `total` bit 7 of **every** packet (spec revision 10, §1.2), so a phone that
+lost packet 0 still knows it is not looking at the country — getting that backwards paints half
+the country clear on the strength of a question nobody asked.
+
+Decoding a file written before revision 10 lifts its single `areaSweep` into the array, and both
+scope fields read as absent-means-national: a sweep saved before them was a national one, because
+there was no other kind, and a held map must not stop speaking for the country on upgrade.

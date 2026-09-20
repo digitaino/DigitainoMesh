@@ -7679,6 +7679,8 @@ public enum L10n {
         }
         /// Location: WeatherAreaMapView.swift - The map shades one area
         public static let areasOne = L10n.tr("Weather", "weather.areaMap.areasOne", fallback: "1 area under an alert")
+        /// Location: WeatherAreaMapView.swift - Row opening the state picker, with what is chosen beside it
+        public static let areasToAsk = L10n.tr("Weather", "weather.areaMap.areasToAsk", fallback: "Areas to ask for")
         /// Location: WeatherAreaMapView.swift - Request button asking the radio for the map
         public static let ask = L10n.tr("Weather", "weather.areaMap.ask", fallback: "Ask for the map")
         /// Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area
@@ -7689,6 +7691,18 @@ public enum L10n {
         public static func askAreaFootnote(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.areaMap.askAreaFootnote", String(describing: p1), fallback: "One packet to %@, and the answer goes to everyone listening.")
         }
+        /// Location: WeatherAreaMapView.swift - Button asking the radio to send the packets that never arrived, %lld is two or more
+        public static func askParts(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.askParts", p1, fallback: "Ask for the %lld missing parts")
+        }
+        /// Location: WeatherAreaMapView.swift - The same button when one packet is missing
+        public static let askPartsOne = L10n.tr("Weather", "weather.areaMap.askPartsOne", fallback: "Ask for the missing part")
+        /// Location: WeatherAreaMapView.swift - The ask button when states are chosen. %@ is a list of state names
+        public static func askStates(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.askStates", String(describing: p1), fallback: "Ask for %@")
+        }
+        /// Location: WeatherAreaMapView.swift - The ask button when the whole country is chosen
+        public static let askWholeCountry = L10n.tr("Weather", "weather.areaMap.askWholeCountry", fallback: "Ask for the whole country")
         /// Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM"
         public static func asOf(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.areaMap.asOf", String(describing: p1), fallback: "Map as of %@")
@@ -7705,12 +7719,16 @@ public enum L10n {
         public static func cost(_ p1: Int) -> String {
           return L10n.tr("Weather", "weather.areaMap.cost", p1, fallback: "About %lld packets on the shared channel.")
         }
+        /// Location: WeatherAreaMapView.swift - The same when one packet is all it costs
+        public static let costOne = L10n.tr("Weather", "weather.areaMap.costOne", fallback: "About 1 packet on the shared channel.")
+        /// Location: WeatherAreaMapView.swift - What the held map covers when no part of it is national. %@ is a list of states
+        public static func covers(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.covers", String(describing: p1), fallback: "This map covers %@.")
+        }
         /// Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit
         public static let cut = L10n.tr("Weather", "weather.areaMap.cut", fallback: "Cut to fit — an area not shaded here may still be under an alert")
         /// Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself
         public static let empty = L10n.tr("Weather", "weather.areaMap.empty", fallback: "No map yet. Nothing asks for one on its own — a map costs the shared channel several packets, so it waits for your tap.")
-        /// Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area
-        public static let held = L10n.tr("Weather", "weather.areaMap.held", fallback: "What this phone holds")
         /// Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too
         public static let heldAll = L10n.tr("Weather", "weather.areaMap.heldAll", fallback: "Warnings, watches and advisories")
         /// Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for
@@ -7719,6 +7737,14 @@ public enum L10n {
         public static let legend = L10n.tr("Weather", "weather.areaMap.legend", fallback: "What the colors mean")
         /// Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing
         public static let list = L10n.tr("Weather", "weather.areaMap.list", fallback: "What's in this map")
+        /// Location: WeatherAreaMapView.swift - Two states in a list, all but the last pair. %1$@ and %2$@ are state names
+        public static func listJoin(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.listJoin", String(describing: p1), String(describing: p2), fallback: "%1$@, %2$@")
+        }
+        /// Location: WeatherAreaMapView.swift - The last pair of states in a list. %1$@ and %2$@ are state names
+        public static func listJoinAnd(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.listJoinAnd", String(describing: p1), String(describing: p2), fallback: "%1$@ and %2$@")
+        }
         /// Location: WeatherAreaMapView.swift - Accessibility label for the map itself
         public static let mapLabel = L10n.tr("Weather", "weather.areaMap.mapLabel", fallback: "Map of the country, with the areas under an alert shaded")
         /// Location: WeatherAlertsListView.swift - Row detail before any map has been received
@@ -7729,26 +7755,72 @@ public enum L10n {
         }
         /// Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for
         public static let noOutlineOne = L10n.tr("Weather", "weather.areaMap.noOutlineOne", fallback: "1 of them has no outline in this app and isn't shaded")
-        /// Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on
-        public static let onTheMap = L10n.tr("Weather", "weather.areaMap.onTheMap", fallback: "On the map")
+        /// Location: WeatherAreaMapView.swift - Under that: an unshaded state outside the map is unknown, not calm
+        public static let notAsked = L10n.tr("Weather", "weather.areaMap.notAsked", fallback: "The rest of the country was not asked for. A state outside this map is unknown, not clear.")
+        /// Location: WeatherAreaMapView.swift - The tapped area is on the map but no alert for it has arrived. %@ is a time like "1:20 PM"
+        public static func onMapAsOf(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.onMapAsOf", String(describing: p1), fallback: "On the map as of %@. Details not received.")
+        }
         /// Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap
         public static let `open` = L10n.tr("Weather", "weather.areaMap.open", fallback: "Open the full map")
-        /// Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent
-        public static func partial(_ p1: Int, _ p2: Int) -> String {
-          return L10n.tr("Weather", "weather.areaMap.partial", p1, p2, fallback: "%1$lld of %2$lld parts arrived — some of the country is missing")
+        /// Location: WeatherAreaMapView.swift - What that button costs, %lld is two or more
+        public static func packets(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.packets", p1, fallback: "%lld packets")
         }
+        /// Location: WeatherAreaMapView.swift - What that button costs when it is one packet
+        public static let packetsOne = L10n.tr("Weather", "weather.areaMap.packetsOne", fallback: "1 packet")
+        /// Location: WeatherAreaMapView.swift - When one part of the map was built, %@ is a time like "1:40 PM"
+        public static func partAsOf(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.partAsOf", String(describing: p1), fallback: "as of %@")
+        }
+        /// Location: WeatherAreaMapView.swift - Status card: a part every one of whose states a newer part now speaks for
+        public static let partReplaced = L10n.tr("Weather", "weather.areaMap.partReplaced", fallback: "A newer part above covers these states.")
+        /// Location: WeatherAreaMapView.swift - Packets of one part never arrived. %1$lld is how many arrived, %2$lld how many were sent
+        public static func partsArrived(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.partsArrived", p1, p2, fallback: "%1$lld of %2$lld parts arrived")
+        }
+        /// Location: WeatherAreaMapView.swift - Status card: a scoped part whose first packet, which carries the states, never arrived
+        public static let partStatesUnknown = L10n.tr("Weather", "weather.areaMap.partStatesUnknown", fallback: "Part of the country, states not known")
+        /// Location: WeatherAreaMapView.swift - Closes the state picker where it is presented rather than pushed (the web client)
+        public static let pickerDone = L10n.tr("Weather", "weather.areaMap.pickerDone", fallback: "Done")
+        /// Location: WeatherAreaMapView.swift - Section header over the rest of the states
+        public static let pickerEveryState = L10n.tr("Weather", "weather.areaMap.pickerEveryState", fallback: "Every state")
+        /// Location: WeatherAreaMapView.swift - The search in the state picker found nothing
+        public static let pickerNoMatches = L10n.tr("Weather", "weather.areaMap.pickerNoMatches", fallback: "No states match that search.")
+        /// Location: WeatherAreaMapView.swift - Search field prompt in the state picker
+        public static let pickerSearch = L10n.tr("Weather", "weather.areaMap.pickerSearch", fallback: "Search states")
+        /// Location: WeatherAreaMapView.swift - How many states are chosen, %lld is one or more
+        public static func pickerSelected(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.pickerSelected", p1, fallback: "%lld selected")
+        }
+        /// Location: WeatherAreaMapView.swift - First row of the state picker
+        public static let pickerWholeCountry = L10n.tr("Weather", "weather.areaMap.pickerWholeCountry", fallback: "The whole country")
+        /// Location: WeatherAreaMapView.swift - Section header over the state the page's place is in
+        public static let pickerYourState = L10n.tr("Weather", "weather.areaMap.pickerYourState", fallback: "Where this page is")
+        /// Location: WeatherAreaMapView.swift - Status card: the national part, where a newer scoped part covers some states
+        public static let restOfCountry = L10n.tr("Weather", "weather.areaMap.restOfCountry", fallback: "The rest of the country")
         /// Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover
         public static let scope = L10n.tr("Weather", "weather.areaMap.scope", fallback: "What to map")
         /// Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime
         public static let scopeAll = L10n.tr("Weather", "weather.areaMap.scopeAll", fallback: "Also advisories")
         /// Location: WeatherAreaMapView.swift - The narrower scope, which is the default
         public static let scopeWarnings = L10n.tr("Weather", "weather.areaMap.scopeWarnings", fallback: "Warnings and watches")
+        /// Location: WeatherAreaMapView.swift - Too many states to name one by one, %lld is four or more
+        public static func stateCount(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.stateCount", p1, fallback: "%lld states")
+        }
         /// Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name
         public static func tapHint(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.areaMap.tapHint", String(describing: p1), fallback: "Tap a shaded area to ask %@ what it is.")
         }
         /// Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it
-        public static let title = L10n.tr("Weather", "weather.areaMap.title", fallback: "National alert map")
+        public static let title = L10n.tr("Weather", "weather.areaMap.title", fallback: "Alert map")
+        /// Location: WeatherAreaMapView.swift - Said before the tap when the selection is wider than one request can name. %lld is the limit
+        public static func tooManyStates(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.tooManyStates", p1, fallback: "More than %lld states asks for the whole country.")
+        }
+        /// Location: WeatherAreaMapView.swift - Status card: the national part, where nothing newer covers any state
+        public static let wholeCountry = L10n.tr("Weather", "weather.areaMap.wholeCountry", fallback: "The whole country")
       }
       public enum Banner {
         /// Location: WeatherPlacePageView.swift - Banner button that offers to add #meshwx
@@ -7941,6 +8013,14 @@ public enum L10n {
         public static let radarAndGauge = L10n.tr("Weather", "weather.floodSourceTag.radarAndGauge", fallback: "radar and gauge")
       }
       public enum Forecast {
+        /// Location: Asks for a forecast at the place's own coordinate. %@ is the radio's name. On iOS the page's Update sends it and the card carries no button of its own
+        public static func askNearby(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.askNearby", String(describing: p1), fallback: "Ask %@ for a forecast here")
+        }
+        /// Location: WeatherForecastSection.swift - The forecast is for a point the radio picked, which this app cannot name. %@ is the radio's name
+        public static func chosenByBot(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.forecast.chosenByBot", String(describing: p1), fallback: "Forecast point chosen by %@")
+        }
         /// Location: WeatherCopy.swift - High only, %@ is a temperature
         public static func high(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.forecast.high", String(describing: p1), fallback: "High %@")
@@ -7964,10 +8044,6 @@ public enum L10n {
         /// Location: WeatherCopy.swift - Nothing held, and the nearest point is over 10 km away. %1$@ is the place, %2$@ the point's name, %3$@ its distance like "60 km"
         public static func missingFar(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
           return L10n.tr("Weather", "weather.forecast.missingFar", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "No forecast for %1$@ yet. The nearest forecast point is %2$@, %3$@.")
-        }
-        /// Location: WeatherCopy.swift - No forecast point close enough to speak for the place, %@ is the place
-        public static func noPoint(_ p1: Any) -> String {
-          return L10n.tr("Weather", "weather.forecast.noPoint", String(describing: p1), fallback: "No forecast point near %@.")
         }
         /// Location: WeatherCopy.swift - Chance of rain, %lld is percent
         public static func rain(_ p1: Int) -> String {
@@ -8225,6 +8301,12 @@ public enum L10n {
         public static let noAlertList = L10n.tr("Weather", "weather.radioRow.noAlertList", fallback: "no alert list yet")
       }
       public enum Reports {
+        /// Location: WeatherReportsView.swift - Button asking the radio to send the chunks of a report that never arrived, %lld is two or more
+        public static func askParts(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.reports.askParts", p1, fallback: "Ask for the %lld missing parts")
+        }
+        /// Location: WeatherReportsView.swift - The same button when one chunk is missing
+        public static let askPartsOne = L10n.tr("Weather", "weather.reports.askPartsOne", fallback: "Ask for the missing part")
         /// Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot
         public static let cut = L10n.tr("Weather", "weather.reports.cut", fallback: "Shortened for radio")
         /// Location: WeatherReportsView.swift - Marker where a part of a text never arrived
@@ -8419,6 +8501,14 @@ public enum L10n {
         public static let areaMap = L10n.tr("Weather", "weather.requestName.areaMap", fallback: "National alert map")
         /// Location: WeatherCopy.swift - Name of a request for the national alert map including advisories
         public static let areaMapAll = L10n.tr("Weather", "weather.requestName.areaMapAll", fallback: "National alert map · with advisories")
+        /// Location: WeatherCopy.swift - Name of a request for an alert map of some states. %@ is a list of state names
+        public static func areaMapStates(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.areaMapStates", String(describing: p1), fallback: "Alert map · %@")
+        }
+        /// Location: WeatherCopy.swift - The same, including advisories. %@ is a list of state names
+        public static func areaMapStatesAll(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.areaMapStatesAll", String(describing: p1), fallback: "Alert map · %@ · with advisories")
+        }
         /// Location: WeatherCopy.swift - Name of a request for warnings naming one area, %@ is a county or zone code like TXZ192
         public static func areaWarnings(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.requestName.areaWarnings", String(describing: p1), fallback: "Alerts for %@")
@@ -8429,8 +8519,18 @@ public enum L10n {
         public static func forecast(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.requestName.forecast", String(describing: p1), fallback: "Forecast for %@")
         }
+        /// Location: WeatherCopy.swift - Name of a request for a forecast at a coordinate. %@ is the coordinate that was asked about
+        public static func forecastAt(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.forecastAt", String(describing: p1), fallback: "Forecast for %@")
+        }
         /// Location: WeatherCopy.swift - Name of a request for the coded current conditions
         public static let metar = L10n.tr("Weather", "weather.requestName.metar", fallback: "METAR")
+        /// Location: WeatherCopy.swift - Name of a request for the packets of an answer that never arrived. %@ is what the answer was
+        public static func parts(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.requestName.parts", String(describing: p1), fallback: "Missing parts of %@")
+        }
+        /// Location: WeatherCopy.swift - The same, for an answer this app cannot name
+        public static let partsGeneric = L10n.tr("Weather", "weather.requestName.partsGeneric", fallback: "Missing parts")
         /// Location: WeatherCopy.swift - Name of a request for the hourly station readings
         public static let readings = L10n.tr("Weather", "weather.requestName.readings", fallback: "Station readings")
         /// Location: WeatherCopy.swift - Name of a request for one station, %@ is an airport code like KAUS
@@ -8449,12 +8549,18 @@ public enum L10n {
         }
       }
       public enum Requests {
+        /// Location: WeatherRadioView.swift - Row opening the whole request log, %lld is how many it holds
+        public static func all(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.requests.all", p1, fallback: "All requests (%lld)")
+        }
+        /// Location: WeatherRadioView.swift - Title of that screen
+        public static let allTitle = L10n.tr("Weather", "weather.requests.allTitle", fallback: "All requests")
         /// Location: WeatherRadioView.swift - How a request ended: the answer arrived
         public static let answered = L10n.tr("Weather", "weather.requests.answered", fallback: "answered")
         /// Location: WeatherRadioView.swift - Footer under the requests this phone sent
         public static let footer = L10n.tr("Weather", "weather.requests.footer", fallback: "What this phone asked for. Every answer was broadcast, so everyone listening got it too.")
-        /// Location: WeatherRadioView.swift - Section header for the requests this phone sent
-        public static let header = L10n.tr("Weather", "weather.requests.header", fallback: "Your requests")
+        /// Location: WeatherRadioView.swift - Header of this phone's own requests; the newest three are listed
+        public static let newest = L10n.tr("Weather", "weather.requests.newest", fallback: "Your requests")
         /// Location: WeatherRadioView.swift - How a request ended: nothing came back
         public static let noAnswer = L10n.tr("Weather", "weather.requests.noAnswer", fallback: "no answer")
         /// Location: WeatherRadioView.swift - Shown when this phone has asked for nothing
@@ -8611,6 +8717,172 @@ public enum L10n {
         public static let possible = L10n.tr("Weather", "weather.tornadoTag.possible", fallback: "possible")
         /// Location: WeatherFormatting.swift - Tornado tag value
         public static let radarIndicated = L10n.tr("Weather", "weather.tornadoTag.radarIndicated", fallback: "radar indicated")
+      }
+      public enum Traffic {
+        /// Location: WeatherTrafficView.swift - Header over the datagram's own facts
+        public static let about = L10n.tr("Weather", "weather.traffic.about", fallback: "This datagram")
+        /// Location: WeatherTrafficView.swift - The datagram was drained from your radio's queue, not heard live
+        public static let backlog = L10n.tr("Weather", "weather.traffic.backlog", fallback: "from the radio's queue")
+        /// Location: WeatherTrafficView.swift - Payload length in bytes, %lld is the number
+        public static func bytes(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.traffic.bytes", p1, fallback: "%lld B")
+        }
+        /// Location: WeatherTrafficView.swift - Empties the log
+        public static let clear = L10n.tr("Weather", "weather.traffic.clear", fallback: "Clear")
+        /// Location: WeatherTrafficView.swift - Body of that confirmation, %lld is how many rows go
+        public static func clearMessage(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.traffic.clearMessage", p1, fallback: "This removes the %lld rows this phone kept of what went past on #meshwx. The weather it has stored is not touched.")
+        }
+        /// Location: WeatherTrafficView.swift - Title of the confirmation for that
+        public static let clearTitle = L10n.tr("Weather", "weather.traffic.clearTitle", fallback: "Clear the channel log?")
+        /// Location: WeatherTrafficView.swift - The app had already applied this message
+        public static let duplicate = L10n.tr("Weather", "weather.traffic.duplicate", fallback: "duplicate")
+        /// Location: WeatherTrafficView.swift - Shown while the log is empty
+        public static let empty = L10n.tr("Weather", "weather.traffic.empty", fallback: "Nothing heard on this channel yet.")
+        /// Location: WeatherTrafficView.swift - Header over what the decoded message says
+        public static let fields = L10n.tr("Weather", "weather.traffic.fields", fallback: "What it says")
+        /// Location: WeatherTrafficView.swift - The packet carried no path at all: it was flooded to the mesh
+        public static let flood = L10n.tr("Weather", "weather.traffic.flood", fallback: "flooded")
+        /// Location: WeatherTrafficView.swift - Header over the raw payload
+        public static let hex = L10n.tr("Weather", "weather.traffic.hex", fallback: "Bytes")
+        /// Location: WeatherTrafficView.swift - How many repeaters the packet passed, %lld is two or more
+        public static func hops(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.traffic.hops", p1, fallback: "%lld hops")
+        }
+        /// Location: WeatherTrafficView.swift - The packet passed one repeater
+        public static let hopsOne = L10n.tr("Weather", "weather.traffic.hopsOne", fallback: "1 hop")
+        /// Location: WeatherTrafficView.swift - On the detail screen of a datagram the codec could not read
+        public static let notDecoded = L10n.tr("Weather", "weather.traffic.notDecoded", fallback: "This app could not read this datagram.")
+        /// Location: WeatherTrafficView.swift - Shown in place of the sender for a datagram this phone put on the air
+        public static let sent = L10n.tr("Weather", "weather.traffic.sent", fallback: "Sent from this device")
+        /// Location: WeatherTrafficView.swift - The radio's counter in a bubble's facts line, %lld is the number
+        public static func seq(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.traffic.seq", p1, fallback: "seq %lld")
+        }
+        /// Location: WeatherTrafficView.swift - Signal-to-noise in a bubble's facts line, %@ is a number like "12"
+        public static func snr(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.traffic.snr", String(describing: p1), fallback: "SNR %@ dB")
+        }
+        /// Location: WeatherTrafficView.swift - Under that title
+        public static let subtitle = L10n.tr("Weather", "weather.traffic.subtitle", fallback: "Everything heard on #meshwx, newest at the bottom.")
+        /// Location: WeatherTrafficView.swift - Row on the radio page, and the title of the timeline it opens
+        public static let title = L10n.tr("Weather", "weather.traffic.title", fallback: "Channel traffic")
+        /// Location: WeatherTrafficView.swift - Name over a datagram whose header could not be read far enough to name a radio
+        public static let unknownSender = L10n.tr("Weather", "weather.traffic.unknownSender", fallback: "Unknown sender")
+        /// Location: WeatherTrafficView.swift - Name over a request this phone sent
+        public static let you = L10n.tr("Weather", "weather.traffic.you", fallback: "This phone")
+        public enum CancelReason {
+          /// Location: WeatherTrafficView.swift - Why an alert ended (spec cancel reason 0)
+          public static let cancelled = L10n.tr("Weather", "weather.traffic.cancelReason.cancelled", fallback: "cancelled")
+          /// Location: WeatherTrafficView.swift - Cancel reason 1
+          public static let expiredEarly = L10n.tr("Weather", "weather.traffic.cancelReason.expiredEarly", fallback: "expired early")
+          /// Location: WeatherTrafficView.swift - Cancel reason 2: a stronger alert follows, so nothing improved
+          public static let upgraded = L10n.tr("Weather", "weather.traffic.cancelReason.upgraded", fallback: "upgraded")
+        }
+        public enum Detail {
+          /// Location: WeatherTrafficView.swift - The map packet's sweep carries advisories as well as warnings and watches
+          public static let advisories = L10n.tr("Weather", "weather.traffic.detail.advisories", fallback: "with advisories")
+          /// Location: WeatherTrafficView.swift - How many alerts a list named, %lld is two or more
+          public static func alerts(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.traffic.detail.alerts", p1, fallback: "%lld alerts")
+          }
+          /// Location: WeatherTrafficView.swift - A list naming one alert
+          public static let alertsOne = L10n.tr("Weather", "weather.traffic.detail.alertsOne", fallback: "1 alert")
+          /// Location: WeatherTrafficView.swift - How many areas one map packet shaded, %lld is two or more
+          public static func areas(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.traffic.detail.areas", p1, fallback: "%lld areas")
+          }
+          /// Location: WeatherTrafficView.swift - One map packet shading one area
+          public static let areasOne = L10n.tr("Weather", "weather.traffic.detail.areasOne", fallback: "1 area")
+          /// Location: WeatherTrafficView.swift - A forecast for a point the radio picked, which this app's tables cannot name
+          public static let botPoint = L10n.tr("Weather", "weather.traffic.detail.botPoint", fallback: "point chosen by the bot")
+          /// Location: WeatherTrafficView.swift - The radio dropped entries or text to make the message fit
+          public static let cut = L10n.tr("Weather", "weather.traffic.detail.cut", fallback: "cut to fit")
+          /// Location: WeatherTrafficView.swift - A map packet belonging to a sweep of the whole country
+          public static let national = L10n.tr("Weather", "weather.traffic.detail.national", fallback: "the whole country")
+          /// Location: WeatherTrafficView.swift - How many Weather Service offices a coverage statement named, %lld is two or more
+          public static func offices(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.traffic.detail.offices", p1, fallback: "%lld offices")
+          }
+          /// Location: WeatherTrafficView.swift - A coverage statement naming one office
+          public static let officesOne = L10n.tr("Weather", "weather.traffic.detail.officesOne", fallback: "1 office")
+          /// Location: WeatherTrafficView.swift - Which packet of a multi-packet answer this is. %1$lld is its number, %2$lld how many there are
+          public static func part(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Weather", "weather.traffic.detail.part", p1, p2, fallback: "part %1$lld of %2$lld")
+          }
+          /// Location: WeatherTrafficView.swift - A map packet of a sweep covering some states, where this packet does not carry which
+          public static let scopedUnknown = L10n.tr("Weather", "weather.traffic.detail.scopedUnknown", fallback: "scoped, states not in this packet")
+          /// Location: WeatherTrafficView.swift - How many stations a readings message carried, %lld is two or more
+          public static func stations(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.traffic.detail.stations", p1, fallback: "%lld stations")
+          }
+          /// Location: WeatherTrafficView.swift - A readings message for one station
+          public static let stationsOne = L10n.tr("Weather", "weather.traffic.detail.stationsOne", fallback: "1 station")
+        }
+        public enum Field {
+          /// Location: WeatherTrafficView.swift - The MeshCore data type the datagram was sent under
+          public static let dataType = L10n.tr("Weather", "weather.traffic.field.dataType", fallback: "Data type")
+          /// Location: WeatherTrafficView.swift - Which radio sent it
+          public static let from = L10n.tr("Weather", "weather.traffic.field.from", fallback: "From")
+          /// Location: WeatherTrafficView.swift - How many repeaters it passed through
+          public static let hops = L10n.tr("Weather", "weather.traffic.field.hops", fallback: "Hops")
+          /// Location: WeatherTrafficView.swift - The radio's own counter for this message
+          public static let seq = L10n.tr("Weather", "weather.traffic.field.seq", fallback: "Sequence")
+          /// Location: WeatherTrafficView.swift - Signal-to-noise of the received packet
+          public static let signal = L10n.tr("Weather", "weather.traffic.field.signal", fallback: "Signal")
+          /// Location: WeatherTrafficView.swift - How many bytes of airtime it took
+          public static let size = L10n.tr("Weather", "weather.traffic.field.size", fallback: "Size")
+          /// Location: WeatherTrafficView.swift - Which channel slot it arrived on
+          public static let slot = L10n.tr("Weather", "weather.traffic.field.slot", fallback: "Channel slot")
+          /// Location: WeatherTrafficView.swift - The message type nibble the header carries
+          public static let type = L10n.tr("Weather", "weather.traffic.field.type", fallback: "Message type")
+          /// Location: WeatherTrafficView.swift - When this phone heard or sent it
+          public static let when = L10n.tr("Weather", "weather.traffic.field.when", fallback: "Time")
+        }
+        public enum Reason {
+          /// Location: WeatherTrafficView.swift - Reason 3
+          public static let botError = L10n.tr("Weather", "weather.traffic.reason.botError", fallback: "bot error")
+          /// Location: WeatherTrafficView.swift - Why the radio could not serve a request (spec reason 0)
+          public static let noData = L10n.tr("Weather", "weather.traffic.reason.noData", fallback: "no data")
+          /// Location: WeatherTrafficView.swift - Any other reason
+          public static let other = L10n.tr("Weather", "weather.traffic.reason.other", fallback: "no reason given")
+          /// Location: WeatherTrafficView.swift - Reason 4
+          public static let rateLimited = L10n.tr("Weather", "weather.traffic.reason.rateLimited", fallback: "asked too recently")
+          /// Location: WeatherTrafficView.swift - Reason 1
+          public static let unknownLocation = L10n.tr("Weather", "weather.traffic.reason.unknownLocation", fallback: "unknown location")
+          /// Location: WeatherTrafficView.swift - Reason 2
+          public static let unsupported = L10n.tr("Weather", "weather.traffic.reason.unsupported", fallback: "not supported")
+        }
+        public enum Title {
+          /// Location: WeatherTrafficView.swift - A bubble carrying one packet of an alert map
+          public static let areaSweep = L10n.tr("Weather", "weather.traffic.title.areaSweep", fallback: "Alert map")
+          /// Location: WeatherTrafficView.swift - A bubble saying an alert has ended
+          public static let cancel = L10n.tr("Weather", "weather.traffic.title.cancel", fallback: "Alert ended")
+          /// Location: WeatherTrafficView.swift - A bubble carrying the radio's statement of its area
+          public static let coverage = L10n.tr("Weather", "weather.traffic.title.coverage", fallback: "What it covers")
+          /// Location: WeatherTrafficView.swift - A bubble carrying the list of active alerts
+          public static let digest = L10n.tr("Weather", "weather.traffic.title.digest", fallback: "Alert list")
+          /// Location: WeatherTrafficView.swift - A bubble carrying a forecast
+          public static let forecast = L10n.tr("Weather", "weather.traffic.title.forecast", fallback: "Forecast")
+          /// Location: WeatherTrafficView.swift - A bubble saying the radio cannot serve a request
+          public static let notAvailable = L10n.tr("Weather", "weather.traffic.title.notAvailable", fallback: "Not available")
+          /// Location: WeatherTrafficView.swift - A bubble carrying station readings
+          public static let observations = L10n.tr("Weather", "weather.traffic.title.observations", fallback: "Observations")
+          /// Location: WeatherTrafficView.swift - A bubble of a message type this app does not know
+          public static let otherData = L10n.tr("Weather", "weather.traffic.title.otherData", fallback: "Other data")
+          /// Location: WeatherTrafficView.swift - A bubble carrying somebody's request. %@ is the first bytes of their key
+          public static func request(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.traffic.title.request", String(describing: p1), fallback: "Request from %@")
+          }
+          /// Location: WeatherTrafficView.swift - The same bubble for a request this phone sent
+          public static let requestSent = L10n.tr("Weather", "weather.traffic.title.requestSent", fallback: "Request sent")
+          /// Location: WeatherTrafficView.swift - A bubble carrying one chunk of a text reply
+          public static let text = L10n.tr("Weather", "weather.traffic.title.text", fallback: "Text report")
+          /// Location: WeatherTrafficView.swift - A bubble whose bytes the codec could not read
+          public static let unreadable = L10n.tr("Weather", "weather.traffic.title.unreadable", fallback: "Unreadable")
+          /// Location: WeatherTrafficView.swift - A bubble carrying one alert
+          public static let warning = L10n.tr("Weather", "weather.traffic.title.warning", fallback: "Alert")
+        }
       }
       public enum Unit {
         /// Location: WeatherFormatting.swift - Duration in days

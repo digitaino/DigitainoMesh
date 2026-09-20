@@ -436,9 +436,6 @@
 /* Location: WeatherCopy.swift - Nothing held, and the nearest point is over 10 km away. %1$@ is the place, %2$@ the point's name, %3$@ its distance like "60 km" */
 "weather.forecast.missingFar" = "Прогнозу для %1$@ ще немає. Найближча точка прогнозу — %2$@, %3$@.";
 
-/* Location: WeatherCopy.swift - No forecast point close enough to speak for the place, %@ is the place */
-"weather.forecast.noPoint" = "Поруч із %@ немає точки прогнозу.";
-
 /* Location: WeatherForecastSection.swift - Accessibility summary, %lld is how many forecast rows */
 "weather.forecast.accessibility.rows" = "Записів: %lld";
 
@@ -991,8 +988,8 @@
 
 // MARK: - Your requests
 
-/* Location: WeatherRadioView.swift - Section header for the requests this phone sent */
-"weather.requests.header" = "Ваші запити";
+/* Location: WeatherRadioView.swift - Header of this phone's own requests; the newest three are listed */
+"weather.requests.newest" = "Ваші запити";
 
 /* Location: WeatherRadioView.swift - Footer under the requests this phone sent */
 "weather.requests.footer" = "Про що просив цей телефон. Кожну відповідь транслювали, тож її отримали всі, хто слухав.";
@@ -1182,19 +1179,13 @@
 // MARK: - National alert map
 
 /* Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it */
-"weather.areaMap.title" = "Карта попереджень по країні";
+"weather.areaMap.title" = "Карта попереджень";
 
 /* Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap */
 "weather.areaMap.open" = "Відкрити карту повністю";
 
 /* Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing */
 "weather.areaMap.list" = "Що на цій карті";
-
-/* Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on */
-"weather.areaMap.onTheMap" = "На карті";
-
-/* Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area */
-"weather.areaMap.held" = "Що має цей телефон";
 
 /* Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area */
 "weather.areaMap.askArea" = "Запитати про цей район";
@@ -1216,9 +1207,6 @@
 
 /* Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM" */
 "weather.areaMap.asOf" = "Карта станом на %@";
-
-/* Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent */
-"weather.areaMap.partial" = "Надійшло %1$lld з %2$lld частин — частини країни бракує";
 
 /* Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit */
 "weather.areaMap.cut" = "Урізана, щоб умістилася: незафарбована тут зона все одно може бути під попередженням";
@@ -1259,6 +1247,9 @@
 /* Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets */
 "weather.areaMap.cost" = "Близько %lld пакетів у спільному каналі.";
 
+/* Location: WeatherAreaMapView.swift - The same when one packet is all it costs */
+"weather.areaMap.costOne" = "Близько 1 пакета у спільному каналі.";
+
 /* Location: WeatherAreaMapView.swift - Header over the colors used on the map */
 "weather.areaMap.legend" = "Що означають кольори";
 
@@ -1276,3 +1267,327 @@
 
 /* Location: WeatherCopy.swift - Name of a request for the national alert map including advisories */
 "weather.requestName.areaMapAll" = "Карта попереджень по країні · з повідомленнями";
+
+// MARK: - Alert map, revision 10
+
+/* Location: WeatherAreaMapView.swift - Status card: the national part, where a newer scoped part covers some states */
+"weather.areaMap.restOfCountry" = "Решта країни";
+
+/* Location: WeatherAreaMapView.swift - Status card: the national part, where nothing newer covers any state */
+"weather.areaMap.wholeCountry" = "Уся країна";
+
+/* Location: WeatherAreaMapView.swift - Status card: a scoped part whose first packet, which carries the states, never arrived */
+"weather.areaMap.partStatesUnknown" = "Частина країни, штати невідомі";
+
+/* Location: WeatherAreaMapView.swift - Status card: a part every one of whose states a newer part now speaks for */
+"weather.areaMap.partReplaced" = "Новіша частина вище охоплює ці штати.";
+
+/* Location: WeatherAreaMapView.swift - When one part of the map was built, %@ is a time like "1:40 PM" */
+"weather.areaMap.partAsOf" = "дані станом на %@";
+
+/* Location: WeatherAreaMapView.swift - Packets of one part never arrived. %1$lld is how many arrived, %2$lld how many were sent */
+"weather.areaMap.partsArrived" = "Надійшло %1$lld з %2$lld частин";
+
+/* Location: WeatherAreaMapView.swift - Button asking the radio to send the packets that never arrived, %lld is two or more */
+"weather.areaMap.askParts" = "Запитати частини, яких бракує: %lld";
+
+/* Location: WeatherAreaMapView.swift - The same button when one packet is missing */
+"weather.areaMap.askPartsOne" = "Запитати частину, якої бракує";
+
+/* Location: WeatherAreaMapView.swift - What that button costs, %lld is two or more */
+"weather.areaMap.packets" = "Пакетів: %lld";
+
+/* Location: WeatherAreaMapView.swift - What that button costs when it is one packet */
+"weather.areaMap.packetsOne" = "1 пакет";
+
+/* Location: WeatherAreaMapView.swift - Too many states to name one by one, %lld is four or more */
+"weather.areaMap.stateCount" = "Штатів: %lld";
+
+/* Location: WeatherAreaMapView.swift - Two states in a list, all but the last pair. %1$@ and %2$@ are state names */
+"weather.areaMap.listJoin" = "%1$@, %2$@";
+
+/* Location: WeatherAreaMapView.swift - The last pair of states in a list. %1$@ and %2$@ are state names */
+"weather.areaMap.listJoinAnd" = "%1$@ і %2$@";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when no part of it is national. %@ is a list of states */
+"weather.areaMap.covers" = "Ця карта охоплює: %@.";
+
+/* Location: WeatherAreaMapView.swift - Under that: an unshaded state outside the map is unknown, not calm */
+"weather.areaMap.notAsked" = "Решту країни не запитували. Штат поза цією картою невідомий, а не вільний від попереджень.";
+
+/* Location: WeatherAreaMapView.swift - Row opening the state picker, with what is chosen beside it */
+"weather.areaMap.areasToAsk" = "Які райони запитати";
+
+/* Location: WeatherAreaMapView.swift - The ask button when states are chosen. %@ is a list of state names */
+"weather.areaMap.askStates" = "Запитати: %@";
+
+/* Location: WeatherAreaMapView.swift - The ask button when the whole country is chosen */
+"weather.areaMap.askWholeCountry" = "Запитати всю країну";
+
+/* Location: WeatherAreaMapView.swift - Said before the tap when the selection is wider than one request can name. %lld is the limit */
+"weather.areaMap.tooManyStates" = "Більше %lld штатів — це запит усієї країни.";
+
+/* Location: WeatherAreaMapView.swift - The tapped area is on the map but no alert for it has arrived. %@ is a time like "1:20 PM" */
+"weather.areaMap.onMapAsOf" = "На карті, дані станом на %@. Подробиці не отримано.";
+
+/* Location: WeatherAreaMapView.swift - First row of the state picker */
+"weather.areaMap.pickerWholeCountry" = "Уся країна";
+
+/* Location: WeatherAreaMapView.swift - Section header over the state the page's place is in */
+"weather.areaMap.pickerYourState" = "Де розташована ця сторінка";
+
+/* Location: WeatherAreaMapView.swift - Section header over the rest of the states */
+"weather.areaMap.pickerEveryState" = "Усі штати";
+
+/* Location: WeatherAreaMapView.swift - Search field prompt in the state picker */
+"weather.areaMap.pickerSearch" = "Пошук штатів";
+
+/* Location: WeatherAreaMapView.swift - How many states are chosen, %lld is one or more */
+"weather.areaMap.pickerSelected" = "Вибрано: %lld";
+
+/* Location: WeatherAreaMapView.swift - The search in the state picker found nothing */
+"weather.areaMap.pickerNoMatches" = "Немає штатів, що відповідають цьому запиту.";
+
+/* Location: WeatherAreaMapView.swift - Closes the state picker where it is presented rather than pushed (the web client) */
+"weather.areaMap.pickerDone" = "Готово";
+
+// MARK: - Text reports: the missing chunks
+
+/* Location: WeatherReportsView.swift - Button asking the radio to send the chunks of a report that never arrived, %lld is two or more */
+"weather.reports.askParts" = "Запитати частини, яких бракує: %lld";
+
+/* Location: WeatherReportsView.swift - The same button when one chunk is missing */
+"weather.reports.askPartsOne" = "Запитати частину, якої бракує";
+
+// MARK: - Forecast, revision 10
+
+/* Location: WeatherForecastSection.swift - The forecast is for a point the radio picked, which this app cannot name. %@ is the radio's name */
+"weather.forecast.chosenByBot" = "Точку прогнозу вибрав %@";
+
+/* Location: Asks for a forecast at the place's own coordinate. %@ is the radio's name. On iOS the page's Update sends it and the card carries no button of its own */
+"weather.forecast.askNearby" = "Запитати в %@ прогноз для цього місця";
+
+// MARK: - Request names, revision 10
+
+/* Location: WeatherCopy.swift - Name of a request for the packets of an answer that never arrived. %@ is what the answer was */
+"weather.requestName.parts" = "Частини, яких бракує: %@";
+
+/* Location: WeatherCopy.swift - The same, for an answer this app cannot name */
+"weather.requestName.partsGeneric" = "Частини, яких бракує";
+
+/* Location: WeatherCopy.swift - Name of a request for a forecast at a coordinate. %@ is the coordinate that was asked about */
+"weather.requestName.forecastAt" = "Прогноз для %@";
+
+/* Location: WeatherCopy.swift - Name of a request for an alert map of some states. %@ is a list of state names */
+"weather.requestName.areaMapStates" = "Карта попереджень · %@";
+
+/* Location: WeatherCopy.swift - The same, including advisories. %@ is a list of state names */
+"weather.requestName.areaMapStatesAll" = "Карта попереджень · %@ · з повідомленнями";
+
+// MARK: - Your requests
+
+/* Location: WeatherRadioView.swift - Row opening the whole request log, %lld is how many it holds */
+"weather.requests.all" = "Усі запити (%lld)";
+
+/* Location: WeatherRadioView.swift - Title of that screen */
+"weather.requests.allTitle" = "Усі запити";
+
+// MARK: - Channel traffic
+
+/* Location: WeatherTrafficView.swift - Row on the radio page, and the title of the timeline it opens */
+"weather.traffic.title" = "Трафік каналу";
+
+/* Location: WeatherTrafficView.swift - Under that title */
+"weather.traffic.subtitle" = "Усе, що чути на #meshwx, найновіше внизу.";
+
+/* Location: WeatherTrafficView.swift - Shown while the log is empty */
+"weather.traffic.empty" = "На цьому каналі поки нічого не чути.";
+
+/* Location: WeatherTrafficView.swift - Empties the log */
+"weather.traffic.clear" = "Очистити";
+
+/* Location: WeatherTrafficView.swift - Title of the confirmation for that */
+"weather.traffic.clearTitle" = "Очистити журнал каналу?";
+
+/* Location: WeatherTrafficView.swift - Body of that confirmation, %lld is how many rows go */
+"weather.traffic.clearMessage" = "Це вилучить рядки, які телефон зберіг про трафік на #meshwx: %lld. Збережена погода не змінюється.";
+
+/* Location: WeatherTrafficView.swift - Name over a request this phone sent */
+"weather.traffic.you" = "Цей телефон";
+
+/* Location: WeatherTrafficView.swift - Name over a datagram whose header could not be read far enough to name a radio */
+"weather.traffic.unknownSender" = "Невідомий відправник";
+
+/* Location: WeatherTrafficView.swift - On the detail screen of a datagram the codec could not read */
+"weather.traffic.notDecoded" = "Цей застосунок не зміг прочитати цю дейтаграму.";
+
+/* Location: WeatherTrafficView.swift - Header over the datagram's own facts */
+"weather.traffic.about" = "Ця дейтаграма";
+
+/* Location: WeatherTrafficView.swift - When this phone heard or sent it */
+"weather.traffic.field.when" = "Час";
+
+/* Location: WeatherTrafficView.swift - Which radio sent it */
+"weather.traffic.field.from" = "Від";
+
+/* Location: WeatherTrafficView.swift - How many bytes of airtime it took */
+"weather.traffic.field.size" = "Розмір";
+
+/* Location: WeatherTrafficView.swift - The radio's own counter for this message */
+"weather.traffic.field.seq" = "Послідовність";
+
+/* Location: WeatherTrafficView.swift - Signal-to-noise of the received packet */
+"weather.traffic.field.signal" = "Сигнал";
+
+/* Location: WeatherTrafficView.swift - How many repeaters it passed through */
+"weather.traffic.field.hops" = "Переходи";
+
+/* Location: WeatherTrafficView.swift - Which channel slot it arrived on */
+"weather.traffic.field.slot" = "Слот каналу";
+
+/* Location: WeatherTrafficView.swift - The message type nibble the header carries */
+"weather.traffic.field.type" = "Тип повідомлення";
+
+/* Location: WeatherTrafficView.swift - The MeshCore data type the datagram was sent under */
+"weather.traffic.field.dataType" = "Тип даних";
+
+/* Location: WeatherTrafficView.swift - The datagram was drained from your radio's queue, not heard live */
+"weather.traffic.backlog" = "з черги рації";
+
+/* Location: WeatherTrafficView.swift - The app had already applied this message */
+"weather.traffic.duplicate" = "дублікат";
+
+/* Location: WeatherTrafficView.swift - Payload length in bytes, %lld is the number */
+"weather.traffic.bytes" = "%lld B";
+
+/* Location: WeatherTrafficView.swift - The radio's counter in a bubble's facts line, %lld is the number */
+"weather.traffic.seq" = "посл. %lld";
+
+/* Location: WeatherTrafficView.swift - Signal-to-noise in a bubble's facts line, %@ is a number like "12" */
+"weather.traffic.snr" = "SNR %@ dB";
+
+/* Location: WeatherTrafficView.swift - How many repeaters the packet passed, %lld is two or more */
+"weather.traffic.hops" = "Переходів: %lld";
+
+/* Location: WeatherTrafficView.swift - The packet passed one repeater */
+"weather.traffic.hopsOne" = "1 перехід";
+
+/* Location: WeatherTrafficView.swift - The packet carried no path at all: it was flooded to the mesh */
+"weather.traffic.flood" = "лавинна розсилка";
+
+/* Location: WeatherTrafficView.swift - Header over what the decoded message says */
+"weather.traffic.fields" = "Що в ній";
+
+/* Location: WeatherTrafficView.swift - Header over the raw payload */
+"weather.traffic.hex" = "Байти";
+
+/* Location: WeatherTrafficView.swift - Shown in place of the sender for a datagram this phone put on the air */
+"weather.traffic.sent" = "Надіслано з цього пристрою";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one alert */
+"weather.traffic.title.warning" = "Попередження";
+
+/* Location: WeatherTrafficView.swift - A bubble saying an alert has ended */
+"weather.traffic.title.cancel" = "Попередження завершено";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying the list of active alerts */
+"weather.traffic.title.digest" = "Список попереджень";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying station readings */
+"weather.traffic.title.observations" = "Спостереження";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying a forecast */
+"weather.traffic.title.forecast" = "Прогноз";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one chunk of a text reply */
+"weather.traffic.title.text" = "Текстовий звіт";
+
+/* Location: WeatherTrafficView.swift - A bubble saying the radio cannot serve a request */
+"weather.traffic.title.notAvailable" = "Недоступно";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying the radio's statement of its area */
+"weather.traffic.title.coverage" = "Що він охоплює";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying somebody's request. %@ is the first bytes of their key */
+"weather.traffic.title.request" = "Запит від %@";
+
+/* Location: WeatherTrafficView.swift - The same bubble for a request this phone sent */
+"weather.traffic.title.requestSent" = "Запит надіслано";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one packet of an alert map */
+"weather.traffic.title.areaSweep" = "Карта попереджень";
+
+/* Location: WeatherTrafficView.swift - A bubble whose bytes the codec could not read */
+"weather.traffic.title.unreadable" = "Не читається";
+
+/* Location: WeatherTrafficView.swift - A bubble of a message type this app does not know */
+"weather.traffic.title.otherData" = "Інші дані";
+
+/* Location: WeatherTrafficView.swift - How many stations a readings message carried, %lld is two or more */
+"weather.traffic.detail.stations" = "Станцій: %lld";
+
+/* Location: WeatherTrafficView.swift - A readings message for one station */
+"weather.traffic.detail.stationsOne" = "1 станція";
+
+/* Location: WeatherTrafficView.swift - How many alerts a list named, %lld is two or more */
+"weather.traffic.detail.alerts" = "Попереджень: %lld";
+
+/* Location: WeatherTrafficView.swift - A list naming one alert */
+"weather.traffic.detail.alertsOne" = "1 попередження";
+
+/* Location: WeatherTrafficView.swift - How many areas one map packet shaded, %lld is two or more */
+"weather.traffic.detail.areas" = "Районів: %lld";
+
+/* Location: WeatherTrafficView.swift - One map packet shading one area */
+"weather.traffic.detail.areasOne" = "1 район";
+
+/* Location: WeatherTrafficView.swift - How many Weather Service offices a coverage statement named, %lld is two or more */
+"weather.traffic.detail.offices" = "Офісів: %lld";
+
+/* Location: WeatherTrafficView.swift - A coverage statement naming one office */
+"weather.traffic.detail.officesOne" = "1 офіс";
+
+/* Location: WeatherTrafficView.swift - Which packet of a multi-packet answer this is. %1$lld is its number, %2$lld how many there are */
+"weather.traffic.detail.part" = "частина %1$lld з %2$lld";
+
+/* Location: WeatherTrafficView.swift - A forecast for a point the radio picked, which this app's tables cannot name */
+"weather.traffic.detail.botPoint" = "точку вибрав бот";
+
+/* Location: WeatherTrafficView.swift - A map packet belonging to a sweep of the whole country */
+"weather.traffic.detail.national" = "уся країна";
+
+/* Location: WeatherTrafficView.swift - A map packet of a sweep covering some states, where this packet does not carry which */
+"weather.traffic.detail.scopedUnknown" = "обмежено, штатів немає в цьому пакеті";
+
+/* Location: WeatherTrafficView.swift - The radio dropped entries or text to make the message fit */
+"weather.traffic.detail.cut" = "обрізано, щоб умістилося";
+
+/* Location: WeatherTrafficView.swift - The map packet's sweep carries advisories as well as warnings and watches */
+"weather.traffic.detail.advisories" = "з повідомленнями";
+
+/* Location: WeatherTrafficView.swift - Why the radio could not serve a request (spec reason 0) */
+"weather.traffic.reason.noData" = "немає даних";
+
+/* Location: WeatherTrafficView.swift - Reason 1 */
+"weather.traffic.reason.unknownLocation" = "невідоме місце";
+
+/* Location: WeatherTrafficView.swift - Reason 2 */
+"weather.traffic.reason.unsupported" = "не підтримується";
+
+/* Location: WeatherTrafficView.swift - Reason 3 */
+"weather.traffic.reason.botError" = "помилка бота";
+
+/* Location: WeatherTrafficView.swift - Reason 4 */
+"weather.traffic.reason.rateLimited" = "запитано надто нещодавно";
+
+/* Location: WeatherTrafficView.swift - Any other reason */
+"weather.traffic.reason.other" = "причину не вказано";
+
+/* Location: WeatherTrafficView.swift - Why an alert ended (spec cancel reason 0) */
+"weather.traffic.cancelReason.cancelled" = "скасовано";
+
+/* Location: WeatherTrafficView.swift - Cancel reason 1 */
+"weather.traffic.cancelReason.expiredEarly" = "минуло раніше";
+
+/* Location: WeatherTrafficView.swift - Cancel reason 2: a stronger alert follows, so nothing improved */
+"weather.traffic.cancelReason.upgraded" = "підвищено";

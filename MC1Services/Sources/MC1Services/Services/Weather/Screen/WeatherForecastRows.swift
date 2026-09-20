@@ -174,9 +174,19 @@ public enum WeatherForecastCard: Sendable, Hashable {
       case placePoint
       /// Another point's forecast, already held, close enough to stand in.
       case nearbyPoint(kilometres: Double)
+      /// A point the **bot** chose, answering a `>f <lat>,<lon>` for this place (spec revision
+      /// 10, §1.3). `kilometres` is from the place to the coordinate that was asked about, which
+      /// is the only coordinate the phone knows: the point the bot forecast for is not in this
+      /// bundle, which is the whole reason the ask exists.
+      ///
+      /// The card labels it "Forecast point chosen by WX-AUS", because a forecast is for a point
+      /// and this page cannot say which one.
+      case botChosenPoint(kilometres: Double)
     }
 
-    public var point: MeshWXPoint
+    /// Nil for a forecast the bot resolved to a point this bundle does not carry
+    /// (``Source/botChosenPoint(kilometres:)``).
+    public var point: MeshWXPoint?
     public var stored: WeatherStoredForecast
     public var botID: UInt16
     public var layout: MeshWXForecastLayout
@@ -198,23 +208,47 @@ public enum WeatherForecastCard: Sendable, Hashable {
   }
 
   case noPlace
-  /// Nothing held for the place: ask for this point, `kilometres` from the place.
-  case missing(point: MeshWXPoint, kilometres: Double)
-  /// The nearest bundled forecast point is too far from the place to speak for it, or the bundle
-  /// has none: there is nothing worth asking for.
-  case noPointNearby(nearest: MeshWXPoint?, kilometres: Double?)
+  /// Nothing held for the place: ask.
+  ///
+  /// `point` is the bundled point the ask would name, `kilometres` from the place — and **nil**
+  /// when the bundle has no point within reach, in which case the ask is
+  /// ``WeatherRequest/forecastAt(latitude:longitude:)`` for the place's own coordinate.
+  ///
+  /// There is no longer a case for "no point nearby, nothing to ask for". `pfm_points.json`
+  /// version 1 had no point at all for nine offices, so the app showed "No forecast point near
+  /// Albuquerque" and offered nothing while the bot held a forecast fifteen kilometres away —
+  /// which is what the owner saw: "Forecast works in chat (`forecast santa fe nm`) but not in the
+  /// app. I thought we were using the same engine." Whenever the place has a coordinate there is
+  /// something to ask (spec revision 10, §1.3), so this is the only empty card there is.
+  case missing(point: MeshWXPoint?, kilometres: Double?)
   case forecast(Summary)
 
   public static let nearbyPointKilometres = 10.0
+  /// How far the coordinate a `>f <lat>,<lon>` asked about may be from a place and still be that
+  /// place's forecast (spec revision 10, §1.3).
+  ///
+  /// Much tighter than ``nearbyPointKilometres`` is generous, and deliberately so: what is held
+  /// under a coordinate is a forecast for a point *the phone cannot see*, somewhere near that
+  /// coordinate. Ten kilometres of slack for the place plus the bot's own choice is already the
+  /// width of a front, and 25 km is where that stops being one weather.
+  public static let askedCoordinateKilometres = 25.0
 
   /// How far the nearest forecast point may be and still stand for the place.
   ///
   /// From the bundle's own density (2026-09-15 kit): measured from every `places.json` entry to
   /// its nearest `pfm_points.json` point, over the 34,556 places with any point within 1,000 km
-  /// (Hawaii, American Samoa, Guam and the Northern Marianas have none), the distance is 23 km at
-  /// the median, 68 km at p95 and 114 km at p99. The cutoff is p99 rounded up. About 1% of places
-  /// lie beyond it, mostly New Mexico (Albuquerque is 213 km from its nearest point), Utah, Idaho
-  /// and western Alaska — places where the nearest point's forecast is another landscape's.
+  /// (Hawaii, American Samoa, Guam and the Northern Marianas had none), the distance was 23 km at
+  /// the median, 68 km at p95 and 114 km at p99. The cutoff is that p99, rounded up.
+  ///
+  /// `pfm_points.json` version 2 (spec revision 10, §1.3) appended eighty-five points for the
+  /// nine offices the first cut had none for, and the same measurement now reads 22.5 km at the
+  /// median, 62.6 km at p95 and 90.2 km at p99, with 109 of 34,909 places beyond this cutoff.
+  /// The number is left where it is: what it decides is not "is there a point" but "is that
+  /// point's forecast this place's weather", and that did not change when the bundle grew.
+  ///
+  /// A place beyond it is no longer a place with nothing to ask for. It is asked about by
+  /// coordinate (``WeatherRequest/forecastAt(latitude:longitude:)``), because the bundle was
+  /// never the authority on what the bot holds.
   public static let pointReachKilometres = 115.0
 
   public static func make(
@@ -225,14 +259,15 @@ public enum WeatherForecastCard: Sendable, Hashable {
     calendar: Calendar
   ) -> WeatherForecastCard {
     guard let place else { return .noPlace }
-    guard let placePoint = tables.nearestPoint(toLat: place.coordinate.latitude, lon: place.coordinate.longitude) else {
-      return .noPointNearby(nearest: nil, kilometres: nil)
+    // The bundle's nearest point, when it has one within reach. Since revision 10 the bundle is
+    // not the authority on whether the place can be asked about at all: with no point in reach
+    // the ask is the coordinate itself.
+    let placePoint = tables.nearestPoint(toLat: place.coordinate.latitude, lon: place.coordinate.longitude)
+    let placePointKilometres = placePoint.map {
+      WeatherGeo.kilometres(place.coordinate, MeshWXCoordinate(latitude: $0.lat, longitude: $0.lon))
     }
-    let placePointKilometres = WeatherGeo.kilometres(
-      place.coordinate, MeshWXCoordinate(latitude: placePoint.lat, longitude: placePoint.lon))
-    guard placePointKilometres <= pointReachKilometres else {
-      return .noPointNearby(nearest: placePoint, kilometres: placePointKilometres)
-    }
+    let reachablePoint: MeshWXPoint? = (placePointKilometres ?? .infinity) <= pointReachKilometres
+      ? placePoint : nil
 
     var newest: [UInt16: (stored: WeatherStoredForecast, botID: UInt16)] = [:]
     for (botID, state) in states {
@@ -243,7 +278,7 @@ public enum WeatherForecastCard: Sendable, Hashable {
     }
 
     func summary(
-      _ point: MeshWXPoint, _ entry: (stored: WeatherStoredForecast, botID: UInt16),
+      _ point: MeshWXPoint?, _ entry: (stored: WeatherStoredForecast, botID: UInt16),
       _ source: Summary.Source, _ kilometres: Double
     ) -> WeatherForecastCard {
       .forecast(Summary(
@@ -257,8 +292,8 @@ public enum WeatherForecastCard: Sendable, Hashable {
         kilometres: kilometres))
     }
 
-    if let held = newest[placePoint.index] {
-      return summary(placePoint, held, .placePoint, placePointKilometres)
+    if let reachablePoint, let held = newest[reachablePoint.index] {
+      return summary(reachablePoint, held, .placePoint, placePointKilometres ?? 0)
     }
 
     let nearby = newest.compactMap { index, entry -> (MeshWXPoint, (stored: WeatherStoredForecast, botID: UInt16), Double)? in
@@ -270,7 +305,50 @@ public enum WeatherForecastCard: Sendable, Hashable {
       return summary(point, entry, .nearbyPoint(kilometres: distance), distance)
     }
 
-    return .missing(point: placePoint, kilometres: placePointKilometres)
+    // A forecast held under the coordinate somebody asked about from this phone (spec revision
+    // 10, §1.3). It has no point of its own that this bundle can name, so the place's own
+    // distance from the *question* is what is checked, and the card says the bot chose the point.
+    if let asked = nearestAskedCoordinate(states: states, place: place) {
+      return summary(nil, (asked.stored, asked.botID), .botChosenPoint(kilometres: asked.kilometres), asked.kilometres)
+    }
+
+    // Nothing held. With a bundled point in reach the ask names it; without one it names the
+    // coordinate, and `WeatherUpdatePlan` reads which from the nil here.
+    return .missing(point: reachablePoint, kilometres: reachablePoint == nil ? nil : placePointKilometres)
+  }
+
+  /// The nearest coordinate-keyed forecast within ``askedCoordinateKilometres`` of the place, and
+  /// how far away the question it answers was asked (spec revision 10, §1.3).
+  ///
+  /// Only keys that parse as a coordinate: the one slot for an answer nobody here asked for
+  /// (``WeatherBotState/unbundledAskKey``) is somebody else's question and is never a place's
+  /// forecast, which is the whole reason it has a key that cannot be mistaken for one.
+  static func nearestAskedCoordinate(
+    states: [UInt16: WeatherBotState], place: WeatherPlace
+  ) -> (stored: WeatherStoredForecast, botID: UInt16, kilometres: Double)? {
+    var best: (stored: WeatherStoredForecast, botID: UInt16, kilometres: Double)?
+    for (botID, state) in states {
+      for (key, stored) in state.unbundledForecasts {
+        guard let coordinate = coordinate(fromKey: key) else { continue }
+        let distance = WeatherGeo.kilometres(place.coordinate, coordinate)
+        guard distance <= askedCoordinateKilometres else { continue }
+        if let held = best, held.kilometres < distance { continue }
+        if let held = best, held.kilometres == distance,
+           held.stored.forecast.issuedMinutes >= stored.forecast.issuedMinutes { continue }
+        best = (stored, botID, distance)
+      }
+    }
+    return best
+  }
+
+  /// `"35.687,-105.938"` back into a coordinate, or nil for anything that is not one — which is
+  /// what ``WeatherBotState/unbundledAskKey`` is.
+  static func coordinate(fromKey key: String) -> MeshWXCoordinate? {
+    let parts = key.split(separator: ",", omittingEmptySubsequences: false)
+    guard parts.count == 2, let latitude = Double(parts[0]), let longitude = Double(parts[1]),
+          (-90...90).contains(latitude), (-180...180).contains(longitude)
+    else { return nil }
+    return MeshWXCoordinate(latitude: latitude, longitude: longitude)
   }
 }
 

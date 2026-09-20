@@ -344,17 +344,20 @@ enum WeatherCopy {
 
   /// "No forecast for Austin yet."; with the point more than 10 km off, "No forecast for Big
   /// Spring yet. The nearest forecast point is Midland, 60 km."
-  static func forecastMissing(placeName: String, point: MeshWXPoint, kilometres: Double) -> String {
-    guard kilometres > WeatherForecastCard.nearbyPointKilometres else {
+  ///
+  /// **There is no "No forecast point near Albuquerque" any more** (spec revision 10, §1.3;
+  /// docs/MESHWX_UI.md §3.1 U-38). `pfm_points.json` version 1 had no point at all for nine
+  /// offices, so the app said that sentence and offered nothing while the bot held a forecast
+  /// fifteen kilometres away — which is what the owner saw: *Forecast works in chat (`forecast
+  /// santa fe nm`) but not in the app. I thought we were using the same engine.* A place with a
+  /// coordinate can always be asked about, so an empty card with no point to name says only that
+  /// there is no forecast yet, and Update sends `>f <lat>,<lon>`.
+  static func forecastMissing(placeName: String, point: MeshWXPoint?, kilometres: Double?) -> String {
+    guard let point, let kilometres, kilometres > WeatherForecastCard.nearbyPointKilometres else {
       return L10n.Weather.Weather.Forecast.missing(placeName)
     }
     return L10n.Weather.Weather.Forecast.missingFar(
       placeName, WeatherNames.pointLabel(point.name), WeatherFormatting.kilometres(kilometres))
-  }
-
-  /// "No forecast point near Albuquerque."
-  static func noForecastPoint(placeName: String) -> String {
-    L10n.Weather.Weather.Forecast.noPoint(placeName)
   }
 
   // MARK: - Where the data came from (§12.1)
@@ -406,7 +409,7 @@ enum WeatherCopy {
       return L10n.Weather.Weather.Request.contentList(time)
     case .observations, .observation:
       return L10n.Weather.Weather.Request.contentReadings(time)
-    case .forecast, .forecastForPlace, .homeForecast:
+    case .forecast, .forecastForPlace, .homeForecast, .forecastAt:
       return L10n.Weather.Weather.Request.contentIssued(time)
     default:
       return nil
@@ -672,10 +675,43 @@ enum WeatherCopy {
       return L10n.Weather.Weather.Reports.Outlook.title
     case .coverage:
       return L10n.Weather.Weather.RequestName.coverage
-    case let .areaSweep(includesAdvisories):
+    case let .areaSweep(includesAdvisories, states):
+      // A scoped ask names its states, because the log is where somebody works out what those
+      // packets were spent on and "Alert map" twice over answers nothing (revision 10, §1.2).
+      guard !states.isEmpty else {
+        return includesAdvisories
+          ? L10n.Weather.Weather.RequestName.areaMapAll
+          : L10n.Weather.Weather.RequestName.areaMap
+      }
+      // Normalised here as well as on the wire: two selections of the same states have to be one
+      // row in the log, whatever order the value was built with.
+      let named = WeatherAreaMapCopy.stateList(WeatherRequest.sweepStates(states))
       return includesAdvisories
-        ? L10n.Weather.Weather.RequestName.areaMapAll
-        : L10n.Weather.Weather.RequestName.areaMap
+        ? L10n.Weather.Weather.RequestName.areaMapStatesAll(named)
+        : L10n.Weather.Weather.RequestName.areaMapStates(named)
+    case let .parts(_, _, kind):
+      // The kind is carried for exactly this: the wire says only `>part 212 1,4,6`, and a log row
+      // reading "Missing parts" with no subject is a row nobody can act on (revision 10, §1.1).
+      return partsName(kind)
+    case let .forecastAt(latitude, longitude):
+      // The coordinate is the only name such a forecast has: the bot picks the point, and this
+      // bundle may hold no index for it at all (revision 10, §1.3).
+      return L10n.Weather.Weather.RequestName.forecastAt(
+        WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude))
+    }
+  }
+
+  /// "Missing parts of Alert map", "Missing parts of Storm reports".
+  static func partsName(_ kind: WeatherPartsKind) -> String {
+    switch kind {
+    case .areaSweep:
+      return L10n.Weather.Weather.RequestName.parts(L10n.Weather.Weather.AreaMap.title)
+    case let .text(subject):
+      let parsed = MeshWXTextSubject(rawValue: subject)
+      // A subject code this build does not know has no name to put in the sentence, and
+      // "Missing parts of Text" claims one. The bare noun is the honest row.
+      if case .other = parsed { return L10n.Weather.Weather.RequestName.partsGeneric }
+      return L10n.Weather.Weather.RequestName.parts(textSubjectName(parsed))
     }
   }
 

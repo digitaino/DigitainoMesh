@@ -288,28 +288,47 @@ struct WeatherRadioView: View {
 
   /// What this phone asked for, newest first, and how each one ended. The only requests anyone
   /// can name: the answers were broadcast, and they carry no requester.
+  ///
+  /// **Three rows and a way in** (docs/MESHWX_UI.md §3.1 U-39). The owner, 20 September: *Your
+  /// requests is way too long of a list.* Forty rows of a ledger sat in the middle of a page
+  /// whose other nine sections are one row each, so everything under it was below the fold. The
+  /// log is untouched — what was wrong was the page.
   private var requestsSection: some View {
-    Section {
-      WeatherCardLabel(title: L10n.Weather.Weather.Requests.header, systemImage: "paperplane")
-      if model.requestLog.isEmpty {
+    let split = model.requestLogSplit
+    return Section {
+      WeatherCardLabel(title: L10n.Weather.Weather.Requests.newest, systemImage: "paperplane")
+      if split.newest.isEmpty {
         Text(L10n.Weather.Weather.Requests.none)
           .font(.subheadline)
           .foregroundStyle(.secondary)
       } else {
-        ForEach(model.requestLog) { entry in
-          VStack(alignment: .leading, spacing: 2) {
-            Text(WeatherCopy.requestName(entry.request))
-            Text("\(time(entry.sentAt)) · \(WeatherCopy.requestOutcome(entry.outcome))")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
+        ForEach(split.newest) { entry in
+          requestRow(entry)
+        }
+        if split.total > split.newest.count {
+          NavigationLink {
+            WeatherRequestsListView(screen: screen)
+          } label: {
+            Text(L10n.Weather.Weather.Requests.all(split.total))
           }
-          .accessibilityElement(children: .combine)
+          .accessibilityIdentifier("weather.radio.allRequests")
         }
       }
     } footer: {
       Text(L10n.Weather.Weather.Requests.footer)
     }
     .themedRowBackground(theme)
+  }
+
+  @ViewBuilder
+  private func requestRow(_ entry: WeatherRequestLogEntry) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(WeatherCopy.requestName(entry.request))
+      Text("\(time(entry.sentAt)) · \(WeatherCopy.requestOutcome(entry.outcome))")
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+    }
+    .accessibilityElement(children: .combine)
   }
 
   // MARK: - Radios
@@ -410,6 +429,15 @@ struct WeatherRadioView: View {
       LabeledContent(L10n.Weather.Weather.About.lastMessage) {
         Text(lastMessage)
       }
+      // The owner's sixth ask, 20 September: *a way to see all the GRP_DATA traffic on a channel
+      // like we do a chat.* It belongs here, under the channel it is about, and nowhere else on
+      // the page: everything else on this screen is the weather, and this is the wire.
+      NavigationLink {
+        WeatherTrafficView(screen: screen)
+      } label: {
+        Label(L10n.Weather.Weather.Traffic.title, systemImage: "dot.radiowaves.up.forward")
+      }
+      .accessibilityIdentifier("weather.radio.traffic")
     }
     .themedRowBackground(theme)
   }
@@ -440,5 +468,45 @@ struct WeatherRadioView: View {
       }
       .themedRowBackground(theme)
     }
+  }
+}
+
+// MARK: - Every request this phone has sent (§3.1 U-39)
+
+/// The whole request log, from the radio page's "All requests (27)" row.
+///
+/// The same rows the page's first three are, and nothing more: the log is capped at forty and a
+/// week by `WeatherRequestLog`, so this screen is the log, not a history of one. Pushed and handed
+/// the page it was opened from, like every other drill-in in this tool (docs/MESHWX_UI.md §13).
+struct WeatherRequestsListView: View {
+  @Environment(\.appTheme) private var theme
+
+  let screen: WeatherPageScreen
+
+  private var model: WeatherToolModel { screen.model }
+
+  var body: some View {
+    List {
+      Section {
+        ForEach(model.requestLog) { entry in
+          VStack(alignment: .leading, spacing: 2) {
+            Text(WeatherCopy.requestName(entry.request))
+            Text("\(WeatherFormatting.clockTime(entry.sentAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)) · \(WeatherCopy.requestOutcome(entry.outcome))")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+          .accessibilityElement(children: .combine)
+        }
+      } footer: {
+        Text(L10n.Weather.Weather.Requests.footer)
+      }
+      .themedRowBackground(theme)
+    }
+    .listStyle(.insetGrouped)
+    .themedCanvas(theme)
+    .navigationTitle(L10n.Weather.Weather.Requests.allTitle)
+    .navigationBarTitleDisplayMode(.inline)
+    .weatherPendingBar(model: model, requestsOnScreen: [])
+    .weatherToolChrome()
   }
 }

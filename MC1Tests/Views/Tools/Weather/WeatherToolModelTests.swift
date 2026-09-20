@@ -480,3 +480,77 @@ struct WeatherScreenBuilderGeometryTests {
     #expect(WeatherScreenBuilder.placeZone(from: ["TXC453"], stateCode: "TX", county: "TXC453") == nil)
   }
 }
+
+/// The model's revision 10 rules: which areas the next map covers, and how much of the request
+/// log the radio page shows (docs/MESHWX_UI.md §17, §3.1 U-37, U-39).
+@Suite("Weather tool model, revision 10")
+@MainActor
+struct WeatherToolModelRevision10Tests {
+  func store() -> (WeatherAreaSelectionStore, String) {
+    let suite = "test.weather.areaSelection.\(UUID().uuidString)"
+    return (WeatherAreaSelectionStore(defaults: UserDefaults(suiteName: suite)!), suite)
+  }
+
+  /// The owner's third ask: *have a way for the user to select which areas they want to request
+  /// the warnings for.* The choice is one value on the phone, saved the moment it changes —
+  /// there is no Done on the picker and nothing to commit.
+  @Test
+  func `the area selection is saved as it changes`() throws {
+    let (store, suite) = store()
+    defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+    let model = WeatherToolModel(areaSelectionStore: store)
+
+    // Nothing chosen and no page built: the whole country, which is also what the store holds
+    // nothing for.
+    #expect(store.selection == nil)
+    #expect(model.areaSelection(forPageID: WeatherPage.myLocationID) == .wholeCountry)
+
+    model.setAreaSelection(WeatherAreaSelection(isWholeCountry: false, states: ["tx", "ok"]))
+    let expected = WeatherAreaSelection(isWholeCountry: false, states: ["OK", "TX"])
+    #expect(model.areaSelection(forPageID: WeatherPage.myLocationID) == expected)
+    #expect(store.selection == expected)
+    // Codes are one value however the picker handed them over, so one selection is one request.
+    #expect(expected.request(includesAdvisories: false).wireText == ">wmap OKTX")
+
+    // Turning the whole country back on keeps what was picked under it.
+    model.setAreaSelection(WeatherAreaSelection(isWholeCountry: true, states: ["OK", "TX"]))
+    #expect(model.areaSelection(forPageID: WeatherPage.myLocationID).isWholeCountry)
+    #expect(model.areaSelection(forPageID: WeatherPage.myLocationID).states == ["OK", "TX"])
+    #expect(store.selection?.isWholeCountry == true)
+  }
+
+  /// Before anybody chooses, the map opens on the state of the page's own place: somebody opening
+  /// it from their own town wants their own state, and one state is one packet rather than eight.
+  @Test
+  func `with nothing chosen the default is the page's own state`() {
+    #expect(WeatherAreaSelection.default(placeState: "TX")
+      == WeatherAreaSelection(isWholeCountry: false, states: ["TX"]))
+    #expect(WeatherAreaSelection.default(placeState: nil) == .wholeCountry)
+    #expect(WeatherAreaSelection.default(placeState: "") == .wholeCountry)
+  }
+
+  /// The owner's fifth ask: *Your requests is way too long of a list.* Three rows and a way in;
+  /// the log itself is untouched.
+  @Test
+  func `the radio page shows the newest three requests and counts the rest`() {
+    let now = WeatherFormattingTests.now
+    let log = (0..<7).map { offset in
+      WeatherRequestLogEntry(
+        id: UUID(), request: .digest, botID: 0x041D,
+        sentAt: now.addingTimeInterval(-Double(offset) * 60))
+    }
+    let split = WeatherToolModel.requestLogSplit(log)
+    #expect(WeatherToolModel.newestRequestCount == 3)
+    #expect(split.newest.map(\.id) == log.prefix(3).map(\.id))
+    #expect(split.total == 7)
+
+    // A log short of the limit is the whole log, and there is nothing left to open.
+    let short = WeatherToolModel.requestLogSplit(Array(log.prefix(2)))
+    #expect(short.newest.count == 2)
+    #expect(short.total == 2)
+    let none = WeatherToolModel.requestLogSplit([])
+    #expect(none.newest.isEmpty)
+    #expect(none.total == 0)
+    #expect(L10n.Weather.Weather.Requests.all(27) == "All requests (27)")
+  }
+}

@@ -41,6 +41,24 @@ public enum WeatherTransportError: Error, Sendable, Hashable {
   case channelRequestsUnavailable(String)
 }
 
+/// A Request datagram that went on the air: the bytes and the slot they went out on (spec §7B).
+///
+/// Returned by ``WeatherTransport/sendChannelRequest(text:botID:timestamp:seq:)`` so the channel
+/// traffic log can show this phone's own requests beside everything it heard, in the form they
+/// were actually sent (docs/MESHWX_UI.md §12).
+public struct WeatherChannelRequestSent: Sendable, Hashable {
+  /// The slot carrying `#meshwx` on this radio — not a fixed number, and not one the service
+  /// knows on its own.
+  public var channelIndex: UInt8
+  /// The `data` field of the datagram: an encoded ``MeshWXRequest``.
+  public var payload: Data
+
+  public init(channelIndex: UInt8, payload: Data) {
+    self.channelIndex = channelIndex
+    self.payload = payload
+  }
+}
+
 /// What the weather service needs from a radio: channel datagrams in both directions, a DM going
 /// out, and a way to tell which slot is `#meshwx`. Narrow on purpose so tests can drive the
 /// service with a fake and so the requests provably never touch `MessageService`
@@ -59,17 +77,24 @@ public protocol WeatherTransport: Sendable {
   /// Sends the same `>` text as a **Request datagram**, flooded on `#meshwx` (spec §7B): the
   /// normal path since revision 6, because a flood needs no stored route.
   ///
-  /// Nothing comes back. A datagram has no acknowledgement — the answer on the channel is the
-  /// acknowledgement — so a send that returns says only that the radio took it.
+  /// No *answer* comes back. A datagram has no acknowledgement — the answer on the channel is
+  /// the acknowledgement — so a send that returns says only that the radio took it.
   ///
   /// - Parameters:
   ///   - botID: the bot asked, the first two bytes of its public key.
   ///   - timestamp: the request's own time, repeated byte for byte on the one resend; it is
   ///     what makes the resend a copy to the bot rather than a second request.
   ///   - seq: the **sender's** counter, likewise repeated on the resend.
+  /// - Returns: the bytes that went out and the slot they went out on, for the channel traffic
+  ///   log (docs/MESHWX_UI.md §12) — so the row shows what was sent rather than a reconstruction
+  ///   of it. Nil from a transport that puts no datagram on any channel, which is the DEBUG
+  ///   bridge: there is nothing on the air to log.
   /// - Throws: ``WeatherTransportError/channelRequestsUnavailable(_:)`` when this radio cannot
   ///   send one at all, which is the service's cue to fall back to the DM ladder.
-  func sendChannelRequest(text: String, botID: UInt16, timestamp: Date, seq: UInt8) async throws
+  @discardableResult
+  func sendChannelRequest(
+    text: String, botID: UInt16, timestamp: Date, seq: UInt8
+  ) async throws -> WeatherChannelRequestSent?
   /// Forgets the route the radio holds to a public key, so the next DM to it goes out by flood
   /// — every repeater forwards it once — rather than hop by hop along a route that may be
   /// stale. The chat rule (docs/guides/Messaging.md, D5), applied to a weather request after
@@ -165,7 +190,10 @@ public struct SessionWeatherTransport: WeatherTransport {
   /// command, some slot on this radio carries the channel, and the radio has told the app its
   /// own public key — the six bytes the bot pairs this phone's datagrams and DMs by. Any of
   /// them missing is `channelRequestsUnavailable`, and the service sends the DM instead.
-  public func sendChannelRequest(text: String, botID: UInt16, timestamp: Date, seq: UInt8) async throws {
+  @discardableResult
+  public func sendChannelRequest(
+    text: String, botID: UInt16, timestamp: Date, seq: UInt8
+  ) async throws -> WeatherChannelRequestSent? {
     guard await channelDataSupported() else {
       throw WeatherTransportError.channelRequestsUnavailable(
         "the radio's firmware is older than v1.15.0 and has no send-channel-data command")
@@ -186,12 +214,14 @@ public struct SessionWeatherTransport: WeatherTransport {
       text: text)
     // Flooded: every repeater in reach forwards it once, and no stored route can lose it —
     // which is the whole reason the datagram replaced the DM (spec §7B).
+    let payload = try request.encode()
     try await session.sendChannelData(
       channelIndex: slot,
       dataType: MeshWXWire.dataType,
-      payload: request.encode(),
+      payload: payload,
       pathLength: PacketBuilder.floodPathSentinel,
       pathBytes: Data())
+    return WeatherChannelRequestSent(channelIndex: slot, payload: payload)
   }
 
   /// The slot carrying `#meshwx`, by secret, cached for the session once found.
@@ -283,6 +313,9 @@ public actor WeatherService {
 
   private let transport: any WeatherTransport
   private let store: any WeatherStateStore
+  /// Where the channel traffic log persists (docs/MESHWX_UI.md §12). Nil turns the log off
+  /// entirely, which is what every test that is not about it wants.
+  private let trafficStore: (any WeatherTrafficLogStore)?
   private let now: @Sendable () -> Date
   private let answerTimeout: Duration
   private let channelAnswerTimeout: Duration
@@ -347,11 +380,18 @@ public actor WeatherService {
     case text(WeatherRequest)
     /// `>cov`: the bot's own statement of its area.
     case coverage
-    /// `>wmap`: the national area sweep. One slot for both scopes: an eight-packet answer that
-    /// has just been broadcast is an answer everyone on the channel has, and the narrower sweep
-    /// is a subset of the wider one. Spending eight more packets to widen it a minute later is
-    /// exactly what the five-minute rule is for.
-    case areaSweep
+    /// `>wmap`: an area sweep, by **what it covers** — the state codes, sorted and upper case,
+    /// and `[]` for the country.
+    ///
+    /// One slot for both breadths: an eight-packet answer that has just been broadcast is an
+    /// answer everyone on the channel has, and the narrower sweep is a subset of the wider one.
+    /// Spending eight more packets to widen it a minute later is exactly what the five-minute
+    /// rule is for.
+    ///
+    /// Not one slot for both *scopes*, though, which is what revision 10 changes: a sweep of
+    /// Texas says nothing about Oklahoma, and refusing an Oklahoma tap because somebody asked
+    /// about Texas two minutes ago would leave a map with a hole in it and no way to fill it.
+    case areaSweep(states: [String])
   }
 
   struct AnswerSlot: Hashable {
@@ -369,9 +409,17 @@ public actor WeatherService {
 
   private var lastAnswers: [AnswerSlot: AnswerRecord] = [:]
 
+  /// The channel traffic log, oldest first (docs/MESHWX_UI.md §12). Loaded with the state and
+  /// written on every datagram; empty and never written when no store was injected.
+  private var traffic: [WeatherTrafficEntry] = []
+
   /// - Parameters:
   ///   - transport: The radio.
   ///   - store: Where state persists.
+  ///   - trafficLogStore: where the channel traffic log persists. Nil — the default — keeps no
+  ///     log at all: it is a screen the user opens, not something the service needs, and a test
+  ///     driving a thousand datagrams through `ingest` should not be writing a ring of 300 to
+  ///     disk for each one.
   ///   - now: The clock, injectable for tests.
   ///   - answerTimeout: How long to wait for a DM's answer before the retry; tests shorten it.
   ///   - channelAnswerTimeout: The same for a Request datagram, which is waited on for less and
@@ -382,6 +430,7 @@ public actor WeatherService {
   public init(
     transport: any WeatherTransport,
     store: any WeatherStateStore,
+    trafficLogStore: (any WeatherTrafficLogStore)? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
     answerTimeout: Duration = WeatherService.answerTimeout,
     channelAnswerTimeout: Duration = WeatherService.channelAnswerTimeout,
@@ -390,6 +439,7 @@ public actor WeatherService {
   ) {
     self.transport = transport
     self.store = store
+    trafficStore = trafficLogStore
     self.now = now
     self.answerTimeout = answerTimeout
     self.channelAnswerTimeout = channelAnswerTimeout
@@ -487,7 +537,55 @@ public actor WeatherService {
       logger.error("Weather state load failed: \(error.localizedDescription)")
       states = [:]
     }
+    if let trafficStore {
+      // A log that will not read is an empty log, never a load failure: the weather is what the
+      // service is for, and a window on the channel must not be able to take it down.
+      traffic = (try? await trafficStore.load()) ?? []
+    }
     eventBroadcaster.yield(.stateLoaded)
+  }
+
+  // MARK: Channel traffic
+
+  /// Every datagram this phone heard on the weather slot and every Request it sent, oldest first
+  /// (docs/MESHWX_UI.md §12). Empty when no traffic-log store was injected.
+  public func trafficLog() async -> [WeatherTrafficEntry] {
+    await loadIfNeeded()
+    return traffic
+  }
+
+  /// Empties the log, on disk as well. The screen's "Clear": what is in it is a window on the
+  /// channel and nothing else depends on it, so there is nothing to undo.
+  public func clearTrafficLog() async {
+    await loadIfNeeded()
+    traffic = []
+    await persistTraffic()
+  }
+
+  /// Appends one datagram to the log and writes it. Nothing at all when no store was injected,
+  /// which is the default.
+  private func record(_ entry: WeatherTrafficEntry) async {
+    guard trafficStore != nil else { return }
+    traffic = WeatherTrafficLog.appending(entry, to: traffic)
+    await persistTraffic()
+  }
+
+  /// Logs a Request datagram this phone put on the air (spec §7B). Nothing for a transport that
+  /// sends no datagram — the DEBUG bridge — and nothing for the DM fallback, which is not a
+  /// datagram on the channel and is not what the screen is about.
+  private func recordSent(_ sent: WeatherChannelRequestSent?, botID: UInt16) async {
+    guard let sent else { return }
+    await record(WeatherTrafficEntry.sent(
+      sent.payload, channelIndex: sent.channelIndex, botID: botID, at: now()))
+  }
+
+  private func persistTraffic() async {
+    guard let trafficStore else { return }
+    do {
+      try await trafficStore.save(traffic)
+    } catch {
+      logger.error("Weather traffic log save failed: \(error.localizedDescription)")
+    }
   }
 
   // MARK: State
@@ -542,22 +640,45 @@ public actor WeatherService {
       logger.warning("Ignored a MeshWX-typed datagram on channel slot \(datagram.channelIndex), which is not #meshwx")
       return nil
     }
+
+    /// The channel traffic log gets every datagram that reached the weather slot, whatever
+    /// happens to it next (docs/MESHWX_UI.md §12): undecodable bytes, somebody else's request, a
+    /// copy of a packet already applied, a backlog drained at connect. That is the whole point of
+    /// the screen — everywhere else in the app, "nothing arrived" and "eight packets arrived and
+    /// every one of them was a copy" look exactly the same.
+    func log(isDuplicate: Bool) async {
+      await record(WeatherTrafficEntry.received(
+        datagram.data,
+        channelIndex: datagram.channelIndex,
+        dataType: datagram.dataType,
+        snr: datagram.snr,
+        pathLength: datagram.pathLength,
+        at: now(),
+        isBacklog: isBacklog,
+        isDuplicate: isDuplicate))
+    }
+
     let message: MeshWXMessage
     do {
       message = try MeshWXDecoder.decode(datagram.data)
     } catch {
       logger.warning("Undecodable MeshWX datagram (\(datagram.data.count) bytes): \(error)")
+      await log(isDuplicate: false)
       return nil
     }
     if case .request = message.payload {
       // Another phone asking the bot something, heard because requests are flooded on the
       // channel now (spec §7B). It is not from a bot, so it is not the bot's `seq` and not the
       // bot being heard; its answer will arrive as a message of its own, for everyone. Dropped
-      // here rather than in the reducer so nothing about it can reach state.
+      // here rather than in the reducer so nothing about it can reach state — but it is traffic
+      // on the channel, and the traffic screen is where "who else is asking for things" lives.
+      await log(isDuplicate: false)
       return nil
     }
     session.lastChannelDatagramAt = now()
-    return await ingest(message, isBacklog: isBacklog)
+    let changes = await ingest(message, isBacklog: isBacklog)
+    await log(isDuplicate: changes.contains { if case .duplicate = $0 { true } else { false } })
+    return changes
   }
 
   private func isWeatherSlot(_ index: UInt8) async -> Bool {
@@ -662,7 +783,15 @@ public actor WeatherService {
       case let (.areaSweepStored, .areaSweep(sweep)):
         // Filled on the *first* packet, not on the last: the seven that follow are already on
         // the air, and a second phone tapping between them must not add eight more.
-        fill(botID, .areaSweep, asOf: Date(unixMinutes: sweep.builtMinutes))
+        //
+        // Keyed by what the sweep covers rather than by what anybody asked for — the sweep's own
+        // scope entries, which is the only evidence on the wire. A packet of a scoped sweep that
+        // is not the one carrying the scope names no states and fills nothing: the packet that
+        // did carry them already filled the slot, and guessing here would fill the national slot
+        // with a sweep of Texas.
+        if let states = sweepScopeCodes(of: sweep) {
+          fill(botID, .areaSweep(states: states), asOf: Date(unixMinutes: sweep.builtMinutes))
+        }
       case (.coverageStored, .coverage):
         // No content time: the statement describes the bot, not an hour (spec §7A), so the
         // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
@@ -676,6 +805,19 @@ public actor WeatherService {
         break
       }
     }
+  }
+
+  /// What a sweep packet says it covers, as the state codes an ``AnswerKey/areaSweep(states:)``
+  /// is keyed by: `[]` for the country, the codes for a scoped sweep whose scope entries are in
+  /// this packet, nil when it is scoped and they are not.
+  ///
+  /// A state index this bundle has no code for keeps its number, so an older bundle reading a
+  /// newer bot's sweep gets a key that is still unique to that selection rather than one that
+  /// silently equals the national slot.
+  private func sweepScopeCodes(of sweep: MeshWXAreaSweep) -> [String]? {
+    guard sweep.isScoped else { return [] }
+    guard !sweep.scope.isEmpty else { return nil }
+    return WeatherRequest.sweepStates(sweep.scope.map { tables.stateCode($0) ?? String($0) })
   }
 
   // MARK: Requests
@@ -723,8 +865,9 @@ public actor WeatherService {
     // (`handleTimeout`), which is what makes it a copy rather than a second request.
     let seq = nextRequestSeq
     do {
-      try await transport.sendChannelRequest(
+      let sent = try await transport.sendChannelRequest(
         text: request.wireText, botID: bot.botID, timestamp: sentAt, seq: seq)
+      await recordSent(sent, botID: bot.botID)
       nextRequestSeq &+= 1
       let entry = WeatherPendingRequest(
         request: request, botID: bot.botID, botPublicKey: bot.publicKey, sentAt: sentAt,
@@ -774,8 +917,21 @@ public actor WeatherService {
     case .warningText, .forecastDiscussion, .spaceWeather, .stormReports, .rainfall, .metar, .taf, .hazardousOutlook:
       AnswerSlot(botID: botID, key: .text(request))
     case .coverage: AnswerSlot(botID: botID, key: .coverage)
-    case .areaSweep: AnswerSlot(botID: botID, key: .areaSweep)
-    case .homeForecast, .forecastForPlace: nil
+    case let .areaSweep(_, states):
+      AnswerSlot(botID: botID, key: .areaSweep(states: WeatherRequest.sweepStates(states)))
+    // `>part` is the repair, not the answer, and the five-minute rule must never hold it back
+    // (spec revision 10, §1.1). The case it exists for is precisely an answer received in the
+    // last five minutes that arrived with holes in it: refusing the ask on the grounds that the
+    // answer just came would leave "4 of 7 parts arrived" on screen with nothing to do about it,
+    // which is the thing the owner asked to be able to fix.
+    //
+    // It is cheap enough to be safe: three packets instead of eight, the bot resends the same
+    // `(group, idx)` at most once every 30 s whoever asks, and the app offers the ask only while
+    // the assembly is incomplete (`WeatherPartsOffer`).
+    case .parts: nil
+    // Nobody can say in advance which point the bot will pick, so there is no slot to key. A
+    // place the bot resolves for itself has never had one.
+    case .homeForecast, .forecastForPlace, .forecastAt: nil
     }
   }
 
@@ -916,9 +1072,12 @@ public actor WeatherService {
     pending[id] = entry
     do {
       lastSendAt = entry.request.sentAt
-      try await transport.sendChannelRequest(
+      let sent = try await transport.sendChannelRequest(
         text: entry.request.request.wireText, botID: entry.request.botID,
         timestamp: entry.request.timestamp, seq: entry.request.seq)
+      // The resend is its own row: the same bytes went on the air a second time, and a screen
+      // about airtime must show both.
+      await recordSent(sent, botID: entry.request.botID)
     } catch {
       settle(id: id, outcome: .failed(error.localizedDescription))
       return
@@ -1009,9 +1168,52 @@ public actor WeatherService {
       payload, satisfies: request.request.expectedReply, fromAddressedBot: request.botID == botID,
       stationIndex: stationIndex, tables: tables)
     else { return false }
+    switch request.request {
+    // `>part 212 1,4,6` settles the moment **any** of the indexes asked for lands (spec revision
+    // 10, §1.1). The other two are still on the air behind it, and a request that only settled on
+    // the last of them would time out every time one of the three was lost again — which is the
+    // situation the ask exists for. A packet of group 212 the request did not name is the bot's
+    // ordinary transmission, and settles nothing.
+    case let .parts(_, indexes, _):
+      switch payload {
+      case let .areaSweep(sweep): return indexes.contains(sweep.index)
+      case let .text(chunk): return indexes.contains(chunk.index)
+      default: return false
+      }
+    // `>f <lat>,<lon>`: the bot picks the point (spec revision 10, §1.3), so the check is
+    // distance from what was asked about, not the index.
+    case let .forecastAt(latitude, longitude):
+      guard case let .forecast(forecast) = payload else { return false }
+      return Self.forecast(forecast, answersLatitude: latitude, longitude: longitude, tables: tables)
+    default:
+      break
+    }
     guard case let .text(chunk) = payload else { return true }
     guard let assembly = states[botID]?.texts[chunk.group] else { return false }
     return WeatherTextMatch.matches(request.request, assembly: assembly, states: states, tables: tables)
+  }
+
+  /// Whether a forecast answers a `>f <lat>,<lon>` (spec revision 10, §1.3). Static and
+  /// table-driven so the rule is testable without a service.
+  ///
+  /// Two ways it can:
+  ///
+  /// - The bot resolved a point this bundle does not carry (`0xFFFF`). There is nothing to measure
+  ///   — that is the whole reason the ask exists — and only the bot asked can send one that
+  ///   answers this request, so any such forecast from it while the request is pending is it.
+  /// - The point is bundled, and it is within ``forecastSubstituteKilometres`` of the coordinate
+  ///   asked about. The same 80 km `>f <index>` already allows, for the same reason: the bot
+  ///   forecasts the coordinates, and what comes back may be a neighbouring point under its own
+  ///   index.
+  static func forecast(
+    _ forecast: MeshWXForecast, answersLatitude latitude: Double, longitude: Double,
+    tables: MeshWXTables
+  ) -> Bool {
+    if forecast.isUnbundledPoint { return true }
+    guard let point = tables.point(at: forecast.pointIndex) else { return false }
+    return MeshWXGeo.distanceKilometres(
+      fromLat: latitude, lon: longitude, toLat: point.lat, lon: point.lon)
+      <= forecastSubstituteKilometres
   }
 
   /// Records on the stored answer that this phone asked for it: the channel is shared, and a
@@ -1026,15 +1228,46 @@ public actor WeatherService {
         // request is its only label (spec §7).
         states[botID]?.forecasts[forecast.pointIndex]?.requestLabel = place
       }
+      if case let .forecastAt(latitude, longitude) = request.request {
+        // The coordinate asked about is the only name this forecast has (spec revision 10,
+        // §1.3), so it moves out of the one slot for answers nobody here asked for and under
+        // its own key. The reducer put it there because the reducer holds no requests and could
+        // not know; this is the moment it becomes an answer to a question of this phone's.
+        let key = WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude)
+        guard var stored = states[botID]?.unbundledForecasts[WeatherBotState.unbundledAskKey]
+          ?? states[botID]?.forecasts[forecast.pointIndex]
+        else { return }
+        stored.requestedHere = true
+        stored.requestLabel = key
+        states[botID]?.unbundledForecasts.removeValue(forKey: WeatherBotState.unbundledAskKey)
+        states[botID]?.unbundledForecasts[key] = stored
+        states[botID]?.forecasts[forecast.pointIndex]?.requestLabel = key
+        if var state = states[botID] {
+          WeatherStateReducer.pruneUnbundledForecasts(&state)
+          states[botID] = state
+        }
+      }
     case let .text(chunk):
       states[botID]?.texts[chunk.group]?.request = request.request
     case let .areaSweep(sweep):
-      // Only if the held sweep is still this one: the reducer may have set this packet aside as
-      // older than what it holds, and then the sweep on screen is not this request's answer.
-      guard states[botID]?.areaSweep?.group == sweep.group,
-        states[botID]?.areaSweep?.builtMinutes == sweep.builtMinutes
-      else { return }
-      states[botID]?.areaSweep?.request = request.request
+      // Only if the sweep is still held as this one: the reducer may have set this packet aside
+      // as older than what it holds, and then the sweep on screen is not this request's answer.
+      guard let index = states[botID]?.areaSweeps.firstIndex(where: {
+        $0.group == sweep.group && $0.builtMinutes == sweep.builtMinutes
+      }) else { return }
+      switch request.request {
+      case .areaSweep:
+        states[botID]?.areaSweeps[index].request = request.request
+      case .parts:
+        // A `>part` repairs a sweep that may well be somebody else's; it does not make the sweep
+        // this phone's. It is recorded only where nothing else claims it, so the screen can still
+        // say this phone spent airtime on the map it is looking at.
+        if states[botID]?.areaSweeps[index].request == nil {
+          states[botID]?.areaSweeps[index].request = request.request
+        }
+      default:
+        break
+      }
     default:
       break
     }
@@ -1111,7 +1344,19 @@ public actor WeatherService {
     case (.areaSweep, .areaSweep):
       // The first packet of the sweep settles the tap; the other seven keep flowing into state,
       // exactly as `>w`'s warnings do after its first message. Only the bot asked reaches here.
+      //
+      // Neither the breadth nor the scope asked for is checked against the answer: a bot that
+      // will not widen to advisories answers the narrow sweep, and one whose feed reaches only
+      // Texas answers a two-state ask with Texas. Both are still the answer to the tap, and the
+      // sweep's own flag and scope entries are what the screen reads.
       return true
+    case let (.parts(group), .areaSweep(sweep)):
+      // Which of the indexes asked for arrived is checked by the service against the request
+      // itself (`answers`), the way a text reply's words are: the reply kind carries the group
+      // and no more. Only the bot asked reaches here — a `group` byte is one bot's counter.
+      return fromAddressedBot && sweep.group == group
+    case let (.parts(group), .text(chunk)):
+      return fromAddressedBot && chunk.group == group
     default:
       return false
     }

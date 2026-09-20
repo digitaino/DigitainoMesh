@@ -436,9 +436,6 @@
 /* Location: WeatherCopy.swift - Nothing held, and the nearest point is over 10 km away. %1$@ is the place, %2$@ the point's name, %3$@ its distance like "60 km" */
 "weather.forecast.missingFar" = "Nog geen verwachting voor %1$@. Het dichtstbijzijnde verwachtingspunt is %2$@, %3$@.";
 
-/* Location: WeatherCopy.swift - No forecast point close enough to speak for the place, %@ is the place */
-"weather.forecast.noPoint" = "Geen verwachtingspunt bij %@.";
-
 /* Location: WeatherForecastSection.swift - Accessibility summary, %lld is how many forecast rows */
 "weather.forecast.accessibility.rows" = "%lld items";
 
@@ -991,8 +988,8 @@
 
 // MARK: - Your requests
 
-/* Location: WeatherRadioView.swift - Section header for the requests this phone sent */
-"weather.requests.header" = "Jouw verzoeken";
+/* Location: WeatherRadioView.swift - Header of this phone's own requests; the newest three are listed */
+"weather.requests.newest" = "Jouw verzoeken";
 
 /* Location: WeatherRadioView.swift - Footer under the requests this phone sent */
 "weather.requests.footer" = "Waar deze telefoon om heeft gevraagd. Elk antwoord werd uitgezonden, dus iedereen die meeluisterde kreeg het ook.";
@@ -1182,19 +1179,13 @@
 // MARK: - National alert map
 
 /* Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it */
-"weather.areaMap.title" = "Landelijke waarschuwingskaart";
+"weather.areaMap.title" = "Waarschuwingskaart";
 
 /* Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap */
 "weather.areaMap.open" = "Volledige kaart openen";
 
 /* Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing */
 "weather.areaMap.list" = "Wat er op deze kaart staat";
-
-/* Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on */
-"weather.areaMap.onTheMap" = "Op de kaart";
-
-/* Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area */
-"weather.areaMap.held" = "Wat deze telefoon heeft";
 
 /* Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area */
 "weather.areaMap.askArea" = "Vraag naar dit gebied";
@@ -1216,9 +1207,6 @@
 
 /* Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM" */
 "weather.areaMap.asOf" = "Kaart van %@";
-
-/* Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent */
-"weather.areaMap.partial" = "%1$lld van %2$lld delen aangekomen — een deel van het land ontbreekt";
 
 /* Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit */
 "weather.areaMap.cut" = "Ingekort om te passen — een gebied dat hier niet gekleurd is, kan toch onder een waarschuwing vallen";
@@ -1259,6 +1247,9 @@
 /* Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets */
 "weather.areaMap.cost" = "Ongeveer %lld pakketten op het gedeelde kanaal.";
 
+/* Location: WeatherAreaMapView.swift - The same when one packet is all it costs */
+"weather.areaMap.costOne" = "Ongeveer 1 pakket op het gedeelde kanaal.";
+
 /* Location: WeatherAreaMapView.swift - Header over the colors used on the map */
 "weather.areaMap.legend" = "Wat de kleuren betekenen";
 
@@ -1276,3 +1267,327 @@
 
 /* Location: WeatherCopy.swift - Name of a request for the national alert map including advisories */
 "weather.requestName.areaMapAll" = "Landelijke waarschuwingskaart · met berichten";
+
+// MARK: - Alert map, revision 10
+
+/* Location: WeatherAreaMapView.swift - Status card: the national part, where a newer scoped part covers some states */
+"weather.areaMap.restOfCountry" = "De rest van het land";
+
+/* Location: WeatherAreaMapView.swift - Status card: the national part, where nothing newer covers any state */
+"weather.areaMap.wholeCountry" = "Het hele land";
+
+/* Location: WeatherAreaMapView.swift - Status card: a scoped part whose first packet, which carries the states, never arrived */
+"weather.areaMap.partStatesUnknown" = "Een deel van het land, staten onbekend";
+
+/* Location: WeatherAreaMapView.swift - Status card: a part every one of whose states a newer part now speaks for */
+"weather.areaMap.partReplaced" = "Een nieuwer deel hierboven dekt deze staten.";
+
+/* Location: WeatherAreaMapView.swift - When one part of the map was built, %@ is a time like "1:40 PM" */
+"weather.areaMap.partAsOf" = "stand van %@";
+
+/* Location: WeatherAreaMapView.swift - Packets of one part never arrived. %1$lld is how many arrived, %2$lld how many were sent */
+"weather.areaMap.partsArrived" = "%1$lld van %2$lld delen aangekomen";
+
+/* Location: WeatherAreaMapView.swift - Button asking the radio to send the packets that never arrived, %lld is two or more */
+"weather.areaMap.askParts" = "%lld ontbrekende delen opvragen";
+
+/* Location: WeatherAreaMapView.swift - The same button when one packet is missing */
+"weather.areaMap.askPartsOne" = "Ontbrekend deel opvragen";
+
+/* Location: WeatherAreaMapView.swift - What that button costs, %lld is two or more */
+"weather.areaMap.packets" = "%lld pakketten";
+
+/* Location: WeatherAreaMapView.swift - What that button costs when it is one packet */
+"weather.areaMap.packetsOne" = "1 pakket";
+
+/* Location: WeatherAreaMapView.swift - Too many states to name one by one, %lld is four or more */
+"weather.areaMap.stateCount" = "%lld staten";
+
+/* Location: WeatherAreaMapView.swift - Two states in a list, all but the last pair. %1$@ and %2$@ are state names */
+"weather.areaMap.listJoin" = "%1$@, %2$@";
+
+/* Location: WeatherAreaMapView.swift - The last pair of states in a list. %1$@ and %2$@ are state names */
+"weather.areaMap.listJoinAnd" = "%1$@ en %2$@";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when no part of it is national. %@ is a list of states */
+"weather.areaMap.covers" = "Deze kaart dekt %@.";
+
+/* Location: WeatherAreaMapView.swift - Under that: an unshaded state outside the map is unknown, not calm */
+"weather.areaMap.notAsked" = "De rest van het land is niet opgevraagd. Een staat buiten deze kaart is onbekend, niet vrij van waarschuwingen.";
+
+/* Location: WeatherAreaMapView.swift - Row opening the state picker, with what is chosen beside it */
+"weather.areaMap.areasToAsk" = "Gebieden om op te vragen";
+
+/* Location: WeatherAreaMapView.swift - The ask button when states are chosen. %@ is a list of state names */
+"weather.areaMap.askStates" = "%@ opvragen";
+
+/* Location: WeatherAreaMapView.swift - The ask button when the whole country is chosen */
+"weather.areaMap.askWholeCountry" = "Hele land opvragen";
+
+/* Location: WeatherAreaMapView.swift - Said before the tap when the selection is wider than one request can name. %lld is the limit */
+"weather.areaMap.tooManyStates" = "Meer dan %lld staten vraagt het hele land op.";
+
+/* Location: WeatherAreaMapView.swift - The tapped area is on the map but no alert for it has arrived. %@ is a time like "1:20 PM" */
+"weather.areaMap.onMapAsOf" = "Op de kaart, stand van %@. Details niet ontvangen.";
+
+/* Location: WeatherAreaMapView.swift - First row of the state picker */
+"weather.areaMap.pickerWholeCountry" = "Het hele land";
+
+/* Location: WeatherAreaMapView.swift - Section header over the state the page's place is in */
+"weather.areaMap.pickerYourState" = "Waar deze pagina ligt";
+
+/* Location: WeatherAreaMapView.swift - Section header over the rest of the states */
+"weather.areaMap.pickerEveryState" = "Alle staten";
+
+/* Location: WeatherAreaMapView.swift - Search field prompt in the state picker */
+"weather.areaMap.pickerSearch" = "Staten zoeken";
+
+/* Location: WeatherAreaMapView.swift - How many states are chosen, %lld is one or more */
+"weather.areaMap.pickerSelected" = "%lld geselecteerd";
+
+/* Location: WeatherAreaMapView.swift - The search in the state picker found nothing */
+"weather.areaMap.pickerNoMatches" = "Geen staten komen overeen met die zoekopdracht.";
+
+/* Location: WeatherAreaMapView.swift - Closes the state picker where it is presented rather than pushed (the web client) */
+"weather.areaMap.pickerDone" = "Gereed";
+
+// MARK: - Text reports: the missing chunks
+
+/* Location: WeatherReportsView.swift - Button asking the radio to send the chunks of a report that never arrived, %lld is two or more */
+"weather.reports.askParts" = "%lld ontbrekende delen opvragen";
+
+/* Location: WeatherReportsView.swift - The same button when one chunk is missing */
+"weather.reports.askPartsOne" = "Ontbrekend deel opvragen";
+
+// MARK: - Forecast, revision 10
+
+/* Location: WeatherForecastSection.swift - The forecast is for a point the radio picked, which this app cannot name. %@ is the radio's name */
+"weather.forecast.chosenByBot" = "Verwachtingspunt gekozen door %@";
+
+/* Location: Asks for a forecast at the place's own coordinate. %@ is the radio's name. On iOS the page's Update sends it and the card carries no button of its own */
+"weather.forecast.askNearby" = "%@ om een verwachting voor hier vragen";
+
+// MARK: - Request names, revision 10
+
+/* Location: WeatherCopy.swift - Name of a request for the packets of an answer that never arrived. %@ is what the answer was */
+"weather.requestName.parts" = "Ontbrekende delen van %@";
+
+/* Location: WeatherCopy.swift - The same, for an answer this app cannot name */
+"weather.requestName.partsGeneric" = "Ontbrekende delen";
+
+/* Location: WeatherCopy.swift - Name of a request for a forecast at a coordinate. %@ is the coordinate that was asked about */
+"weather.requestName.forecastAt" = "Verwachting voor %@";
+
+/* Location: WeatherCopy.swift - Name of a request for an alert map of some states. %@ is a list of state names */
+"weather.requestName.areaMapStates" = "Waarschuwingskaart · %@";
+
+/* Location: WeatherCopy.swift - The same, including advisories. %@ is a list of state names */
+"weather.requestName.areaMapStatesAll" = "Waarschuwingskaart · %@ · met berichten";
+
+// MARK: - Your requests
+
+/* Location: WeatherRadioView.swift - Row opening the whole request log, %lld is how many it holds */
+"weather.requests.all" = "Alle verzoeken (%lld)";
+
+/* Location: WeatherRadioView.swift - Title of that screen */
+"weather.requests.allTitle" = "Alle verzoeken";
+
+// MARK: - Channel traffic
+
+/* Location: WeatherTrafficView.swift - Row on the radio page, and the title of the timeline it opens */
+"weather.traffic.title" = "Kanaalverkeer";
+
+/* Location: WeatherTrafficView.swift - Under that title */
+"weather.traffic.subtitle" = "Alles wat op #meshwx is gehoord, het nieuwste onderaan.";
+
+/* Location: WeatherTrafficView.swift - Shown while the log is empty */
+"weather.traffic.empty" = "Nog niets gehoord op dit kanaal.";
+
+/* Location: WeatherTrafficView.swift - Empties the log */
+"weather.traffic.clear" = "Wissen";
+
+/* Location: WeatherTrafficView.swift - Title of the confirmation for that */
+"weather.traffic.clearTitle" = "Kanaallog wissen?";
+
+/* Location: WeatherTrafficView.swift - Body of that confirmation, %lld is how many rows go */
+"weather.traffic.clearMessage" = "Dit verwijdert de %lld regels die deze telefoon bewaarde van wat er op #meshwx langskwam. Het opgeslagen weer blijft ongemoeid.";
+
+/* Location: WeatherTrafficView.swift - Name over a request this phone sent */
+"weather.traffic.you" = "Deze telefoon";
+
+/* Location: WeatherTrafficView.swift - Name over a datagram whose header could not be read far enough to name a radio */
+"weather.traffic.unknownSender" = "Onbekende afzender";
+
+/* Location: WeatherTrafficView.swift - On the detail screen of a datagram the codec could not read */
+"weather.traffic.notDecoded" = "Deze app kon dit datagram niet lezen.";
+
+/* Location: WeatherTrafficView.swift - Header over the datagram's own facts */
+"weather.traffic.about" = "Dit datagram";
+
+/* Location: WeatherTrafficView.swift - When this phone heard or sent it */
+"weather.traffic.field.when" = "Tijd";
+
+/* Location: WeatherTrafficView.swift - Which radio sent it */
+"weather.traffic.field.from" = "Van";
+
+/* Location: WeatherTrafficView.swift - How many bytes of airtime it took */
+"weather.traffic.field.size" = "Grootte";
+
+/* Location: WeatherTrafficView.swift - The radio's own counter for this message */
+"weather.traffic.field.seq" = "Volgnummer";
+
+/* Location: WeatherTrafficView.swift - Signal-to-noise of the received packet */
+"weather.traffic.field.signal" = "Signaal";
+
+/* Location: WeatherTrafficView.swift - How many repeaters it passed through */
+"weather.traffic.field.hops" = "Hops";
+
+/* Location: WeatherTrafficView.swift - Which channel slot it arrived on */
+"weather.traffic.field.slot" = "Kanaalslot";
+
+/* Location: WeatherTrafficView.swift - The message type nibble the header carries */
+"weather.traffic.field.type" = "Berichttype";
+
+/* Location: WeatherTrafficView.swift - The MeshCore data type the datagram was sent under */
+"weather.traffic.field.dataType" = "Gegevenstype";
+
+/* Location: WeatherTrafficView.swift - The datagram was drained from your radio's queue, not heard live */
+"weather.traffic.backlog" = "uit de wachtrij van de radio";
+
+/* Location: WeatherTrafficView.swift - The app had already applied this message */
+"weather.traffic.duplicate" = "duplicaat";
+
+/* Location: WeatherTrafficView.swift - Payload length in bytes, %lld is the number */
+"weather.traffic.bytes" = "%lld B";
+
+/* Location: WeatherTrafficView.swift - The radio's counter in a bubble's facts line, %lld is the number */
+"weather.traffic.seq" = "seq %lld";
+
+/* Location: WeatherTrafficView.swift - Signal-to-noise in a bubble's facts line, %@ is a number like "12" */
+"weather.traffic.snr" = "SNR %@ dB";
+
+/* Location: WeatherTrafficView.swift - How many repeaters the packet passed, %lld is two or more */
+"weather.traffic.hops" = "%lld hops";
+
+/* Location: WeatherTrafficView.swift - The packet passed one repeater */
+"weather.traffic.hopsOne" = "1 hop";
+
+/* Location: WeatherTrafficView.swift - The packet carried no path at all: it was flooded to the mesh */
+"weather.traffic.flood" = "verspreid";
+
+/* Location: WeatherTrafficView.swift - Header over what the decoded message says */
+"weather.traffic.fields" = "Wat erin staat";
+
+/* Location: WeatherTrafficView.swift - Header over the raw payload */
+"weather.traffic.hex" = "Bytes";
+
+/* Location: WeatherTrafficView.swift - Shown in place of the sender for a datagram this phone put on the air */
+"weather.traffic.sent" = "Verzonden vanaf dit apparaat";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one alert */
+"weather.traffic.title.warning" = "Waarschuwing";
+
+/* Location: WeatherTrafficView.swift - A bubble saying an alert has ended */
+"weather.traffic.title.cancel" = "Waarschuwing beëindigd";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying the list of active alerts */
+"weather.traffic.title.digest" = "Waarschuwingslijst";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying station readings */
+"weather.traffic.title.observations" = "Waarnemingen";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying a forecast */
+"weather.traffic.title.forecast" = "Verwachting";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one chunk of a text reply */
+"weather.traffic.title.text" = "Tekstrapport";
+
+/* Location: WeatherTrafficView.swift - A bubble saying the radio cannot serve a request */
+"weather.traffic.title.notAvailable" = "Niet beschikbaar";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying the radio's statement of its area */
+"weather.traffic.title.coverage" = "Wat het dekt";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying somebody's request. %@ is the first bytes of their key */
+"weather.traffic.title.request" = "Verzoek van %@";
+
+/* Location: WeatherTrafficView.swift - The same bubble for a request this phone sent */
+"weather.traffic.title.requestSent" = "Verzoek verzonden";
+
+/* Location: WeatherTrafficView.swift - A bubble carrying one packet of an alert map */
+"weather.traffic.title.areaSweep" = "Waarschuwingskaart";
+
+/* Location: WeatherTrafficView.swift - A bubble whose bytes the codec could not read */
+"weather.traffic.title.unreadable" = "Onleesbaar";
+
+/* Location: WeatherTrafficView.swift - A bubble of a message type this app does not know */
+"weather.traffic.title.otherData" = "Andere gegevens";
+
+/* Location: WeatherTrafficView.swift - How many stations a readings message carried, %lld is two or more */
+"weather.traffic.detail.stations" = "%lld stations";
+
+/* Location: WeatherTrafficView.swift - A readings message for one station */
+"weather.traffic.detail.stationsOne" = "1 station";
+
+/* Location: WeatherTrafficView.swift - How many alerts a list named, %lld is two or more */
+"weather.traffic.detail.alerts" = "%lld waarschuwingen";
+
+/* Location: WeatherTrafficView.swift - A list naming one alert */
+"weather.traffic.detail.alertsOne" = "1 waarschuwing";
+
+/* Location: WeatherTrafficView.swift - How many areas one map packet shaded, %lld is two or more */
+"weather.traffic.detail.areas" = "%lld gebieden";
+
+/* Location: WeatherTrafficView.swift - One map packet shading one area */
+"weather.traffic.detail.areasOne" = "1 gebied";
+
+/* Location: WeatherTrafficView.swift - How many Weather Service offices a coverage statement named, %lld is two or more */
+"weather.traffic.detail.offices" = "%lld kantoren";
+
+/* Location: WeatherTrafficView.swift - A coverage statement naming one office */
+"weather.traffic.detail.officesOne" = "1 kantoor";
+
+/* Location: WeatherTrafficView.swift - Which packet of a multi-packet answer this is. %1$lld is its number, %2$lld how many there are */
+"weather.traffic.detail.part" = "deel %1$lld van %2$lld";
+
+/* Location: WeatherTrafficView.swift - A forecast for a point the radio picked, which this app's tables cannot name */
+"weather.traffic.detail.botPoint" = "punt gekozen door de bot";
+
+/* Location: WeatherTrafficView.swift - A map packet belonging to a sweep of the whole country */
+"weather.traffic.detail.national" = "het hele land";
+
+/* Location: WeatherTrafficView.swift - A map packet of a sweep covering some states, where this packet does not carry which */
+"weather.traffic.detail.scopedUnknown" = "beperkt, staten niet in dit pakket";
+
+/* Location: WeatherTrafficView.swift - The radio dropped entries or text to make the message fit */
+"weather.traffic.detail.cut" = "ingekort om te passen";
+
+/* Location: WeatherTrafficView.swift - The map packet's sweep carries advisories as well as warnings and watches */
+"weather.traffic.detail.advisories" = "met berichten";
+
+/* Location: WeatherTrafficView.swift - Why the radio could not serve a request (spec reason 0) */
+"weather.traffic.reason.noData" = "geen gegevens";
+
+/* Location: WeatherTrafficView.swift - Reason 1 */
+"weather.traffic.reason.unknownLocation" = "onbekende locatie";
+
+/* Location: WeatherTrafficView.swift - Reason 2 */
+"weather.traffic.reason.unsupported" = "niet ondersteund";
+
+/* Location: WeatherTrafficView.swift - Reason 3 */
+"weather.traffic.reason.botError" = "botfout";
+
+/* Location: WeatherTrafficView.swift - Reason 4 */
+"weather.traffic.reason.rateLimited" = "te kort geleden gevraagd";
+
+/* Location: WeatherTrafficView.swift - Any other reason */
+"weather.traffic.reason.other" = "geen reden gegeven";
+
+/* Location: WeatherTrafficView.swift - Why an alert ended (spec cancel reason 0) */
+"weather.traffic.cancelReason.cancelled" = "ingetrokken";
+
+/* Location: WeatherTrafficView.swift - Cancel reason 1 */
+"weather.traffic.cancelReason.expiredEarly" = "vroeg verlopen";
+
+/* Location: WeatherTrafficView.swift - Cancel reason 2: a stronger alert follows, so nothing improved */
+"weather.traffic.cancelReason.upgraded" = "opgeschaald";

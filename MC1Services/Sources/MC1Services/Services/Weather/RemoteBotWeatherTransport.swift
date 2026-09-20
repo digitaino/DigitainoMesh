@@ -159,9 +159,16 @@ public actor RemoteBotWeatherTransport: WeatherTransport {
   /// back on the feed exactly as it does for a DM. Nothing is confirmed either way — a datagram
   /// has no acknowledgement — so unlike ``sendRequest(to:text:timestamp:attempt:)`` this one
   /// pushes no stand-in code.
-  public func sendChannelRequest(text: String, botID: UInt16, timestamp: Date, seq: UInt8) async throws {
+  ///
+  /// Returns nil for the same reason: no datagram goes on any channel, so there are no bytes and
+  /// no slot for the channel traffic log to show (docs/MESHWX_UI.md §12).
+  @discardableResult
+  public func sendChannelRequest(
+    text: String, botID: UInt16, timestamp: Date, seq: UInt8
+  ) async throws -> WeatherChannelRequestSent? {
     let accepted = try await post(text)
     logger.info("Bridge took channel request \(text) for bot \(botID) seq \(seq): accepted=\(accepted)")
+    return nil
   }
 
   /// Posts one `>` request through the bridge. Returns whether the bot accepted it; a refusal

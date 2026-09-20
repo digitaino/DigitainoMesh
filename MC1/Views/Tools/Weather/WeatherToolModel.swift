@@ -194,9 +194,22 @@ final class WeatherToolModel {
   /// (docs/MESHWX_UI.md §3.1 U-1). Injectable so a test gets its own defaults suite rather than
   /// the user's.
   @ObservationIgnored let savedPlacesStore: WeatherSavedPlacesStore
+  /// Which states the next alert map should cover, kept on the phone (`weather.areaSelection`).
+  /// Injectable for the same reason.
+  @ObservationIgnored let areaSelectionStore: WeatherAreaSelectionStore
+  /// What this phone heard and sent on the weather slot, oldest first — the channel traffic
+  /// timeline's rows (docs/MESHWX_UI.md §12). Empty until that screen asks for them.
+  private(set) var traffic: [WeatherTrafficEntry] = []
+  /// The choice made on this phone, or nil while nobody has made one. Nil is not the whole
+  /// country: the default depends on the page's own place, which the store knows nothing about.
+  private(set) var chosenAreas: WeatherAreaSelection?
 
-  init(savedPlacesStore: WeatherSavedPlacesStore = WeatherSavedPlacesStore()) {
+  init(
+    savedPlacesStore: WeatherSavedPlacesStore = WeatherSavedPlacesStore(),
+    areaSelectionStore: WeatherAreaSelectionStore = WeatherAreaSelectionStore()
+  ) {
     self.savedPlacesStore = savedPlacesStore
+    self.areaSelectionStore = areaSelectionStore
   }
   /// Why the pull that just happened sent nothing, while it is worth saying
   /// (docs/MESHWX_UI.md §3.1 U-6). A gesture that silently does nothing reads as broken.
@@ -249,6 +262,9 @@ final class WeatherToolModel {
   static let locatingWindow: TimeInterval = 5
   /// A fix older than this is refreshed on "Back to my location".
   static let staleFixAge: TimeInterval = 5 * 60
+  /// How many of this phone's own requests the radio page lists before it stops and offers the
+  /// rest behind a row (docs/MESHWX_UI.md §3.1 U-39).
+  nonisolated static let newestRequestCount = 3
 
   // MARK: - Derived
 
@@ -389,6 +405,7 @@ final class WeatherToolModel {
     adopt(savedPlacesStore.places)
     subscriptions = DefaultsWeatherAlertWatchStore().subscriptions
     requestLog = WeatherRequestLogStore().entries
+    chosenAreas = areaSelectionStore.selection
     now = Date()
     // Warm the tables where the first-touch cost is invisible.
     Task.detached(priority: .utility) { _ = MeshWXTables.shared }
@@ -472,6 +489,10 @@ final class WeatherToolModel {
   }
 
   private func handle(_ event: WeatherEvent, from service: WeatherService) async {
+    // The channel traffic timeline follows the wire, so it is refreshed by every event that
+    // could have put a row in the log — but only while somebody is looking at it, because a
+    // busy channel would otherwise copy three hundred rows out of the actor per datagram.
+    if isShowingTraffic { await refreshTraffic(from: service) }
     switch event {
     case .stateLoaded, .received:
       scheduleRebuild()
@@ -1126,6 +1147,22 @@ final class WeatherToolModel {
     WeatherRequestLogStore().entries = updated
   }
 
+  /// The newest few requests and how many there are in all, for the radio page's *Your requests*
+  /// (docs/MESHWX_UI.md §12, §3.1 U-39).
+  ///
+  /// The owner's fifth ask: *Your requests is way too long of a list.* Forty rows of a ledger on
+  /// a page whose other nine sections are one row each. It is three rows and a way in now, and
+  /// the log itself is untouched — what was wrong was the page, not the record.
+  var requestLogSplit: (newest: [WeatherRequestLogEntry], total: Int) {
+    Self.requestLogSplit(requestLog)
+  }
+
+  nonisolated static func requestLogSplit(
+    _ log: [WeatherRequestLogEntry], newest: Int = newestRequestCount
+  ) -> (newest: [WeatherRequestLogEntry], total: Int) {
+    (Array(log.prefix(newest)), log.count)
+  }
+
   func recordFingerprint(_ fingerprint: Fingerprint, for request: WeatherRequest) {
     fingerprints[request] = fingerprint
   }
@@ -1358,6 +1395,102 @@ final class WeatherToolModel {
 
   func setReportState(_ code: String, forPageID pageID: String) {
     reportStateOverrides[pageID] = code
+  }
+
+  // MARK: - The alert map (§17), per page
+
+  /// Every sweep the **page's own** radio has sent, resolved into one map
+  /// (`WeatherAlertMapPicture`): for each state the newest sweep that covers it wins, and only
+  /// that sweep's entries for that state are drawn.
+  ///
+  /// Per page id, like every other drill-in in this tool: a pushed screen reads the page it was
+  /// opened from and never the model's current page (docs/MESHWX_UI.md §13, §3.1 U-18).
+  ///
+  /// Computed rather than cached. It is a sort and one pass over at most eight sweeps' entries —
+  /// a few hundred runs — and a cache keyed on the sweeps would have to be written from `body`,
+  /// which is the one place this model never mutates itself from.
+  func areaPicture(forPageID pageID: String) -> WeatherAlertMapPicture {
+    guard let build = builds[pageID], let state = build.context.sourceState else {
+      return .empty
+    }
+    return WeatherAlertMapPicture.make(
+      sweeps: state.areaSweeps, states: MeshWXTables.shared.states, now: now)
+  }
+
+  /// What the next map should cover, for the page asking: the choice this phone last made, else
+  /// that page's own state, else the whole country.
+  func areaSelection(forPageID pageID: String) -> WeatherAreaSelection {
+    chosenAreas ?? .default(placeState: builds[pageID]?.context.placeStateCode)
+  }
+
+  /// Saved as it changes — there is nothing to commit, and the picker has no Done
+  /// (docs/MESHWX_UI.md §3.1 U-37). Device-local: which states somebody looks at is a fact about
+  /// this phone, not about a radio.
+  func setAreaSelection(_ selection: WeatherAreaSelection) {
+    chosenAreas = selection
+    areaSelectionStore.selection = selection
+  }
+
+  /// "Ask for the 3 missing parts" for one part of the map, or nil while it is not offered
+  /// (`WeatherPartsOffer`: incomplete, settled fifteen seconds, and inside the bot's ten-minute
+  /// cache).
+  ///
+  /// The part is matched back to the assembly it was built from by `(group, built)`: the picture
+  /// carries what a screen needs to *say*, and the offer's rules need the receipt times, which
+  /// only the assembly has.
+  func areaPartsOffer(
+    forPageID pageID: String, part: WeatherAlertMapPicture.Part
+  ) -> WeatherRequest? {
+    guard let state = builds[pageID]?.context.sourceState else { return nil }
+    guard let assembly = state.areaSweeps.first(where: {
+      $0.group == part.group && $0.builtMinutes == UInt32(part.builtAt.timeIntervalSince1970 / 60)
+    }) else { return nil }
+    return WeatherPartsOffer.make(assembly: assembly, kind: .areaSweep, now: now)
+  }
+
+  /// What the map says about one area: the event shading it and when the part that shaded it was
+  /// built. Nil for an area no part names.
+  ///
+  /// The picture is in part order — newest part first — and each part's entries are in severity
+  /// order, so the first entry naming the area is the newest and most severe word there is, which
+  /// is also the one the map drew.
+  func areaOnMap(forPageID pageID: String, ugc: String) -> WeatherAreaMapWord? {
+    let picture = areaPicture(forPageID: pageID)
+    let states = MeshWXTables.shared.states
+    for entry in picture.entries where entry.entry.ugcCodes(states: states).contains(ugc) {
+      guard picture.parts.indices.contains(entry.part) else { continue }
+      return WeatherAreaMapWord(event: entry.entry.event, asOf: picture.parts[entry.part].builtAt)
+    }
+    return nil
+  }
+
+  // MARK: - Channel traffic (§12)
+
+  /// The traffic screen is on screen, so the log is worth keeping up with. Set by that screen on
+  /// appear and cleared on disappear; the rows themselves are left alone, so pushing a bubble's
+  /// detail and coming back does not blank the timeline.
+  @ObservationIgnored var isShowingTraffic = false
+
+  /// Reads the log the service keeps of every datagram on the weather slot and every request this
+  /// phone sent (`WeatherService.trafficLog`). Oldest first, as the timeline reads.
+  func refreshTraffic() async {
+    await refreshTraffic(from: appState?.services?.weatherService)
+  }
+
+  private func refreshTraffic(from service: WeatherService?) async {
+    guard let service else {
+      traffic = []
+      return
+    }
+    traffic = await service.trafficLog()
+  }
+
+  /// The screen's "Clear": what is in the log is a window on the channel and nothing else depends
+  /// on it, so there is nothing to undo — and the weather the phone has stored is not touched.
+  func clearTraffic() async {
+    guard let service = appState?.services?.weatherService else { return }
+    await service.clearTrafficLog()
+    traffic = []
   }
 
   // MARK: - Bots

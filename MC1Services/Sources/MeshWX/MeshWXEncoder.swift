@@ -609,6 +609,13 @@ public enum MeshWXEncoder {
   /// Every field is bounded and every bound is checked rather than masked: `state << 1 | kind`
   /// puts the state one bit from the kind, and a state index of 128 silently truncated would
   /// move every area in the packet to another state's outlines.
+  /// - Parameters:
+  ///   - isScoped: the sweep covers only the states `scope` names (spec revision 10, §7C). It
+  ///     rides in `total` bit 7 and goes on **every** packet of a scoped sweep, including the
+  ///     ones that carry no scope entries.
+  ///   - scope: the state indices this packet names, written out first as scope entries — `event
+  ///     0`, kind zone, `start 0`, `run 1` — ahead of the alert entries. They count toward the 38
+  ///     an entry list holds, because they are entries.
   public static func areaSweep(
     seq: UInt8,
     bot: UInt16,
@@ -619,6 +626,8 @@ public enum MeshWXEncoder {
     entries: [MeshWXAreaSweep.Entry],
     wasCut: Bool = false,
     includesAdvisories: Bool = false,
+    isScoped: Bool = false,
+    scope: [UInt8] = [],
     source: MeshWXDataSource = .unstated
   ) throws -> Data {
     guard (1...MeshWXWire.maxAreaSweepPackets).contains(Int(total)) else {
@@ -628,9 +637,21 @@ public enum MeshWXEncoder {
     guard index < total else {
       throw MeshWXEncodeError.outOfRange(field: "area sweep index", value: Int(index))
     }
-    guard entries.count <= MeshWXWire.maxAreaSweepEntries else {
+    // A national sweep with a scope is a contradiction the wire cannot express — the scope
+    // entries would go out under a `total` whose bit 7 is clear, and every reader would take
+    // them for the country. Refused rather than silently promoted to scoped.
+    guard isScoped || scope.isEmpty else {
+      throw MeshWXEncodeError.outOfRange(field: "area sweep scope on a national sweep", value: scope.count)
+    }
+    guard scope.count <= MeshWXWire.maxSweepScopeStates else {
       throw MeshWXEncodeError.badCount(
-        what: "area sweep entries", count: entries.count,
+        what: "area sweep scope states", count: scope.count,
+        allowed: 0...MeshWXWire.maxSweepScopeStates)
+    }
+    // The scope rides in the entry list, so it spends the same budget the areas do.
+    guard scope.count + entries.count <= MeshWXWire.maxAreaSweepEntries else {
+      throw MeshWXEncodeError.badCount(
+        what: "area sweep entries", count: scope.count + entries.count,
         allowed: 0...MeshWXWire.maxAreaSweepEntries)
     }
 
@@ -642,8 +663,8 @@ public enum MeshWXEncoder {
     out.appendU32(builtMinutes)
     out.append(group)
     out.append(index)
-    out.append(total)
-    for entry in entries {
+    out.append(total | (isScoped ? MeshWXWire.sweepScopedBit : 0))
+    for entry in scope.map({ MeshWXAreaSweep.scopeEntry(stateIndex: $0) }) + entries {
       guard entry.stateIndex <= 127 else {
         throw MeshWXEncodeError.outOfRange(field: "sweep state index", value: Int(entry.stateIndex))
       }
@@ -676,6 +697,8 @@ public enum MeshWXEncoder {
       entries: sweep.entries,
       wasCut: sweep.wasCut,
       includesAdvisories: sweep.includesAdvisories,
+      isScoped: sweep.isScoped,
+      scope: sweep.scope,
       source: source
     )
   }

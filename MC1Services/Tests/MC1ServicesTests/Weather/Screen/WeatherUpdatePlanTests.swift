@@ -614,3 +614,146 @@ struct WeatherUpdatePlanCoverageTests {
     #expect(!plan(bare).items.contains(.areaAlerts))
   }
 }
+
+/// Spec revision 10, §1.3: the forecast card and the Update plan for a place the bundle has no
+/// point for, and for a forecast the bot chose the point for.
+@Suite("Weather forecast by coordinate")
+struct WeatherForecastAtTests {
+  typealias P = WeatherPhoneFixture
+  let tables = MeshWXTables.shared
+
+  /// Pago Pago, American Samoa: the office PPG is one of the nine the first cut of
+  /// `pfm_points.json` had no point at all for, and the Pacific territories are still thousands
+  /// of kilometres from the nearest one.
+  static let pagoPago = MeshWXCoordinate(latitude: -14.2756, longitude: -170.7020)
+  static let santaFe = MeshWXCoordinate(latitude: 35.687, longitude: -105.938)
+
+  private func plan(_ state: WeatherBotState, place: WeatherPlace) -> WeatherUpdatePlan {
+    let snapshot = WeatherScreenSnapshot.make(
+      WeatherScreenSnapshot.Inputs(
+        states: [P.botID: state],
+        bots: [WeatherBot(
+          publicKey: Data([0x1D, 0x04]) + Data(repeating: 0x55, count: 30),
+          name: "WX-AUS", latitude: 0, longitude: 0, lastAdvert: nil)],
+        preferredBotID: nil, place: place, isRadioConnected: true, firmwareSupportsWeather: true,
+        firmwareVersion: "v1.15.0", hasWeatherChannel: true,
+        session: WeatherSessionInfo(startedAt: P.now.addingTimeInterval(-3600)),
+        now: P.now, calendar: P.calendar),
+      geometry: MeshWXGeometry.shared, tables: tables)
+    return WeatherUpdatePlan.make(
+      snapshot: snapshot, sourceState: state, coverageAlreadyAsked: true, tables: tables,
+      now: P.now)
+  }
+
+  /// The empty card with no point to name still asks — by coordinate. Before revision 10 it was
+  /// `.noPointNearby` and asked for nothing at all, which is what the owner saw as "forecast
+  /// works in chat but not in the app".
+  @Test
+  func `a place with no bundled point in reach is asked about by coordinate`() {
+    let place = P.place(Self.pagoPago, label: "Pago Pago, AS")
+    var state = P.state()
+    state.forecasts = [:]
+    let plan = plan(state, place: place)
+    #expect(plan.steps.map(\.request).contains(
+      .forecastAt(latitude: Self.pagoPago.latitude, longitude: Self.pagoPago.longitude)))
+    #expect(plan.items.contains(.forecast))
+  }
+
+  /// A held forecast under a coordinate within 25 km of the place **is** that place's forecast,
+  /// labelled as a point the bot chose — this page cannot name the point, because the bundle has
+  /// none there.
+  @Test
+  func `a coordinate forecast within twenty-five kilometres is the place's forecast`() throws {
+    var state = WeatherBotState(botID: P.botID)
+    let key = WeatherRequest.coordinateKey(
+      latitude: Self.pagoPago.latitude, longitude: Self.pagoPago.longitude)
+    state.unbundledForecasts[key] = WeatherStoredForecast(
+      forecast: P.dailyForecast(point: 0xFFFF, issuedMinutes: P.nowMinutes - 60, temps: [(88, 74)]),
+      receivedAt: P.now, requestLabel: key, requestedHere: true)
+
+    guard case let .forecast(summary) = WeatherForecastCard.make(
+      states: [P.botID: state], place: P.place(Self.pagoPago, label: "Pago Pago, AS"),
+      tables: tables, now: P.now, calendar: P.calendar)
+    else {
+      Issue.record("expected the held coordinate forecast to be the place's")
+      return
+    }
+    #expect(summary.point == nil, "the bundle has no point to name")
+    #expect(summary.isOwn)
+    #expect(summary.rows.first?.highF == 88)
+    guard case let .botChosenPoint(kilometres) = summary.source else {
+      Issue.record("expected the bot's own choice of point")
+      return
+    }
+    #expect(kilometres < 1)
+  }
+
+  /// Twenty-five kilometres, and no further: what is held under a coordinate is a forecast for a
+  /// point nobody here can see, somewhere near it.
+  @Test
+  func `a coordinate forecast further than twenty-five kilometres is not the place's`() {
+    var state = WeatherBotState(botID: P.botID)
+    // Half a degree of latitude is about 55 km.
+    let key = WeatherRequest.coordinateKey(
+      latitude: Self.pagoPago.latitude + 0.5, longitude: Self.pagoPago.longitude)
+    state.unbundledForecasts[key] = WeatherStoredForecast(
+      forecast: P.dailyForecast(point: 0xFFFF, issuedMinutes: P.nowMinutes - 60, temps: [(88, 74)]),
+      receivedAt: P.now, requestedHere: true)
+    guard case let .missing(point, _) = WeatherForecastCard.make(
+      states: [P.botID: state], place: P.place(Self.pagoPago, label: "Pago Pago, AS"),
+      tables: tables, now: P.now, calendar: P.calendar)
+    else {
+      Issue.record("expected an empty card")
+      return
+    }
+    #expect(point == nil)
+  }
+
+  /// The one slot for an answer nobody here asked for is never a place's forecast: its key is
+  /// deliberately not a coordinate, so nothing can mistake it for one.
+  @Test
+  func `the slot for somebody else's question is never shown as a place's forecast`() {
+    var state = WeatherBotState(botID: P.botID)
+    state.unbundledForecasts[WeatherBotState.unbundledAskKey] = WeatherStoredForecast(
+      forecast: P.dailyForecast(point: 0xFFFF, issuedMinutes: P.nowMinutes - 60, temps: [(88, 74)]),
+      receivedAt: P.now)
+    guard case .missing = WeatherForecastCard.make(
+      states: [P.botID: state], place: P.place(Self.pagoPago, label: "Pago Pago, AS"),
+      tables: tables, now: P.now, calendar: P.calendar)
+    else {
+      Issue.record("expected an empty card")
+      return
+    }
+    #expect(WeatherForecastCard.coordinate(fromKey: WeatherBotState.unbundledAskKey) == nil)
+    #expect(WeatherForecastCard.coordinate(fromKey: "35.687,-105.938")
+      == MeshWXCoordinate(latitude: 35.687, longitude: -105.938))
+  }
+
+  /// A stale forecast the bot chose the point for is refreshed the way it was fetched. Asking
+  /// `>f <nearest bundled index>` instead would come back with another place's forecast, which is
+  /// exactly what the bundle's gaps used to produce.
+  @Test
+  func `a stale coordinate forecast is refreshed by coordinate, not by index`() {
+    var state = P.state()
+    state.forecasts = [:]
+    let place = P.place(Self.pagoPago, label: "Pago Pago, AS")
+    let key = WeatherRequest.coordinateKey(
+      latitude: Self.pagoPago.latitude, longitude: Self.pagoPago.longitude)
+    state.unbundledForecasts[key] = WeatherStoredForecast(
+      forecast: P.dailyForecast(point: 0xFFFF, issuedMinutes: P.nowMinutes - 13 * 60, temps: [(88, 74)]),
+      receivedAt: P.now.addingTimeInterval(-3600), requestedHere: true)
+    let plan = plan(state, place: place)
+    #expect(plan.steps.map(\.request).contains(
+      .forecastAt(latitude: Self.pagoPago.latitude, longitude: Self.pagoPago.longitude)))
+    #expect(!plan.steps.contains { if case .forecast = $0.request { true } else { false } })
+  }
+
+  /// A place the bundle does have a point for is unchanged: `>f <index>` as before.
+  @Test
+  func `a place with a bundled point still asks by index`() {
+    var state = P.state()
+    state.forecasts = [:]
+    let plan = plan(state, place: P.place(P.austin))
+    #expect(plan.steps.map(\.request).contains(.forecast(point: 103)))
+  }
+}

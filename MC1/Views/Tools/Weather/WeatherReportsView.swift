@@ -126,6 +126,7 @@ struct WeatherReportProductView: View {
     let choice = WeatherReportSelection.choose(
       texts: screen.snapshot.texts, subject: product.subject, request: request,
       isByArea: product.isByArea)
+    let offer = choice.flatMap { WeatherPartsOffer.make(assembly: $0.item.assembly, now: screen.now) }
 
     List {
       Section {
@@ -141,6 +142,23 @@ struct WeatherReportProductView: View {
             Text(L10n.Weather.Weather.Reports.stateRow(
               screen.reportState.map(WeatherReferenceNames.stateName) ?? L10n.Weather.Weather.Reports.noState))
           }
+        }
+        // A reply with a chunk missing gets the cheap ask **above** the expensive one (spec
+        // revision 10, §1.1; docs/MESHWX_UI.md §3.1 U-35): the bot resends the bytes it
+        // transmitted, so one packet fills the hole in the text already on screen, where
+        // "Ask for latest" rebuilds the whole reply.
+        // It comes and goes on its own rules — fifteen seconds after the last chunk, gone once
+        // the bot has dropped the group — and then the ordinary ask is the only offer there is.
+        if let offer {
+          VStack(alignment: .leading, spacing: 2) {
+            WeatherAskButton(
+              screen: screen, title: WeatherAreaMapCopy.askPartsTitle(offer, isReport: true),
+              request: offer)
+            Text(WeatherAreaMapCopy.packets(WeatherAreaMapCopy.packetCount(offer)))
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+          .accessibilityIdentifier("weather.report.askParts")
         }
         if let request {
           WeatherAskButton(
@@ -188,7 +206,7 @@ struct WeatherReportProductView: View {
     .themedCanvas(theme)
     .navigationTitle(product.title)
     .navigationBarTitleDisplayMode(.inline)
-    .weatherPendingBar(model: model, requestsOnScreen: Set([request].compactMap { $0 }))
+    .weatherPendingBar(model: model, requestsOnScreen: Set([request, offer].compactMap { $0 }))
     .weatherToolChrome()
   }
 

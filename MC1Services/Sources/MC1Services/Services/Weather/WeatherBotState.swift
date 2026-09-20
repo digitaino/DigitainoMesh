@@ -336,16 +336,17 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
   }
 }
 
-/// A national area sweep being reassembled by `(bot, group)` in `idx` order (spec §7C).
+/// An area sweep being reassembled by `(bot, group)` in `idx` order (spec §7C).
 ///
-/// One per bot, newest only. A sweep is a picture of the whole country at one minute, so two of
-/// them are not two things to hold: a newer ``builtMinutes`` replaces an older sweep outright,
-/// packets and all, rather than merging into it. Merging would draw half of this hour's country
-/// over half of last hour's, which is the one output a map must never produce.
+/// One sweep is one picture, built at one minute, of the states it covers. Packets of *this*
+/// sweep merge into it; a newer sweep is a second picture and gets an assembly of its own
+/// (`WeatherBotState.areaSweeps`), because merging two would draw this hour's Texas beside last
+/// hour's Montana — the one output a map must never produce.
 ///
 /// Held whether or not it is complete. Eight packets on a shared channel is the most expensive
 /// answer in the protocol, and a sweep missing its last packet is still forty states' worth of
-/// map — so a partial one is kept, drawn, and labelled as partial.
+/// map — so a partial one is kept, drawn, and labelled as partial. Since revision 10 the missing
+/// packets can also be asked for by name (``WeatherPartsOffer``).
 public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
   /// When the bot built the sweep, in Unix minutes (spec §7C). The age on screen is from this,
   /// never from receipt.
@@ -363,6 +364,22 @@ public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
   /// The sweep carries advisories as well as warnings and watches. Clear means the narrower scope
   /// was asked for, not that no advisory is active.
   public var includesAdvisories: Bool
+  /// The sweep covers only the states ``scope`` names, not the country (spec revision 10, §7C).
+  ///
+  /// Read off `total` bit 7, which every packet of a scoped sweep carries — so this is known from
+  /// whichever packet arrived first, packet 0 or not.
+  public var isScoped: Bool
+  /// Which states the sweep covers, in three states of knowledge:
+  ///
+  /// - `[]` — the whole country. ``isScoped`` is false and every unshaded area is genuinely
+  ///   clear, as far as the sweep goes.
+  /// - the state indices — scoped, and the packet carrying the scope entries (packet 0) arrived.
+  ///   An unshaded area inside these states is clear; one outside them was never asked about.
+  /// - `nil` — scoped, and packet 0 has not arrived. The sweep's entries are real and are drawn,
+  ///   but nothing is known about which states it was asked for, so it speaks for none of them.
+  ///   This is the case the whole `total` bit 7 design exists for: without the flag on every
+  ///   packet, a phone in this position would read a scoped sweep as the country.
+  public var scope: [UInt8]?
   /// Where the bot got the products behind the sweep (spec §2.2, revision 7). Unstated for a bot
   /// older than revision 7; a packet that states nothing never erases one that did.
   public var source: MeshWXDataSource
@@ -379,6 +396,8 @@ public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
     lastReceivedAt: Date,
     wasCut: Bool = false,
     includesAdvisories: Bool = false,
+    isScoped: Bool = false,
+    scope: [UInt8]? = [],
     source: MeshWXDataSource = .unstated,
     request: WeatherRequest? = nil
   ) {
@@ -390,12 +409,49 @@ public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
     self.lastReceivedAt = lastReceivedAt
     self.wasCut = wasCut
     self.includesAdvisories = includesAdvisories
+    self.isScoped = isScoped
+    self.scope = scope
     self.source = source
     self.request = request
   }
 
+  private enum CodingKeys: String, CodingKey {
+    case builtMinutes, group, total, packets, firstReceivedAt, lastReceivedAt, wasCut,
+      includesAdvisories, isScoped, scope, source, request
+  }
+
+  /// Both scope fields arrived with revision 10. A sweep saved before them was a national one —
+  /// there was no other kind — so absent decodes as `isScoped: false, scope: []` rather than as
+  /// an unknown scope, which would make a held map stop speaking for the country on upgrade.
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    builtMinutes = try container.decode(UInt32.self, forKey: .builtMinutes)
+    group = try container.decode(UInt8.self, forKey: .group)
+    total = try container.decode(UInt8.self, forKey: .total)
+    packets = try container.decode([UInt8: [MeshWXAreaSweep.Entry]].self, forKey: .packets)
+    firstReceivedAt = try container.decode(Date.self, forKey: .firstReceivedAt)
+    lastReceivedAt = try container.decode(Date.self, forKey: .lastReceivedAt)
+    wasCut = try container.decodeIfPresent(Bool.self, forKey: .wasCut) ?? false
+    includesAdvisories = try container.decodeIfPresent(Bool.self, forKey: .includesAdvisories) ?? false
+    isScoped = try container.decodeIfPresent(Bool.self, forKey: .isScoped) ?? false
+    scope = isScoped ? try container.decodeIfPresent([UInt8].self, forKey: .scope) : []
+    source = try container.decodeIfPresent(MeshWXDataSource.self, forKey: .source) ?? .unstated
+    request = try container.decodeIfPresent(WeatherRequest.self, forKey: .request)
+  }
+
   /// When the bot built it, on the bot's clock.
   public var builtAt: Date { Date(unixMinutes: builtMinutes) }
+
+  /// The sweep covers the country: not scoped, so every state is in it.
+  public var isNational: Bool { !isScoped }
+
+  /// Whether this sweep is the newest word on `stateIndex` — that it was asked about at all.
+  /// A scoped sweep whose scope has not arrived (``scope`` nil) speaks for no state: its entries
+  /// are drawn, but "nothing shaded here" is a claim it cannot make.
+  public func covers(stateIndex: UInt8) -> Bool {
+    guard isScoped else { return true }
+    return scope?.contains(stateIndex) ?? false
+  }
 
   public var missingIndexes: [UInt8] {
     (0..<total).filter { packets[$0] == nil }
@@ -471,14 +527,44 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   public var observations: [UInt16: WeatherStoredObservation]
   /// By point index; `0xFFFF` holds the last place-resolved forecast.
   public var forecasts: [UInt16: WeatherStoredForecast]
+  /// Forecasts the bot resolved for itself, by **the coordinate that was asked for**, written
+  /// exactly as the wire wrote it: `"35.687,-105.938"` (spec revision 10, §1.3).
+  ///
+  /// A `>f <lat>,<lon>` answer comes back under point `0xFFFF` when the point the bot chose is
+  /// not in this bundle, and `0xFFFF` is one slot for the whole protocol: two coordinates asked
+  /// about a minute apart would overwrite each other, and neither would have a name. The key is
+  /// the question, which is the only label such a forecast has.
+  ///
+  /// ``WeatherBotState/unbundledAskKey`` is the one slot for an answer nobody here asked for: a
+  /// `0xFFFF` forecast heard on the channel is somebody else's question, is kept for the Cached
+  /// screen, and is never shown as a place's forecast.
+  ///
+  /// At most ``unbundledForecastLimit``, oldest received dropped.
+  public var unbundledForecasts: [String: WeatherStoredForecast]
   /// By group.
   public var texts: [UInt8: WeatherTextAssembly]
   /// What the bot says it carries (spec §7A). Nil until it has said: the station footprint is
   /// the fallback then, and nothing the bot has not stated may put a place outside its area.
   public var coverage: WeatherStoredCoverage?
-  /// The newest national area sweep this bot sent (spec §7C), complete or partial. Nil until one
-  /// has been heard — and it never is until somebody on the channel taps for it.
-  public var areaSweep: WeatherAreaSweepAssembly?
+  /// The area sweeps this bot sent (spec §7C), complete or partial, **newest first**. Empty until
+  /// one has been heard — and it never is until somebody on the channel taps for it.
+  ///
+  /// More than one since revision 10, because a scoped sweep of Texas and a national sweep from
+  /// an hour ago are two different answers and the map wants both: Texas from the newer one, the
+  /// rest of the country from the older. `WeatherStateReducer.retained(_:)` is what keeps the
+  /// list from growing — a national sweep drops everything older than it, a scoped one drops
+  /// older scoped sweeps it fully contains, and ``areaSweepLimit`` is the ceiling.
+  public var areaSweeps: [WeatherAreaSweepAssembly]
+
+  /// The most sweeps kept per bot. Eight because the picker offers fifteen states at a time and
+  /// a handful of selections plus the last national sweep is what a map is built out of; past
+  /// that the oldest is not on screen anywhere.
+  public static let areaSweepLimit = 8
+  /// The most coordinate-keyed forecasts kept per bot.
+  public static let unbundledForecastLimit = 12
+  /// The ``unbundledForecasts`` key for an answer this phone did not ask for. Not a coordinate,
+  /// and deliberately not one: nothing may take it for a place's forecast.
+  public static let unbundledAskKey = "?"
 
   public init(botID: UInt16) {
     self.botID = botID
@@ -495,20 +581,23 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     missingFromDigest = []
     observations = [:]
     forecasts = [:]
+    unbundledForecasts = [:]
     texts = [:]
     coverage = nil
-    areaSweep = nil
+    areaSweeps = []
   }
 
   private enum CodingKeys: String, CodingKey {
     case botID, lastSeq, recentMessages, lastHeardAt, lastLiveHeardAt, needsDigest, gapDetectedAt, warnings,
-      pendingUpgrades, recentCancels, digest, missingFromDigest, observations, forecasts, texts, coverage,
-      areaSweep
+      pendingUpgrades, recentCancels, digest, missingFromDigest, observations, forecasts,
+      unbundledForecasts, texts, coverage, areaSweeps
   }
 
   private enum LegacyCodingKeys: String, CodingKey {
     /// The duplicate window before fingerprints: bare `seq` values.
     case recentSeqs
+    /// The one sweep a phone held before revision 10 could hold several.
+    case areaSweep
   }
 
   /// Fields added after the first release decode as absent rather than failing the whole file:
@@ -536,14 +625,33 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     missingFromDigest = try container.decode([MeshWXWarningIdentity].self, forKey: .missingFromDigest)
     observations = try container.decode([UInt16: WeatherStoredObservation].self, forKey: .observations)
     forecasts = try container.decode([UInt16: WeatherStoredForecast].self, forKey: .forecasts)
+    // Revision 10, §1.3. A file written before it holds whatever `0xFFFF` was holding, which
+    // stays where it is: this dictionary is the coordinate-keyed cache, and nothing was ever
+    // asked for by coordinate before it existed.
+    unbundledForecasts = try container.decodeIfPresent(
+      [String: WeatherStoredForecast].self, forKey: .unbundledForecasts) ?? [:]
     texts = try container.decode([UInt8: WeatherTextAssembly].self, forKey: .texts)
     // A file written before the bot stated anything, or before the app could read it: absent is
     // "has not said", which falls back to the station footprint rather than failing the file.
     coverage = try container.decodeIfPresent(WeatherStoredCoverage.self, forKey: .coverage)
-    // Revision 8, §7C. A file written before the app could read a sweep decodes as having none,
-    // which is exactly right: nobody had asked for one.
-    areaSweep = try container.decodeIfPresent(WeatherAreaSweepAssembly.self, forKey: .areaSweep)
+    // Revision 8, §7C, then revision 10's list of them. A file written before the app could read
+    // a sweep decodes as having none, which is exactly right: nobody had asked for one. One
+    // written between the two holds a single sweep under `areaSweep`, which was national — there
+    // was no other kind — and is lifted into the list rather than thrown away, so the map a
+    // phone had before the upgrade is the map it has after it.
+    if let list = try container.decodeIfPresent([WeatherAreaSweepAssembly].self, forKey: .areaSweeps) {
+      areaSweeps = list
+    } else {
+      let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+      areaSweeps = (try legacy.decodeIfPresent(WeatherAreaSweepAssembly.self, forKey: .areaSweep))
+        .map { [$0] } ?? []
+    }
   }
+
+  /// The newest sweep held, whatever its scope. What a caller wants when it needs one sweep and
+  /// not a map: the age line on a row, the packet-count estimate, the "has anybody asked?" check.
+  /// The map itself reads all of them (``WeatherAlertMapPicture``).
+  public var newestAreaSweep: WeatherAreaSweepAssembly? { areaSweeps.first }
 
   /// Warnings not yet expired at `now`, in the spec's display order (§10.2): the most severe
   /// first (`MeshWXSeverity.rank`, warnings above watches above advisories), then the soonest

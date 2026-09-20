@@ -52,7 +52,7 @@ struct WeatherScreenSnapshotTests {
       Issue.record("expected a forecast")
       return
     }
-    #expect(forecast.point.index == 103)
+    #expect(forecast.point?.index == 103)
     #expect(screen.otherPlaces.map(\.point.index) == [304, 1010])
     #expect(screen.readings.count == 14)
   }

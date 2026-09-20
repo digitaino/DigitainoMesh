@@ -241,9 +241,9 @@ public struct WeatherScreenSnapshot: Sendable {
     let forecast = WeatherForecastCard.make(
       states: inputs.states, place: inputs.place, tables: tables, now: now, calendar: inputs.calendar)
     let placePoint: UInt16? = switch forecast {
-    case let .forecast(summary): summary.point.index
-    case let .missing(point, _): point.index
-    case .noPlace, .noPointNearby: nil
+    case let .forecast(summary): summary.point?.index
+    case let .missing(point, _): point?.index
+    case .noPlace: nil
     }
 
     let texts = inputs.states.flatMap { botID, state in
@@ -567,21 +567,34 @@ public struct WeatherUpdatePlan: Sendable, Hashable {
       break
     }
 
-    // Forecast.
+    // Forecast. Which ask it is depends on whether the bundle has a point for the place: with
+    // one, `>f <index>`; without, the coordinate itself (spec revision 10, §1.3), which is what
+    // stopped Santa Fe asking for nothing while the bot held a forecast fifteen kilometres away.
+    func forecastRequest(_ point: MeshWXPoint?) -> WeatherRequest? {
+      if let point { return .forecast(point: point.index) }
+      guard let place = snapshot.place else { return nil }
+      return .forecastAt(
+        latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
+    }
     switch snapshot.forecast {
     case let .forecast(summary):
       if now.timeIntervalSince(summary.stored.issuedAt) > forecastFreshFor {
         if isJustReceived(summary.stored.receivedAt) {
           justReceived.append(.forecast)
-        } else {
-          steps.append(Step(item: .forecast, request: .forecast(point: summary.point.index)))
+        } else if let request = forecastRequest(summary.point) {
+          // A forecast the bot chose the point for is refreshed the way it was fetched: by
+          // coordinate. Asking `>f <nearest bundled index>` instead would come back with another
+          // place's forecast, which is exactly what the bundle's gaps used to produce.
+          steps.append(Step(item: .forecast, request: request))
         }
       } else {
         currentTimes.append(summary.stored.issuedAt)
       }
     case let .missing(point, _):
-      steps.append(Step(item: .forecast, request: .forecast(point: point.index)))
-    case .noPointNearby, .noPlace:
+      if let request = forecastRequest(point) {
+        steps.append(Step(item: .forecast, request: request))
+      }
+    case .noPlace:
       break
     }
 

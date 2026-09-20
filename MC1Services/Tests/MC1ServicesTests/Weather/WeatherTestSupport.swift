@@ -159,8 +159,14 @@ enum WeatherFixture {
     )
   }
 
-  /// One packet of a national area sweep (spec §7C). The flags nibble is built by hand here, so
-  /// the header and the body cannot disagree about the cut and the scope.
+  /// One packet of an area sweep (spec §7C). The flags nibble is built by hand here, so the
+  /// header and the body cannot disagree about the cut and the breadth.
+  ///
+  /// - Parameters:
+  ///   - isScoped: `total` bit 7 (spec revision 10, §1.2), which every packet of a scoped sweep
+  ///     carries. Defaults to whether `scope` names anything, so a caller that gives a scope gets
+  ///     a scoped sweep and one that gives none gets the country.
+  ///   - scope: the state indices this packet's scope entries name — packet 0's, normally.
   static func areaSweep(
     seq: UInt8,
     builtMinutes: UInt32 = t0Minutes,
@@ -170,6 +176,8 @@ enum WeatherFixture {
     entries: [MeshWXAreaSweep.Entry],
     wasCut: Bool = false,
     includesAdvisories: Bool = false,
+    isScoped: Bool? = nil,
+    scope: [UInt8] = [],
     source: MeshWXDataSource = .unstated,
     bot: UInt16 = botID
   ) -> MeshWXMessage {
@@ -179,7 +187,8 @@ enum WeatherFixture {
         flags: (wasCut ? 1 : 0) | (includesAdvisories ? 2 : 0) | sourceBits(source), bot: bot),
       payload: .areaSweep(MeshWXAreaSweep(
         builtMinutes: builtMinutes, group: group, index: index, total: total, wasCut: wasCut,
-        includesAdvisories: includesAdvisories, entries: entries))
+        includesAdvisories: includesAdvisories, isScoped: isScoped ?? !scope.isEmpty,
+        scope: scope, entries: entries))
     )
   }
 
@@ -189,6 +198,14 @@ enum WeatherFixture {
   /// Oklahoma counties 1-4 under a Winter Storm Warning.
   static let oklahomaSweepEntry = MeshWXAreaSweep.Entry(
     event: 24, stateIndex: 35, isCounty: true, start: 1, run: 4)
+  /// Montana zones 10-12 under a Winter Weather Advisory: a third state, for the scope rules.
+  static let montanaSweepEntry = MeshWXAreaSweep.Entry(
+    event: 25, stateIndex: 25, isCounty: false, start: 10, run: 3)
+
+  /// `index.json` state indices of the three fixture entries, so a scope can name them.
+  static let texasState: UInt8 = 42
+  static let oklahomaState: UInt8 = 35
+  static let montanaState: UInt8 = 25
 
   /// WX-AUS's real statement (spec §7A, the vector `coverage_wx_aus`): 120 km around Austin, the
   /// offices EWX/FWD/HGX/SJT, and its 36 zones as five runs, neither list cut.
@@ -359,7 +376,10 @@ actor FakeWeatherTransport: WeatherTransport {
     return code
   }
 
-  func sendChannelRequest(text: String, botID: UInt16, timestamp: Date, seq: UInt8) async throws {
+  @discardableResult
+  func sendChannelRequest(
+    text: String, botID: UInt16, timestamp: Date, seq: UInt8
+  ) async throws -> WeatherChannelRequestSent? {
     guard channelRequestsSupported else {
       channelRequestsRefused += 1
       throw WeatherTransportError.channelRequestsUnavailable("the fake radio has no #meshwx slot")
@@ -369,6 +389,15 @@ actor FakeWeatherTransport: WeatherTransport {
       throw MeshCoreError.deviceError(code: 1)
     }
     channelSent.append((text, botID, timestamp, seq))
+    // The bytes the radio would have taken, on slot 3 — the slot fixture datagrams arrive on —
+    // so the channel traffic log gets a real Request datagram to show (spec §7B).
+    let request = MeshWXRequest(
+      seq: seq,
+      botID: botID,
+      senderPrefix: WeatherFixture.phonePublicKey.prefix(MeshWXWire.requestSenderPrefixSize),
+      timestamp: UInt32(truncatingIfNeeded: Int64(timestamp.timeIntervalSince1970)),
+      text: text)
+    return WeatherChannelRequestSent(channelIndex: 3, payload: try request.encode())
   }
 
   func setChannelRequestsSupported(_ supported: Bool) {

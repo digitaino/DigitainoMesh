@@ -376,35 +376,54 @@ public enum MeshWXDecoder {
   /// Whatever does not make a whole four-byte entry is left alone, the way every other type here
   /// tolerates trailing bytes. A sweep is a picture of the country and a bot a version ahead
   /// appending a field to the end must not cost this phone the thirty-seven entries it can read.
+  ///
+  /// Two things are unpacked here that the bytes carry in place rather than in fields of their
+  /// own (spec revision 10, §7C):
+  ///
+  /// - The `total` byte's **bit 7** is the scope flag and its low nibble the packet count. A
+  ///   revision 9 decoder reading a scoped sweep would see `total = 0x83` and believe the sweep
+  ///   runs to 131 packets, which is why the app it ships in never went to anyone.
+  /// - An entry whose **event is 0** is a scope entry, not an area under an alert. It is lifted
+  ///   into ``MeshWXAreaSweep/scope`` wherever it appears, not only at the head of packet 0: no
+  ///   real event has code 0, so event 0 can only ever mean this, and reading it as an alert
+  ///   would shade a whole state with an event the tables cannot name.
   static func decodeAreaSweep(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXAreaSweep {
     try need(bytes, MeshWXWire.areaSweepFixedSize, "area sweep")
     let count = (bytes.count - MeshWXWire.areaSweepFixedSize) / MeshWXWire.areaSweepEntrySize
 
     var entries: [MeshWXAreaSweep.Entry] = []
+    var scope: [UInt8] = []
     entries.reserveCapacity(count)
     var offset = MeshWXWire.areaSweepFixedSize
     for _ in 0..<count {
       let stateByte = bytes[offset + 1]
       let packed = u16(bytes, offset + 2)
-      entries.append(
-        MeshWXAreaSweep.Entry(
-          event: bytes[offset],
-          stateIndex: stateByte >> MeshWXWire.sweepStateShift,
-          isCounty: stateByte & MeshWXWire.sweepCountyBit != 0,
-          start: packed & MeshWXWire.sweepStartMask,
-          // Six bits carried less one, so the field spans 1…64 and never 0: an entry that
-          // covered nothing would have no reason to be on the air.
-          run: UInt8(packed >> MeshWXWire.sweepRunShift) + 1
-        ))
+      let entry = MeshWXAreaSweep.Entry(
+        event: bytes[offset],
+        stateIndex: stateByte >> MeshWXWire.sweepStateShift,
+        isCounty: stateByte & MeshWXWire.sweepCountyBit != 0,
+        start: packed & MeshWXWire.sweepStartMask,
+        // Six bits carried less one, so the field spans 1…64 and never 0: an entry that
+        // covered nothing would have no reason to be on the air.
+        run: UInt8(packed >> MeshWXWire.sweepRunShift) + 1
+      )
       offset += MeshWXWire.areaSweepEntrySize
+      if entry.event == MeshWXWire.sweepScopeEvent {
+        scope.append(entry.stateIndex)
+      } else {
+        entries.append(entry)
+      }
     }
+    let total = bytes[10]
     return MeshWXAreaSweep(
       builtMinutes: u32(bytes, 4),
       group: bytes[8],
       index: bytes[9],
-      total: bytes[10],
+      total: total & MeshWXWire.sweepTotalMask,
       wasCut: header.flags & MeshWXWire.flagSweepCut != 0,
       includesAdvisories: header.flags & MeshWXWire.flagSweepAdvisories != 0,
+      isScoped: total & MeshWXWire.sweepScopedBit != 0,
+      scope: scope,
       entries: entries
     )
   }

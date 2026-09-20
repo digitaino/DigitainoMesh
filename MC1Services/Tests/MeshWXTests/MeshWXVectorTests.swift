@@ -27,6 +27,61 @@ struct MeshWXVectorTests {
     // Revision 5's two times, each beside the revision 4 form of the same message.
     #expect(MeshWXVectors.all.contains { $0.name == "observations_three_stations_ages" })
     #expect(MeshWXVectors.all.contains { $0.name == "severe_thunderstorm_warning_issued" })
+    // Revision 10's three: the scoped sweep, and the two new request forms.
+    #expect(MeshWXVectors.all.contains { $0.name == "area_sweep_scoped_packet0" })
+    #expect(MeshWXVectors.all.contains { $0.name == "request_parts" })
+    #expect(MeshWXVectors.all.contains { $0.name == "request_forecast_at" })
+  }
+
+  /// Spec revision 10, §1.2, against the publisher's own bytes: `total` is `0x81` — bit 7 set and
+  /// the packet count 1 — and the two scope entries at the head of the packet are lifted out of
+  /// `entries`, so the sweep reports four areas and not six.
+  @Test func theScopedSweepVectorSplitsTheTotalByteAndLiftsItsScope() throws {
+    let vector = try #require(MeshWXVectors.all.first { $0.name == "area_sweep_scoped_packet0" })
+    let data = try #require(Data(meshWXHex: vector.hex))
+    #expect(data[10] == 0x81, "bit 7 the scope flag, the count in the low nibble")
+    guard case let .areaSweep(sweep) = try MeshWXDecoder.decode(data).payload else {
+      Issue.record("expected an area sweep")
+      return
+    }
+    #expect(sweep.total == 1)
+    #expect(sweep.isScoped)
+    #expect(sweep.scope == [35, 42], "Oklahoma and Texas, in the order the bot wrote them")
+    #expect(sweep.entries.count == 4)
+    #expect(!sweep.entries.contains { $0.event == MeshWXWire.sweepScopeEvent })
+    // The scope entries go back, first, so the publisher's hex comes out of the encoder unchanged.
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+
+    // The national sweep beside it in the same file is the control: bit 7 clear, no scope.
+    let national = try #require(MeshWXVectors.all.first { $0.name == "area_sweep_national_packet1" })
+    let nationalData = try #require(Data(meshWXHex: national.hex))
+    #expect(nationalData[10] & MeshWXWire.sweepScopedBit == 0)
+    guard case let .areaSweep(plain) = try MeshWXDecoder.decode(nationalData).payload else {
+      Issue.record("expected an area sweep")
+      return
+    }
+    #expect(!plain.isScoped)
+    #expect(plain.scope.isEmpty)
+  }
+
+  /// The three request vectors, encoded from this app's own request grammar: the bytes this phone
+  /// puts on the air have to be the publisher's, not merely round-trip-clean.
+  @Test func theRequestVectorsAreTheBytesTheSpecPrints() throws {
+    // The spec printed `>d` before any vector carried it; the file now does, and the two agree.
+    let digest = try #require(MeshWXVectors.all.first { $0.name == "request_digest" })
+    #expect(digest.hex == MeshWXVectors.requestDigestHex)
+
+    let sender = Data([0x01, 0x02, 0x03, 0x04, 0x05, 0x06])
+    for (name, text) in [("request_parts", ">part 212 1,4,6"), ("request_forecast_at", ">f 35.687,-105.938")] {
+      let vector = try #require(MeshWXVectors.all.first { $0.name == name })
+      let want = try #require(Data(meshWXHex: vector.hex))
+      #expect(vector.decoded.text == text)
+      let request = MeshWXRequest(
+        seq: vector.decoded.seq, botID: vector.decoded.bot, senderPrefix: sender,
+        timestamp: try #require(vector.decoded.ts), text: text)
+      #expect(try request.encode() == want, "\(name)")
+      #expect(text.utf8.count <= MeshWXWire.maxRequestTextBytes)
+    }
   }
 
   @Test(arguments: MeshWXVectors.all)
@@ -67,11 +122,9 @@ struct MeshWXVectorTests {
     case .coverage(let coverage):
       #expect(want.name == "coverage")
       try expectCoverage(coverage, matches: want)
-    case .request:
-      // The publisher's file carries no Request vector yet; `theRequestVectorIsTheSixteenBytes…`
-      // below tests the one the spec prints. This case exists so that the day it ships, the
-      // vector reaches the suite instead of failing to compile.
+    case .request(let request):
       #expect(want.name == "request")
+      expectRequest(request, matches: want)
     case .areaSweep(let sweep):
       #expect(want.name == "area_sweep")
       try expectAreaSweep(sweep, matches: want)
@@ -297,6 +350,17 @@ struct MeshWXVectorTests {
   /// different shape, so the fixture tells them apart by what the JSON holds
   /// (`MeshWXVectors.Decoded.EntriesField`) — and `#require` here means a renamed key fails the
   /// suite instead of passing over a nil.
+  /// Spec §7B: the one message this app transmits. `ts` is Unix **seconds** here, not the minutes
+  /// every other time in the protocol is carried in, which is worth reading off the publisher's
+  /// own field rather than off an implementation that could be wrong by a factor of sixty.
+  private func expectRequest(_ request: MeshWXRequest, matches want: MeshWXVectors.Decoded) {
+    #expect(request.text == want.text)
+    #expect(request.timestamp == want.ts)
+    #expect(request.senderPrefix.map { String(format: "%02x", $0) }.joined() == want.sender)
+    #expect(request.botID == want.bot)
+    #expect(request.seq == want.seq)
+  }
+
   private func expectAreaSweep(_ sweep: MeshWXAreaSweep, matches want: MeshWXVectors.Decoded) throws {
     #expect(sweep.builtMinutes == (try #require(want.sweepBuiltMinutes)))
     #expect(sweep.group == want.group)
@@ -305,7 +369,14 @@ struct MeshWXVectorTests {
     // The two flag bits, read twice: off the header above and out of the decoded body here.
     #expect(sweep.wasCut == (want.cut ?? false))
     #expect(sweep.includesAdvisories == (want.advisories ?? false))
+    // Revision 10, §1.2. `total` bit 7 is the scope flag, and the publisher prints it as its own
+    // field rather than leaving it inside the count — which is exactly the reading that has to be
+    // checked, since a decoder that never split the byte would report `total = 131` here.
+    #expect(sweep.isScoped == (want.scoped ?? false))
+    #expect(sweep.scope == (want.scope ?? []))
 
+    // Alert entries only: the publisher lifts the scope out of `entries` too, so a vector whose
+    // packet 0 names three states has three fewer entries here than bytes on the wire.
     let wantEntries = try #require(want.entries?.sweep)
     #expect(sweep.entries.count == wantEntries.count)
     let states = MeshWXTables.shared.states

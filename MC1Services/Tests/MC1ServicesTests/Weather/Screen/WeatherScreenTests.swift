@@ -638,18 +638,20 @@ struct WeatherForecastCardTests {
       Issue.record("expected a forecast")
       return
     }
-    #expect(summary.point.index == 103)
+    #expect(summary.point?.index == 103)
     #expect(summary.source == .placePoint)
     #expect(summary.layout == .days)
     #expect(summary.rows.first?.highF == 102)
   }
 
   @Test
-  func `Round Rock is not answered with Austin's forecast from twenty kilometres away`() {
-    guard case let .missing(point, kilometres) = WeatherForecastCard.make(states: [P.botID: P.state()], place: P.place(P.roundRock), tables: tables, now: P.now, calendar: P.calendar) else {
+  func `Round Rock is not answered with Austin's forecast from twenty kilometres away`() throws {
+    guard case let .missing(nearest, distance) = WeatherForecastCard.make(states: [P.botID: P.state()], place: P.place(P.roundRock), tables: tables, now: P.now, calendar: P.calendar) else {
       Issue.record("expected missing")
       return
     }
+    let point = try #require(nearest)
+    let kilometres = try #require(distance)
     #expect(point.index != 103)
     #expect(abs(kilometres - WeatherGeo.kilometres(P.roundRock, MeshWXCoordinate(latitude: point.lat, longitude: point.lon))) < 0.001)
     #expect(kilometres <= WeatherForecastCard.pointReachKilometres)
@@ -667,7 +669,8 @@ struct WeatherForecastCardTests {
       Issue.record("expected a forecast")
       return
     }
-    let point = MeshWXCoordinate(latitude: summary.point.lat, longitude: summary.point.lon)
+    let summaryPoint = try #require(summary.point)
+    let point = MeshWXCoordinate(latitude: summaryPoint.lat, longitude: summaryPoint.lon)
     #expect(abs(summary.kilometres - WeatherGeo.kilometres(P.austin, point)) < 0.001)
     // The fixture's forecasts came off the channel; nothing here asked for them.
     #expect(summary.isOwn == false)

@@ -1098,8 +1098,9 @@ struct WeatherRetentionTests {
   }
 }
 
-/// Spec §7C: the national area sweep — packets assembled by `group` the way Text chunks are, but
-/// only ever one sweep held, because two sweeps are two pictures of the same country.
+/// Spec §7C: the area sweep — packets assembled by `group` the way Text chunks are, and two
+/// sweeps of the same ground never merged, because they are two pictures of it. Revision 10's
+/// several-sweeps-at-once rules are in `WeatherStateReducerScopedSweepTests` below.
 @Suite("WeatherStateReducer area sweep")
 struct WeatherStateReducerAreaSweepTests {
   private typealias F = WeatherFixture
@@ -1114,7 +1115,7 @@ struct WeatherStateReducerAreaSweepTests {
       to: &state, receivedAt: F.t0)
     #expect(changes == [.areaSweepStored(group: 1, index: 0, isComplete: false)])
 
-    let sweep = state.areaSweep
+    let sweep = state.newestAreaSweep
     #expect(sweep?.builtMinutes == F.t0Minutes)
     #expect(sweep?.builtAt == Date(unixMinutes: F.t0Minutes))
     #expect(sweep?.group == 1)
@@ -1138,21 +1139,21 @@ struct WeatherStateReducerAreaSweepTests {
         F.areaSweep(seq: 1 + index, group: 1, index: index, total: 3, entries: [entry]),
         to: &state, receivedAt: F.t0.addingTimeInterval(arrival))
     }
-    #expect(state.areaSweep?.isComplete == false)
-    #expect(state.areaSweep?.missingIndexes == [1])
+    #expect(state.newestAreaSweep?.isComplete == false)
+    #expect(state.newestAreaSweep?.missingIndexes == [1])
 
     let middle = MeshWXAreaSweep.Entry(event: 9, stateIndex: 5, isCounty: false, start: 20, run: 2)
     let changes = WeatherStateReducer.apply(
       F.areaSweep(seq: 4, group: 1, index: 1, total: 3, entries: [middle]),
       to: &state, receivedAt: F.t0.addingTimeInterval(9))
     #expect(changes == [.areaSweepStored(group: 1, index: 1, isComplete: true)])
-    #expect(state.areaSweep?.isComplete == true)
+    #expect(state.newestAreaSweep?.isComplete == true)
     // Packet order, not arrival order: the bot sends most severe first and the map lays its
     // tints down in that order.
-    #expect(state.areaSweep?.entries == [F.texasSweepEntry, middle, F.oklahomaSweepEntry])
-    #expect(state.areaSweep?.lastReceivedAt == F.t0.addingTimeInterval(9))
+    #expect(state.newestAreaSweep?.entries == [F.texasSweepEntry, middle, F.oklahomaSweepEntry])
+    #expect(state.newestAreaSweep?.lastReceivedAt == F.t0.addingTimeInterval(9))
     #expect(
-      state.areaSweep?.firstReceivedAt == F.t0,
+      state.newestAreaSweep?.firstReceivedAt == F.t0,
       "the first packet to *arrive* set this, whatever its index was")
   }
 
@@ -1165,7 +1166,7 @@ struct WeatherStateReducerAreaSweepTests {
     _ = WeatherStateReducer.apply(
       F.areaSweep(seq: 2, group: 1, index: 1, total: 2, entries: [F.oklahomaSweepEntry]),
       to: &state, receivedAt: F.t0)
-    #expect(state.areaSweep?.isComplete == true)
+    #expect(state.newestAreaSweep?.isComplete == true)
 
     // An hour later the bot builds a fresh one. Merging its first packet into the old assembly
     // would draw this hour's Texas beside last hour's Oklahoma.
@@ -1175,11 +1176,11 @@ struct WeatherStateReducerAreaSweepTests {
         seq: 3, builtMinutes: F.t0Minutes + 60, group: 3, index: 0, total: 2, entries: [later]),
       to: &state, receivedAt: F.t0.addingTimeInterval(3600))
     #expect(changes == [.areaSweepStored(group: 3, index: 0, isComplete: false)])
-    #expect(state.areaSweep?.builtMinutes == F.t0Minutes + 60)
-    #expect(state.areaSweep?.group == 3)
-    #expect(state.areaSweep?.entries == [later], "nothing of the old sweep survives")
-    #expect(state.areaSweep?.missingIndexes == [1])
-    #expect(state.areaSweep?.firstReceivedAt == F.t0.addingTimeInterval(3600))
+    #expect(state.newestAreaSweep?.builtMinutes == F.t0Minutes + 60)
+    #expect(state.newestAreaSweep?.group == 3)
+    #expect(state.newestAreaSweep?.entries == [later], "nothing of the old sweep survives")
+    #expect(state.newestAreaSweep?.missingIndexes == [1])
+    #expect(state.newestAreaSweep?.firstReceivedAt == F.t0.addingTimeInterval(3600))
   }
 
   @Test
@@ -1199,7 +1200,7 @@ struct WeatherStateReducerAreaSweepTests {
         entries: [F.oklahomaSweepEntry]),
       to: &state, receivedAt: F.t0.addingTimeInterval(60))
     #expect(changes.last == .areaSweepIgnoredOlder(builtMinutes: F.t0Minutes - 60))
-    #expect(state.areaSweep == before.areaSweep)
+    #expect(state.newestAreaSweep == before.newestAreaSweep)
   }
 
   @Test
@@ -1211,9 +1212,9 @@ struct WeatherStateReducerAreaSweepTests {
     _ = WeatherStateReducer.apply(
       F.areaSweep(seq: 9, group: 9, index: 1, total: 2, entries: [F.oklahomaSweepEntry]),
       to: &state, receivedAt: F.t0.addingTimeInterval(30))
-    #expect(state.areaSweep?.group == 9)
-    #expect(state.areaSweep?.entries == [F.oklahomaSweepEntry])
-    #expect(state.areaSweep?.missingIndexes == [0])
+    #expect(state.newestAreaSweep?.group == 9)
+    #expect(state.newestAreaSweep?.entries == [F.oklahomaSweepEntry])
+    #expect(state.newestAreaSweep?.missingIndexes == [0])
   }
 
   /// Both flags are set on every packet of a sweep, so one packet saying so is the sweep saying
@@ -1232,10 +1233,10 @@ struct WeatherStateReducerAreaSweepTests {
         seq: 3, group: 1, index: 2, total: 3, entries: [F.oklahomaSweepEntry], wasCut: true,
         includesAdvisories: true),
       to: &state, receivedAt: F.t0.addingTimeInterval(4))
-    #expect(state.areaSweep?.wasCut == true)
-    #expect(state.areaSweep?.includesAdvisories == true)
-    #expect(state.areaSweep?.isComplete == false)
-    #expect(state.areaSweep?.source == .goesSatellite, "a silent packet never erases a stated source")
+    #expect(state.newestAreaSweep?.wasCut == true)
+    #expect(state.newestAreaSweep?.includesAdvisories == true)
+    #expect(state.newestAreaSweep?.isComplete == false)
+    #expect(state.newestAreaSweep?.source == .goesSatellite, "a silent packet never erases a stated source")
   }
 
   @Test
@@ -1266,11 +1267,315 @@ struct WeatherStateReducerAreaSweepTests {
     var object = try #require(
       try JSONSerialization.jsonObject(with: encoder.encode(state)) as? [String: Any])
     #expect(object["areaSweep"] == nil, "a state with no sweep writes no key at all")
-    object.removeValue(forKey: "areaSweep")
+    object.removeValue(forKey: "areaSweeps")
     let older = try JSONSerialization.data(withJSONObject: object)
 
     let loaded = try JSONDecoder().decode(WeatherBotState.self, from: older)
-    #expect(loaded.areaSweep == nil)
+    #expect(loaded.areaSweeps.isEmpty)
     #expect(loaded.warnings.count == 1, "everything else in the file is unchanged")
+  }
+}
+
+/// Spec revision 10 (§1.1, §1.2): scoped sweeps, several held at once, and the `>part` resend
+/// that fills a hole in one of them.
+@Suite("WeatherStateReducer scoped sweeps")
+struct WeatherStateReducerScopedSweepTests {
+  private typealias F = WeatherFixture
+
+  private func fresh() -> WeatherBotState { WeatherBotState(botID: F.botID) }
+
+  /// A national sweep is not scoped and covers every state: `scope` is `[]`, never nil, so a
+  /// screen can tell "the country" from "scoped, and which states is not known yet".
+  @Test
+  func `a national sweep has an empty scope and covers every state`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(seq: 1, group: 1, index: 0, total: 1, entries: [F.texasSweepEntry]),
+      to: &state, receivedAt: F.t0)
+    let sweep = try? #require(state.newestAreaSweep)
+    #expect(sweep?.isScoped == false)
+    #expect(sweep?.isNational == true)
+    #expect(sweep?.scope == [])
+    #expect(sweep?.covers(stateIndex: F.montanaState) == true)
+  }
+
+  @Test
+  func `a scoped sweep carries the states its packet zero named`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 1, group: 4, index: 0, total: 2, entries: [F.texasSweepEntry],
+        scope: [F.texasState, F.oklahomaState]),
+      to: &state, receivedAt: F.t0)
+    let sweep = try? #require(state.newestAreaSweep)
+    #expect(sweep?.isScoped == true)
+    #expect(sweep?.isNational == false)
+    #expect(sweep?.scope == [F.texasState, F.oklahomaState])
+    #expect(sweep?.covers(stateIndex: F.texasState) == true)
+    #expect(sweep?.covers(stateIndex: F.montanaState) == false)
+    // The scope entries are not areas under an alert and never reach the entry list.
+    #expect(sweep?.entries == [F.texasSweepEntry])
+  }
+
+  /// The case `total` bit 7 exists for. Packet 1 says the sweep is scoped without saying what to,
+  /// and a phone in that position must not read it as the country — an unshaded state is unknown,
+  /// not clear. When packet 0 turns up the scope is known for good.
+  @Test
+  func `a scoped sweep whose packet zero is missing knows it is scoped and not which states`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 1, group: 4, index: 1, total: 2, entries: [F.oklahomaSweepEntry], isScoped: true),
+      to: &state, receivedAt: F.t0)
+    #expect(state.newestAreaSweep?.isScoped == true)
+    #expect(state.newestAreaSweep?.scope == nil, "scoped, and what to is not known")
+    #expect(state.newestAreaSweep?.covers(stateIndex: F.oklahomaState) == false,
+            "it speaks for no state until its scope arrives")
+
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 2, group: 4, index: 0, total: 2, entries: [F.texasSweepEntry],
+        scope: [F.texasState, F.oklahomaState]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(2))
+    #expect(state.newestAreaSweep?.scope == [F.texasState, F.oklahomaState])
+    #expect(state.newestAreaSweep?.isComplete == true)
+    // A later packet that names no states never erases the scope already known.
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 3, group: 4, index: 1, total: 2, entries: [F.oklahomaSweepEntry], isScoped: true),
+      to: &state, receivedAt: F.t0.addingTimeInterval(4))
+    #expect(state.newestAreaSweep?.scope == [F.texasState, F.oklahomaState])
+  }
+
+  // MARK: - Retention
+
+  /// A national sweep is the newest word on every state, so nothing older can add one.
+  @Test
+  func `a national sweep drops every sweep older than it`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 1, group: 1, index: 0, total: 1, entries: [F.texasSweepEntry], scope: [F.texasState]),
+      to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 2, builtMinutes: F.t0Minutes + 5, group: 2, index: 0, total: 1,
+        entries: [F.montanaSweepEntry], scope: [F.montanaState]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(300))
+    #expect(state.areaSweeps.count == 2, "two scopes, two answers")
+
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 3, builtMinutes: F.t0Minutes + 10, group: 3, index: 0, total: 4,
+        entries: [F.oklahomaSweepEntry]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(600))
+    #expect(state.areaSweeps.count == 1)
+    #expect(state.newestAreaSweep?.group == 3)
+    #expect(state.newestAreaSweep?.isNational == true)
+  }
+
+  /// A scoped sweep drops older scoped sweeps **whose scope it fully contains**, and touches
+  /// nothing else: asking for Texas and Oklahoma replaces last hour's Texas, leaves last hour's
+  /// Montana, and leaves the national sweep under it, which still speaks for the other states.
+  @Test
+  func `a scoped sweep drops only the older scoped sweeps it fully contains`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(seq: 1, group: 1, index: 0, total: 1, entries: [F.oklahomaSweepEntry]),
+      to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 2, builtMinutes: F.t0Minutes + 5, group: 2, index: 0, total: 1,
+        entries: [F.texasSweepEntry], scope: [F.texasState]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(300))
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 3, builtMinutes: F.t0Minutes + 6, group: 3, index: 0, total: 1,
+        entries: [F.montanaSweepEntry], scope: [F.montanaState]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(360))
+    #expect(state.areaSweeps.count == 3)
+
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 4, builtMinutes: F.t0Minutes + 20, group: 4, index: 0, total: 2,
+        entries: [F.texasSweepEntry, F.oklahomaSweepEntry],
+        scope: [F.texasState, F.oklahomaState]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(1200))
+    #expect(state.areaSweeps.map(\.group) == [4, 3, 1], "Texas went, Montana and the country stayed")
+  }
+
+  /// Eight is the ceiling, newest kept.
+  @Test
+  func `at most eight sweeps are held`() {
+    var state = fresh()
+    for step in 0..<12 {
+      _ = WeatherStateReducer.apply(
+        F.areaSweep(
+          seq: UInt8(step + 1), builtMinutes: F.t0Minutes + UInt32(step), group: UInt8(step + 1),
+          index: 0, total: 1, entries: [F.texasSweepEntry], scope: [UInt8(step)]),
+        to: &state, receivedAt: F.t0.addingTimeInterval(Double(step) * 60))
+    }
+    #expect(state.areaSweeps.count == WeatherBotState.areaSweepLimit)
+    #expect(state.areaSweeps.map(\.group) == [12, 11, 10, 9, 8, 7, 6, 5])
+  }
+
+  // MARK: - `>part` (spec revision 10, §1.1)
+
+  /// The bot answers `>part` by sending the named packets again: identical bytes except a new
+  /// `seq`. It must reach the assembly it belongs to — not be taken for a duplicate (the `seq`
+  /// differs, so the fingerprint does), not be turned away as older than a newer sweep, and not
+  /// land in the wrong one of two sweeps held.
+  @Test
+  func `a resent part fills the hole in its own assembly`() {
+    var state = fresh()
+    // A national sweep of three packets, missing the middle one.
+    for index: UInt8 in [0, 2] {
+      _ = WeatherStateReducer.apply(
+        F.areaSweep(
+          seq: 10 + index, group: 7, index: index, total: 3,
+          entries: [index == 0 ? F.texasSweepEntry : F.oklahomaSweepEntry]),
+        to: &state, receivedAt: F.t0.addingTimeInterval(Double(index)))
+    }
+    // …and a scoped sweep since, so the national one is no longer the newest thing held.
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(
+        seq: 30, builtMinutes: F.t0Minutes + 3, group: 9, index: 0, total: 1,
+        entries: [F.montanaSweepEntry], scope: [F.montanaState]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(200))
+    #expect(state.areaSweeps.count == 2)
+
+    let middle = MeshWXAreaSweep.Entry(event: 9, stateIndex: 5, isCounty: false, start: 20, run: 2)
+    let changes = WeatherStateReducer.apply(
+      F.areaSweep(seq: 99, group: 7, index: 1, total: 3, entries: [middle]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(240))
+    #expect(changes == [.sequenceGap(expected: 31, received: 99),
+                        .areaSweepStored(group: 7, index: 1, isComplete: true)])
+
+    let repaired = state.areaSweeps.first { $0.group == 7 }
+    #expect(repaired?.isComplete == true)
+    #expect(repaired?.entries == [F.texasSweepEntry, middle, F.oklahomaSweepEntry])
+    #expect(state.areaSweeps.count == 2, "the scoped sweep beside it is untouched")
+  }
+
+  /// A resend that arrives *behind* the bot's newest `seq` — the counter moved on while other
+  /// answers went out — is out of order, and out of order is not a reason to drop a packet: it
+  /// adds a packet to an assembly and can roll nothing back.
+  @Test
+  func `a resent part arriving out of order still fills the hole`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(seq: 100, group: 7, index: 0, total: 2, entries: [F.texasSweepEntry]),
+      to: &state, receivedAt: F.t0)
+    // Something else of the bot's, further ahead, so the missing packet's `seq` is behind it.
+    _ = WeatherStateReducer.apply(F.digest(seq: 120, entries: []), to: &state, receivedAt: F.t0)
+
+    let changes = WeatherStateReducer.apply(
+      F.areaSweep(seq: 110, group: 7, index: 1, total: 2, entries: [F.oklahomaSweepEntry]),
+      to: &state, receivedAt: F.t0.addingTimeInterval(30))
+    #expect(changes.contains(.outOfOrder(seq: 110)))
+    #expect(changes.contains(.areaSweepStored(group: 7, index: 1, isComplete: true)))
+    #expect(state.newestAreaSweep?.isComplete == true)
+  }
+
+  /// The same bytes under the same `seq` are the bot's own unechoed resend and are still a
+  /// duplicate: nothing in revision 10 changes that.
+  @Test
+  func `the same packet under the same seq is still a duplicate`() {
+    var state = fresh()
+    let packet = F.areaSweep(seq: 5, group: 7, index: 0, total: 2, entries: [F.texasSweepEntry])
+    _ = WeatherStateReducer.apply(packet, to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(packet, to: &state, receivedAt: F.t0.addingTimeInterval(9))
+    #expect(changes == [.duplicate(seq: 5)])
+    #expect(state.newestAreaSweep?.lastReceivedAt == F.t0)
+  }
+
+  // MARK: - Migration
+
+  /// A state file written while the app held one sweep still loads, and the sweep in it survives
+  /// the upgrade: it was a national one, because there was no other kind.
+  @Test
+  func `a state file with a single areaSweep lifts it into the list`() throws {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(seq: 1, group: 7, index: 0, total: 2, entries: [F.texasSweepEntry]),
+      to: &state, receivedAt: F.t0)
+    let held = try #require(state.newestAreaSweep)
+
+    var object = try #require(
+      try JSONSerialization.jsonObject(with: try JSONEncoder().encode(state)) as? [String: Any])
+    let sweeps = try #require(object["areaSweeps"] as? [Any])
+    object.removeValue(forKey: "areaSweeps")
+    object["areaSweep"] = sweeps[0]
+    // The field the old file wrote did not exist yet, so take it back out of the encoded copy.
+    if var single = object["areaSweep"] as? [String: Any] {
+      single.removeValue(forKey: "isScoped")
+      single.removeValue(forKey: "scope")
+      object["areaSweep"] = single
+    }
+
+    let loaded = try JSONDecoder().decode(
+      WeatherBotState.self, from: try JSONSerialization.data(withJSONObject: object))
+    #expect(loaded.areaSweeps.count == 1)
+    #expect(loaded.newestAreaSweep?.group == held.group)
+    #expect(loaded.newestAreaSweep?.entries == held.entries)
+    #expect(loaded.newestAreaSweep?.isScoped == false, "there was no other kind")
+    #expect(loaded.newestAreaSweep?.scope == [])
+  }
+}
+
+/// Spec revision 10, §1.3: forecasts for a coordinate, which come back under point `0xFFFF`
+/// because the bundle has no point where the bot found one.
+@Suite("WeatherStateReducer unbundled forecasts")
+struct WeatherStateReducerUnbundledForecastTests {
+  private typealias F = WeatherFixture
+
+  /// The reducer holds no requests, so it cannot know whether this phone asked: every unbundled
+  /// forecast lands in the one slot for an answer nobody here asked for, and `WeatherService`
+  /// moves it under the coordinate when it settles a request of this phone's.
+  @Test
+  func `an unbundled forecast lands in the slot for a question nobody here asked`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(
+      F.forecast(seq: 1, point: 0xFFFF, issuedMinutes: F.t0Minutes), to: &state, receivedAt: F.t0)
+    #expect(state.unbundledForecasts.count == 1)
+    #expect(state.unbundledForecasts[WeatherBotState.unbundledAskKey]?.forecast.isUnbundledPoint == true)
+    #expect(state.unbundledForecasts[WeatherBotState.unbundledAskKey]?.requestedHere == false)
+  }
+
+  /// `0xFFFF` is not a place. Santa Fe's 14:00 forecast followed by Taos's 13:00 one is two
+  /// answers, not a stale copy of one, so the older-issue rule must not fire on the sentinel —
+  /// it would have made the second `>f <lat>,<lon>` of a session silently do nothing.
+  @Test
+  func `a second unbundled forecast is not refused for being issued earlier`() {
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(
+      F.forecast(seq: 1, point: 0xFFFF, issuedMinutes: F.t0Minutes), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(
+      F.forecast(seq: 2, point: 0xFFFF, issuedMinutes: F.t0Minutes - 60),
+      to: &state, receivedAt: F.t0.addingTimeInterval(10))
+    #expect(changes == [.forecastStored(point: 0xFFFF)])
+    #expect(state.forecasts[0xFFFF]?.forecast.issuedMinutes == F.t0Minutes - 60)
+
+    // A bundled point is a place, and there the rule stands.
+    _ = WeatherStateReducer.apply(
+      F.forecast(seq: 3, point: 102, issuedMinutes: F.t0Minutes), to: &state, receivedAt: F.t0)
+    let older = WeatherStateReducer.apply(
+      F.forecast(seq: 4, point: 102, issuedMinutes: F.t0Minutes - 60), to: &state, receivedAt: F.t0)
+    #expect(older == [.forecastIgnoredOlder(point: 102)])
+  }
+
+  /// Twelve, oldest received dropped.
+  @Test
+  func `at most twelve coordinate forecasts are kept`() {
+    var state = WeatherBotState(botID: F.botID)
+    for step in 0..<15 {
+      state.unbundledForecasts["\(step).000,-100.000"] = WeatherStoredForecast(
+        forecast: MeshWXForecast(pointIndex: 0xFFFF, issuedMinutes: F.t0Minutes, firstPeriod: 0, periods: []),
+        receivedAt: F.t0.addingTimeInterval(Double(step)))
+    }
+    WeatherStateReducer.pruneUnbundledForecasts(&state)
+    #expect(state.unbundledForecasts.count == WeatherBotState.unbundledForecastLimit)
+    #expect(state.unbundledForecasts["14.000,-100.000"] != nil)
+    #expect(state.unbundledForecasts["2.000,-100.000"] == nil)
   }
 }

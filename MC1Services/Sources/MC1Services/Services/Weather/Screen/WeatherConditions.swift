@@ -195,22 +195,28 @@ public struct WeatherEmptyPlace: Sendable, Hashable {
   /// The forecast point a refresh would ask about, when one is in reach.
   public var pointName: String?
   public var pointKilometres: Double?
+  /// A refresh would ask for a forecast, whether or not it can name a point: since revision 10
+  /// a place with no bundled point in reach is asked about by coordinate (spec revision 10,
+  /// §1.3), so "no point to name" is no longer "nothing to ask for".
+  public var canAskForecast: Bool
 
   public init(
     stationICAO: String? = nil,
     stationKilometres: Double? = nil,
     pointName: String? = nil,
-    pointKilometres: Double? = nil
+    pointKilometres: Double? = nil,
+    canAskForecast: Bool = false
   ) {
     self.stationICAO = stationICAO
     self.stationKilometres = stationKilometres
     self.pointName = pointName
     self.pointKilometres = pointKilometres
+    self.canAskForecast = canAskForecast
   }
 
   /// Nothing near enough to spend airtime on: the card says so instead of offering an ask that
   /// would come back empty.
-  public var hasNothingToAsk: Bool { stationICAO == nil && pointName == nil }
+  public var hasNothingToAsk: Bool { stationICAO == nil && pointName == nil && !canAskForecast }
 
   /// Nil unless the page would say no to both the weather and the forecast. A page with either
   /// one keeps the two sections it has always had.
@@ -231,10 +237,13 @@ public struct WeatherEmptyPlace: Sendable, Hashable {
     case .noPlace, .forecast:
       return nil
     case let .missing(point, kilometres):
-      empty.pointName = point.name
+      // Since revision 10 an empty card can have no bundled point to name and still have an ask:
+      // `>f <lat>,<lon>` goes out for the place's own coordinate (spec revision 10, §1.3). The
+      // card then names no point — there is none to name — but it is not nothing to ask for, so
+      // ``hasNothingToAsk`` stops speaking for the forecast and the page keeps its Update.
+      empty.pointName = point?.name
       empty.pointKilometres = kilometres
-    case .noPointNearby:
-      break
+      empty.canAskForecast = true
     }
     return empty
   }

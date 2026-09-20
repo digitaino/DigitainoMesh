@@ -388,7 +388,11 @@ public final class ServiceContainer {
     #endif
     weatherService = WeatherService(
       transport: weatherTransport,
-      store: FileWeatherStateStore.default()
+      store: FileWeatherStateStore.default(),
+      // The channel traffic screen's log (docs/MESHWX_UI.md §12): a ring of 300 datagrams beside
+      // the weather state, shared across connections because the channel is the channel whichever
+      // radio is listening to it.
+      trafficLogStore: FileWeatherTrafficLogStore.default()
     )
     let weatherService = weatherService
     weatherAlertNotifier = WeatherAlertNotifier(

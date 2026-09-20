@@ -41,8 +41,9 @@ public enum WeatherStateChange: Sendable, Hashable {
   case coverageIgnoredOlder
   /// One packet of a national area sweep landed (spec §7C).
   case areaSweepStored(group: UInt8, index: UInt8, isComplete: Bool)
-  /// The sweep was built before the one already held — a late drain from the radio's queue — so
-  /// it changed nothing.
+  /// The sweep was built before something already held that speaks for everything it would say
+  /// — a newer national sweep, or a newer scoped one whose scope contains this one's — so it
+  /// changed nothing. Usually a backlog drained from the radio's queue at connect.
   case areaSweepIgnoredOlder(builtMinutes: UInt32)
   case notAvailable(MeshWXNotAvailable)
   case unknownType(rawType: UInt8)
@@ -523,20 +524,52 @@ public enum WeatherStateReducer {
     source: MeshWXDataSource
   ) -> WeatherStateChange {
     let held = state.forecasts[forecast.pointIndex]
-    if let held, held.forecast.issuedMinutes > forecast.issuedMinutes {
+    // "Older" is a comparison between two forecasts *of the same place*, which is what a bundled
+    // point index is. `0xFFFF` is not a place: it is "somewhere the bundle has no point for", and
+    // Santa Fe's 14:00 forecast followed by Taos's 13:00 one is two answers, not a stale copy of
+    // one. Applying the check there would have made the second `>f <lat>,<lon>` of a session
+    // silently do nothing (spec revision 10, §1.3).
+    if let held, !forecast.isUnbundledPoint, held.forecast.issuedMinutes > forecast.issuedMinutes {
       return .forecastIgnoredOlder(point: forecast.pointIndex)
     }
     // A fresh forecast for the unbundled slot is for whatever place was asked for last; the
     // service re-labels it when it settles the request that produced it. Whether this phone
     // asked about a bundled point survives the bot's next scheduled issue of it.
-    state.forecasts[forecast.pointIndex] = WeatherStoredForecast(
+    let stored = WeatherStoredForecast(
       forecast: forecast,
       receivedAt: receivedAt,
       requestLabel: nil,
       requestedHere: forecast.isUnbundledPoint ? false : (held?.requestedHere ?? false),
       source: source
     )
+    state.forecasts[forecast.pointIndex] = stored
+    if forecast.isUnbundledPoint {
+      // Nobody here has asked for it yet as far as the reducer can tell — it holds no requests —
+      // so it goes in the one slot for an answer that is somebody else's question. `WeatherService`
+      // moves it under the coordinate asked about when it settles a `.forecastAt` of this phone's,
+      // and until then nothing may show it as a place's forecast.
+      state.unbundledForecasts[WeatherBotState.unbundledAskKey] = stored
+      pruneUnbundledForecasts(&state)
+    }
     return .forecastStored(point: forecast.pointIndex)
+  }
+
+  /// Keeps ``WeatherBotState/unbundledForecasts`` at ``WeatherBotState/unbundledForecastLimit``,
+  /// oldest received dropped. The unasked-for slot is nothing special here: it is one answer
+  /// among the twelve, and an old one of somebody else's goes before a coordinate this phone
+  /// asked about half an hour ago.
+  static func pruneUnbundledForecasts(
+    _ state: inout WeatherBotState, limit: Int = WeatherBotState.unbundledForecastLimit
+  ) {
+    guard state.unbundledForecasts.count > limit else { return }
+    let keep = Set(state.unbundledForecasts
+      .sorted { lhs, rhs in
+        lhs.value.receivedAt != rhs.value.receivedAt
+          ? lhs.value.receivedAt > rhs.value.receivedAt : lhs.key < rhs.key
+      }
+      .prefix(limit)
+      .map(\.key))
+    state.unbundledForecasts = state.unbundledForecasts.filter { keep.contains($0.key) }
   }
 
   // MARK: - Text
@@ -595,56 +628,166 @@ public enum WeatherStateReducer {
 
   // MARK: - Area sweep
 
-  /// Spec §7C: the packets of one sweep share a `group` and assemble like Text chunks, but only
-  /// one sweep is ever held — the newest the bot built.
+  /// Spec §7C, as revision 10 left it: the packets of one sweep share a `group` and assemble like
+  /// Text chunks, and several sweeps can be held at once because a scoped one covers only the
+  /// states it names.
   ///
-  /// Three rules, in this order:
+  /// Four rules, in this order, and the order is the point:
   ///
-  /// - A sweep built **before** the one held changes nothing. A backlog drained from the radio at
-  ///   connect would otherwise repaint the country as it was an hour ago.
-  /// - A sweep built **after** it replaces the held one outright, packets and all. Two sweeps are
-  ///   two pictures of the same country, and merging them draws this hour's Texas beside last
-  ///   hour's Montana.
-  /// - The **same** build time under a different `group` or `total` is the bot sending the sweep
-  ///   again; the packets in flight are of the new transmission, so that one starts over too.
-  ///   Equal build time and equal group is the one case that merges, which is the whole point.
+  /// - A packet of a sweep **already held** — same `group`, same build time, same `total` —
+  ///   merges into it, whatever else has arrived since. This is what makes a `>part` resend land:
+  ///   it is the same bytes under a new `seq` (spec revision 10, §1.1), so it is not a duplicate,
+  ///   and it fills the hole in the assembly it belongs to rather than starting a new one or
+  ///   being turned away as old.
+  /// - A sweep built **before** something already held that speaks for everything it would say
+  ///   changes nothing: a national sweep built later is the newest word on every state, and a
+  ///   scoped one built later is the newest word on the states it names. A backlog drained from
+  ///   the radio at connect would otherwise repaint the map as it was an hour ago.
+  /// - The **same** build time and scope under a different `group` or `total` is the bot sending
+  ///   the sweep again; the packets in flight are of the new transmission, so that assembly
+  ///   starts over.
+  /// - Anything else is a new sweep and is kept beside the others, newest first, under
+  ///   ``retained(_:limit:)``.
   private static func store(
     _ sweep: MeshWXAreaSweep,
     in state: inout WeatherBotState,
     receivedAt: Date,
     source: MeshWXDataSource
   ) -> WeatherStateChange {
-    let held = state.areaSweep
-    if let held, sweep.builtMinutes < held.builtMinutes {
+    func merge(into assembly: inout WeatherAreaSweepAssembly) {
+      assembly.packets[sweep.index] = sweep.entries
+      assembly.lastReceivedAt = receivedAt
+      // Set on every packet of a cut sweep (spec §7C), so any packet saying so is the sweep
+      // saying so — which is what makes the mark survive the packet that never arrived.
+      assembly.wasCut = assembly.wasCut || sweep.wasCut
+      // One sweep's breadth, so the packets agree; a packet that says advisories are in it is
+      // taken at its word, and one that does not never narrows a breadth already stated.
+      assembly.includesAdvisories = assembly.includesAdvisories || sweep.includesAdvisories
+      // Likewise the scope flag, which every packet of a scoped sweep carries.
+      assembly.isScoped = assembly.isScoped || sweep.isScoped
+      // The states themselves ride only on the packet that carries the scope entries. Once it
+      // has arrived the scope is known for good; until then it stays nil, and a packet that
+      // names none never erases one that did.
+      if !sweep.scope.isEmpty {
+        assembly.scope = sweep.scope
+      } else if assembly.isScoped, assembly.scope?.isEmpty == true {
+        // A sweep that turns out to be scoped after a packet that did not say so: what it covers
+        // is not the country, and is not yet known either.
+        assembly.scope = nil
+      }
+      if source != .unstated { assembly.source = source }
+    }
+
+    if let index = state.areaSweeps.firstIndex(where: {
+      $0.group == sweep.group && $0.builtMinutes == sweep.builtMinutes && $0.total == sweep.total
+    }) {
+      merge(into: &state.areaSweeps[index])
+      let assembly = state.areaSweeps[index]
+      state.areaSweeps = retained(state.areaSweeps)
+      return .areaSweepStored(group: sweep.group, index: sweep.index, isComplete: assembly.isComplete)
+    }
+
+    if isSupersededOnArrival(sweep, by: state.areaSweeps) {
       return .areaSweepIgnoredOlder(builtMinutes: sweep.builtMinutes)
     }
 
-    var assembly: WeatherAreaSweepAssembly
-    if let held, held.builtMinutes == sweep.builtMinutes, held.group == sweep.group,
-      held.total == sweep.total
-    {
-      assembly = held
+    var assembly = WeatherAreaSweepAssembly(
+      builtMinutes: sweep.builtMinutes,
+      group: sweep.group,
+      total: sweep.total,
+      firstReceivedAt: receivedAt,
+      lastReceivedAt: receivedAt,
+      isScoped: sweep.isScoped,
+      // Scoped and this packet carries no scope entries: which states it covers is not known yet.
+      scope: sweep.isScoped ? (sweep.scope.isEmpty ? nil : sweep.scope) : []
+    )
+    merge(into: &assembly)
+    if let resent = state.areaSweeps.firstIndex(where: { isSameSweepResent($0, sweep) }) {
+      state.areaSweeps[resent] = assembly
     } else {
-      assembly = WeatherAreaSweepAssembly(
-        builtMinutes: sweep.builtMinutes,
-        group: sweep.group,
-        total: sweep.total,
-        firstReceivedAt: receivedAt,
-        lastReceivedAt: receivedAt
-      )
+      state.areaSweeps.append(assembly)
     }
-    assembly.packets[sweep.index] = sweep.entries
-    assembly.lastReceivedAt = receivedAt
-    // Set on every packet of a cut sweep (spec §7C), so any packet saying so is the sweep saying
-    // so — which is what makes the mark survive the packet that never arrived.
-    assembly.wasCut = assembly.wasCut || sweep.wasCut
-    // The scope is one sweep's, so the packets agree; a packet that says advisories are in it is
-    // taken at its word, and one that does not never narrows a scope already stated.
-    assembly.includesAdvisories = assembly.includesAdvisories || sweep.includesAdvisories
-    if source != .unstated { assembly.source = source }
-    state.areaSweep = assembly
-    return .areaSweepStored(
-      group: sweep.group, index: sweep.index, isComplete: assembly.isComplete)
+    state.areaSweeps = retained(state.areaSweeps)
+    return .areaSweepStored(group: sweep.group, index: sweep.index, isComplete: assembly.isComplete)
+  }
+
+  /// Whether a sweep this phone has not seen a packet of is already spoken for by one it holds:
+  /// a national sweep built later, or a scoped one built later whose scope contains all of this
+  /// one's. Both mean the newer answer already covers everything this one would add.
+  ///
+  /// A scoped sweep whose own scope has not arrived yet claims nothing and is never superseded on
+  /// that ground: it may name a state nothing else here covers.
+  private static func isSupersededOnArrival(
+    _ sweep: MeshWXAreaSweep, by held: [WeatherAreaSweepAssembly]
+  ) -> Bool {
+    if held.contains(where: { $0.isNational && $0.builtMinutes > sweep.builtMinutes }) { return true }
+    guard sweep.isScoped, !sweep.scope.isEmpty else { return false }
+    let asked = Set(sweep.scope)
+    return held.contains { candidate in
+      guard candidate.isScoped, candidate.builtMinutes > sweep.builtMinutes,
+            let scope = candidate.scope
+      else { return false }
+      return asked.isSubset(of: Set(scope))
+    }
+  }
+
+  /// Whether a packet is the bot transmitting a sweep this phone already holds a second time: the
+  /// same build time and the same breadth under a new `group` or `total`. The packets in the air
+  /// belong to the new transmission, so the held assembly starts over rather than keeping half of
+  /// each.
+  ///
+  /// Two *different* scoped sweeps built in the same minute — two phones tapping a second apart —
+  /// are told apart by their scopes where both are known. Where the arriving packet carries none
+  /// (it is not the packet the scope rides on) there is nothing to tell them apart by, and the
+  /// re-transmission reading is the one the old rule took.
+  private static func isSameSweepResent(
+    _ held: WeatherAreaSweepAssembly, _ sweep: MeshWXAreaSweep
+  ) -> Bool {
+    guard held.builtMinutes == sweep.builtMinutes, held.isScoped == sweep.isScoped else { return false }
+    guard let heldScope = held.scope, !sweep.scope.isEmpty else { return true }
+    return Set(heldScope) == Set(sweep.scope)
+  }
+
+  /// The sweeps worth keeping, newest first (spec revision 10, design §2 "State").
+  ///
+  /// Three rules and nothing else:
+  ///
+  /// - A **national** sweep drops every sweep older than it. It is the newest word on every
+  ///   state, so nothing older can add one.
+  /// - A **scoped** sweep drops older scoped sweeps whose scope it fully contains. Asking for
+  ///   Texas and Oklahoma replaces last hour's Texas; it does not touch last hour's Montana, and
+  ///   it does not touch the national sweep under it, which still speaks for the other forty-nine.
+  /// - At most `limit` are kept.
+  ///
+  /// "Older" is by build time, then by receipt: two transmissions of one sweep carry the same
+  /// build time, and the one that arrived later is the one whose packets are still coming.
+  public static func retained(
+    _ sweeps: [WeatherAreaSweepAssembly], limit: Int = WeatherBotState.areaSweepLimit
+  ) -> [WeatherAreaSweepAssembly] {
+    var kept: [WeatherAreaSweepAssembly] = []
+    for sweep in sweeps.sorted(by: isNewer) {
+      // Everything in `kept` is newer than this one (or the same age and heard later), so a
+      // national sweep in there is by definition a national sweep newer than this.
+      if kept.contains(where: \.isNational) { continue }
+      if sweep.isScoped, let scope = sweep.scope {
+        let asked = Set(scope)
+        let covered = kept.contains { candidate in
+          guard candidate.isScoped, let wider = candidate.scope else { return false }
+          return asked.isSubset(of: Set(wider))
+        }
+        if covered { continue }
+      }
+      kept.append(sweep)
+    }
+    return Array(kept.prefix(limit))
+  }
+
+  /// Newest first: build time, then when the last packet arrived, then the group byte so the
+  /// order never depends on dictionary iteration.
+  static func isNewer(_ lhs: WeatherAreaSweepAssembly, _ rhs: WeatherAreaSweepAssembly) -> Bool {
+    if lhs.builtMinutes != rhs.builtMinutes { return lhs.builtMinutes > rhs.builtMinutes }
+    if lhs.lastReceivedAt != rhs.lastReceivedAt { return lhs.lastReceivedAt > rhs.lastReceivedAt }
+    return lhs.group < rhs.group
   }
 
   // MARK: - Ordering

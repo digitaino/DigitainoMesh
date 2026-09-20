@@ -259,7 +259,7 @@ struct WeatherServiceAnswerTests {
   func `the first sweep packet answers the map request and fills its slot`() async throws {
     let h = makeHarness()
     let settled = collectSettlements(h.events)
-    let pending = try #require(try await h.service.send(.areaSweep(includesAdvisories: false), to: F.bot))
+    let pending = try #require(try await h.service.send(.areaSweep(includesAdvisories: false, states: []), to: F.bot))
     #expect(await h.transport.sent.map(\.text) == [">wmap"])
 
     h.clock.advance(by: 2)
@@ -269,13 +269,13 @@ struct WeatherServiceAnswerTests {
     #expect(settled.value.first?.0.id == pending.id)
     #expect(settled.value.first?.1 == .answered)
     // The sweep the tap produced is marked as this phone's, even though it is still arriving.
-    #expect(await h.service.state(for: F.botID)?.areaSweep?.request
-      == .areaSweep(includesAdvisories: false))
+    #expect(await h.service.state(for: F.botID)?.newestAreaSweep?.request
+      == .areaSweep(includesAdvisories: false, states: []))
 
     // Both scopes share one slot: the narrow sweep is a subset of the wide one, and eight more
     // packets a minute later is exactly what the five-minute rule is for.
     h.clock.advance(by: 30)
-    #expect(try await h.service.send(.areaSweep(includesAdvisories: true), to: F.bot) == nil)
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: true, states: []), to: F.bot) == nil)
     #expect(await weatherWaitUntil { settled.value.count == 2 })
     #expect(settled.value.last?.1
       == .alreadyReceived(receivedAt: F.t0.addingTimeInterval(2), contentAsOf: Date(unixMinutes: F.t0Minutes)))
@@ -288,7 +288,7 @@ struct WeatherServiceAnswerTests {
     let h = makeHarness()
     _ = await h.service.ingest(F.areaSweep(
       seq: 1, group: 1, index: 0, total: 1, entries: [F.texasSweepEntry], bot: 0x0102))
-    #expect(try await h.service.send(.areaSweep(includesAdvisories: false), to: F.bot) != nil)
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false, states: []), to: F.bot) != nil)
   }
 
   // MARK: - Backlog
@@ -410,5 +410,302 @@ struct WeatherServiceAnswerTests {
     #expect(state.texts[23]?.request == .warningText(identity: "SV.W.EWX.42"))
     #expect(state.texts[2]?.request == nil)
     #expect(state.texts[3]?.request == nil)
+  }
+}
+
+/// Spec revision 10: what the three new requests pair with, which of them the five-minute rule
+/// applies to, and the channel traffic log.
+@Suite("WeatherService revision 10 answers")
+struct WeatherServiceRevisionTenTests {
+  private typealias F = WeatherFixture
+
+  private struct Harness {
+    let transport: FakeWeatherTransport
+    let clock: WeatherTestClock
+    let service: WeatherService
+    let events: AsyncStream<WeatherEvent>
+    let traffic: InMemoryWeatherTrafficLogStore
+  }
+
+  private func makeHarness(
+    channelRequests: Bool = false, logTraffic: Bool = false
+  ) -> Harness {
+    let transport = FakeWeatherTransport(channelRequestsSupported: channelRequests)
+    let clock = WeatherTestClock()
+    let traffic = InMemoryWeatherTrafficLogStore()
+    let service = WeatherService(
+      transport: transport,
+      store: InMemoryWeatherStateStore(),
+      trafficLogStore: logTraffic ? traffic : nil,
+      now: { clock.now },
+      stationIndex: { $0 == "KAUS" ? 202 : nil },
+      tables: .shared
+    )
+    return Harness(
+      transport: transport, clock: clock, service: service, events: service.events(),
+      traffic: traffic)
+  }
+
+  private func collectSettlements(_ events: AsyncStream<WeatherEvent>) -> LockedValue<[(WeatherPendingRequest, WeatherRequestOutcome)]> {
+    let box = LockedValue<[(WeatherPendingRequest, WeatherRequestOutcome)]>([])
+    Task {
+      for await event in events {
+        if case let .requestSettled(request, outcome) = event {
+          box.value.append((request, outcome))
+        }
+      }
+    }
+    return box
+  }
+
+  // MARK: - `>part` (spec revision 10, §1.1)
+
+  /// "It settles as answered when any asked-for index arrives from the bot asked." The other two
+  /// packets are still on the air behind it, and a request that only settled on the last of them
+  /// would time out every time one of the three was lost again.
+  @Test
+  func `a parts request settles on any index it asked for`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    _ = await h.service.ingest(F.areaSweep(seq: 1, group: 7, index: 0, total: 3, entries: [F.texasSweepEntry]))
+    h.clock.advance(by: 30)
+    let pending = try #require(
+      try await h.service.send(.parts(group: 7, indexes: [1, 2], of: .areaSweep), to: F.bot))
+    #expect(await h.transport.sent.map(\.text) == [">part 7 1,2"])
+
+    // A packet of the same group the request did not name is the bot's ordinary transmission.
+    _ = await h.service.ingest(F.areaSweep(seq: 2, group: 7, index: 0, total: 3, entries: [F.texasSweepEntry]))
+    #expect(await h.service.pendingRequests().count == 1)
+
+    _ = await h.service.ingest(F.areaSweep(seq: 3, group: 7, index: 2, total: 3, entries: [F.oklahomaSweepEntry]))
+    #expect(await weatherWaitUntil { settled.value.count == 1 })
+    #expect(settled.value.first?.0.id == pending.id)
+    #expect(settled.value.first?.1 == .answered)
+  }
+
+  /// A `group` byte is one bot's counter; group 7 from another bot is a different answer.
+  @Test
+  func `another bot's group seven does not answer this bot's parts request`() async throws {
+    let h = makeHarness()
+    _ = try await h.service.send(.parts(group: 7, indexes: [1], of: .areaSweep), to: F.bot)
+    _ = await h.service.ingest(
+      F.areaSweep(seq: 1, group: 7, index: 1, total: 3, entries: [F.texasSweepEntry], bot: 0x0102))
+    #expect(await h.service.pendingRequests().count == 1)
+  }
+
+  /// A text reply's missing chunk is the same ask and the same pairing (spec §8.1, §7C).
+  @Test
+  func `a parts request is answered by a text chunk of its group`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    _ = try await h.service.send(.parts(group: 23, indexes: [1], of: .text(subject: 0)), to: F.bot)
+    #expect(await h.transport.sent.map(\.text) == [">part 23 1"])
+    _ = await h.service.ingest(F.text(seq: 1, group: 23, index: 1, total: 2, text: "…moving east."))
+    #expect(await weatherWaitUntil { settled.value.count == 1 })
+    #expect(settled.value.first?.1 == .answered)
+  }
+
+  /// The five-minute rule must never hold `>part` back: the case it exists for is precisely an
+  /// answer received in the last five minutes that arrived with holes in it.
+  @Test
+  func `a parts request is never refused by the five-minute rule`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.areaSweep(seq: 1, group: 7, index: 0, total: 3, entries: [F.texasSweepEntry]))
+    h.clock.advance(by: 30)
+    // The ordinary map ask is refused, as it should be: eight packets just went out.
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false, states: []), to: F.bot) == nil)
+    h.clock.advance(by: 6)
+    #expect(try await h.service.send(.parts(group: 7, indexes: [1, 2], of: .areaSweep), to: F.bot) != nil)
+  }
+
+  // MARK: - Scoped sweeps (spec revision 10, §1.2)
+
+  /// A sweep of Texas says nothing about Oklahoma, so the two taps are two answer slots.
+  @Test
+  func `two state selections are two answer slots and one selection is one`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.areaSweep(
+      seq: 1, group: 7, index: 0, total: 1, entries: [F.texasSweepEntry], scope: [F.texasState]))
+    h.clock.advance(by: 30)
+
+    // The same selection, whatever order the picker handed it over in.
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false, states: ["TX"]), to: F.bot) == nil)
+    h.clock.advance(by: 6)
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: true, states: ["tx"]), to: F.bot) == nil,
+            "both breadths share one slot, as they always have")
+    h.clock.advance(by: 6)
+    // A different selection is a different question.
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false, states: ["OK"]), to: F.bot) != nil)
+    h.clock.advance(by: 6)
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false, states: []), to: F.bot) != nil,
+            "the country is not a state selection either")
+  }
+
+  /// A packet of a scoped sweep that is not the one carrying the scope names no states, so it
+  /// fills no slot: guessing would put a sweep of Texas in the national one.
+  @Test
+  func `a scoped packet with no scope entries fills no answer slot`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.areaSweep(
+      seq: 1, group: 7, index: 1, total: 2, entries: [F.texasSweepEntry], isScoped: true))
+    h.clock.advance(by: 30)
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false, states: []), to: F.bot) != nil)
+    h.clock.advance(by: 6)
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false, states: ["TX"]), to: F.bot) != nil)
+  }
+
+  /// The tap's own sweep is marked as this phone's, scope and all.
+  @Test
+  func `a scoped sweep answers the selection that asked for it`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    let request = WeatherRequest.areaSweep(includesAdvisories: false, states: ["OK", "TX"])
+    _ = try #require(try await h.service.send(request, to: F.bot))
+    #expect(await h.transport.sent.map(\.text) == [">wmap OKTX"])
+    _ = await h.service.ingest(F.areaSweep(
+      seq: 1, group: 7, index: 0, total: 2, entries: [F.texasSweepEntry],
+      scope: [F.texasState, F.oklahomaState]))
+    #expect(await weatherWaitUntil { settled.value.count == 1 })
+    #expect(await h.service.state(for: F.botID)?.newestAreaSweep?.request == request)
+  }
+
+  // MARK: - `>f <lat>,<lon>` (spec revision 10, §1.3)
+
+  /// The bot picks the point, so the check is distance from what was asked about. A forecast for
+  /// a point the bundle does not carry answers it outright — that is the case the ask exists for.
+  @Test
+  func `a coordinate forecast is answered by an unbundled point or one within eighty kilometres`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    // Santa Fe, whose office had no bundled point at all in version 1 of the bundle.
+    _ = try #require(
+      try await h.service.send(.forecastAt(latitude: 35.687, longitude: -105.938), to: F.bot))
+    #expect(await h.transport.sent.map(\.text) == [">f 35.687,-105.938"])
+
+    // A bundled point on the other side of the country is not it.
+    _ = await h.service.ingest(F.forecast(seq: 1, point: 102))
+    #expect(await h.service.pendingRequests().count == 1)
+
+    _ = await h.service.ingest(F.forecast(seq: 2, point: 0xFFFF))
+    #expect(await weatherWaitUntil { settled.value.count == 1 })
+    #expect(settled.value.first?.1 == .answered)
+
+    // The coordinate asked about becomes the key the answer is filed under.
+    let state = try #require(await h.service.state(for: F.botID))
+    #expect(state.unbundledForecasts["35.687,-105.938"]?.requestedHere == true)
+    #expect(state.unbundledForecasts[WeatherBotState.unbundledAskKey] == nil,
+            "it is no longer somebody else's question")
+  }
+
+  /// The 80 km the point form already allows, measured from the coordinate rather than from an
+  /// index — the bot answers with the nearest point it holds a forecast for.
+  @Test
+  func `a bundled point near the coordinate answers it and one far away does not`() throws {
+    let tables = MeshWXTables.shared
+    let point = try #require(tables.nearestPoint(toLat: 30.2672, lon: -97.7431))
+    let near = MeshWXForecast(pointIndex: point.index, issuedMinutes: 0, firstPeriod: 0, periods: [])
+    #expect(WeatherService.forecast(near, answersLatitude: 30.2672, longitude: -97.7431, tables: tables))
+    #expect(!WeatherService.forecast(near, answersLatitude: 40.7128, longitude: -74.0060, tables: tables))
+    // `0xFFFF` is the bundle saying it has no point there, which is the whole reason for the ask.
+    let unbundled = MeshWXForecast(pointIndex: 0xFFFF, issuedMinutes: 0, firstPeriod: 0, periods: [])
+    #expect(WeatherService.forecast(unbundled, answersLatitude: 40.7128, longitude: -74.0060, tables: tables))
+  }
+
+  // MARK: - Channel traffic (docs/MESHWX_UI.md §12)
+
+  /// Every datagram on the weather slot: decodable or not, duplicate or not, live or backlog,
+  /// somebody else's request or this phone's. That is the whole point of the screen — everywhere
+  /// else "nothing arrived" and "eight copies arrived" look identical.
+  @Test
+  func `the traffic log records every datagram on the weather slot`() async throws {
+    let h = makeHarness(channelRequests: true, logTraffic: true)
+    await h.service.loadIfNeeded()
+
+    let packet = F.areaSweep(seq: 1, group: 7, index: 0, total: 3, entries: [F.texasSweepEntry])
+    _ = await h.service.ingest(try F.datagram(packet))
+    // The bot's own resend of an unechoed packet.
+    _ = await h.service.ingest(try F.datagram(packet))
+    // Somebody else's request, flooded on the channel.
+    _ = await h.service.ingest(try F.datagram(F.request(seq: 4, text: ">o KAUS")))
+    // Bytes the codec cannot read: a sweep header with no sweep behind it.
+    _ = await h.service.ingest(ChannelDatagram(
+      channelIndex: 3, pathLength: 2, dataType: MeshWXWire.dataType,
+      data: Data([0x11, 0x7A, 0x4C, 0xA0, 0x00]), snr: -3.5))
+    // Drained from the radio's queue.
+    _ = await h.service.ingest(
+      try F.datagram(F.digest(seq: 9, entries: [])), isBacklog: true)
+    // And this phone's own request.
+    _ = try await h.service.send(.observations, to: F.bot)
+
+    let log = await h.service.trafficLog()
+    #expect(log.count == 6, "oldest first, nothing filtered out")
+    #expect(log.map(\.direction) == [.received, .received, .received, .received, .received, .sent])
+    #expect(log.map(\.isDuplicate) == [false, true, false, false, false, false])
+    #expect(log.map(\.isBacklog) == [false, false, false, false, true, false])
+    #expect(log[0].type == MeshWXMessageType.areaSweep.rawValue)
+    #expect(log[0].botID == F.botID)
+    #expect(log[0].snr == 6.5)
+    #expect(log[0].pathLength == 0xFF)
+    #expect(log[2].type == MeshWXMessageType.request.rawValue)
+    // The header read and the body did not, which is the honest row: the four bytes that could be
+    // read are shown and nothing else is claimed. `WeatherTrafficSummary` decodes the payload
+    // again and calls it undecodable.
+    #expect(log[3].type == MeshWXMessageType.areaSweep.rawValue)
+    #expect(log[3].seq == 0x11)
+    #expect(log[3].length == 5)
+    #expect(log[3].hex == "117a4ca000")
+    #expect(WeatherTrafficSummary.make(entry: log[3], tables: .shared).title == .undecodable)
+    #expect(log[5].channelIndex == 3)
+    #expect(log[5].snr == nil, "nothing this phone sent has a signal reading")
+
+    // It persists beside the weather state, and "Clear" empties both.
+    #expect(await h.traffic.entries.count == 6)
+    await h.service.clearTrafficLog()
+    #expect(await h.service.trafficLog().isEmpty)
+    #expect(await h.traffic.entries.isEmpty)
+  }
+
+  /// The resend of a Request datagram is its own row: the same bytes went on the air twice, and a
+  /// screen about airtime has to show both.
+  @Test
+  func `the resend of a request is a second row`() async throws {
+    let transport = FakeWeatherTransport(channelRequestsSupported: true)
+    let clock = WeatherTestClock()
+    let traffic = InMemoryWeatherTrafficLogStore()
+    let service = WeatherService(
+      transport: transport, store: InMemoryWeatherStateStore(), trafficLogStore: traffic,
+      now: { clock.now }, channelAnswerTimeout: .milliseconds(20), tables: .shared)
+    _ = try await service.send(.digest, to: F.bot)
+    #expect(await weatherWaitUntil { await transport.channelSent.count == 2 })
+    #expect(await weatherWaitUntil { await service.trafficLog().count == 2 })
+    let log = await service.trafficLog()
+    #expect(log.allSatisfy { $0.direction == .sent })
+    #expect(log[0].hex == log[1].hex, "the same bytes, which is what makes it a copy to the bot")
+  }
+
+  /// A datagram on another channel is not the weather channel's traffic and never reaches the log.
+  @Test
+  func `a datagram on a foreign slot is not logged`() async throws {
+    let h = makeHarness(logTraffic: true)
+    await h.transport.setSecret(Data(repeating: 0x33, count: 16), at: 5)
+    _ = await h.service.ingest(try F.datagram(F.digest(seq: 1, entries: []), channelIndex: 5))
+    #expect(await h.service.trafficLog().isEmpty)
+  }
+
+  /// A ring of three hundred: a window on the channel, not a record of it.
+  @Test
+  func `the log is a ring of three hundred`() {
+    var log: [WeatherTrafficEntry] = []
+    for step in 0..<305 {
+      log = WeatherTrafficLog.appending(
+        WeatherTrafficEntry(
+          at: F.t0.addingTimeInterval(Double(step)), direction: .received, channelIndex: 3,
+          length: 4, hex: "0\(step % 10)0a0b0c"),
+        to: log)
+    }
+    #expect(WeatherTrafficLog.limit == 300)
+    #expect(log.count == 300)
+    #expect(log.first?.at == F.t0.addingTimeInterval(5), "the oldest five went")
+    #expect(log.last?.at == F.t0.addingTimeInterval(304))
   }
 }

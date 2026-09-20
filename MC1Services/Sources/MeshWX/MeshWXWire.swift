@@ -80,6 +80,15 @@ public enum MeshWXWire {
   /// Packets one sweep may be split into (spec §7C), the same ceiling a Text reply has. Eight
   /// packets is the whole country's worth of airtime, which is why the screen never asks by itself.
   public static let maxAreaSweepPackets = 8
+  /// States one `>wmap` may name (spec revision 10, §7C). Fifteen two-letter codes run together
+  /// are 30 characters, which is what makes the compact form fit ``maxRequestTextBytes`` beside
+  /// `>wmap all `. Past it the screen asks for the whole country and says so before the tap.
+  public static let maxSweepScopeStates = 15
+  /// How long the bot keeps the transmitted bytes of a multi-packet answer, so `>part` can send
+  /// the named packets again (spec revision 10, §7C/§8.1). Ten minutes, eight answers. The app
+  /// offers the ask only inside this window: past it the ordinary request is the only honest
+  /// offer, because the bot no longer holds the bytes.
+  public static let partsCacheSeconds = 600
   /// Consecutive UGC numbers one sweep entry may cover: the run field is six bits, carried less
   /// one, so 1 to 64.
   public static let maxAreaSweepRun: UInt8 = 64
@@ -190,6 +199,29 @@ public enum MeshWXWire {
   /// Bit 1: advisories are in this sweep, not only warnings and watches. Clear means the wider
   /// scope was not asked for, **not** that no advisory is active anywhere.
   static let flagSweepAdvisories: UInt8 = 0x2
+
+  // MARK: Area sweep scope (spec revision 10, §7C)
+  //
+  // Revision 10 splits the `total` byte, which never used more than four of its bits, so a scoped
+  // sweep says *on every packet* that it is not the country. The owner's reason for the whole
+  // feature: "have a way for the user to select which areas they want to request the warnings
+  // for. One, a few, or all. That way we don't default to sending everything."
+
+  /// `total` byte, bit 7: this sweep covers only the states its scope entries name.
+  ///
+  /// Set on **every** packet of a scoped sweep, not only on packet 0, so a phone that lost the
+  /// packet carrying the scope still knows it is not looking at the whole country — which is the
+  /// difference between "no alert there" and "nobody asked about there".
+  public static let sweepScopedBit: UInt8 = 0x80
+  /// `total` byte, bits 0-3: the packet count, 1 to ``maxAreaSweepPackets``.
+  public static let sweepTotalMask: UInt8 = 0x0F
+  /// The event code of a scope entry (spec revision 10, §7C): no real event has code 0, which is
+  /// what lets the scope ride in the entry list instead of costing a field of its own.
+  ///
+  /// A scope entry is `event 0`, kind zone, `start 0`, `run 1` — `XXZ000`, the Weather Service's
+  /// own way of writing "all of state XX". The decoder lifts them out of ``MeshWXAreaSweep/entries``
+  /// and into ``MeshWXAreaSweep/scope``; the encoder puts them back, first.
+  public static let sweepScopeEvent: UInt8 = 0
 }
 
 /// The ten structured message types (spec §2.2, high nibble of the type byte).

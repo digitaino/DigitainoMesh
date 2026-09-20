@@ -1086,4 +1086,125 @@ struct MeshWXCodecTests {
     let sweep = try #require(try sweepBody(data + Data([0xAB, 0xCD, 0xEF])))
     #expect(sweep.entries == [Self.texasZones])
   }
+
+  // MARK: - Scoped sweeps (spec revision 10, §1.2)
+
+  /// Oklahoma index 35, Texas 42, as `index.json` orders them.
+  private static let oklahomaCounties = MeshWXAreaSweep.Entry(
+    event: 24, stateIndex: 35, isCounty: true, start: 1, run: 4)
+
+  /// The `total` byte carries two fields now: bit 7 is the scope flag and bits 0-3 the packet
+  /// count. A revision 9 decoder reading `0x83` believed the sweep ran to 131 packets, which is
+  /// why the byte could be split at all — no revision 9 client ever shipped.
+  @Test func theTotalByteCarriesTheScopeFlagInBitSeven() throws {
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 9, bot: 0x4C7A, builtMinutes: 29_823_945, group: 9, index: 0, total: 3,
+      entries: [Self.texasZones], isScoped: true, scope: [42])
+    #expect(data[10] == 0x83, "bit 7 set, the count in the low nibble")
+
+    let sweep = try #require(try sweepBody(data))
+    #expect(sweep.total == 3, "the count is the low nibble and nothing else")
+    #expect(sweep.isScoped)
+    #expect(sweep.scope == [42])
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+
+    let national = try MeshWXEncoder.areaSweep(
+      seq: 9, bot: 0x4C7A, builtMinutes: 29_823_945, group: 9, index: 0, total: 3,
+      entries: [Self.texasZones])
+    #expect(national[10] == 0x03)
+    let plain = try #require(try sweepBody(national))
+    #expect(!plain.isScoped)
+    #expect(plain.scope.isEmpty)
+  }
+
+  /// A scope entry is `event 0`, kind zone, `start 0`, `run 1` — `XXZ000`, the Weather Service's
+  /// own way of writing "all of state XX" — and it sorts before every alert entry.
+  @Test func aScopeEntryIsEventZeroZoneZeroRunOne() throws {
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+      entries: [Self.texasZones], isScoped: true, scope: [42, 35])
+    // Eleven fixed, two scope entries, one alert entry.
+    #expect(data.count == 11 + 4 + 4 + 4)
+    #expect(Array(data[11..<15]) == [0, 42 << 1, 0, 0], "Texas: event 0, zone, start 0, run 1")
+    #expect(Array(data[15..<19]) == [0, 35 << 1, 0, 0], "Oklahoma, in the order given")
+    #expect(Array(data[19..<23]) == [3, 42 << 1, 0xC0, 0x14], "the alert entry, after both")
+  }
+
+  /// The decoder lifts the scope out of `entries`, so nothing downstream can mistake `XXZ000` for
+  /// an area under an alert — and the encoder puts it back, first, so the round trip is exact.
+  @Test func theScopeIsLiftedOutOfTheEntriesAndPutBackFirst() throws {
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 100, group: 1, index: 0, total: 2,
+      entries: [Self.texasZones, Self.oklahomaCounties], isScoped: true, scope: [42, 35])
+    let sweep = try #require(try sweepBody(data))
+    #expect(sweep.entries == [Self.texasZones, Self.oklahomaCounties], "alert entries only")
+    #expect(sweep.scope == [42, 35])
+    #expect(!sweep.entries.contains { $0.event == MeshWXWire.sweepScopeEvent })
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+  }
+
+  /// Every packet of a scoped sweep sets bit 7, and only the first carries the scope entries. A
+  /// phone that lost packet 0 still knows it is not looking at the country — which is the whole
+  /// reason the flag is on every packet rather than in the scope entries alone.
+  @Test func aLaterPacketIsScopedWithNoScopeEntriesOfItsOwn() throws {
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 4, bot: 0x4C7A, builtMinutes: 100, group: 1, index: 2, total: 3,
+      entries: [Self.oklahomaCounties], isScoped: true)
+    #expect(data[10] == 0x83)
+    let sweep = try #require(try sweepBody(data))
+    #expect(sweep.isScoped)
+    #expect(sweep.scope.isEmpty, "the scope rides on packet 0 only")
+    #expect(sweep.entries == [Self.oklahomaCounties])
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+  }
+
+  /// The scope costs entries, because it *is* entries: fifteen states and 24 runs fill a packet.
+  @Test func theScopeSpendsTheSameThirtyEightEntriesTheAreasDo() throws {
+    let areas = (0..<23).map {
+      MeshWXAreaSweep.Entry(event: 3, stateIndex: 42, isCounty: false, start: UInt16($0), run: 1)
+    }
+    let scope = Array<UInt8>(0..<15)
+    let full = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1, entries: areas,
+      isScoped: true, scope: scope)
+    #expect(full.count == 11 + 38 * 4)
+    let sweep = try #require(try sweepBody(full))
+    #expect(sweep.scope == scope)
+    #expect(sweep.entries.count == 23)
+
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+        entries: areas + [Self.texasZones], isScoped: true, scope: scope)
+    }
+  }
+
+  /// Fifteen states is the ceiling (`>wmap all` plus fifteen codes is 40 bytes of request text),
+  /// and a scope on a sweep whose bit 7 is clear is a contradiction the wire cannot express:
+  /// every reader would take the scope entries for the country.
+  @Test func theScopeIsCappedAtFifteenStatesAndNeverRidesOnANationalSweep() throws {
+    #expect(MeshWXWire.maxSweepScopeStates == 15)
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1, entries: [],
+        isScoped: true, scope: Array<UInt8>(0..<16))
+    }
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1, entries: [],
+        isScoped: false, scope: [42])
+    }
+  }
+
+  /// The scope entry's own constructor, so the bot and the app agree on the four bytes.
+  @Test func theScopeEntryConstructorMatchesTheWire() {
+    let entry = MeshWXAreaSweep.scopeEntry(stateIndex: 42)
+    #expect(entry.event == MeshWXWire.sweepScopeEvent)
+    #expect(entry.event == 0)
+    #expect(entry.stateIndex == 42)
+    #expect(!entry.isCounty)
+    #expect(entry.start == 0)
+    #expect(entry.run == 1)
+    #expect(entry.ugcCodes(states: MeshWXTables.shared.states) == ["TXZ000"])
+  }
 }

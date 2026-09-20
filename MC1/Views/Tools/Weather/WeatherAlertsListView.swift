@@ -71,7 +71,7 @@ struct WeatherAlertsListView: View {
   /// When the held sweep was built, or that nobody has asked for one — which is the usual answer,
   /// because nothing in the app asks for a sweep without a tap.
   private var areaMapDetail: String {
-    guard let sweep = screen.context.sourceState?.areaSweep else {
+    guard let sweep = screen.context.sourceState?.newestAreaSweep else {
       return L10n.Weather.Weather.AreaMap.never
     }
     return WeatherAreaMapCopy.builtLine(

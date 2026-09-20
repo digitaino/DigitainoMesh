@@ -1,5 +1,6 @@
 import Foundation
 @testable import MC1Services
+import MeshWX
 import Testing
 
 /// The request grammar is the one part of the protocol the app *sends*, so every line of the
@@ -28,8 +29,8 @@ struct WeatherRequestTests {
       (.taf(station: "KAUS"), ">taf KAUS"),
       (.hazardousOutlook, ">hwo"),
       (.coverage, ">cov"),
-      (.areaSweep(includesAdvisories: false), ">wmap"),
-      (.areaSweep(includesAdvisories: true), ">wmap all")
+      (.areaSweep(includesAdvisories: false, states: []), ">wmap"),
+      (.areaSweep(includesAdvisories: true, states: []), ">wmap all")
     ]
     for (request, text) in expected {
       #expect(request.wireText == text)
@@ -54,8 +55,8 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.coverage.requestLetter == "c")
     // The sweep rides on `w` like every other warning request, so a refusal for it comes back
     // under the same letter (spec §8.3).
-    #expect(WeatherRequest.areaSweep(includesAdvisories: false).requestLetter == "w")
-    #expect(WeatherRequest.areaSweep(includesAdvisories: true).requestLetter == "w")
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: []).requestLetter == "w")
+    #expect(WeatherRequest.areaSweep(includesAdvisories: true, states: []).requestLetter == "w")
   }
 
   /// Spec §7A: a statement describes the bot that sent it, so another bot's — or another
@@ -67,8 +68,8 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.observation(station: "KAUS").acceptsAnswerFromAnyBot)
     // Spec §7C: a sweep is one bot's reading of the country, cut where its own feed runs out,
     // so another bot's sweep is not this request's answer.
-    #expect(!WeatherRequest.areaSweep(includesAdvisories: false).acceptsAnswerFromAnyBot)
-    #expect(!WeatherRequest.areaSweep(includesAdvisories: true).acceptsAnswerFromAnyBot)
+    #expect(!WeatherRequest.areaSweep(includesAdvisories: false, states: []).acceptsAnswerFromAnyBot)
+    #expect(!WeatherRequest.areaSweep(includesAdvisories: true, states: []).acceptsAnswerFromAnyBot)
   }
 
   @Test
@@ -95,15 +96,114 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.coverage.expectedReply == .coverage)
     // Both scopes expect the same answer: the sweep's own flag says which one arrived, and a bot
     // that will not widen to advisories still answers the tap with the narrow sweep.
-    #expect(WeatherRequest.areaSweep(includesAdvisories: false).expectedReply == .areaSweep)
-    #expect(WeatherRequest.areaSweep(includesAdvisories: true).expectedReply == .areaSweep)
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: []).expectedReply == .areaSweep)
+    #expect(WeatherRequest.areaSweep(includesAdvisories: true, states: []).expectedReply == .areaSweep)
   }
 
   /// Two scopes are two requests: one on the air must not settle the other's button, and the
   /// request log has to be able to say which one was asked for.
   @Test
   func `the two map scopes are distinct requests`() {
-    #expect(WeatherRequest.areaSweep(includesAdvisories: false)
-      != WeatherRequest.areaSweep(includesAdvisories: true))
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: [])
+      != WeatherRequest.areaSweep(includesAdvisories: true, states: []))
+  }
+
+  // MARK: - Revision 10
+
+  /// Spec revision 10, §1.2. The compact form on purpose: upper case, run together, no
+  /// separators, so fifteen states fit the forty-byte request text beside `>wmap all `.
+  @Test
+  func `a scoped map names its states run together and upper case`() {
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: ["TX"]).wireText == ">wmap TX")
+    #expect(WeatherRequest.areaSweep(includesAdvisories: true, states: ["TX", "OK"]).wireText == ">wmap all OKTX")
+    // Sorted and upper-cased wherever it was built, so one selection is one request: the
+    // five-minute slot and the request log both key off the value.
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: ["tx", "ok"]).wireText == ">wmap OKTX")
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: ["OK", "TX"])
+      == WeatherRequest.areaSweep(includesAdvisories: false, states: ["OK", "TX"]))
+    #expect(WeatherRequest.sweepStates(["tx", "OK", "tx"]) == ["OK", "TX"])
+    // Fifteen two-letter codes, `>wmap all ` in front: exactly the forty bytes the wire allows.
+    let fifteen = ["AL", "AR", "AZ", "CO", "IA", "KS", "LA", "MO", "MS", "NE", "NM", "OK", "TN", "TX", "UT"]
+    let widest = WeatherRequest.areaSweep(includesAdvisories: true, states: fifteen).wireText
+    #expect(widest.utf8.count == 40)
+    #expect(widest.utf8.count <= MeshWXWire.maxRequestTextBytes)
+  }
+
+  /// Spec revision 10, §1.1: `>part <group> <idx>[,<idx>…]`, decimal, no spaces after the commas.
+  @Test
+  func `a parts request names its group and its indexes in decimal`() {
+    #expect(WeatherRequest.parts(group: 212, indexes: [1, 4, 6], of: .areaSweep).wireText
+      == ">part 212 1,4,6")
+    #expect(WeatherRequest.parts(group: 0, indexes: [0], of: .text(subject: 3)).wireText
+      == ">part 0 0")
+    // `p`, its own letter in the §8.3 table, so a refusal for it cannot be read as a `>wmap` one.
+    #expect(WeatherRequest.parts(group: 212, indexes: [1], of: .areaSweep).requestLetter == "p")
+    // The kind is for the log's wording; it is not on the wire and pairs nothing.
+    #expect(WeatherRequest.parts(group: 212, indexes: [1], of: .areaSweep).expectedReply
+      == .parts(group: 212))
+    #expect(WeatherRequest.parts(group: 212, indexes: [1], of: .text(subject: 3)).expectedReply
+      == .parts(group: 212))
+    // A `group` byte is one bot's counter and means nothing on another's.
+    #expect(!WeatherRequest.parts(group: 212, indexes: [1], of: .areaSweep).acceptsAnswerFromAnyBot)
+  }
+
+  /// Spec revision 10, §1.3: three decimals, recognised by the comma, and the `f` letter the rest
+  /// of the forecast grammar uses.
+  @Test
+  func `a coordinate forecast is two signed decimals with three places`() {
+    let santaFe = WeatherRequest.forecastAt(latitude: 35.6870, longitude: -105.9378)
+    #expect(santaFe.wireText == ">f 35.687,-105.938")
+    #expect(santaFe.requestLetter == "f")
+    #expect(santaFe.expectedReply == .forecast(point: nil))
+    // The bot resolves the point for itself, exactly as it does for `>f <place>`.
+    #expect(!santaFe.acceptsAnswerFromAnyBot)
+    #expect(WeatherRequest.forecastAt(latitude: 0, longitude: 0).wireText == ">f 0.000,0.000")
+    #expect(WeatherRequest.coordinateKey(latitude: 35.6870, longitude: -105.9378)
+      == "35.687,-105.938")
+  }
+
+  /// The request log and the weather state on a phone already hold `WeatherRequest` values, so a
+  /// file written before revision 10 has to keep loading. `>wmap` was the whole country then, and
+  /// that is what it decodes as.
+  @Test
+  func `an old areaSweep in a saved file decodes as the whole country`() throws {
+    let old = Data(#"{"areaSweep":{"includesAdvisories":true}}"#.utf8)
+    #expect(try JSONDecoder().decode(WeatherRequest.self, from: old)
+      == .areaSweep(includesAdvisories: true, states: []))
+  }
+
+  /// Every case survives a round trip through the encoding a phone's files are written in — and
+  /// the encoded shape is the contract the JavaScript port reads (`meshwx/web/docs/PORTING.md`),
+  /// so the two spellings that are easy to get wrong are pinned as bytes.
+  @Test
+  func `every request round-trips through its saved form`() throws {
+    let all: [WeatherRequest] = [
+      .digest, .activeWarnings, .warning(identity: "SV.W.EWX.42"), .warningsTouching(ugc: "TXC453"),
+      .warningText(identity: "SV.W.EWX.42"), .observations, .observation(station: "KAUS"),
+      .homeForecast, .forecast(point: 102), .forecastForPlace("round rock tx"),
+      .forecastAt(latitude: 35.687, longitude: -105.938), .forecastDiscussion(office: "EWX"),
+      .spaceWeather, .stormReports(state: "TX"), .rainfall(state: "TX"), .metar(station: "KAUS"),
+      .taf(station: "KAUS"), .hazardousOutlook, .coverage,
+      .areaSweep(includesAdvisories: false, states: []),
+      .areaSweep(includesAdvisories: true, states: ["OK", "TX"]),
+      .parts(group: 212, indexes: [1, 4, 6], of: .areaSweep),
+      .parts(group: 7, indexes: [2], of: .text(subject: 3))
+    ]
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .sortedKeys
+    for request in all {
+      let data = try encoder.encode(request)
+      #expect(try JSONDecoder().decode(WeatherRequest.self, from: data) == request, "\(request)")
+    }
+    #expect(String(decoding: try encoder.encode(WeatherRequest.digest), as: UTF8.self)
+      == #"{"digest":{}}"#)
+    #expect(String(decoding: try encoder.encode(WeatherRequest.forecastForPlace("austin tx")), as: UTF8.self)
+      == #"{"forecastForPlace":{"_0":"austin tx"}}"#)
+    #expect(String(decoding: try encoder.encode(
+      WeatherRequest.areaSweep(includesAdvisories: false, states: ["TX"])), as: UTF8.self)
+      == #"{"areaSweep":{"includesAdvisories":false,"states":["TX"]}}"#)
+    #expect(String(decoding: try encoder.encode(
+      WeatherRequest.parts(group: 212, indexes: [1, 4], of: .text(subject: 3))), as: UTF8.self)
+      == #"{"parts":{"group":212,"indexes":[1,4],"of":{"text":{"subject":3}}}}"#)
   }
 }

@@ -942,15 +942,22 @@ public struct MeshWXRequest: Sendable, Hashable, Codable {
 
 // MARK: - Area sweep
 
-/// One packet of a national area sweep (type 10, spec §7C).
+/// One packet of an area sweep (type 10, spec §7C).
 ///
-/// The sweep is the answer to one question — *where in the country is anything happening?* — and
-/// it is the most expensive answer on the channel: up to eight packets, broadcast to everyone
-/// listening. Nothing may ask for one on a timer, on appear or on a pull; only a tap.
+/// The sweep is the answer to one question — *where is anything happening?* — and it is the most
+/// expensive answer on the channel: up to eight packets, broadcast to everyone listening. Nothing
+/// may ask for one on a timer, on appear or on a pull; only a tap.
+///
+/// Since revision 10 the question can be asked of a few states rather than of the country
+/// (``isScoped``, ``scope``), which is the owner's "that way we don't default to sending
+/// everything". A scoped sweep is not a smaller national one: the states it does not name are
+/// **unknown**, never clear.
 ///
 /// Reassemble by `(bot, group)` in ``index`` order exactly as a Text reply is (spec §8.1). A
 /// packet that never arrives leaves a hole: draw the entries that did arrive and say the sweep is
-/// partial, because a map of forty states is still worth looking at.
+/// partial, because a map of forty states is still worth looking at. Since revision 10 the packets
+/// that never arrived can also be asked for by name (`>part`), which is the one repair that costs
+/// three packets instead of eight.
 public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
   /// One run of consecutive UGC numbers in one state, under one event (spec §7C).
   ///
@@ -1010,7 +1017,8 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
   /// Shared by every packet of one sweep (the `seq` of its first packet), exactly as Text does.
   public var group: UInt8
   public var index: UInt8
-  /// 1 to ``MeshWXWire/maxAreaSweepPackets``.
+  /// 1 to ``MeshWXWire/maxAreaSweepPackets``: the `total` byte's low nibble
+  /// (``MeshWXWire/sweepTotalMask``), bit 7 having become the scope flag in revision 10.
   public var total: UInt8
   /// Flags bit 0: entries were dropped to fit.
   ///
@@ -1020,7 +1028,26 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
   /// Flags bit 1: advisories are in the sweep, not only warnings and watches. Clear does not mean
   /// there are no advisories — it means the narrower scope was asked for.
   public var includesAdvisories: Bool
-  /// Most severe first, as the bot ordered them.
+  /// `total` bit 7 (spec revision 10, §7C): the sweep covers only the states its scope names, not
+  /// the country.
+  ///
+  /// The one field of this type carried on **every** packet that a phone must have before it can
+  /// read the map at all: an unshaded state inside the scope has nothing active, and an unshaded
+  /// state outside it was never asked about. Getting that backwards paints half the country clear
+  /// on the strength of a question nobody asked.
+  public var isScoped: Bool
+  /// The state indices this packet's scope entries name (spec revision 10, §7C), in the order the
+  /// bot sent them.
+  ///
+  /// Empty for a national sweep, and empty for the packets of a scoped sweep after the first: the
+  /// bot writes the scope once, at the head of packet 0. ``isScoped`` is what says the sweep is
+  /// scoped; this says *what to*, when the packet carrying it arrived.
+  public var scope: [UInt8]
+  /// The alert entries, most severe first, as the bot ordered them.
+  ///
+  /// Alert entries only: a scope entry (event 0) is lifted into ``scope`` by the decoder and put
+  /// back, first, by the encoder. Nothing downstream has to know that the scope travels as an
+  /// entry, and nothing can mistake `XXZ000` for an area under an alert.
   public var entries: [Entry]
 
   public init(
@@ -1030,6 +1057,8 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
     total: UInt8,
     wasCut: Bool = false,
     includesAdvisories: Bool = false,
+    isScoped: Bool = false,
+    scope: [UInt8] = [],
     entries: [Entry]
   ) {
     self.builtMinutes = builtMinutes
@@ -1038,7 +1067,16 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
     self.total = total
     self.wasCut = wasCut
     self.includesAdvisories = includesAdvisories
+    self.isScoped = isScoped
+    self.scope = scope
     self.entries = entries
+  }
+
+  /// A scope entry as the wire carries it (spec revision 10, §7C): `event 0`, kind zone,
+  /// `start 0`, `run 1`. One per state named, sorting before every alert entry.
+  public static func scopeEntry(stateIndex: UInt8) -> Entry {
+    Entry(
+      event: MeshWXWire.sweepScopeEvent, stateIndex: stateIndex, isCounty: false, start: 0, run: 1)
   }
 }
 

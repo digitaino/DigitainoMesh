@@ -2,53 +2,60 @@ import MC1Services
 import MeshWX
 import SwiftUI
 
-/// The national alert map (docs/MESHWX_UI.md §17): every area in the country the radio says is
-/// under an alert, shaded by event.
+/// The alert map (docs/MESHWX_UI.md §17): every area the radio says is under an alert, shaded by
+/// event — for the whole country, or for the states somebody asked about.
 ///
 /// **This screen never asks for anything on its own.** No request on appear, none on a pull, none
-/// on a timer — one sweep is up to eight packets broadcast to everyone on `#meshwx`, and a screen
+/// on a timer — a sweep is up to eight packets broadcast to everyone on `#meshwx`, and a screen
 /// that fetched one because it was opened would spend the whole channel's airtime on a swipe. The
-/// only thing that sends is a tap on the button, and the button says what the tap costs before it
+/// only thing that sends is a tap on a button, and every button says what the tap costs before it
 /// is spent.
 ///
-/// What it shows comes from the state the source bot's sweep was stored in
-/// (`WeatherBotState.areaSweep`), complete or partial. A sweep missing two of its eight packets is
-/// still most of a country and is drawn, labelled as partial.
+/// Revision 10 made the map **several sweeps at once** (`WeatherAlertMapPicture`). The owner's
+/// third ask: *can we go from national alert map to just alert map, and have a way for the user to
+/// select which areas they want to request the warnings for. One, a few, or all. That way we don't
+/// default to sending everything.* A phone can now hold the country from 13:20 and Texas from
+/// 13:40, and the status card is where that stops being a lie: one line per part, each with its
+/// own age, its own breadth and its own holes — and, for a part missing packets, the ask that
+/// fills them (the owner's first ask: *should allow me to re-request the missing data*).
 struct WeatherAreaMapView: View {
   @Environment(\.appTheme) private var theme
 
-  /// The page this was opened from, so the radio it names and asks is that page's
-  /// (docs/MESHWX_UI.md §13).
+  /// The page this was opened from, so the radio it names and asks is that page's, and so is the
+  /// state the selection defaults to (docs/MESHWX_UI.md §13).
   let screen: WeatherPageScreen
 
-  /// How much weather the **next** map should cover. Not what the held one covers — the held one
-  /// says that itself (``MeshWXAreaSweep/includesAdvisories``), and the two can differ.
-  @State private var scope: WeatherAreaMapScope = .warningsAndWatches
+  /// How much weather the **next** map should cover. Not what the held parts cover — each part
+  /// says that itself, and they can differ from each other as well as from this.
+  @State private var level: WeatherAreaMapScope = .warningsAndWatches
   @State private var drawing = WeatherAreaMapDrawing()
   @State private var isShowingMap = false
 
   private var model: WeatherToolModel { screen.model }
-  private var sweep: WeatherAreaSweepAssembly? { screen.context.sourceState?.areaSweep }
-  private var request: WeatherRequest { scope.request }
+  private var picture: WeatherAlertMapPicture { model.areaPicture(forPageID: screen.pageID) }
+  private var selection: WeatherAreaSelection { model.areaSelection(forPageID: screen.pageID) }
+  private var request: WeatherRequest { selection.request(includesAdvisories: level.includesAdvisories) }
 
-  /// What to redraw on. Never the clock: an unchanged sweep is not re-shaded every 30 seconds,
-  /// and re-shading a country is not cheap.
+  /// What to redraw on: which sweeps are held and which of their packets are in. Never the clock —
+  /// an unchanged map is not re-shaded every 30 seconds, and re-shading a country is not cheap.
   private var drawingKey: WeatherAreaMapKey {
     WeatherAreaMapKey(
       botID: screen.snapshot.source?.botID,
-      builtMinutes: sweep?.builtMinutes,
-      group: sweep?.group,
-      packets: sweep?.packets.keys.sorted() ?? [],
+      parts: (screen.context.sourceState?.areaSweeps ?? []).map {
+        WeatherAreaMapKey.Part(
+          group: $0.group, builtMinutes: $0.builtMinutes, packets: $0.packets.keys.sorted())
+      },
       isGeometryLoaded: screen.context.isGeometryLoaded)
   }
 
   var body: some View {
+    let picture = picture
     List {
-      mapSection
-      statusSection
-      alertListSection
+      mapSection(picture)
+      statusSection(picture)
+      alertListSection(picture)
       legendSection
-      askSection
+      askSection(picture)
       sourceSection
     }
     .listStyle(.insetGrouped)
@@ -61,7 +68,9 @@ struct WeatherAreaMapView: View {
       WeatherAreaFullMapView(screen: screen, drawing: drawing)
     }
     .task(id: drawingKey) {
-      let entries = sweep?.entries ?? []
+      // The resolved picture, not the raw sweeps: where a newer scoped part has replaced a
+      // state's entries, the older ones must not be laid down under it.
+      let entries = picture.entries.map(\.entry)
       drawing = await Task.detached(priority: .userInitiated) {
         WeatherAreaMapDrawing.make(entries: entries, tables: .shared, geometry: .shared)
       }.value
@@ -71,8 +80,8 @@ struct WeatherAreaMapView: View {
   // MARK: - Sections
 
   @ViewBuilder
-  private var mapSection: some View {
-    if sweep != nil {
+  private func mapSection(_ picture: WeatherAlertMapPicture) -> some View {
+    if !picture.parts.isEmpty {
       Section {
         // The card is a still: the map underneath it takes no gestures, and the whole row opens
         // the full map, which zooms and answers a tap on an area. `allowsHitTesting(false)` on
@@ -109,57 +118,99 @@ struct WeatherAreaMapView: View {
     }
   }
 
+  /// One row per part, then what the map as a whole does and does not speak for.
   @ViewBuilder
-  private var statusSection: some View {
+  private func statusSection(_ picture: WeatherAlertMapPicture) -> some View {
     Section {
-      if let sweep {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(WeatherAreaMapCopy.builtLine(
-            sweep, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
-            .font(.subheadline)
-          Text(WeatherAreaMapCopy.scopeHeld(sweep))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-          if let count = WeatherAreaMapCopy.areaCount(drawing, sweep: sweep, source: screen.sourceName) {
-            Text(count)
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-          if let undrawn = WeatherAreaMapCopy.undrawn(drawing) {
-            Text(undrawn)
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-          // Both are honesty about what is *not* on the map, so both are orange rather than
-          // grey: a gap in a cut or partial sweep is not calm weather.
-          if !sweep.isComplete {
-            Text(L10n.Weather.Weather.AreaMap.partial(sweep.receivedPacketCount, Int(sweep.total)))
-              .font(.footnote)
-              .foregroundStyle(.orange)
-          }
-          if sweep.wasCut {
-            Text(L10n.Weather.Weather.AreaMap.cut)
-              .font(.footnote)
-              .foregroundStyle(.orange)
-          }
-        }
-        .accessibilityElement(children: .combine)
-      } else {
+      if picture.parts.isEmpty {
         Text(L10n.Weather.Weather.AreaMap.empty)
           .font(.subheadline)
           .foregroundStyle(.secondary)
+      } else {
+        ForEach(picture.parts) { part in
+          partRow(part, picture: picture)
+        }
+        // With nothing national held the map speaks for the states its parts name and for no
+        // others, and an unshaded state outside them is unknown rather than clear.
+        if !picture.coversWholeCountry, let covered = WeatherAreaMapCopy.coveredStates(picture) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.Weather.Weather.AreaMap.covers(covered))
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+            Text(L10n.Weather.Weather.AreaMap.notAsked)
+              .font(.footnote)
+              .foregroundStyle(.orange)
+          }
+          .accessibilityElement(children: .combine)
+        }
+        VStack(alignment: .leading, spacing: 4) {
+          if let count = WeatherAreaMapCopy.areaCount(drawing, picture: picture, source: screen.sourceName) {
+            Text(count)
+          }
+          if let undrawn = WeatherAreaMapCopy.undrawn(drawing) {
+            Text(undrawn)
+          }
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
       }
     }
     .themedRowBackground(theme)
   }
 
+  /// "Texas, Oklahoma · as of 1:40 PM · 2 min old", its breadth, and the two kinds of hole a part
+  /// can have — both orange, because a gap in a cut or partial sweep is not calm weather.
+  @ViewBuilder
+  private func partRow(_ part: WeatherAlertMapPicture.Part, picture: WeatherAlertMapPicture) -> some View {
+    let offer = model.areaPartsOffer(forPageID: screen.pageID, part: part)
+    VStack(alignment: .leading, spacing: 4) {
+      Text(WeatherAreaMapCopy.partLine(
+        part, picture: picture, now: screen.now, calendar: .autoupdatingCurrent,
+        locale: .autoupdatingCurrent, tables: .shared))
+        .font(.subheadline)
+      Text(WeatherAreaMapCopy.level(part))
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+      if WeatherAreaMapCopy.isReplaced(part) {
+        Text(L10n.Weather.Weather.AreaMap.partReplaced)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      if part.wasCut {
+        Text(L10n.Weather.Weather.AreaMap.cut)
+          .font(.footnote)
+          .foregroundStyle(.orange)
+      }
+      if !part.missingIndexes.isEmpty {
+        Text(L10n.Weather.Weather.AreaMap.partsArrived(part.receivedPackets, part.totalPackets))
+          .font(.footnote)
+          .foregroundStyle(.orange)
+      }
+    }
+    .accessibilityElement(children: .combine)
+
+    // The ask is a row of its own, never folded into the combined line above: it is a button, and
+    // the offer comes and goes with the fifteen-second and ten-minute rules (`WeatherPartsOffer`)
+    // while the lines above it stay (docs/MESHWX_UI.md §3.1 U-35).
+    if let offer {
+      VStack(alignment: .leading, spacing: 2) {
+        WeatherAskButton(screen: screen, title: WeatherAreaMapCopy.askPartsTitle(offer), request: offer)
+        Text(WeatherAreaMapCopy.packets(WeatherAreaMapCopy.packetCount(offer)))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      .accessibilityIdentifier("weather.areaMap.askParts.\(part.group)")
+    }
+  }
+
   /// What the shading says, as a list — one row per alert kind, with how many areas are under it
   /// and where. The map answers "where"; a reader who wants "what" was reading colours off a
   /// legend and counting shapes (docs/MESHWX_UI.md §3.1 U-32). Tapping a kind opens its areas,
-  /// and tapping an area asks the radio what it is, exactly as tapping the map does.
+  /// and tapping an area opens what the phone knows about it.
   @ViewBuilder
-  private var alertListSection: some View {
-    let groups = WeatherAreaMapList.groups(sweep?.entries ?? [], tables: .shared)
+  private func alertListSection(_ picture: WeatherAlertMapPicture) -> some View {
+    let groups = WeatherAreaMapList.groups(picture.entries.map(\.entry), tables: .shared)
     if !groups.isEmpty {
       Section {
         WeatherCardLabel(
@@ -210,26 +261,46 @@ struct WeatherAreaMapView: View {
     }
   }
 
+  /// What the next map covers, what it costs, and the tap that spends it.
   @ViewBuilder
-  private var askSection: some View {
+  private func askSection(_ picture: WeatherAlertMapPicture) -> some View {
+    let selection = selection
     Section {
-      Picker(L10n.Weather.Weather.AreaMap.scope, selection: $scope) {
+      NavigationLink {
+        WeatherAreaPickerView(screen: screen)
+      } label: {
+        LabeledContent(L10n.Weather.Weather.AreaMap.areasToAsk) {
+          Text(WeatherAreaMapCopy.selectionName(selection))
+        }
+      }
+      .accessibilityIdentifier("weather.areaMap.areasToAsk")
+
+      Picker(L10n.Weather.Weather.AreaMap.scope, selection: $level) {
         ForEach(WeatherAreaMapScope.allCases, id: \.self) { option in
           Text(option.title).tag(option)
         }
       }
       .pickerStyle(.segmented)
+
+      // Said **before** the tap, not after it: somebody who picked twenty states and got the
+      // country back is owed the sentence in advance (`WeatherAreaSelection.asksWholeCountry`).
+      if selection.isAskingWholeCountryByOverflow {
+        Text(L10n.Weather.Weather.AreaMap.tooManyStates(MeshWXWire.maxSweepScopeStates))
+          .font(.footnote)
+          .foregroundStyle(.orange)
+      }
       // The cost above the button, not under it: it is what the tap is about to spend, and a
       // reader who has already tapped, or who cannot tap at all, does not need telling.
       if model.status(for: request).isAskable {
-        Text(L10n.Weather.Weather.AreaMap.cost(scope.packets(lastSweep: sweep)))
+        Text(WeatherAreaMapCopy.cost(WeatherAreaSweepCost.packets(
+          for: selection, advisories: level.includesAdvisories, held: picture)))
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
       WeatherAskButton(
-        screen: screen, title: L10n.Weather.Weather.AreaMap.ask, request: request,
+        screen: screen, title: WeatherAreaMapCopy.askTitle(selection), request: request,
         showsFootnotes: true)
-      if sweep != nil, model.status(for: request).isAskable {
+      if !picture.parts.isEmpty, model.status(for: request).isAskable {
         Text(L10n.Weather.Weather.AreaMap.tapHint(screen.sourceName))
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -251,12 +322,132 @@ struct WeatherAreaMapView: View {
   }
 }
 
+// MARK: - Which areas to ask about (§17)
+
+/// The states the next map should cover: search, the whole country first, then every state with a
+/// checkmark — the page's own state at the top, because that is the one somebody opening the map
+/// from their own town almost always wants.
+///
+/// **Pushed, and saved as it changes.** There is no Done and nothing to commit: the selection is
+/// one value in one store (`WeatherAreaSelectionStore`), and the back chevron is the only way out
+/// this tool has ever offered from a pushed screen (docs/MESHWX_UI.md §3.1 U-11).
+struct WeatherAreaPickerView: View {
+  @Environment(\.appTheme) private var theme
+
+  let screen: WeatherPageScreen
+
+  @State private var search = ""
+
+  private var model: WeatherToolModel { screen.model }
+
+  var body: some View {
+    let selection = model.areaSelection(forPageID: screen.pageID)
+    let home = screen.context.placeStateCode?.uppercased()
+    let all = WeatherReferenceNames.requestableStates(from: MeshWXTables.shared.states)
+    let matching = all.filter { WeatherAreaPickerView.matches($0, search: search) }
+    let pageState = home.flatMap { code in matching.first { $0 == code } }
+    let rest = matching.filter { $0 != pageState }
+
+    List {
+      Section {
+        row(
+          title: L10n.Weather.Weather.AreaMap.pickerWholeCountry,
+          isSelected: selection.isWholeCountry,
+          identifier: "weather.areaMap.picker.wholeCountry"
+        ) {
+          var updated = selection
+          updated.isWholeCountry = true
+          model.setAreaSelection(updated)
+        }
+      } footer: {
+        if !selection.states.isEmpty {
+          Text(L10n.Weather.Weather.AreaMap.pickerSelected(selection.states.count))
+        }
+      }
+      .themedRowBackground(theme)
+
+      if let pageState {
+        Section {
+          stateRow(pageState, selection: selection)
+        } header: {
+          Text(L10n.Weather.Weather.AreaMap.pickerYourState)
+        }
+        .themedRowBackground(theme)
+      }
+
+      Section {
+        if rest.isEmpty, pageState == nil {
+          Text(L10n.Weather.Weather.AreaMap.pickerNoMatches)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(rest, id: \.self) { code in
+            stateRow(code, selection: selection)
+          }
+        }
+      } header: {
+        if !rest.isEmpty {
+          Text(L10n.Weather.Weather.AreaMap.pickerEveryState)
+        }
+      }
+      .themedRowBackground(theme)
+    }
+    .listStyle(.insetGrouped)
+    .themedCanvas(theme)
+    .searchable(text: $search, prompt: L10n.Weather.Weather.AreaMap.pickerSearch)
+    .navigationTitle(L10n.Weather.Weather.AreaMap.areasToAsk)
+    .navigationBarTitleDisplayMode(.inline)
+    .weatherToolChrome()
+  }
+
+  /// A state code matches its own letters or its name, so "tex", "TX" and "Texas" all find Texas.
+  static func matches(_ code: String, search: String) -> Bool {
+    let query = search.trimmingCharacters(in: .whitespaces)
+    guard !query.isEmpty else { return true }
+    if code.localizedCaseInsensitiveContains(query) { return true }
+    return WeatherReferenceNames.stateName(code).localizedCaseInsensitiveContains(query)
+  }
+
+  /// Picking a state turns the whole country off: the two are one answer to one question, and a
+  /// picker that left both on would send a request nobody chose.
+  private func stateRow(_ code: String, selection: WeatherAreaSelection) -> some View {
+    let isSelected = !selection.isWholeCountry && selection.states.contains(code)
+    return row(
+      title: WeatherReferenceNames.stateName(code), isSelected: isSelected,
+      identifier: "weather.areaMap.picker.\(code)"
+    ) {
+      var states = Set(selection.states)
+      if isSelected { states.remove(code) } else { states.insert(code) }
+      model.setAreaSelection(
+        WeatherAreaSelection(isWholeCountry: false, states: Array(states)))
+    }
+  }
+
+  private func row(
+    title: String, isSelected: Bool, identifier: String, tapped: @escaping () -> Void
+  ) -> some View {
+    Button(action: tapped) {
+      HStack {
+        Text(title)
+          .foregroundStyle(.primary)
+        Spacer(minLength: 8)
+        if isSelected {
+          Image(systemName: "checkmark")
+            .foregroundStyle(.tint)
+            .accessibilityLabel(L10n.Weather.Weather.Common.selected)
+        }
+      }
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier(identifier)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+  }
+}
+
 // MARK: - The interactive map
 
-/// The full map, where a tap on a shaded area asks the radio what is happening there.
-///
-/// One tap, one `>w <area>` — a single packet, not a sweep — and only for an area this map
-/// actually shaded: a tap on empty land asks for nothing rather than guessing at a county.
+/// The full map, where a tap on a shaded area opens what the phone knows about it.
 struct WeatherAreaFullMapView: View {
   let screen: WeatherPageScreen
   let drawing: WeatherAreaMapDrawing
@@ -321,37 +512,37 @@ struct WeatherAreaFullMapView: View {
       // A tap used to put `>w <ugc>` on the air and show nothing at all: the answer landed in
       // state, the map never mentioned it, and the owner tapped area after area for nothing
       // (docs/MESHWX_UI.md §3.1 U-34). It opens the area's own screen instead, which already
-      // knows what the sweep said about it — no airtime — and asks only when asked to.
-      picked = WeatherPickedArea(ugc: ugc, event: eventForArea(ugc))
+      // knows what the map said about it — no airtime — and asks only when asked to.
+      picked = WeatherPickedArea(ugc: ugc)
     }
-  }
-
-  /// What the sweep said about this area, for the screen the tap opens. The sweep is in severity
-  /// order and `drawnCodes` follows it, so the first entry naming the area is the one shading it.
-  private func eventForArea(_ ugc: String) -> UInt8? {
-    let states = MeshWXTables.shared.states
-    for entry in screen.context.sourceState?.areaSweep?.entries ?? []
-    where entry.ugcCodes(states: states).contains(ugc) {
-      return entry.event
-    }
-    return nil
   }
 }
 
-// MARK: - One area, and what is known about it (§3.1 U-34)
+// MARK: - One area, and what is known about it (§17.3)
 
-/// The area a tap landed on: its code, and the alert the sweep shaded it with.
+/// The area a tap landed on. Its code and nothing else: what the map said about it is read from
+/// the page's own picture, so the screen says the same thing however it was reached.
 struct WeatherPickedArea: Identifiable, Hashable {
   var ugc: String
-  var event: UInt8?
 
   var id: String { ugc }
 }
 
-/// What the phone knows about one area, and the one request that would learn more.
+/// What the map says about one area: the event shading it, and when the part that shaded it was
+/// built (which is the "as of" the row carries, on the radio's clock).
+struct WeatherAreaMapWord: Hashable {
+  var event: UInt8
+  var asOf: Date
+}
+
+/// What the phone knows about one area, in **one card**, and the one request that would learn more
+/// (docs/MESHWX_UI.md §17.3, §3.1 U-36).
 ///
-/// The sweep already says which kind of alert covers it, which costs nothing to show. A warning
-/// this phone holds for it is shown in full. Only the button spends airtime, and only on a tap.
+/// The owner's second ask: *this "on the map" vs "what the phone holds" is weird.* It was two
+/// cards saying one thing twice — the map's event on top, the alerts this phone holds underneath —
+/// and a reader had to work out for themselves that they were the same alert. They are one list
+/// now: the held alerts as ordinary rows, and a row for the map's own event **only when that event
+/// is not among them**, which is the one case the two cards were ever telling apart.
 struct WeatherAreaDetailView: View {
   @Environment(\.appTheme) private var theme
 
@@ -372,41 +563,36 @@ struct WeatherAreaDetailView: View {
 
   var body: some View {
     let alerts = held
+    let unheld = WeatherAreaMapCopy.unheldMapWord(
+      model.areaOnMap(forPageID: screen.pageID, ugc: area.ugc),
+      heldEvents: alerts.map(\.warning.event))
+
     List {
       Section {
-        WeatherCardLabel(title: L10n.Weather.Weather.AreaMap.onTheMap, systemImage: "map")
-        LabeledContent {
-          Text(area.ugc)
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-        } label: {
-          Text(WeatherAreaMapList.areaName(area.ugc, tables: .shared))
-        }
-        if let event = area.event {
-          Label(
-            WeatherFormatting.eventName(event, tables: .shared),
-            systemImage: WeatherFormatting.symbol(for: event, tables: .shared))
-        }
-      }
-      .themedRowBackground(theme)
-
-      if !alerts.isEmpty {
-        Section {
-          WeatherCardLabel(
-            title: L10n.Weather.Weather.AreaMap.held, systemImage: "exclamationmark.triangle")
-          ForEach(alerts) { item in
-            NavigationLink {
-              WeatherAlertDetailView(screen: screen, identity: item.identity)
-            } label: {
-              WeatherAlertRow(item: item, placeName: screen.placeName, now: screen.now)
-                .equatable()
-            }
+        WeatherCardLabel(
+          title: WeatherAreaMapList.areaName(area.ugc, tables: .shared), trailing: area.ugc)
+        ForEach(alerts) { item in
+          NavigationLink {
+            WeatherAlertDetailView(screen: screen, identity: item.identity)
+          } label: {
+            WeatherAlertRow(item: item, placeName: screen.placeName, now: screen.now)
+              .equatable()
           }
         }
-        .themedRowBackground(theme)
-      }
-
-      Section {
+        if let unheld {
+          VStack(alignment: .leading, spacing: 2) {
+            Label(
+              WeatherFormatting.eventName(unheld.event, tables: .shared),
+              systemImage: WeatherFormatting.symbol(for: unheld.event, tables: .shared))
+            Text(L10n.Weather.Weather.AreaMap.onMapAsOf(WeatherFormatting.clockTime(
+              unheld.asOf, now: screen.now, calendar: .autoupdatingCurrent,
+              locale: .autoupdatingCurrent)))
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+          .accessibilityElement(children: .combine)
+          .accessibilityIdentifier("weather.areaMap.onMapOnly")
+        }
         WeatherAskButton(
           screen: screen,
           title: alerts.isEmpty
@@ -438,9 +624,10 @@ extension WeatherRequestStatus {
   }
 }
 
-// MARK: - Scope
+// MARK: - Level
 
-/// How much of the country's weather the next map should cover (spec §7C).
+/// How much of a state's weather the next map should carry (spec §7C). The *breadth* of the ask;
+/// ``WeatherAreaSelection`` is its reach.
 enum WeatherAreaMapScope: Hashable, CaseIterable {
   /// The default. Warnings and watches only — what people open a map during a storm to see.
   case warningsAndWatches
@@ -448,24 +635,6 @@ enum WeatherAreaMapScope: Hashable, CaseIterable {
   case alsoAdvisories
 
   var includesAdvisories: Bool { self == .alsoAdvisories }
-
-  var request: WeatherRequest { .areaSweep(includesAdvisories: includesAdvisories) }
-
-  /// What one tap spends, in packets, said in plain words before it is spent.
-  ///
-  /// Measured against the bot's live products on 2026-09-20: warnings and watches were 148 runs,
-  /// four packets; with advisories 263 runs, seven. Eight is the ceiling
-  /// (``MeshWXWire/maxAreaSweepPackets``) and a busy day reaches it, so the figure a phone shows
-  /// is the last sweep it actually received at this scope, and these only until one arrives.
-  var typicalPackets: Int { includesAdvisories ? 7 : 4 }
-
-  /// The last sweep at this scope is the best estimate there is: it is what this bot sent for
-  /// this country a few minutes ago.
-  func packets(lastSweep: WeatherAreaSweepAssembly?) -> Int {
-    guard let lastSweep, lastSweep.includesAdvisories == includesAdvisories, lastSweep.total > 0
-    else { return typicalPackets }
-    return Int(lastSweep.total)
-  }
 
   var title: String {
     switch self {
@@ -475,22 +644,43 @@ enum WeatherAreaMapScope: Hashable, CaseIterable {
   }
 }
 
-/// What a redraw is keyed on: the sweep's identity and which of its packets are in, never the
+extension WeatherAreaSelection {
+  /// The selection names more states than a forty-byte request can carry, so the tap will ask for
+  /// the country. The screen says so before it is tapped, never after.
+  var isAskingWholeCountryByOverflow: Bool {
+    !isWholeCountry && states.count > MeshWXWire.maxSweepScopeStates
+  }
+}
+
+/// What a redraw is keyed on: which sweeps are held and which of their packets are in, never the
 /// entries themselves — a country's worth of runs is not a value to hash on every body evaluation.
 struct WeatherAreaMapKey: Hashable {
+  /// One held sweep's identity, for the same reason.
+  struct Part: Hashable {
+    var group: UInt8
+    var builtMinutes: UInt32
+    var packets: [UInt8]
+  }
+
   var botID: UInt16?
-  var builtMinutes: UInt32?
-  var group: UInt8?
-  var packets: [UInt8]
+  var parts: [Part]
   var isGeometryLoaded: Bool
 }
 
 // MARK: - Copy
 
-/// The sentences the national map is built from, as pure functions of the sweep.
+/// The sentences the alert map is built from, as pure functions of the picture and the selection.
 enum WeatherAreaMapCopy {
+  /// How many states a line names before it gives up and counts them. Three is what fits on one
+  /// line of a status card at the largest text size the tool is read at; past that the names are
+  /// a wall and the number is the fact.
+  static let maxNamedStates = 3
+
   /// "Map as of 8:02 PM · 3 h old": when the radio built it, and how long ago that was. The build
   /// time is the radio's own (spec §7C), never when this phone happened to hear the packets.
+  ///
+  /// The alerts list's row still leads with the newest sweep this way; the map's own card names
+  /// each part separately (``partLine(_:picture:now:calendar:locale:tables:)``).
   static func builtLine(
     _ sweep: WeatherAreaSweepAssembly, now: Date, calendar: Calendar, locale: Locale
   ) -> String {
@@ -499,25 +689,178 @@ enum WeatherAreaMapCopy {
     return "\(asOf) · \(WeatherFormatting.age(sweep.builtAt, now: now))"
   }
 
-  /// What the held map covers — read off the sweep itself, not off the button that asked for it:
-  /// a radio may answer the wider request with the narrower sweep, and then this is what arrived.
-  static func scopeHeld(_ sweep: WeatherAreaSweepAssembly) -> String {
-    sweep.includesAdvisories
+  /// "Texas, Oklahoma · as of 1:40 PM · 2 min old" — what this part is the word on, when the radio
+  /// built it, and how old that makes it.
+  static func partLine(
+    _ part: WeatherAlertMapPicture.Part,
+    picture: WeatherAlertMapPicture,
+    now: Date,
+    calendar: Calendar,
+    locale: Locale,
+    tables: MeshWXTables
+  ) -> String {
+    [partName(part, picture: picture, tables: tables),
+     L10n.Weather.Weather.AreaMap.partAsOf(
+       WeatherFormatting.clockTime(part.builtAt, now: now, calendar: calendar, locale: locale)),
+     WeatherFormatting.age(part.builtAt, now: now)]
+      .joined(separator: " · ")
+  }
+
+  /// What a part is the word on.
+  ///
+  /// A national part is "the whole country" until something scoped and newer takes states off it,
+  /// and then it is honestly "the rest of the country". A scoped part is named by the states it
+  /// **asked for**, not by the ones it kept: a part every one of whose states a newer sweep now
+  /// covers is still the part that asked for them, and the line under it says what happened.
+  static func partName(
+    _ part: WeatherAlertMapPicture.Part, picture: WeatherAlertMapPicture, tables: MeshWXTables
+  ) -> String {
+    guard part.isScoped else {
+      let replaced = picture.parts.contains { $0.isScoped && !$0.stateCodes.isEmpty }
+      return replaced
+        ? L10n.Weather.Weather.AreaMap.restOfCountry
+        : L10n.Weather.Weather.AreaMap.wholeCountry
+    }
+    let codes = scopeCodes(part, tables: tables)
+    guard let codes, !codes.isEmpty else {
+      // Scoped, and the packet carrying the scope never arrived. Its entries are real and are
+      // drawn; which states it was asked for is not in what came (spec revision 10, §1.2).
+      return L10n.Weather.Weather.AreaMap.partStatesUnknown
+    }
+    return stateList(codes)
+  }
+
+  /// The state codes a scoped part names, or nil when its scope has not arrived.
+  static func scopeCodes(
+    _ part: WeatherAlertMapPicture.Part, tables: MeshWXTables
+  ) -> [String]? {
+    guard let scope = part.scope else { return nil }
+    let states = tables.states
+    return scope.compactMap { Int($0) < states.count ? states[Int($0)] : nil }.sorted()
+  }
+
+  /// Every state a newer part has taken off this one: it asked for them and no longer speaks for
+  /// any of them.
+  static func isReplaced(_ part: WeatherAlertMapPicture.Part) -> Bool {
+    part.isScoped && !(part.scope ?? []).isEmpty && part.stateCodes.isEmpty
+  }
+
+  /// What one part covers — read off the sweep itself, not off the button that asked for it: a
+  /// radio may answer the wider request with the narrower sweep, and then this is what arrived.
+  static func level(_ part: WeatherAlertMapPicture.Part) -> String {
+    part.includesAdvisories
       ? L10n.Weather.Weather.AreaMap.heldAll
       : L10n.Weather.Weather.AreaMap.heldWarnings
   }
 
-  /// How many areas are under an alert — or, for a whole map that found none, that the country is
-  /// clear.
+  /// What the held map covers when no part of it is national, for "This map covers %@." Nil when
+  /// not one part can name a state, which is the case where the sentence would say nothing.
+  static func coveredStates(
+    _ picture: WeatherAlertMapPicture, tables: MeshWXTables = .shared
+  ) -> String? {
+    var codes: Set<String> = []
+    for part in picture.parts {
+      codes.formUnion(scopeCodes(part, tables: tables) ?? [])
+    }
+    guard !codes.isEmpty else { return nil }
+    return stateList(codes.sorted())
+  }
+
+  /// "Texas", "Texas and Oklahoma", "Texas, Oklahoma and New Mexico", "6 states".
   ///
-  /// **The clear sentence needs a whole map.** A sweep that was cut or is missing packets says
-  /// nothing about the areas it does not name, so a partial map with no entries says only that
-  /// nothing arrived, and the partial and cut lines above it are what the reader is left with.
+  /// The design writes both joins out ("Texas, Oklahoma · as of 13:40" and "Ask for Texas and
+  /// Oklahoma"), so the comma folds every pair but the last and the last takes the word. Past
+  /// ``maxNamedStates`` the count is the fact and the names are a wall.
+  static func stateList(_ codes: [String]) -> String {
+    let names = codes.map(WeatherReferenceNames.stateName)
+    guard names.count <= maxNamedStates else {
+      return L10n.Weather.Weather.AreaMap.stateCount(names.count)
+    }
+    guard let last = names.last else { return "" }
+    guard names.count > 1 else { return last }
+    let head = names.dropLast().reduce(into: "") { joined, name in
+      joined = joined.isEmpty ? name : L10n.Weather.Weather.AreaMap.listJoin(joined, name)
+    }
+    return L10n.Weather.Weather.AreaMap.listJoinAnd(head, last)
+  }
+
+  /// What the "Areas to ask for" row shows beside itself: the choice, never what the request will
+  /// be turned into. Somebody who picked twenty states sees twenty states, and the orange line
+  /// under the picker says what that will actually send.
+  static func selectionName(_ selection: WeatherAreaSelection) -> String {
+    selection.isWholeCountry || selection.states.isEmpty
+      ? L10n.Weather.Weather.AreaMap.wholeCountry
+      : stateList(selection.states)
+  }
+
+  /// The ask button's own title, which names what the tap will ask for.
+  static func askTitle(_ selection: WeatherAreaSelection) -> String {
+    selection.asksWholeCountry
+      ? L10n.Weather.Weather.AreaMap.askWholeCountry
+      : L10n.Weather.Weather.AreaMap.askStates(stateList(selection.askedStates))
+  }
+
+  /// "Ask for the 3 missing parts" (spec revision 10, §1.1).
+  static func askPartsTitle(_ request: WeatherRequest, isReport: Bool = false) -> String {
+    let count = packetCount(request)
+    if isReport {
+      return count == 1
+        ? L10n.Weather.Weather.Reports.askPartsOne
+        : L10n.Weather.Weather.Reports.askParts(count)
+    }
+    return count == 1
+      ? L10n.Weather.Weather.AreaMap.askPartsOne
+      : L10n.Weather.Weather.AreaMap.askParts(count)
+  }
+
+  /// How many packets a parts request asks for — which is exactly what it costs, because the bot
+  /// resends the bytes it transmitted rather than rebuilding the answer.
+  static func packetCount(_ request: WeatherRequest) -> Int {
+    guard case let .parts(_, indexes, _) = request else { return 0 }
+    return indexes.count
+  }
+
+  static func packets(_ count: Int) -> String {
+    count == 1
+      ? L10n.Weather.Weather.AreaMap.packetsOne
+      : L10n.Weather.Weather.AreaMap.packets(count)
+  }
+
+  /// "About 4 packets on the shared channel." — what one tap on the sweep will spend, before it
+  /// is spent. One state is often one packet, which is the whole point of the owner's third ask,
+  /// so the sentence has a singular.
+  static func cost(_ packets: Int) -> String {
+    packets == 1
+      ? L10n.Weather.Weather.AreaMap.costOne
+      : L10n.Weather.Weather.AreaMap.cost(packets)
+  }
+
+  /// The one extra row the tapped-area card can carry: the map's own event for the area, **only**
+  /// when this phone holds no alert of that kind for it (docs/MESHWX_UI.md §17.3, §3.1 U-36).
+  ///
+  /// The owner's second ask: *this "on the map" vs "what the phone holds" is weird.* It was two
+  /// cards, and for the ordinary case — the map shades Travis County red and the phone holds the
+  /// Tornado Warning that did it — both said the same thing, one of them in full and one of them
+  /// as a coloured word. This is the only case the two cards were ever telling apart.
+  static func unheldMapWord(
+    _ word: WeatherAreaMapWord?, heldEvents: [UInt8]
+  ) -> WeatherAreaMapWord? {
+    guard let word, !heldEvents.contains(word.event) else { return nil }
+    return word
+  }
+
+  /// How many areas are under an alert — or, for a map that speaks for the whole country with no
+  /// hole in it and found none, that the country is clear.
+  ///
+  /// **The clear sentence needs a whole map.** A part that was cut or is missing packets says
+  /// nothing about the areas it does not name, and a map with no national part says nothing about
+  /// the states nobody asked for — so either one silences the sentence, and the orange lines above
+  /// are what the reader is left with.
   static func areaCount(
-    _ drawing: WeatherAreaMapDrawing, sweep: WeatherAreaSweepAssembly, source: String
+    _ drawing: WeatherAreaMapDrawing, picture: WeatherAlertMapPicture, source: String
   ) -> String? {
     guard drawing.areaCount > 0 else {
-      guard sweep.isComplete, !sweep.wasCut else { return nil }
+      guard picture.coversWholeCountry, picture.parts.allSatisfy(\.isWhole) else { return nil }
       return L10n.Weather.Weather.AreaMap.clear(WeatherFormatting.sentenceStart(source))
     }
     return drawing.areaCount == 1
@@ -525,7 +868,7 @@ enum WeatherAreaMapCopy {
       : L10n.Weather.Weather.AreaMap.areas(drawing.areaCount)
   }
 
-  /// Areas the sweep named that this bundle has no outline for. Said rather than swallowed: the
+  /// Areas the map named that this bundle has no outline for. Said rather than swallowed: the
   /// UGC tables grow and the bundle is a cut in time, so the map is honestly a little smaller than
   /// the sweep, and nobody should read the difference as clear weather.
   static func undrawn(_ drawing: WeatherAreaMapDrawing) -> String? {
@@ -537,10 +880,9 @@ enum WeatherAreaMapCopy {
   }
 }
 
-
 // MARK: - What the map is showing, as a list (§3.1 U-32)
 
-/// One kind of alert in a sweep: its event code, its name, and every area under it, in the
+/// One kind of alert on the map: its event code, its name, and every area under it, in the
 /// order the sweep sent them — most severe first, then by state.
 struct WeatherAreaMapGroup: Identifiable, Hashable {
   var event: UInt8
@@ -551,7 +893,7 @@ struct WeatherAreaMapGroup: Identifiable, Hashable {
 }
 
 enum WeatherAreaMapList {
-  /// A sweep's entries collapsed to one row per event code. An area under two alerts belongs to
+  /// The map's entries collapsed to one row per event code. An area under two alerts belongs to
   /// the first that named it, which is the more severe: the sweep is in severity order and the
   /// map shades it the same way.
   static func groups(_ entries: [MeshWXAreaSweep.Entry], tables: MeshWXTables) -> [WeatherAreaMapGroup] {
@@ -586,8 +928,8 @@ enum WeatherAreaMapList {
   }
 }
 
-/// Every area under one kind of alert. A tap asks the radio what that area is under, the same
-/// request a tap on the map sends.
+/// Every area under one kind of alert. A tap opens what the phone knows about that area, the same
+/// screen a tap on the map opens.
 struct WeatherAreaListView: View {
   @Environment(\.appTheme) private var theme
 
@@ -601,8 +943,7 @@ struct WeatherAreaListView: View {
       Section {
         ForEach(group.codes, id: \.self) { code in
           NavigationLink {
-            WeatherAreaDetailView(
-              screen: screen, area: WeatherPickedArea(ugc: code, event: group.event))
+            WeatherAreaDetailView(screen: screen, area: WeatherPickedArea(ugc: code))
           } label: {
             HStack {
               Text(WeatherAreaMapList.areaName(code, tables: .shared))
