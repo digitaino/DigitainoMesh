@@ -609,18 +609,18 @@
 "weather.reports.overheard" = "ouvido em #meshwx";
 
 /* Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot */
-"weather.reports.cut" = "O resto não coube na rádio.";
+"weather.reports.cut" = "Encurtado para rádio";
 
 // MARK: - Where the data came from
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say. */
-"weather.source.goes" = "Do satélite GOES";
+"weather.source.goes" = "Via satélite GOES";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet */
-"weather.source.internet" = "Da internet";
+"weather.source.internet" = "Via internet";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet */
-"weather.source.mixed" = "Do GOES e da internet";
+"weather.source.mixed" = "Via GOES e internet";
 
 // MARK: - Requests
 
@@ -1178,3 +1178,101 @@
 
 /* Location: WeatherAlertNotificationCopy.swift - Second line of a notification for a warning drained from the radio's queue */
 "weather.notifications.late" = "Recebido tarde — enviado enquanto o seu rádio estava fora de alcance.";
+
+// MARK: - National alert map
+
+/* Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it */
+"weather.areaMap.title" = "Mapa nacional de avisos";
+
+/* Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap */
+"weather.areaMap.open" = "Abrir o mapa completo";
+
+/* Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing */
+"weather.areaMap.list" = "O que há neste mapa";
+
+/* Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on */
+"weather.areaMap.onTheMap" = "No mapa";
+
+/* Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area */
+"weather.areaMap.held" = "O que este telemóvel tem";
+
+/* Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area */
+"weather.areaMap.askArea" = "Perguntar sobre esta área";
+
+/* Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it */
+"weather.areaMap.askAreaAgain" = "Perguntar de novo";
+
+/* Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name */
+"weather.areaMap.askAreaFootnote" = "Um pacote para %@, e a resposta chega a todos os que escutam.";
+
+/* Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state */
+"weather.areaMap.areaIn" = "%1$@, %2$@";
+
+/* Location: WeatherAlertsListView.swift - Row detail before any map has been received */
+"weather.areaMap.never" = "Ainda não foi pedido";
+
+/* Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself */
+"weather.areaMap.empty" = "Ainda não há mapa. Nada o pede sozinho — um mapa custa vários pacotes ao canal partilhado, por isso espera pelo teu toque.";
+
+/* Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM" */
+"weather.areaMap.asOf" = "Mapa das %@";
+
+/* Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent */
+"weather.areaMap.partial" = "Chegaram %1$lld de %2$lld partes — falta parte do país";
+
+/* Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit */
+"weather.areaMap.cut" = "Cortado para caber: uma área sem cor aqui pode estar na mesma sob um aviso";
+
+/* Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more */
+"weather.areaMap.areas" = "%lld áreas sob um aviso";
+
+/* Location: WeatherAreaMapView.swift - The map shades one area */
+"weather.areaMap.areasOne" = "1 área sob um aviso";
+
+/* Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence */
+"weather.areaMap.clear" = "%@ não encontrou nada sob um aviso em todo o país.";
+
+/* Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more */
+"weather.areaMap.noOutline" = "Esta app não tem o contorno de %lld delas, por isso não ficam com cor";
+
+/* Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for */
+"weather.areaMap.noOutlineOne" = "Esta app não tem o contorno de 1 delas, por isso não fica com cor";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for */
+"weather.areaMap.heldWarnings" = "Avisos e vigilâncias";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too */
+"weather.areaMap.heldAll" = "Avisos, vigilâncias e boletins";
+
+/* Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover */
+"weather.areaMap.scope" = "O que mapear";
+
+/* Location: WeatherAreaMapView.swift - The narrower scope, which is the default */
+"weather.areaMap.scopeWarnings" = "Avisos e vigilâncias";
+
+/* Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime */
+"weather.areaMap.scopeAll" = "Também boletins";
+
+/* Location: WeatherAreaMapView.swift - Request button asking the radio for the map */
+"weather.areaMap.ask" = "Pedir o mapa";
+
+/* Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets */
+"weather.areaMap.cost" = "Cerca de %lld pacotes no canal partilhado.";
+
+/* Location: WeatherAreaMapView.swift - Header over the colors used on the map */
+"weather.areaMap.legend" = "O que significam as cores";
+
+/* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
+"weather.areaMap.tapHint" = "Toca numa área com cor para perguntar a %@ o que é.";
+
+/* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
+"weather.areaMap.mapLabel" = "Mapa do país, com as áreas sob um aviso a cor";
+
+/* Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name */
+"weather.areaMap.busy" = "Outro rádio pediu o mapa a %@ há pouco — tenta outra vez daqui a alguns minutos.";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map */
+"weather.requestName.areaMap" = "Mapa nacional de avisos";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map including advisories */
+"weather.requestName.areaMapAll" = "Mapa nacional de avisos · com boletins";

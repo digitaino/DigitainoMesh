@@ -609,18 +609,18 @@
 "weather.reports.overheard" = "почуто в #meshwx";
 
 /* Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot */
-"weather.reports.cut" = "Решта не вмістилася в ефір.";
+"weather.reports.cut" = "Скорочено для радіо";
 
 // MARK: - Where the data came from
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say. */
-"weather.source.goes" = "Із супутника GOES";
+"weather.source.goes" = "Через супутник GOES";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet */
-"weather.source.internet" = "З інтернету";
+"weather.source.internet" = "Через інтернет";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet */
-"weather.source.mixed" = "Із супутника GOES та з інтернету";
+"weather.source.mixed" = "Через GOES та інтернет";
 
 // MARK: - Requests
 
@@ -1178,3 +1178,101 @@
 
 /* Location: WeatherAlertNotificationCopy.swift - Second line of a notification for a warning drained from the radio's queue */
 "weather.notifications.late" = "Отримано із запізненням — надіслано, коли ваша рація була поза зоною прийому.";
+
+// MARK: - National alert map
+
+/* Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it */
+"weather.areaMap.title" = "Карта попереджень по країні";
+
+/* Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap */
+"weather.areaMap.open" = "Відкрити карту повністю";
+
+/* Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing */
+"weather.areaMap.list" = "Що на цій карті";
+
+/* Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on */
+"weather.areaMap.onTheMap" = "На карті";
+
+/* Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area */
+"weather.areaMap.held" = "Що має цей телефон";
+
+/* Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area */
+"weather.areaMap.askArea" = "Запитати про цей район";
+
+/* Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it */
+"weather.areaMap.askAreaAgain" = "Запитати ще раз";
+
+/* Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name */
+"weather.areaMap.askAreaFootnote" = "Один пакет до %@, і відповідь отримають усі, хто слухає.";
+
+/* Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state */
+"weather.areaMap.areaIn" = "%1$@, %2$@";
+
+/* Location: WeatherAlertsListView.swift - Row detail before any map has been received */
+"weather.areaMap.never" = "Ще не запитували";
+
+/* Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself */
+"weather.areaMap.empty" = "Карти ще немає. Ніщо не запитує її саме собою: карта коштує спільному каналу кількох пакетів, тож вона чекає на твій дотик.";
+
+/* Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM" */
+"weather.areaMap.asOf" = "Карта станом на %@";
+
+/* Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent */
+"weather.areaMap.partial" = "Надійшло %1$lld з %2$lld частин — частини країни бракує";
+
+/* Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit */
+"weather.areaMap.cut" = "Урізана, щоб умістилася: незафарбована тут зона все одно може бути під попередженням";
+
+/* Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more */
+"weather.areaMap.areas" = "Зон під попередженням: %lld";
+
+/* Location: WeatherAreaMapView.swift - The map shades one area */
+"weather.areaMap.areasOne" = "1 зона під попередженням";
+
+/* Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence */
+"weather.areaMap.clear" = "%@ не знайшла нічого під попередженням по всій країні.";
+
+/* Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more */
+"weather.areaMap.noOutline" = "Цей застосунок не має контурів для %lld з них, тож вони не зафарбовані";
+
+/* Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for */
+"weather.areaMap.noOutlineOne" = "Цей застосунок не має контуру для 1 з них, тож вона не зафарбована";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for */
+"weather.areaMap.heldWarnings" = "Попередження та спостереження";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too */
+"weather.areaMap.heldAll" = "Попередження, спостереження та повідомлення";
+
+/* Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover */
+"weather.areaMap.scope" = "Що нанести на карту";
+
+/* Location: WeatherAreaMapView.swift - The narrower scope, which is the default */
+"weather.areaMap.scopeWarnings" = "Попередження та спостереження";
+
+/* Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime */
+"weather.areaMap.scopeAll" = "Ще й повідомлення";
+
+/* Location: WeatherAreaMapView.swift - Request button asking the radio for the map */
+"weather.areaMap.ask" = "Запитати карту";
+
+/* Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets */
+"weather.areaMap.cost" = "Близько %lld пакетів у спільному каналі.";
+
+/* Location: WeatherAreaMapView.swift - Header over the colors used on the map */
+"weather.areaMap.legend" = "Що означають кольори";
+
+/* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
+"weather.areaMap.tapHint" = "Торкнися зафарбованої зони, щоб запитати про неї в %@.";
+
+/* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
+"weather.areaMap.mapLabel" = "Карта країни із зафарбованими зонами під попередженням";
+
+/* Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name */
+"weather.areaMap.busy" = "Інша рація нещодавно запитала карту в %@ — спробуй за кілька хвилин.";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map */
+"weather.requestName.areaMap" = "Карта попереджень по країні";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map including advisories */
+"weather.requestName.areaMapAll" = "Карта попереджень по країні · з повідомленнями";

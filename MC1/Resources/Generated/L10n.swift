@@ -7668,6 +7668,88 @@ private final class BundleToken {
           return L10n.tr("Weather", "weather.coverage.covers", String(describing: p1), fallback: "Covers %@")
         }
         /// Location: WeatherCopy.swift - Alert detail for an alert far away, %@ is the place
+      public enum AreaMap {
+        /// Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state
+        public static func areaIn(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.areaIn", String(describing: p1), String(describing: p2), fallback: "%1$@, %2$@")
+        }
+        /// Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more
+        public static func areas(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.areas", p1, fallback: "%lld areas under an alert")
+        }
+        /// Location: WeatherAreaMapView.swift - The map shades one area
+        public static let areasOne = L10n.tr("Weather", "weather.areaMap.areasOne", fallback: "1 area under an alert")
+        /// Location: WeatherAreaMapView.swift - Request button asking the radio for the map
+        public static let ask = L10n.tr("Weather", "weather.areaMap.ask", fallback: "Ask for the map")
+        /// Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area
+        public static let askArea = L10n.tr("Weather", "weather.areaMap.askArea", fallback: "Ask about this area")
+        /// Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it
+        public static let askAreaAgain = L10n.tr("Weather", "weather.areaMap.askAreaAgain", fallback: "Ask again")
+        /// Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name
+        public static func askAreaFootnote(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.askAreaFootnote", String(describing: p1), fallback: "One packet to %@, and the answer goes to everyone listening.")
+        }
+        /// Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM"
+        public static func asOf(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.asOf", String(describing: p1), fallback: "Map as of %@")
+        }
+        /// Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name
+        public static func busy(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.busy", String(describing: p1), fallback: "Another radio asked %@ for the map recently — try again in a few minutes.")
+        }
+        /// Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence
+        public static func clear(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.clear", String(describing: p1), fallback: "%@ found nothing under an alert anywhere in the country.")
+        }
+        /// Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets
+        public static func cost(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.cost", p1, fallback: "About %lld packets on the shared channel.")
+        }
+        /// Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit
+        public static let cut = L10n.tr("Weather", "weather.areaMap.cut", fallback: "Cut to fit — an area not shaded here may still be under an alert")
+        /// Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself
+        public static let empty = L10n.tr("Weather", "weather.areaMap.empty", fallback: "No map yet. Nothing asks for one on its own — a map costs the shared channel several packets, so it waits for your tap.")
+        /// Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area
+        public static let held = L10n.tr("Weather", "weather.areaMap.held", fallback: "What this phone holds")
+        /// Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too
+        public static let heldAll = L10n.tr("Weather", "weather.areaMap.heldAll", fallback: "Warnings, watches and advisories")
+        /// Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for
+        public static let heldWarnings = L10n.tr("Weather", "weather.areaMap.heldWarnings", fallback: "Warnings and watches")
+        /// Location: WeatherAreaMapView.swift - Header over the colors used on the map
+        public static let legend = L10n.tr("Weather", "weather.areaMap.legend", fallback: "What the colors mean")
+        /// Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing
+        public static let list = L10n.tr("Weather", "weather.areaMap.list", fallback: "What's in this map")
+        /// Location: WeatherAreaMapView.swift - Accessibility label for the map itself
+        public static let mapLabel = L10n.tr("Weather", "weather.areaMap.mapLabel", fallback: "Map of the country, with the areas under an alert shaded")
+        /// Location: WeatherAlertsListView.swift - Row detail before any map has been received
+        public static let never = L10n.tr("Weather", "weather.areaMap.never", fallback: "Not asked for yet")
+        /// Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more
+        public static func noOutline(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.noOutline", p1, fallback: "%lld of them have no outline in this app and aren't shaded")
+        }
+        /// Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for
+        public static let noOutlineOne = L10n.tr("Weather", "weather.areaMap.noOutlineOne", fallback: "1 of them has no outline in this app and isn't shaded")
+        /// Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on
+        public static let onTheMap = L10n.tr("Weather", "weather.areaMap.onTheMap", fallback: "On the map")
+        /// Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap
+        public static let `open` = L10n.tr("Weather", "weather.areaMap.open", fallback: "Open the full map")
+        /// Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent
+        public static func partial(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.partial", p1, p2, fallback: "%1$lld of %2$lld parts arrived — some of the country is missing")
+        }
+        /// Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover
+        public static let scope = L10n.tr("Weather", "weather.areaMap.scope", fallback: "What to map")
+        /// Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime
+        public static let scopeAll = L10n.tr("Weather", "weather.areaMap.scopeAll", fallback: "Also advisories")
+        /// Location: WeatherAreaMapView.swift - The narrower scope, which is the default
+        public static let scopeWarnings = L10n.tr("Weather", "weather.areaMap.scopeWarnings", fallback: "Warnings and watches")
+        /// Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name
+        public static func tapHint(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.tapHint", String(describing: p1), fallback: "Tap a shaded area to ask %@ what it is.")
+        }
+        /// Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it
+        public static let title = L10n.tr("Weather", "weather.areaMap.title", fallback: "National alert map")
+      }
         public static func doesNotCover(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.coverage.doesNotCover", String(describing: p1), fallback: "Doesn't cover %@")
         }
@@ -8144,7 +8226,7 @@ private final class BundleToken {
           return L10n.tr("Weather", "weather.request.contentReadings", String(describing: p1), fallback: "readings as of %@")
         }
         /// Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot
-        public static let cut = L10n.tr("Weather", "weather.reports.cut", fallback: "The rest didn't fit on the radio.")
+        public static let cut = L10n.tr("Weather", "weather.reports.cut", fallback: "Shortened for radio")
         /// Location: WeatherCopy.swift - Your radio refused to send the request, %@ is a time
         public static func failed(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.request.failed", String(describing: p1), fallback: "Your radio couldn't send this at %@.")
@@ -8333,6 +8415,10 @@ private final class BundleToken {
         public static func inchesOfMercury(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.station.inchesOfMercury", String(describing: p1), fallback: "%@ inHg")
         }
+        /// Location: WeatherCopy.swift - Name of a request for the national alert map
+        public static let areaMap = L10n.tr("Weather", "weather.requestName.areaMap", fallback: "National alert map")
+        /// Location: WeatherCopy.swift - Name of a request for the national alert map including advisories
+        public static let areaMapAll = L10n.tr("Weather", "weather.requestName.areaMapAll", fallback: "National alert map · with advisories")
         /// Location: WeatherStationsView.swift - Station screen with no reading received yet
         public static let nothingHeld = L10n.tr("Weather", "weather.station.nothingHeld", fallback: "No reading from this station yet.")
         /// Location: WeatherStationsView.swift - Why a station's reading is old: the radio's hourly report does not carry it
@@ -8414,11 +8500,11 @@ private final class BundleToken {
           return L10n.tr("Weather", "weather.time.within", String(describing: p1), fallback: "in %@")
       public enum Source {
         /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say.
-        public static let goes = L10n.tr("Weather", "weather.source.goes", fallback: "From the GOES satellite")
+        public static let goes = L10n.tr("Weather", "weather.source.goes", fallback: "Via GOES satellite")
         /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet
-        public static let internet = L10n.tr("Weather", "weather.source.internet", fallback: "From the internet")
+        public static let internet = L10n.tr("Weather", "weather.source.internet", fallback: "Via internet")
         /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet
-        public static let mixed = L10n.tr("Weather", "weather.source.mixed", fallback: "From GOES and the internet")
+        public static let mixed = L10n.tr("Weather", "weather.source.mixed", fallback: "Via GOES and internet")
       }
         }
         /// Location: WeatherFormatting.swift - A time yesterday, %@ is a time like "2:00 PM"

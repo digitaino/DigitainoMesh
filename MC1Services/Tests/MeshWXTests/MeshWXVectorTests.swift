@@ -72,6 +72,9 @@ struct MeshWXVectorTests {
       // below tests the one the spec prints. This case exists so that the day it ships, the
       // vector reaches the suite instead of failing to compile.
       #expect(want.name == "request")
+    case .areaSweep(let sweep):
+      #expect(want.name == "area_sweep")
+      try expectAreaSweep(sweep, matches: want)
     case .unknown:
       Issue.record("vector \(vector.name) decoded as an unknown type")
     }
@@ -279,7 +282,7 @@ struct MeshWXVectorTests {
   private func expectDigest(_ digest: MeshWXDigest, matches want: MeshWXVectors.Decoded) throws {
     #expect(digest.nowMinutes == want.nowMin)
     #expect(digest.feedHealth == want.feedHealth)
-    let wantEntries = try #require(want.entries)
+    let wantEntries = try #require(want.entries?.digest)
     #expect(digest.entries.count == wantEntries.count)
     for (entry, expected) in zip(digest.entries, wantEntries) {
       #expect(entry.identity.event == expected.event)
@@ -287,6 +290,36 @@ struct MeshWXVectorTests {
       #expect(entry.identity.etn == expected.etn)
       #expect(entry.expiresRelativeMinutes == expected.expiresRel)
       #expect(entry.expiresMinutes == expected.expiresMin)
+    }
+  }
+
+  /// Spec §7C. The sweep's entries go under `entries`, the same key a Digest uses for a wholly
+  /// different shape, so the fixture tells them apart by what the JSON holds
+  /// (`MeshWXVectors.Decoded.EntriesField`) — and `#require` here means a renamed key fails the
+  /// suite instead of passing over a nil.
+  private func expectAreaSweep(_ sweep: MeshWXAreaSweep, matches want: MeshWXVectors.Decoded) throws {
+    #expect(sweep.builtMinutes == (try #require(want.sweepBuiltMinutes)))
+    #expect(sweep.group == want.group)
+    #expect(sweep.index == want.idx)
+    #expect(sweep.total == want.total)
+    // The two flag bits, read twice: off the header above and out of the decoded body here.
+    #expect(sweep.wasCut == (want.cut ?? false))
+    #expect(sweep.includesAdvisories == (want.advisories ?? false))
+
+    let wantEntries = try #require(want.entries?.sweep)
+    #expect(sweep.entries.count == wantEntries.count)
+    let states = MeshWXTables.shared.states
+    for (entry, expected) in zip(sweep.entries, wantEntries) {
+      #expect(entry.event == expected.event)
+      #expect(entry.stateIndex == expected.state)
+      #expect(entry.isCounty == expected.county)
+      #expect(entry.start == expected.start)
+      #expect(entry.run == expected.run)
+      // Where the vector prints the codes, the expansion is checked against the publisher's own
+      // list rather than against this implementation's arithmetic.
+      if let ugcs = expected.ugcs {
+        #expect(entry.ugcCodes(states: states) == ugcs)
+      }
     }
   }
 

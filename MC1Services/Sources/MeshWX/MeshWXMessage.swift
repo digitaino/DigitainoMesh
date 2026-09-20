@@ -940,6 +940,108 @@ public struct MeshWXRequest: Sendable, Hashable, Codable {
   }
 }
 
+// MARK: - Area sweep
+
+/// One packet of a national area sweep (type 10, spec §7C).
+///
+/// The sweep is the answer to one question — *where in the country is anything happening?* — and
+/// it is the most expensive answer on the channel: up to eight packets, broadcast to everyone
+/// listening. Nothing may ask for one on a timer, on appear or on a pull; only a tap.
+///
+/// Reassemble by `(bot, group)` in ``index`` order exactly as a Text reply is (spec §8.1). A
+/// packet that never arrives leaves a hole: draw the entries that did arrive and say the sweep is
+/// partial, because a map of forty states is still worth looking at.
+public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
+  /// One run of consecutive UGC numbers in one state, under one event (spec §7C).
+  ///
+  /// Four bytes for what a Warning spends four bytes on *without* the event, which is the whole
+  /// point: the country's alerts fit in eight packets because a Winter Weather Advisory over
+  /// thirty Montana zones is one entry.
+  public struct Entry: Sendable, Hashable, Codable {
+    /// Event code, from the same `protocol.json` `events` table a Warning uses — so the app's
+    /// existing event names, severities and tints apply unchanged.
+    public var event: UInt8
+    /// Index into `index.json` `states` (bits 7-1 of the wire byte).
+    public var stateIndex: UInt8
+    /// Bit 0 of the wire byte: county (`C`) rather than forecast zone (`Z`).
+    public var isCounty: Bool
+    /// First UGC number in the run (bits 0-9 of the wire u16).
+    public var start: UInt16
+    /// How many consecutive numbers the run covers, 1 to
+    /// ``MeshWXWire/maxAreaSweepRun``. Carried less one in bits 10-15.
+    public var run: UInt8
+
+    public init(event: UInt8, stateIndex: UInt8, isCounty: Bool, start: UInt16, run: UInt8) {
+      self.event = event
+      self.stateIndex = stateIndex
+      self.isCounty = isCounty
+      self.start = start
+      self.run = run
+    }
+
+    /// The UGC numbers this entry covers.
+    public var numbers: [UInt16] {
+      guard run > 0 else { return [] }
+      return (0..<UInt16(run)).map { start &+ $0 }
+    }
+
+    /// Expand to UGC strings (`"TXZ192"`, `"TXC453"`) using `index.json` `states`.
+    ///
+    /// Empty when the state index is not in the table: an older bundle decoding a newer bot's
+    /// sweep should lose the *names*, never the message. A run never crosses a state, so every
+    /// code here carries the same two letters.
+    public func ugcCodes(states: [String]) -> [String] {
+      guard Int(stateIndex) < states.count else { return [] }
+      let state = states[Int(stateIndex)]
+      let kind = isCounty ? "C" : "Z"
+      return numbers.map { "\(state)\(kind)\(MeshWXAreaRun.ugcDigits($0))" }
+    }
+
+    /// The same run as a Warning carries it, for anything that already speaks that shape
+    /// (`MeshWXTables.namedAreas(for:)`, `MeshWXAreaRun.covers(ugc:states:)`).
+    public var areaRun: MeshWXAreaRun {
+      MeshWXAreaRun(stateIndex: stateIndex, isCounty: isCounty, start: start, run: run)
+    }
+  }
+
+  /// Unix **minutes** the bot built the sweep. The age on screen is measured from this and never
+  /// from receipt: a sweep drained from the radio's queue an hour late is an hour old.
+  public var builtMinutes: UInt32
+  /// Shared by every packet of one sweep (the `seq` of its first packet), exactly as Text does.
+  public var group: UInt8
+  public var index: UInt8
+  /// 1 to ``MeshWXWire/maxAreaSweepPackets``.
+  public var total: UInt8
+  /// Flags bit 0: entries were dropped to fit.
+  ///
+  /// Set on every packet of a cut sweep, so a phone that missed the last one still knows the map
+  /// is short of the country. An area absent from a cut sweep is **not** an area with no alert.
+  public var wasCut: Bool
+  /// Flags bit 1: advisories are in the sweep, not only warnings and watches. Clear does not mean
+  /// there are no advisories — it means the narrower scope was asked for.
+  public var includesAdvisories: Bool
+  /// Most severe first, as the bot ordered them.
+  public var entries: [Entry]
+
+  public init(
+    builtMinutes: UInt32,
+    group: UInt8,
+    index: UInt8,
+    total: UInt8,
+    wasCut: Bool = false,
+    includesAdvisories: Bool = false,
+    entries: [Entry]
+  ) {
+    self.builtMinutes = builtMinutes
+    self.group = group
+    self.index = index
+    self.total = total
+    self.wasCut = wasCut
+    self.includesAdvisories = includesAdvisories
+    self.entries = entries
+  }
+}
+
 // MARK: - Message
 
 /// The decoded body of a v5 message.
@@ -955,6 +1057,8 @@ public enum MeshWXPayload: Sendable, Hashable {
   /// An app's request (spec §7B). Only ever *heard* from another phone on the channel: this
   /// app sends its own and never acts on somebody else's.
   case request(MeshWXRequest)
+  /// One packet of a national area sweep (spec §7C).
+  case areaSweep(MeshWXAreaSweep)
   /// A reserved or third-party type (spec §2.2, nibbles 8-15). Receivers ignore these,
   /// but the header still decoded, so `(bot, seq)` tracking keeps working.
   case unknown

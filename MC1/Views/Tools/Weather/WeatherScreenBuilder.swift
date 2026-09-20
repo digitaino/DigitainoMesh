@@ -242,7 +242,7 @@ enum WeatherScreenBuilder {
         if let county, let name = tables.county(county)?.name {
           facts.county = WeatherAreaName(ugc: county, name: L10n.Weather.Weather.Area.county(name))
         }
-        facts.zoneUGC = codes.first { $0.count == 6 && $0.dropFirst(2).first == "Z" }
+        facts.zoneUGC = Self.placeZone(from: codes, stateCode: facts.stateCode, county: county)
         facts.hasCounty = true
       }
       context.placeStateCode = facts.stateCode
@@ -253,10 +253,7 @@ enum WeatherScreenBuilder {
     context.sourceState = snapshot.source.flatMap { states[$0.botID] }
 
     if !geometry.isLoaded {
-      context.needsGeometry = states.values.contains { state in
-        state.warnings.values.contains { needsOutline($0.warning) }
-          || state.pendingUpgrades.values.contains { needsOutline($0.warning) }
-      }
+      context.needsGeometry = Self.needsGeometry(hasPlace: place != nil, states: states)
     }
     var stationTowns = request.stationTowns
     if case let .noneNearby(nearest) = snapshot.primaryStation {
@@ -393,6 +390,37 @@ enum WeatherScreenBuilder {
       return state
     }
     return readings.first?.station.state
+  }
+
+  /// The place's own forecast zone: the land zone of its own state, not the water beside it.
+  ///
+  /// A coastal place lies in a marine zone as well as its land one — San Juan is in PRZ001 and
+  /// PRZ016 and in Atlantic zone AMZ712 — and the outlines answer in no particular order, so
+  /// taking the first zone found could ask a radio for warnings on the sea while the heat advisory
+  /// sat on the land zone. The place's state decides; its county names that state when nothing
+  /// else does (docs/MESHWX_UI.md §3.1 U-27).
+  static func placeZone(from codes: [String], stateCode: String?, county: String?) -> String? {
+    let zones = codes.filter { $0.count == 6 && $0.dropFirst(2).first == "Z" }.sorted()
+    let state = stateCode ?? county.map { String($0.prefix(2)) }
+    guard let state else { return zones.first }
+    return zones.first { $0.hasPrefix(state.uppercased()) } ?? zones.first
+  }
+
+  /// Whether the outlines are worth loading for this page.
+  ///
+  /// **A place needs them as much as a warning does.** They used to load only for a held warning
+  /// with no polygon of its own, which left a place outside the radio's area unable to ask for its
+  /// alerts at all: the page learns it is outside, and learns the zone and county to ask by, from
+  /// the outlines — so with none loaded it never asked, and never received the warning that would
+  /// have loaded them. San Juan sat under "no alerts" while the same radio answered `warn pr` with
+  /// a heat advisory (docs/MESHWX_UI.md §3.1 U-27). The load is off the main actor and both files
+  /// together take about half a second.
+  static func needsGeometry(hasPlace: Bool, states: [UInt16: WeatherBotState]) -> Bool {
+    if hasPlace { return true }
+    return states.values.contains { state in
+      state.warnings.values.contains { needsOutline($0.warning) }
+        || state.pendingUpgrades.values.contains { needsOutline($0.warning) }
+    }
   }
 
   static func needsOutline(_ warning: MeshWXWarning) -> Bool {

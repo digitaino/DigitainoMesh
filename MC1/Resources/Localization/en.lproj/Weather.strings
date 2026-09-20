@@ -610,18 +610,18 @@
 "weather.reports.overheard" = "heard on #meshwx";
 
 /* Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot */
-"weather.reports.cut" = "The rest didn't fit on the radio.";
+"weather.reports.cut" = "Shortened for radio";
 
 // MARK: - Where the data came from
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say. */
-"weather.source.goes" = "From the GOES satellite";
+"weather.source.goes" = "Via GOES satellite";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet */
-"weather.source.internet" = "From the internet";
+"weather.source.internet" = "Via internet";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet */
-"weather.source.mixed" = "From GOES and the internet";
+"weather.source.mixed" = "Via GOES and internet";
 
 // MARK: - Requests
 
@@ -1175,3 +1175,101 @@
 
 /* Location: WeatherAlertNotificationCopy.swift - Second line of a notification for a warning drained from the radio's queue */
 "weather.notifications.late" = "Received late — sent while your radio was out of range.";
+
+// MARK: - National alert map
+
+/* Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it */
+"weather.areaMap.title" = "National alert map";
+
+/* Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap */
+"weather.areaMap.open" = "Open the full map";
+
+/* Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing */
+"weather.areaMap.list" = "What's in this map";
+
+/* Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on */
+"weather.areaMap.onTheMap" = "On the map";
+
+/* Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area */
+"weather.areaMap.held" = "What this phone holds";
+
+/* Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area */
+"weather.areaMap.askArea" = "Ask about this area";
+
+/* Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it */
+"weather.areaMap.askAreaAgain" = "Ask again";
+
+/* Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name */
+"weather.areaMap.askAreaFootnote" = "One packet to %@, and the answer goes to everyone listening.";
+
+/* Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state */
+"weather.areaMap.areaIn" = "%1$@, %2$@";
+
+/* Location: WeatherAlertsListView.swift - Row detail before any map has been received */
+"weather.areaMap.never" = "Not asked for yet";
+
+/* Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself */
+"weather.areaMap.empty" = "No map yet. Nothing asks for one on its own — a map costs the shared channel several packets, so it waits for your tap.";
+
+/* Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM" */
+"weather.areaMap.asOf" = "Map as of %@";
+
+/* Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent */
+"weather.areaMap.partial" = "%1$lld of %2$lld parts arrived — some of the country is missing";
+
+/* Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit */
+"weather.areaMap.cut" = "Cut to fit — an area not shaded here may still be under an alert";
+
+/* Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more */
+"weather.areaMap.areas" = "%lld areas under an alert";
+
+/* Location: WeatherAreaMapView.swift - The map shades one area */
+"weather.areaMap.areasOne" = "1 area under an alert";
+
+/* Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence */
+"weather.areaMap.clear" = "%@ found nothing under an alert anywhere in the country.";
+
+/* Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more */
+"weather.areaMap.noOutline" = "%lld of them have no outline in this app and aren't shaded";
+
+/* Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for */
+"weather.areaMap.noOutlineOne" = "1 of them has no outline in this app and isn't shaded";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for */
+"weather.areaMap.heldWarnings" = "Warnings and watches";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too */
+"weather.areaMap.heldAll" = "Warnings, watches and advisories";
+
+/* Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover */
+"weather.areaMap.scope" = "What to map";
+
+/* Location: WeatherAreaMapView.swift - The narrower scope, which is the default */
+"weather.areaMap.scopeWarnings" = "Warnings and watches";
+
+/* Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime */
+"weather.areaMap.scopeAll" = "Also advisories";
+
+/* Location: WeatherAreaMapView.swift - Request button asking the radio for the map */
+"weather.areaMap.ask" = "Ask for the map";
+
+/* Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets */
+"weather.areaMap.cost" = "About %lld packets on the shared channel.";
+
+/* Location: WeatherAreaMapView.swift - Header over the colors used on the map */
+"weather.areaMap.legend" = "What the colors mean";
+
+/* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
+"weather.areaMap.tapHint" = "Tap a shaded area to ask %@ what it is.";
+
+/* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
+"weather.areaMap.mapLabel" = "Map of the country, with the areas under an alert shaded";
+
+/* Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name */
+"weather.areaMap.busy" = "Another radio asked %@ for the map recently — try again in a few minutes.";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map */
+"weather.requestName.areaMap" = "National alert map";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map including advisories */
+"weather.requestName.areaMapAll" = "National alert map · with advisories";

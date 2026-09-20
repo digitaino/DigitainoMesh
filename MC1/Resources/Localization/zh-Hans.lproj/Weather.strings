@@ -609,18 +609,18 @@
 "weather.reports.overheard" = "在 #meshwx 上听到";
 
 /* Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot */
-"weather.reports.cut" = "其余内容超出电台传输长度，未发送。";
+"weather.reports.cut" = "已为电台缩短";
 
 // MARK: - Where the data came from
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say. */
-"weather.source.goes" = "来自 GOES 卫星";
+"weather.source.goes" = "经 GOES 卫星";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet */
-"weather.source.internet" = "来自互联网";
+"weather.source.internet" = "经互联网";
 
 /* Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet */
-"weather.source.mixed" = "来自 GOES 卫星和互联网";
+"weather.source.mixed" = "经 GOES 与互联网";
 
 // MARK: - Requests
 
@@ -1178,3 +1178,101 @@
 
 /* Location: WeatherAlertNotificationCopy.swift - Second line of a notification for a warning drained from the radio's queue */
 "weather.notifications.late" = "延迟收到 — 发送时你的电台不在通信范围内。";
+
+// MARK: - National alert map
+
+/* Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it */
+"weather.areaMap.title" = "全国预警地图";
+
+/* Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap */
+"weather.areaMap.open" = "打开完整地图";
+
+/* Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing */
+"weather.areaMap.list" = "这张地图上有什么";
+
+/* Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on */
+"weather.areaMap.onTheMap" = "地图上";
+
+/* Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area */
+"weather.areaMap.held" = "这台手机已有的内容";
+
+/* Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area */
+"weather.areaMap.askArea" = "查询这个区域";
+
+/* Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it */
+"weather.areaMap.askAreaAgain" = "再问一次";
+
+/* Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name */
+"weather.areaMap.askAreaFootnote" = "向 %@ 发一个数据包，答复会发给所有在听的人。";
+
+/* Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state */
+"weather.areaMap.areaIn" = "%1$@, %2$@";
+
+/* Location: WeatherAlertsListView.swift - Row detail before any map has been received */
+"weather.areaMap.never" = "尚未请求";
+
+/* Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself */
+"weather.areaMap.empty" = "还没有地图。没有任何东西会自己去请求：一张地图要占用共享频道好几个数据包，所以它等你来点。";
+
+/* Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM" */
+"weather.areaMap.asOf" = "%@ 的地图";
+
+/* Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent */
+"weather.areaMap.partial" = "%2$lld 个部分中收到 %1$lld 个 — 国内有一部分缺失";
+
+/* Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit */
+"weather.areaMap.cut" = "为放得下而被裁剪 — 这里没上色的区域仍可能处于预警之下";
+
+/* Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more */
+"weather.areaMap.areas" = "%lld 个区域处于预警之下";
+
+/* Location: WeatherAreaMapView.swift - The map shades one area */
+"weather.areaMap.areasOne" = "1 个区域处于预警之下";
+
+/* Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence */
+"weather.areaMap.clear" = "%@ 在全国范围内没有找到任何处于预警之下的区域。";
+
+/* Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more */
+"weather.areaMap.noOutline" = "本应用没有其中 %lld 个的边界，因此未上色";
+
+/* Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for */
+"weather.areaMap.noOutlineOne" = "本应用没有其中 1 个的边界，因此未上色";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for */
+"weather.areaMap.heldWarnings" = "预警和观察";
+
+/* Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too */
+"weather.areaMap.heldAll" = "预警、观察和提示";
+
+/* Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover */
+"weather.areaMap.scope" = "地图涵盖什么";
+
+/* Location: WeatherAreaMapView.swift - The narrower scope, which is the default */
+"weather.areaMap.scopeWarnings" = "预警和观察";
+
+/* Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime */
+"weather.areaMap.scopeAll" = "也包括提示";
+
+/* Location: WeatherAreaMapView.swift - Request button asking the radio for the map */
+"weather.areaMap.ask" = "请求地图";
+
+/* Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets */
+"weather.areaMap.cost" = "共享频道上大约 %lld 个数据包。";
+
+/* Location: WeatherAreaMapView.swift - Header over the colors used on the map */
+"weather.areaMap.legend" = "颜色的含义";
+
+/* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
+"weather.areaMap.tapHint" = "点按上色的区域，向 %@ 询问那里的情况。";
+
+/* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
+"weather.areaMap.mapLabel" = "全国地图，处于预警之下的区域已上色";
+
+/* Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name */
+"weather.areaMap.busy" = "刚刚有另一台电台向 %@ 请求过地图 — 请过几分钟再试。";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map */
+"weather.requestName.areaMap" = "全国预警地图";
+
+/* Location: WeatherCopy.swift - Name of a request for the national alert map including advisories */
+"weather.requestName.areaMapAll" = "全国预警地图 · 含提示";

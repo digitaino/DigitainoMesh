@@ -885,4 +885,205 @@ struct MeshWXCodecTests {
       #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(chunk)) == chunk)
     }
   }
+
+  // MARK: - Area sweep (type 10, spec §7C)
+
+  private func sweepBody(_ data: Data) throws -> MeshWXAreaSweep? {
+    guard case let .areaSweep(sweep) = try MeshWXDecoder.decode(data).payload else { return nil }
+    return sweep
+  }
+
+  /// Texas zones 192 through 197 under a Severe Thunderstorm Warning, as one entry.
+  private static let texasZones = MeshWXAreaSweep.Entry(
+    event: 3, stateIndex: 42, isCounty: false, start: 192, run: 6)
+
+  /// The eleven-byte header the contract prints, field by field, before any entry: `built` at
+  /// offset 4 as u32 LE minutes, then `group`, `idx` and `total`.
+  @Test func theSweepHeaderIsTheElevenBytesTheContractPrints() throws {
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 9, bot: 0x4C7A, builtMinutes: 29_823_945, group: 9, index: 0, total: 3,
+      entries: [Self.texasZones])
+    #expect(data.count == 15, "11 fixed plus one 4-byte entry")
+    #expect(data.prefix(4) == Data([0x09, 0x7A, 0x4C, 0xA0]), "type 10 in the high nibble")
+    #expect(data[4...7] == Data([0xC9, 0x13, 0xC7, 0x01]), "29 823 945 minutes, little-endian")
+    #expect(data[8] == 9)
+    #expect(data[9] == 0)
+    #expect(data[10] == 3)
+
+    let sweep = try #require(try sweepBody(data))
+    #expect(sweep.builtMinutes == 29_823_945)
+    #expect(sweep.group == 9)
+    #expect(sweep.index == 0)
+    #expect(sweep.total == 3)
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+  }
+
+  /// One entry, byte by byte: the event, then `state << 1 | kind`, then a u16 whose low ten bits
+  /// are the start and whose high six are the run less one.
+  ///
+  /// The state and kind sit the *other* way round from a Warning's area run, which packs the kind
+  /// into bit 7 and the state into bits 6-0. Two layouts for the same two fields is exactly the
+  /// kind of thing a round trip alone would never catch.
+  @Test func aSweepEntryPacksTheEventStateKindStartAndRun() throws {
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+      entries: [Self.texasZones])
+    let entry = data.suffix(4)
+    #expect(entry.count == 4)
+    #expect(Array(entry) == [3, 42 << 1, 0xC0, 0x14])
+    // 0x14C0 = 0b0001_01_00_1100_0000: run − 1 = 5 in bits 10-15, start = 192 in bits 0-9.
+    #expect(UInt16(0x14C0) & 0x03FF == 192)
+    #expect(UInt16(0x14C0) >> 10 == 5)
+
+    let decoded = try #require(try sweepBody(data)).entries
+    #expect(decoded == [Self.texasZones])
+    #expect(decoded[0].isCounty == false)
+    #expect(decoded[0].stateIndex == 42)
+  }
+
+  /// A county entry sets bit 0 and leaves the state where it was.
+  @Test func theCountyBitIsBitZeroAndDoesNotDisturbTheState() throws {
+    let county = MeshWXAreaSweep.Entry(event: 3, stateIndex: 42, isCounty: true, start: 453, run: 1)
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1, entries: [county])
+    #expect(data[12] == 42 << 1 | 1)
+    let decoded = try #require(try sweepBody(data)).entries
+    #expect(decoded == [county])
+    #expect(decoded[0].stateIndex == 42, "the state survives the kind bit under it")
+  }
+
+  /// An entry expands to the UGC codes the run covers — the whole reason the sweep fits in eight
+  /// packets. A run never crosses a state, so every code carries the same two letters.
+  @Test func anEntryExpandsToItsUGCCodes() {
+    let states = MeshWXTables.shared.states
+    #expect(Self.texasZones.numbers == [192, 193, 194, 195, 196, 197])
+    #expect(Self.texasZones.ugcCodes(states: states)
+      == ["TXZ192", "TXZ193", "TXZ194", "TXZ195", "TXZ196", "TXZ197"])
+
+    let counties = MeshWXAreaSweep.Entry(event: 3, stateIndex: 42, isCounty: true, start: 8, run: 3)
+    #expect(counties.ugcCodes(states: states) == ["TXC008", "TXC009", "TXC010"])
+
+    // An older bundle decoding a newer bot's sweep loses the names, never the message.
+    #expect(MeshWXAreaSweep.Entry(event: 3, stateIndex: 120, isCounty: false, start: 1, run: 1)
+      .ugcCodes(states: states).isEmpty)
+  }
+
+  /// The run field is six bits carried less one, so it spans 1 to 64 and never 0.
+  @Test func theRunFieldSpansOneToSixtyFour() throws {
+    for run: UInt8 in [1, 2, 63, 64] {
+      let entry = MeshWXAreaSweep.Entry(event: 9, stateIndex: 26, isCounty: false, start: 1, run: run)
+      let data = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1, entries: [entry])
+      let decoded = try #require(try sweepBody(data)).entries
+      #expect(decoded == [entry])
+      #expect(decoded[0].numbers.count == Int(run))
+      #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+    }
+    // 65 has no encoding, and clamping it would move an area into a state's next county.
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+        entries: [MeshWXAreaSweep.Entry(event: 9, stateIndex: 26, isCounty: false, start: 1, run: 65)])
+    }
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+        entries: [MeshWXAreaSweep.Entry(event: 9, stateIndex: 26, isCounty: false, start: 1, run: 0)])
+    }
+  }
+
+  /// Ten bits of start: 1023 fits and 1024 does not.
+  @Test func theStartFieldIsTenBitsWide() throws {
+    let edge = MeshWXAreaSweep.Entry(event: 9, stateIndex: 5, isCounty: true, start: 1023, run: 1)
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1, entries: [edge])
+    #expect(try #require(try sweepBody(data)).entries == [edge])
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+        entries: [MeshWXAreaSweep.Entry(event: 9, stateIndex: 5, isCounty: true, start: 1024, run: 1)])
+    }
+  }
+
+  /// The flags nibble: bit 0 cut, bit 1 advisories, bits 3-2 the source — four independent
+  /// claims in one nibble, each of which has to survive a re-encode.
+  @Test func theSweepFlagsAreCutAdvisoriesAndSource() throws {
+    for cut in [false, true] {
+      for advisories in [false, true] {
+        for source in MeshWXDataSource.allCases {
+          let data = try MeshWXEncoder.areaSweep(
+            seq: 2, bot: 0x4C7A, builtMinutes: 29_823_945, group: 2, index: 1, total: 2,
+            entries: [Self.texasZones], wasCut: cut, includesAdvisories: advisories, source: source)
+          let expected = (cut ? 0x1 : 0) | (advisories ? 0x2 : 0) | (source.rawValue << 2)
+          #expect(data[3] & 0x0F == expected)
+          let sweep = try #require(try sweepBody(data))
+          #expect(sweep.wasCut == cut)
+          #expect(sweep.includesAdvisories == advisories)
+          #expect(try MeshWXDecoder.decodeHeader(data).dataSource == source)
+          #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+        }
+      }
+    }
+  }
+
+  /// 38 entries is what `(165 − 11) / 4` leaves, and the packet budget is what refuses the 39th.
+  @Test func aPacketCarriesAtMostThirtyEightEntries() throws {
+    let entries = (0..<38).map {
+      MeshWXAreaSweep.Entry(event: 3, stateIndex: 42, isCounty: false, start: UInt16($0), run: 1)
+    }
+    let full = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1, entries: entries)
+    #expect(full.count == 163)
+    #expect(full.count <= MeshWXWire.maxData)
+    #expect(try #require(try sweepBody(full)).entries.count == 38)
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(full)) == full)
+
+    #expect(throws: MeshWXEncodeError.self) {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+        entries: entries + [Self.texasZones])
+    }
+  }
+
+  /// A sweep is at most eight packets, and `idx` has to be inside `total` — an encoder that let
+  /// `3 of 2` out would break the assembly on every phone that heard it.
+  @Test func aSweepIsAtMostEightPacketsAndTheIndexIsInsideTheTotal() throws {
+    for total: UInt8 in [1, 8] {
+      _ = try MeshWXEncoder.areaSweep(
+        seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: total - 1, total: total,
+        entries: [Self.texasZones])
+    }
+    for (index, total) in [(UInt8(0), UInt8(0)), (UInt8(0), UInt8(9)), (UInt8(2), UInt8(2))] {
+      #expect(throws: MeshWXEncodeError.self) {
+        _ = try MeshWXEncoder.areaSweep(
+          seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: index, total: total,
+          entries: [Self.texasZones])
+      }
+    }
+  }
+
+  /// No entries is a legal packet: a sweep of a quiet country still has to say when it was built
+  /// and how many packets it is.
+  @Test func anEmptySweepPacketDecodes() throws {
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 29_823_945, group: 1, index: 0, total: 1, entries: [])
+    #expect(data.count == 11)
+    let sweep = try #require(try sweepBody(data))
+    #expect(sweep.entries.isEmpty)
+    #expect(sweep.builtMinutes == 29_823_945)
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(data)) == data)
+  }
+
+  /// Under eleven bytes there is no sweep to read; a trailing byte that does not make a whole
+  /// entry is left alone, the way every other type here tolerates one.
+  @Test func aShortSweepThrowsAndATrailingByteIsIgnored() throws {
+    #expect(throws: MeshWXDecodeError.self) {
+      _ = try MeshWXDecoder.decode(Data([0x01, 0x7A, 0x4C, 0xA0, 0, 0, 0, 0, 1, 0]))
+    }
+    let data = try MeshWXEncoder.areaSweep(
+      seq: 1, bot: 0x4C7A, builtMinutes: 0, group: 1, index: 0, total: 1,
+      entries: [Self.texasZones])
+    let sweep = try #require(try sweepBody(data + Data([0xAB, 0xCD, 0xEF])))
+    #expect(sweep.entries == [Self.texasZones])
+  }
 }

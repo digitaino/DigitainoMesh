@@ -45,6 +45,7 @@ public enum MeshWXDecoder {
       case .notAvailable: .notAvailable(try decodeNotAvailable(bytes))
       case .coverage: .coverage(try decodeCoverage(bytes, header: header))
       case .request: .request(try decodeRequest(bytes, header: header))
+      case .areaSweep: .areaSweep(try decodeAreaSweep(bytes, header: header))
       case nil: .unknown
       }
     return MeshWXMessage(header: header, payload: payload)
@@ -364,6 +365,47 @@ public enum MeshWXDecoder {
       senderPrefix: Data(bytes[MeshWXWire.headerSize..<senderEnd]),
       timestamp: u32(bytes, senderEnd),
       text: text
+    )
+  }
+
+  // MARK: - Area sweep (type 10, spec §7C)
+
+  /// The entries run to the end of the packet: there is no count byte, because a count would
+  /// cost the byte that the 38th entry is made of.
+  ///
+  /// Whatever does not make a whole four-byte entry is left alone, the way every other type here
+  /// tolerates trailing bytes. A sweep is a picture of the country and a bot a version ahead
+  /// appending a field to the end must not cost this phone the thirty-seven entries it can read.
+  static func decodeAreaSweep(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXAreaSweep {
+    try need(bytes, MeshWXWire.areaSweepFixedSize, "area sweep")
+    let count = (bytes.count - MeshWXWire.areaSweepFixedSize) / MeshWXWire.areaSweepEntrySize
+
+    var entries: [MeshWXAreaSweep.Entry] = []
+    entries.reserveCapacity(count)
+    var offset = MeshWXWire.areaSweepFixedSize
+    for _ in 0..<count {
+      let stateByte = bytes[offset + 1]
+      let packed = u16(bytes, offset + 2)
+      entries.append(
+        MeshWXAreaSweep.Entry(
+          event: bytes[offset],
+          stateIndex: stateByte >> MeshWXWire.sweepStateShift,
+          isCounty: stateByte & MeshWXWire.sweepCountyBit != 0,
+          start: packed & MeshWXWire.sweepStartMask,
+          // Six bits carried less one, so the field spans 1…64 and never 0: an entry that
+          // covered nothing would have no reason to be on the air.
+          run: UInt8(packed >> MeshWXWire.sweepRunShift) + 1
+        ))
+      offset += MeshWXWire.areaSweepEntrySize
+    }
+    return MeshWXAreaSweep(
+      builtMinutes: u32(bytes, 4),
+      group: bytes[8],
+      index: bytes[9],
+      total: bytes[10],
+      wasCut: header.flags & MeshWXWire.flagSweepCut != 0,
+      includesAdvisories: header.flags & MeshWXWire.flagSweepAdvisories != 0,
+      entries: entries
     )
   }
 

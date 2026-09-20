@@ -347,6 +347,11 @@ public actor WeatherService {
     case text(WeatherRequest)
     /// `>cov`: the bot's own statement of its area.
     case coverage
+    /// `>wmap`: the national area sweep. One slot for both scopes: an eight-packet answer that
+    /// has just been broadcast is an answer everyone on the channel has, and the narrower sweep
+    /// is a subset of the wider one. Spending eight more packets to widen it a minute later is
+    /// exactly what the five-minute rule is for.
+    case areaSweep
   }
 
   struct AnswerSlot: Hashable {
@@ -654,6 +659,10 @@ public actor WeatherService {
         }
       case let (.forecastStored(point), .forecast(forecast)) where !forecast.isUnbundledPoint:
         fill(nil, .forecast(point), asOf: Date(unixMinutes: forecast.issuedMinutes))
+      case let (.areaSweepStored, .areaSweep(sweep)):
+        // Filled on the *first* packet, not on the last: the seven that follow are already on
+        // the air, and a second phone tapping between them must not add eight more.
+        fill(botID, .areaSweep, asOf: Date(unixMinutes: sweep.builtMinutes))
       case (.coverageStored, .coverage):
         // No content time: the statement describes the bot, not an hour (spec §7A), so the
         // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
@@ -765,6 +774,7 @@ public actor WeatherService {
     case .warningText, .forecastDiscussion, .spaceWeather, .stormReports, .rainfall, .metar, .taf, .hazardousOutlook:
       AnswerSlot(botID: botID, key: .text(request))
     case .coverage: AnswerSlot(botID: botID, key: .coverage)
+    case .areaSweep: AnswerSlot(botID: botID, key: .areaSweep)
     case .homeForecast, .forecastForPlace: nil
     }
   }
@@ -1018,6 +1028,13 @@ public actor WeatherService {
       }
     case let .text(chunk):
       states[botID]?.texts[chunk.group]?.request = request.request
+    case let .areaSweep(sweep):
+      // Only if the held sweep is still this one: the reducer may have set this packet aside as
+      // older than what it holds, and then the sweep on screen is not this request's answer.
+      guard states[botID]?.areaSweep?.group == sweep.group,
+        states[botID]?.areaSweep?.builtMinutes == sweep.builtMinutes
+      else { return }
+      states[botID]?.areaSweep?.request = request.request
     default:
       break
     }
@@ -1090,6 +1107,10 @@ public actor WeatherService {
     case (.coverage, .coverage):
       // Nothing to check it against: a statement is about the bot that sent it, and only the
       // bot asked can answer this one (`acceptsAnswerFromAnyBot`).
+      return true
+    case (.areaSweep, .areaSweep):
+      // The first packet of the sweep settles the tap; the other seven keep flowing into state,
+      // exactly as `>w`'s warnings do after its first message. Only the bot asked reaches here.
       return true
     default:
       return false

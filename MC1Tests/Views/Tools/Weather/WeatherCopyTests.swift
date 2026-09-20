@@ -456,20 +456,169 @@ struct WeatherCopyTests {
 
   @Test
   func `the source line names the path the data took, and says nothing when the radio did not`() {
-    #expect(WeatherCopy.dataSource(.goesSatellite) == "From the GOES satellite")
-    #expect(WeatherCopy.dataSource(.internet) == "From the internet")
-    #expect(WeatherCopy.dataSource(.mixed) == "From GOES and the internet")
+    #expect(WeatherCopy.dataSource(.goesSatellite) == "Via GOES satellite")
+    #expect(WeatherCopy.dataSource(.internet) == "Via internet")
+    #expect(WeatherCopy.dataSource(.mixed) == "Via GOES and internet")
     // A radio older than revision 7 has made no claim, and no screen may invent one for it.
     #expect(WeatherCopy.dataSource(.unstated) == nil)
   }
 
   @Test
-  func `a cut reply says the rest did not fit, beside the source when there is one`() {
-    #expect(WeatherCopy.reportFootnote(source: .goesSatellite, wasCut: false) == "From the GOES satellite")
-    #expect(WeatherCopy.reportFootnote(source: .unstated, wasCut: true) == "The rest didn't fit on the radio.")
+  func `a shortened reply says so, beside the source when there is one`() {
+    #expect(WeatherCopy.reportFootnote(source: .goesSatellite, wasCut: false) == "Via GOES satellite")
+    #expect(WeatherCopy.reportFootnote(source: .unstated, wasCut: true) == "Shortened for radio")
     #expect(WeatherCopy.reportFootnote(source: .internet, wasCut: true)
-      == "From the internet · The rest didn't fit on the radio.")
+      == "Via internet · Shortened for radio")
     // Neither fact: no row at all, so a card from an older radio reads exactly as it did.
     #expect(WeatherCopy.reportFootnote(source: .unstated, wasCut: false) == nil)
+  }
+
+  // MARK: - The national alert map (§17)
+
+  static func sweep(
+    builtMinutesAgo: Int = 0,
+    total: UInt8 = 1,
+    packets: [UInt8: [MeshWXAreaSweep.Entry]] = [0: []],
+    wasCut: Bool = false,
+    includesAdvisories: Bool = false
+  ) -> WeatherAreaSweepAssembly {
+    let built = UInt32(now.timeIntervalSince1970 / 60) - UInt32(builtMinutesAgo)
+    return WeatherAreaSweepAssembly(
+      builtMinutes: built, group: 7, total: total, packets: packets,
+      firstReceivedAt: now, lastReceivedAt: now, wasCut: wasCut,
+      includesAdvisories: includesAdvisories)
+  }
+
+  /// The radio's own build time, and how long ago that was — never when the packets arrived.
+  @Test
+  func `the map line names when the radio built it and how old that makes it`() {
+    #expect(F.plain(WeatherAreaMapCopy.builtLine(
+      Self.sweep(builtMinutesAgo: 198), now: Self.now, calendar: F.calendar, locale: F.locale))
+      == "Map as of 8:02 PM · 3 h old")
+  }
+
+  /// What the held map covers is read off the sweep, not off the button that asked for it: a
+  /// radio may answer the wider request with the narrower sweep.
+  @Test
+  func `the map says which scope actually arrived`() {
+    #expect(WeatherAreaMapCopy.scopeHeld(Self.sweep()) == "Warnings and watches")
+    #expect(WeatherAreaMapCopy.scopeHeld(Self.sweep(includesAdvisories: true))
+      == "Warnings, watches and advisories")
+  }
+
+  @Test
+  func `the map counts the areas it shades`() {
+    var drawing = WeatherAreaMapDrawing()
+    drawing.areaCount = 1
+    #expect(WeatherAreaMapCopy.areaCount(drawing, sweep: Self.sweep(), source: "WX-AUS")
+      == "1 area under an alert")
+    drawing.areaCount = 42
+    #expect(WeatherAreaMapCopy.areaCount(drawing, sweep: Self.sweep(), source: "WX-AUS")
+      == "42 areas under an alert")
+  }
+
+  /// "Nothing anywhere" needs a whole map. A sweep that was cut, or that is missing packets,
+  /// says nothing about the areas it never named, so it must not be read as a quiet country.
+  @Test
+  func `only a complete, uncut map may call the country clear`() {
+    let drawing = WeatherAreaMapDrawing()
+    #expect(WeatherAreaMapCopy.areaCount(drawing, sweep: Self.sweep(), source: "WX-AUS")
+      == "WX-AUS found nothing under an alert anywhere in the country.")
+    #expect(WeatherAreaMapCopy.areaCount(drawing, sweep: Self.sweep(wasCut: true), source: "WX-AUS") == nil)
+    #expect(WeatherAreaMapCopy.areaCount(
+      drawing, sweep: Self.sweep(total: 3, packets: [0: []]), source: "WX-AUS") == nil)
+  }
+
+  /// The bundle is a cut in time and the UGC tables grow, so a map is honestly a little smaller
+  /// than the sweep — and the difference is said rather than swallowed.
+  @Test
+  func `areas with no outline are counted out loud`() {
+    var drawing = WeatherAreaMapDrawing()
+    #expect(WeatherAreaMapCopy.undrawn(drawing) == nil)
+    drawing.undrawnCount = 1
+    #expect(WeatherAreaMapCopy.undrawn(drawing) == "1 of them has no outline in this app and isn\'t shaded")
+    drawing.undrawnCount = 6
+    #expect(WeatherAreaMapCopy.undrawn(drawing) == "6 of them have no outline in this app and aren\'t shaded")
+  }
+
+  /// Reason 4 on a sweep is not the radio being broken and not the radio being busy: somebody
+  /// else has just spent those eight packets, and this phone is about to be handed the same map.
+  @Test
+  func `a refused map reads as another radio having asked, never as an error`() {
+    let refused = WeatherRequestStatus.settled(.notAvailable(.rateLimited), at: Self.now)
+    #expect(request(refused, for: .areaSweep(includesAdvisories: false))
+      == "Another radio asked WX-AUS for the map recently — try again in a few minutes.")
+    #expect(request(refused, for: .areaSweep(includesAdvisories: true))
+      == "Another radio asked WX-AUS for the map recently — try again in a few minutes.")
+    // Every other request keeps the wording it had.
+    #expect(request(refused, for: .digest) == "WX-AUS is busy, try again in a few minutes")
+    #expect(request(.settled(.notAvailable(.botError), at: Self.now), for: .areaSweep(includesAdvisories: false))
+      == "WX-AUS had an error")
+  }
+
+  /// What the tap costs, in packets, before it is spent — and the wider scope costs more.
+  ///
+  /// With nothing received yet the figures are what the bot actually sent on 2026-09-20: four
+  /// packets for warnings and watches, seven with advisories. Once a sweep has arrived, the
+  /// number is that sweep's own, which is the only honest estimate there is.
+  @Test
+  func `each scope says what it will spend`() {
+    #expect(WeatherAreaMapScope.warningsAndWatches.packets(lastSweep: nil) == 4)
+    #expect(WeatherAreaMapScope.alsoAdvisories.packets(lastSweep: nil) == 7)
+
+    func sweep(total: UInt8, advisories: Bool) -> WeatherAreaSweepAssembly {
+      WeatherAreaSweepAssembly(
+        builtMinutes: 29_823_900, group: 1, total: total,
+        firstReceivedAt: Self.now, lastReceivedAt: Self.now,
+        includesAdvisories: advisories)
+    }
+    #expect(WeatherAreaMapScope.warningsAndWatches.packets(lastSweep: sweep(total: 5, advisories: false)) == 5)
+    // A sweep at the other scope says nothing about this one.
+    #expect(WeatherAreaMapScope.warningsAndWatches.packets(lastSweep: sweep(total: 8, advisories: true)) == 4)
+
+    #expect(WeatherAreaMapScope.warningsAndWatches.title == "Warnings and watches")
+    #expect(WeatherAreaMapScope.alsoAdvisories.title == "Also advisories")
+    #expect(L10n.Weather.Weather.AreaMap.cost(4) == "About 4 packets on the shared channel.")
+    #expect(L10n.Weather.Weather.AreaMap.cost(8) == "About 8 packets on the shared channel.")
+    // The wider scope is the one that sends `>wmap all`.
+    #expect(WeatherAreaMapScope.warningsAndWatches.request.wireText == ">wmap")
+    #expect(WeatherAreaMapScope.alsoAdvisories.request.wireText == ">wmap all")
+  }
+
+  /// Every tap on this screen is public, and the screen never asks on its own — so the note the
+  /// ask button carries is the one every other ask button carries.
+  @Test
+  func `the map names itself in the request log and says the answer is public`() {
+    #expect(WeatherCopy.requestName(.areaSweep(includesAdvisories: false)) == "National alert map")
+    #expect(WeatherCopy.requestName(.areaSweep(includesAdvisories: true))
+      == "National alert map · with advisories")
+    #expect(L10n.Weather.Weather.Request.publicNote == "Everyone listening on #meshwx gets the answer.")
+  }
+
+  /// The list beside the map: one row per alert kind, an area belonging to the first kind that
+  /// named it, and names a reader recognises rather than UGC codes (§3.1 U-32).
+  @Test
+  func `the map's list groups areas by alert kind, most severe first`() throws {
+    let tables = MeshWXTables.shared
+    // The codes the bot actually sends for these, read back out of the shared table.
+    let heat = try #require((0...255).map(UInt8.init).first { tables.vtec(for: $0) == "HT.Y" })
+    let tornado = try #require((0...255).map(UInt8.init).first { tables.vtec(for: $0) == "TO.W" })
+    let stateIndex = UInt8(tables.states.firstIndex(of: "TX") ?? 0)
+    func entry(_ event: UInt8, start: UInt16, run: UInt8, county: Bool) -> MeshWXAreaSweep.Entry {
+      MeshWXAreaSweep.Entry(event: event, stateIndex: stateIndex, isCounty: county, start: start, run: run)
+    }
+    let groups = WeatherAreaMapList.groups(
+      [entry(tornado, start: 453, run: 1, county: true),
+       entry(heat, start: 192, run: 3, county: false),
+       // The same county again, under the milder one: the first kind keeps it.
+       entry(heat, start: 453, run: 1, county: true)],
+      tables: tables)
+    #expect(groups.map(\.event) == [tornado, heat])
+    #expect(groups[0].codes == ["TXC453"])
+    #expect(groups[1].codes == ["TXZ192", "TXZ193", "TXZ194"])
+    #expect(groups[0].name.isEmpty == false)
+    #expect(WeatherAreaMapList.areaName("TXC453", tables: tables).contains("Travis"))
+    // An area the tables do not carry is still the code the radio would be asked about.
+    #expect(WeatherAreaMapList.areaName("ZZZ999", tables: tables) == "ZZZ999")
   }
 }

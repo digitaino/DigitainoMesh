@@ -68,6 +68,16 @@ struct WeatherAlertsListView: View {
       locale: .autoupdatingCurrent)
   }
 
+  /// When the held sweep was built, or that nobody has asked for one — which is the usual answer,
+  /// because nothing in the app asks for a sweep without a tap.
+  private var areaMapDetail: String {
+    guard let sweep = screen.context.sourceState?.areaSweep else {
+      return L10n.Weather.Weather.AreaMap.never
+    }
+    return WeatherAreaMapCopy.builtLine(
+      sweep, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
+  }
+
   private func sourceLine(_ snapshot: WeatherScreenSnapshot) -> String {
     snapshot.source == nil
       ? L10n.Weather.Weather.Alerts.sourceGeneric
@@ -95,6 +105,20 @@ struct WeatherAlertsListView: View {
       .accessibilityLabel(L10n.Weather.Weather.AlertsList.openMap)
       .accessibilityAddTraits(.isButton)
       .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+
+      // The whole country, one screen away (docs/MESHWX_UI.md §17). A row rather than anything
+      // that loads: opening it asks for nothing, and the map it shows is whatever sweep the
+      // channel has already carried.
+      NavigationLink {
+        WeatherAreaMapView(screen: screen)
+      } label: {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(L10n.Weather.Weather.AreaMap.title)
+          Text(areaMapDetail)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+      }
     }
     .themedRowBackground(theme)
 

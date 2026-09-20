@@ -74,10 +74,15 @@ private struct WeatherToolScreen: View {
     case station(pageID: String, index: UInt16)
     case alert(pageID: String, identity: MeshWXWarningIdentity)
     case radio(pageID: String)
+    /// The national map is about the whole country, not this page — but it is built from the
+    /// page's own screen like every other destination, and it is reached from the title menu
+    /// rather than from three taps down the radio page (docs/MESHWX_UI.md §3.1 U-32).
+    case areaMap(pageID: String)
 
     var pageID: String {
       switch self {
-      case let .station(pageID, _), let .alert(pageID, _), let .radio(pageID): pageID
+      case let .station(pageID, _), let .alert(pageID, _), let .radio(pageID),
+           let .areaMap(pageID): pageID
       }
     }
   }
@@ -196,6 +201,9 @@ private struct WeatherToolScreen: View {
     Button(L10n.Weather.Weather.Place.manage, systemImage: "list.bullet") {
       isShowingPlaces = true
     }
+    Button(L10n.Weather.Weather.AreaMap.title, systemImage: "map") {
+      pushed = .areaMap(pageID: model.selectedPageID)
+    }
   }
 
   private var pager: some View {
@@ -256,6 +264,8 @@ private struct WeatherToolScreen: View {
           WeatherAlertDetailView(screen: screen, identity: identity)
         case .radio:
           WeatherRadioView(screen: screen)
+        case .areaMap:
+          WeatherAreaMapView(screen: screen)
         }
       } else {
         // A tapped notification can open the tool straight onto its alert, before the page it

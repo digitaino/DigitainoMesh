@@ -600,6 +600,86 @@ public enum MeshWXEncoder {
       text: request.text)
   }
 
+  // MARK: - Area sweep (type 10, spec §7C)
+
+  /// One packet of a national sweep. The app never sends one — only a bot builds them — but the
+  /// shared vectors are a round trip, and the map's tests need a sweep of Montana without waiting
+  /// for a blizzard.
+  ///
+  /// Every field is bounded and every bound is checked rather than masked: `state << 1 | kind`
+  /// puts the state one bit from the kind, and a state index of 128 silently truncated would
+  /// move every area in the packet to another state's outlines.
+  public static func areaSweep(
+    seq: UInt8,
+    bot: UInt16,
+    builtMinutes: UInt32,
+    group: UInt8,
+    index: UInt8,
+    total: UInt8,
+    entries: [MeshWXAreaSweep.Entry],
+    wasCut: Bool = false,
+    includesAdvisories: Bool = false,
+    source: MeshWXDataSource = .unstated
+  ) throws -> Data {
+    guard (1...MeshWXWire.maxAreaSweepPackets).contains(Int(total)) else {
+      throw MeshWXEncodeError.badCount(
+        what: "area sweep total", count: Int(total), allowed: 1...MeshWXWire.maxAreaSweepPackets)
+    }
+    guard index < total else {
+      throw MeshWXEncodeError.outOfRange(field: "area sweep index", value: Int(index))
+    }
+    guard entries.count <= MeshWXWire.maxAreaSweepEntries else {
+      throw MeshWXEncodeError.badCount(
+        what: "area sweep entries", count: entries.count,
+        allowed: 0...MeshWXWire.maxAreaSweepEntries)
+    }
+
+    var flags: UInt8 = wasCut ? MeshWXWire.flagSweepCut : 0
+    if includesAdvisories { flags |= MeshWXWire.flagSweepAdvisories }
+    flags |= source.flagBits
+
+    var out = try header(seq: seq, bot: bot, type: .areaSweep, flags: flags)
+    out.appendU32(builtMinutes)
+    out.append(group)
+    out.append(index)
+    out.append(total)
+    for entry in entries {
+      guard entry.stateIndex <= 127 else {
+        throw MeshWXEncodeError.outOfRange(field: "sweep state index", value: Int(entry.stateIndex))
+      }
+      guard entry.start <= MeshWXWire.maxAreaSweepStart else {
+        throw MeshWXEncodeError.outOfRange(field: "sweep start", value: Int(entry.start))
+      }
+      guard (1...MeshWXWire.maxAreaSweepRun).contains(entry.run) else {
+        throw MeshWXEncodeError.outOfRange(field: "sweep run", value: Int(entry.run))
+      }
+      out.append(entry.event)
+      out.append(
+        (entry.stateIndex << MeshWXWire.sweepStateShift)
+          | (entry.isCounty ? MeshWXWire.sweepCountyBit : 0))
+      out.appendU16(
+        (UInt16(entry.run - 1) << MeshWXWire.sweepRunShift) | entry.start)
+    }
+    return try checkSize(out, "area sweep")
+  }
+
+  public static func areaSweep(
+    seq: UInt8, bot: UInt16, _ sweep: MeshWXAreaSweep, source: MeshWXDataSource = .unstated
+  ) throws -> Data {
+    try areaSweep(
+      seq: seq,
+      bot: bot,
+      builtMinutes: sweep.builtMinutes,
+      group: sweep.group,
+      index: sweep.index,
+      total: sweep.total,
+      entries: sweep.entries,
+      wasCut: sweep.wasCut,
+      includesAdvisories: sweep.includesAdvisories,
+      source: source
+    )
+  }
+
   // MARK: - Round trip
 
   /// Re-encode a decoded message, header and all.
@@ -625,6 +705,7 @@ public enum MeshWXEncoder {
     case .notAvailable(let na): return try notAvailable(seq: seq, bot: bot, na)
     case .coverage(let coverage): return try self.coverage(seq: seq, bot: bot, coverage)
     case .request(let request): return try self.request(seq: seq, bot: bot, request)
+    case .areaSweep(let sweep): return try areaSweep(seq: seq, bot: bot, sweep, source: source)
     case .unknown:
       throw MeshWXEncodeError.outOfRange(field: "type", value: Int(message.header.rawType))
     }

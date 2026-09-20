@@ -108,7 +108,11 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
   /// One fill and one outline overlay per colour: the map colours per overlay, not per feature.
   /// Overlays draw in the order given and alerts arrive most urgent first, so they are laid down in
   /// reverse: a tornado warning's polygon sits on top of the heat advisory zones under it.
-  private static func overlays(_ shapes: [(MeshWXEventTint, [[CLLocationCoordinate2D]])]) -> [MapOverlay] {
+  ///
+  /// `fileprivate` rather than `private` so the national sweep's drawing
+  /// (``WeatherAreaMapDrawing``) lays its shapes down through exactly this, and one map cannot
+  /// end up tinting or stacking differently from the other.
+  fileprivate static func overlays(_ shapes: [(MeshWXEventTint, [[CLLocationCoordinate2D]])]) -> [MapOverlay] {
     var order: [MeshWXEventTint] = []
     var byTint: [MeshWXEventTint: [[CLLocationCoordinate2D]]] = [:]
     for (tint, rings) in shapes.reversed() {
@@ -133,7 +137,7 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
     }
   }
 
-  private static func coordinate(_ value: MeshWXCoordinate) -> CLLocationCoordinate2D {
+  fileprivate static func coordinate(_ value: MeshWXCoordinate) -> CLLocationCoordinate2D {
     CLLocationCoordinate2D(latitude: value.latitude, longitude: value.longitude)
   }
 
@@ -152,7 +156,7 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
       bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
   }
 
-  private static func bounds(_ coordinates: [CLLocationCoordinate2D]) -> WeatherMapBounds? {
+  fileprivate static func bounds(_ coordinates: [CLLocationCoordinate2D]) -> WeatherMapBounds? {
     guard let first = coordinates.first else { return nil }
     var box = WeatherMapBounds(
       minLatitude: first.latitude, maxLatitude: first.latitude,
@@ -171,6 +175,90 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
   }
 }
 
+// MARK: - The national sweep
+
+/// What the national alert map draws, and the few numbers under it (docs/MESHWX_UI.md §17).
+///
+/// The sweep names areas by UGC code and nothing else, so the shading is the same lookup an
+/// alert's own map does — ``MeshWXGeometry/rings(for:)`` for the outline,
+/// ``MeshWXPresentation/tint(forVTEC:)`` for the colour — laid down through
+/// ``WeatherMapDrawing/overlays(_:)`` so the two maps cannot drift apart.
+///
+/// **Areas are deduplicated, first entry wins.** Entries arrive most severe first (spec §7C), so
+/// a county under both a Tornado Warning and a Flood Advisory draws red, once. That is also what
+/// bounds the work: whatever the sweep says, the map never draws more shapes than the bundle has
+/// outlines.
+struct WeatherAreaMapDrawing: @unchecked Sendable, Equatable {
+  /// One event in the sweep and the colour it is drawn in, most severe first.
+  struct LegendItem: Equatable, Identifiable {
+    var event: UInt8
+    var name: String
+    var tint: MeshWXEventTint
+
+    var id: UInt8 { event }
+  }
+
+  var drawing = WeatherMapDrawing()
+  var legend: [LegendItem] = []
+  /// Distinct areas the sweep named, drawn or not.
+  var areaCount = 0
+  /// How many of those the bundle has no outline for, so they are counted but not shaded. The
+  /// bundle is a cut in time and the UGC tables grow (`MeshWXGeometry`), so this is a normal
+  /// outcome and the screen says it rather than quietly showing a smaller country.
+  var undrawnCount = 0
+  /// Every area the sweep named that the map did shade, in sweep order — most severe first — so
+  /// a tap on overlapping shapes resolves to the most severe of them.
+  var drawnCodes: [String] = []
+
+  static func make(
+    entries: [MeshWXAreaSweep.Entry],
+    tables: MeshWXTables,
+    geometry: MeshWXGeometry
+  ) -> WeatherAreaMapDrawing {
+    var result = WeatherAreaMapDrawing()
+    var shapes: [(MeshWXEventTint, [[CLLocationCoordinate2D]])] = []
+    var framed: [CLLocationCoordinate2D] = []
+    var seenAreas: Set<String> = []
+    var seenEvents: Set<UInt8> = []
+    let states = tables.states
+
+    for entry in entries {
+      let tint = WeatherFormatting.tint(for: entry.event, tables: tables)
+      var rings: [[CLLocationCoordinate2D]] = []
+      for ugc in entry.ugcCodes(states: states) where seenAreas.insert(ugc).inserted {
+        result.areaCount += 1
+        guard let outline = geometry.rings(for: ugc) else {
+          result.undrawnCount += 1
+          continue
+        }
+        let converted = outline.filter { $0.count >= 3 }.map { $0.map(WeatherMapDrawing.coordinate) }
+        guard !converted.isEmpty else {
+          result.undrawnCount += 1
+          continue
+        }
+        rings.append(contentsOf: converted)
+        result.drawnCodes.append(ugc)
+      }
+      guard !rings.isEmpty else { continue }
+      shapes.append((tint, rings))
+      framed.append(contentsOf: rings.flatMap { $0 })
+      if seenEvents.insert(entry.event).inserted {
+        result.legend.append(
+          LegendItem(
+            event: entry.event,
+            name: WeatherFormatting.eventName(entry.event, tables: tables),
+            tint: tint))
+      }
+    }
+
+    result.drawing = WeatherMapDrawing(
+      overlays: WeatherMapDrawing.overlays(shapes),
+      points: [],
+      bounds: WeatherMapDrawing.bounds(framed))
+    return result
+  }
+}
+
 /// The shared map showing a prepared drawing, framed on it.
 struct WeatherAlertMapView: View {
   @Environment(\.appState) private var appState
@@ -178,6 +266,9 @@ struct WeatherAlertMapView: View {
 
   let drawing: WeatherMapDrawing
   let isInteractive: Bool
+  /// A tap on the map itself, in plain degrees. Nil — the default, and what every existing caller
+  /// passes — leaves the map exactly as it was: taps do nothing.
+  var onTap: ((MeshWXCoordinate) -> Void)?
 
   @State private var cameraBounds: MLNCoordinateBounds?
   @State private var cameraVersion = 0
@@ -211,7 +302,11 @@ struct WeatherAlertMapView: View {
       cameraBounds: cameraBounds,
       cameraRegionVersion: cameraVersion,
       onPointTap: nil,
-      onMapTap: nil,
+      onMapTap: onTap.map { handler in
+        { coordinate in
+          handler(MeshWXCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude))
+        }
+      },
       onCameraRegionChange: nil,
       isStyleLoaded: $isStyleLoaded
     )

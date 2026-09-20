@@ -159,6 +159,37 @@ enum WeatherFixture {
     )
   }
 
+  /// One packet of a national area sweep (spec §7C). The flags nibble is built by hand here, so
+  /// the header and the body cannot disagree about the cut and the scope.
+  static func areaSweep(
+    seq: UInt8,
+    builtMinutes: UInt32 = t0Minutes,
+    group: UInt8,
+    index: UInt8,
+    total: UInt8,
+    entries: [MeshWXAreaSweep.Entry],
+    wasCut: Bool = false,
+    includesAdvisories: Bool = false,
+    source: MeshWXDataSource = .unstated,
+    bot: UInt16 = botID
+  ) -> MeshWXMessage {
+    MeshWXMessage(
+      header: header(
+        seq: seq, type: .areaSweep,
+        flags: (wasCut ? 1 : 0) | (includesAdvisories ? 2 : 0) | sourceBits(source), bot: bot),
+      payload: .areaSweep(MeshWXAreaSweep(
+        builtMinutes: builtMinutes, group: group, index: index, total: total, wasCut: wasCut,
+        includesAdvisories: includesAdvisories, entries: entries))
+    )
+  }
+
+  /// Texas zones 192-197 under a Severe Thunderstorm Warning.
+  static let texasSweepEntry = MeshWXAreaSweep.Entry(
+    event: 3, stateIndex: 42, isCounty: false, start: 192, run: 6)
+  /// Oklahoma counties 1-4 under a Winter Storm Warning.
+  static let oklahomaSweepEntry = MeshWXAreaSweep.Entry(
+    event: 24, stateIndex: 35, isCounty: true, start: 1, run: 4)
+
   /// WX-AUS's real statement (spec §7A, the vector `coverage_wx_aus`): 120 km around Austin, the
   /// offices EWX/FWD/HGX/SJT, and its 36 zones as five runs, neither list cut.
   static let austinCoverage = MeshWXCoverage(

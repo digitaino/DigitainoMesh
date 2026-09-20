@@ -251,6 +251,46 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.forecast(point: 102), to: F.bot) != nil)
   }
 
+  // MARK: - Area sweep (spec §7C)
+
+  /// `>wmap` is answered by the sweep's **first** packet — the other seven are already on the
+  /// air — and the slot it fills is what stops the next phone spending eight more.
+  @Test
+  func `the first sweep packet answers the map request and fills its slot`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    let pending = try #require(try await h.service.send(.areaSweep(includesAdvisories: false), to: F.bot))
+    #expect(await h.transport.sent.map(\.text) == [">wmap"])
+
+    h.clock.advance(by: 2)
+    _ = await h.service.ingest(F.areaSweep(
+      seq: 1, group: 1, index: 0, total: 3, entries: [F.texasSweepEntry]))
+    #expect(await weatherWaitUntil { settled.value.count == 1 })
+    #expect(settled.value.first?.0.id == pending.id)
+    #expect(settled.value.first?.1 == .answered)
+    // The sweep the tap produced is marked as this phone's, even though it is still arriving.
+    #expect(await h.service.state(for: F.botID)?.areaSweep?.request
+      == .areaSweep(includesAdvisories: false))
+
+    // Both scopes share one slot: the narrow sweep is a subset of the wide one, and eight more
+    // packets a minute later is exactly what the five-minute rule is for.
+    h.clock.advance(by: 30)
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: true), to: F.bot) == nil)
+    #expect(await weatherWaitUntil { settled.value.count == 2 })
+    #expect(settled.value.last?.1
+      == .alreadyReceived(receivedAt: F.t0.addingTimeInterval(2), contentAsOf: Date(unixMinutes: F.t0Minutes)))
+  }
+
+  /// Spec §7C: a sweep is cut where the sending bot's own feed runs out, so another bot's is not
+  /// this request's answer.
+  @Test
+  func `another bot's sweep does not answer this bot's map request`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.areaSweep(
+      seq: 1, group: 1, index: 0, total: 1, entries: [F.texasSweepEntry], bot: 0x0102))
+    #expect(try await h.service.send(.areaSweep(includesAdvisories: false), to: F.bot) != nil)
+  }
+
   // MARK: - Backlog
 
   @Test

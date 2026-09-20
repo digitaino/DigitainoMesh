@@ -128,6 +128,17 @@ struct WeatherPlacePickerView: View {
       // blue "Edit" capsule beside it was the loudest thing in the whole tool, for a mode that is
       // no longer needed: rows delete by swiping and reorder by dragging, with no mode at all.
       .toolbar {
+        // Removing a place was a swipe and nothing else, which the owner went looking for and
+        // could not find (docs/MESHWX_UI.md §3.1 U-30). Edit is where iOS keeps "get rid of
+        // something", and it also uncovers the drag that reorders. The swipe still works with no
+        // mode at all; this is the way that can be seen. Plain, in the leading slot: the filled
+        // blue capsule it replaces was the loudest thing in the tool (§3.1 U-10).
+        if !model.savedPlaces.isEmpty {
+          ToolbarItem(placement: .cancellationAction) {
+            EditButton()
+              .accessibilityIdentifier("weather.places.edit")
+          }
+        }
         ToolbarItem(placement: .confirmationAction) {
           Button(L10n.Weather.Weather.Common.done) { dismiss() }
             .accessibilityIdentifier("weather.places.done")
@@ -274,6 +285,12 @@ struct WeatherPlacePickerView: View {
             } label: {
               Label(L10n.Weather.Weather.Picker.remove, systemImage: "trash")
             }
+          }
+        }
+        // In Edit mode this is the red minus; the swipe above is the same removal without it.
+        .onDelete { offsets in
+          for id in offsets.map({ model.savedPlaces[$0].id }) {
+            model.removeSavedPlace(id: id)
           }
         }
         .onMove { source, destination in

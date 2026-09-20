@@ -263,6 +263,13 @@ enum WeatherCopy {
           ? L10n.Weather.Weather.Request.heardNoAnswer(sourceStart, time(at))
           : L10n.Weather.Weather.Request.noAnswer(time(at), source)
       case let .notAvailable(reason):
+        // The map's own rate limit is not the radio being busy and is certainly not an error:
+        // the sweep is the one answer the whole channel shares, so a refusal means somebody else
+        // has just spent those eight packets and this phone is about to be handed the same map
+        // (docs/MESHWX_UI.md §17).
+        if case .rateLimited = reason, case .areaSweep? = request {
+          return L10n.Weather.Weather.AreaMap.busy(source)
+        }
         return notAvailable(reason, source: sourceStart)
       case .failed:
         return L10n.Weather.Weather.Request.failed(time(at))
@@ -352,7 +359,7 @@ enum WeatherCopy {
 
   // MARK: - Where the data came from (§12.1)
 
-  /// "From the GOES satellite", "From the internet", "From GOES and the internet" — and **nil**
+  /// "Via GOES satellite", "Via internet", "Via GOES and internet" — and **nil**
   /// when the radio did not say (spec §2.2, revision 7).
   ///
   /// Nil rather than a phrase, because a bot older than revision 7 has made no claim and a screen
@@ -665,6 +672,10 @@ enum WeatherCopy {
       return L10n.Weather.Weather.Reports.Outlook.title
     case .coverage:
       return L10n.Weather.Weather.RequestName.coverage
+    case let .areaSweep(includesAdvisories):
+      return includesAdvisories
+        ? L10n.Weather.Weather.RequestName.areaMapAll
+        : L10n.Weather.Weather.RequestName.areaMap
     }
   }
 

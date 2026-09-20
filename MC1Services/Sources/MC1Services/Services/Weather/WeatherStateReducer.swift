@@ -39,6 +39,11 @@ public enum WeatherStateChange: Sendable, Hashable {
   /// A statement that arrived out of order behind one already held: the held one came in a
   /// message the bot sent later, so it stands.
   case coverageIgnoredOlder
+  /// One packet of a national area sweep landed (spec §7C).
+  case areaSweepStored(group: UInt8, index: UInt8, isComplete: Bool)
+  /// The sweep was built before the one already held — a late drain from the radio's queue — so
+  /// it changed nothing.
+  case areaSweepIgnoredOlder(builtMinutes: UInt32)
   case notAvailable(MeshWXNotAvailable)
   case unknownType(rawType: UInt8)
 }
@@ -165,6 +170,8 @@ public enum WeatherStateReducer {
       changes.append(store(chunk, in: &state, receivedAt: receivedAt, source: source))
     case let .coverage(coverage):
       changes.append(store(coverage, in: &state, receivedAt: receivedAt, isOutOfOrder: isOutOfOrder))
+    case let .areaSweep(sweep):
+      changes.append(store(sweep, in: &state, receivedAt: receivedAt, source: source))
     case let .notAvailable(notAvailable):
       changes.append(.notAvailable(notAvailable))
     case .request:
@@ -584,6 +591,60 @@ public enum WeatherStateReducer {
     if isOutOfOrder, state.coverage != nil { return .coverageIgnoredOlder }
     state.coverage = WeatherStoredCoverage(coverage: coverage, receivedAt: receivedAt)
     return .coverageStored
+  }
+
+  // MARK: - Area sweep
+
+  /// Spec §7C: the packets of one sweep share a `group` and assemble like Text chunks, but only
+  /// one sweep is ever held — the newest the bot built.
+  ///
+  /// Three rules, in this order:
+  ///
+  /// - A sweep built **before** the one held changes nothing. A backlog drained from the radio at
+  ///   connect would otherwise repaint the country as it was an hour ago.
+  /// - A sweep built **after** it replaces the held one outright, packets and all. Two sweeps are
+  ///   two pictures of the same country, and merging them draws this hour's Texas beside last
+  ///   hour's Montana.
+  /// - The **same** build time under a different `group` or `total` is the bot sending the sweep
+  ///   again; the packets in flight are of the new transmission, so that one starts over too.
+  ///   Equal build time and equal group is the one case that merges, which is the whole point.
+  private static func store(
+    _ sweep: MeshWXAreaSweep,
+    in state: inout WeatherBotState,
+    receivedAt: Date,
+    source: MeshWXDataSource
+  ) -> WeatherStateChange {
+    let held = state.areaSweep
+    if let held, sweep.builtMinutes < held.builtMinutes {
+      return .areaSweepIgnoredOlder(builtMinutes: sweep.builtMinutes)
+    }
+
+    var assembly: WeatherAreaSweepAssembly
+    if let held, held.builtMinutes == sweep.builtMinutes, held.group == sweep.group,
+      held.total == sweep.total
+    {
+      assembly = held
+    } else {
+      assembly = WeatherAreaSweepAssembly(
+        builtMinutes: sweep.builtMinutes,
+        group: sweep.group,
+        total: sweep.total,
+        firstReceivedAt: receivedAt,
+        lastReceivedAt: receivedAt
+      )
+    }
+    assembly.packets[sweep.index] = sweep.entries
+    assembly.lastReceivedAt = receivedAt
+    // Set on every packet of a cut sweep (spec §7C), so any packet saying so is the sweep saying
+    // so — which is what makes the mark survive the packet that never arrived.
+    assembly.wasCut = assembly.wasCut || sweep.wasCut
+    // The scope is one sweep's, so the packets agree; a packet that says advisories are in it is
+    // taken at its word, and one that does not never narrows a scope already stated.
+    assembly.includesAdvisories = assembly.includesAdvisories || sweep.includesAdvisories
+    if source != .unstated { assembly.source = source }
+    state.areaSweep = assembly
+    return .areaSweepStored(
+      group: sweep.group, index: sweep.index, isComplete: assembly.isComplete)
   }
 
   // MARK: - Ordering

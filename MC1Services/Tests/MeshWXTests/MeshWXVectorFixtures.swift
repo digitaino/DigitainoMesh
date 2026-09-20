@@ -82,10 +82,22 @@ enum MeshWXVectors {
     // Cancel
     let reason: UInt8?
 
-    // Digest
+    // Digest, and — since revision 8 — the Area sweep, whose entries arrive under the same key
+    // in a shape of their own.
     let nowMin: UInt32?
     let feedHealth: UInt8?
-    let entries: [DigestEntry]?
+    let entries: EntriesField?
+
+    // Area sweep (spec §7C). `group`, `idx` and `total` are shared with Text above; the build
+    // time is read under either spelling, because the wire field is `built` and every other time
+    // in this file carries the `_min` suffix the bot's decoder adds.
+    let built: UInt32?
+    let builtMin: UInt32?
+    let cut: Bool?
+    let advisories: Bool?
+
+    /// The build time of an Area sweep, whichever key the vector carries it under.
+    var sweepBuiltMinutes: UInt32? { builtMin ?? built }
 
     // Observations
     let tsMin: UInt32?
@@ -145,11 +157,50 @@ enum MeshWXVectors {
       }
     }
 
+    /// `entries` in two shapes — a Digest's identities and an Area sweep's runs — told apart by
+    /// what the JSON holds rather than by the vector's name, the way ``StationsField`` is. A
+    /// mis-typed field surfaces as a decode failure (which `fixtureIsPresent` reports) rather
+    /// than as a silent nil the tests would pass over.
+    enum EntriesField: Decodable, Sendable {
+      case digest([DigestEntry])
+      case sweep([SweepEntry])
+
+      init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let digest = try? container.decode([DigestEntry].self) {
+          self = .digest(digest)
+        } else {
+          self = .sweep(try container.decode([SweepEntry].self))
+        }
+      }
+
+      var digest: [DigestEntry]? {
+        guard case let .digest(entries) = self else { return nil }
+        return entries
+      }
+
+      var sweep: [SweepEntry]? {
+        guard case let .sweep(entries) = self else { return nil }
+        return entries
+      }
+    }
+
     struct Area: Decodable, Sendable {
       let state: UInt8
       let county: Bool
       let start: UInt16
       let run: UInt8
+    }
+
+    /// One Area sweep entry: a Warning's area run with the event code in front of it (spec §7C).
+    struct SweepEntry: Decodable, Sendable {
+      let event: UInt8
+      let state: UInt8
+      let county: Bool
+      let start: UInt16
+      let run: UInt8
+      /// The codes the entry expands to, where the vector prints them.
+      let ugcs: [String]?
     }
 
     struct DigestEntry: Decodable, Sendable {

@@ -434,3 +434,49 @@ struct WeatherPlaceSearchTests {
     #expect(town.places.first?.name == "ROUND ROCK")
   }
 }
+
+/// When the map outlines are worth loading (docs/MESHWX_UI.md §3.1 U-27).
+@Suite("Weather outlines")
+struct WeatherScreenBuilderGeometryTests {
+
+  /// A warning the phone must draw itself: area runs, no polygon of its own.
+  func stateWithUndrawnWarning() -> [UInt16: WeatherBotState] {
+    let warning = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 3, office: 35, etn: 42), expiresMinutes: 29_000_000,
+      areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 100, run: 1)])
+    var state = WeatherBotState(botID: 0x041D)
+    state.warnings[warning.identity] = WeatherStoredWarning(warning: warning, receivedAt: Date())
+    return [0x041D: state]
+  }
+
+  /// The San Juan case: a place, nothing held for it. The outlines are what say the place is
+  /// outside the radio's area and name the zone and county to ask by, so without them the page
+  /// asked for no alerts at all and no alert could ever arrive to load them.
+  @Test
+  func `a place needs the outlines even with nothing held`() {
+    #expect(WeatherScreenBuilder.needsGeometry(hasPlace: true, states: [:]))
+    #expect(WeatherScreenBuilder.needsGeometry(hasPlace: true, states: stateWithUndrawnWarning()))
+  }
+
+  /// No place: only a warning that must be drawn is worth 15 MB of outlines.
+  @Test
+  func `with no place only an undrawn warning asks for them`() {
+    #expect(!WeatherScreenBuilder.needsGeometry(hasPlace: false, states: [:]))
+    #expect(!WeatherScreenBuilder.needsGeometry(hasPlace: false, states: [0x041D: WeatherBotState(botID: 0x041D)]))
+    #expect(WeatherScreenBuilder.needsGeometry(hasPlace: false, states: stateWithUndrawnWarning()))
+  }
+
+  /// San Juan lies in two land zones and in Atlantic marine zone AMZ712, in whatever order the
+  /// outlines answer. The land zone of the place's own state is the one a radio is asked about.
+  @Test
+  func `a coastal place asks about its land zone, not the water`() {
+    let sanJuan = ["AMZ712", "PRZ016", "PRC127", "PRZ001"]
+    #expect(WeatherScreenBuilder.placeZone(from: sanJuan, stateCode: "PR", county: "PRC127") == "PRZ001")
+    // No state code held yet: the county names the state.
+    #expect(WeatherScreenBuilder.placeZone(from: sanJuan, stateCode: nil, county: "PRC127") == "PRZ001")
+    // Nothing says which state: any zone beats no zone, and the choice is at least stable.
+    #expect(WeatherScreenBuilder.placeZone(from: sanJuan, stateCode: nil, county: nil) == "AMZ712")
+    #expect(WeatherScreenBuilder.placeZone(from: ["TXC453", "TXZ192"], stateCode: "TX", county: "TXC453") == "TXZ192")
+    #expect(WeatherScreenBuilder.placeZone(from: ["TXC453"], stateCode: "TX", county: "TXC453") == nil)
+  }
+}

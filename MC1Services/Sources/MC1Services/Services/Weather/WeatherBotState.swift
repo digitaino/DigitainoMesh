@@ -336,6 +336,82 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
   }
 }
 
+/// A national area sweep being reassembled by `(bot, group)` in `idx` order (spec §7C).
+///
+/// One per bot, newest only. A sweep is a picture of the whole country at one minute, so two of
+/// them are not two things to hold: a newer ``builtMinutes`` replaces an older sweep outright,
+/// packets and all, rather than merging into it. Merging would draw half of this hour's country
+/// over half of last hour's, which is the one output a map must never produce.
+///
+/// Held whether or not it is complete. Eight packets on a shared channel is the most expensive
+/// answer in the protocol, and a sweep missing its last packet is still forty states' worth of
+/// map — so a partial one is kept, drawn, and labelled as partial.
+public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
+  /// When the bot built the sweep, in Unix minutes (spec §7C). The age on screen is from this,
+  /// never from receipt.
+  public var builtMinutes: UInt32
+  /// Shared by every packet of this sweep: the `seq` of its first.
+  public var group: UInt8
+  public var total: UInt8
+  /// Entries by packet index. Absent indexes never arrived.
+  public var packets: [UInt8: [MeshWXAreaSweep.Entry]]
+  public var firstReceivedAt: Date
+  public var lastReceivedAt: Date
+  /// Any packet said entries were dropped to fit. An area absent from a cut sweep is not an area
+  /// with no alert, and no screen may read it as one.
+  public var wasCut: Bool
+  /// The sweep carries advisories as well as warnings and watches. Clear means the narrower scope
+  /// was asked for, not that no advisory is active.
+  public var includesAdvisories: Bool
+  /// Where the bot got the products behind the sweep (spec §2.2, revision 7). Unstated for a bot
+  /// older than revision 7; a packet that states nothing never erases one that did.
+  public var source: MeshWXDataSource
+  /// The request of this phone's that this sweep answered, if any. A sweep is broadcast to
+  /// everyone on `#meshwx`, so most of them answer somebody else's tap.
+  public var request: WeatherRequest?
+
+  public init(
+    builtMinutes: UInt32,
+    group: UInt8,
+    total: UInt8,
+    packets: [UInt8: [MeshWXAreaSweep.Entry]] = [:],
+    firstReceivedAt: Date,
+    lastReceivedAt: Date,
+    wasCut: Bool = false,
+    includesAdvisories: Bool = false,
+    source: MeshWXDataSource = .unstated,
+    request: WeatherRequest? = nil
+  ) {
+    self.builtMinutes = builtMinutes
+    self.group = group
+    self.total = total
+    self.packets = packets
+    self.firstReceivedAt = firstReceivedAt
+    self.lastReceivedAt = lastReceivedAt
+    self.wasCut = wasCut
+    self.includesAdvisories = includesAdvisories
+    self.source = source
+    self.request = request
+  }
+
+  /// When the bot built it, on the bot's clock.
+  public var builtAt: Date { Date(unixMinutes: builtMinutes) }
+
+  public var missingIndexes: [UInt8] {
+    (0..<total).filter { packets[$0] == nil }
+  }
+
+  public var isComplete: Bool { total > 0 && missingIndexes.isEmpty }
+
+  public var receivedPacketCount: Int { packets.count }
+
+  /// Every entry received, in packet order then in the order the bot sent them — most severe
+  /// first (spec §7C), which is also the order the map lays its tints down in.
+  public var entries: [MeshWXAreaSweep.Entry] {
+    packets.keys.sorted().flatMap { packets[$0] ?? [] }
+  }
+}
+
 // MARK: - Per-bot state
 
 /// One accepted message in the duplicate window: its `seq`, and a fingerprint of its content so
@@ -400,6 +476,9 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// What the bot says it carries (spec §7A). Nil until it has said: the station footprint is
   /// the fallback then, and nothing the bot has not stated may put a place outside its area.
   public var coverage: WeatherStoredCoverage?
+  /// The newest national area sweep this bot sent (spec §7C), complete or partial. Nil until one
+  /// has been heard — and it never is until somebody on the channel taps for it.
+  public var areaSweep: WeatherAreaSweepAssembly?
 
   public init(botID: UInt16) {
     self.botID = botID
@@ -418,11 +497,13 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     forecasts = [:]
     texts = [:]
     coverage = nil
+    areaSweep = nil
   }
 
   private enum CodingKeys: String, CodingKey {
     case botID, lastSeq, recentMessages, lastHeardAt, lastLiveHeardAt, needsDigest, gapDetectedAt, warnings,
-      pendingUpgrades, recentCancels, digest, missingFromDigest, observations, forecasts, texts, coverage
+      pendingUpgrades, recentCancels, digest, missingFromDigest, observations, forecasts, texts, coverage,
+      areaSweep
   }
 
   private enum LegacyCodingKeys: String, CodingKey {
@@ -459,6 +540,9 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     // A file written before the bot stated anything, or before the app could read it: absent is
     // "has not said", which falls back to the station footprint rather than failing the file.
     coverage = try container.decodeIfPresent(WeatherStoredCoverage.self, forKey: .coverage)
+    // Revision 8, §7C. A file written before the app could read a sweep decodes as having none,
+    // which is exactly right: nobody had asked for one.
+    areaSweep = try container.decodeIfPresent(WeatherAreaSweepAssembly.self, forKey: .areaSweep)
   }
 
   /// Warnings not yet expired at `now`, in the spec's display order (§10.2): the most severe

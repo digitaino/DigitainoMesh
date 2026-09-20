@@ -102,6 +102,7 @@ Further defects in the same data:
 | — | Radio's configured position as a place source | **Rejected.** Often a home address or deliberately offset; an unlabelled hand-typed coordinate is exactly the false-calm path B6 describes |
 | — | Tapping a station makes it primary | **Rejected.** Details only |
 | — | Local notification for a new covering warning | **Adopted 2026-09-16**, opt-in and per place (§16, §3.1 N-1 to N-8). Warnings are broadcast on `#meshwx` as they happen, so filtering them on the phone costs the mesh nothing |
+| — | A map of everywhere in the country under an alert | **Adopted 2026-09-20** as the Area sweep (spec §7C, §17), reached from the alerts list. **Airtime is the constraint the owner set**: a sweep is up to eight packets broadcast to the whole channel, so the screen asks on a tap and on nothing else — not on appear, not on a pull, not on a timer, and never from Update — and the button says what the tap costs before it is spent. **Rejected** a stations map's treatment of a rate limit as an error: reason 4 on a sweep means another radio has just spent those packets and this phone is about to be handed the same map, so it is worded as that and never as a failure. A cut or partial sweep is still drawn, labelled, and forbidden from claiming the country is clear |
 
 ### 3.1 Implementation review decisions (2026-09-15)
 
@@ -192,6 +193,10 @@ walkthrough found and what was changed.
 | U-27 | "Nearest station TJIG, 1 km · Nearest forecast point Luis Munoz Marin International Airport-San Juan, 12 km" — one clause for a pilot, the next for a reader | **Adopted.** `WeatherCopy.emptyPlaceNearest` names both, the station from the table. The airport code is on the station's own screen, which this card's Update opens onto |
 | U-28 | Searching in Places took **Done** away and left a ⊗ in its place, beside the field's own clear button | **Adopted.** `searchPresentationToolbarBehavior(.avoidHidingContent)`: the one button that closes the sheet stays put while the field is up |
 | U-29 | A pushed screen had no bottom inset for the app's floating tab bar: the station screen's "as of 12:55 PM" and its "Airport reports (coded)" header sat under it | **Adopted.** The place pages get their inset from the tool's own bottom bar; every pushed destination — station, station list, alert, alerts list, reports, state picker, radio page, Cached, notifications — took `weatherTabBarInset()`, the tab bar's own height above the home indicator. **Superseded by §3.1.2 V-2**: the tab bar is hidden for the tool, and the inset is gone |
+| U-30 | 2026-09-20: "we have no way of deleting or removing locations from the app?" A saved place removed by a swipe and nothing else, after the Edit capsule was dropped in U-10 | **Adopted.** `EditButton` in the sheet's leading slot, plain text rather than the filled capsule, with `onDelete` on the rows so Edit shows the red minus and the drag handles. The swipe still removes with no mode at all; this is the way that can be found by looking |
+| U-31 | 2026-09-20: "'from the GOES satellite' — the 'the' is weird" and "'the rest didn't fit on the radio' — what the fuck does that mean?" | **Adopted.** The source line is a path, not a sentence: "Via GOES satellite", "Via internet", "Via GOES and internet". The cut note says what was done to the text rather than narrating the radio: "Shortened for radio" |
+| U-32 | 2026-09-20, first look at the national map: "it's way too deep... I see the map but I can't zoom or click on anything to request more details? also there is no list?" It sat three taps down (place page → radio row → alerts list → map), its card was a still whose only content had hit testing off — so the row that opens the full map had no hit area at all — and the screen showed colours with nothing that named them | **Adopted.** The map is a row in the **title menu**, beside the page picker and "Add or edit places", so it is one tap from anywhere in the tool; the radio page's alerts list keeps its row. The card gets a `contentShape` and an explicit "Open the full map ›" line, and the full map zooms, pans and answers a tap on an area. A **"What's in this map"** section lists one row per alert kind with how many areas are under it, opening that kind's areas by name ("Travis County, TX"), each a tap that asks the radio about that area — the same request the map's tap sends |
+| U-33 | 2026-09-20: "the app just flashes when I click on a shaded area on the map". The full map carried the tap hint as a **top** safe-area inset and the pending bar as a **bottom** one. A tap swaps them — the hint goes as the bar arrives — so the map view was resized at both edges in the same frame, and a full-bleed MapLibre view relays out its style when it is resized | **Adopted.** Both bars are overlays now, so the map's frame never changes and nothing it has drawn is thrown away. Neither takes touches, so pan, zoom and the tap still reach the map underneath, and the swap is animated rather than instant |
 
 ### 3.1.2 Visual pass against the Human Interface Guidelines, 16 September (afternoon)
 
@@ -795,8 +800,8 @@ Four drill-ins from a place page, and what the radio page holds (§3.2 Q3, Q8).
 
 Since revision 7 every message that carries weather says where the bot got it (spec §2.2, the
 flags nibble's bits 3-2): off its own GOES dish, from NOAA over the internet, or both. The app
-says it in one quiet line in the footnote voice — "From the GOES satellite", "From the internet",
-"From GOES and the internet" — never a badge and never a colour, because it is provenance and not
+says it in one quiet line in the footnote voice — "Via GOES satellite", "Via internet",
+"Via GOES and internet" — never a badge and never a colour, because it is provenance and not
 a warning. It sits under the text on a **product screen**, under the point line on the
 **forecast** card, and under the issuing office on **alert detail**.
 
@@ -806,7 +811,7 @@ whole of that message's nibble is the reason the warning ended (spec §4) — so
 inferred from one.
 
 A text reply the bot had to cut adds a second clause on the same line, joined with a middot: "The
-rest didn't fit on the radio." That is a different claim from the missing-part marker in the body.
+for radio." That is a different claim from the missing-part marker in the body.
 A marker is a chunk the air ate and Ask for latest may fill it; this is the whole reply that radio
 will ever send for that request, and the bot now cuts at a sentence boundary rather than mid-word,
 so the text ends where a sentence does.
@@ -1062,3 +1067,82 @@ demand: it is parked, the outlines are loaded once, and it is judged again.
 
 The common case is two lines: nothing in the message touched a warning, or nothing is watched, and
 the evaluator reads no state at all.
+
+## 17. The national alert map
+
+One request answered with a compact sweep of every area in the country under an alert, shaded on
+the app's own zone and county outlines (spec §7C, message type 10). It answers the one question
+the place pages cannot: *where is anything happening at all?*
+
+It is reached from the alerts list, as a row under the map: **National alert map**, with when the
+held sweep was built, or "Not asked for yet" — which is what the row says almost always, because
+nothing in the app asks for a sweep without a tap.
+
+### 17.1 Airtime is the constraint
+
+A sweep is up to **eight packets**, broadcast to everyone listening on `#meshwx`. That is the
+most expensive answer in the protocol, and it is the whole design of this screen:
+
+- **Nothing asks on its own.** No request on appear, none on a pull to refresh, none on a timer,
+  and Update never plans one. The only thing that sends is a tap on the button.
+- **The tap says what it costs before it is spent** — "About 7 packets on the shared channel." —
+  above the button, not under it, because a reader who has already tapped does not need telling
+  afterwards. The wider scope says 8.
+- **The answer is public**, and the button carries the same footnote every other ask button does:
+  "Everyone listening on #meshwx gets the answer."
+- **Two scopes.** Warnings and watches is the default and sends `>wmap`; "Also advisories" is the
+  wider one and sends `>wmap all`. Both share one five-minute answer slot, because the narrow
+  sweep is a subset of the wide one and spending eight more packets a minute later to widen it is
+  exactly what that rule exists to stop.
+
+A rate-limited refusal (Not available, reason 4) is **not an error and not the radio being busy**.
+Somebody else has just spent those eight packets, so this phone is about to be handed the same
+map: "Another radio asked WX-AUS for the map recently — try again in a few minutes." Every other
+request keeps the §11.2 wording it had.
+
+### 17.2 What the screen says
+
+The map itself, then four kinds of sentence, then the legend and the ask:
+
+- **When it was built**, on the radio's clock, and how old that makes it: "Map as of 8:02 PM ·
+  3 h old". Never when the packets arrived (§10.5).
+- **Which scope arrived** — read off the sweep's own flag, not off the button that asked for it:
+  a radio may answer the wider request with the narrower sweep.
+- **How many areas are under an alert**, or, for a sweep that is whole and uncut and found none,
+  that the country is clear. A sweep that was **cut** or is **missing packets** may not say that:
+  it says nothing about the areas it never named, and a gap in it is not calm weather. Both facts
+  are orange lines of their own — "Cut to fit — an area not shaded here may still be under an
+  alert" and "3 of 8 parts arrived — some of the country is missing".
+- **Areas the app cannot draw.** The bundle is a cut in time and the UGC tables grow, so a code
+  with no outline is a normal outcome (§9). Those areas are counted and said out loud rather than
+  swallowed, so nobody reads the missing shape as clear weather.
+
+A **partial sweep is still drawn**. Six packets of eight is most of a country, and a map with two
+states missing, labelled as such, is worth more than an empty screen.
+
+The **legend** lists the events actually in the sweep, most severe first, each beside the colour
+it is drawn in — not the colour names, which mean nothing on their own. The shading is the same
+lookup an alert's own map does: `MeshWXGeometry.rings(for:)` for the outline, `MeshWXEventTint`
+for the colour, laid down through `WeatherMapDrawing.overlays`, so the two maps cannot drift
+apart. Areas are deduplicated, first entry wins — entries arrive most severe first, so a county
+under both a Tornado Warning and a Flood Advisory draws red, once.
+
+### 17.3 Tapping an area
+
+On the full map, a tap on a shaded area asks that area for detail with the existing
+`>w <area>` request — **one packet, not a sweep**. A tap on empty land asks for nothing rather
+than guessing at a county, and a tap while anything else is on the air does nothing. The hint
+above the map says what a tap does, and disappears while a request is pending or while everything
+is blocked, so the page never tells someone to tap while nothing would go out (§3.1 U-24).
+
+### 17.4 State
+
+One sweep per bot, the newest, complete or partial (`WeatherBotState.areaSweep`). Packets
+assemble by `group` the way Text chunks do (§8.1), but a **newer `built` replaces the held sweep
+outright** rather than merging into it: two sweeps are two pictures of the same country, and
+merging them draws this hour's Texas beside last hour's Montana. A sweep built before the one
+held — a backlog drained from the radio at connect — changes nothing. The same build time under a
+new `group` is the radio sending the sweep again, so that assembly starts over too.
+
+The field is `decodeIfPresent` with no default beyond nil, so a state file written before this
+shipped still loads: absent means "no sweep", which is exactly right — nobody had asked for one.

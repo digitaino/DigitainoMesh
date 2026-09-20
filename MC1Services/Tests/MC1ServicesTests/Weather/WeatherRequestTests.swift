@@ -27,7 +27,9 @@ struct WeatherRequestTests {
       (.metar(station: "KAUS"), ">metar KAUS"),
       (.taf(station: "KAUS"), ">taf KAUS"),
       (.hazardousOutlook, ">hwo"),
-      (.coverage, ">cov")
+      (.coverage, ">cov"),
+      (.areaSweep(includesAdvisories: false), ">wmap"),
+      (.areaSweep(includesAdvisories: true), ">wmap all")
     ]
     for (request, text) in expected {
       #expect(request.wireText == text)
@@ -50,6 +52,10 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.taf(station: "KAUS").requestLetter == "t")
     #expect(WeatherRequest.hazardousOutlook.requestLetter == "h")
     #expect(WeatherRequest.coverage.requestLetter == "c")
+    // The sweep rides on `w` like every other warning request, so a refusal for it comes back
+    // under the same letter (spec §8.3).
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false).requestLetter == "w")
+    #expect(WeatherRequest.areaSweep(includesAdvisories: true).requestLetter == "w")
   }
 
   /// Spec §7A: a statement describes the bot that sent it, so another bot's — or another
@@ -59,6 +65,10 @@ struct WeatherRequestTests {
     #expect(!WeatherRequest.coverage.acceptsAnswerFromAnyBot)
     #expect(!WeatherRequest.observations.acceptsAnswerFromAnyBot)
     #expect(WeatherRequest.observation(station: "KAUS").acceptsAnswerFromAnyBot)
+    // Spec §7C: a sweep is one bot's reading of the country, cut where its own feed runs out,
+    // so another bot's sweep is not this request's answer.
+    #expect(!WeatherRequest.areaSweep(includesAdvisories: false).acceptsAnswerFromAnyBot)
+    #expect(!WeatherRequest.areaSweep(includesAdvisories: true).acceptsAnswerFromAnyBot)
   }
 
   @Test
@@ -83,5 +93,17 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.taf(station: "KAUS").expectedReply == .text(subject: 5))
     #expect(WeatherRequest.hazardousOutlook.expectedReply == .text(subject: 6))
     #expect(WeatherRequest.coverage.expectedReply == .coverage)
+    // Both scopes expect the same answer: the sweep's own flag says which one arrived, and a bot
+    // that will not widen to advisories still answers the tap with the narrow sweep.
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false).expectedReply == .areaSweep)
+    #expect(WeatherRequest.areaSweep(includesAdvisories: true).expectedReply == .areaSweep)
+  }
+
+  /// Two scopes are two requests: one on the air must not settle the other's button, and the
+  /// request log has to be able to say which one was asked for.
+  @Test
+  func `the two map scopes are distinct requests`() {
+    #expect(WeatherRequest.areaSweep(includesAdvisories: false)
+      != WeatherRequest.areaSweep(includesAdvisories: true))
   }
 }

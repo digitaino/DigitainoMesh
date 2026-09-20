@@ -58,6 +58,14 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// tell "outside the area" from "nothing said yet" until one does — and withholds both the
   /// check and the out-of-area requests meanwhile (docs/MESHWX_UI.md §6, §11.1).
   case coverage
+  /// `>wmap` / `>wmap all` — every area in the country under an alert, as an Area sweep of at
+  /// most eight packets (spec §7C).
+  ///
+  /// The most expensive request in the grammar, and the only one whose cost is stated on the
+  /// button before it is spent (docs/MESHWX_UI.md §17). `includesAdvisories` sends `>wmap all`,
+  /// which widens the sweep from warnings and watches to advisories as well — more of the
+  /// country shaded, and more of the eight packets used.
+  case areaSweep(includesAdvisories: Bool)
 
   /// The DM body, exactly as the bot parses it.
   public var wireText: String {
@@ -80,6 +88,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case let .taf(station): ">taf \(station)"
     case .hazardousOutlook: ">hwo"
     case .coverage: ">cov"
+    case let .areaSweep(includesAdvisories): includesAdvisories ? ">wmap all" : ">wmap"
     }
   }
 
@@ -110,6 +119,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case .metar, .taf: .text(subject: WeatherTextSubjectCode.metarTaf)
     case .hazardousOutlook: .text(subject: WeatherTextSubjectCode.hazardousOutlook)
     case .coverage: .coverage
+    case .areaSweep: .areaSweep
     }
   }
 
@@ -128,9 +138,11 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     // A narrative names its event and areas but not its office or tracking number, so only the
     // bot asked can vouch that the text is for the warning asked about. A coverage statement
     // describes the bot that sent it and nothing else, so another bot's says nothing about this
-    // one's area.
+    // one's area. A sweep is one bot's reading of the country — what it carries, and how far its
+    // own feed reaches — and a second bot's sweep may be cut somewhere else entirely, so only the
+    // bot asked settles this one.
     case .digest, .activeWarnings, .warningsTouching, .warningText, .observations, .homeForecast, .forecastForPlace,
-      .hazardousOutlook, .coverage:
+      .hazardousOutlook, .coverage, .areaSweep:
       false
     }
   }
@@ -153,6 +165,10 @@ public enum WeatherReplyKind: Sendable, Hashable {
   /// `>cov`: the bot's statement of its area. It carries no argument to check it against —
   /// a statement is about whichever bot sent it.
   case coverage
+  /// `>wmap`: a packet of the national area sweep. The scope asked for is not checked against
+  /// the answer: a bot that will not widen to advisories answers the narrow sweep, and that is
+  /// still the answer to the tap — the sweep's own flag says which scope arrived.
+  case areaSweep
 }
 
 /// Text subjects on the wire (spec §8.1), kept as raw codes here so this file needs no

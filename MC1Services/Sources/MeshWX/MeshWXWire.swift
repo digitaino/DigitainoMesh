@@ -43,6 +43,9 @@ public enum MeshWXWire {
   static let coverageFixedSize = 14
   /// Header, the sender's key prefix and the request's own time, before the text (spec §7B).
   static let requestFixedSize = 14
+  /// Header, the build time, and the three assembly bytes, before the entries (spec §7C).
+  static let areaSweepFixedSize = 11
+  static let areaSweepEntrySize = 4
 
   // MARK: Counts and limits (spec §3, §5, §6, §7, §8.1)
 
@@ -71,6 +74,17 @@ public enum MeshWXWire {
   /// UTF-8 bytes a Request's text may take (spec §7B). Well under the packet budget: the whole
   /// §8.2 grammar fits, and a request is not the place to spend airtime.
   public static let maxRequestTextBytes = 40
+  /// Entries one Area sweep packet carries (spec §7C): `(165 − 11) / 4` is 38, and the packet
+  /// budget is what the cap is made of.
+  public static let maxAreaSweepEntries = 38
+  /// Packets one sweep may be split into (spec §7C), the same ceiling a Text reply has. Eight
+  /// packets is the whole country's worth of airtime, which is why the screen never asks by itself.
+  public static let maxAreaSweepPackets = 8
+  /// Consecutive UGC numbers one sweep entry may cover: the run field is six bits, carried less
+  /// one, so 1 to 64.
+  public static let maxAreaSweepRun: UInt8 = 64
+  /// The largest UGC number a sweep entry may start at: the start field is ten bits.
+  public static let maxAreaSweepStart: UInt16 = 0x03FF
 
   // MARK: Sentinels (spec §6, §7)
   //
@@ -150,11 +164,37 @@ public enum MeshWXWire {
 
   /// Area run state byte, bit 7: the run numbers counties, not forecast zones.
   static let areaCountyBit: UInt8 = 0x80
+
+  // MARK: Area sweep entry (spec §7C)
+  //
+  // A sweep entry is a Warning's area run squeezed from four bytes of state-plus-u16-plus-run
+  // into four bytes that also carry the event, which is what lets one packet name 38 runs
+  // instead of a warning's 30. The state and kind therefore sit the *other* way round from a
+  // Warning's run byte: `state << 1 | kind`, not `kind << 7 | state`. Two layouts for the same
+  // two fields is a trap worth naming rather than a constant worth sharing.
+
+  /// Sweep entry byte 1, bit 0: the numbers are counties (`C`), not forecast zones (`Z`).
+  static let sweepCountyBit: UInt8 = 0x1
+  /// How far up byte 1 the state index sits.
+  static let sweepStateShift: UInt8 = 1
+  /// Bits 0-9 of a sweep entry's u16: the first UGC number in the run.
+  static let sweepStartMask: UInt16 = 0x03FF
+  /// Bits 10-15 of a sweep entry's u16: the run length, less one.
+  static let sweepRunShift: UInt16 = 10
+
+  // MARK: Area sweep flags nibble (spec §7C)
+
+  /// Bit 0: entries were dropped to fit, so an area absent from the sweep may still be under
+  /// an alert. Never read a gap in a cut sweep as clear weather.
+  static let flagSweepCut: UInt8 = 0x1
+  /// Bit 1: advisories are in this sweep, not only warnings and watches. Clear means the wider
+  /// scope was not asked for, **not** that no advisory is active anywhere.
+  static let flagSweepAdvisories: UInt8 = 0x2
 }
 
-/// The nine structured message types (spec §2.2, high nibble of the type byte).
+/// The ten structured message types (spec §2.2, high nibble of the type byte).
 ///
-/// Types 10-11 are reserved and 12-15 are free for third-party experiments, so this is
+/// Type 11 is reserved and 12-15 are free for third-party experiments, so this is
 /// deliberately not exhaustive over the nibble: ``MeshWXHeader/rawType`` keeps the byte
 /// and receivers ignore what they do not know.
 public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable {
@@ -170,6 +210,9 @@ public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable 
   /// Spec revision 6, §7B: an app's `>` request, flooded on `#meshwx` as a datagram. The one
   /// type this app *sends*; another phone's, heard on the channel, is not ours to act on.
   case request = 9
+  /// Spec revision 8, §7C: every area in the country under an alert, in one sweep of at most
+  /// eight packets.
+  case areaSweep = 10
 }
 
 /// Where the weather in a message came from (spec §2.2, revision 7: flags bits 3-2).
