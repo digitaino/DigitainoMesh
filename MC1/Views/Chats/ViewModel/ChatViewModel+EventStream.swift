@@ -64,6 +64,9 @@ extension ChatViewModel {
       timeline.enqueueReload(messageID: messageID)
       // A repeater echoed our packet: the send was heard, so nothing to offer.
       noteNoRepeatsInput(.repeatHeard(messageID: messageID, count: count))
+      // The echo is also what stamps `packetContentHash`, so this is the first
+      // moment the message can be looked up at all. Bring the next pass forward.
+      requestObserverCountPass()
 
     case let .reactionReceived(messageID, _):
       timeline.enqueueReload(messageID: messageID)

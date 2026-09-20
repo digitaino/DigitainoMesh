@@ -621,6 +621,24 @@
 /* Location: UnifiedMessageBubble.swift - Plural form of repeats */
 "chats.message.repeat.plural" = "跳";
 
+/* Location: BubbleFooterRow.swift - Singular form of observer, for the eye badge's VoiceOver label */
+"chats.message.observers.singular" = "个观察站";
+
+/* Location: BubbleFooterRow.swift - Plural form of observers, for the eye badge's VoiceOver label */
+"chats.message.observers.plural" = "个观察站";
+
+/* Location: BubbleFooterRow.swift - VoiceOver label for the eye badge before the count has been looked up */
+"chats.message.observers.pending" = "观察站数量待获取";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row - %1$@ is the observer count (or an ellipsis while unknown), %2$@ is how long ago the count was last checked */
+"chats.message.observers.diagnostic" = "观察站：%1$@ · %2$@前检查";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when the packet is known but no lookup has run yet */
+"chats.message.observers.diagnosticNotChecked" = "观察站：尚未检查";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when no echo has stamped the message's packet hash yet */
+"chats.message.observers.diagnosticNoHash" = "观察站：尚无数据包哈希";
+
 /* Location: UnifiedMessageBubble.swift - Context menu text showing sent time - %@ is formatted date */
 "chats.message.info.sent" = "已发送：%@";
 

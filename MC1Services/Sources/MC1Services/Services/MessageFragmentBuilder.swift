@@ -256,7 +256,11 @@ public enum MessageFragmentBuilder {
       // Second gate on direction: the detector only ever arms outgoing sends, but the
       // card is meaningless on an incoming row, so an inconsistent input can never
       // render one.
-      noRepeatsRetry: message.isOutgoing ? inputs.noRepeatsRetry : nil
+      noRepeatsRetry: message.isOutgoing ? inputs.noRepeatsRetry : nil,
+      observerCount: message.packetObserverCount,
+      // The eye is a "did my message get out" readout, so it is meaningless on a
+      // received row: gated on direction here as well as on the two settings.
+      showsObserverCount: message.isOutgoing && inputs.showsObserverCounts
     )
   }
 

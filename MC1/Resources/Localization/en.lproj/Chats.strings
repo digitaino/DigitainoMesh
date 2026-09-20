@@ -621,6 +621,24 @@
 /* Location: UnifiedMessageBubble.swift - Plural form of repeats */
 "chats.message.repeat.plural" = "repeats";
 
+/* Location: BubbleFooterRow.swift - Singular form of observer, for the eye badge's VoiceOver label */
+"chats.message.observers.singular" = "observer";
+
+/* Location: BubbleFooterRow.swift - Plural form of observers, for the eye badge's VoiceOver label */
+"chats.message.observers.plural" = "observers";
+
+/* Location: BubbleFooterRow.swift - VoiceOver label for the eye badge before the count has been looked up */
+"chats.message.observers.pending" = "observer count pending";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row - %1$@ is the observer count (or an ellipsis while unknown), %2$@ is how long ago the count was last checked */
+"chats.message.observers.diagnostic" = "Observers: %1$@ · checked %2$@ ago";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when the packet is known but no lookup has run yet */
+"chats.message.observers.diagnosticNotChecked" = "Observers: not checked yet";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when no echo has stamped the message's packet hash yet */
+"chats.message.observers.diagnosticNoHash" = "Observers: no packet hash yet";
+
 /* Location: DuplicateCountBadge.swift - Badge text on a collapsed run of duplicate copies - %d is the copy count */
 "chats.message.duplicates.badge" = "×%d";
 

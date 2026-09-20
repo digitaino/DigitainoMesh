@@ -196,6 +196,17 @@ public final class Message {
   /// leaves the device unless the user turns that feature on.
   public var packetContentHash: String?
 
+  /// Distinct observers on the CoreScope server that reported hearing this message's
+  /// packet, cached off the last successful lookup so a relaunch does not refetch.
+  /// Only ever written for messages this phone sent, and only while both Packet Scope
+  /// and the observer-count switch are on. Nil means "never looked up".
+  public var packetObserverCount: Int?
+
+  /// When ``packetObserverCount`` was last written. Drives the re-poll cadence
+  /// (fresh sends re-check in seconds, older ones in hours). Nil with a non-nil count
+  /// is not expected; both are written together.
+  public var packetObserversCheckedAt: Date?
+
   /// Heard repeats for this message (cascade delete)
   @Relationship(deleteRule: .cascade, inverse: \MessageRepeat.message)
   var repeats: [MessageRepeat]?
@@ -334,6 +345,8 @@ public final class Message {
     userLatitude = dto.userLatitude
     userLongitude = dto.userLongitude
     packetContentHash = dto.packetContentHash
+    packetObserverCount = dto.packetObserverCount
+    packetObserversCheckedAt = dto.packetObserversCheckedAt
   }
 }
 
@@ -427,6 +440,10 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
   public var userLongitude: Double?
   /// Mesh-wide packet identity from RxLog correlation. See `Message.packetContentHash`.
   public var packetContentHash: String?
+  /// Cached distinct observer count. See `Message.packetObserverCount`.
+  public var packetObserverCount: Int?
+  /// When the cached count was written. See `Message.packetObserversCheckedAt`.
+  public var packetObserversCheckedAt: Date?
 
   /// Explicit Codable so backups predating ``sortDate`` decode cleanly.
   /// Legacy envelopes have no `sortDate` key; it falls back to `createdAt`,
@@ -441,7 +458,7 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
          linkPreviewIconData, linkPreviewFetched, containsSelfMention, mentionSeen,
          failureSeen, timestampCorrected, senderTimestamp, reactionSummary, routeType,
          regionScope, regionScopeMatches, userLatitude, userLongitude,
-         packetContentHash
+         packetContentHash, packetObserverCount, packetObserversCheckedAt
   }
 
   public init(from decoder: Decoder) throws {
@@ -490,6 +507,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     userLatitude = try container.decodeIfPresent(Double.self, forKey: .userLatitude)
     userLongitude = try container.decodeIfPresent(Double.self, forKey: .userLongitude)
     packetContentHash = try container.decodeIfPresent(String.self, forKey: .packetContentHash)
+    packetObserverCount = try container.decodeIfPresent(Int.self, forKey: .packetObserverCount)
+    packetObserversCheckedAt = try container.decodeIfPresent(Date.self, forKey: .packetObserversCheckedAt)
   }
 
   public init(from message: Message, includeLinkPreviewBlobs: Bool = true) {
@@ -545,6 +564,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     userLatitude = message.userLatitude
     userLongitude = message.userLongitude
     packetContentHash = message.packetContentHash
+    packetObserverCount = message.packetObserverCount
+    packetObserversCheckedAt = message.packetObserversCheckedAt
   }
 
   /// Memberwise initializer for creating DTOs directly
@@ -590,7 +611,9 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     regionScopeMatches: [String] = [],
     userLatitude: Double? = nil,
     userLongitude: Double? = nil,
-    packetContentHash: String? = nil
+    packetContentHash: String? = nil,
+    packetObserverCount: Int? = nil,
+    packetObserversCheckedAt: Date? = nil
   ) {
     self.id = id
     self.radioID = radioID
@@ -634,6 +657,8 @@ public struct MessageDTO: Sendable, Equatable, Hashable, Identifiable, Codable {
     self.userLatitude = userLatitude
     self.userLongitude = userLongitude
     self.packetContentHash = packetContentHash
+    self.packetObserverCount = packetObserverCount
+    self.packetObserversCheckedAt = packetObserversCheckedAt
   }
 
   public var isOutgoing: Bool {

@@ -586,6 +586,24 @@
 /* Location: UnifiedMessageBubble.swift - Plural form of repeats */
 "chats.message.repeat.plural" = "повторов";
 
+/* Location: BubbleFooterRow.swift - Singular form of observer, for the eye badge's VoiceOver label */
+"chats.message.observers.singular" = "наблюдатель";
+
+/* Location: BubbleFooterRow.swift - Plural form of observers, for the eye badge's VoiceOver label */
+"chats.message.observers.plural" = "наблюдателей";
+
+/* Location: BubbleFooterRow.swift - VoiceOver label for the eye badge before the count has been looked up */
+"chats.message.observers.pending" = "число наблюдателей ещё не получено";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row - %1$@ is the observer count (or an ellipsis while unknown), %2$@ is how long ago the count was last checked */
+"chats.message.observers.diagnostic" = "Наблюдатели: %1$@ · проверено %2$@ назад";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when the packet is known but no lookup has run yet */
+"chats.message.observers.diagnosticNotChecked" = "Наблюдатели: ещё не проверено";
+
+/* Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when no echo has stamped the message's packet hash yet */
+"chats.message.observers.diagnosticNoHash" = "Наблюдатели: хеш пакета ещё не получен";
+
 /* Location: UnifiedMessageBubble.swift - Context menu text showing sent time - %@ is formatted date */
 "chats.message.info.sent" = "Отправлено: %@";
 

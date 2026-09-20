@@ -22,6 +22,10 @@ struct BubbleFooterRow: View {
   var timeColor: Color = .secondary
   /// Retry callback for the failed-status icon; only outgoing bubbles pass one.
   var onRetry: (() -> Void)?
+  /// Tap handler for the observer-count eye. Opens the message's actions sheet —
+  /// the same surface a long press opens, because the Network View lives there and
+  /// the eye is a shortcut to it, not a second destination.
+  var onObserverTap: (() -> Void)?
 
   var body: some View {
     let segments = footerSegments
@@ -65,6 +69,15 @@ struct BubbleFooterRow: View {
 
     if footer.heardRepeats > 0, footer.showStatusRow {
       badges.append(AnyView(BubbleRepeatFooter(count: footer.heardRepeats, color: timeColor)))
+    }
+    // Not gated on `heardRepeats`: zero repeats heard with observers on the server
+    // is exactly the case the badge exists to show, so it renders on its own.
+    if footer.showsObserverCount, footer.showStatusRow {
+      badges.append(AnyView(BubbleObserverFooter(
+        count: footer.observerCount,
+        color: timeColor,
+        onTap: onObserverTap
+      )))
     }
     if footer.sendCount > 1, footer.showStatusRow {
       badges.append(AnyView(BubbleSendCountFooter(count: footer.sendCount, color: timeColor)))
@@ -235,6 +248,65 @@ private struct BubbleRepeatFooter: View {
   }
 }
 
+/// Distinct observers on the CoreScope server that heard this message's packet:
+/// the eye glyph and the count. Only ever on the user's own sent bubbles, and only
+/// while both Packet Scope switches are on.
+///
+/// A nil count renders `…`, never `0`: the lookup has not landed (no echo yet, the
+/// pass has not run, the server is unreachable), and a zero would claim nobody heard
+/// the message. Tapping opens the message's actions sheet, where the Network View
+/// button lives — the eye is a shortcut into the existing surface.
+private struct BubbleObserverFooter: View {
+  let count: Int?
+  let color: Color
+  let onTap: (() -> Void)?
+
+  private var accessibilityLabel: String {
+    MessageObserverAccessibility.label(count: count)
+  }
+
+  var body: some View {
+    Button {
+      onTap?()
+    } label: {
+      HStack(spacing: 2) {
+        Image(systemName: "eye")
+        if let count {
+          Text("\(count)")
+        } else {
+          Text(verbatim: "…")
+        }
+      }
+      .font(.caption2)
+      .foregroundStyle(color)
+      .footerChip(color: color)
+      // The chip itself is ~18 pt tall; pad the tappable area out to a comfortable
+      // target without moving the chip, then reclaim the space so the footer's
+      // spacing is unchanged.
+      .padding(8)
+      .contentShape(.rect)
+      .padding(-8)
+    }
+    .buttonStyle(.plain)
+    .disabled(onTap == nil)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(accessibilityLabel)
+  }
+}
+
+/// Shared VoiceOver label for the eye badge and the whole-bubble combined label.
+enum MessageObserverAccessibility {
+  static func label(count: Int?) -> String {
+    guard let count else {
+      return L10n.Chats.Chats.Message.Observers.pending
+    }
+    let word = count == 1
+      ? L10n.Chats.Chats.Message.Observers.singular
+      : L10n.Chats.Chats.Message.Observers.plural
+    return "\(count) \(word)"
+  }
+}
+
 /// Number of times an outgoing message was (re)sent over the mesh, shown as a
 /// `2x`-style multiplier badge. Only appears once the send count exceeds one.
 private struct BubbleSendCountFooter: View {
@@ -273,8 +345,8 @@ private struct BubbleStatusFooter: View {
       case .retrying:
         HStack(spacing: 3) {
           spinner
-          if footer.maxRetryAttempts > 0 {
-            Text("\(footer.retryAttempt + 1)/\(footer.maxRetryAttempts)")
+          if let progress = footer.sendProgress {
+            Text("\(progress.send)/\(progress.of)")
               .font(.caption2)
           }
         }
@@ -357,12 +429,21 @@ enum MessageStatusText {
     case .failed:
       return L10n.Chats.Chats.Message.Status.failed
     case .retrying:
-      let displayAttempt = footer.retryAttempt + 1
-      let maxAttempts = footer.maxRetryAttempts
-      if maxAttempts > 0 {
-        return L10n.Chats.Chats.Message.Status.retryingAttempt(displayAttempt, maxAttempts)
+      if let progress = footer.sendProgress {
+        return L10n.Chats.Chats.Message.Status.retryingAttempt(progress.send, progress.of)
       }
       return L10n.Chats.Chats.Message.Status.retrying
     }
+  }
+}
+
+private extension MessageFooter {
+  /// The send in flight and the total, both counted as sends: "2/4" while the second of four
+  /// goes out, "4/4" for the last (flood) one. The retry loop stores the retry index (0 for
+  /// the second send) and the retry budget, `MessageServiceConfig.maxAttempts - 1`, so the
+  /// total follows the config. Nil for a row saved without a budget.
+  var sendProgress: (send: Int, of: Int)? {
+    guard maxRetryAttempts > 0 else { return nil }
+    return (retryAttempt + 2, maxRetryAttempts + 1)
   }
 }

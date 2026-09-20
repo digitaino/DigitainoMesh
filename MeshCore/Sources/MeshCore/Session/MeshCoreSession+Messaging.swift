@@ -61,7 +61,10 @@ public extension MeshCoreSession {
   ///                  required if path reset is enabled.
   ///   - text: The message text to send.
   ///   - timestamp: The message timestamp. Defaults to current time.
-  ///   - maxAttempts: The maximum number of total attempts to make. Defaults to 3.
+  ///   - maxAttempts: The maximum number of total attempts to make. Defaults to 3. At most
+  ///                  4 are made (attempt indices 0-3): firmware hashes `attempt & 0x03`, so
+  ///                  attempt 4 would repeat attempt 0's ACK code, which a repeater that
+  ///                  already relayed it drops.
   ///   - floodAfter: The number of failed attempts after which to reset the path to flood.
   ///                 Defaults to 2.
   ///   - maxFloodAttempts: The maximum number of attempts to make while in flood mode.
@@ -87,8 +90,9 @@ public extension MeshCoreSession {
     var attempts = 0
     var floodAttempts = 0
     var isFloodMode = false
+    let attemptLimit = min(maxAttempts, 4)
 
-    while attempts < maxAttempts, !isFloodMode || floodAttempts < maxFloodAttempts {
+    while attempts < attemptLimit, !isFloodMode || floodAttempts < maxFloodAttempts {
       if attempts == floodAfter, !isFloodMode {
         logger.info("Resetting path to flood after \(attempts) failed attempts")
         do {

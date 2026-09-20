@@ -81,6 +81,9 @@ struct ChatConversationView: View {
   @AppStorage(AppStorageKey.linkPreviewsEnabled.rawValue) private var previewsEnabled = AppStorageKey.defaultLinkPreviewsEnabled
   @AppStorage(AppStorageKey.replyWithQuote.rawValue) private var replyWithQuote = AppStorageKey.defaultReplyWithQuote
   @AppStorage(AppStorageKey.showMapPreviewThumbnails.rawValue) private var showMapPreviewThumbnails = AppStorageKey.defaultShowMapPreviewThumbnails
+  @AppStorage(AppStorageKey.packetScopeEnabled.rawValue) private var packetScopeEnabled = AppStorageKey.defaultPacketScopeEnabled
+  @AppStorage(AppStorageKey.packetScopeObserverCountsEnabled.rawValue)
+  private var packetScopeObserverCounts = AppStorageKey.defaultPacketScopeObserverCountsEnabled
 
   // MARK: - Environment
 
@@ -112,7 +115,10 @@ struct ChatConversationView: View {
       currentUserName: appState.localNodeName,
       themeID: theme.id,
       contentSizeCategory: AppearanceToken.contentSizeCategoryToken(dynamicTypeSize),
-      preferredLanguageCode: EnvInputs.preferredLanguageCode(from: locale)
+      preferredLanguageCode: EnvInputs.preferredLanguageCode(from: locale),
+      // ANDed, never read apart: the master opt-in is what authorises a hash to
+      // leave the phone, and the second switch only chooses whether the count shows.
+      showsObserverCounts: packetScopeEnabled && packetScopeObserverCounts
     )
   }
 

@@ -421,6 +421,19 @@ final class ChatViewModel {
   /// `ChatTimelinePrimer` does not subscribe.
   @ObservationIgnored var snapshotResolutionTask: Task<Void, Never>?
 
+  /// Conversation-scoped polling loop for the observer-count eye badge. Owned here
+  /// (extensions cannot add stored properties) but driven entirely from
+  /// `ChatViewModel+PacketScope`. Nil whenever no conversation is on screen —
+  /// that is the invariant that stops the app from talking to CoreScope in the
+  /// background. Interactive only; `ChatTimelinePrimer` never starts it.
+  @ObservationIgnored var observerCountTask: Task<Void, Never>?
+
+  /// Monotonic nudge counter for `observerCountTask`. `requestObserverCountPass()`
+  /// bumps it and the loop's sleep watches it, so an echo that has just stamped a
+  /// content hash brings the next pass forward without cancelling an in-flight
+  /// request. Not `@Observable` state: it drives a task, never a view.
+  @ObservationIgnored var observerCountNudge: Int = 0
+
   /// Per-instance override of the receive-time prefetch timeout. Production
   /// callers leave this at `defaultPrefetchTimeout` (3s); tests can shorten
   /// it to bound their wall-clock budget.
@@ -606,6 +619,7 @@ final class ChatViewModel {
   deinit {
     dimensionResolutionTask?.cancel()
     snapshotResolutionTask?.cancel()
+    observerCountTask?.cancel()
   }
 
   static func copyForEnqueueFailure(_ error: Error) -> String {

@@ -401,6 +401,61 @@ struct MessageServiceSendTests {
 
   @Test
   @MainActor
+  func `resendChannelMessage forgets the resent packet's hash and observer count`() async throws {
+    // A resend puts a different packet on the air under the same message id, and the
+    // hash stamp is first-writer-wins — so without an explicit clear the row goes on
+    // describing the packet that was resent. Rafael, 2026-09-05: "when we resend a
+    // message the eye/network view does not update." The badge should fall back to
+    // `…` until the first echo of *this* transmission stamps the new hash.
+    let transport = MockTransport()
+    let session = MeshCoreSession(transport: transport)
+    let startTask = Task { try await session.start() }
+    try await waitUntil("session should send app start") {
+      await transport.sentData.count == 1
+    }
+    await transport.simulateReceive(makeSelfInfoPacket())
+    try await startTask.value
+    defer { Task { await session.stop() } }
+
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let service = MessageService(session: session, dataStore: dataStore, contactService: nil)
+
+    let messageID = UUID()
+    try await dataStore.saveMessage(
+      MessageDTO.testChannelMessage(
+        id: messageID,
+        radioID: testDeviceID,
+        channelIndex: 0,
+        status: .sent,
+        heardRepeats: 3,
+        sendCount: 1
+      )
+    )
+    // The state a message in the field is in by the time Send Again is tapped: an
+    // echo stamped its hash and a scope pass cached a count against it.
+    try await dataStore.setMessagePacketContentHashIfMissing(
+      id: messageID,
+      contentHash: "286dcbdeab84b458"
+    )
+    try await dataStore.setMessageObserverCount(id: messageID, count: 7, checkedAt: Date())
+
+    let resendTask = Task { try await service.resendChannelMessage(messageID: messageID) }
+    try await waitUntil("resend should send CMD_SEND_CHANNEL_MSG") {
+      await transport.sentData.count == 2
+    }
+    await transport.simulateOK()
+    _ = try await resendTask.value
+
+    let stored = try await dataStore.fetchMessage(id: messageID)
+    #expect(stored?.packetContentHash == nil, "the resent packet's hash must not survive the resend")
+    #expect(stored?.packetObserverCount == nil, "the eye must fall back to … rather than show a stale count")
+    #expect(stored?.packetObserversCheckedAt == nil)
+    #expect(stored?.status == .sent, "clearing the packet scope must not disturb the delivery state")
+  }
+
+  @Test
+  @MainActor
   func `resendDirectMessage increments sendCount and broadcasts .resent on a successful resend`() async throws {
     let transport = MockTransport()
     let session = MeshCoreSession(
@@ -1116,5 +1171,76 @@ struct MessageServiceSendTests {
       #expect(directSendsBeforeReset == floodAfter,
               "resetPath must fire after exactly config.floodAfter direct sends")
     }
+  }
+
+  /// The default config gives a DM four sends with one timestamp: attempts 0-2 on the stored
+  /// path, then resetPath and attempt 3 by flood. Attempt 4 would repeat attempt 0's ACK code,
+  /// which a repeater that already relayed it drops.
+  @Test
+  @MainActor
+  func `the default config sends attempts 0-2 on the stored path, then resets the path and sends attempt 3 by flood`() async throws {
+    let transport = MockTransport()
+    let session = MeshCoreSession(
+      transport: transport,
+      configuration: SessionConfiguration(defaultTimeout: 10)
+    )
+    let startTask = Task { try await session.start() }
+    try await waitUntil("session should send app start") {
+      await transport.sentData.count == 1
+    }
+    await transport.simulateReceive(makeSelfInfoPacket())
+    try await startTask.value
+    defer { Task { await session.stop() } }
+
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let service = MessageService(
+      session: session,
+      dataStore: dataStore,
+      contactService: nil,
+      config: MessageServiceConfig()
+    )
+
+    let contact = ContactDTO.testContact(id: UUID(), radioID: testDeviceID)
+    let ackCode = Data([0xA1, 0xB2, 0xC3, 0xD4])
+
+    // Never emit the end-to-end ACK, so every attempt times out.
+    let responder = Task {
+      var responded = 1 // app start already accounted for
+      while !Task.isCancelled {
+        let count = await transport.sentData.count
+        if count > responded {
+          responded = count
+          let newest = await transport.sentData.last
+          switch newest?.first {
+          case CommandCode.resetPath.rawValue:
+            await transport.simulateOK()
+          case CommandCode.getContactByKey.rawValue:
+            await transport.simulateReceive(Data([ResponseCode.error.rawValue]))
+          default:
+            var msgSent = Data([ResponseCode.messageSent.rawValue])
+            msgSent.append(0)
+            msgSent.append(ackCode)
+            msgSent.append(uint32Bytes(10)) // ~12ms ack window
+            await transport.simulateReceive(msgSent)
+          }
+        }
+        await Task.yield()
+      }
+    }
+    defer { responder.cancel() }
+
+    let sent = try await service.sendMessageWithRetry(text: "four sends", to: contact)
+    #expect(sent.status == .sent)
+
+    let sends = await transport.sentData
+    // sendMessage packet: [code, type, attempt, timestamp LE32, key prefix, text]
+    let messageSends = sends.filter { $0.first == CommandCode.sendMessage.rawValue }.map { [UInt8]($0) }
+    #expect(messageSends.map { $0[2] } == [0, 1, 2, 3])
+    #expect(Set(messageSends.map { Array($0[3..<7]) }).count == 1, "every attempt must reuse the message's timestamp")
+    #expect(sends.count(where: { $0.first == CommandCode.resetPath.rawValue }) == 1)
+    let resetIndex = try #require(sends.firstIndex { $0.first == CommandCode.resetPath.rawValue })
+    #expect(sends[..<resetIndex].count(where: { $0.first == CommandCode.sendMessage.rawValue }) == 3,
+            "resetPath must come after the third send and before the fourth")
   }
 }

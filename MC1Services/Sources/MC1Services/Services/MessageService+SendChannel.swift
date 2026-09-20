@@ -269,6 +269,13 @@ public extension MessageService {
       _ = try await dataStore.incrementMessageSendCount(id: messageID)
       try await dataStore.updateMessageHeardRepeats(id: messageID, heardRepeats: 0)
       try await dataStore.deleteMessageRepeats(messageID: messageID)
+      // A resend is a new packet with a new timestamp, so a new content hash. The
+      // hash stamp is first-writer-wins, which would leave the row — and with it
+      // the eye badge and the Network View — describing the packet that was
+      // resent rather than this one, for as long as the message exists. Clear the
+      // packet identity along with the repeats it belonged to; the first echo of
+      // this transmission stamps the new hash and the badge picks it up from `…`.
+      try await dataStore.clearMessagePacketScope(id: messageID)
       // The repeat set just reset, and the fresh echoes will be mapped as
       // loops from wherever *this* retransmit happened — re-stamp the origin
       // to match. nil when no trustworthy fix exists: better no origin than

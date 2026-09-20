@@ -23,8 +23,8 @@ This guide covers the message lifecycle, delivery states, retry logic, and ACK h
 │                         SEND                         │
 │  MessageService.sendMessageWithRetry() runs the      │
 │  app-layer retry loop (sendDirectMessageWithRetryLoop)│
-│  • Attempts 1-4: Direct routing                      │
-│  • Attempt 5: Flood routing (after floodAfter)       │
+│  • Attempts 1-3: Direct routing                      │
+│  • Attempt 4: Flood routing (after floodAfter)       │
 │  • Message status: .sent, then .retrying per retry   │
 └──────────────────────────────────────────────────────┘
                             │
@@ -49,7 +49,7 @@ This guide covers the message lifecycle, delivery states, retry logic, and ACK h
 | `.sent` (channel) | Radio queued the broadcast; no ACK, terminal success | "Sent" text |
 | `.delivered` | ACK received from recipient | "Delivered" text |
 | `.failed` | All attempts exhausted | "Failed" text + red exclamation icon + red bubble background |
-| `.retrying` | Retry in progress | "Retrying %d/%d" text (current attempt / max attempts when `maxRetryAttempts > 0`, falling back to "Retrying..." when `maxRetryAttempts == 0`) + spinner |
+| `.retrying` | Retry in progress | Spinner + send in flight / total sends ("2/4", "3/4", "4/4" by default; VoiceOver "Retrying %d/%d") when `maxRetryAttempts > 0`, falling back to "Retrying..." when `maxRetryAttempts == 0` |
 
 **Note:** The retry button only appears for messages with `.failed` status. During `.retrying`, the button is replaced with a spinner to indicate the retry is in progress.
 
@@ -61,18 +61,18 @@ This guide covers the message lifecycle, delivery states, retry logic, and ACK h
 
 Default configuration (`MessageServiceConfig`):
 - `floodFallbackOnRetry: true` - Currently unused; no send/retry code reads it. Both automatic and manual retries switch to flood after `floodAfter` direct attempts
-- `maxAttempts: 5` - Total send attempts (capped at 5 = 4 direct + 1 flood)
+- `maxAttempts: 4` - Total send attempts (capped at 4 = attempt indices 0-3: firmware hashes `attempt & 0x03`, so attempt 4 would repeat attempt 0's ACK code, which a repeater that already relayed it drops). All sends reuse the message's timestamp; a contact with no stored path gets the same count, all by flood
 - `maxFloodAttempts: 1` - Maximum flood attempts
-- `floodAfter: 4` - Switch to flood after 4 direct attempts
+- `floodAfter: 3` - Reset the path and switch to flood after 3 attempts on the stored path
 - `minTimeout: 0` - Minimum timeout seconds
 - `triggerPathDiscoveryAfterFlood: true` - Trigger path discovery after flood
 - `ackGiveUpWindow: 30` - Floor and post-loop grace for the give-up deadline
 
 ```
-Attempts 1-4: Direct routing (use contact's outPath)
+Attempts 1-3: Direct routing (use contact's outPath)
     │
     ▼ Timeout, no ACK
-Attempt 5: Flood routing (broadcast to all)
+Attempt 4: Flood routing (resetPath, broadcast to all)
     │
     ▼ Timeout, no ACK
 FAILED
@@ -114,7 +114,7 @@ This clears the contact's cached routing path, forcing the mesh to rediscover th
 **Manual Retry:**
 - Triggered when user taps "Retry" button on a failed message
 - The UI's `retryMessage` replaces the `PendingSend` row (`replacePendingSendForRetry`), sets status to `.pending`, and signals the persistent send queue; it does not set `.retrying` immediately
-- The queue drain later runs the same retry loop as an automatic send, which switches to flood after `floodAfter` (4) direct attempts; `.retrying` is only set by the loop after the first attempt fails
+- The queue drain later runs the same retry loop as an automatic send, which switches to flood after `floodAfter` (3) direct attempts; `.retrying` is only set by the loop after the first attempt fails
 - Retry button disappears while `.retrying` status is active
 
 ### Manual Retry Details
@@ -133,10 +133,10 @@ coordinator?.applyStatusUpdate(
 try await signalDMEnqueued(envelope)
 ```
 
-The queue drain then calls `sendPendingDirectMessage` (or `resendDirectMessage` when the envelope is `isResend`), which runs `sendDirectMessageWithRetryLoop`. That loop marks `.retrying` via `updateMessageRetryStatus` only after the first attempt fails, and switches to flood after `floodAfter` (4) direct attempts; the same code path serves automatic and manual retries.
+The queue drain then calls `sendPendingDirectMessage` (or `resendDirectMessage` when the envelope is `isResend`), which runs `sendDirectMessageWithRetryLoop`. That loop marks `.retrying` via `updateMessageRetryStatus` only after the first attempt fails, and switches to flood after `floodAfter` (3) direct attempts; the same code path serves automatic and manual retries.
 
 The UI shows:
-- "Retrying %d/%d" text (current attempt / max attempts) with a spinner icon when `maxRetryAttempts > 0`, falling back to plain "Retrying..." only when `maxRetryAttempts == 0`
+- A spinner with the send in flight out of the total ("2/4", "3/4", then "4/4" for the flood send) when `maxRetryAttempts > 0`, falling back to the spinner alone ("Retrying..." to VoiceOver) only when `maxRetryAttempts == 0`. The loop stores the retry index and `maxAttempts - 1`; `BubbleFooterRow` adds the first send back, so the total follows `MessageServiceConfig`
 - The retry button is hidden while in `.retrying` status
 
 ## ACK Tracking

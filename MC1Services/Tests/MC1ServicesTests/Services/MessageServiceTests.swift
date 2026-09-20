@@ -11,9 +11,9 @@ struct MessageServiceTests {
   func `MessageServiceConfig default values`() {
     let config = MessageServiceConfig.default
     #expect(config.floodFallbackOnRetry == true)
-    #expect(config.maxAttempts == 5)
+    #expect(config.maxAttempts == 4)
     #expect(config.maxFloodAttempts == 1)
-    #expect(config.floodAfter == 4)
+    #expect(config.floodAfter == 3)
     #expect(config.minTimeout == 0)
     #expect(config.triggerPathDiscoveryAfterFlood == true)
     #expect(config.ackGiveUpWindow == 30)

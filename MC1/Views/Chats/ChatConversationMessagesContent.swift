@@ -117,6 +117,12 @@ struct ChatConversationMessagesContent: View {
       viewModel.incomingAvatarFlight = incomingAvatarFlight
       incomingAvatarFlight.isAtBottom = isAtBottom
       incomingAvatarFlight.reduceMotion = reduceMotion
+      viewModel.startObserverCountPolling()
+    }
+    .onDisappear {
+      // The observer-count loop is the only unattended CoreScope caller in the
+      // app; it exists exactly as long as a conversation is on screen.
+      viewModel.stopObserverCountPolling()
     }
     .onChange(of: isAtBottom, initial: true) { _, atBottom in
       incomingAvatarFlight.isAtBottom = atBottom
@@ -126,6 +132,13 @@ struct ChatConversationMessagesContent: View {
     }
     .onChange(of: envInputs) { _, new in
       viewModel.applyEnvInputs(new)
+      // Turning the observer-count switch on while a chat is open must start the
+      // loop; turning it off must stop it without waiting for the next screen.
+      if new.showsObserverCounts {
+        viewModel.startObserverCountPolling()
+      } else {
+        viewModel.stopObserverCountPolling()
+      }
     }
   }
 

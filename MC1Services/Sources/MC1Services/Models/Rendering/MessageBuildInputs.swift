@@ -63,6 +63,9 @@ public struct MessageBuildInputs: Sendable, Hashable {
   /// Already-decided Translation chrome. The builder copies this onto the
   /// text payload and never calls the detector.
   public let translation: MessageTranslationChrome?
+  /// Both Packet Scope switches, already ANDed by the caller. Gates the eye badge
+  /// on the user's own sent bubbles; the count itself rides on the message row.
+  public let showsObserverCounts: Bool
 
   public init(
     messageID: UUID,
@@ -92,7 +95,8 @@ public struct MessageBuildInputs: Sendable, Hashable {
     duplicateCount: Int = 1,
     isDuplicateRunExpanded: Bool = false,
     incomingAvatar: IncomingAvatarIdentity? = nil,
-    translation: MessageTranslationChrome? = nil
+    translation: MessageTranslationChrome? = nil,
+    showsObserverCounts: Bool = false
   ) {
     self.messageID = messageID
     self.previewState = previewState
@@ -122,5 +126,6 @@ public struct MessageBuildInputs: Sendable, Hashable {
     self.isDuplicateRunExpanded = isDuplicateRunExpanded
     self.incomingAvatar = incomingAvatar
     self.translation = translation
+    self.showsObserverCounts = showsObserverCounts
   }
 }

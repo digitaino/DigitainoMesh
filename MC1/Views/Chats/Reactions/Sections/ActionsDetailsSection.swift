@@ -35,6 +35,18 @@ struct ActionsDetailsSection: View {
         networkViewButton
       }
 
+      // Deliberately outside `canViewPacketScope`: that gate needs a packet hash,
+      // and "no packet hash yet" is one of the three things this line has to be
+      // able to say.
+      if message.isOutgoing, ChatViewModel.observerCountsEnabled() {
+        Text(MessageObserverDiagnostic.text(for: message))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .padding(.horizontal)
+          .padding(.bottom, 8)
+          .accessibilityElement(children: .combine)
+      }
+
       if availability.canShowRepeatDetails {
         ActionsExpandableDetailRow(
           isDetailExpanded: $isDetailExpanded,
@@ -153,6 +165,36 @@ struct ActionsDetailsSection: View {
       .contentShape(.rect)
     }
     .foregroundStyle(.primary)
+  }
+}
+
+/// The one line in the actions sheet that says what the eye badge actually knows:
+/// the cached observer count and how long ago it was confirmed.
+///
+/// Exists to be screenshotted. Rafael has reported three times that the badge sits
+/// on one number and then jumps, and a bare glyph cannot distinguish "the loop has
+/// not run", "the loop ran and the server said this", and "there is nothing to ask
+/// about yet". Those are three different defects with three different fixes, and
+/// this line names which one is on screen.
+enum MessageObserverDiagnostic {
+  static func text(for message: MessageDTO, now: Date = Date()) -> String {
+    guard message.packetContentHash != nil else {
+      return L10n.Chats.Chats.Message.Observers.diagnosticNoHash
+    }
+    guard let checkedAt = message.packetObserversCheckedAt else {
+      return L10n.Chats.Chats.Message.Observers.diagnosticNotChecked
+    }
+    // A checked message with no count is the hot-window zero the pass declines to
+    // believe: the check happened, the number is still unknown, and the badge shows
+    // the same ellipsis it does here.
+    let count = message.packetObserverCount.map(String.init) ?? "…"
+    // Clamped at zero because a device whose clock moved backwards should read
+    // "checked 0s ago", not a negative age.
+    let elapsed = Swift.max(0, now.timeIntervalSince(checkedAt))
+    let age = Duration.seconds(elapsed).formatted(
+      .units(allowed: [.hours, .minutes, .seconds], width: .narrow, maximumUnitCount: 1)
+    )
+    return L10n.Chats.Chats.Message.Observers.diagnostic(count, age)
   }
 }
 

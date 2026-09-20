@@ -597,6 +597,8 @@ private actor AdmissionStubDataStore: PersistenceStoreProtocol {
   }
 
   func setMessagePacketContentHashIfMissing(id _: UUID, contentHash _: String) async throws {}
+  func setMessageObserverCount(id _: UUID, count _: Int, checkedAt _: Date) async throws {}
+  func clearMessagePacketScope(id _: UUID) async throws {}
 
   func deleteMessageRepeats(messageID: UUID) async throws {}
   func incrementMessageSendCount(id: UUID) async throws -> Int {

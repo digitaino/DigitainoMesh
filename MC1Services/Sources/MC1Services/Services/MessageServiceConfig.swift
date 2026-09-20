@@ -68,17 +68,19 @@ struct MessageServiceConfig {
 
   init(
     floodFallbackOnRetry: Bool = true,
-    maxAttempts: Int = 5,
+    maxAttempts: Int = 4,
     maxFloodAttempts: Int = 1,
-    floodAfter: Int = 4,
+    floodAfter: Int = 3,
     minTimeout: TimeInterval = 0,
     triggerPathDiscoveryAfterFlood: Bool = true,
     ackGiveUpWindow: TimeInterval = 30,
     poolBackoff: PoolBackoffConfig = .default
   ) {
-    // 5 = 4 direct + 1 flood. AckCodeBuilder.expectedAck documents why attempt
-    // indices through 4 stay ACK-unambiguous; past that the cap bounds airtime.
-    precondition(maxAttempts <= 5, "maxAttempts must be <= 5 (4 direct + 1 flood)")
+    // 4 = 3 on the stored path + 1 flood: attempt indices 0-3. Firmware hashes
+    // `attempt & 0x03`, so attempt 4 would repeat attempt 0's ACK code, and a
+    // repeater that already relayed that code drops it: a 5th send's
+    // confirmation can be lost even when the message arrived.
+    precondition(maxAttempts <= 4, "maxAttempts must be <= 4 (attempt indices 0-3)")
     self.floodFallbackOnRetry = floodFallbackOnRetry
     self.maxAttempts = maxAttempts
     self.maxFloodAttempts = maxFloodAttempts

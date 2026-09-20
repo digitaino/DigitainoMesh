@@ -220,7 +220,8 @@ extension ChatMessageBakeState {
           detected: detectedLanguages[message.id],
           phase: translationPhases[message.id],
           preferredLanguageCode: envInputs.preferredLanguageCode
-        )
+        ),
+      showsObserverCounts: envInputs.showsObserverCounts
     )
   }
 

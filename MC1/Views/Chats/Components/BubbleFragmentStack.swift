@@ -97,7 +97,10 @@ struct BubbleFragmentStack: View, Equatable {
             footer: item.footer,
             dynamicTypeSize: dynamicTypeSize,
             timeColor: timeColor,
-            onRetry: callbacks.onRetry
+            onRetry: callbacks.onRetry,
+            // The eye is a shortcut to the Network View, which lives in the message's
+            // actions sheet — so it opens exactly what a long press opens.
+            onObserverTap: { callbacks.onLongPress?() }
           )
         }
       }

@@ -22,7 +22,11 @@ struct MessagePacketContentHashTests {
     return Data(bytes)
   }
 
-  private func makeDTO(hash: String?) -> MessageDTO {
+  private func makeDTO(
+    hash: String?,
+    observerCount: Int? = nil,
+    checkedAt: Date? = nil
+  ) -> MessageDTO {
     MessageDTO(
       id: UUID(),
       radioID: UUID(),
@@ -45,7 +49,9 @@ struct MessagePacketContentHashTests {
       heardRepeats: 0,
       retryAttempt: 0,
       maxRetryAttempts: 0,
-      packetContentHash: hash
+      packetContentHash: hash,
+      packetObserverCount: observerCount,
+      packetObserversCheckedAt: checkedAt
     )
   }
 
@@ -76,6 +82,57 @@ struct MessagePacketContentHashTests {
     #expect(model.packetContentHash == "b120e42c91ae7ca9")
     let back = MessageDTO(from: model)
     #expect(back.packetContentHash == "b120e42c91ae7ca9")
+  }
+
+  // MARK: - Cached observer count
+
+  @Test
+  func `the cached observer count round-trips through the backup wire format`() throws {
+    let checkedAt = Date(timeIntervalSince1970: 1_788_229_400)
+    let dto = makeDTO(hash: "286dcbdeab84b458", observerCount: 4, checkedAt: checkedAt)
+    let data = try JSONEncoder().encode(dto)
+    let decoded = try JSONDecoder().decode(MessageDTO.self, from: data)
+    #expect(decoded.packetObserverCount == 4)
+    #expect(decoded.packetObserversCheckedAt == checkedAt)
+  }
+
+  @Test
+  func `a legacy envelope without the observer keys decodes to nil`() throws {
+    let dto = makeDTO(
+      hash: "286dcbdeab84b458",
+      observerCount: 4,
+      checkedAt: Date(timeIntervalSince1970: 1_788_229_400)
+    )
+    var json = try #require(
+      try JSONSerialization.jsonObject(with: JSONEncoder().encode(dto)) as? [String: Any]
+    )
+    json.removeValue(forKey: "packetObserverCount")
+    json.removeValue(forKey: "packetObserversCheckedAt")
+    let legacyData = try JSONSerialization.data(withJSONObject: json)
+    let decoded = try JSONDecoder().decode(MessageDTO.self, from: legacyData)
+    #expect(decoded.packetObserverCount == nil)
+    #expect(decoded.packetObserversCheckedAt == nil)
+    // The hash still decodes: the new keys are additive, not a format bump.
+    #expect(decoded.packetContentHash == "286dcbdeab84b458")
+  }
+
+  @Test
+  func `the cached observer count survives the DTO to model to DTO round trip`() {
+    let checkedAt = Date(timeIntervalSince1970: 1_788_229_400)
+    let dto = makeDTO(hash: "b120e42c91ae7ca9", observerCount: 7, checkedAt: checkedAt)
+    let model = Message(dto: dto)
+    #expect(model.packetObserverCount == 7)
+    #expect(model.packetObserversCheckedAt == checkedAt)
+    let back = MessageDTO(from: model)
+    #expect(back.packetObserverCount == 7)
+    #expect(back.packetObserversCheckedAt == checkedAt)
+  }
+
+  @Test
+  func `a never-looked-up message carries nil, not zero`() {
+    let dto = makeDTO(hash: "b120e42c91ae7ca9")
+    #expect(dto.packetObserverCount == nil)
+    #expect(MessageDTO(from: Message(dto: dto)).packetObserverCount == nil)
   }
 
   @Test

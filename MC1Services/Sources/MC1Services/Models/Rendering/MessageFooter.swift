@@ -47,6 +47,13 @@ public struct MessageFooter: Sendable, Hashable {
   /// carries the other send-outcome slots (`status`, `heardRepeats`, `sendCount`) the card
   /// reasons about. Baked in, so the item-only `Equatable` seam still decides the redraw.
   public let noRepeatsRetry: NoRepeatsRetryPrompt?
+  /// Distinct observers on the CoreScope server that heard this message's packet,
+  /// cached on the row. Nil means the lookup has not landed yet — the badge shows
+  /// an ellipsis rather than a zero, because "not asked" is not "nobody heard it".
+  public let observerCount: Int?
+  /// Whether the eye badge renders at all. True only for the user's own sent
+  /// messages while both Packet Scope and its observer-count switch are on.
+  public let showsObserverCount: Bool
 
   /// True when `regionMatchNames` has more than one entry. Derived, not stored.
   public var regionIsAmbiguous: Bool {
@@ -68,7 +75,9 @@ public struct MessageFooter: Sendable, Hashable {
     retryAttempt: Int,
     maxRetryAttempts: Int,
     sendCount: Int,
-    noRepeatsRetry: NoRepeatsRetryPrompt? = nil
+    noRepeatsRetry: NoRepeatsRetryPrompt? = nil,
+    observerCount: Int? = nil,
+    showsObserverCount: Bool = false
   ) {
     self.showHop = showHop
     self.hopCount = hopCount
@@ -85,6 +94,8 @@ public struct MessageFooter: Sendable, Hashable {
     self.maxRetryAttempts = maxRetryAttempts
     self.sendCount = sendCount
     self.noRepeatsRetry = noRepeatsRetry
+    self.observerCount = observerCount
+    self.showsObserverCount = showsObserverCount
   }
 
   /// Returns a new footer with `status` overridden. Eliminates the multi-field
@@ -105,7 +116,9 @@ public struct MessageFooter: Sendable, Hashable {
       retryAttempt: retryAttempt,
       maxRetryAttempts: maxRetryAttempts,
       sendCount: sendCount,
-      noRepeatsRetry: noRepeatsRetry
+      noRepeatsRetry: noRepeatsRetry,
+      observerCount: observerCount,
+      showsObserverCount: showsObserverCount
     )
   }
 }

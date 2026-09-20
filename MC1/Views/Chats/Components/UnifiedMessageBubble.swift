@@ -426,6 +426,9 @@ struct UnifiedMessageBubble: View, Equatable {
       if item.footer.noRepeatsRetry != nil {
         label += ", \(L10n.Chats.Chats.Message.NoRepeats.title)"
       }
+      if item.footer.showsObserverCount {
+        label += ", \(MessageObserverAccessibility.label(count: item.footer.observerCount))"
+      }
     }
     if !item.envelope.isOutgoing {
       if item.footer.showHop {

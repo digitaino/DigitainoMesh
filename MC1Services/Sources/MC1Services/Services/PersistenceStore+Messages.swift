@@ -834,6 +834,43 @@ public extension PersistenceStore {
     try modelContext.save()
   }
 
+  /// Caches the distinct observer count for a message's packet. Unlike the hash,
+  /// the count is a moving figure — later observations raise it — so every pass
+  /// overwrites, and the timestamp records when the figure was true.
+  func setMessageObserverCount(id: UUID, count: Int, checkedAt: Date) throws {
+    let targetID = id
+    let predicate = #Predicate<Message> { message in message.id == targetID }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    guard let message = try modelContext.fetch(descriptor).first else {
+      return
+    }
+
+    message.packetObserverCount = count
+    message.packetObserversCheckedAt = checkedAt
+    try modelContext.save()
+  }
+
+  /// Drops the row's packet identity and its cached count. See
+  /// `HeardRepeatPersisting` for why a resend has to do this rather than rely on
+  /// the hash stamp's first-writer-wins rule.
+  func clearMessagePacketScope(id: UUID) throws {
+    let targetID = id
+    let predicate = #Predicate<Message> { message in message.id == targetID }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    guard let message = try modelContext.fetch(descriptor).first else {
+      return
+    }
+
+    message.packetContentHash = nil
+    message.packetObserverCount = nil
+    message.packetObserversCheckedAt = nil
+    try modelContext.save()
+  }
+
   /// Increments the sendCount for a message and returns the new count.
   func incrementMessageSendCount(id: UUID) throws -> Int {
     let targetID = id

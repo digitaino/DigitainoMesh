@@ -142,9 +142,9 @@ extension MessageService {
   /// Sends a direct message with automatic retry and flood routing fallback.
   ///
   /// This is the recommended method for sending messages. It automatically:
-  /// 1. Attempts direct routing up to `maxAttempts` times
-  /// 2. Switches to flood routing after `floodAfter` attempts
-  /// 3. Makes up to `maxFloodAttempts` using flood routing
+  /// 1. Sends up to `maxAttempts` times (default 4, attempt indices 0-3), all with one timestamp
+  /// 2. Uses the contact's stored path for the first `floodAfter` sends (default 3)
+  /// 3. Then resets the path and makes up to `maxFloodAttempts` by flood (default 1)
   /// 4. Returns immediately when ACK is received
   ///
   /// The message is saved to the database immediately and the `onMessageCreated`
