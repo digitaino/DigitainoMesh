@@ -2,13 +2,19 @@ import Foundation
 import MC1Services
 import os
 
-/// The session-scoped sink the capture and probe engines emit raw events into.
+/// The sink the capture and probe engines emit raw events into.
 ///
 /// This is the MapperRawLog half of the boundary `MapperRawSampleRecording` declares in
 /// MC1Services (docs/ACTIVE_SURVEY_M3_5.md §2.4): the engines know only the protocol, the
 /// implementation lives on this side of the dependency edge, and the app wires the two
-/// together. An engine with a nil recorder — the ambient, capture-off default — writes no
-/// raw rows at all.
+/// together. An engine with a nil recorder writes no raw rows at all.
+///
+/// **Always on since v3** (docs/SIGNAL_MAPPER_V3.md §2, §7 step 2). The recorder used to
+/// be session-scoped — one per ride, minted with the ride's `runID` and thrown away at
+/// stop — so everything the radio heard outside a ride was aggregated and forgotten. It
+/// is now app-lifetime: the app attaches one whenever capture is wired, it records with
+/// ``runID`` nil, and a ride merely *stamps* its id on the rows recorded while it is open
+/// (``setRunID(_:)``). Retention, not a session boundary, is what bounds the table.
 ///
 /// **Batching without timers.** A ride emits a few rows per second and a breadcrumb every
 /// two; writing each one is a SwiftData transaction per row for hours. The recorder holds
@@ -29,17 +35,21 @@ public actor MapperRawSampleRecorder: MapperRawSampleRecording {
   /// *visible*, because a cap hit or a failing store otherwise looks exactly like a quiet
   /// mesh.
   public struct Snapshot: Sendable, Equatable {
-    public let runID: UUID
-    /// Events accepted so far this run — the number the cap is measured against.
+    /// The ride currently being stamped onto rows, or nil outside one.
+    public let runID: UUID?
+    /// Events accepted since the recorder was built.
     public let recordedCount: Int
+    /// Events accepted since the current ride opened — the number the cap is measured
+    /// against. Equal to ``recordedCount`` outside a ride, where nothing is capped.
+    public let runRecordedCount: Int
     /// Events held in memory, not yet written.
     public let bufferedCount: Int
     /// The sequence number the next accepted event will get. After ``finish()`` this is
     /// the run's final `seq`, which a resumed session continues from.
     public let nextSeq: Int64
-    /// Events refused because the run hit its cap.
+    /// Events refused because the open ride hit its cap. Only a ride can drop.
     public let droppedCount: Int
-    /// Whether the cap has been reached. Sticky for the run.
+    /// Whether the open ride has reached its cap. Sticky until the ride ends.
     public let didHitCap: Bool
     /// How many batches failed to write. Non-zero means rows are missing from the log.
     public let flushFailureCount: Int
@@ -54,7 +64,7 @@ public actor MapperRawSampleRecorder: MapperRawSampleRecording {
   public static let flushIntervalSeconds: TimeInterval = 5
 
   private let store: MapperRawLogStore
-  private let runID: UUID
+  private var runID: UUID?
   private let cap: Int
   private let now: @Sendable () -> Date
 
@@ -69,24 +79,26 @@ public actor MapperRawSampleRecorder: MapperRawSampleRecording {
   private var firstBufferedAt: Date?
   private var nextSeq: Int64
   private var recordedCount = 0
+  private var runRecordedCount = 0
   private var droppedCount = 0
   private var flushFailureCount = 0
   private var didHitCap = false
 
   /// - Parameters:
   ///   - store: Where batches land.
-  ///   - runID: The run every row is stamped with. Fixed for the recorder's life — a new
-  ///     run means a new recorder.
+  ///   - runID: The ride to stamp on rows, or nil for the ordinary always-on case. Not
+  ///     fixed for the recorder's life any more — see ``setRunID(_:)``.
   ///   - startingSeq: Where this recorder's numbering continues from. Non-zero when a
-  ///     session resumes after a BLE rewire: the run's `seq` space is continuous even
-  ///     though the recorder that was filling it is gone.
-  ///   - cap: `rawSampleCapPerSession` (default 50 000). A runaway backstop, not a
-  ///     target — a real 2 h ride writes 3–8 k rows.
+  ///     recorder is rebuilt and the `seq` space has to stay continuous across it.
+  ///   - cap: `rawSampleCapPerSession` (default 50 000). A **per-ride** backstop since v3
+  ///     and nothing else: outside a ride the only bound is retention, because a cap on
+  ///     the always-on log would silently stop recording one afternoon and never start
+  ///     again. A real 2 h ride writes 3–8 k rows.
   ///   - now: The clock, injected so the lazy flush deadline is testable and nothing here
   ///     reads system time directly.
   public init(
     store: MapperRawLogStore,
-    runID: UUID,
+    runID: UUID? = nil,
     startingSeq: Int64 = 0,
     cap: Int = 50000,
     now: @escaping @Sendable () -> Date = { Date() }
@@ -98,19 +110,40 @@ public actor MapperRawSampleRecorder: MapperRawSampleRecording {
     self.now = now
   }
 
+  // MARK: - Ride scope
+
+  /// Opens or closes the ride label rows are stamped with.
+  ///
+  /// Flushes first, so the batch buffered under the old scope is written with the id it
+  /// was recorded under rather than gaining — or losing — a ride it never belonged to.
+  /// The per-ride cap and its drop counters reset with the scope; the `seq` counter does
+  /// not, because it orders the *table*, and a ride starting mid-stream must not reuse
+  /// numbers already on disk.
+  public func setRunID(_ runID: UUID?) async {
+    guard runID != self.runID else { return }
+    await flush()
+    self.runID = runID
+    runRecordedCount = 0
+    droppedCount = 0
+    didHitCap = false
+  }
+
   // MARK: - Recording
 
   public func record(_ event: MapperRawSampleEvent) async {
-    guard recordedCount < cap else {
+    // Only a ride is capped. Outside one the log is the store and stopping it would lose
+    // the coverage the whole feature is made of (SIGNAL_MAPPER_V3 §2).
+    if runID != nil, runRecordedCount >= cap {
       if !didHitCap {
         didHitCap = true
-        logger.notice("raw sample cap reached; further rows dropped for this run")
+        logger.notice("raw sample cap reached; further rows dropped for this ride")
       }
       droppedCount += 1
       return
     }
 
     recordedCount += 1
+    runRecordedCount += 1
     buffer.append(event)
     let at = now()
     let openedAt = firstBufferedAt ?? at
@@ -140,6 +173,7 @@ public actor MapperRawSampleRecorder: MapperRawSampleRecording {
     Snapshot(
       runID: runID,
       recordedCount: recordedCount,
+      runRecordedCount: runRecordedCount,
       bufferedCount: buffer.count,
       nextSeq: nextSeq,
       droppedCount: droppedCount,
@@ -164,9 +198,12 @@ public actor MapperRawSampleRecorder: MapperRawSampleRecording {
     // (§6 F1) is not allowed to do.
     let base = nextSeq
     nextSeq += Int64(batch.count)
+    // The ride label is read here too, before the suspension: `setRunID` flushes on its
+    // way through, and a batch must be written under the scope it was recorded in.
+    let scope = runID
 
     do {
-      try await store.insertSamples(batch, runID: runID, startingSeq: base)
+      try await store.insertSamples(batch, runID: scope, startingSeq: base)
     } catch {
       flushFailureCount += 1
       // The claimed range is not rewound. A gap in `seq` is an honest record of a lost

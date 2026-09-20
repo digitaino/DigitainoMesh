@@ -119,8 +119,16 @@ final class MapperSurveyRun {
 /// - **No `packetHash`** (§6 F1). `SHA-256(payload)` is identical on every node that
 ///   heard the packet, so it is a cross-mesh join key: any exported ride could be
 ///   de-anonymised against a third party's RX log, and locally it joins straight to
-///   `RxLogEntry`. The run-local ``seq`` is the correlation key instead — it means
-///   nothing outside this run's own rows, which is exactly the property wanted.
+///   `RxLogEntry`. The ``seq`` is the correlation key instead — it means nothing outside
+///   this store's own rows, which is exactly the property wanted.
+///
+///   ``contentHash`` is the *narrow* exception SIGNAL_MAPPER_V3 §2 opens, and only on
+///   ``MapperRawSampleKind/sent`` and ``MapperRawSampleKind/observerSighting`` rows: a
+///   hash of our own transmission, and of somebody else's sighting of that same
+///   transmission, is the join key reach is made of, and it identifies us — who already
+///   consented — rather than a third party. On a passively heard packet it would be
+///   exactly the cross-mesh key F1 refused, so it stays nil there, asserted in
+///   `MapperRawLogPrivacyInvariantTests`.
 /// - **No `repeaterName`** (§6 F9, §2.4). Names are personal data and would sit on every
 ///   row of a movement log. They resolve at export time from the contact list, where the
 ///   user can see them, and are never persisted here.
@@ -132,12 +140,30 @@ final class MapperSurveyRun {
 @Model
 final class MapperRawSample {
   // `runID` alone serves the count/delete/purge paths; `runID + seq` serves the
-  // paginated ordered read the export streams through. Both are the whole access
-  // pattern of this table.
-  #Index<MapperRawSample>([\.runID], [\.runID, \.seq])
+  // paginated ordered read the export streams through. `(cellRaw, timestamp)` and
+  // `(repeaterHexID, timestamp)` are what SIGNAL_MAPPER_V3 §2 adds: with the log
+  // always on, the card and the map are *queries* — "everything in this hexagon since
+  // then", "every observation of this repeater" — over a table that now spans 90 days
+  // rather than one ride.
+  // `timestamp` alone is the fourth because the retention sweep and the size readout both
+  // run at launch over the whole table and neither can use a composite whose leading
+  // column is a cell or a repeater: `timestamp < cutoff` would be a full scan per delete
+  // chunk, repeated until the expired rows are gone.
+  #Index<MapperRawSample>(
+    [\.runID],
+    [\.runID, \.seq],
+    [\.cellRaw, \.timestamp],
+    [\.repeaterHexID, \.timestamp],
+    [\.timestamp]
+  )
 
-  /// Which run wrote this row. By value — see the type's note on relationships.
-  var runID: UUID
+  /// Which run wrote this row, when a ride was open — by value, see the type's note on
+  /// relationships.
+  ///
+  /// **Optional since v3** (§2). The raw log is no longer ride-scoped: it is *the* store,
+  /// and the overwhelming majority of rows are written with no ride in progress. A ride is
+  /// now a label on the rows recorded while it was open, not the reason they exist.
+  var runID: UUID?
 
   /// Run-local monotonic sequence, assigned by ``MapperRawSampleRecorder``.
   ///
@@ -170,6 +196,23 @@ final class MapperRawSample {
   /// Nil when the event carried none; an empty array and "no array" are different
   /// facts and stay different.
   var perHopSnrsData: Data?
+
+  /// The packet's hop hashes in path order, JSON `["0C","42"]`, canonical uppercase.
+  /// Same nil-vs-empty rule as ``perHopSnrsData``. Additive optional column.
+  var pathHashesData: Data?
+
+  /// The packet bytes as received (SIGNAL_MAPPER_V3 §9). ~100 bytes a row, only on the
+  /// kinds that *are* a received packet. Foreign payloads stay encrypted — this is the
+  /// ciphertext the radio handed over, not a decode of it.
+  var rawHex: Data?
+
+  /// The packet's mesh-wide identity, 16 hex characters. Only on `sent` and
+  /// `observerSighting` rows — see the type's note on `packetHash`.
+  var contentHash: String?
+
+  /// Which local message row a `sent` row transmitted, so the echo can back-fill
+  /// ``contentHash`` by message rather than by guessing at times.
+  var messageID: UUID?
 
   // MARK: - Repeater identity
 
@@ -217,7 +260,7 @@ final class MapperRawSample {
   var gateOutcomeRaw: Int
 
   init(
-    runID: UUID,
+    runID: UUID?,
     seq: Int64,
     timestamp: Date,
     kindRaw: Int,
@@ -229,6 +272,10 @@ final class MapperRawSample {
     routeTypeRaw: Int? = nil,
     payloadTypeRaw: Int? = nil,
     perHopSnrsData: Data? = nil,
+    pathHashesData: Data? = nil,
+    rawHex: Data? = nil,
+    contentHash: String? = nil,
+    messageID: UUID? = nil,
     repeaterHexID: String? = nil,
     repeaterPublicKey: Data? = nil,
     wasFocused: Bool = false,
@@ -254,6 +301,10 @@ final class MapperRawSample {
     self.routeTypeRaw = routeTypeRaw
     self.payloadTypeRaw = payloadTypeRaw
     self.perHopSnrsData = perHopSnrsData
+    self.pathHashesData = pathHashesData
+    self.rawHex = rawHex
+    self.contentHash = contentHash
+    self.messageID = messageID
     self.repeaterHexID = repeaterHexID
     self.repeaterPublicKey = repeaterPublicKey
     self.wasFocused = wasFocused
@@ -270,7 +321,7 @@ final class MapperRawSample {
 
   /// Builds a row from a recorder event. `seq` comes from the recorder, not the event —
   /// the event has no idea where in the run it landed.
-  convenience init(event: MapperRawSampleEvent, runID: UUID, seq: Int64) {
+  convenience init(event: MapperRawSampleEvent, runID: UUID?, seq: Int64) {
     self.init(
       runID: runID,
       seq: seq,
@@ -284,6 +335,14 @@ final class MapperRawSample {
       routeTypeRaw: event.routeTypeRaw.map(Int.init),
       payloadTypeRaw: event.payloadTypeRaw.map(Int.init),
       perHopSnrsData: MapperRawSampleDTO.encode(perHopSnrs: event.perHopSnrs),
+      pathHashesData: MapperRawSampleDTO.encode(pathHashes: event.pathHashes),
+      // The two privacy rules of §2/§9 are applied here, on the way in, rather than trusted
+      // to every producer: a kind not entitled to packet bytes or to a mesh-wide hash does
+      // not get to keep them, whatever the event carried. `MapperRawLogPrivacyInvariantTests`
+      // asserts the outcome on stored rows for exactly this reason.
+      rawHex: event.kind.mayCarryPacketBytes ? event.rawHex : nil,
+      contentHash: event.kind.mayCarryContentHash ? event.contentHash : nil,
+      messageID: event.messageID,
       repeaterHexID: event.repeaterHexID,
       repeaterPublicKey: event.repeaterPublicKey,
       wasFocused: event.wasFocused,
@@ -440,7 +499,8 @@ public struct MapperSurveyRunDTO: Sendable, Equatable {
 /// a row written by a future build — a kind this build has never heard of — survives a
 /// read/export round trip instead of being dropped or, worse, mislabelled.
 public struct MapperRawSampleDTO: Sendable, Equatable {
-  public let runID: UUID
+  /// Nil for a row recorded outside a ride, which since v3 is most of them.
+  public let runID: UUID?
   public let seq: Int64
   public let timestamp: Date
   public let kindRaw: Int
@@ -453,6 +513,10 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
   public let routeTypeRaw: Int?
   public let payloadTypeRaw: Int?
   public let perHopSnrs: [Double]?
+  public let pathHashes: [String]?
+  public let rawHex: Data?
+  public let contentHash: String?
+  public let messageID: UUID?
 
   public let repeaterHexID: String?
   public let repeaterPublicKey: Data?
@@ -472,7 +536,7 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
   public let gateOutcomeRaw: Int
 
   public init(
-    runID: UUID,
+    runID: UUID?,
     seq: Int64,
     timestamp: Date,
     kindRaw: Int,
@@ -484,6 +548,10 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
     routeTypeRaw: Int? = nil,
     payloadTypeRaw: Int? = nil,
     perHopSnrs: [Double]? = nil,
+    pathHashes: [String]? = nil,
+    rawHex: Data? = nil,
+    contentHash: String? = nil,
+    messageID: UUID? = nil,
     repeaterHexID: String? = nil,
     repeaterPublicKey: Data? = nil,
     wasFocused: Bool = false,
@@ -509,6 +577,10 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
     self.routeTypeRaw = routeTypeRaw
     self.payloadTypeRaw = payloadTypeRaw
     self.perHopSnrs = perHopSnrs
+    self.pathHashes = pathHashes
+    self.rawHex = rawHex
+    self.contentHash = contentHash
+    self.messageID = messageID
     self.repeaterHexID = repeaterHexID
     self.repeaterPublicKey = repeaterPublicKey
     self.wasFocused = wasFocused
@@ -537,6 +609,10 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
       routeTypeRaw: model.routeTypeRaw,
       payloadTypeRaw: model.payloadTypeRaw,
       perHopSnrs: Self.decode(perHopSnrs: model.perHopSnrsData),
+      pathHashes: Self.decode(pathHashes: model.pathHashesData),
+      rawHex: model.rawHex,
+      contentHash: model.contentHash,
+      messageID: model.messageID,
       repeaterHexID: model.repeaterHexID,
       repeaterPublicKey: model.repeaterPublicKey,
       wasFocused: model.wasFocused,
@@ -583,5 +659,18 @@ public struct MapperRawSampleDTO: Sendable, Equatable {
     guard let data else { return nil }
     guard !data.isEmpty else { return [] }
     return (try? JSONDecoder().decode([Double].self, from: data)) ?? []
+  }
+
+  /// Same nil-in/nil-out contract as ``encode(perHopSnrs:)``: "no path field" and "a path
+  /// field with no hops" are different claims about a packet.
+  static func encode(pathHashes: [String]?) -> Data? {
+    guard let pathHashes else { return nil }
+    return (try? encoder.encode(pathHashes)) ?? Data()
+  }
+
+  static func decode(pathHashes data: Data?) -> [String]? {
+    guard let data else { return nil }
+    guard !data.isEmpty else { return [] }
+    return (try? JSONDecoder().decode([String].self, from: data)) ?? []
   }
 }

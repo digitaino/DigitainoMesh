@@ -1021,7 +1021,10 @@ public actor SignalMapperProbeEngine {
     guard let placement else { return }
     event.setFix(placement.fix, at: placement.at)
     event.cellRaw = placement.cell.rawValue
-    event.gateOutcome = .accepted
+    // The placement's own verdict, not a constant: a doubtful fix now places a row, and a
+    // row that claimed `.accepted` for it would make the export unable to tell the two
+    // apart — the whole point of keeping the position instead of dropping it.
+    event.gateOutcome = placement.outcome
   }
 
   // MARK: - Session setup
@@ -1055,16 +1058,23 @@ public actor SignalMapperProbeEngine {
     self.policy = policy
   }
 
-  /// A fix the probe loop may plan against: present, not known-moved-away-from, and
-  /// inside the flat age budget. The full gate — displacement scaling, accuracy, anchor
-  /// discs — runs where it matters, in the capture engine as each attempt is placed.
+  /// A fix the probe loop may plan against — ``MapperFixGate``'s *placeable* verdict, and
+  /// nothing of its own.
+  ///
+  /// Sharing the definition is the fix for the 2026-09-04 field defect: this used to be a
+  /// hand-rolled subset of the capture engine's gate, so during GPS warm-up probes flew on a
+  /// fix the capture engine would then refuse to place, and every reply they earned was
+  /// written with no cell — counted on the strip, invisible on the card for ever. One
+  /// definition means the invariant holds by construction: if a probe is sent, its reply can
+  /// be placed. Whether the placement is *trusted* is a separate question the capture engine
+  /// answers per fold.
   private func usableFix() async -> MapperFix? {
-    guard let fix = await fixProvider.latestFix() else { return nil }
-    guard !fix.movedSinceCapture else { return nil }
-    guard now().timeIntervalSince(fix.timestamp) <= tuningProvider.tuning.fixMaxAgeSeconds else {
-      return nil
-    }
-    return fix
+    let verdict = MapperFixGate.evaluate(
+      fix: await fixProvider.latestFix(),
+      at: now(),
+      tuning: tuningProvider.tuning
+    )
+    return verdict.isPlaceable ? verdict.fix : nil
   }
 
   // MARK: - Policy mapping
@@ -1161,12 +1171,25 @@ public struct MapperProbePlacement: Sendable, Equatable {
   public let fix: MapperFix
   public let at: Date
   public let isStationary: Bool
+  /// How sure the placement is (``MapperFixGate``). A placement used to exist only when the
+  /// gate accepted it, so every reader was entitled to assume acceptance; since 2026-09-04 a
+  /// doubtful fix is placed too, so that assumption has to be read off this field instead.
+  /// Anything that folds into an aggregate must require ``MapperGateOutcome/accepted``; a raw
+  /// row records the outcome beside the cell and keeps both.
+  public let outcome: MapperGateOutcome
 
-  public init(cell: H3Cell, fix: MapperFix, at: Date, isStationary: Bool) {
+  public init(
+    cell: H3Cell,
+    fix: MapperFix,
+    at: Date,
+    isStationary: Bool,
+    outcome: MapperGateOutcome = .accepted
+  ) {
     self.cell = cell
     self.fix = fix
     self.at = at
     self.isStationary = isStationary
+    self.outcome = outcome
   }
 }
 

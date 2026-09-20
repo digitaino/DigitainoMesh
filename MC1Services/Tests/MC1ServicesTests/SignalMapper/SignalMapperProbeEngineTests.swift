@@ -708,4 +708,90 @@ struct SignalMapperProbeEngineTests {
     #expect(results.first?.rxSnr == 5.0)
     await engine.stopSession()
   }
+
+  // MARK: - One definition of a usable fix (2026-09-04)
+
+  /// The regression the whole 2026-09-04 field report is about.
+  ///
+  /// The probe engine used to plan on a laxer test than the capture engine placed on, so
+  /// during GPS warm-up it transmitted happily while every row the transmission earned was
+  /// written with `cellRaw` nil — and the store's cell fetch is an equality match, so those
+  /// rows were invisible to the card and to the summaries for ever. The HUD counted the
+  /// replies anyway. Both engines read ``MapperFixGate`` now: if a probe goes out, its rows
+  /// carry a cell, tagged with the doubt.
+  private actor RawEventRecorder: MapperRawSampleRecording {
+    private(set) var events: [MapperRawSampleEvent] = []
+
+    func record(_ event: MapperRawSampleEvent) async {
+      events.append(event)
+    }
+  }
+
+  @Test
+  func `A probe planned on a doubtful fix still writes rows that carry a cell`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let session = MockSignalBarsSession()
+    let store = try PersistenceStore(modelContainer: PersistenceStore.createContainer(inMemory: true))
+    // 500 m of accuracy: a real position the strict gate refuses, which is exactly the
+    // first minutes of a ride before the GPS has settled.
+    let fixes = StubMapperFixProvider(mapperFix(accuracy: 500, at: clock.now))
+    let capture = SignalMapperCaptureEngine(
+      source: ScriptedRxEntrySource(),
+      store: store,
+      fixProvider: fixes,
+      tuningProvider: StaticMapperTuningProvider(MapperTuning()),
+      anchorSeedProvider: StaticMapperAnchorSeedProvider(),
+      now: clock.provider
+    )
+    await capture.start()
+
+    let recorder = RawEventRecorder()
+    let target = try makeTarget()
+    let engine = SignalMapperProbeEngine(
+      session: session,
+      sink: capture,
+      warmTargets: StubTargetSource(targets: [target]),
+      fixProvider: fixes,
+      tuningProvider: StaticMapperTuningProvider(makeTuning()),
+      rawRecorder: recorder,
+      now: clock.provider,
+      sleep: Self.parkedSleep
+    )
+
+    await engine.startSession(pathHashMode: 0)
+    await engine.tick()
+
+    #expect(await engine.snapshot().probesSent == 1, "the fix is good enough to transmit on")
+    let expectedCell = try #require(MapperFixtureLocation.cell(MapperFixtureLocation.plaza))
+    let attempts = await recorder.events.filter { $0.kind == .probeAttempt }
+    #expect(!attempts.isEmpty)
+    for attempt in attempts {
+      #expect(attempt.cellRaw == expectedCell.rawValue, "a row with no cell can never be read back")
+      #expect(attempt.gateOutcome == .inaccurateFix, "placed, and honest about how well")
+    }
+
+    // And the reply that comes back is placed at the same doubtful cell, rather than
+    // vanishing into a row the card cannot fetch.
+    let tag = try #require(await session.traces.first?.tag)
+    await engine.ingest(.traceData(TraceInfo(
+      tag: tag, authCode: 0, flags: 0, pathLength: 1,
+      path: [TraceNode(hashBytes: Data([0xAB]), snr: 7.5), TraceNode(hashBytes: nil, snr: 5.0)]
+    )))
+    clock.advance(6)
+    await engine.tick()
+
+    let replies = await recorder.events.filter { $0.kind == .probeTraceReply }
+    #expect(!replies.isEmpty)
+    for reply in replies {
+      #expect(reply.cellRaw == expectedCell.rawValue)
+      #expect(reply.gateOutcome == .inaccurateFix)
+    }
+
+    // The aggregate side is untouched: a doubtful placement books no probe and folds no
+    // sample, so the dead-zone denominator stays clean.
+    await capture.flushNow()
+    #expect(try await store.countMapperCellObservations() == 0)
+    await engine.stopSession()
+    await capture.stop()
+  }
 }

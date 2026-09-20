@@ -330,7 +330,15 @@ struct MapperRawLogStoreTests {
       radioID: nil, frequency: nil, bandwidth: nil, spreadingFactor: nil,
       codingRate: nil, txPower: nil, focusTargetHexIDs: [], startedAt: start.addingTimeInterval(86400 * 29)
     )
-    try await store.insertSamples([rawEvent(at: start)], runID: recent, startingSeq: 0)
+    // Timestamped inside its own run. Since v3 the purge deletes rows by their own
+    // timestamp rather than by the run they name — that is the only way rows with no run
+    // at all can expire — so a row dated 29 days before the ride that "wrote" it would be
+    // swept as the ancient row it claims to be.
+    try await store.insertSamples(
+      [rawEvent(at: start.addingTimeInterval(86400 * 29))],
+      runID: recent,
+      startingSeq: 0
+    )
     try await store.endRun(recent, at: start.addingTimeInterval(86400 * 29 + 3600))
 
     // A 30-day cutoff that falls between the two: 31 days after the old run ended, 2 days
@@ -371,6 +379,80 @@ struct MapperRawLogStoreTests {
     #expect(try await store.fetchRuns().map(\.id) == [runB])
     #expect(try await store.sampleCount(runID: runA) == 0)
     #expect(try await store.sampleCount(runID: runB) == 1)
+  }
+
+  // MARK: - Row arrivals
+
+  /// Counts what a subscriber actually received, so an *absence* of signals is assertable
+  /// rather than merely unobserved.
+  private actor SignalCounter {
+    private(set) var count = 0
+
+    func drain(_ stream: AsyncStream<Void>) async {
+      for await _ in stream {
+        count += 1
+      }
+    }
+  }
+
+  /// A batch that wrote nothing must wake nobody: the recorder flushes on a deadline, so an
+  /// idle radio produces empty flushes forever and each one would be a card rebuild.
+  @Test
+  func `An empty batch announces nothing`() async throws {
+    let (store, runID) = try await makeStoreWithRun(startedAt: start)
+    let counter = SignalCounter()
+    let stream = await store.rowArrivals()
+    let drain = Task { await counter.drain(stream) }
+    defer { drain.cancel() }
+
+    try await store.insertSamples([], runID: runID, startingSeq: 0)
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(await counter.count == 0)
+
+    // The control: the same subscriber does wake for a batch that wrote rows.
+    try await store.insertSamples([rawEvent(at: start)], runID: runID, startingSeq: 0)
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(await counter.count == 1)
+  }
+
+  /// The signal lands *after* the transaction, so a consumer that reads the moment it wakes
+  /// sees the rows that woke it.
+  @Test
+  func `The rows are readable by the time the arrival signal lands`() async throws {
+    let (store, runID) = try await makeStoreWithRun(startedAt: start)
+    var iterator = await store.rowArrivals().makeAsyncIterator()
+
+    try await store.insertSamples(
+      [rawEvent(at: start), rawEvent(at: start.addingTimeInterval(1))],
+      runID: runID,
+      startingSeq: 0
+    )
+
+    #expect(await iterator.next() != nil)
+    #expect(try await store.sampleCount(runID: runID) == 2)
+  }
+
+  /// Two screens (or a screen and a test) both listening must both be told: a single shared
+  /// continuation would deliver each signal to exactly one of them.
+  @Test
+  func `Every subscriber hears every batch`() async throws {
+    let (store, runID) = try await makeStoreWithRun(startedAt: start)
+    let first = SignalCounter()
+    let second = SignalCounter()
+    let firstStream = await store.rowArrivals()
+    let secondStream = await store.rowArrivals()
+    let drainFirst = Task { await first.drain(firstStream) }
+    let drainSecond = Task { await second.drain(secondStream) }
+    defer {
+      drainFirst.cancel()
+      drainSecond.cancel()
+    }
+
+    try await store.insertSamples([rawEvent(at: start)], runID: runID, startingSeq: 0)
+    try await Task.sleep(for: .milliseconds(100))
+
+    #expect(await first.count == 1)
+    #expect(await second.count == 1)
   }
 
   @Test

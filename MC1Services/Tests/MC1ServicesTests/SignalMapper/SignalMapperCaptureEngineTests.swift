@@ -968,4 +968,222 @@ struct SignalMapperCaptureEngineTests {
     let rows = try await store.fetchMapperCellObservations()
     #expect(rows.isEmpty, "a rejected sample must still be rejected from aggregates")
   }
+
+  // MARK: - (h) Attribution: who a packet is evidence about (SIGNAL_MAPPER_V3 §1)
+
+  /// A flood packet accumulates its path as it travels, so the last entry is the node our
+  /// radio received it from. Unchanged from v2 — pinned here because the direct rule below
+  /// is defined against it.
+  @Test
+  func `A flood packet credits its last hop with our reading of it`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+    let recorder = RecordingRawRecorder()
+
+    await engine.start()
+    await engine.setRawRecorder(recorder)
+    source.send(mapperRxEntry(
+      payload: Data([0x01]),
+      receivedAt: clock.now,
+      snr: 4,
+      rssi: -95,
+      routeType: .flood,
+      pathNodes: [0x0C, 0x42]
+    ))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    let lastHop = try #require(row.repeaters["42"])
+    #expect(lastHop.rxSnrCount == 1)
+    #expect(lastHop.rxSnrSum == 4)
+
+    let raw = try #require(await recorder.events.first)
+    #expect(raw.repeaterHexID == "42")
+    #expect(raw.pathHashes == ["0C", "42"])
+  }
+
+  /// The v2 bug this rule fixes. A direct-routed packet carries the *remaining* route and
+  /// each forwarder consumes an entry from the front, so its last entry is the destination
+  /// side — a node that never transmitted to us. Crediting it puts our SNR on the wrong
+  /// link, which is exactly what CoreScope's firmware-verified rule refuses (§1).
+  ///
+  /// The packet is still coverage: it reached us here, so the cell counts it. It just
+  /// names nobody.
+  @Test
+  func `A direct-routed packet credits nobody, and its raw row still keeps the path`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+    let recorder = RecordingRawRecorder()
+
+    await engine.start()
+    await engine.setRawRecorder(recorder)
+    source.send(mapperRxEntry(
+      payload: Data([0x01]),
+      receivedAt: clock.now,
+      snr: 4,
+      rssi: -95,
+      routeType: .direct,
+      pathNodes: [0x0C, 0x42]
+    ))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(row.repeaters.isEmpty, "a direct packet's path names nobody we heard")
+    #expect(row.packetCount == 1, "it is still a packet that reached us here")
+
+    let raw = try #require(await recorder.events.first)
+    #expect(raw.repeaterHexID == nil)
+    #expect(raw.pathHashes == ["0C", "42"], "the route is recorded even though nobody is credited")
+    #expect(raw.routeTypeRaw == RouteType.direct.rawValue)
+  }
+
+  /// Nothing relayed it, so we heard the sender — and an advert is the one payload that
+  /// says who the sender is, at offset 0 of its own body.
+  @Test
+  func `A zero-hop advert credits the advertiser at the packet's hash width`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+    let recorder = RecordingRawRecorder()
+
+    await engine.start()
+    await engine.setRawRecorder(recorder)
+    source.send(mapperAdvertEntry(receivedAt: clock.now, publicKeyFirstByte: 0xAB, snr: 9, rssi: -60))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(Set(row.repeaters.keys) == ["AB"], "one byte of key, because that is this packet's hash width")
+    let sender = try #require(row.repeaters["AB"])
+    #expect(sender.rxSnrCount == 1)
+    #expect(sender.rxSnrSum == 9)
+
+    let raw = try #require(await recorder.events.first)
+    #expect(raw.repeaterHexID == "AB")
+    #expect(raw.pathHashes == nil, "no hops at all is not an empty path, it is no path")
+  }
+
+  /// A 0-hop packet of any other type stays anonymous: its payload is somebody else's
+  /// business and nothing in it names the transmitter.
+  @Test
+  func `A zero-hop packet that is not an advert credits nobody`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(source: source, store: store, fixes: fixes, clock: clock, tuning: makeTuning())
+
+    await engine.start()
+    source.send(mapperRxEntry(
+      payload: Data([0x01]),
+      receivedAt: clock.now,
+      routeType: .flood,
+      pathNodes: []
+    ))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(row.repeaters.isEmpty)
+    #expect(row.packetCount == 1)
+  }
+
+  /// The three-hops case (§1): an echo of our own packet is evidence in both directions,
+  /// so every hop stays on it whatever the route classification says. The direct rule is
+  /// about crediting *somebody else's* packet to a node we did not hear.
+  @Test
+  func `An echo keeps its whole path even when the echo arrived direct-routed`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let repeats = ScriptedTxHeardSource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      source: source, txHeard: repeats, store: store, fixes: fixes, clock: clock, tuning: makeTuning()
+    )
+    let recorder = RecordingRawRecorder()
+
+    await engine.start()
+    await engine.setRawRecorder(recorder)
+    repeats.send(mapperHeardRepeat(
+      receivedAt: clock.now,
+      snr: 7,
+      rssi: -75,
+      pathNodes: [0x0C, 0x42],
+      isFlood: false
+    ))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(Set(row.repeaters.keys) == ["0C", "42"], "the first hop heard us; the last is the one we heard")
+    #expect(try #require(row.repeaters["42"]).rxSnrCount == 1)
+
+    let raw = try #require(await recorder.events.first)
+    #expect(raw.kind == .txHeard)
+    #expect(raw.repeaterHexID == "42")
+    #expect(raw.pathHashes == ["0C", "42"])
+  }
+
+  // MARK: - (i) What a raw row carries
+
+  /// §9: the bytes as received, so scope can ingest them and a later tool can re-decode
+  /// anything. Recorded with no run open anywhere in this suite — the engine has never had
+  /// a notion of a ride, and since v3 the app attaches a recorder whenever capture is
+  /// wired rather than only while one is running.
+  @Test
+  func `Raw rows carry the packet bytes and the route, with no ride involved`() async throws {
+    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let acks = ScriptedAckSource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      source: source, acks: acks, store: store, fixes: fixes, clock: clock, tuning: makeTuning()
+    )
+    let recorder = RecordingRawRecorder()
+
+    await engine.start()
+    await engine.setRawRecorder(recorder)
+    let entry = mapperRxEntry(
+      payload: Data([0x01, 0x02, 0x03]),
+      receivedAt: clock.now,
+      routeType: .flood,
+      pathNodes: [0x42]
+    )
+    source.send(entry)
+    try await waitForCondition { await !recorder.events.isEmpty }
+
+    acks.send(.statusResolved(messageID: UUID(), status: .delivered, roundTripTime: 900))
+    try await waitForCondition { await recorder.events.count >= 2 }
+    await engine.flushNow()
+    await engine.stop()
+
+    let events = await recorder.events
+    let heard = try #require(events.first { $0.kind == .passiveRx })
+    #expect(heard.rawHex == entry.rawPayload)
+    #expect(heard.pathHashes == ["42"])
+    #expect(heard.payloadTypeRaw == PayloadType.groupText.rawValue)
+
+    // The kinds that are not a received packet carry no bytes, whatever the producer does.
+    let ack = try #require(events.first { $0.kind == .ackResolved })
+    #expect(ack.rawHex == nil)
+    #expect(ack.pathHashes == nil)
+    #expect(ack.rttMs == 900)
+  }
 }

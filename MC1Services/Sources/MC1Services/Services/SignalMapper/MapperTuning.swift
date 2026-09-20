@@ -56,12 +56,19 @@ public struct MapperTuning: Sendable, Equatable, Codable {
   /// mid-ride ends the ride (foreground-only capture).
   public var rideKeepsScreenAwake: Bool
 
-  /// Days raw ride-log rows are kept before the launch purge removes them.
+  /// Days raw log rows are kept before the launch purge removes them.
   /// 0 means keep forever — an explicit choice, deliberately **not** the default:
   /// a precise movement diary's analytic value decays in weeks while its exposure
   /// accrues forever (ACTIVE_SURVEY_M3_5.md §3.1). Unlike ``MapperTuningStore``'s
   /// anchor seed, this key IS reset by `resetToDefaults()` — the reset must restore
   /// the safe value, not preserve an override.
+  ///
+  /// **90 since v3** (SIGNAL_MAPPER_V3.md §0, §2), up from 30. The rows are no longer a
+  /// ride recording that a completed ride has finished with: they are the map, the card
+  /// and every answer either can give, so a 30-day window would delete the coverage
+  /// history the feature now *is*. A season is the span over which "which repeaters do I
+  /// hear here" stays a question worth asking, and the phone still forgets — export is
+  /// how anything outlives it.
   public var rawRetentionDays: Int
 
   // MARK: - Fix policy (consumed in M0)
@@ -139,7 +146,7 @@ public struct MapperTuning: Sendable, Equatable, Codable {
     communityFreshnessDays: Int = 0,
     focusProbeIntervalSeconds: TimeInterval = 20,
     rawSampleCapPerSession: Int = 50000,
-    rawRetentionDays: Int = 30,
+    rawRetentionDays: Int = 90,
     rideKeepsScreenAwake: Bool = true,
     fixMaxAgeSeconds: TimeInterval = 30,
     fixMaxAccuracyMeters: Double = 50,

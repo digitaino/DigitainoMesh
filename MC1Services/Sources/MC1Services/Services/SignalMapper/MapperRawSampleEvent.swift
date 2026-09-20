@@ -30,6 +30,47 @@ public enum MapperRawSampleKind: Int, Sendable, CaseIterable {
   case radioLinkDown = 9
   /// The BLE link to the radio came back.
   case radioLinkUp = 10
+  /// One of *our own* transmissions left the radio: a message, an advert or a manual
+  /// flood (docs/SIGNAL_MAPPER_V3.md §2, "Our own packets"). Probe transmissions keep
+  /// their own ``probeAttempt`` kind rather than doubling as `sent` rows.
+  ///
+  /// The firmware builds the packet, so the app cannot compute a content hash at send
+  /// time; ``MapperRawSampleEvent/contentHash`` is back-filled once the echo reveals it,
+  /// keyed by ``MapperRawSampleEvent/messageID``.
+  case sent = 11
+  /// One observer's sighting of one of our packets, fetched from CoreScope after the
+  /// fact (§4). `repeaterHexID` is the observer, `rxSnr`/`rssi` are *its* reading of us,
+  /// `contentHash` is the packet, and there is no position: the row records what somebody
+  /// else heard, not where we were.
+  case observerSighting = 12
+
+  /// The kinds allowed to carry a ``MapperRawSampleEvent/contentHash``.
+  ///
+  /// ACTIVE_SURVEY_M3_5 §6 F1 refused a mesh-wide packet identity on raw rows outright: it
+  /// is a cross-mesh join key, and an exported ride carrying one could be matched against a
+  /// third party's RX log. SIGNAL_MAPPER_V3 §2 narrows that to these two, where the packet
+  /// being identified is *ours* — a transmission we chose to make under our own key, and
+  /// an observer's sighting of that same transmission, which is the join reach is built
+  /// from. On anything else the hash would still be F1's key over somebody else's traffic.
+  ///
+  /// Enforced on write, not merely documented: `MapperRawSample` drops a hash a kind is not
+  /// entitled to, so a future producer cannot smuggle one in by filling the field.
+  public static let hashBearingKinds: Set<MapperRawSampleKind> = [.sent, .observerSighting]
+
+  /// The kinds allowed to carry ``MapperRawSampleEvent/rawHex`` — the ones that *are* a
+  /// packet our radio received (§9). Our own `sent` rows are not among them: the firmware
+  /// builds the packet and never hands the bytes back.
+  public static let packetBearingKinds: Set<MapperRawSampleKind> = [
+    .passiveRx, .txHeard, .probeTraceReply, .probeDiscoverResponse
+  ]
+
+  public var mayCarryContentHash: Bool {
+    Self.hashBearingKinds.contains(self)
+  }
+
+  public var mayCarryPacketBytes: Bool {
+    Self.packetBearingKinds.contains(self)
+  }
 }
 
 /// Why the aggregate pipeline accepted or rejected the fix behind a sample.
@@ -66,6 +107,36 @@ public struct MapperRawSampleEvent: Sendable, Equatable {
   public var payloadTypeRaw: UInt8?
   public var perHopSnrs: [Double]?
 
+  /// The packet's hop hashes in path order (sender first), canonical uppercase hex —
+  /// the same spelling ``NodeHexID/hex`` produces, so a row joins against the rest of
+  /// the mapper without re-formatting. Nil when the event carried no path; an empty
+  /// array means "a path field that decoded to no hops", which is a different fact.
+  public var pathHashes: [String]?
+
+  /// The packet bytes exactly as the radio handed them over (SIGNAL_MAPPER_V3 §9): what
+  /// a later tool re-decodes and what CoreScope's client-reception payload carries. Set
+  /// on rows that *are* a received packet — ``MapperRawSampleKind/passiveRx``,
+  /// ``MapperRawSampleKind/txHeard`` — and nil everywhere else, including our own
+  /// ``MapperRawSampleKind/sent`` rows, where the firmware built the packet and never
+  /// showed it to us.
+  public var rawHex: Data?
+
+  /// The packet's mesh-wide identity: `SHA-256` over the payload-type nibble and the
+  /// packet payload, 16 lowercase hex characters, identical on every node and observer
+  /// that heard it (`ParsedRxLogData.computeContentHash`).
+  ///
+  /// Allowed on ``MapperRawSampleKind/sent`` and ``MapperRawSampleKind/observerSighting``
+  /// rows only. §2/§9 of SIGNAL_MAPPER_V3 supersede ACTIVE_SURVEY_M3_5 §6 F1 for exactly
+  /// these two kinds: a hash on *our own* transmission and on somebody else's sighting of
+  /// it is the join key reach depends on, while a hash on a passively heard packet would
+  /// still be the cross-mesh join into a third party's RX log that F1 refused.
+  public var contentHash: String?
+
+  /// Local correlation for a ``MapperRawSampleKind/sent`` row: which message row this
+  /// transmission was, so the echo can back-fill ``contentHash`` later. Never leaves the
+  /// phone — a UUID minted by this install names nothing on the mesh.
+  public var messageID: UUID?
+
   // Repeater identity. The full public key is stored when the probe layer knows
   // it (targets, discover responses) — the raw log is the one store allowed to
   // keep it (docs/ACTIVE_SURVEY_M3_5.md §3.3). No name is ever recorded per-row.
@@ -100,6 +171,10 @@ public struct MapperRawSampleEvent: Sendable, Equatable {
     routeTypeRaw: UInt8? = nil,
     payloadTypeRaw: UInt8? = nil,
     perHopSnrs: [Double]? = nil,
+    pathHashes: [String]? = nil,
+    rawHex: Data? = nil,
+    contentHash: String? = nil,
+    messageID: UUID? = nil,
     repeaterHexID: String? = nil,
     repeaterPublicKey: Data? = nil,
     wasFocused: Bool = false,
@@ -123,6 +198,10 @@ public struct MapperRawSampleEvent: Sendable, Equatable {
     self.routeTypeRaw = routeTypeRaw
     self.payloadTypeRaw = payloadTypeRaw
     self.perHopSnrs = perHopSnrs
+    self.pathHashes = pathHashes
+    self.rawHex = rawHex
+    self.contentHash = contentHash
+    self.messageID = messageID
     self.repeaterHexID = repeaterHexID
     self.repeaterPublicKey = repeaterPublicKey
     self.wasFocused = wasFocused

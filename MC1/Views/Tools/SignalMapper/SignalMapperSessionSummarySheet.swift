@@ -2,14 +2,16 @@ import MapperRawLog
 import MC1Services
 import SwiftUI
 
-/// What a finished survey session did, shown the moment it ends (§7 "M3").
+/// What a finished ride did, shown the moment it ends (docs/SIGNAL_MAPPER_V3.md §8:
+/// "the ride completion sheet stays, simplified").
 ///
-/// The numbers are the session's own counters, not the store's: cells *probed* this walk,
-/// probes spent, replies heard, probes that died in the air. "No reply" is presented as a
-/// finding rather than a failure — a probe nothing answered is exactly how a dead zone
-/// gets proved.
+/// **Every number is a fold of the ride's own rows** (``MapperRawLogStore/rideTotals(runID:)``),
+/// not the probe engine's in-memory tallies. That is the whole simplification: an engine
+/// rebuilt by a BLE rewire could disagree with the log it had been writing to, and the
+/// counters that had no row behind them at all — cells *probed*, probes that died in the
+/// air — are gone rather than reconciled. What is left is what the ride recorded.
 ///
-/// The upload-consent leg of this sheet arrives with M2; until a server exists, the footer
+/// The upload-consent leg of this sheet arrives later; until a server exists, the footer
 /// says plainly that nothing leaves the device.
 struct SignalMapperSessionSummarySheet: View {
   let summary: SignalMapperProbeEngine.SessionSnapshot
@@ -17,6 +19,7 @@ struct SignalMapperSessionSummarySheet: View {
   var runID: UUID?
   var rawLogStore: MapperRawLogStore?
 
+  @State private var totals: MapperRideTotals?
   @State private var exportedURL: URL?
   @State private var isExporting = false
 
@@ -24,22 +27,26 @@ struct SignalMapperSessionSummarySheet: View {
     NavigationStack {
       List {
         Section {
-          LabeledContent(
-            L10n.Tools.Tools.SignalMapper.Survey.Summary.cellsProbed,
-            value: summary.cellsProbed.formatted()
-          )
-          LabeledContent(
-            L10n.Tools.Tools.SignalMapper.Survey.Summary.probes,
-            value: summary.probesSent.formatted()
-          )
-          LabeledContent(
-            L10n.Tools.Tools.SignalMapper.Survey.Summary.replies,
-            value: (summary.traceRepliesHeard + summary.discoverResponsesHeard).formatted()
-          )
-          LabeledContent(
-            L10n.Tools.Tools.SignalMapper.Survey.Summary.noReply,
-            value: summary.probesLost.formatted()
-          )
+          if let totals {
+            LabeledContent(
+              L10n.Tools.Tools.SignalMapper.Survey.Summary.hexagons,
+              value: totals.hexagonCount.formatted()
+            )
+            LabeledContent(
+              L10n.Tools.Tools.SignalMapper.Survey.Summary.repeatersHeard,
+              value: totals.repeatersHeard.formatted()
+            )
+            LabeledContent(
+              L10n.Tools.Tools.SignalMapper.Survey.Summary.probes,
+              value: totals.probesSent.formatted()
+            )
+            LabeledContent(
+              L10n.Tools.Tools.SignalMapper.Survey.Summary.replies,
+              value: totals.probeReplies.formatted()
+            )
+          } else {
+            ProgressView()
+          }
           if let startedAt = summary.startedAt {
             LabeledContent(
               L10n.Tools.Tools.SignalMapper.Survey.Summary.duration,
@@ -60,6 +67,10 @@ struct SignalMapperSessionSummarySheet: View {
         exportBar
       }
       .navigationBarTitleDisplayMode(.inline)
+      .task {
+        guard let runID, let rawLogStore else { return }
+        totals = try? await rawLogStore.rideTotals(runID: runID)
+      }
     }
     .presentationDetents([.medium, .large])
     .presentationDragIndicator(.visible)

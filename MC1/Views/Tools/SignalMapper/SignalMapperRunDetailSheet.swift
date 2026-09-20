@@ -44,7 +44,9 @@ struct SignalMapperRunDetailSheet: View {
       }
       .task {
         if let recorder = session.recorder {
-          rawRecorded = await recorder.snapshot().recordedCount
+          // Per-ride, not per-recorder: the recorder is app-lifetime since v3 and its
+          // `recordedCount` spans everything captured this launch, ride or not.
+          rawRecorded = await recorder.snapshot().runRecordedCount
         }
       }
     }

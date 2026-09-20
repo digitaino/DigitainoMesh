@@ -25,17 +25,19 @@ struct SignalMapperCoverageView: View {
   @State private var isStyleLoaded = false
   @State private var isCenteredOnUser = false
   @State private var hasFramedData = false
-  @State private var selection: SignalMapperCoverageCell?
+  @State private var selection: SignalMapperMapCell?
   /// The hexagon the rider is standing in. During a run its card is on screen without
   /// anyone tapping anything — the third field test's "I still don't see any data".
   @State private var liveCell: H3Cell?
   /// Set when the rider dismisses the live cell's card, cleared the moment they cross
   /// into a different hexagon, so the ✕ means what it says without hiding the ride.
   @State private var dismissedLiveCell: H3Cell?
-  /// Which repeater the cell card is filtered to (v1's `selectedRelayFilter`): tapping a
-  /// chip re-computes the card from that repeater's observations alone.
-  @State private var repeaterFilter: String?
-  @State private var detailCell: SignalMapperCoverageCell?
+  /// Which window the card reads. Only meaningful while riding; reset when a ride starts
+  /// or ends so a run never inherits the last one's choice.
+  @State private var cardScope: SignalMapperCardScope = .allTime
+  /// The repeater whose observations are open, from a tap on a card row, with the rows it
+  /// was opened against.
+  @State private var repeaterDetail: SignalMapperRepeaterDetailRequest?
   @State private var showingDeleteConfirmation = false
   @State private var mapLayer: SignalMapperMapLayer = .heard
   /// Menu actions never present a sheet inline: on iPad the toolbar menu is a popover
@@ -62,6 +64,24 @@ struct SignalMapperCoverageView: View {
   /// Same measurement for the live strip, so the camera's top padding is not a constant
   /// that drifts with Dynamic Type (UI review P2-11).
   @State private var topInsetHeight: CGFloat = 0
+  /// The whole map area, which is what the expanded card's ceiling is carved out of.
+  @State private var mapContainerHeight: CGFloat = 0
+  /// How tall the card's scrolling list is drawing, reported by the card itself.
+  @State private var cardRowsHeight: CGFloat = 0
+  /// Everything in the bottom panel that is *not* those rows: the card's header, the
+  /// transmit bar, the focus strip and the paddings between them.
+  ///
+  /// Derived (`panel − rows`) rather than enumerated, so it stays right when a block comes
+  /// or goes and at every Dynamic Type size. Held in state, and updated only when it moves
+  /// by more than the panel's own 8 pt quantum, because it is a difference between two
+  /// measurements that both grow when the card grows: without the hysteresis a couple of
+  /// points of disagreement mid-layout could flip the ceiling across a row boundary, resize
+  /// the card, and start the loop again.
+  @State private var panelChromeHeight: CGFloat = 0
+
+  /// The map keeps at least this much of itself visible however tall the card gets. The
+  /// rider is navigating with it; a list that eats the map answers the wrong question.
+  private static let minimumMapViewport: CGFloat = 160
 
   @AppStorage(AppStorageKey.mapStyleSelection.rawValue)
   private var mapStyleSelection: MapStyleSelection = .standard
@@ -91,6 +111,11 @@ struct SignalMapperCoverageView: View {
       // Passive capture keeps folding while this screen is open; without a refresh the
       // card's "Last Heard" drifts minutes behind the radio pill's repeater list.
       .task(id: appState.servicesVersion) { await model.autoRefresh(appState: appState) }
+      // The fast path: the store says when rows land, so the card repaints on the evidence
+      // rather than on a timer. Keyed on `servicesVersion` like its neighbours — a BLE
+      // rewire builds a new store handle, and a task parked on the old one's stream is the
+      // C4c failure mode this file already documents.
+      .task(id: appState.servicesVersion) { await model.observeRowArrivals(appState: appState) }
       // Re-subscribes the HUD to each new engine generation: the run outlives BLE
       // rewires, the engines (and their snapshot streams) do not.
       .task(id: appState.signalMapperRideSession?.engineGeneration ?? -1) {
@@ -126,8 +151,27 @@ struct SignalMapperCoverageView: View {
         pendingTransmitSheet = false
         showingTransmitSheet = true
       }
+      // The card's rows are a fetch, not a fold of what the map already holds, so pointing
+      // it at a hexagon (or at a different window) is a task that can be cancelled by the
+      // next tap rather than a value that has to arrive.
+      .task(id: cardTargetKey) {
+        await model.setCardTarget(
+          cell: displayedCell?.cell,
+          scope: effectiveScope,
+          appState: appState
+        )
+      }
       .onAppear { model.loadCaptureSetting() }
-      .sheet(item: $detailCell) { SignalMapperCellDetailSheet(cell: $0) }
+      .onChange(of: isSurveying) { _, riding in
+        cardScope = riding ? .ride : .allTime
+      }
+      .sheet(item: $repeaterDetail) { request in
+        SignalMapperRepeaterDetailView(
+          item: request.item,
+          rows: request.rows,
+          since: request.since
+        )
+      }
       // The run sheet's actions run on *its* dismissal, never from inside it: both of
       // them present another sheet (UI review P0-4).
       .sheet(isPresented: $showingRunDetail, onDismiss: runPendingRunDetailAction) {
@@ -190,10 +234,7 @@ struct SignalMapperCoverageView: View {
         Button(L10n.Localizable.Common.cancel, role: .cancel) {}
         Button(L10n.Localizable.Common.delete, role: .destructive) {
           Task {
-            await model.deleteAll(
-              dataStore: appState.services?.dataStore,
-              radioID: appState.currentRadioID
-            )
+            await model.deleteAll(appState: appState)
             hasFramedData = false
           }
         }
@@ -344,7 +385,18 @@ struct SignalMapperCoverageView: View {
       // (UI review P0-3). It is part of the bottom stack now.
       controls
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+
+      // Top-leading, opposite the controls column: the two share the band under the
+      // navigation bar without ever meeting, which is what the previous bottom-leading
+      // placement stopped being able to promise once the card grew (UI review P0-3).
+      SignalMapperLegend(layer: mapLayer, summaryLines: legendSummaryLines)
+        .padding(.leading, 12)
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+    // Measured here, before the insets are applied, so this is the whole area the map and
+    // its chrome share — the number the expanded card's ceiling is subtracted out of.
+    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { mapContainerHeight = $0 }
     .safeAreaInset(edge: .top, spacing: 0) {
       if isSurveying, let session = appState.signalMapperRideSession {
         SignalMapperLiveStrip(
@@ -387,15 +439,6 @@ struct SignalMapperCoverageView: View {
       if let selected = selection {
         selection = snapshot.cells.first { $0.cell == selected.cell }
       }
-      // The detail sheet is a value copy; without this its numbers freeze the moment it
-      // opens, which during a ride is the one place they should not (UI review P2-33).
-      if let open = detailCell {
-        detailCell = snapshot.cells.first { $0.cell == open.cell }
-      }
-      if let repeaterFilter,
-         displayedCell?.repeaters.contains(where: { $0.hexID == repeaterFilter }) != true {
-        self.repeaterFilter = nil
-      }
       guard !hasFramedData, !isSurveying else { return }
       frameData()
     }
@@ -413,10 +456,42 @@ struct SignalMapperCoverageView: View {
   /// The cell whose card is on screen: the tapped one, else — while riding — the one the
   /// rider is standing in. The ride shows its own data without being asked (field report,
   /// 2026-08-30).
-  private var displayedCell: SignalMapperCoverageCell? {
+  ///
+  /// A hexagon with no summary yet still gets a card. The map is drawn from the summary
+  /// table, so gating the live card on it meant a rider who had just crossed a boundary had
+  /// no card at all until a summary existed — exactly the minutes when they most want to
+  /// know what is happening (2026-09-04). The stand-in carries the geometry and no evidence;
+  /// it keeps the same `cell` id, so when the real one folds in the card is updated rather
+  /// than re-identified.
+  private var displayedCell: SignalMapperMapCell? {
     if let selection { return selection }
     guard isSurveying, let liveCell, dismissedLiveCell != liveCell else { return nil }
-    return model.snapshot.cells.first { $0.cell == liveCell }
+    return model.snapshot.cells.first { $0.cell == liveCell } ?? .placeholder(liveCell)
+  }
+
+  /// Ride scope only means something while a ride is open; outside one the card reads
+  /// everything, whatever the switch was last left on.
+  private var effectiveScope: SignalMapperCardScope {
+    isSurveying ? cardScope : .allTime
+  }
+
+  /// Which kind of nothing an empty card is looking at. The order of blame — and why the
+  /// ride-wide answers are gated on the live hexagon and the ride window — lives with the
+  /// enum, in ``SignalMapperCardEmptyReason/resolve(isTappedHexagon:scope:isRejectingFixes:isQualityRejection:rideEvidenceCount:)``.
+  private var cardEmptyReason: SignalMapperCardEmptyReason {
+    let health = appState.signalMapperRideSession?.captureFixHealth
+    return .resolve(
+      isTappedHexagon: selection != nil,
+      scope: effectiveScope,
+      isRejectingFixes: health?.isRejectingFixes == true,
+      isQualityRejection: health?.isQualityRejection == true,
+      rideEvidenceCount: model.rideEvidenceCount
+    )
+  }
+
+  /// What the card's `.task(id:)` keys on: the hexagon and the window, and nothing else.
+  private var cardTargetKey: String {
+    "\(displayedCell?.cell.rawValue ?? 0)-\(effectiveScope.rawValue)"
   }
 
   private var focusHexIDs: Set<String> {
@@ -429,7 +504,11 @@ struct SignalMapperCoverageView: View {
   /// (field report, 2026-08-30).
   private var showsFocusStrip: Bool {
     guard isSurveying else { return false }
-    return !focusHexIDs.isEmpty || displayedCell == nil
+    // "The card has nothing to list" and "there is no card" used to be the same condition.
+    // A just-entered hexagon gets a card now (see `displayedCell`), so the test moved to the
+    // card's *contents* — otherwise adding the card would have silently deleted the strip a
+    // rider with no lock-on targets depends on for exactly those first seconds.
+    return !focusHexIDs.isEmpty || (selection == nil && model.card?.repeaters.isEmpty ?? true)
   }
 
   /// The bottom inset: **one** panel holding the live lock-on rows and the cell card,
@@ -473,14 +552,26 @@ struct SignalMapperCoverageView: View {
     if let displayed = displayedCell {
       SignalMapperCellCard(
         cell: displayed,
+        data: model.card?.cell == displayed.cell ? model.card : nil,
         layer: mapLayer,
-        focusHexIDs: focusHexIDs,
         isLiveCell: selection == nil,
-        repeaterFilter: $repeaterFilter,
-        onDetails: { detailCell = displayed },
-        onLockOn: { repeater in
-          focusPickerSeed = repeater.name ?? repeater.hexID
-          showingFocusPicker = true
+        isRiding: isSurveying,
+        emptyReason: cardEmptyReason,
+        scope: $cardScope,
+        maxRowsHeight: cardMaxRowsHeight,
+        onRowsHeight: noteCardRowsHeight,
+        onFlipLayer: {
+          withAnimation(.snappy(duration: 0.2)) {
+            mapLayer = mapLayer == .heard ? .reach : .heard
+          }
+        },
+        onRepeater: { item in
+          guard let card = model.card, card.cell == displayed.cell else { return }
+          repeaterDetail = SignalMapperRepeaterDetailRequest(
+            item: item,
+            rows: card.rows,
+            since: card.since
+          )
         },
         onClose: {
           withAnimation(.snappy(duration: 0.25)) {
@@ -489,7 +580,6 @@ struct SignalMapperCoverageView: View {
             } else {
               dismissedLiveCell = liveCell
             }
-            repeaterFilter = nil
           }
         }
       )
@@ -533,20 +623,30 @@ struct SignalMapperCoverageView: View {
     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
   }
 
-  private var legendSummary: String? {
-    guard model.hasCoverage else { return nil }
-    return L10n.Tools.Tools.SignalMapper.summary(
-      model.snapshot.cells.count,
-      model.snapshot.totalObservations,
-      model.snapshot.dayCount
-    )
+  /// "All time · N hexagons · M observations", plus this ride's own line while one is
+  /// open. Both are counts of rows: hexagons are summary rows, observations are the
+  /// packets those summaries folded (§3).
+  private var legendSummaryLines: [String] {
+    guard model.hasCoverage else { return [] }
+    var lines = [L10n.Tools.Tools.SignalMapper.Legend.allTime(
+      model.snapshot.hexagonCount,
+      model.snapshot.observationCount
+    )]
+    if let startedAt = appState.signalMapperRideSession?.startedAt {
+      lines.append(L10n.Tools.Tools.SignalMapper.Legend.thisRide(
+        model.snapshot.rideHexagonCount(since: startedAt),
+        model.rideObservationCount
+      ))
+    }
+    return lines
   }
 
   private func rebuildOverlays() {
     mapOverlays = SignalMapperCoverageRenderer.overlays(
       for: model.snapshot,
       selected: selection,
-      layer: mapLayer
+      layer: mapLayer,
+      rideStartedAt: appState.signalMapperRideSession?.startedAt
     )
   }
 
@@ -603,7 +703,6 @@ struct SignalMapperCoverageView: View {
             liveCell = here
             // A new hexagon is new data: a card dismissed in the last one does not carry.
             dismissedLiveCell = nil
-            repeaterFilter = nil
           }
         }
         let last = breadcrumb.last
@@ -720,10 +819,7 @@ struct SignalMapperCoverageView: View {
 
   private func reload() async {
     model.loadCaptureSetting()
-    await model.load(
-      dataStore: appState.services?.dataStore,
-      radioID: appState.currentRadioID
-    )
+    await model.load(appState: appState)
   }
 
   /// Frames every captured cell. The map ignores a camera whose version still matches the
@@ -753,6 +849,42 @@ struct SignalMapperCoverageView: View {
     let stepped = (height / 8).rounded() * 8
     guard stepped != bottomInsetHeight else { return }
     bottomInsetHeight = stepped
+    refreshPanelChrome()
+  }
+
+  /// Records the rows height and nothing else. The chrome estimate is deliberately NOT
+  /// refreshed from here: this value arrives in the same update that changed the card's
+  /// ceiling, while the panel's own height is measured only after a layout pass that
+  /// contains it, so subtracting the new rows from the old panel would put the whole rows
+  /// delta into the chrome. `noteBottomInset` refreshes it once the panel has been measured,
+  /// at which point the two numbers describe the same layout (review, 2026-09-05).
+  private func noteCardRowsHeight(_ height: CGFloat) {
+    guard cardRowsHeight != height else { return }
+    cardRowsHeight = height
+  }
+
+  /// See ``panelChromeHeight``. Only while a card is on screen: with no card the panel is
+  /// smaller and the last rows measurement is stale, and the difference between them is a
+  /// number about nothing.
+  private func refreshPanelChrome() {
+    guard displayedCell != nil, bottomInsetHeight > 0, cardRowsHeight > 0 else { return }
+    let chrome = max(0, bottomInsetHeight - cardRowsHeight)
+    guard abs(chrome - panelChromeHeight) > 8 else { return }
+    panelChromeHeight = chrome
+  }
+
+  /// How tall the card's list may grow when the rider expands it: what is left of the map
+  /// area once the ride strip, the panel's own chrome and the map's minimum viewport have
+  /// taken theirs. Zero until everything it needs has been measured, which leaves the card
+  /// at its collapsed three rows — the honest state for "we do not know yet".
+  ///
+  /// Quantized down to 8 pt for the same reason the inset is: this number reaches the card,
+  /// which rounds it down to whole rows, and a ceiling that breathes by a point should not
+  /// be able to add and remove a row on alternate layout passes.
+  private var cardMaxRowsHeight: CGFloat {
+    guard mapContainerHeight > 0, panelChromeHeight > 0 else { return 0 }
+    let available = mapContainerHeight - topInsetHeight - panelChromeHeight - Self.minimumMapViewport
+    return max(0, (available / 8).rounded(.down) * 8)
   }
 
   private func runPendingRunDetailAction() {
@@ -777,7 +909,6 @@ struct SignalMapperCoverageView: View {
       if isLive {
         dismissedLiveCell = nil
       }
-      repeaterFilter = nil
     }
   }
 

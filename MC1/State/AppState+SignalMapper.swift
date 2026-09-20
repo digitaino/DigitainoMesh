@@ -63,8 +63,12 @@ extension AppState {
       guard !Task.isCancelled else { return }
       await router.setFallback(fixes)
       await engine.start()
-      if let session = self.signalMapperRideSession {
-        await engine.setRawRecorder(session.recorder)
+      // The raw log is always on since v3 (§7 step 2): a recorder exists whenever capture
+      // is wired, not only while a ride is open. Attached after `start()` so the engine is
+      // already running when rows begin arriving, and after the store's launch maintenance
+      // has had its turn.
+      if let recorder = await self.ensureRawRecorder() {
+        await engine.setRawRecorder(recorder)
       }
     }
 
@@ -90,6 +94,10 @@ extension AppState {
   /// explicit stop or auto-end — riding out of BLE range must not end the ride.
   func tearDownSignalMapper() {
     suspendProbeEngineForRewire()
+    // Our own transmissions stop being recorded exactly when everything else does. The
+    // capture toggle governing only the passive producers would be a rule the user cannot
+    // see: they turned capture off and the log kept growing.
+    mapperSentPacketLogger?.stop()
 
     let previousTransition = signalMapperStartTask
     previousTransition?.cancel()
@@ -105,9 +113,13 @@ extension AppState {
     signalMapperEngine = nil
     signalMapperFixCache = nil
 
+    let recorder = mapperRawSampleRecorder
     signalMapperStartTask = Task {
       await previousTransition?.value
       await engine.stop()
+      // The recorder outlives the engine — it is app-lifetime now — so the tail it is
+      // holding has to be written here rather than dying with the stack.
+      await recorder?.flushNow()
       await fixes?.reset()
       await router?.setFallback(nil)
     }
@@ -210,9 +222,10 @@ extension AppState {
     locationService.requestPermissionIfNeeded()
     requestSurveyMovementHints()
 
-    // The raw ride log. Failing to open it degrades the run to aggregates-only rather
-    // than blocking it — but that degradation is loud in the summary sheet.
-    let recorder = await makeRawRecorder(focusTargets: focusTargets)
+    // The ride's run row, and the label on the already-running recorder. Failing to open
+    // it degrades the run to aggregates-only rather than blocking it — but that
+    // degradation is loud in the summary sheet.
+    let recorder = await openRun(focusTargets: focusTargets)
     let session = SignalMapperRideSession(
       runID: recorder?.runID ?? UUID(),
       startedAt: Date(),
@@ -288,7 +301,12 @@ extension AppState {
     }
 
     guard let engine = signalMapperEngine else { return }
-    await engine.setRawRecorder(session.recorder)
+    // Only ever *attaches*. A nil ride recorder means the raw store failed to open, and
+    // passing it through would detach the app-lifetime recorder the ambient wiring
+    // already gave this engine.
+    if let recorder = session.recorder ?? mapperRawSampleRecorder {
+      await engine.setRawRecorder(recorder)
+    }
 
     let probe = SignalMapperProbeEngine(
       session: services.session,
@@ -341,16 +359,14 @@ extension AppState {
     locationService.stopContinuousUpdates()
     updateMapperIdleTimer()
 
-    await signalMapperEngine?.setRawRecorder(nil)
-
     var totals = session.carried
     totals.isRunning = false
     totals.startedAt = session.startedAt
 
-    // Close out the raw log: final flush, then stamp the run row.
-    if let recorder = session.recorder {
-      _ = await recorder.finish()
-    }
+    // Close out the ride's slice of the log: the recorder keeps running with no run
+    // label, so the engine keeps its recorder and only the stamp comes off. `setRunID`
+    // flushes on its way through, so the ride's tail lands under the ride's id.
+    await session.recorder?.setRunID(nil)
     if let store = mapperRawLogStore {
       let runID = session.runID
       let carried = session.carried
@@ -430,23 +446,90 @@ extension AppState {
 
   // MARK: - Raw log plumbing
 
-  /// Opens (or reuses) the raw-log store and creates the run row + recorder. Runs the
-  /// launch maintenance on first open: orphaned runs get their `endedAt` stamped and
-  /// expired runs purge per the retention tuning.
-  private func makeRawRecorder(
-    focusTargets: [MapperProbeTarget]
-  ) async -> (runID: UUID, recorder: MapperRawSampleRecorder)? {
-    let store: MapperRawLogStore
-    if let existing = mapperRawLogStore {
-      store = existing
-    } else {
-      guard let fresh = try? MapperRawLogStore.live() else { return nil }
-      mapperRawLogStore = fresh
-      store = fresh
-      let tuning = MapperTuningStore().tuning
-      _ = try? await fresh.reconcileOrphanRuns(now: Date())
-      _ = try? await fresh.purgeExpired(retentionDays: tuning.rawRetentionDays, now: Date())
+  /// Opens (or reuses) the raw store, running launch maintenance the first time.
+  ///
+  /// Maintenance is: orphaned runs get their `endedAt` stamped, everything past the
+  /// retention window is deleted — rows first, whatever run they name, because since v3
+  /// most rows name none — and then the derived per-cell summaries are rebuilt *if the
+  /// table is empty*, which is the first launch after step 3 and no other
+  /// (``MapperRawLogStore/rebuildAllSummariesIfEmpty()``, two counts on every later one).
+  /// The rebuild runs after the purge on purpose: folding rows that are about to be
+  /// deleted would produce a cache the very next statement contradicts.
+  ///
+  /// Called by the capture wiring *and* by the coverage screen, which since step 4 reads
+  /// its map from this store and may open it with capture switched off entirely.
+  ///
+  /// Returning nil degrades the mapper to aggregates-only rather than blocking capture;
+  /// the raw store failing to open must never cost the user their coverage map.
+  func resolveMapperRawLogStore() async -> MapperRawLogStore? {
+    if let existing = mapperRawLogStore { return existing }
+    guard let fresh = try? MapperRawLogStore.live() else { return nil }
+    mapperRawLogStore = fresh
+    let tuning = MapperTuningStore().tuning
+    _ = try? await fresh.reconcileOrphanRuns(now: Date())
+    _ = try? await fresh.purgeExpired(retentionDays: tuning.rawRetentionDays, now: Date())
+    _ = try? await fresh.rebuildAllSummariesIfEmpty()
+    return fresh
+  }
+
+  /// Opens (or reuses) the raw store and the one app-lifetime recorder, and starts the
+  /// sent-packet logger against them.
+  @discardableResult
+  func ensureRawRecorder() async -> MapperRawSampleRecorder? {
+    if let recorder = mapperRawSampleRecorder {
+      startSentPacketLogger(recorder: recorder)
+      return recorder
     }
+
+    guard let store = await resolveMapperRawLogStore() else { return nil }
+
+    // Continue the table's numbering rather than restarting at zero: `seq` orders the
+    // store now, not one ride, and a launch that reused numbers would make the order
+    // ambiguous for every row written after it.
+    let startingSeq = await (try? store.nextSeq()) ?? 0
+    let recorder = MapperRawSampleRecorder(
+      store: store,
+      runID: nil,
+      startingSeq: startingSeq,
+      // A per-ride backstop only. Outside a ride nothing is capped — retention is the
+      // bound (§2).
+      cap: MapperTuningStore().tuning.rawSampleCapPerSession
+    )
+    mapperRawSampleRecorder = recorder
+    startSentPacketLogger(recorder: recorder)
+    return recorder
+  }
+
+  /// Subscribes the sent-packet logger to the message stream, building it on first use.
+  ///
+  /// Lives *inside* the capture wiring rather than beside the message stream, because
+  /// "capture is on" is what makes recording our own transmissions legitimate: the toggle
+  /// has to govern every producer, not only the passive ones. `tearDownSignalMapper`
+  /// unsubscribes it for the same reason.
+  ///
+  /// Re-entrant by design — `wireSignalMapper` runs on every reconnect, and rebuilding a
+  /// working subscription each time would drop whatever event was in flight.
+  private func startSentPacketLogger(recorder: MapperRawSampleRecorder) {
+    guard let services, let store = mapperRawLogStore else { return }
+    if mapperSentPacketLogger == nil {
+      mapperSentPacketLogger = MapperSentPacketLogger(
+        recorder: recorder,
+        store: store,
+        fixProvider: mapperFixRouter(),
+        messages: services.dataStore
+      )
+    }
+    guard let logger = mapperSentPacketLogger, !logger.isRunning else { return }
+    logger.start(events: messageEventStream.events())
+  }
+
+  /// Opens the ride's run row and stamps its id onto the running recorder.
+  ///
+  /// The recorder is *not* replaced: it has been recording since capture came up, and
+  /// swapping it at ride start would drop whatever it was holding and restart the
+  /// sequence. A ride is a label, and this is where the label goes on.
+  private func openRun(focusTargets: [MapperProbeTarget]) async -> (runID: UUID, recorder: MapperRawSampleRecorder)? {
+    guard let recorder = await ensureRawRecorder(), let store = mapperRawLogStore else { return nil }
 
     let device = connectedDevice
     guard let runID = try? await store.createRun(
@@ -460,12 +543,7 @@ extension AppState {
       startedAt: Date()
     ) else { return nil }
 
-    let recorder = MapperRawSampleRecorder(
-      store: store,
-      runID: runID,
-      startingSeq: 0,
-      cap: MapperTuningStore().tuning.rawSampleCapPerSession
-    )
+    await recorder.setRunID(runID)
     return (runID, recorder)
   }
 

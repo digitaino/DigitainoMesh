@@ -224,6 +224,38 @@ func mapperRxEntry(
   return RxLogEntryDTO(radioID: radioID, receivedAt: receivedAt, from: parsed)
 }
 
+/// A zero-hop advert: the one packet shape that names its own sender.
+///
+/// An advert's payload begins with the advertiser's full 32-byte public key, so the
+/// attribution rule (SIGNAL_MAPPER_V3 §1) can credit the sender for a packet nothing
+/// relayed. Built by hand rather than through ``mapperRxEntry`` because the payload type
+/// and the payload's first 32 bytes both have to be real for the parse to mean anything.
+func mapperAdvertEntry(
+  receivedAt: Date,
+  publicKeyFirstByte: UInt8,
+  snr: Double? = 8,
+  rssi: Int? = -70,
+  hashSize: Int = 1,
+  radioID: UUID = UUID()
+) -> RxLogEntryDTO {
+  var key = Data([publicKeyFirstByte])
+  key.append(Data(repeating: 0x11, count: 31))
+  let parsed = ParsedRxLogData(
+    snr: snr,
+    rssi: rssi,
+    rawPayload: Data([0x11]) + key,
+    routeType: .flood,
+    payloadType: .advert,
+    payloadVersion: 0,
+    payloadTypeBits: PayloadType.advert.rawValue,
+    transportCode: nil,
+    pathLength: encodePathLen(hashSize: hashSize, hopCount: 0),
+    pathNodes: [],
+    packetPayload: key
+  )
+  return RxLogEntryDTO(radioID: radioID, receivedAt: receivedAt, from: parsed)
+}
+
 // MARK: - Waiting
 
 /// Polls `condition` until it holds or the budget runs out.

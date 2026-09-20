@@ -26,7 +26,9 @@ struct MapperTuningStoreTests {
     #expect(store.tuning.communityFreshnessDays == 0)
     #expect(store.tuning.focusProbeIntervalSeconds == 20)
     #expect(store.tuning.rawSampleCapPerSession == 50000)
-    #expect(store.tuning.rawRetentionDays == 30)
+    // 90 since SIGNAL_MAPPER_V3 §2: the raw log is the store, not a ride recording, so
+    // retention is the coverage history's lifetime rather than a ride's.
+    #expect(store.tuning.rawRetentionDays == 90)
     #expect(store.tuning.rideKeepsScreenAwake == true)
     #expect(store.tuning.uploadBatchMinCells == 25)
   }

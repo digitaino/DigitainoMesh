@@ -421,11 +421,17 @@ public actor SignalMapperCaptureEngine {
         hopCount: entry.hopCount,
         routeTypeRaw: entry.routeType.rawValue,
         payloadTypeRaw: entry.payloadType.rawValue,
+        pathHashes: Self.pathHashes(pathNodes: entry.pathNodes, hashSize: entry.pathHashSize),
+        // §9: the bytes as received, so scope can ingest them and a later tool can
+        // re-decode. Foreign payloads are ciphertext here and stay that way.
+        rawHex: entry.rawPayload,
+        // Nil for a direct-routed packet — the row keeps the path it carried and credits
+        // nobody, which is the whole of the §1 attribution rule at the row level.
         repeaterHexID: Self.repeaterSightings(from: entry).last?.id
       ),
       gate: gate
     )
-    guard let placed = gate.placement else { return }
+    guard let placed = gate.accepted else { return }
     guard !anchors.contains(cell: placed.cell) else {
       state.droppedAnchorCount += 1
       return
@@ -456,7 +462,9 @@ public actor SignalMapperCaptureEngine {
       pathNodes: detail.pathNodes,
       hashSize: detail.hashSize,
       snr: detail.snr,
-      rssi: detail.rssi
+      rssi: detail.rssi,
+      isFlood: event.isFlood,
+      isEcho: true
     )
     await recordRaw(
       MapperRawSampleEvent(
@@ -465,11 +473,15 @@ public actor SignalMapperCaptureEngine {
         rxSnr: detail.snr,
         rssi: detail.rssi,
         hopCount: detail.hopCount,
+        // The echo's path is both legs of the three-hops case: first hop heard us, last
+        // hop is the one we heard. `MessageRepeatDTO` keeps no packet bytes, so there is
+        // no `rawHex` to record here.
+        pathHashes: Self.pathHashes(pathNodes: detail.pathNodes, hashSize: detail.hashSize),
         repeaterHexID: echoHops.last?.id
       ),
       gate: gate
     )
-    guard let placed = gate.placement else { return }
+    guard let placed = gate.accepted else { return }
     guard !anchors.contains(cell: placed.cell) else {
       state.droppedAnchorCount += 1
       return
@@ -507,7 +519,7 @@ public actor SignalMapperCaptureEngine {
       ),
       gate: gate
     )
-    guard let placed = gate.placement else { return }
+    guard let placed = gate.accepted else { return }
     guard !anchors.contains(cell: placed.cell) else {
       state.droppedAnchorCount += 1
       return
@@ -548,8 +560,14 @@ public actor SignalMapperCaptureEngine {
     // ride speed a reply lands a boundary-straddling couple of seconds downrange of
     // the transmission it answers (M3.5 review M4). The current fix is only a
     // fallback. Anchor policy applies either way: a placement carries no disc verdict.
+    //
+    // Only an *accepted* send placement folds. Since 2026-09-04 the probe engine is also
+    // handed doubtful placements so its raw rows can carry a cell; those are the aggregate
+    // path's version of "no placement", and fall through to the current-fix fallback
+    // exactly as a missing one always did.
+    let sendPlacement = result.placement.flatMap { $0.outcome == .accepted ? $0 : nil }
     let placed: Placement
-    if let sendPlacement = result.placement {
+    if let sendPlacement {
       placed = Placement(
         cell: sendPlacement.cell,
         coordinate: GeoCoordinate(
@@ -564,7 +582,7 @@ public actor SignalMapperCaptureEngine {
     } else {
       return
     }
-    if result.placement != nil, anchors.contains(cell: placed.cell) {
+    if sendPlacement != nil, anchors.contains(cell: placed.cell) {
       state.droppedAnchorCount += 1
       return
     }
@@ -599,7 +617,7 @@ public actor SignalMapperCaptureEngine {
     // not six (field report, 2026-08-30). The ledger lives on the engine rather than the
     // pending slot because a flush between two replies to the same probe would otherwise
     // book the transmission twice.
-    if let sendPlacement = result.placement, noteAnsweredProbe(at: sendPlacement.at) {
+    if let sendPlacement, noteAnsweredProbe(at: sendPlacement.at) {
       slot.aggregate.probesAnswered += 1
     }
     if let rttMs = result.rttMs {
@@ -633,12 +651,18 @@ public actor SignalMapperCaptureEngine {
   /// divides by. The aggregate booking respects anchor discs; the returned placement is
   /// handed back regardless, because the raw log and the reply fold both need it and
   /// neither may learn the disc verdict from it.
+  ///
+  /// A merely doubtful fix (poor accuracy, or older than its own speed allows) is placed
+  /// and returned, carrying its ``MapperGateOutcome`` so no reader can mistake it for an
+  /// accepted one — the probe engine planned this transmission on the same fix, and a
+  /// reply that cannot be placed is a reply that vanishes. The `probesSent` booking above
+  /// stays behind the strict gate: the dead-zone denominator must not inherit doubt.
   public func placeProbeAttempt() async -> MapperProbePlacement? {
     guard state.isRunning else { return nil }
     let gate = await qualityGate()
-    guard let placed = gate.placement, let fix = gate.fix else { return nil }
+    guard let placed = gate.position, let fix = gate.fix else { return nil }
 
-    if !anchors.contains(cell: placed.cell) {
+    if gate.outcome == .accepted, !anchors.contains(cell: placed.cell) {
       let key = CellDay(cell: placed.cell, day: MapperDayKey.key(for: placed.at))
       var slot = pending[key] ?? PendingCell(cell: placed.cell)
       slot.note(placed.at)
@@ -650,29 +674,43 @@ public actor SignalMapperCaptureEngine {
       cell: placed.cell,
       fix: fix,
       at: placed.at,
-      isStationary: placed.isStationary
+      isStationary: placed.isStationary,
+      outcome: gate.outcome
     )
   }
 
   // MARK: - Fix gate
 
-  /// Where an observation arriving now belongs, or nil when the fix policy (§2.2) or the
-  /// anchor exclusion (§2.7) refuses to place it. The drop is counted against the reason it
-  /// failed for.
+  /// One fix, graded, with the drops already counted.
   ///
-  /// Four ways a fix can fail, in the order they are cheapest to test:
+  /// Two placements rather than one, because a fix can be real without being trustworthy:
   ///
-  /// 1. **There isn't one.** Nothing to place against.
-  /// 2. **The phone moved.** The cache saw a movement hint after this fix was taken, so
-  ///    whatever the fix says, the phone is somewhere else now. Age and accuracy both still
-  ///    look perfect here, which is exactly why this test has to exist separately.
-  /// 3. **It is too old** — either past the flat ``MapperTuning/fixMaxAgeSeconds`` or past
-  ///    the shorter budget its own speed implies (see ``toleratedAgeSeconds(for:tuning:)``).
-  /// 4. **It is too vague.** Accuracy worse than the tuning allows, or CoreLocation's
-  ///    negative sentinel for "not a real fix".
+  /// - ``position`` is where the fix says we are whenever ``MapperFixGate`` could place it
+  ///   at all. A raw row carries this, alongside the outcome that says how sure it is.
+  /// - ``accepted`` is the same placement, but only when the strict tests passed too. It is
+  ///   the *only* one the `(cell, day)` aggregates, the anchor discs and the dead-zone
+  ///   `probesSent` denominator ever see.
+  ///
+  /// Splitting them is the 2026-09-04 owner decision: a doubtful fix used to place nothing
+  /// at all, which lost the reply for ever, and losing the row is the one outcome no later
+  /// consumer can undo (the observation table already carries accuracy and fix age for
+  /// exactly this filtering — SIGNAL_MAPPER_V3 §2).
+  private struct FixGate {
+    var position: Placement?
+    var fix: MapperFix?
+    var outcome: MapperGateOutcome
+
+    var accepted: Placement? {
+      outcome == .accepted ? position : nil
+    }
+  }
+
+  /// Where an observation arriving now belongs *for the aggregate path*, or nil when the fix
+  /// policy (§2.2) or the anchor exclusion (§2.7) refuses to place it. The drop is counted
+  /// against the reason it failed for.
   private func place() async -> Placement? {
     let gate = await qualityGate()
-    guard let placed = gate.placement else { return nil }
+    guard let placed = gate.accepted else { return nil }
     // Before the fold, not at upload: an excluded observation must never exist on disk.
     guard !anchors.contains(cell: placed.cell) else {
       state.droppedAnchorCount += 1
@@ -686,82 +724,53 @@ public actor SignalMapperCaptureEngine {
   /// (docs/ACTIVE_SURVEY_M3_5.md §3.2: a per-point in/out label is a solvable oracle
   /// for the disc geometry). Returns the fix it examined either way, so a raw row can
   /// carry the position knowledge that existed even for a rejected sample.
-  private func qualityGate() async -> (placement: Placement?, fix: MapperFix?, outcome: MapperGateOutcome) {
-    let tuning = tuningProvider.tuning
-    guard let fix = await fixProvider.latestFix() else {
-      state.droppedNoFixCount += 1
-      return (nil, nil, .noFix)
-    }
-
-    guard !fix.movedSinceCapture else {
-      state.droppedMovedSinceFixCount += 1
-      return (nil, fix, .movedSinceCapture)
-    }
-
+  ///
+  /// The tests themselves live in ``MapperFixGate`` so the probe engine plans transmissions
+  /// on the identical definition; what stays here is the actor's own bookkeeping — the drop
+  /// counters and the movement hint the placement carries.
+  private func qualityGate() async -> FixGate {
     let at = now()
-    guard at.timeIntervalSince(fix.timestamp) <= Self.toleratedAgeSeconds(for: fix, tuning: tuning) else {
-      state.droppedStaleFixCount += 1
-      return (nil, fix, .staleFix)
-    }
-    // A negative accuracy is CoreLocation's "this is not a real fix" sentinel, so it fails
-    // the same test as an accuracy that is merely too poor.
-    guard fix.horizontalAccuracyMeters >= 0,
-          fix.horizontalAccuracyMeters <= tuning.fixMaxAccuracyMeters else {
-      state.droppedInaccurateFixCount += 1
-      return (nil, fix, .inaccurateFix)
+    let latest = await fixProvider.latestFix()
+    let verdict = MapperFixGate.evaluate(fix: latest, at: at, tuning: tuningProvider.tuning)
+    switch verdict.outcome {
+    case .accepted: break
+    case .noFix: state.droppedNoFixCount += 1
+    case .staleFix: state.droppedStaleFixCount += 1
+    case .inaccurateFix: state.droppedInaccurateFixCount += 1
+    case .movedSinceCapture: state.droppedMovedSinceFixCount += 1
     }
 
-    let coordinate = GeoCoordinate(latitude: fix.latitude, longitude: fix.longitude)
-    guard let cell = SurveyGrid.cell(containing: coordinate) else {
-      state.droppedNoFixCount += 1
-      return (nil, fix, .noFix)
+    guard let cell = verdict.cell, let coordinate = verdict.coordinate else {
+      return FixGate(position: nil, fix: verdict.fix, outcome: verdict.outcome)
     }
-
     let placement = await Placement(
       cell: cell,
       coordinate: coordinate,
       at: at,
       isStationary: movementHints?.currentMovementHint() == .stationary
     )
-    return (placement, fix, .accepted)
+    return FixGate(position: placement, fix: verdict.fix, outcome: verdict.outcome)
   }
 
   /// Populates a raw event's position block from a gate result and hands it to the
   /// session recorder, when one is attached. A rejected fix still contributes what it
-  /// knew — the drop reason is analysis data too.
-  private func recordRaw(
-    _ event: MapperRawSampleEvent,
-    gate: (placement: Placement?, fix: MapperFix?, outcome: MapperGateOutcome)
-  ) async {
+  /// knew — the drop reason is analysis data too, and since 2026-09-04 so is the cell,
+  /// for every fix real enough to have one.
+  private func recordRaw(_ event: MapperRawSampleEvent, gate: FixGate) async {
     guard let rawRecorder else { return }
     var event = event
     if let fix = gate.fix {
       event.setFix(fix, at: event.timestamp)
     }
-    event.cellRaw = gate.placement?.cell.rawValue
+    event.cellRaw = gate.position?.cell.rawValue
     event.gateOutcome = gate.outcome
     await rawRecorder.record(event)
   }
 
-  /// How old a fix may be before it stops describing where the phone is.
-  ///
-  /// ``MapperTuning/fixMaxAgeSeconds`` is a bound on *time*, and the thing that actually
-  /// matters is a bound on *distance*: at 15 m/s a 119-second-old fix passes the age test
-  /// and points at a cell nearly two kilometers back down the road. So when the fix reports
-  /// its own ground speed — which CoreLocation supplies with the fix and no permission
-  /// gates — the budget shrinks to `fixMaxDisplacementMeters / speed`, and the effective
-  /// limit is whichever of the two is tighter.
-  ///
-  /// A stationary phone (speed 0, or a platform that reported none) keeps the full age
-  /// budget, which is correct: it is still in the same cell an hour later. This is the half
-  /// of the movement rule that survives a declined Motion & Fitness prompt, where the
-  /// hint-driven ``MapperFix/movedSinceCapture`` never fires at all.
+  /// The speed-scaled age budget, now owned by ``MapperFixGate`` so both engines read one
+  /// definition. Kept here as the name the mapper's own call sites and tests already use.
   static func toleratedAgeSeconds(for fix: MapperFix, tuning: MapperTuning) -> TimeInterval {
-    guard let speed = fix.speedMetersPerSecond, speed > 0,
-          tuning.fixMaxDisplacementMeters > 0 else {
-      return tuning.fixMaxAgeSeconds
-    }
-    return Swift.min(tuning.fixMaxAgeSeconds, tuning.fixMaxDisplacementMeters / speed)
+    MapperFixGate.toleratedAgeSeconds(for: fix, tuning: tuning)
   }
 
   /// Counts a folded sample and flushes if either threshold has come due.
@@ -797,22 +806,72 @@ public actor SignalMapperCaptureEngine {
     )
   }
 
-  /// The repeaters a packet passed through, in path order.
+  /// The repeaters a packet is evidence about, in path order — CoreScope's capture rule
+  /// (docs/SIGNAL_MAPPER_V3.md §1, verified against firmware `Mesh.cpp`).
   ///
-  /// Only the *last* hop gets the packet's SNR and RSSI: those numbers describe the link
-  /// between that node and our radio, which is the only link this packet measured. Earlier
-  /// hops are recorded as involved — they are real evidence the cell can reach them — but
-  /// with no signal reading attached, because the hop that heard them was somebody else's.
+  /// Three cases, and the difference between them is the whole correctness of the RX
+  /// layer:
+  ///
+  /// - **Flood, with a path.** Relays *append* their hash as the packet travels, so the
+  ///   last entry is the node our radio actually received it from. It gets the SNR and
+  ///   RSSI — those numbers describe that one link. Earlier hops are recorded as involved
+  ///   with no reading, because the node that measured them was somebody else.
+  /// - **Direct-routed, with a path.** Credits **nobody**. A direct packet carries the
+  ///   *remaining* route and each forwarder consumes an entry from the front, so what is
+  ///   left when it reaches us is the destination side of the route — nodes the packet has
+  ///   not visited yet. Reading its last entry as "the repeater we heard" (which this
+  ///   engine did until v3) attributes our SNR to a node that never transmitted to us.
+  /// - **No path at all.** Nothing relayed it, so we heard the *sender*, and the only
+  ///   payload that tells us who the sender is, is an advert — see
+  ///   ``advertiserHexID(from:)``. A 0-hop packet of any other type stays anonymous rather
+  ///   than being credited to a guess.
   ///
   /// Hash handling goes through ``NodeHexID`` (MIGRATION_PLAN §2.1): no hex strings are
   /// built or compared by hand anywhere in the mapper.
   static func repeaterSightings(from entry: RxLogEntryDTO) -> [SurveySample.RepeaterSighting] {
-    sightings(
+    let relayed = sightings(
       pathNodes: entry.pathNodes,
       hashSize: entry.pathHashSize,
       snr: entry.snr,
-      rssi: entry.rssi
+      rssi: entry.rssi,
+      isFlood: entry.routeType.isFlood
     )
+    if !relayed.isEmpty { return relayed }
+    // Empty means either "direct-routed, so nobody is credited" or "no hops at all". Only
+    // the second can name the sender.
+    guard entry.pathNodes.isEmpty, let sender = advertiserHexID(from: entry) else { return [] }
+    return [
+      SurveySample.RepeaterSighting(
+        id: sender.hex,
+        rxSnr: entry.snr,
+        txSnr: nil,
+        rssi: entry.rssi.map(Double.init)
+      )
+    ]
+  }
+
+  /// The advertiser's hash ID from a 0-hop advert, at the width this packet's path field
+  /// was encoded for.
+  ///
+  /// An advert's payload begins with the advertiser's full 32-byte public key
+  /// (`RxLogService` reads the same offset to stamp inbound hop counts). The key is
+  /// narrowed to the packet's own hash width so the ID lands in the same key space every
+  /// other repeater in the mapper is filed under — a full key here would file the same
+  /// node twice, once per representation.
+  static func advertiserHexID(from entry: RxLogEntryDTO) -> NodeHexID? {
+    guard entry.payloadType == .advert else { return nil }
+    guard entry.packetPayload.count >= ProtocolLimits.publicKeySize else { return nil }
+    let width = Swift.min(NodeHexID.maxByteWidth, Swift.max(1, entry.pathHashSize))
+    return NodeHexID(data: Data(entry.packetPayload.prefix(width)))
+  }
+
+  /// A packet's hop hashes in path order, canonical uppercase — what a raw row carries so
+  /// the route survives without the packet. Nil when the packet carried no hops.
+  static func pathHashes(pathNodes: Data, hashSize: Int) -> [String]? {
+    let hops = TrafficHopResolver.hopHashes(pathNodes: pathNodes, hashSize: hashSize)
+      .compactMap(NodeHexID.init(data:))
+      .map(\.hex)
+    return hops.isEmpty ? nil : hops
   }
 
   /// Maps one heard repeat onto a SurveyKit sample.
@@ -841,17 +900,30 @@ public actor SignalMapperCaptureEngine {
         pathNodes: detail.pathNodes,
         hashSize: detail.hashSize,
         snr: detail.snr,
-        rssi: detail.rssi
+        rssi: detail.rssi,
+        isFlood: event.isFlood,
+        isEcho: true
       )
     )
   }
 
-  private static func sightings(
+  /// - Parameters:
+  ///   - isFlood: whether the packet accumulated its path as it travelled. False means the
+  ///     path is the remaining route and names nobody we heard (§1) — so no sighting.
+  ///   - isEcho: this is one of *our own* packets coming back. An echo is evidence in both
+  ///     directions and keeps every hop: the first heard us, the last is the one we heard
+  ///     (docs/SIGNAL_MAPPER_V3.md §1, "the three-hops case"). Its route classification is
+  ///     about the rebroadcast, not about who is creditable, so the direct rule does not
+  ///     apply to it.
+  static func sightings(
     pathNodes: Data,
     hashSize: Int,
     snr: Double?,
-    rssi: Int?
+    rssi: Int?,
+    isFlood: Bool,
+    isEcho: Bool = false
   ) -> [SurveySample.RepeaterSighting] {
+    guard isFlood || isEcho else { return [] }
     let hashes = TrafficHopResolver.hopHashes(pathNodes: pathNodes, hashSize: hashSize)
     let hops = hashes.compactMap(NodeHexID.init(data:))
     guard let lastIndex = hops.indices.last else { return [] }

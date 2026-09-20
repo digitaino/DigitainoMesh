@@ -9,11 +9,12 @@ import SwiftUI
 /// Same shape and same idiom as ``TrafficHeatmapLegend`` — a tool's legend should not be a
 /// new invention every time — with the quality scale swapped for SurveyKit's six-step one.
 struct SignalMapperLegend: View {
-  /// Which layer the map is showing; the Reach layer adds its "probed, never heard" row.
+  /// Which layer the map is showing; the Reach layer adds its two neutral-fill rows.
   var layer: SignalMapperMapLayer = .heard
-  /// One-line coverage totals, shown at the top of the expanded card — the old floating
-  /// summary pill's content, demoted here so the top of the map stays clear.
-  var summary: String?
+  /// Coverage totals, at the top of the expanded card — the old floating summary pill's
+  /// content, demoted here so the top of the map stays clear. Two lines while a ride is
+  /// open: what is on the map, and what this ride has put there (§3).
+  var summaryLines: [String] = []
 
   @State private var isExpanded = false
   @State private var bodyHeight: CGFloat = 0
@@ -79,11 +80,13 @@ struct SignalMapperLegend: View {
 
   private var expandedBody: some View {
     VStack(alignment: .leading, spacing: 8) {
-      if let summary {
-        Text(summary)
-          .font(.caption.weight(.medium))
-          .foregroundStyle(.primary)
-          .fixedSize(horizontal: false, vertical: true)
+      if !summaryLines.isEmpty {
+        ForEach(summaryLines, id: \.self) { line in
+          Text(line)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         Divider()
       }
 
@@ -116,15 +119,18 @@ struct SignalMapperLegend: View {
       }
 
       if layer == .reach {
-        HStack(spacing: 8) {
-          RoundedRectangle(cornerRadius: 2)
-            .fill(Color.gray.opacity(0.45))
-            .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color.gray, lineWidth: 1))
-            .frame(width: 12, height: 12)
-          Text(L10n.Tools.Tools.SignalMapper.Legend.noReach)
-            .font(.caption)
-        }
-        .accessibilityElement(children: .combine)
+        // The two neutral fills, in the order the map decides them (§1): an echo proves
+        // they heard us without a number, and a probe nobody answered proves the opposite.
+        neutralSwatch(
+          fill: Color.gray.opacity(0.28),
+          stroke: Color.primary.opacity(0.55),
+          title: L10n.Tools.Tools.SignalMapper.Legend.heardYou
+        )
+        neutralSwatch(
+          fill: Color.gray.opacity(0.45),
+          stroke: Color.gray,
+          title: L10n.Tools.Tools.SignalMapper.Legend.noReach
+        )
       }
 
       Divider()
@@ -137,5 +143,18 @@ struct SignalMapperLegend: View {
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
     }
+  }
+
+  private func neutralSwatch(fill: Color, stroke: Color, title: String) -> some View {
+    HStack(spacing: 8) {
+      RoundedRectangle(cornerRadius: 2)
+        .fill(fill)
+        .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(stroke, lineWidth: 1))
+        .frame(width: 12, height: 12)
+      Text(title)
+        .font(.caption)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .accessibilityElement(children: .combine)
   }
 }

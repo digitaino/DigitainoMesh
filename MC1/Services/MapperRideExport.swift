@@ -172,7 +172,11 @@ enum MapperRideExport {
   /// value, but a reader inspecting the file cannot tell that from unscrubbed precision,
   /// and a privacy promise nobody can verify by looking is worth much less.
   /// `JSONEncoder` writes the shortest round-tripping form (`-3.712`).
-  private enum JSONValue: Encodable, Sendable {
+  ///
+  /// Internal rather than private so ``MapperObservationExport`` — the observation-table
+  /// encoder SIGNAL_MAPPER_V3 §5 adds, and the app target's *only* other one — emits its
+  /// JSONL through the same value shapes rather than a second, subtly different set.
+  enum JSONValue: Encodable, Sendable {
     case string(String)
     case int(Int)
     case int64(Int64)
@@ -196,8 +200,10 @@ enum MapperRideExport {
   }
 
   /// Appends to an open file handle. A tiny type so the tier encoders can stay pure
-  /// dictionary builders and the streaming lives in exactly one place.
-  private struct FileWriter {
+  /// dictionary builders and the streaming lives in exactly one place — the observation
+  /// export (§5) writes its CSV and JSONL through this same handle rather than opening its
+  /// own, so "an export is written page by page, never buffered" has one implementation.
+  struct FileWriter {
     private let handle: FileHandle
     private let encoder: JSONEncoder
 
@@ -216,8 +222,22 @@ enum MapperRideExport {
       try handle.write(contentsOf: Data(text.utf8))
     }
 
+    /// One `write(2)` for a whole page, for the encoders that build their output a page at a
+    /// time. A row-at-a-time handle write is a syscall per row, and §5's export is 40 000 of
+    /// them.
+    func write(_ data: Data) throws {
+      try handle.write(contentsOf: data)
+    }
+
     func writeJSON(_ object: [String: JSONValue]) throws {
       try handle.write(contentsOf: encoder.encode(object))
+    }
+
+    /// The same sorted-key encoding ``writeJSON(_:)`` performs, handed back rather than
+    /// written, so a caller assembling a page buffer uses this writer's encoder instead of
+    /// configuring a second one that could disagree about key order.
+    func encodedJSON(_ object: [String: JSONValue]) throws -> Data {
+      try encoder.encode(object)
     }
 
     func close() throws {
@@ -336,7 +356,10 @@ enum MapperRideExport {
   /// scrubbed tier refuses.
   private static func fullSampleObject(_ sample: MapperRawSampleDTO) -> [String: JSONValue] {
     var object: [String: JSONValue] = [
-      "runID": .string(sample.runID.uuidString),
+      // Optional since v3: a row recorded outside a ride belongs to no run. This encoder
+      // only ever runs over one run's rows, so the fallback is unreachable in practice —
+      // it is here so a schema change cannot silently drop the column.
+      "runID": .string(sample.runID?.uuidString ?? ""),
       "seq": .int64(sample.seq),
       "timestamp": .string(fullTimestamp(sample.timestamp)),
       "kind": .string(kindName(sample)),
@@ -352,6 +375,12 @@ enum MapperRideExport {
     if let routeType = sample.routeTypeRaw { object["routeType"] = .int(routeType) }
     if let payloadType = sample.payloadTypeRaw { object["payloadType"] = .int(payloadType) }
     if let perHopSnrs = finite(sample.perHopSnrs) { object["perHopSnrs"] = .doubles(perHopSnrs) }
+    if let pathHashes = sample.pathHashes { object["pathHashes"] = .strings(pathHashes) }
+    // Full tier only, and never the scrubbed one: the packet bytes are the packet, and a
+    // scrubbed export exists precisely to hand out less than that (§2.8).
+    if let rawHex = sample.rawHex { object["rawHex"] = .string(hexString(rawHex)) }
+    if let contentHash = sample.contentHash { object["contentHash"] = .string(contentHash) }
+    if let messageID = sample.messageID { object["messageID"] = .string(messageID.uuidString) }
 
     if let hexID = sample.repeaterHexID { object["repeaterHexID"] = .string(hexID) }
     if let key = sample.repeaterPublicKey { object["repeaterPublicKey"] = .string(hexString(key)) }
@@ -379,7 +408,7 @@ enum MapperRideExport {
   /// a case added later, and a new raw-sample kind must be a deliberate decision to
   /// *publish* rather than something that appears in exports by itself. Unknown raw values
   /// — a row written by a newer build — degrade to `unknown-<raw>` instead of vanishing.
-  private static func kindName(_ sample: MapperRawSampleDTO) -> String {
+  static func kindName(_ sample: MapperRawSampleDTO) -> String {
     guard let kind = sample.kind else { return "unknown-\(sample.kindRaw)" }
     switch kind {
     case .probeAttempt: return "probeAttempt"
@@ -393,6 +422,8 @@ enum MapperRideExport {
     case .breadcrumb: return "breadcrumb"
     case .radioLinkDown: return "radioLinkDown"
     case .radioLinkUp: return "radioLinkUp"
+    case .sent: return "sent"
+    case .observerSighting: return "observerSighting"
     }
   }
 
@@ -485,13 +516,16 @@ enum MapperRideExport {
   // MARK: - Files
 
   /// Backup-excluded scratch directory the exports are written into.
-  private static var directory: URL {
+  ///
+  /// One directory for both encoders, so ``deleteExports()`` is still the single sweep that
+  /// clears every copy of the raw log this app has ever written to disk.
+  static var directory: URL {
     FileManager.default.temporaryDirectory.appendingPathComponent("MapperRideExport", isDirectory: true)
   }
 
   /// Creates the export directory and stamps the backup exclusion on it before anything is
   /// written inside, so no export file ever exists in a directory that is not yet excluded.
-  private static func prepareDirectory() throws -> URL {
+  static func prepareDirectory() throws -> URL {
     var url = directory
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     var values = URLResourceValues()
@@ -524,7 +558,7 @@ enum MapperRideExport {
   /// The ride's calendar day **in the rider's own time zone** — the filename is a human
   /// label ("my ride on the 29th"), while every timestamp inside the file is UTC. It leaks
   /// nothing the minute-precision timestamps do not already say.
-  private static func filenameDate(_ date: Date) -> String {
+  static func filenameDate(_ date: Date) -> String {
     let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
     return String(
       format: "%04d-%02d-%02d",
@@ -546,7 +580,9 @@ enum MapperRideExport {
   /// what makes RTT and per-hop ordering reconstructable, which is the tier's whole point.
   private static let fullTimestampStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
 
-  private static func fullTimestamp(_ date: Date) -> String {
+  /// Millisecond ISO 8601 in UTC. Shared with ``MapperObservationExport``, whose §5 file is
+  /// a full-precision table and wants exactly this spelling.
+  static func fullTimestamp(_ date: Date) -> String {
     date.formatted(fullTimestampStyle)
   }
 
@@ -570,11 +606,11 @@ enum MapperRideExport {
   /// Canonical H3 form: unpadded lowercase hex, the same string `h3ToString` produces.
   /// Emitted as text rather than a number because a 64-bit index is not safely
   /// representable in every JSON reader's number type.
-  private static func h3String(_ cell: UInt64) -> String {
+  static func h3String(_ cell: UInt64) -> String {
     String(cell, radix: 16)
   }
 
-  private static func hexString(_ data: Data) -> String {
+  static func hexString(_ data: Data) -> String {
     data.map { String(format: "%02x", $0) }.joined()
   }
 
@@ -586,7 +622,7 @@ enum MapperRideExport {
   /// `JSONEncoder` throws on a non-finite double, and it throws *mid-file* — after the
   /// header and thousands of rows are already on disk. A NaN that reached the store from
   /// firmware must cost its own field, not the whole export.
-  private static func finite(_ value: Double?) -> Double? {
+  static func finite(_ value: Double?) -> Double? {
     guard let value, value.isFinite else { return nil }
     return value
   }
@@ -594,7 +630,7 @@ enum MapperRideExport {
   /// All-or-nothing: dropping individual non-finite entries would silently renumber the
   /// hops, and a per-hop SNR array whose indices no longer match the path is worse than an
   /// absent one.
-  private static func finite(_ values: [Double]?) -> [Double]? {
+  static func finite(_ values: [Double]?) -> [Double]? {
     guard let values, values.allSatisfy(\.isFinite) else { return nil }
     return values
   }

@@ -31,6 +31,125 @@ final class SignalMapperRideSession {
   /// silently vanishing (the moment the user is most likely to glance at it).
   var isRadioConnected = true
 
+  /// What the capture engine is doing with this ride's fixes *lately*.
+  ///
+  /// The engine's own counters are cumulative since it started, and it restarts on every BLE
+  /// rewire, so neither number answers "is the GPS bad right now". This holds the delta over
+  /// the last sampling window instead, plus how long the current unbroken run of refusals
+  /// has lasted — which is the question the strip's chip asks and the only form of it that
+  /// clears itself once the fix comes good.
+  ///
+  /// It exists because the failure it describes was invisible: a ride can count probes and
+  /// replies on the strip while every row they produce is refused a position, and the rider's
+  /// only clue was an empty cell card (field report with screenshot, 2026-09-04).
+  struct CaptureFixHealth: Equatable, Sendable {
+    /// Refusals in the window, by reason. Deliberately not merged with the probe engine's
+    /// `skippedNoFixCount`: that one counts probe *cycles* not planned, these count
+    /// observations not placed, and the strip's long-standing >20 threshold is tuned for it.
+    var droppedNoFixCount = 0
+    var droppedStaleFixCount = 0
+    var droppedInaccurateFixCount = 0
+    /// Observations the gate accepted in the same window — the denominator that makes the
+    /// refusals mean something.
+    var acceptedCount = 0
+
+    /// The first and the most recent refusal in the current unbroken run, or nil while the
+    /// fixes are fine. The span between them is the verdict below.
+    ///
+    /// A span rather than a count of windows because a window is however long it was
+    /// between two probe-engine snapshots, and that engine yields on every reply and every
+    /// send as well as on its 2 s tick — "five windows" is anywhere between one second and
+    /// ten. Measured refusal-to-refusal rather than against the wall clock so that silence
+    /// cannot age a single bad fix into an alarm: with the radio hearing nothing, one
+    /// refusal twenty seconds ago is still one refusal.
+    var rejectingSince: Date?
+    var lastRefusalAt: Date?
+    /// Whether anything in the current run was a fix the engine actually had and refused,
+    /// as opposed to no fix at all. Carried across the run rather than read off the last
+    /// window, so the strip does not change its mind about which problem it is describing
+    /// while one run is still going.
+    var runRefusedAFixItHad = false
+
+    /// How long a run of refusals has to last before it is a fact about the ride rather
+    /// than the gap between two packets.
+    static let sustainedRejectionSeconds: TimeInterval = 10
+
+    var droppedCount: Int {
+      droppedNoFixCount + droppedStaleFixCount + droppedInaccurateFixCount
+    }
+
+    /// A fix exists and is simply not good enough — the state that used to lose rows
+    /// silently, and the one worth naming differently from "no fix at all".
+    var isQualityRejection: Bool {
+      runRefusedAFixItHad
+    }
+
+    /// Everything the radio heard went unplaced, and has done for long enough to be worth
+    /// saying out loud.
+    ///
+    /// One-sided on purpose: a window that placed anything at all is a working ride with
+    /// some noise in it. Sustained on purpose too — a single window holding one refusal and
+    /// no accepts is an ordinary two seconds of a bursty mesh, and deciding on that window
+    /// alone made the strip's chip and the card's empty-state reason blink on and off
+    /// through a perfectly healthy ride, which is the opposite of the alarm they were added
+    /// to be.
+    var isRejectingFixes: Bool {
+      guard let rejectingSince, let lastRefusalAt else { return false }
+      return lastRefusalAt.timeIntervalSince(rejectingSince) >= Self.sustainedRejectionSeconds
+    }
+
+    /// This window's own verdict, folded onto the run so far.
+    ///
+    /// A window that placed something ends the run outright; one that refused everything it
+    /// was given extends it; one where nothing arrived at all leaves it exactly as it was,
+    /// because a quiet radio is not evidence about the fix in either direction.
+    func folding(_ window: CaptureFixHealth, at now: Date) -> CaptureFixHealth {
+      var next = window
+      if window.acceptedCount > 0 {
+        next.rejectingSince = nil
+        next.lastRefusalAt = nil
+        next.runRefusedAFixItHad = false
+      } else if window.droppedCount > 0 {
+        next.rejectingSince = rejectingSince ?? now
+        next.lastRefusalAt = now
+        next.runRefusedAFixItHad =
+          runRefusedAFixItHad || window.droppedStaleFixCount + window.droppedInaccurateFixCount > 0
+      } else {
+        next.rejectingSince = rejectingSince
+        next.lastRefusalAt = lastRefusalAt
+        next.runRefusedAFixItHad = runRefusedAFixItHad
+      }
+      return next
+    }
+  }
+
+  private(set) var captureFixHealth = CaptureFixHealth()
+  private var lastCaptureSnapshot: SignalMapperCaptureEngine.Snapshot?
+
+  /// Folds a fresh capture snapshot in as a delta against the previous one.
+  ///
+  /// A counter that went *down* means the engine was rebuilt (a BLE rewire hands the ride a
+  /// new one), so the baseline is re-seeded and that window contributes nothing rather than
+  /// a negative.
+  func noteCaptureSnapshot(_ snapshot: SignalMapperCaptureEngine.Snapshot, at now: Date = Date()) {
+    defer { lastCaptureSnapshot = snapshot }
+    guard let previous = lastCaptureSnapshot,
+          snapshot.droppedNoFixCount >= previous.droppedNoFixCount,
+          snapshot.droppedStaleFixCount >= previous.droppedStaleFixCount,
+          snapshot.droppedInaccurateFixCount >= previous.droppedInaccurateFixCount,
+          snapshot.sampleCount >= previous.sampleCount else {
+      captureFixHealth = CaptureFixHealth()
+      return
+    }
+    let window = CaptureFixHealth(
+      droppedNoFixCount: snapshot.droppedNoFixCount - previous.droppedNoFixCount,
+      droppedStaleFixCount: snapshot.droppedStaleFixCount - previous.droppedStaleFixCount,
+      droppedInaccurateFixCount: snapshot.droppedInaccurateFixCount - previous.droppedInaccurateFixCount,
+      acceptedCount: snapshot.sampleCount - previous.sampleCount
+    )
+    captureFixHealth = captureFixHealth.folding(window, at: now)
+  }
+
   /// The raw ride log for this run. Optional: raw-log storage failing must never block
   /// a survey — the aggregates still capture.
   let recorder: MapperRawSampleRecorder?
