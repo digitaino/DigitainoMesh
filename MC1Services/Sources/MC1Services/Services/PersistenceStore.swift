@@ -132,6 +132,11 @@ public actor PersistenceStore: PersistenceStoreProtocol {
   ///          no existing row or column is touched, least of all the dormant Build 40
   ///          survey tables, which the mapper never reads. Renumbered from v7→v8 when
   ///          upstream 1.4.0 claimed those steps.
+  /// - v10→v11: Added Message.packetObserverCount (Int?, default nil) and
+  ///          Message.packetObserversCheckedAt (Date?, default nil), the cached
+  ///          Packet Scope observer count behind the eye badge on sent bubbles.
+  ///          Both optional and additive; existing rows migrate to NULL, which
+  ///          reads as "never looked up" and simply re-checks on the next pass.
   public static func createContainer(inMemory: Bool = false) throws -> ModelContainer {
     if !inMemory {
       let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

@@ -29,6 +29,26 @@ extension SignalQuality {
     }
   }
 
+  /// Bar level for SF Symbol `cellularbars` variableValue (0–1), so this scale can drive the
+  /// app's existing bars glyph.
+  ///
+  /// Six steps where ``SNRQuality/barLevel`` has five, and deliberately *not* the same
+  /// numbers: a row inside a hexagon is graded on the scale the hexagon is painted with, or
+  /// a "good" (mint) row would draw the four-step scale's "excellent" bars over a mint
+  /// hexagon and contradict it (Rafael, 2026-09-04 — "a better way to visualize the
+  /// different signal levels"). `unknown` is 0 bars, exactly as the four-step scale has it:
+  /// no reading is not a weak reading.
+  var barLevel: Double {
+    switch self {
+    case .excellent: 1.0
+    case .good: 0.8
+    case .fair: 0.6
+    case .poor: 0.4
+    case .veryPoor: 0.2
+    case .unknown: 0
+    }
+  }
+
   var uiColor: UIColor {
     switch self {
     case .excellent: .systemGreen

@@ -183,7 +183,7 @@ heard through reads fat; a one-off spur reads thin. Links are never coloured
 by signal: nothing in the data says how well an intermediate repeater heard
 the packet. On top, exactly **one SNR-styled leg per located observer**: the
 measured leg (tail hop → observer, or origin → observer when direct) of its
-strongest route, straight. No badges. Pins carry names only: the observer
+best-ranked route — fewest hops first, not loudest — straight. No badges. Pins carry names only: the observer
 pin's label is its name (a label that changed with every poll minted a new
 sprite and re-sourced every pin each time, to state a number the row and the
 leg's badge already carry), and repeater pins are named but **not numbered** —
@@ -265,12 +265,16 @@ re-fits only when a hop finally resolves. One settle re-fit 350 ms after the
 focus fit, because the panel's height is reported after layout. Reduce Motion
 suppresses camera animation in the shared map view.
 
-**Order stability.** Entering a focus freezes the panel's order — observers and
-each ladder — for the life of the focus; new observers append at the tail with
-their `New` chip. A poll therefore cannot move a row or re-rank a ladder under
-a reaching finger. **Deliberate trade, freshness for stability:** during a
-focus the `BEST` chip can disagree with row order. A sort change re-freezes
-around the new order and scrolls the focused row back into view.
+**Order stability.** Entering a focus freezes the panel's order — the top-level
+rows and each ladder under them — for the life of the focus; groups heard after
+the freeze append at the tail with their `New` chip. A poll therefore cannot
+move a row or re-rank a ladder under a reaching finger. `PacketScopeFrozenOrder`
+is grouping-neutral: a group key is a chain key while the list is grouped by
+path and an observer id while it is grouped by observer, and a route id already
+carries its own observer, so the ‹ › ladder needs nothing else. A sort change
+re-freezes around the new order and scrolls the focused row back into view; a
+**grouping** change resets the focus to `.all` first, because the focused row
+belonged to the list that is now gone.
 
 **Cost of a focus change.** Pin ids are content-derived, but
 `updatePointSource` compares the whole array and replaces the source wholesale,
@@ -289,36 +293,70 @@ set `iconIgnoresPlacement` / `textIgnoresPlacement` on every symbol layer the
 app does not own. That removes basemap labels from the index without hiding
 them, and a style reload undoes it.
 
-**Panel.** A fixed shape in every state, so nothing appears or disappears
-under the thumb: `Heard by 9` + the sort menu (icon plus the current option;
-"Farthest" is offered only when something has a distance), then the breadcrumb
-(`All › SOCO T1000e › via …`, always present, each crumb a target), then —
-with nothing focused — `best 12.2 dB · shortest 2 hops · farthest ≥ 23 mi ·
-4 heard directly · still arriving` (farthest is a lower bound whenever a
-heard observer has no location) and the one line that teaches the model. In a
-focus, a **focus bar** follows: the route's hops as numbered pills (an unplaced
-hop wears `mappin.slash`) or the observer's name; the figures (`13.8 dB · 2
-hops · ≥ 12 mi drawn · heard by 3 observers by this path · +1.4 s`); a caveat
-only when there is one; and ‹ › (step through the frozen ladder, wrapping
-across observers), an observers toggle (a true full-map view is its second
-tap), and ✕. The panel has a **total height budget** (45% of the screen; 30%
-in route focus, which keeps the tapped row and its ladder on screen while the
-map gains height; 0 with observers hidden) and the list gets what the header
-leaves, so a focus never takes room from the map.
+**Two list modes.** The list answers one of two questions, and the reader
+picks which. **By path** (`PacketScopePathGrouping`, the default) is one row per
+repeater chain with the observers it reached inside it: observers are the
+network's microphones rather than the mesh, so nine of them reached by three
+chains are three facts, and a row per observer stated the third one nine times.
+**By observer** (`PacketScopeObserverGrouping`) is one row per observer with its
+own routes inside it, and it exists because "which *different* paths did this
+packet take to reach each observer" is a question the chain-major list cannot
+put on one screen. The choice persists (`AppStorageKey.packetScopeGrouping`,
+default `path`, mirrored into `BackupUserDefaults`). Both orders are total —
+falling through to the id — so a poll returning the same data never reshuffles
+a row.
 
-Rows are two lines: signal bars (`cellularbars` at `SNRQuality.barLevel`, the
-repeat-row idiom), name, seconds after the first observer (`+1.3 s`, not a
-wall-clock time that reads the same on every row), and chips — dB, hops, `×3`,
-`No location`, distance from origin. The ladder's RSSI line is labelled as
-what it is — the observer's **best** RSSI, a separate reception's maximum.
-Route rows are 44 pt, two-line cells: a persistent leading glyph that states
-the consequence before the tap (`mappin.and.ellipse` when the map can draw the
-route, `mappin.slash` when it cannot), the hops as **wrapping** numbered pills
-(no nested horizontal scroll view competing with the tap), then a `Best route`
-chip, the dB in its quality colour, the hop count, and `+N hops not on the
-map` when the tail is unplaced. Selection is never colour alone: a leading
-accent bar and weight carry it. Sort: strongest (the fold's order), fewest
-hops, first heard, farthest. Every focus transition is announced to VoiceOver
+The switch lives **inside the existing sort menu** as a second `Picker` section,
+not as a row of its own: the header spends rows only on what carries its height,
+and clearing rows out of it was the third act of the redesign that made the list
+path-major. Changing it resets the focus to `.all`, re-freezes the order, snaps
+the sort to one the new rows can answer, and announces the reset.
+
+**Panel.** A fixed shape in every state, so nothing appears or disappears
+under the thumb: `Heard by 9` + the view menu (`line.3.horizontal.decrease`,
+the grouping, then the sort in secondary colour — the sort drops at
+accessibility type sizes; "Farthest" is offered only when something has a
+distance, "Most observers" only by path and "Most routes" only by observer),
+then — only once there is a trail — the breadcrumb, then what is being looked
+at. The breadcrumb reads in its own list's order: `All › via A › B ›
+SOCO T1000e` by path, `All › SOCO T1000e › via A › B` by observer, each crumb a
+target that pops to its level and the current level the one that is not a link.
+With nothing focused the header prints `best direct 12.2 dB · shortest 2 hops ·
+farthest ≥ 23 mi · 4 heard directly · still arriving` (farthest is a lower bound
+whenever a heard observer has no location) and, until the model has been used
+once, the one line that teaches it. In a focus the figures follow (`13.8 dB ·
+2 hops · ≥ 12 mi drawn · +1.4 s`), a caveat only when there is one, and on the
+count's row ‹ › (step through the frozen ladder, wrapping across groups), an
+observers toggle (a true full-map view is its second tap), and ✕. The panel has
+a **total height budget** (45% of the screen; 30% in route focus, which keeps
+the tapped row and its ladder on screen while the map gains height; 0 with
+observers hidden) and the list gets what the header leaves, so a focus never
+takes room from the map.
+
+**Rows, and the signal rule that governs both modes.** A chain row is its hops
+as **wrapping** numbered pills (unambiguous, because every route along the chain
+traverses the same repeaters in the same order) with the observers under it; an
+observer row is the observer's name with its routes under it, and no pills,
+because across several chains one repeater would sit at two positions. Both
+carry a leading glyph that states the consequence before the tap
+(`mappin.and.ellipse` when the map can draw something, `mappin.slash` when it
+cannot), the seconds after the first observer (`+1.3 s`, not a wall-clock time
+that reads the same on every row), a `New` chip for 20 s after an observer first
+reports, and chips: the route or observer count, `×3`, `Direct RSSI`, `No
+location`, distance from origin.
+
+A **signal figure appears only for a repeater-free reception**, sourced from
+`reception.directSNR` and never from a fold over route SNRs. Every SNR the
+observer network reports is measured at the observer on its last leg, so through
+a repeater it grades that repeater's link and says nothing about the sender. A
+3-hop route renders with no decibels at all — no figure, no colour, no bars —
+and a footer explains the omission. There is no `Best route` chip and no
+"strongest" sort for the same reason: both ranked by a number that was not the
+sender's. RSSI is only attributed where *every* reception was direct, since the
+fold carries no route attribution.
+
+Route rows are 44 pt, two-line cells; selection is never colour alone, a leading
+accent bar and weight carry it. Every focus transition is announced to VoiceOver
 — branched on drawability, so "Showing the route to X" is never said of a map
 that did not change — and the map carries the same sentence as its
 accessibility label. Haptics: selection on focus, light impact on ‹ ›, success
@@ -414,3 +452,112 @@ Also deferred, with the trade-offs recorded (2026-09-01):
   which packet the user cares about — but it is every packet on the instance,
   ~5,300/hour with several observations each. The 6 s poll-diff covers the
   live window well enough to leave this alone.
+
+
+## Observer count on sent bubbles (decided 2026-09-03)
+
+Rafael: "a quick way to see if the message a user sent is getting across the mesh without
+having to click into the Network View." Decisions:
+
+- Every bubble for a message **this phone sent** gets an eye badge next to the repeats
+  counter (`BubbleRepeatFooter`, `repeat` symbol) with the number of **distinct observers**
+  that heard the packet. Received bubbles get no eye. A message whose hash is not yet known
+  (no echo heard) or not yet looked up shows `👁 …`; tapping the eye opens the Network View.
+- **Automatic lookups, sent messages only.** This amends the 2026-09-02 rule that only the
+  "Look Up on the Observer Network" button starts a CoreScope request: while a conversation is
+  on screen, the app batches the content hashes of the user's own sent messages from the last
+  few hours that lack a fresh count into `POST /api/packets/observations` (≤100 per call), and
+  re-polls on a tiered cadence. Nothing is fetched from a bubble's `body`; a conversation-scoped
+  task owns the polling.
+- **A second switch** under Settings → Chats → Packet Scope: "Show observer counts on
+  messages", off by default, only enabled when Packet Scope itself is on. The Network View can
+  stay on with the counter off.
+- Only the 16-hex content hash leaves the phone, as before. Counts are cached on the message
+  row (`packetObserverCount`, `packetObserversCheckedAt`, additive columns) so they survive a
+  relaunch without refetching.
+
+Shipped 2026-09-03 (uncommitted at the time of writing) with three details worth knowing:
+the polling loop wakes on a nudge counter rather than restarting its task, because echoes
+arrive in bursts and a restart per echo would cancel every in-flight request; a zero count
+inside the hot window stays `👁 …` and is not persisted, since scope ingests with a lag and a
+"0" right after a send reads as the message having died; and the eye's hit target is about
+34 pt, padded symmetrically so the footer's layout does not move.
+
+**The cadence, revised twice on 2026-09-04 after Rafael watched it in the field.** Both reports
+were the same sentence — the count sits still and then jumps — and they had two different causes,
+so both fixes were needed.
+
+| Age of the send | Re-poll every |
+| --- | --- |
+| ≤ 90 s | 4 s |
+| ≤ 5 min | 12 s |
+| ≤ 30 min | 60 s |
+| ≤ 24 h | 1 h |
+| beyond | never again |
+
+The first cause was the sleep: the loop waited a flat 20 s whatever the tier said, so 20 s was
+the badge's real resolution. It now derives the wait from `delayUntilNextPass`, the same rule
+that picks candidates, so the two cannot disagree. The second was the shape: there was no warm
+tier, so a message four minutes old went from a 12 s wait to a **one-hour** one in a single
+step, and every observer that reported in between was invisible until the hour was up. The
+invariant that keeps this honest is tested — inside the window where a count can still move, no
+step may slow the badge by more than five-fold. The warm-to-cold step is exempt and is sixty-fold,
+because half an hour after a send the figure genuinely does not move again.
+
+The third piece is the **opening sweep**: nothing polls while a conversation is closed, so the
+loop's first pass ignores the cadence entirely and re-checks every eligible message on screen.
+Without it, opening a chat could show a number last confirmed an hour earlier and then wait out
+the rest of the hour. A pass that fails to reach the server does not retire the sweep, so a chat
+opened with no signal still gets its refresh once there is one. Two rules protect the display
+while a packet is still spreading: a count may only climb inside the warm window, since observers
+accumulate on the server and a smaller answer is a partial page rather than observers going away;
+and a database write happens only when the number moved, so a four-second cadence is not also a
+four-second write loop.
+
+**Third report, 2026-09-05 — the same sentence again, and the cadence was not the cause.** The
+live instance was measured that day: for a real group text all ~14 observers are on the server
+within 7–17 s of the send (median 3 s), and the batch endpoint the app calls reads a store the
+server refreshes every second. The mesh delivers the count in about ten seconds, so anything
+slower than that is the phone. Four things on the phone were, each of them a path on which a
+pass either did not happen or did not take effect:
+
+- **A reload race.** Each echo fires `.heardRepeatRecorded`, which enqueues a reload — an async
+  re-fetch that *replaces* the in-memory DTO with the database row. The pass used to update
+  memory first and write the row after, so a reload landing between the two put the older count
+  and the older check time straight back on the bubble: the badge reverting, then jumping again
+  a cadence later. The pass now persists first, so the worst a reload can fetch is the number
+  this pass has just established. Which writes happen is unchanged — only when the count moved,
+  or once when the message settles.
+- **The opening sweep spent on nothing.** `startObserverCountPolling` runs on `.onAppear`, which
+  on a cold conversation open precedes the first page of messages landing in `messages`. The
+  sweep pass therefore looked at an empty list, returned `.idle`, and the sweep was gone. Only a
+  pass that reached the server (`.completed`) now spends it; `.idle` and `.failed` both keep it.
+- **A fresh send waiting twenty seconds for a hash.** The hash is stamped by the first echo and
+  reaches `messages` only when the coalesced reload lands, which is normally *after* the nudge
+  that same echo fires — so the nudged pass finds no candidate. The `.idle` outcome used to take
+  a flat 20 s; it now takes its wait from `delayUntilNextPass` like `.completed`, and that rule
+  gained a case: an outgoing **channel** message inside the hot window with no hash yet is due in
+  2 s. Nothing goes on the wire until a hash exists, so this costs an in-memory list scan every
+  two seconds for at most five minutes after a send. DMs are excluded because no echo ever stamps
+  one — nothing repeats a DM — and a chat full of them would otherwise scan for ever.
+- **A resend describing the packet it replaced.** `resendChannelMessage` puts a new packet on the
+  air with a new timestamp, so a new content hash, and its bookkeeping zeroed `heardRepeats` and
+  deleted the repeats — but the hash stamp is first-writer-wins, so `packetContentHash`,
+  `packetObserverCount` and `packetObserversCheckedAt` all survived. The eye and the Network View
+  went on describing the packet that had been resent (Rafael: "when we resend a message the
+  eye/network view does not update"). `clearMessagePacketScope(id:)` on `HeardRepeatPersisting`
+  now clears all three in the resend's post-send bookkeeping, so the badge shows `…` until the
+  first echo of *this* transmission stamps the new hash and the two-second rule above picks it
+  up. The raw-log `sent` row is unaffected: `MapperSentPacketLogger` writes a fresh row per
+  transmission and back-fills whichever rows still lack a hash, so the new row gets the new hash
+  and the old row keeps the old one.
+
+**Evidence for the next report.** Every pass logs one `.info` line on
+`Logger(subsystem: "com.mc1", category: "ObserverCounts")`: whether it was the sweep, the
+candidate count, how many hashes went out, `hash previous→reported→written` for each, the
+outcome, and the seconds until the next pass. Content hashes go in the clear — 16 hex characters
+that were on the air already — and message text never appears. In the app, a message's actions
+sheet carries one line under Network View for the user's own sends while the observer-count
+switch is on: `Observers: 8 · checked 12 s ago`, or `Observers: not checked yet`, or
+`Observers: no packet hash yet`. Those are three different defects with three different fixes,
+and the line says which one is on screen.

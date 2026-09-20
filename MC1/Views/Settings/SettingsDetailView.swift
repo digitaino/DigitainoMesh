@@ -48,6 +48,8 @@ struct SettingsDetailView: View {
       SupportDevelopmentView()
     case .feedback:
       FeedbackView()
+    case .signalMapperData:
+      SignalMapperDataView()
     }
   }
 }

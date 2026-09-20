@@ -45,6 +45,11 @@ public struct EnvInputs: Sendable, Hashable {
   /// `@Environment`. Reflow of already-visible cells is driven by the appearance reconfigure path.
   public let contentSizeCategory: String
 
+  /// Packet Scope's master switch ANDed with its observer-count switch. Lives here
+  /// rather than being read inside the builder so flipping either setting bumps the
+  /// `EnvInputs` fingerprint and rebakes every bubble, adding or removing the eye.
+  public let showsObserverCounts: Bool
+
   public init(
     autoPlayGIFs: Bool,
     showIncomingPath: Bool,
@@ -59,7 +64,8 @@ public struct EnvInputs: Sendable, Hashable {
     currentUserName: String,
     themeID: String,
     contentSizeCategory: String,
-    preferredLanguageCode: String
+    preferredLanguageCode: String,
+    showsObserverCounts: Bool = false
   ) {
     self.autoPlayGIFs = autoPlayGIFs
     self.showIncomingPath = showIncomingPath
@@ -75,6 +81,7 @@ public struct EnvInputs: Sendable, Hashable {
     self.themeID = themeID
     self.contentSizeCategory = contentSizeCategory
     self.preferredLanguageCode = preferredLanguageCode
+    self.showsObserverCounts = showsObserverCounts
   }
 
   /// Identifier of the built-in default theme. Shared so `EnvInputs.default` and `Theme.default.id`

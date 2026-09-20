@@ -716,3 +716,11 @@
 "packetScope.a11yShowingPathOne" = "A mostrar 1 observador que a ouviu via %@";
 "packetScope.a11yShowingPath" = "A mostrar %1$d observadores que a ouviram via %2$@";
 "packetScope.a11yShowingDirect" = "A mostrar a receção direta em %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Agrupar por";
+"packetScope.groupByPath" = "Por caminho";
+"packetScope.groupByObserver" = "Por observador";
+"packetScope.sortMostRoutes" = "Mais rotas";
+"packetScope.hintObserver" = "Mostra as rotas deste observador no mapa";
+"packetScope.tapHintObserver" = "Toque num observador e depois numa rota para a traçar no mapa";

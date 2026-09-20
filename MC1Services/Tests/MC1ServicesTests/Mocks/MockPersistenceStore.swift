@@ -1536,6 +1536,21 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     messages[id] = message
   }
 
+  public func setMessageObserverCount(id: UUID, count: Int, checkedAt: Date) async throws {
+    guard var message = messages[id] else { return }
+    message.packetObserverCount = count
+    message.packetObserversCheckedAt = checkedAt
+    messages[id] = message
+  }
+
+  public func clearMessagePacketScope(id: UUID) async throws {
+    guard var message = messages[id] else { return }
+    message.packetContentHash = nil
+    message.packetObserverCount = nil
+    message.packetObserversCheckedAt = nil
+    messages[id] = message
+  }
+
   public func incrementMessageSendCount(id: UUID) async throws -> Int {
     if let message = messages[id] {
       let newCount = message.sendCount + 1

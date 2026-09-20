@@ -907,3 +907,11 @@
 "packetScope.a11yShowingPathOne" = "Showing 1 observer that heard it via %@";
 "packetScope.a11yShowingPath" = "Showing %1$d observers that heard it via %2$@";
 "packetScope.a11yShowingDirect" = "Showing the direct reception at %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Group by";
+"packetScope.groupByPath" = "By path";
+"packetScope.groupByObserver" = "By observer";
+"packetScope.sortMostRoutes" = "Most routes";
+"packetScope.hintObserver" = "Shows this observer’s routes on the map";
+"packetScope.tapHintObserver" = "Tap an observer, then a route, to trace it on the map";

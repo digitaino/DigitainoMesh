@@ -495,3 +495,62 @@ struct NavigationCoordinatorPendingLinkTests {
     #expect(coordinator.selectedSetting == .appearance)
   }
 }
+
+@Suite("NavigationCoordinator Ride-Guarded Clear Tests")
+@MainActor
+struct NavigationCoordinatorRideGuardTests {
+  @Test
+  func `clearPerDeviceSelection keeps the Signal Mapper while a ride records`() {
+    let coordinator = NavigationCoordinator()
+    coordinator.selectedTool = .signalMapper
+
+    coordinator.clearPerDeviceSelection(signalMapperRideActive: true)
+
+    #expect(coordinator.selectedTool == .signalMapper)
+  }
+
+  /// The mapper survives a disconnect with no ride open too, because its cells belong to places
+  /// rather than to the radio that heard them (`requiresRadio` is false). Pinned so a change to that
+  /// classification has to be a deliberate one.
+  @Test
+  func `clearPerDeviceSelection keeps the Signal Mapper with no ride open`() {
+    let coordinator = NavigationCoordinator()
+    coordinator.selectedTool = .signalMapper
+
+    coordinator.clearPerDeviceSelection()
+
+    #expect(coordinator.selectedTool == .signalMapper)
+  }
+
+  /// The ride pins the mapper, not the Tools section: every other radio-requiring tool still clears
+  /// while a ride is recording.
+  @Test
+  func `clearPerDeviceSelection clears a radio-requiring tool during a ride`() {
+    let coordinator = NavigationCoordinator()
+    coordinator.selectedTool = .cli
+
+    coordinator.clearPerDeviceSelection(signalMapperRideActive: true)
+
+    #expect(coordinator.selectedTool == nil)
+  }
+
+  @Test
+  func `clearPerRadioSelection keeps the Signal Mapper while a ride records`() {
+    let coordinator = NavigationCoordinator()
+    coordinator.selectedTool = .signalMapper
+
+    coordinator.clearPerRadioSelection(signalMapperRideActive: true)
+
+    #expect(coordinator.selectedTool == .signalMapper)
+  }
+
+  @Test
+  func `clearPendingLinks keeps the Signal Mapper while a ride records`() {
+    let coordinator = NavigationCoordinator()
+    coordinator.selectedTool = .signalMapper
+
+    coordinator.clearPendingLinks(signalMapperRideActive: true)
+
+    #expect(coordinator.selectedTool == .signalMapper)
+  }
+}

@@ -1,4 +1,5 @@
 import MC1Services
+import SurveyKit
 import SwiftUI
 
 /// Which leg of a repeater link a glyph describes.
@@ -29,17 +30,40 @@ enum RepeaterSignalLeg {
 /// and its popover rows draw it.
 struct RepeaterSignalGlyph: View {
   let leg: RepeaterSignalLeg
-  let quality: SNRQuality
+  /// How full the bars are, `0...1`, and what colour they are. Held as the two rendered
+  /// values rather than as a quality enum because two scales legitimately drive this glyph:
+  /// ``SNRQuality`` for a single packet's reading, and SurveyKit's six-step
+  /// ``SignalQuality`` where the caller is grading the same thing the coverage map paints
+  /// its hexagons with (the signal mapper's cell card). Substituting one scale for the other
+  /// would make a row disagree with the hexagon it is inside.
+  private let barLevel: Double
+  private let color: Color
   /// Briefly brightens and enlarges the arrow when a packet moves in this direction.
   var isFlashing = false
   var size: CGFloat = 14
 
+  init(leg: RepeaterSignalLeg, quality: SNRQuality, isFlashing: Bool = false, size: CGFloat = 14) {
+    self.init(leg: leg, barLevel: quality.barLevel, color: quality.color, isFlashing: isFlashing, size: size)
+  }
+
+  init(leg: RepeaterSignalLeg, coverage: SignalQuality, isFlashing: Bool = false, size: CGFloat = 14) {
+    self.init(leg: leg, barLevel: coverage.barLevel, color: coverage.color, isFlashing: isFlashing, size: size)
+  }
+
+  private init(leg: RepeaterSignalLeg, barLevel: Double, color: Color, isFlashing: Bool, size: CGFloat) {
+    self.leg = leg
+    self.barLevel = barLevel
+    self.color = color
+    self.isFlashing = isFlashing
+    self.size = size
+  }
+
   var body: some View {
-    Image(systemName: "cellularbars", variableValue: quality.barLevel)
-      .foregroundStyle(quality.color)
+    Image(systemName: "cellularbars", variableValue: barLevel)
+      .foregroundStyle(color)
       .font(.system(size: size))
       .overlay(alignment: .topLeading) {
-        RepeaterSignalArrow(leg: leg, color: quality.color, isFlashing: isFlashing)
+        RepeaterSignalArrow(leg: leg, color: color, isFlashing: isFlashing)
           .offset(x: -1, y: -1)
       }
       .accessibilityHidden(true)

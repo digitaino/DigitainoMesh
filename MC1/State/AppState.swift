@@ -322,9 +322,21 @@ final class AppState {
   /// location key off. Nil when no run is active.
   var signalMapperRideSession: SignalMapperRideSession?
 
-  /// The raw ride-log store (own container, backup-excluded). Created lazily at first
-  /// run; launch maintenance (orphan reconciliation, retention purge) runs then too.
+  /// The raw observation store (own container, backup-excluded). Created lazily the first
+  /// time capture is wired; launch maintenance (orphan reconciliation, retention purge)
+  /// runs then too.
   var mapperRawLogStore: MapperRawLogStore?
+
+  /// The app-lifetime raw recorder (docs/SIGNAL_MAPPER_V3.md §7 step 2). Attached to every
+  /// capture-engine generation, records with no `runID` outside a ride and is *stamped*
+  /// with one while a ride is open — it is not rebuilt per ride, so a ride starting or
+  /// stopping never costs a buffered batch.
+  var mapperRawSampleRecorder: MapperRawSampleRecorder?
+
+  /// Writes a raw row for every packet this radio transmits. Subscribes to
+  /// ``messageEventStream``; see `MapperSentPacketLogger` for what does and does not
+  /// count as a send.
+  var mapperSentPacketLogger: MapperSentPacketLogger?
 
   #if DEBUG
     /// Optional test-only hooks for deterministic lifecycle ordering tests.
@@ -575,7 +587,7 @@ final class AppState {
     tearDownSignalBars()
     tearDownSignalMapper()
     messageEventDispatcher.cancelAll()
-    navigation.clearPendingLinks()
+    navigation.clearPendingLinks(signalMapperRideActive: signalMapperRideSession != nil)
     nodeLocationPrompt.endSession()
   }
 
@@ -625,7 +637,7 @@ final class AppState {
        let oldDeviceID = lastConnectedDeviceIDForCLI,
        newDeviceID != oldDeviceID {
       cliToolViewModel?.reset()
-      navigation.clearPerRadioSelection()
+      navigation.clearPerRadioSelection(signalMapperRideActive: signalMapperRideSession != nil)
     }
     lastConnectedDeviceIDForCLI = connectedDevice?.id
 

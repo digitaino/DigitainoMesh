@@ -908,3 +908,11 @@
 "packetScope.a11yShowingPathOne" = "Pokazuje 1 obserwatora, który usłyszał ją przez %@";
 "packetScope.a11yShowingPath" = "Pokazuje obserwatorów (%1$d), którzy usłyszeli ją przez %2$@";
 "packetScope.a11yShowingDirect" = "Pokazuje bezpośredni odbiór w %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Grupuj według";
+"packetScope.groupByPath" = "Według ścieżki";
+"packetScope.groupByObserver" = "Według obserwatora";
+"packetScope.sortMostRoutes" = "Najwięcej tras";
+"packetScope.hintObserver" = "Pokazuje trasy tego obserwatora na mapie";
+"packetScope.tapHintObserver" = "Dotknij obserwatora, a potem trasy, aby prześledzić ją na mapie";

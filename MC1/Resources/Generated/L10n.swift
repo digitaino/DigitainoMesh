@@ -741,6 +741,22 @@ public enum L10n {
           /// Location: NoRepeatsRetryCard.swift - Title of the inline card shown when no repeater relayed a sent message
           public static let title = L10n.tr("Chats", "chats.message.noRepeats.title", fallback: "No repeats heard")
         }
+        public enum Observers {
+          /// Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row - %1$@ is the observer count (or an ellipsis while unknown), %2$@ is how long ago the count was last checked
+          public static func diagnostic(_ p1: Any, _ p2: Any) -> String {
+            return L10n.tr("Chats", "chats.message.observers.diagnostic", String(describing: p1), String(describing: p2), fallback: "Observers: %1$@ · checked %2$@ ago")
+          }
+          /// Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when no echo has stamped the message's packet hash yet
+          public static let diagnosticNoHash = L10n.tr("Chats", "chats.message.observers.diagnosticNoHash", fallback: "Observers: no packet hash yet")
+          /// Location: ActionsDetailsSection.swift - Diagnostic line under the Network View row when the packet is known but no lookup has run yet
+          public static let diagnosticNotChecked = L10n.tr("Chats", "chats.message.observers.diagnosticNotChecked", fallback: "Observers: not checked yet")
+          /// Location: BubbleFooterRow.swift - VoiceOver label for the eye badge before the count has been looked up
+          public static let pending = L10n.tr("Chats", "chats.message.observers.pending", fallback: "observer count pending")
+          /// Location: BubbleFooterRow.swift - Plural form of observers, for the eye badge's VoiceOver label
+          public static let plural = L10n.tr("Chats", "chats.message.observers.plural", fallback: "observers")
+          /// Location: BubbleFooterRow.swift - Singular form of observer, for the eye badge's VoiceOver label
+          public static let singular = L10n.tr("Chats", "chats.message.observers.singular", fallback: "observer")
+        }
         public enum Path {
           /// Location: UnifiedMessageBubble.swift - Accessibility label for routing path - %@ is the path
           public static func accessibilityLabel(_ p1: Any) -> String {
@@ -2862,6 +2878,12 @@ public enum L10n {
       }
       /// Packet Scope: focus (route / observer selection on the map)
       public static let filterAll = L10n.tr("Localizable", "packetScope.filterAll", fallback: "All")
+      /// Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer
+      public static let groupBy = L10n.tr("Localizable", "packetScope.groupBy", fallback: "Group by")
+      /// By observer
+      public static let groupByObserver = L10n.tr("Localizable", "packetScope.groupByObserver", fallback: "By observer")
+      /// By path
+      public static let groupByPath = L10n.tr("Localizable", "packetScope.groupByPath", fallback: "By path")
       /// Location: PacketScopeDetailView.swift - redesigned observer panel: headline, live state, sort menu, route ladder
       public static func heardBy(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.heardBy", p1, fallback: "Heard by %d")
@@ -2876,6 +2898,8 @@ public enum L10n {
       }
       /// Hide observers
       public static let hideObservers = L10n.tr("Localizable", "packetScope.hideObservers", fallback: "Hide observers")
+      /// Shows this observer’s routes on the map
+      public static let hintObserver = L10n.tr("Localizable", "packetScope.hintObserver", fallback: "Shows this observer’s routes on the map")
       /// Shows every observer that heard it by this path
       public static let hintPath = L10n.tr("Localizable", "packetScope.hintPath", fallback: "Shows every observer that heard it by this path")
       /// Shows this route on the map
@@ -2974,6 +2998,8 @@ public enum L10n {
       public static let sortFirstHeard = L10n.tr("Localizable", "packetScope.sortFirstHeard", fallback: "First heard")
       /// Most observers
       public static let sortMostObservers = L10n.tr("Localizable", "packetScope.sortMostObservers", fallback: "Most observers")
+      /// Most routes
+      public static let sortMostRoutes = L10n.tr("Localizable", "packetScope.sortMostRoutes", fallback: "Most routes")
       /// %@ s across the mesh
       public static func spreadSeconds(_ p1: Any) -> String {
         return L10n.tr("Localizable", "packetScope.spreadSeconds", String(describing: p1), fallback: "%@ s across the mesh")
@@ -2988,6 +3014,8 @@ public enum L10n {
       public static let tailUnknownOne = L10n.tr("Localizable", "packetScope.tailUnknownOne", fallback: "+1 hop not on the map")
       /// Tap a path, then an observer, to trace it on the map
       public static let tapHint = L10n.tr("Localizable", "packetScope.tapHint", fallback: "Tap a path, then an observer, to trace it on the map")
+      /// Tap an observer, then a route, to trace it on the map
+      public static let tapHintObserver = L10n.tr("Localizable", "packetScope.tapHintObserver", fallback: "Tap an observer, then a route, to trace it on the map")
       /// ×%d
       public static func timesHeard(_ p1: Int) -> String {
         return L10n.tr("Localizable", "packetScope.timesHeard", p1, fallback: "×%d")
@@ -5670,6 +5698,10 @@ public enum L10n {
       public static let footer = L10n.tr("Settings", "packetScope.footer", fallback: "Adds a Network View to a message's actions, showing which mesh observers heard its packet and at what signal level. Looking a message up sends that packet's identifier (never its content) to the server below over your phone's internet connection. Coverage depends on the observer network the server watches.")
       /// Packet Scope (opt-in CoreScope observer lookup)
       public static let header = L10n.tr("Settings", "packetScope.header", fallback: "Packet Scope")
+      /// Show observer counts on messages
+      public static let observerCounts = L10n.tr("Settings", "packetScope.observerCounts", fallback: "Show observer counts on messages")
+      /// Also shows, on each message you send, how many observers heard it, by looking your sent messages up automatically while a chat is open.
+      public static let observerCountsFooter = L10n.tr("Settings", "packetScope.observerCountsFooter", fallback: "Also shows, on each message you send, how many observers heard it, by looking your sent messages up automatically while a chat is open.")
       /// Server
       public static let server = L10n.tr("Settings", "packetScope.server", fallback: "Server")
       /// Look Up Message Coverage
@@ -6002,6 +6034,116 @@ public enum L10n {
       public static let footer = L10n.tr("Settings", "signalBars.footer", fallback: "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.")
       /// Section header for repeater signal tracking
       public static let header = L10n.tr("Settings", "signalBars.header", fallback: "Repeater Signals")
+    }
+    public enum SignalMapperData {
+      /// Location: SignalMapperDataView.swift - A retention length; %lld is the number of days
+      public static func days(_ p1: Int) -> String {
+        return L10n.tr("Settings", "signalMapperData.days", p1, fallback: "%lld days")
+      }
+      /// Location: SettingsListContent.swift - Section header for the signal mapper's stored observations
+      public static let header = L10n.tr("Settings", "signalMapperData.header", fallback: "Signal Mapper")
+      /// Location: SignalMapperDataView.swift - Retention picker label
+      public static let keepFor = L10n.tr("Settings", "signalMapperData.keepFor", fallback: "Keep for")
+      /// Location: SignalMapperDataView.swift - Label for the stored row count and size
+      public static let observations = L10n.tr("Settings", "signalMapperData.observations", fallback: "Observations")
+      /// Location: SignalMapperDataView.swift - Date of the oldest row still kept
+      public static let oldestKept = L10n.tr("Settings", "signalMapperData.oldestKept", fallback: "Oldest kept")
+      /// Location: SignalMapperDataView.swift - Footer explaining when older rows go
+      public static let retentionFooter = L10n.tr("Settings", "signalMapperData.retentionFooter", fallback: "Older rows are deleted when the app starts. Export anything you want to keep before then.")
+      /// Location: SettingsListContent.swift - Row opening the observation table's screen
+      public static let row = L10n.tr("Settings", "signalMapperData.row", fallback: "Data")
+      /// Location: SignalMapperDataView.swift - Row count and on-disk size; %1$@ rows, %2$@ size
+      public static func rows(_ p1: Any, _ p2: Any) -> String {
+        return L10n.tr("Settings", "signalMapperData.rows", String(describing: p1), String(describing: p2), fallback: "%1$@ rows · %2$@")
+      }
+      /// Location: SignalMapperDataView.swift - What the table holds, under the section header
+      public static let subtitle = L10n.tr("Settings", "signalMapperData.subtitle", fallback: "Everything the radio heard, one row per observation")
+      /// Location: SignalMapperDataView.swift - Navigation title of the observation table's screen
+      public static let title = L10n.tr("Settings", "signalMapperData.title", fallback: "Signal Mapper Data")
+      public enum Delete {
+        /// Location: SignalMapperDataView.swift - Menu opening the delete-older-than choices
+        public static let button = L10n.tr("Settings", "signalMapperData.delete.button", fallback: "Delete rows older than…")
+        /// Location: SignalMapperDataView.swift - Destructive confirmation button
+        public static let confirm = L10n.tr("Settings", "signalMapperData.delete.confirm", fallback: "Delete")
+        /// Location: SignalMapperDataView.swift - Confirmation message
+        public static let confirmMessage = L10n.tr("Settings", "signalMapperData.delete.confirmMessage", fallback: "This cannot be undone. Export them first if you want to keep them.")
+        /// Location: SignalMapperDataView.swift - Confirmation title; %@ is how many rows go
+        public static func confirmTitle(_ p1: Any) -> String {
+          return L10n.tr("Settings", "signalMapperData.delete.confirmTitle", String(describing: p1), fallback: "Delete %@ rows?")
+        }
+        /// Location: SignalMapperDataView.swift - Delete every row, whatever its age
+        public static let everything = L10n.tr("Settings", "signalMapperData.delete.everything", fallback: "Everything")
+        /// Location: SignalMapperDataView.swift - Delete rows older than one day
+        public static let olderThan24Hours = L10n.tr("Settings", "signalMapperData.delete.olderThan24Hours", fallback: "24 hours")
+        /// Location: SignalMapperDataView.swift - Delete rows older than one month
+        public static let olderThan30Days = L10n.tr("Settings", "signalMapperData.delete.olderThan30Days", fallback: "30 days")
+        /// Location: SignalMapperDataView.swift - Delete rows older than one week
+        public static let olderThan7Days = L10n.tr("Settings", "signalMapperData.delete.olderThan7Days", fallback: "7 days")
+      }
+      public enum Export {
+        /// Location: SignalMapperDataView.swift - Date-window picker label
+        public static let dates = L10n.tr("Settings", "signalMapperData.export.dates", fallback: "Dates")
+        /// Location: SignalMapperDataView.swift - Alert shown when the file could not be written
+        public static let failed = L10n.tr("Settings", "signalMapperData.export.failed", fallback: "The export could not be written.")
+        /// Location: SignalMapperDataView.swift - Footer saying what the exported file contains
+        public static let footer = L10n.tr("Settings", "signalMapperData.export.footer", fallback: "One row per observation, at full precision: your positions, the repeater keys and the packet bytes. The file is removed from this phone when you leave this screen.")
+        /// Location: SignalMapperDataView.swift - File-format picker label
+        public static let format = L10n.tr("Settings", "signalMapperData.export.format", fallback: "Format")
+        /// Location: SignalMapperDataView.swift - Export section header
+        public static let header = L10n.tr("Settings", "signalMapperData.export.header", fallback: "Export")
+        /// Location: SignalMapperDataView.swift - Hexagon-scope picker label
+        public static let hexagons = L10n.tr("Settings", "signalMapperData.export.hexagons", fallback: "Hexagons")
+        /// Location: SignalMapperDataView.swift - Packet-kind picker label and its screen title
+        public static let kinds = L10n.tr("Settings", "signalMapperData.export.kinds", fallback: "Kinds")
+        /// Location: SignalMapperDataView.swift - Repeater picker label
+        public static let repeater = L10n.tr("Settings", "signalMapperData.export.repeater", fallback: "Repeater")
+        /// Location: SignalMapperDataView.swift - Button that writes the file; %@ is the row count
+        public static func run(_ p1: Any) -> String {
+          return L10n.tr("Settings", "signalMapperData.export.run", String(describing: p1), fallback: "Export %@ rows…")
+        }
+      }
+      public enum Hexagons {
+        /// Location: SignalMapperDataView.swift - Hexagon scope: every hexagon
+        public static let all = L10n.tr("Settings", "signalMapperData.hexagons.all", fallback: "All")
+        /// Location: SignalMapperDataView.swift - Hexagon scope: the most recent ride's hexagons
+        public static let thisRide = L10n.tr("Settings", "signalMapperData.hexagons.thisRide", fallback: "This ride")
+      }
+      public enum Kinds {
+        /// Location: SignalMapperDataView.swift - Every packet kind is selected
+        public static let all = L10n.tr("Settings", "signalMapperData.kinds.all", fallback: "All")
+        /// Location: SignalMapperDataView.swift - Footer of the packet-kind list
+        public static let footer = L10n.tr("Settings", "signalMapperData.kinds.footer", fallback: "Only the kinds ticked here are written to the file.")
+        /// Location: SignalMapperDataView.swift - No packet kind is selected
+        public static let noneSelected = L10n.tr("Settings", "signalMapperData.kinds.noneSelected", fallback: "None")
+      }
+      public enum Range {
+        /// Location: SignalMapperDataView.swift - Date window: no date filter at all
+        public static let everything = L10n.tr("Settings", "signalMapperData.range.everything", fallback: "Everything")
+        /// Location: SignalMapperDataView.swift - Date window: the last day
+        public static let last24Hours = L10n.tr("Settings", "signalMapperData.range.last24Hours", fallback: "Last 24 hours")
+        /// Location: SignalMapperDataView.swift - Date window: the last month
+        public static let last30Days = L10n.tr("Settings", "signalMapperData.range.last30Days", fallback: "Last 30 days")
+        /// Location: SignalMapperDataView.swift - Date window: the last week
+        public static let last7Days = L10n.tr("Settings", "signalMapperData.range.last7Days", fallback: "Last 7 days")
+        /// Location: SignalMapperDataView.swift - Date window: the whole retention period
+        public static let last90Days = L10n.tr("Settings", "signalMapperData.range.last90Days", fallback: "Last 90 days")
+      }
+      public enum Repeater {
+        /// Location: SignalMapperDataView.swift - Repeater filter: no repeater filter
+        public static let any = L10n.tr("Settings", "signalMapperData.repeater.any", fallback: "Any")
+        /// Location: SignalMapperDataView.swift - A repeater in the picker; %1$@ name, %2$@ hash ID
+        public static func named(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Settings", "signalMapperData.repeater.named", String(describing: p1), String(describing: p2), fallback: "%1$@ (%2$@)")
+        }
+      }
+      public enum Sharing {
+        /// Location: SignalMapperDataView.swift - Footer explaining what publishing would send
+        public static let footer = L10n.tr("Settings", "signalMapperData.sharing.footer", fallback: "Sends what this radio hears, with your position, under your radio's key. World-readable. Coming later.")
+        /// Location: SignalMapperDataView.swift - Sharing section header
+        public static let header = L10n.tr("Settings", "signalMapperData.sharing.header", fallback: "Sharing")
+        /// Location: SignalMapperDataView.swift - Disabled toggle for publishing to CoreScope
+        public static let publish = L10n.tr("Settings", "signalMapperData.sharing.publish", fallback: "Publish to scope.digitaino.com")
+      }
     }
     public enum Telemetry {
       /// Toggle label for allowing telemetry requests
@@ -6901,153 +7043,135 @@ public enum L10n {
         public static let options = L10n.tr("Tools", "tools.signalMapper.options", fallback: "Options")
         /// Location: SignalMapperCoverageView.swift - Privacy note under the capture toggle
         public static let privacyNote = L10n.tr("Tools", "tools.signalMapper.privacyNote", fallback: "Everything stays on this device. Your exact position is never stored — only the hexagon you were in. Nothing is ever uploaded without asking you first.")
-        /// Location: SignalMapperCoverageView.swift - Banner counting what the map is showing; %1$lld is cells, %2$lld observations, %3$lld days
-        public static func summary(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
-          return L10n.tr("Tools", "tools.signalMapper.summary", p1, p2, p3, fallback: "%1$lld cells · %2$lld observations · %3$lld days")
-        }
         public enum Card {
-          /// Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s"
-          public static func ago(_ p1: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.ago", String(describing: p1), fallback: "%@ ago")
-          }
-          /// Location: SignalMapperCellCard.swift - Mean reading under the best one; %@ is decibels
-          public static func average(_ p1: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.average", String(describing: p1), fallback: "avg %@")
-          }
-          /// Location: SignalMapperCellCard.swift - Strongest repeater in the cell
-          public static let bestRepeater = L10n.tr("Tools", "tools.signalMapper.card.bestRepeater", fallback: "Best Repeater")
-          /// Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip
-          public static let chipHint = L10n.tr("Tools", "tools.signalMapper.card.chipHint", fallback: "Shows this repeater's own readings for the cell")
-          /// Location: SignalMapperCellCard.swift - Clears the repeater filter
-          public static let clear = L10n.tr("Tools", "tools.signalMapper.card.clear", fallback: "Clear")
-          /// Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link
-          public static let connected = L10n.tr("Tools", "tools.signalMapper.card.connected", fallback: "Connected (2-way)")
+          /// Location: SignalMapperCellCard.swift - Card scope covering everything recorded
+          public static let allTime = L10n.tr("Tools", "tools.signalMapper.card.allTime", fallback: "All time")
+          /// Location: SignalMapperCellCard.swift - Accessibility label on the header readout for the strongest link in this hexagon
+          public static let bestLink = L10n.tr("Tools", "tools.signalMapper.card.bestLink", fallback: "Best link here")
+          /// Location: SignalMapperCellCard.swift - Accessibility label on the chevron that returns the repeater list to three rows
+          public static let collapse = L10n.tr("Tools", "tools.signalMapper.card.collapse", fallback: "Show fewer repeaters")
           /// Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at
           public static func downlinkAccessibility(_ p1: Int) -> String {
             return L10n.tr("Tools", "tools.signalMapper.card.downlinkAccessibility", p1, fallback: "you hear them at %lld decibels")
           }
-          /// Location: SignalMapperCellCard.swift - Group of repeaters we only hear
-          public static let heardOnly = L10n.tr("Tools", "tools.signalMapper.card.heardOnly", fallback: "Heard (1-way)")
-          /// Location: SignalMapperCellCard.swift - Uplink is blank because this repeater has never reported hearing us
-          public static let heardOnlyReason = L10n.tr("Tools", "tools.signalMapper.card.heardOnlyReason", fallback: "Heard only — never reported hearing you")
-          /// Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s"
-          public static func lastHeard(_ p1: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.lastHeard", String(describing: p1), fallback: "Last heard %@ ago")
+          /// Location: SignalMapperCellCard.swift - Accessibility label on the chevron that grows the repeater list
+          public static let expand = L10n.tr("Tools", "tools.signalMapper.card.expand", fallback: "Show more repeaters")
+          /// Location: SignalMapperCellCard.swift - Shown when GPS quality is refusing to place anything
+          public static let fixesRejected = L10n.tr("Tools", "tools.signalMapper.card.fixesRejected", fallback: "GPS too poor to place anything here")
+          /// Location: SignalMapperCellCard.swift - Packets heard in this hexagon; %lld is the count
+          public static func heardCount(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.heardCount", p1, fallback: "%lld heard")
           }
-          /// Location: SignalMapperCellCard.swift - Label of the live last-heard clock
-          public static let lastHeardLabel = L10n.tr("Tools", "tools.signalMapper.card.lastHeardLabel", fallback: "Last Heard")
+          /// Location: SignalMapperCellCard.swift - A repeater echoed your packet, proving it heard you without a number
+          public static let heardYou = L10n.tr("Tools", "tools.signalMapper.card.heardYou", fallback: "heard you")
+          /// Location: SignalMapperCellCard.swift - A repeater reported the SNR it received you at; %@ is decibels
+          public static func hearsYou(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.hearsYou", String(describing: p1), fallback: "hears you %@ dB")
+          }
+          /// Location: SignalMapperCellCard.swift - Age of the most recent evidence; %@ is a duration
+          public static func lastHeardAgo(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.lastHeardAgo", String(describing: p1), fallback: "last %@ ago")
+          }
           /// Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon
           public static let myCell = L10n.tr("Tools", "tools.signalMapper.card.myCell", fallback: "My Cell")
+          /// Location: SignalMapperCellCard.swift - Repeater listed from a reply or an echo that our radio has never measured
+          public static let noDirectReading = L10n.tr("Tools", "tools.signalMapper.card.noDirectReading", fallback: "not heard directly here")
+          /// Location: SignalMapperCellCard.swift - Shown when there is no GPS fix at all yet
+          public static let noFixYet = L10n.tr("Tools", "tools.signalMapper.card.noFixYet", fallback: "No GPS fix yet, so nothing can be placed")
+          /// Location: SignalMapperCellCard.swift - Shown when packets were heard here but none credit a repeater; %lld packets heard
+          public static func noneAttributable(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.noneAttributable", p1, fallback: "%lld heard, none from a repeater we can name")
+          }
           /// Location: SignalMapperCellCard.swift - Header when probes from this hexagon were never answered
           public static let noResponse = L10n.tr("Tools", "tools.signalMapper.card.noResponse", fallback: "No Response")
           /// Location: SignalMapperCellCard.swift - Subtitle of the no-response header
           public static let noResponseDetail = L10n.tr("Tools", "tools.signalMapper.card.noResponseDetail", fallback: "Probe sent, no response")
-          /// Location: SignalMapperCellCard.swift - Packets split by direction for one repeater
-          public static let packetSplit = L10n.tr("Tools", "tools.signalMapper.card.packetSplit", fallback: "Packets")
-          /// Location: SignalMapperCellCard.swift - Packet split; %1$lld heard from them, %2$lld carrying their reading of us
-          public static func packetSplitValue(_ p1: Int, _ p2: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.packetSplitValue", p1, p2, fallback: "%1$lld heard · %2$lld reported")
+          /// Location: SignalMapperCellCard.swift - Shown when the ride has heard nothing in this hexagon
+          public static let nothingThisRide = L10n.tr("Tools", "tools.signalMapper.card.nothingThisRide", fallback: "Nothing heard here this ride")
+          /// Location: SignalMapperCellCard.swift - Shown when the ride has captured nothing anywhere yet
+          public static let nothingYet = L10n.tr("Tools", "tools.signalMapper.card.nothingYet", fallback: "Nothing captured yet this ride")
+          /// Location: SignalMapperCellCard.swift - Uplink readings repeaters reported for you here; %lld is the count
+          public static func readingsOfYou(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.readingsOfYou", p1, fallback: "%lld readings of you")
           }
-          /// Location: SignalMapperCellCard.swift - Packet count under the quality headline
-          public static func packetsReceived(_ p1: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.packetsReceived", p1, fallback: "%lld packets received")
+          /// Location: SignalMapperCellCard.swift - Accessibility hint for a repeater row
+          public static let rowHint = L10n.tr("Tools", "tools.signalMapper.card.rowHint", fallback: "Opens every observation of this repeater in this hexagon")
+          /// Location: SignalMapperCellCard.swift - Downlink readings for one repeater; %1$@ latest, %2$@ best, %3$@ average
+          public static func rxLine(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.rxLine", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "%1$@ now · %2$@ best · %3$@ avg")
           }
-          /// Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent
-          public static func probeSuccess(_ p1: Int, _ p2: Int, _ p3: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.probeSuccess", p1, p2, p3, fallback: "%1$lld/%2$lld replies (%3$lld%%)")
+          /// Location: SignalMapperCellCard.swift - Card scope limited to the open ride
+          public static let thisRide = L10n.tr("Tools", "tools.signalMapper.card.thisRide", fallback: "This ride")
+          /// Location: SignalMapperCellCard.swift - Uplink readings one repeater reported; %1$@ latest, %2$@ best, %3$@ average
+          public static func txLine(_ p1: Any, _ p2: Any, _ p3: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.card.txLine", String(describing: p1), String(describing: p2), String(describing: p3), fallback: "hears you %1$@ now · %2$@ best · %3$@ avg")
           }
-          /// Location: SignalMapperCellCard.swift - Share of probes that were answered
-          public static let probeSuccessLabel = L10n.tr("Tools", "tools.signalMapper.card.probeSuccessLabel", fallback: "Probe Success")
-          /// Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent
-          public static func probeSuccessValue(_ p1: Int, _ p2: Int, _ p3: Int, _ p4: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.probeSuccessValue", p1, p2, p3, p4, fallback: "%1$lld%% (%2$lld/%3$lld) · %4$lld replies")
-          }
-          /// Location: SignalMapperCellCard.swift - Downlink column label
-          public static let rxSignal = L10n.tr("Tools", "tools.signalMapper.card.rxSignal", fallback: "RX Signal")
-          /// Location: SignalMapperCellCard.swift - Uplink column label
-          public static let txSignal = L10n.tr("Tools", "tools.signalMapper.card.txSignal", fallback: "TX Signal")
-          /// Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name
-          public static func via(_ p1: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.card.via", String(describing: p1), fallback: "via %@")
-          }
-          /// Location: SignalMapperCellCard.swift - Uplink is blank because no probe has been answered yet
-          public static let waitingUplink = L10n.tr("Tools", "tools.signalMapper.card.waitingUplink", fallback: "Waiting for a discover response")
         }
         public enum Delete {
           /// Location: SignalMapperCoverageView.swift - Menu item that deletes every captured cell
           public static let action = L10n.tr("Tools", "tools.signalMapper.delete.action", fallback: "Delete Captured Coverage")
           /// Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells
-          public static let message = L10n.tr("Tools", "tools.signalMapper.delete.message", fallback: "Removes every hexagon captured on this device. This cannot be undone.")
+          public static let message = L10n.tr("Tools", "tools.signalMapper.delete.message", fallback: "Removes every hexagon and every observation captured on this device, including the rows you could export. This cannot be undone.")
           /// Location: SignalMapperCoverageView.swift - Confirmation alert title before deleting captured cells
           public static let title = L10n.tr("Tools", "tools.signalMapper.delete.title", fallback: "Delete Captured Coverage?")
         }
         public enum Detail {
-          /// Location: SignalMapperCellDetailSheet.swift - Messages sent from this cell that were acknowledged
-          public static let acknowledged = L10n.tr("Tools", "tools.signalMapper.detail.acknowledged", fallback: "Sends acknowledged")
+          /// Location: SignalMapperRepeaterDetailView.swift - Total row count when the list is capped; %lld is the total
+          public static func allRows(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.allRows", p1, fallback: "All %lld …")
+          }
           /// Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess
           public static let ambiguousName = L10n.tr("Tools", "tools.signalMapper.detail.ambiguousName", fallback: "More than one node answers to this hash")
-          /// Location: SignalMapperCellDetailSheet.swift - Mean received signal strength in this cell
-          public static let averageRssi = L10n.tr("Tools", "tools.signalMapper.detail.averageRssi", fallback: "Average RSSI")
-          /// Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell
-          public static let averageSnr = L10n.tr("Tools", "tools.signalMapper.detail.averageSnr", fallback: "Average SNR")
-          /// Location: SignalMapperCellDetailSheet.swift - Mean SNR repeaters reported for our transmissions
-          public static let averageTxSnr = L10n.tr("Tools", "tools.signalMapper.detail.averageTxSnr", fallback: "They heard you at")
-          /// Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index
-          public static func cellFooter(_ p1: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.detail.cellFooter", String(describing: p1), fallback: "H3 cell %@")
+          /// Location: SignalMapperRepeaterDetailView.swift - How many hops a packet had taken; %lld is the count
+          public static func hops(_ p1: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.hops", p1, fallback: "%lld hops")
           }
-          /// Location: SignalMapperCellDetailSheet.swift - First and last day a cell was observed; %1$@ and %2$@ are dates
-          public static func dayRange(_ p1: Any, _ p2: Any) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.detail.dayRange", String(describing: p1), String(describing: p2), fallback: "%1$@ to %2$@")
+          /// Location: SignalMapperRepeaterDetailView.swift - Repeater subtitle; %1$lld packets heard directly, %2$@ the first date
+          public static func inThisHexagon(_ p1: Int, _ p2: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.detail.inThisHexagon", p1, String(describing: p2), fallback: "In this hexagon · %1$lld heard directly · since %2$@")
           }
-          /// Location: SignalMapperCellDetailSheet.swift - Row label for the days this cell was seen on
-          public static let days = L10n.tr("Tools", "tools.signalMapper.detail.days", fallback: "Days")
-          /// Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction
-          public static let direction = L10n.tr("Tools", "tools.signalMapper.detail.direction", fallback: "By Direction")
-          /// Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number
-          public static func milliseconds(_ p1: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.detail.milliseconds", p1, fallback: "%lldms")
-          }
+          /// Location: SignalMapperRepeaterDetailView.swift - Chart key for the uplink series
+          public static let itHearsYou = L10n.tr("Tools", "tools.signalMapper.detail.itHearsYou", fallback: "↑ it hears you")
           /// Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered
           public static let neverHeardBack = L10n.tr("Tools", "tools.signalMapper.detail.neverHeardBack", fallback: "Never heard back")
           /// Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts
           public static let noPacketsHeard = L10n.tr("Tools", "tools.signalMapper.detail.noPacketsHeard", fallback: "No packets heard")
-          /// Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell
-          public static let observations = L10n.tr("Tools", "tools.signalMapper.detail.observations", fallback: "Observations")
-          /// Location: SignalMapperCellDetailSheet.swift - Packets a repeater carried; %lld is the count
-          public static func packets(_ p1: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.detail.packets", p1, fallback: "%lld packets")
+          /// Location: SignalMapperRepeaterDetailView.swift - Section header above the raw rows
+          public static let observationsHere = L10n.tr("Tools", "tools.signalMapper.detail.observationsHere", fallback: "Observations here")
+          /// Location: SignalMapperRepeaterDetailView.swift - Chart key for the downlink series
+          public static let youHearIt = L10n.tr("Tools", "tools.signalMapper.detail.youHearIt", fallback: "↓ you hear it")
+          public enum Kind {
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a received advert
+            public static let advert = L10n.tr("Tools", "tools.signalMapper.detail.kind.advert", fallback: "advert")
+            /// Location: SignalMapperDataView.swift - Row kind: a periodic position marker
+            public static let breadcrumb = L10n.tr("Tools", "tools.signalMapper.detail.kind.breadcrumb", fallback: "breadcrumb")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a message confirmed delivered
+            public static let delivered = L10n.tr("Tools", "tools.signalMapper.detail.kind.delivered", fallback: "delivered")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a direct-routed packet
+            public static let direct = L10n.tr("Tools", "tools.signalMapper.detail.kind.direct", fallback: "direct")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a discover probe
+            public static let discoverReply = L10n.tr("Tools", "tools.signalMapper.detail.kind.discoverReply", fallback: "discover reply")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own packets heard being rebroadcast
+            public static let echo = L10n.tr("Tools", "tools.signalMapper.detail.kind.echo", fallback: "echo of your message")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a flood-routed packet
+            public static let flood = L10n.tr("Tools", "tools.signalMapper.detail.kind.flood", fallback: "flood")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a received packet of unknown route
+            public static let heard = L10n.tr("Tools", "tools.signalMapper.detail.kind.heard", fallback: "heard")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: an observer's sighting of one of your packets
+            public static let observer = L10n.tr("Tools", "tools.signalMapper.detail.kind.observer", fallback: "observer heard you")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe nothing answered
+            public static let probeLost = L10n.tr("Tools", "tools.signalMapper.detail.kind.probeLost", fallback: "no reply")
+            /// Location: SignalMapperDataView.swift - Row kind: a repeater answered a probe (trace or discover)
+            public static let probeReply = L10n.tr("Tools", "tools.signalMapper.detail.kind.probeReply", fallback: "probe reply")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe this radio transmitted
+            public static let probeSent = L10n.tr("Tools", "tools.signalMapper.detail.kind.probeSent", fallback: "probe sent")
+            /// Location: SignalMapperDataView.swift - Row kind: the link to the radio went down or came back
+            public static let radioLink = L10n.tr("Tools", "tools.signalMapper.detail.kind.radioLink", fallback: "radio link")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own transmissions
+            public static let sent = L10n.tr("Tools", "tools.signalMapper.detail.kind.sent", fallback: "you sent")
+            /// Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a trace probe
+            public static let traceReply = L10n.tr("Tools", "tools.signalMapper.detail.kind.traceReply", fallback: "trace reply")
           }
-          /// Location: SignalMapperCellDetailSheet.swift - Probe replies that came back
-          public static let probeReplies = L10n.tr("Tools", "tools.signalMapper.detail.probeReplies", fallback: "Probe replies")
-          /// Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip
-          public static let probeRoundTrip = L10n.tr("Tools", "tools.signalMapper.detail.probeRoundTrip", fallback: "Probe round trip")
-          /// Location: SignalMapperCellDetailSheet.swift - Probe transmissions sent from this cell
-          public static let probesSent = L10n.tr("Tools", "tools.signalMapper.detail.probesSent", fallback: "Probes sent")
-          /// Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade
-          public static let quality = L10n.tr("Tools", "tools.signalMapper.detail.quality", fallback: "Signal quality")
-          /// Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell
-          public static let received = L10n.tr("Tools", "tools.signalMapper.detail.received", fallback: "Packets received")
-          /// Location: SignalMapperCellDetailSheet.swift - Section header listing the repeaters heard in this cell
-          public static let repeaters = L10n.tr("Tools", "tools.signalMapper.detail.repeaters", fallback: "Repeaters Heard")
-          /// Location: SignalMapperCellDetailSheet.swift - Mean round-trip time of acknowledged sends
-          public static let roundTrip = L10n.tr("Tools", "tools.signalMapper.detail.roundTrip", fallback: "Average round trip")
-          /// Location: SignalMapperCellDetailSheet.swift - How packets in this cell were routed
-          public static let routeMix = L10n.tr("Tools", "tools.signalMapper.detail.routeMix", fallback: "Route mix")
-          /// Location: SignalMapperCellDetailSheet.swift - Direct versus flood packet split; %1$lld is direct, %2$lld flood
-          public static func routeSplit(_ p1: Int, _ p2: Int) -> String {
-            return L10n.tr("Tools", "tools.signalMapper.detail.routeSplit", p1, p2, fallback: "%1$lld direct · %2$lld flood")
-          }
-          /// Location: SignalMapperCellDetailSheet.swift - Section header for radio measurements
-          public static let signal = L10n.tr("Tools", "tools.signalMapper.detail.signal", fallback: "Signal")
-          /// Location: SignalMapperCellDetailSheet.swift - Best and worst signal-to-noise ratio in this cell
-          public static let snrRange = L10n.tr("Tools", "tools.signalMapper.detail.snrRange", fallback: "SNR range")
-          /// Location: SignalMapperCellDetailSheet.swift - Title of the tapped-cell sheet
-          public static let title = L10n.tr("Tools", "tools.signalMapper.detail.title", fallback: "Cell Detail")
-          /// Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater
-          public static let txHeard = L10n.tr("Tools", "tools.signalMapper.detail.txHeard", fallback: "Your packets heard back")
-          /// Location: SignalMapperCellDetailSheet.swift - Section: what active probing from this cell proved
-          public static let uplink = L10n.tr("Tools", "tools.signalMapper.detail.uplink", fallback: "Uplink")
         }
         public enum Focus {
           /// Location: SignalMapperFocusPickerView.swift - Confirm button applying the lock-on selection
@@ -7085,21 +7209,31 @@ public enum L10n {
         }
         public enum Layer {
           /// Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink)
-          public static let heard = L10n.tr("Tools", "tools.signalMapper.layer.heard", fallback: "Heard — what I hear")
+          public static let heard = L10n.tr("Tools", "tools.signalMapper.layer.heard", fallback: "I hear them")
           /// Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink)
-          public static let reach = L10n.tr("Tools", "tools.signalMapper.layer.reach", fallback: "Reach — what hears me")
+          public static let reach = L10n.tr("Tools", "tools.signalMapper.layer.reach", fallback: "They hear me")
           /// Location: SignalMapperCoverageView.swift - Map layer picker title
           public static let title = L10n.tr("Tools", "tools.signalMapper.layer.title", fallback: "Map Layer")
         }
         public enum Legend {
+          /// Location: SignalMapperCoverageView.swift - Legend totals for the whole map; %1$lld hexagons, %2$lld observations
+          public static func allTime(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.legend.allTime", p1, p2, fallback: "All time · %1$lld hexagons · %2$lld observations")
+          }
           /// Location: SignalMapperLegend.swift - Legend note explaining hexagon opacity
           public static let density = L10n.tr("Tools", "tools.signalMapper.legend.density", fallback: "Solid hexagons were observed more often than faint ones.")
+          /// Location: SignalMapperLegend.swift - Legend row for cells where repeaters echoed you but reported no number
+          public static let heardYou = L10n.tr("Tools", "tools.signalMapper.legend.heardYou", fallback: "heard you, no number")
           /// Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells
-          public static let noReach = L10n.tr("Tools", "tools.signalMapper.legend.noReach", fallback: "Probed, nobody heard you")
+          public static let noReach = L10n.tr("Tools", "tools.signalMapper.legend.noReach", fallback: "probed, nobody heard")
           /// Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale
           public static let reachSignal = L10n.tr("Tools", "tools.signalMapper.legend.reachSignal", fallback: "Color is how well repeaters heard your transmissions from that hexagon.")
           /// Location: SignalMapperLegend.swift - Legend note explaining hexagon color
           public static let signal = L10n.tr("Tools", "tools.signalMapper.legend.signal", fallback: "Color is the average signal the mesh reached that hexagon with.")
+          /// Location: SignalMapperCoverageView.swift - Legend totals for the open ride; %1$lld hexagons, %2$lld observations
+          public static func thisRide(_ p1: Int, _ p2: Int) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.legend.thisRide", p1, p2, fallback: "This ride · %1$lld hexagons · %2$lld observations")
+          }
           /// Location: SignalMapperLegend.swift - Legend title
           public static let title = L10n.tr("Tools", "tools.signalMapper.legend.title", fallback: "Legend")
         }
@@ -7162,8 +7296,16 @@ public enum L10n {
           }
           /// Location: SignalMapperLiveStrip.swift - Accessibility hint on the live strip (opens run details)
           public static let detailHint = L10n.tr("Tools", "tools.signalMapper.strip.detailHint", fallback: "Shows survey details")
+          /// Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes exist but are too poor to place observations
+          public static let fixRejected = L10n.tr("Tools", "tools.signalMapper.strip.fixRejected", fallback: "Fixes rejected")
+          /// Location: SignalMapperLiveStrip.swift - Spoken explanation of the fix-rejected chip
+          public static let fixRejectedHint = L10n.tr("Tools", "tools.signalMapper.strip.fixRejectedHint", fallback: "GPS accuracy is too poor to place what the radio is hearing")
           /// Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes are being rejected
           public static let noFix = L10n.tr("Tools", "tools.signalMapper.strip.noFix", fallback: "No fix")
+          /// Location: SignalMapperLiveStrip.swift - Spoken value of the adaptive-power chip; %@ is the step label
+          public static func power(_ p1: Any) -> String {
+            return L10n.tr("Tools", "tools.signalMapper.strip.power", String(describing: p1), fallback: "Transmit power %@.")
+          }
         }
         public enum Survey {
           /// Location: SignalMapperCoverageView.swift - Disabled start button while no radio is connected
@@ -7179,20 +7321,22 @@ public enum L10n {
           /// Location: SignalMapperCoverageView.swift - Menu/button ending the running survey session
           public static let stop = L10n.tr("Tools", "tools.signalMapper.survey.stop", fallback: "End Survey")
           public enum Summary {
-            /// Location: SignalMapperSessionSummarySheet.swift - Distinct hexagons that triggered a probe
-            public static let cellsProbed = L10n.tr("Tools", "tools.signalMapper.survey.summary.cellsProbed", fallback: "Hexagons probed")
             /// Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted
             public static let duration = L10n.tr("Tools", "tools.signalMapper.survey.summary.duration", fallback: "Duration")
             /// Location: SignalMapperSessionSummarySheet.swift - Button generating the shareable ride log
             public static let export = L10n.tr("Tools", "tools.signalMapper.survey.summary.export", fallback: "Export Ride Log")
             /// Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing
             public static let exportNote = L10n.tr("Tools", "tools.signalMapper.survey.summary.exportNote", fallback: "Shared files are scrubbed: positions coarsened, the first and last 500 m trimmed, repeater keys shortened. The full log stays on this device.")
+            /// Location: SignalMapperSessionSummarySheet.swift - Hexagons the ride recorded rows in
+            public static let hexagons = L10n.tr("Tools", "tools.signalMapper.survey.summary.hexagons", fallback: "Hexagons touched")
             /// Location: SignalMapperSessionSummarySheet.swift - Footer: results never leave the device
             public static let localNote = L10n.tr("Tools", "tools.signalMapper.survey.summary.localNote", fallback: "Survey results are stored on this device only.")
             /// Location: SignalMapperSessionSummarySheet.swift - Probes whose reply never arrived
             public static let noReply = L10n.tr("Tools", "tools.signalMapper.survey.summary.noReply", fallback: "Probes with no reply")
             /// Location: SignalMapperSessionSummarySheet.swift - Probe cycles the session transmitted
             public static let probes = L10n.tr("Tools", "tools.signalMapper.survey.summary.probes", fallback: "Probe cycles sent")
+            /// Location: SignalMapperSessionSummarySheet.swift - Distinct repeaters heard directly on the ride
+            public static let repeatersHeard = L10n.tr("Tools", "tools.signalMapper.survey.summary.repeatersHeard", fallback: "Repeaters heard directly")
             /// Location: SignalMapperSessionSummarySheet.swift - Trace and discover replies heard back
             public static let replies = L10n.tr("Tools", "tools.signalMapper.survey.summary.replies", fallback: "Replies heard")
             /// Location: SignalMapperSessionSummarySheet.swift - Share button once the export file is ready
@@ -7312,58 +7456,6 @@ public enum L10n {
       }
     }
   }
-  public enum WhatsNew {
-    public enum WhatsNew {
-      /// Button to dismiss the What's New sheet
-      public static let continueButton = L10n.tr("WhatsNew", "whatsNew.continueButton", fallback: "Continue")
-      /// Link on the What's New sheet to the full GitHub release notes
-      public static let fullReleaseNotes = L10n.tr("WhatsNew", "whatsNew.fullReleaseNotes", fallback: "Full release notes")
-      /// Title of the What's New sheet shown once after an app update
-      public static let title = L10n.tr("WhatsNew", "whatsNew.title", fallback: "What's New")
-      public enum ContactPhotos {
-        /// What's New v1.3 - Contact photos feature, description
-        public static let description = L10n.tr("WhatsNew", "whatsNew.contactPhotos.description", fallback: "Set an avatar on any contact so people are easier to spot in lists and conversations.")
-        /// What's New v1.3 - Contact photos feature, title
-        public static let title = L10n.tr("WhatsNew", "whatsNew.contactPhotos.title", fallback: "Contact photos")
-      }
-      public enum FasterChats {
-        /// What's New v1.3 - Improved chats feature, description
-        public static let description = L10n.tr("WhatsNew", "whatsNew.fasterChats.description", fallback: "Opening a chat lands you at new messages instead of the bottom. Times show on every bubble, and history and link previews load faster.")
-        /// What's New v1.3 - Improved chats feature, title
-        public static let title = L10n.tr("WhatsNew", "whatsNew.fasterChats.title", fallback: "Improved chats")
-      }
-      public enum MapFilters {
-        /// What's New v1.3 - Map filters feature, description
-        public static let description = L10n.tr("WhatsNew", "whatsNew.mapFilters.description", fallback: "Filter pins by favorites, discovered nodes, and node type.")
-        /// What's New v1.3 - Map filters feature, title
-        public static let title = L10n.tr("WhatsNew", "whatsNew.mapFilters.title", fallback: "Map filters")
-      }
-    }
-  }
-}
-// swiftlint:enable explicit_type_interface function_parameter_count identifier_name line_length
-// swiftlint:enable nesting type_body_length type_name vertical_whitespace_opening_braces
-
-// MARK: - Implementation Details
-
-extension L10n {
-  private static func tr(_ table: String, _ key: String, _ args: CVarArg..., fallback value: String) -> String {
-    let format = BundleToken.bundle.localizedString(forKey: key, value: value, table: table)
-    return String(format: format, locale: Locale.current, arguments: args)
-  }
-}
-
-// swiftlint:disable convenience_type
-private final class BundleToken {
-  static let bundle: Bundle = {
-    #if SWIFT_PACKAGE
-    return Bundle.module
-    #else
-    return Bundle(for: BundleToken.self)
-    #endif
-  }()
-}
-// swiftlint:enable convenience_type
   public enum Weather {
     public enum Weather {
       /// Location: ToolSelection.swift - Tool selection label and screen title
@@ -7576,6 +7668,88 @@ private final class BundleToken {
           return L10n.tr("Weather", "weather.area.county", String(describing: p1), fallback: "%@ County")
         }
       }
+      public enum AreaMap {
+        /// Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state
+        public static func areaIn(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.areaIn", String(describing: p1), String(describing: p2), fallback: "%1$@, %2$@")
+        }
+        /// Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more
+        public static func areas(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.areas", p1, fallback: "%lld areas under an alert")
+        }
+        /// Location: WeatherAreaMapView.swift - The map shades one area
+        public static let areasOne = L10n.tr("Weather", "weather.areaMap.areasOne", fallback: "1 area under an alert")
+        /// Location: WeatherAreaMapView.swift - Request button asking the radio for the map
+        public static let ask = L10n.tr("Weather", "weather.areaMap.ask", fallback: "Ask for the map")
+        /// Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area
+        public static let askArea = L10n.tr("Weather", "weather.areaMap.askArea", fallback: "Ask about this area")
+        /// Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it
+        public static let askAreaAgain = L10n.tr("Weather", "weather.areaMap.askAreaAgain", fallback: "Ask again")
+        /// Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name
+        public static func askAreaFootnote(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.askAreaFootnote", String(describing: p1), fallback: "One packet to %@, and the answer goes to everyone listening.")
+        }
+        /// Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM"
+        public static func asOf(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.asOf", String(describing: p1), fallback: "Map as of %@")
+        }
+        /// Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name
+        public static func busy(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.busy", String(describing: p1), fallback: "Another radio asked %@ for the map recently — try again in a few minutes.")
+        }
+        /// Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence
+        public static func clear(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.clear", String(describing: p1), fallback: "%@ found nothing under an alert anywhere in the country.")
+        }
+        /// Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets
+        public static func cost(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.cost", p1, fallback: "About %lld packets on the shared channel.")
+        }
+        /// Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit
+        public static let cut = L10n.tr("Weather", "weather.areaMap.cut", fallback: "Cut to fit — an area not shaded here may still be under an alert")
+        /// Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself
+        public static let empty = L10n.tr("Weather", "weather.areaMap.empty", fallback: "No map yet. Nothing asks for one on its own — a map costs the shared channel several packets, so it waits for your tap.")
+        /// Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area
+        public static let held = L10n.tr("Weather", "weather.areaMap.held", fallback: "What this phone holds")
+        /// Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too
+        public static let heldAll = L10n.tr("Weather", "weather.areaMap.heldAll", fallback: "Warnings, watches and advisories")
+        /// Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for
+        public static let heldWarnings = L10n.tr("Weather", "weather.areaMap.heldWarnings", fallback: "Warnings and watches")
+        /// Location: WeatherAreaMapView.swift - Header over the colors used on the map
+        public static let legend = L10n.tr("Weather", "weather.areaMap.legend", fallback: "What the colors mean")
+        /// Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing
+        public static let list = L10n.tr("Weather", "weather.areaMap.list", fallback: "What's in this map")
+        /// Location: WeatherAreaMapView.swift - Accessibility label for the map itself
+        public static let mapLabel = L10n.tr("Weather", "weather.areaMap.mapLabel", fallback: "Map of the country, with the areas under an alert shaded")
+        /// Location: WeatherAlertsListView.swift - Row detail before any map has been received
+        public static let never = L10n.tr("Weather", "weather.areaMap.never", fallback: "Not asked for yet")
+        /// Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more
+        public static func noOutline(_ p1: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.noOutline", p1, fallback: "%lld of them have no outline in this app and aren't shaded")
+        }
+        /// Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for
+        public static let noOutlineOne = L10n.tr("Weather", "weather.areaMap.noOutlineOne", fallback: "1 of them has no outline in this app and isn't shaded")
+        /// Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on
+        public static let onTheMap = L10n.tr("Weather", "weather.areaMap.onTheMap", fallback: "On the map")
+        /// Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap
+        public static let `open` = L10n.tr("Weather", "weather.areaMap.open", fallback: "Open the full map")
+        /// Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent
+        public static func partial(_ p1: Int, _ p2: Int) -> String {
+          return L10n.tr("Weather", "weather.areaMap.partial", p1, p2, fallback: "%1$lld of %2$lld parts arrived — some of the country is missing")
+        }
+        /// Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover
+        public static let scope = L10n.tr("Weather", "weather.areaMap.scope", fallback: "What to map")
+        /// Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime
+        public static let scopeAll = L10n.tr("Weather", "weather.areaMap.scopeAll", fallback: "Also advisories")
+        /// Location: WeatherAreaMapView.swift - The narrower scope, which is the default
+        public static let scopeWarnings = L10n.tr("Weather", "weather.areaMap.scopeWarnings", fallback: "Warnings and watches")
+        /// Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name
+        public static func tapHint(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.areaMap.tapHint", String(describing: p1), fallback: "Tap a shaded area to ask %@ what it is.")
+        }
+        /// Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it
+        public static let title = L10n.tr("Weather", "weather.areaMap.title", fallback: "National alert map")
+      }
       public enum Banner {
         /// Location: WeatherPlacePageView.swift - Banner button that offers to add #meshwx
         public static let addChannel = L10n.tr("Weather", "weather.banner.addChannel", fallback: "Add channel")
@@ -7668,88 +7842,6 @@ private final class BundleToken {
           return L10n.tr("Weather", "weather.coverage.covers", String(describing: p1), fallback: "Covers %@")
         }
         /// Location: WeatherCopy.swift - Alert detail for an alert far away, %@ is the place
-      public enum AreaMap {
-        /// Location: WeatherAreaMapView.swift - One area in that list. %1$@ is the area's name, %2$@ its state
-        public static func areaIn(_ p1: Any, _ p2: Any) -> String {
-          return L10n.tr("Weather", "weather.areaMap.areaIn", String(describing: p1), String(describing: p2), fallback: "%1$@, %2$@")
-        }
-        /// Location: WeatherAreaMapView.swift - How many areas the map shades, %lld is two or more
-        public static func areas(_ p1: Int) -> String {
-          return L10n.tr("Weather", "weather.areaMap.areas", p1, fallback: "%lld areas under an alert")
-        }
-        /// Location: WeatherAreaMapView.swift - The map shades one area
-        public static let areasOne = L10n.tr("Weather", "weather.areaMap.areasOne", fallback: "1 area under an alert")
-        /// Location: WeatherAreaMapView.swift - Request button asking the radio for the map
-        public static let ask = L10n.tr("Weather", "weather.areaMap.ask", fallback: "Ask for the map")
-        /// Location: WeatherAreaMapView.swift - Button: ask the radio about the tapped area
-        public static let askArea = L10n.tr("Weather", "weather.areaMap.askArea", fallback: "Ask about this area")
-        /// Location: WeatherAreaMapView.swift - The same button when the phone already holds an alert for it
-        public static let askAreaAgain = L10n.tr("Weather", "weather.areaMap.askAreaAgain", fallback: "Ask again")
-        /// Location: WeatherAreaMapView.swift - Under that button. %@ is the radio's name
-        public static func askAreaFootnote(_ p1: Any) -> String {
-          return L10n.tr("Weather", "weather.areaMap.askAreaFootnote", String(describing: p1), fallback: "One packet to %@, and the answer goes to everyone listening.")
-        }
-        /// Location: WeatherAreaMapView.swift - When the radio built the map, %@ is a time like "8:02 PM"
-        public static func asOf(_ p1: Any) -> String {
-          return L10n.tr("Weather", "weather.areaMap.asOf", String(describing: p1), fallback: "Map as of %@")
-        }
-        /// Location: WeatherCopy.swift - The radio's rate limit refused the map (Not available, reason 4). %@ is the radio's name
-        public static func busy(_ p1: Any) -> String {
-          return L10n.tr("Weather", "weather.areaMap.busy", String(describing: p1), fallback: "Another radio asked %@ for the map recently — try again in a few minutes.")
-        }
-        /// Location: WeatherAreaMapView.swift - A complete map that found nothing anywhere, %@ is the radio's name at the start of a sentence
-        public static func clear(_ p1: Any) -> String {
-          return L10n.tr("Weather", "weather.areaMap.clear", String(describing: p1), fallback: "%@ found nothing under an alert anywhere in the country.")
-        }
-        /// Location: WeatherAreaMapView.swift - What one tap costs, said before it is spent. %lld is a number of packets
-        public static func cost(_ p1: Int) -> String {
-          return L10n.tr("Weather", "weather.areaMap.cost", p1, fallback: "About %lld packets on the shared channel.")
-        }
-        /// Location: WeatherAreaMapView.swift - The radio dropped areas to make the map fit
-        public static let cut = L10n.tr("Weather", "weather.areaMap.cut", fallback: "Cut to fit — an area not shaded here may still be under an alert")
-        /// Location: WeatherAreaMapView.swift - Shown when no map has been received, and why nothing fetches one by itself
-        public static let empty = L10n.tr("Weather", "weather.areaMap.empty", fallback: "No map yet. Nothing asks for one on its own — a map costs the shared channel several packets, so it waits for your tap.")
-        /// Location: WeatherAreaMapView.swift - Header of the alerts this phone already holds for that area
-        public static let held = L10n.tr("Weather", "weather.areaMap.held", fallback: "What this phone holds")
-        /// Location: WeatherAreaMapView.swift - What the held map covers when advisories were asked for too
-        public static let heldAll = L10n.tr("Weather", "weather.areaMap.heldAll", fallback: "Warnings, watches and advisories")
-        /// Location: WeatherAreaMapView.swift - What the held map covers when only warnings and watches were asked for
-        public static let heldWarnings = L10n.tr("Weather", "weather.areaMap.heldWarnings", fallback: "Warnings and watches")
-        /// Location: WeatherAreaMapView.swift - Header over the colors used on the map
-        public static let legend = L10n.tr("Weather", "weather.areaMap.legend", fallback: "What the colors mean")
-        /// Location: WeatherAreaMapView.swift - Header of the list of alert kinds the map is showing
-        public static let list = L10n.tr("Weather", "weather.areaMap.list", fallback: "What's in this map")
-        /// Location: WeatherAreaMapView.swift - Accessibility label for the map itself
-        public static let mapLabel = L10n.tr("Weather", "weather.areaMap.mapLabel", fallback: "Map of the country, with the areas under an alert shaded")
-        /// Location: WeatherAlertsListView.swift - Row detail before any map has been received
-        public static let never = L10n.tr("Weather", "weather.areaMap.never", fallback: "Not asked for yet")
-        /// Location: WeatherAreaMapView.swift - Areas the map named that this app has no outline for, so they are not shaded. %lld is two or more
-        public static func noOutline(_ p1: Int) -> String {
-          return L10n.tr("Weather", "weather.areaMap.noOutline", p1, fallback: "%lld of them have no outline in this app and aren't shaded")
-        }
-        /// Location: WeatherAreaMapView.swift - One area the map named that this app has no outline for
-        public static let noOutlineOne = L10n.tr("Weather", "weather.areaMap.noOutlineOne", fallback: "1 of them has no outline in this app and isn't shaded")
-        /// Location: WeatherAreaMapView.swift - Header of what the sweep said about the area a tap landed on
-        public static let onTheMap = L10n.tr("Weather", "weather.areaMap.onTheMap", fallback: "On the map")
-        /// Location: WeatherAreaMapView.swift - Under the still map on the card; the full map zooms and answers a tap
-        public static let `open` = L10n.tr("Weather", "weather.areaMap.open", fallback: "Open the full map")
-        /// Location: WeatherAreaMapView.swift - Parts of the map never arrived. %1$lld is how many arrived, %2$lld how many were sent
-        public static func partial(_ p1: Int, _ p2: Int) -> String {
-          return L10n.tr("Weather", "weather.areaMap.partial", p1, p2, fallback: "%1$lld of %2$lld parts arrived — some of the country is missing")
-        }
-        /// Location: WeatherAreaMapView.swift - Picker label for how much weather the next map should cover
-        public static let scope = L10n.tr("Weather", "weather.areaMap.scope", fallback: "What to map")
-        /// Location: WeatherAreaMapView.swift - The wider scope, which costs more airtime
-        public static let scopeAll = L10n.tr("Weather", "weather.areaMap.scopeAll", fallback: "Also advisories")
-        /// Location: WeatherAreaMapView.swift - The narrower scope, which is the default
-        public static let scopeWarnings = L10n.tr("Weather", "weather.areaMap.scopeWarnings", fallback: "Warnings and watches")
-        /// Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name
-        public static func tapHint(_ p1: Any) -> String {
-          return L10n.tr("Weather", "weather.areaMap.tapHint", String(describing: p1), fallback: "Tap a shaded area to ask %@ what it is.")
-        }
-        /// Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it
-        public static let title = L10n.tr("Weather", "weather.areaMap.title", fallback: "National alert map")
-      }
         public static func doesNotCover(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.coverage.doesNotCover", String(describing: p1), fallback: "Doesn't cover %@")
         }
@@ -8133,6 +8225,8 @@ private final class BundleToken {
         public static let noAlertList = L10n.tr("Weather", "weather.radioRow.noAlertList", fallback: "no alert list yet")
       }
       public enum Reports {
+        /// Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot
+        public static let cut = L10n.tr("Weather", "weather.reports.cut", fallback: "Shortened for radio")
         /// Location: WeatherReportsView.swift - Marker where a part of a text never arrived
         public static let missingPart = L10n.tr("Weather", "weather.reports.missingPart", fallback: "\n[missing part]\n")
         /// Location: WeatherReportsView.swift - Shown instead of Ask when the request needs a place
@@ -8225,8 +8319,6 @@ private final class BundleToken {
         public static func contentReadings(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.request.contentReadings", String(describing: p1), fallback: "readings as of %@")
         }
-        /// Location: WeatherReportsView.swift - Last line of a reply the weather radio had to cut; a sentence, joined to the source line with a middot
-        public static let cut = L10n.tr("Weather", "weather.reports.cut", fallback: "Shortened for radio")
         /// Location: WeatherCopy.swift - Your radio refused to send the request, %@ is a time
         public static func failed(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.request.failed", String(describing: p1), fallback: "Your radio couldn't send this at %@.")
@@ -8323,6 +8415,10 @@ private final class BundleToken {
         public static let activeWarnings = L10n.tr("Weather", "weather.requestName.activeWarnings", fallback: "Active warnings")
         /// Location: WeatherCopy.swift - Name of a request for the radio's alert list
         public static let alertList = L10n.tr("Weather", "weather.requestName.alertList", fallback: "Alert list")
+        /// Location: WeatherCopy.swift - Name of a request for the national alert map
+        public static let areaMap = L10n.tr("Weather", "weather.requestName.areaMap", fallback: "National alert map")
+        /// Location: WeatherCopy.swift - Name of a request for the national alert map including advisories
+        public static let areaMapAll = L10n.tr("Weather", "weather.requestName.areaMapAll", fallback: "National alert map · with advisories")
         /// Location: WeatherCopy.swift - Name of a request for warnings naming one area, %@ is a county or zone code like TXZ192
         public static func areaWarnings(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.requestName.areaWarnings", String(describing: p1), fallback: "Alerts for %@")
@@ -8402,6 +8498,14 @@ private final class BundleToken {
         /// Location: WeatherFormatting.swift - Sky condition
         public static let thunderstorm = L10n.tr("Weather", "weather.sky.thunderstorm", fallback: "Thunderstorm")
       }
+      public enum Source {
+        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say.
+        public static let goes = L10n.tr("Weather", "weather.source.goes", fallback: "Via GOES satellite")
+        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet
+        public static let internet = L10n.tr("Weather", "weather.source.internet", fallback: "Via internet")
+        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet
+        public static let mixed = L10n.tr("Weather", "weather.source.mixed", fallback: "Via GOES and internet")
+      }
       public enum Station {
         /// Location: WeatherStationsView.swift - Section with METAR and TAF
         public static let airportReports = L10n.tr("Weather", "weather.station.airportReports", fallback: "Airport reports (coded)")
@@ -8415,10 +8519,6 @@ private final class BundleToken {
         public static func inchesOfMercury(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.station.inchesOfMercury", String(describing: p1), fallback: "%@ inHg")
         }
-        /// Location: WeatherCopy.swift - Name of a request for the national alert map
-        public static let areaMap = L10n.tr("Weather", "weather.requestName.areaMap", fallback: "National alert map")
-        /// Location: WeatherCopy.swift - Name of a request for the national alert map including advisories
-        public static let areaMapAll = L10n.tr("Weather", "weather.requestName.areaMapAll", fallback: "National alert map · with advisories")
         /// Location: WeatherStationsView.swift - Station screen with no reading received yet
         public static let nothingHeld = L10n.tr("Weather", "weather.station.nothingHeld", fallback: "No reading from this station yet.")
         /// Location: WeatherStationsView.swift - Why a station's reading is old: the radio's hourly report does not carry it
@@ -8498,14 +8598,6 @@ private final class BundleToken {
         /// Location: WeatherFormatting.swift - Countdown, %@ is a duration like "40 min"
         public static func within(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.time.within", String(describing: p1), fallback: "in %@")
-      public enum Source {
-        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: off its own satellite dish. Nothing is shown when the radio doesn't say.
-        public static let goes = L10n.tr("Weather", "weather.source.goes", fallback: "Via GOES satellite")
-        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: fetched over the internet
-        public static let internet = L10n.tr("Weather", "weather.source.internet", fallback: "Via internet")
-        /// Location: WeatherReportsView.swift, WeatherForecastSection.swift, WeatherAlertDetailView.swift - Where the weather radio got the data: built from both the satellite and the internet
-        public static let mixed = L10n.tr("Weather", "weather.source.mixed", fallback: "Via GOES and internet")
-      }
         }
         /// Location: WeatherFormatting.swift - A time yesterday, %@ is a time like "2:00 PM"
         public static func yesterday(_ p1: Any) -> String {
@@ -8600,3 +8692,55 @@ private final class BundleToken {
       }
     }
   }
+  public enum WhatsNew {
+    public enum WhatsNew {
+      /// Button to dismiss the What's New sheet
+      public static let continueButton = L10n.tr("WhatsNew", "whatsNew.continueButton", fallback: "Continue")
+      /// Link on the What's New sheet to the full GitHub release notes
+      public static let fullReleaseNotes = L10n.tr("WhatsNew", "whatsNew.fullReleaseNotes", fallback: "Full release notes")
+      /// Title of the What's New sheet shown once after an app update
+      public static let title = L10n.tr("WhatsNew", "whatsNew.title", fallback: "What's New")
+      public enum ContactPhotos {
+        /// What's New v1.3 - Contact photos feature, description
+        public static let description = L10n.tr("WhatsNew", "whatsNew.contactPhotos.description", fallback: "Set an avatar on any contact so people are easier to spot in lists and conversations.")
+        /// What's New v1.3 - Contact photos feature, title
+        public static let title = L10n.tr("WhatsNew", "whatsNew.contactPhotos.title", fallback: "Contact photos")
+      }
+      public enum FasterChats {
+        /// What's New v1.3 - Improved chats feature, description
+        public static let description = L10n.tr("WhatsNew", "whatsNew.fasterChats.description", fallback: "Opening a chat lands you at new messages instead of the bottom. Times show on every bubble, and history and link previews load faster.")
+        /// What's New v1.3 - Improved chats feature, title
+        public static let title = L10n.tr("WhatsNew", "whatsNew.fasterChats.title", fallback: "Improved chats")
+      }
+      public enum MapFilters {
+        /// What's New v1.3 - Map filters feature, description
+        public static let description = L10n.tr("WhatsNew", "whatsNew.mapFilters.description", fallback: "Filter pins by favorites, discovered nodes, and node type.")
+        /// What's New v1.3 - Map filters feature, title
+        public static let title = L10n.tr("WhatsNew", "whatsNew.mapFilters.title", fallback: "Map filters")
+      }
+    }
+  }
+}
+// swiftlint:enable explicit_type_interface function_parameter_count identifier_name line_length
+// swiftlint:enable nesting type_body_length type_name vertical_whitespace_opening_braces
+
+// MARK: - Implementation Details
+
+extension L10n {
+  private static func tr(_ table: String, _ key: String, _ args: CVarArg..., fallback value: String) -> String {
+    let format = BundleToken.bundle.localizedString(forKey: key, value: value, table: table)
+    return String(format: format, locale: Locale.current, arguments: args)
+  }
+}
+
+// swiftlint:disable convenience_type
+private final class BundleToken {
+  static let bundle: Bundle = {
+    #if SWIFT_PACKAGE
+    return Bundle.module
+    #else
+    return Bundle(for: BundleToken.self)
+    #endif
+  }()
+}
+// swiftlint:enable convenience_type

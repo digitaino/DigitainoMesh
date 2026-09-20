@@ -907,3 +907,11 @@
 "packetScope.a11yShowingPathOne" = "Показан 1 наблюдатель, услышавший её через %@";
 "packetScope.a11yShowingPath" = "Показаны наблюдатели (%1$d), услышавшие её через %2$@";
 "packetScope.a11yShowingDirect" = "Показан прямой приём у %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Группировать по";
+"packetScope.groupByPath" = "По пути";
+"packetScope.groupByObserver" = "По наблюдателю";
+"packetScope.sortMostRoutes" = "Больше всего маршрутов";
+"packetScope.hintObserver" = "Показывает маршруты этого наблюдателя на карте";
+"packetScope.tapHintObserver" = "Коснитесь наблюдателя, затем маршрута, чтобы проследить его на карте";

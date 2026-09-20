@@ -910,3 +910,11 @@
 "packetScope.a11yShowingPathOne" = "Toont 1 waarnemer die het via %@ hoorde";
 "packetScope.a11yShowingPath" = "Toont %1$d waarnemers die het via %2$@ hoorden";
 "packetScope.a11yShowingDirect" = "Toont de directe ontvangst bij %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Groeperen op";
+"packetScope.groupByPath" = "Op pad";
+"packetScope.groupByObserver" = "Op waarnemer";
+"packetScope.sortMostRoutes" = "Meeste routes";
+"packetScope.hintObserver" = "Toont de routes van deze waarnemer op de kaart";
+"packetScope.tapHintObserver" = "Tik op een waarnemer en dan op een route om die op de kaart te volgen";

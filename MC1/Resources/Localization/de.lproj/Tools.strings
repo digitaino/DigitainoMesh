@@ -1150,9 +1150,6 @@
 /* Location: SignalMapperCoverageView.swift - Explains that frequently-visited areas are excluded from the map */
 "tools.signalMapper.anchorNote" = "Orte, an denen du viel Zeit verbringst, werden bewusst von der Karte ausgenommen.";
 
-/* Location: SignalMapperCoverageView.swift - Banner counting what the map is showing; %1$lld is cells, %2$lld observations, %3$lld days */
-"tools.signalMapper.summary" = "%1$lld Zellen · %2$lld Messungen · %3$lld Tage";
-
 /* Location: SignalMapperCoverageView.swift - Map control that frames every captured cell */
 "tools.signalMapper.centerOnCoverage" = "Auf Abdeckung zentrieren";
 
@@ -1166,7 +1163,7 @@
 "tools.signalMapper.delete.title" = "Erfasste Abdeckung löschen?";
 
 /* Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells */
-"tools.signalMapper.delete.message" = "Entfernt jedes auf diesem Gerät erfasste Sechseck. Das lässt sich nicht rückgängig machen.";
+"tools.signalMapper.delete.message" = "Entfernt jedes Sechseck und jede Beobachtung, die auf diesem Gerät erfasst wurde, einschließlich der exportierbaren Zeilen. Dies kann nicht rückgängig gemacht werden.";
 
 /* Location: SignalMapperLegend.swift - Legend title */
 "tools.signalMapper.legend.title" = "Legende";
@@ -1180,68 +1177,8 @@
 /* Location: SignalQuality+Color.swift - Signal quality below the poor threshold */
 "tools.signalMapper.quality.veryPoor" = "Sehr schlecht";
 
-/* Location: SignalMapperCellDetailSheet.swift - Title of the tapped-cell sheet */
-"tools.signalMapper.detail.title" = "Zellendetails";
-
-/* Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade */
-"tools.signalMapper.detail.quality" = "Signalqualität";
-
-/* Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell */
-"tools.signalMapper.detail.observations" = "Messungen";
-
-/* Location: SignalMapperCellDetailSheet.swift - Row label for the days this cell was seen on */
-"tools.signalMapper.detail.days" = "Tage";
-
-/* Location: SignalMapperCellDetailSheet.swift - First and last day a cell was observed; %1$@ and %2$@ are dates */
-"tools.signalMapper.detail.dayRange" = "%1$@ bis %2$@";
-
-/* Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index */
-"tools.signalMapper.detail.cellFooter" = "H3-Zelle %@";
-
-/* Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction */
-"tools.signalMapper.detail.direction" = "Nach Richtung";
-
-/* Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell */
-"tools.signalMapper.detail.received" = "Empfangene Pakete";
-
-/* Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater */
-"tools.signalMapper.detail.txHeard" = "Eigene Pakete zurückgehört";
-
-/* Location: SignalMapperCellDetailSheet.swift - Messages sent from this cell that were acknowledged */
-"tools.signalMapper.detail.acknowledged" = "Bestätigte Sendungen";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean round-trip time of acknowledged sends */
-"tools.signalMapper.detail.roundTrip" = "Mittlere Umlaufzeit";
-
-/* Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number */
-"tools.signalMapper.detail.milliseconds" = "%lldms";
-
-/* Location: SignalMapperCellDetailSheet.swift - Section header for radio measurements */
-"tools.signalMapper.detail.signal" = "Signal";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell */
-"tools.signalMapper.detail.averageSnr" = "Mittlerer SNR";
-
-/* Location: SignalMapperCellDetailSheet.swift - Best and worst signal-to-noise ratio in this cell */
-"tools.signalMapper.detail.snrRange" = "SNR-Bereich";
-
 /* Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts */
 "tools.signalMapper.detail.noPacketsHeard" = "Keine Pakete gehört";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean received signal strength in this cell */
-"tools.signalMapper.detail.averageRssi" = "Mittlerer RSSI";
-
-/* Location: SignalMapperCellDetailSheet.swift - How packets in this cell were routed */
-"tools.signalMapper.detail.routeMix" = "Routen-Mix";
-
-/* Location: SignalMapperCellDetailSheet.swift - Direct versus flood packet split; %1$lld is direct, %2$lld flood */
-"tools.signalMapper.detail.routeSplit" = "%1$lld direkt · %2$lld Flood";
-
-/* Location: SignalMapperCellDetailSheet.swift - Section header listing the repeaters heard in this cell */
-"tools.signalMapper.detail.repeaters" = "Gehörte Repeater";
-
-/* Location: SignalMapperCellDetailSheet.swift - Packets a repeater carried; %lld is the count */
-"tools.signalMapper.detail.packets" = "%lld Pakete";
 
 /* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
 "tools.signalMapper.detail.ambiguousName" = "Mehr als ein Knoten passt zu diesem Hash";
@@ -1253,7 +1190,6 @@
 "tools.signalMapper.survey.spotCheck" = "Punktmessung";
 "tools.signalMapper.survey.hud" = "Vermessung läuft · %1$lld Sonden · %2$lld Antworten";
 "tools.signalMapper.survey.summary.title" = "Vermessung abgeschlossen";
-"tools.signalMapper.survey.summary.cellsProbed" = "Vermessene Sechsecke";
 "tools.signalMapper.survey.summary.probes" = "Gesendete Messzyklen";
 "tools.signalMapper.survey.summary.replies" = "Gehörte Antworten";
 "tools.signalMapper.survey.summary.noReply" = "Sonden ohne Antwort";
@@ -1305,16 +1241,16 @@
 "tools.signalMapper.layer.title" = "Kartenebene";
 
 /* Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink) */
-"tools.signalMapper.layer.heard" = "Gehört — was ich höre";
+"tools.signalMapper.layer.heard" = "Ich höre sie";
 
 /* Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink) */
-"tools.signalMapper.layer.reach" = "Reichweite — was mich hört";
+"tools.signalMapper.layer.reach" = "Sie hören mich";
 
 /* Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale */
 "tools.signalMapper.legend.reachSignal" = "Die Farbe zeigt, wie gut Repeater deine Sendungen aus diesem Sechseck gehört haben.";
 
 /* Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells */
-"tools.signalMapper.legend.noReach" = "Vermessen, niemand hat dich gehört";
+"tools.signalMapper.legend.noReach" = "vermessen, niemand hat gehört";
 
 /* Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted */
 "tools.signalMapper.survey.summary.duration" = "Dauer";
@@ -1328,29 +1264,23 @@
 /* Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing */
 "tools.signalMapper.survey.summary.exportNote" = "Geteilte Dateien werden bereinigt: Positionen vergröbert, die ersten und letzten 500 m entfernt, Repeater-Schlüssel gekürzt. Das vollständige Protokoll bleibt auf diesem Gerät.";
 
-/* Location: SignalMapperCellDetailSheet.swift - Section: what active probing from this cell proved */
-"tools.signalMapper.detail.uplink" = "Uplink";
-
-/* Location: SignalMapperCellDetailSheet.swift - Probe transmissions sent from this cell */
-"tools.signalMapper.detail.probesSent" = "Gesendete Sonden";
-
-/* Location: SignalMapperCellDetailSheet.swift - Probe replies that came back */
-"tools.signalMapper.detail.probeReplies" = "Sondenantworten";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean SNR repeaters reported for our transmissions */
-"tools.signalMapper.detail.averageTxSnr" = "Sie hörten dich mit";
-
 /* Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered */
 "tools.signalMapper.detail.neverHeardBack" = "Nie eine Antwort erhalten";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip */
-"tools.signalMapper.detail.probeRoundTrip" = "Sonden-Umlaufzeit";
 
 /* Location: SignalMapperLiveStrip.swift - Accessibility hint on the live strip (opens run details) */
 "tools.signalMapper.strip.detailHint" = "Zeigt Details zur Vermessung";
 
 /* Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes are being rejected */
 "tools.signalMapper.strip.noFix" = "Keine Ortung";
+
+/* Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes exist but are too poor to place observations */
+"tools.signalMapper.strip.fixRejected" = "Ortung verworfen";
+
+/* Location: SignalMapperLiveStrip.swift - Spoken explanation of the fix-rejected chip */
+"tools.signalMapper.strip.fixRejectedHint" = "Die GPS-Genauigkeit reicht nicht, um das Gehörte zu verorten";
+
+/* Location: SignalMapperLiveStrip.swift - Spoken value of the adaptive-power chip; %@ is the step label */
+"tools.signalMapper.strip.power" = "Sendeleistung %@.";
 
 /* Location: SignalMapperLiveStrip.swift - Accessibility summary; %1$@ elapsed, %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons */
 "tools.signalMapper.strip.accessibility" = "Vermessung seit %1$@. %2$lld Sonden, %3$lld Antworten, %4$lld verloren, %5$lld Sechsecke.";
@@ -1409,62 +1339,8 @@
 /* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
 "tools.signalMapper.focus.search" = "Repeater suchen";
 
-/* Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent */
-"tools.signalMapper.card.probeSuccess" = "%1$lld/%2$lld Antworten (%3$lld%%)";
-
-/* Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s" */
-"tools.signalMapper.card.lastHeard" = "Zuletzt vor %@ gehört";
-
 /* Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon */
 "tools.signalMapper.card.myCell" = "Meine Zelle";
-
-/* Location: SignalMapperCellCard.swift - Packet count under the quality headline */
-"tools.signalMapper.card.packetsReceived" = "%lld Pakete empfangen";
-
-/* Location: SignalMapperCellCard.swift - Downlink column label */
-"tools.signalMapper.card.rxSignal" = "RX-Signal";
-
-/* Location: SignalMapperCellCard.swift - Uplink column label */
-"tools.signalMapper.card.txSignal" = "TX-Signal";
-
-/* Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name */
-"tools.signalMapper.card.via" = "über %@";
-
-/* Location: SignalMapperCellCard.swift - Clears the repeater filter */
-"tools.signalMapper.card.clear" = "Aufheben";
-
-/* Location: SignalMapperCellCard.swift - Uplink is blank because this repeater has never reported hearing us */
-"tools.signalMapper.card.heardOnlyReason" = "Nur gehört — hat nie gemeldet, dich zu hören";
-
-/* Location: SignalMapperCellCard.swift - Uplink is blank because no probe has been answered yet */
-"tools.signalMapper.card.waitingUplink" = "Warte auf Erkennungsantwort";
-
-/* Location: SignalMapperCellCard.swift - Strongest repeater in the cell */
-"tools.signalMapper.card.bestRepeater" = "Bester Repeater";
-
-/* Location: SignalMapperCellCard.swift - Label of the live last-heard clock */
-"tools.signalMapper.card.lastHeardLabel" = "Zuletzt gehört";
-
-/* Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s" */
-"tools.signalMapper.card.ago" = "vor %@";
-
-/* Location: SignalMapperCellCard.swift - Share of probes that were answered */
-"tools.signalMapper.card.probeSuccessLabel" = "Sondenerfolg";
-
-/* Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent */
-"tools.signalMapper.card.probeSuccessValue" = "%1$lld%% (%2$lld/%3$lld) · %4$lld Antworten";
-
-/* Location: SignalMapperCellCard.swift - Packets split by direction for one repeater */
-"tools.signalMapper.card.packetSplit" = "Pakete";
-
-/* Location: SignalMapperCellCard.swift - Packet split; %1$lld heard from them, %2$lld carrying their reading of us */
-"tools.signalMapper.card.packetSplitValue" = "%1$lld gehört · %2$lld gemeldet";
-
-/* Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link */
-"tools.signalMapper.card.connected" = "Verbunden (beidseitig)";
-
-/* Location: SignalMapperCellCard.swift - Group of repeaters we only hear */
-"tools.signalMapper.card.heardOnly" = "Gehört (einseitig)";
 
 /* Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at */
 "tools.signalMapper.card.downlinkAccessibility" = "du hörst sie mit %lld Dezibel";
@@ -1477,12 +1353,6 @@
 
 /* Location: SignalMapperCellCard.swift - Subtitle of the no-response header */
 "tools.signalMapper.card.noResponseDetail" = "Sonde gesendet, keine Antwort";
-
-/* Location: SignalMapperCellCard.swift - Mean reading under the best one; %@ is decibels */
-"tools.signalMapper.card.average" = "Ø %@";
-
-/* Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip */
-"tools.signalMapper.card.chipHint" = "Zeigt die Messwerte dieses Repeaters für die Zelle";
 
 /* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
 "tools.signalMapper.focus.unlock" = "Aufschaltung aufheben";
@@ -1543,3 +1413,97 @@
 
 /* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
 "tools.signalMapper.transmit.floodShort" = "Flood";
+
+/* Location: SignalMapperCellCard.swift - Packets heard in this hexagon; %lld is the count */
+"tools.signalMapper.card.heardCount" = "%lld gehört";
+/* Location: SignalMapperCellCard.swift - Uplink readings repeaters reported for you here; %lld is the count */
+"tools.signalMapper.card.readingsOfYou" = "%lld Messungen von dir";
+/* Location: SignalMapperCellCard.swift - Age of the most recent evidence; %@ is a duration */
+"tools.signalMapper.card.lastHeardAgo" = "zuletzt vor %@";
+/* Location: SignalMapperCellCard.swift - Downlink readings for one repeater; %1$@ latest, %2$@ best, %3$@ average */
+"tools.signalMapper.card.rxLine" = "%1$@ jetzt · %2$@ best · %3$@ Ø";
+/* Location: SignalMapperCellCard.swift - Uplink readings one repeater reported; %1$@ latest, %2$@ best, %3$@ average */
+"tools.signalMapper.card.txLine" = "hört dich %1$@ jetzt · %2$@ best · %3$@ Ø";
+/* Location: SignalMapperCellCard.swift - A repeater reported the SNR it received you at; %@ is decibels */
+"tools.signalMapper.card.hearsYou" = "hört dich mit %@ dB";
+/* Location: SignalMapperCellCard.swift - A repeater echoed your packet, proving it heard you without a number */
+"tools.signalMapper.card.heardYou" = "hat dich gehört";
+/* Location: SignalMapperCellCard.swift - Card scope limited to the open ride */
+"tools.signalMapper.card.thisRide" = "Diese Fahrt";
+/* Location: SignalMapperCellCard.swift - Card scope covering everything recorded */
+"tools.signalMapper.card.allTime" = "Gesamt";
+/* Location: SignalMapperCellCard.swift - Shown when the ride has heard nothing in this hexagon */
+"tools.signalMapper.card.nothingThisRide" = "Auf dieser Fahrt hier nichts gehört";
+
+/* Location: SignalMapperCellCard.swift - Repeater listed from a reply or an echo that our radio has never measured */
+"tools.signalMapper.card.noDirectReading" = "hier nicht direkt gehört";
+
+/* Location: SignalMapperCellCard.swift - Shown when the ride has captured nothing anywhere yet */
+"tools.signalMapper.card.nothingYet" = "Auf dieser Fahrt noch nichts erfasst";
+
+/* Location: SignalMapperCellCard.swift - Shown when GPS quality is refusing to place anything */
+"tools.signalMapper.card.fixesRejected" = "GPS zu ungenau, um hier etwas zu verorten";
+/* Location: SignalMapperCellCard.swift - Shown when there is no GPS fix at all yet */
+"tools.signalMapper.card.noFixYet" = "Noch keine GPS-Ortung, also lässt sich nichts verorten";
+/* Location: SignalMapperCellCard.swift - Shown when packets were heard here but none credit a repeater; %lld packets heard */
+"tools.signalMapper.card.noneAttributable" = "%lld gehört, keines von einem benennbaren Repeater";
+/* Location: SignalMapperCellCard.swift - Accessibility hint for a repeater row */
+"tools.signalMapper.card.rowHint" = "Öffnet jede Beobachtung dieses Repeaters in diesem Sechseck";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the chevron that grows the repeater list */
+"tools.signalMapper.card.expand" = "Mehr Repeater anzeigen";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the chevron that returns the repeater list to three rows */
+"tools.signalMapper.card.collapse" = "Weniger Repeater anzeigen";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the header readout for the strongest link in this hexagon */
+"tools.signalMapper.card.bestLink" = "Beste Verbindung hier";
+/* Location: SignalMapperCoverageView.swift - Legend totals for the whole map; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.allTime" = "Gesamt · %1$lld Sechsecke · %2$lld Messungen";
+/* Location: SignalMapperCoverageView.swift - Legend totals for the open ride; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.thisRide" = "Diese Fahrt · %1$lld Sechsecke · %2$lld Messungen";
+/* Location: SignalMapperLegend.swift - Legend row for cells where repeaters echoed you but reported no number */
+"tools.signalMapper.legend.heardYou" = "hat dich gehört, ohne Wert";
+/* Location: SignalMapperRepeaterDetailView.swift - Repeater subtitle; %1$lld packets heard directly, %2$@ the first date */
+"tools.signalMapper.detail.inThisHexagon" = "In diesem Sechseck · %1$lld direkt gehört · seit %2$@";
+/* Location: SignalMapperRepeaterDetailView.swift - Chart key for the downlink series */
+"tools.signalMapper.detail.youHearIt" = "↓ du hörst ihn";
+/* Location: SignalMapperRepeaterDetailView.swift - Chart key for the uplink series */
+"tools.signalMapper.detail.itHearsYou" = "↑ er hört dich";
+/* Location: SignalMapperRepeaterDetailView.swift - Section header above the raw rows */
+"tools.signalMapper.detail.observationsHere" = "Beobachtungen hier";
+/* Location: SignalMapperRepeaterDetailView.swift - Total row count when the list is capped; %lld is the total */
+"tools.signalMapper.detail.allRows" = "Alle %lld …";
+/* Location: SignalMapperRepeaterDetailView.swift - How many hops a packet had taken; %lld is the count */
+"tools.signalMapper.detail.hops" = "%lld Sprünge";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a received advert */
+"tools.signalMapper.detail.kind.advert" = "Advert";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a flood-routed packet */
+"tools.signalMapper.detail.kind.flood" = "Flood";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a direct-routed packet */
+"tools.signalMapper.detail.kind.direct" = "direkt";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a received packet of unknown route */
+"tools.signalMapper.detail.kind.heard" = "gehört";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own packets heard being rebroadcast */
+"tools.signalMapper.detail.kind.echo" = "Echo deiner Nachricht";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a trace probe */
+"tools.signalMapper.detail.kind.traceReply" = "Trace-Antwort";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a discover probe */
+"tools.signalMapper.detail.kind.discoverReply" = "Discover-Antwort";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe this radio transmitted */
+"tools.signalMapper.detail.kind.probeSent" = "Sonde gesendet";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe nothing answered */
+"tools.signalMapper.detail.kind.probeLost" = "keine Antwort";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own transmissions */
+"tools.signalMapper.detail.kind.sent" = "du hast gesendet";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a message confirmed delivered */
+"tools.signalMapper.detail.kind.delivered" = "zugestellt";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: an observer's sighting of one of your packets */
+"tools.signalMapper.detail.kind.observer" = "Beobachter hat dich gehört";
+/* Location: SignalMapperDataView.swift - Row kind: a repeater answered a probe (trace or discover) */
+"tools.signalMapper.detail.kind.probeReply" = "Sondenantwort";
+/* Location: SignalMapperDataView.swift - Row kind: a periodic position marker */
+"tools.signalMapper.detail.kind.breadcrumb" = "Wegpunkt";
+/* Location: SignalMapperDataView.swift - Row kind: the link to the radio went down or came back */
+"tools.signalMapper.detail.kind.radioLink" = "Funkverbindung";
+/* Location: SignalMapperSessionSummarySheet.swift - Hexagons the ride recorded rows in */
+"tools.signalMapper.survey.summary.hexagons" = "Berührte Sechsecke";
+/* Location: SignalMapperSessionSummarySheet.swift - Distinct repeaters heard directly on the ride */
+"tools.signalMapper.survey.summary.repeatersHeard" = "Direkt gehörte Repeater";

@@ -910,3 +910,11 @@
 "packetScope.a11yShowingPathOne" = "Показано 1 спостерігача, який почув її через %@";
 "packetScope.a11yShowingPath" = "Показано спостерігачів (%1$d), які почули її через %2$@";
 "packetScope.a11yShowingDirect" = "Показано прямий прийом у %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Групувати за";
+"packetScope.groupByPath" = "За шляхом";
+"packetScope.groupByObserver" = "За спостерігачем";
+"packetScope.sortMostRoutes" = "Найбільше маршрутів";
+"packetScope.hintObserver" = "Показує маршрути цього спостерігача на карті";
+"packetScope.tapHintObserver" = "Торкніться спостерігача, потім маршруту, щоб простежити його на карті";

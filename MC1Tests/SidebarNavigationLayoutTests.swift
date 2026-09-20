@@ -66,6 +66,57 @@ struct SidebarNavigationLayoutTests {
     )
   }
 
+  // MARK: - Tool selection on a tab change
+
+  @Test
+  func `Leaving Tools clears the open tool`() {
+    #expect(
+      MainSidebarView.clearsToolSelection(
+        arrivingAt: .chats, selectedTool: .cli, signalMapperRideActive: false
+      )
+    )
+  }
+
+  @Test
+  func `Arriving at Tools clears nothing`() {
+    #expect(
+      !MainSidebarView.clearsToolSelection(
+        arrivingAt: .tools, selectedTool: .cli, signalMapperRideActive: false
+      )
+    )
+  }
+
+  /// A ride keeps recording while the rider looks at another tab, so the map has to still be there
+  /// when they come back — on a phone in landscape this selection is also what the compact stack
+  /// seeds from after the next rotation.
+  @Test
+  func `Leaving Tools keeps the Signal Mapper while a ride records`() {
+    #expect(
+      !MainSidebarView.clearsToolSelection(
+        arrivingAt: .chats, selectedTool: .signalMapper, signalMapperRideActive: true
+      )
+    )
+  }
+
+  @Test
+  func `Leaving Tools clears the Signal Mapper when no ride is open`() {
+    #expect(
+      MainSidebarView.clearsToolSelection(
+        arrivingAt: .chats, selectedTool: .signalMapper, signalMapperRideActive: false
+      )
+    )
+  }
+
+  /// The ride pins the mapper, not the Tools section.
+  @Test
+  func `Leaving Tools clears another tool even while a ride records`() {
+    #expect(
+      MainSidebarView.clearsToolSelection(
+        arrivingAt: .chats, selectedTool: .tracePath, signalMapperRideActive: true
+      )
+    )
+  }
+
   @Test
   func `Line of Sight and Trace Path collapse the sidebar; other tools keep it`() {
     #expect(ToolSelection.lineOfSight.prefersCollapsedSidebar)

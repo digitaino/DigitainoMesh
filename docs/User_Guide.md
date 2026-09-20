@@ -111,8 +111,8 @@ Block unwanted contacts to prevent receiving messages from them:
 If a message fails to deliver:
 
 1. Tap the **Retry** button that appears below the failed message.
-2. The app re-attempts direct routing first, then falls back to flood routing (broadcast to all nearby nodes) only after the direct attempts are exhausted (by default, 4 direct attempts followed by 1 flood attempt).
-3. You'll see retry progress: "Retrying 1/4...", "Retrying 2/4...", etc.
+2. The app re-attempts direct routing first, then falls back to flood routing (broadcast to all nearby nodes) only after the direct attempts are exhausted (by default, 3 direct attempts followed by 1 flood attempt).
+3. You'll see which of the four sends is going out: "2/4", "3/4", then "4/4" for the flood send.
 
 ### Group Channels
 

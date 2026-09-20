@@ -101,7 +101,11 @@ extension AppState {
       currentUserName: localNodeName,
       themeID: themeID,
       contentSizeCategory: contentSizeCategory,
-      preferredLanguageCode: EnvInputs.preferredLanguageCode(from: Locale.current)
+      preferredLanguageCode: EnvInputs.preferredLanguageCode(from: Locale.current),
+      // ANDed, never read apart: the master opt-in is what authorises a hash to
+      // leave the phone, and the second switch only chooses whether the count shows.
+      showsObserverCounts: bool(.packetScopeEnabled, AppStorageKey.defaultPacketScopeEnabled)
+        && bool(.packetScopeObserverCountsEnabled, AppStorageKey.defaultPacketScopeObserverCountsEnabled)
     )
   }
 

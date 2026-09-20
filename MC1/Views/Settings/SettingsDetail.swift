@@ -17,6 +17,7 @@ enum SettingsDetail: Hashable {
   case backup
   case support
   case feedback
+  case signalMapperData
 
   /// The My Device rows only exist while a radio is connected; clearing their selection on
   /// disconnect or a radio switch keeps the detail pane from stranding a now-gone device page.
@@ -24,7 +25,9 @@ enum SettingsDetail: Hashable {
     switch self {
     case .deviceInfo, .radio, .location, .connection, .advanced:
       true
-    case .notifications, .chats, .appearance, .maps, .backup, .support, .feedback:
+    // The observation table outlives every radio — it is 90 days of what *this phone* heard,
+    // and a rider who unpairs a radio must still be able to export and delete it.
+    case .notifications, .chats, .appearance, .maps, .backup, .support, .feedback, .signalMapperData:
       false
     }
   }

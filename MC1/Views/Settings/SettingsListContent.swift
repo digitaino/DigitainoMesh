@@ -119,6 +119,21 @@ struct SettingsListContent: View {
     }
     .themedRowBackground(theme, flatten: isSidebar)
 
+    // The observation table's own screen (docs/SIGNAL_MAPPER_V3.md §5): what the raw log
+    // costs, how long it is kept, the export and the delete. Its own section rather than a
+    // row under App Settings because it is the *data* the Signal Mapper tool produces, not a
+    // setting of the tool — and unlike the debug panel below it, it ships.
+    Section {
+      SettingsDetailRow(detail: .signalMapperData) {
+        TintedLabel(L10n.Settings.SignalMapperData.row, systemImage: "tablecells")
+      }
+    } header: {
+      Text(L10n.Settings.SignalMapperData.header)
+    } footer: {
+      Text(L10n.Settings.SignalMapperData.subtitle)
+    }
+    .themedRowBackground(theme, flatten: isSidebar)
+
     AboutSection(isSidebar: isSidebar)
 
     if demoModeManager.isUnlocked {

@@ -1918,4 +1918,93 @@
 "packetScope.header" = "Packet Scope";
 "packetScope.toggle" = "Consulter la couverture des messages";
 "packetScope.server" = "Serveur";
+"packetScope.observerCounts" = "Afficher le nombre d'observateurs sur les messages";
+"packetScope.observerCountsFooter" = "Affiche également, sur chaque message que vous envoyez, combien d'observateurs l'ont entendu, en consultant automatiquement vos messages envoyés tant qu'une conversation est ouverte.";
 "packetScope.footer" = "Ajoute une vue réseau aux actions d'un message, montrant quels observateurs du maillage ont entendu son paquet et à quel niveau de signal. La consultation envoie l'identifiant du paquet (jamais son contenu) au serveur ci-dessous via la connexion internet du téléphone. La couverture dépend du réseau d'observateurs surveillé par le serveur.";
+
+// MARK: - Signal Mapper Data (Settings > Signal Mapper > Data)
+
+/* Location: SettingsListContent.swift - Section header for the signal mapper's stored observations */
+"signalMapperData.header" = "Cartographe de signal";
+/* Location: SettingsListContent.swift - Row opening the observation table's screen */
+"signalMapperData.row" = "Données";
+/* Location: SignalMapperDataView.swift - Navigation title of the observation table's screen */
+"signalMapperData.title" = "Données du cartographe";
+/* Location: SignalMapperDataView.swift - What the table holds, under the section header */
+"signalMapperData.subtitle" = "Tout ce que la radio a entendu, une ligne par observation";
+/* Location: SignalMapperDataView.swift - Label for the stored row count and size */
+"signalMapperData.observations" = "Observations";
+/* Location: SignalMapperDataView.swift - Row count and on-disk size; %1$@ rows, %2$@ size */
+"signalMapperData.rows" = "%1$@ lignes · %2$@";
+/* Location: SignalMapperDataView.swift - Date of the oldest row still kept */
+"signalMapperData.oldestKept" = "Plus ancienne conservée";
+/* Location: SignalMapperDataView.swift - Retention picker label */
+"signalMapperData.keepFor" = "Conserver";
+/* Location: SignalMapperDataView.swift - A retention length; %lld is the number of days */
+"signalMapperData.days" = "%lld jours";
+/* Location: SignalMapperDataView.swift - Footer explaining when older rows go */
+"signalMapperData.retentionFooter" = "Les lignes plus anciennes sont supprimées au démarrage de l’app. Exportez avant ce que vous voulez garder.";
+/* Location: SignalMapperDataView.swift - Export section header */
+"signalMapperData.export.header" = "Exporter";
+/* Location: SignalMapperDataView.swift - Date-window picker label */
+"signalMapperData.export.dates" = "Dates";
+/* Location: SignalMapperDataView.swift - Hexagon-scope picker label */
+"signalMapperData.export.hexagons" = "Hexagones";
+/* Location: SignalMapperDataView.swift - Repeater picker label */
+"signalMapperData.export.repeater" = "Répéteur";
+/* Location: SignalMapperDataView.swift - Packet-kind picker label and its screen title */
+"signalMapperData.export.kinds" = "Types";
+/* Location: SignalMapperDataView.swift - File-format picker label */
+"signalMapperData.export.format" = "Format";
+/* Location: SignalMapperDataView.swift - Button that writes the file; %@ is the row count */
+"signalMapperData.export.run" = "Exporter %@ lignes…";
+/* Location: SignalMapperDataView.swift - Footer saying what the exported file contains */
+"signalMapperData.export.footer" = "Une ligne par observation, en pleine précision : vos positions, les clés des répéteurs et les octets des paquets. Le fichier est retiré de ce téléphone dès que vous quittez cet écran.";
+/* Location: SignalMapperDataView.swift - Alert shown when the file could not be written */
+"signalMapperData.export.failed" = "L’export n’a pas pu être écrit.";
+/* Location: SignalMapperDataView.swift - Date window: the last day */
+"signalMapperData.range.last24Hours" = "Dernières 24 heures";
+/* Location: SignalMapperDataView.swift - Date window: the last week */
+"signalMapperData.range.last7Days" = "7 derniers jours";
+/* Location: SignalMapperDataView.swift - Date window: the last month */
+"signalMapperData.range.last30Days" = "30 derniers jours";
+/* Location: SignalMapperDataView.swift - Date window: the whole retention period */
+"signalMapperData.range.last90Days" = "90 derniers jours";
+/* Location: SignalMapperDataView.swift - Date window: no date filter at all */
+"signalMapperData.range.everything" = "Tout";
+/* Location: SignalMapperDataView.swift - Hexagon scope: every hexagon */
+"signalMapperData.hexagons.all" = "Tous";
+/* Location: SignalMapperDataView.swift - Hexagon scope: the most recent ride's hexagons */
+"signalMapperData.hexagons.thisRide" = "Ce trajet";
+/* Location: SignalMapperDataView.swift - Repeater filter: no repeater filter */
+"signalMapperData.repeater.any" = "Tous";
+/* Location: SignalMapperDataView.swift - A repeater in the picker; %1$@ name, %2$@ hash ID */
+"signalMapperData.repeater.named" = "%1$@ (%2$@)";
+/* Location: SignalMapperDataView.swift - Every packet kind is selected */
+"signalMapperData.kinds.all" = "Tous";
+/* Location: SignalMapperDataView.swift - No packet kind is selected */
+"signalMapperData.kinds.noneSelected" = "Aucun";
+/* Location: SignalMapperDataView.swift - Footer of the packet-kind list */
+"signalMapperData.kinds.footer" = "Seuls les types cochés ici sont écrits dans le fichier.";
+/* Location: SignalMapperDataView.swift - Sharing section header */
+"signalMapperData.sharing.header" = "Partage";
+/* Location: SignalMapperDataView.swift - Disabled toggle for publishing to CoreScope */
+"signalMapperData.sharing.publish" = "Publier sur scope.digitaino.com";
+/* Location: SignalMapperDataView.swift - Footer explaining what publishing would send */
+"signalMapperData.sharing.footer" = "Envoie ce que cette radio entend, avec votre position, sous la clé de votre radio. Lisible par tous. À venir.";
+/* Location: SignalMapperDataView.swift - Menu opening the delete-older-than choices */
+"signalMapperData.delete.button" = "Supprimer les lignes plus vieilles que…";
+/* Location: SignalMapperDataView.swift - Delete rows older than one day */
+"signalMapperData.delete.olderThan24Hours" = "24 heures";
+/* Location: SignalMapperDataView.swift - Delete rows older than one week */
+"signalMapperData.delete.olderThan7Days" = "7 jours";
+/* Location: SignalMapperDataView.swift - Delete rows older than one month */
+"signalMapperData.delete.olderThan30Days" = "30 jours";
+/* Location: SignalMapperDataView.swift - Delete every row, whatever its age */
+"signalMapperData.delete.everything" = "Tout";
+/* Location: SignalMapperDataView.swift - Confirmation title; %@ is how many rows go */
+"signalMapperData.delete.confirmTitle" = "Supprimer %@ lignes ?";
+/* Location: SignalMapperDataView.swift - Confirmation message */
+"signalMapperData.delete.confirmMessage" = "C’est irréversible. Exportez-les d’abord si vous voulez les garder.";
+/* Location: SignalMapperDataView.swift - Destructive confirmation button */
+"signalMapperData.delete.confirm" = "Supprimer";

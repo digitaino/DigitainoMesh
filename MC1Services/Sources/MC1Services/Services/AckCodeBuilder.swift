@@ -27,15 +27,14 @@ private let ackCodeByteCount = 4
 ///   ≥1s spacing or replace `pendingAcks`'s ackCode lookup with a
 ///   `[Data: Set<UUID>]` index in `MessageService.handleAcknowledgement`.
 /// - **Attempt index is masked to two bits.** Firmware hashes `attempt & 0x03`,
-///   so attempt 4 reuses attempt 0's code. This is benign for delivery
-///   detection: a single message accumulates its attempt codes in a `Set`
-///   (`pendingAcks` `ackCodes`), so the wrap is a no-op re-add and any returned
-///   ACK still matches the right message. Firmware deliberately supports
-///   `attempt > 3` in `composeMsgPacket`, appending the full attempt byte after
-///   the hash so `packet_hash` stays unique. `expectedAck` allows `attempt < 5`
-///   (4 direct + 1 flood); `MessageServiceConfig` keeps `maxAttempts <= 5`.
-///   Cross-*message* collision is unaffected by the wrap and stays mitigated by
-///   the per-radioID `dmQueue` serialization.
+///   so attempt 4 would repeat attempt 0's code. Firmware does accept
+///   `attempt > 3` in `composeMsgPacket` (the full attempt byte follows the
+///   hash, so `packet_hash` stays unique), but a v1.15 repeater drops an ACK
+///   code it already relayed: a 5th send's confirmation can be lost even when
+///   the message arrived. `expectedAck` therefore allows `attempt < 4`, and
+///   `MessageServiceConfig` keeps `maxAttempts <= 4` (3 on the stored path +
+///   1 flood). Cross-*message* collision stays mitigated by the per-radioID
+///   `dmQueue` serialization.
 enum AckCodeBuilder {
   static func expectedAck(
     timestamp: UInt32,
@@ -44,8 +43,8 @@ enum AckCodeBuilder {
     senderPublicKey: Data
   ) -> Data {
     precondition(
-      attempt < 5,
-      "MessageServiceConfig caps maxAttempts at 5 (4 direct + 1 flood); attempt \(attempt) exceeds the index range and would over-wrap the & 0x03 ACK mask"
+      attempt < 4,
+      "MessageServiceConfig caps maxAttempts at 4 (attempt indices 0-3); attempt \(attempt) would repeat attempt \(attempt & attemptMask)'s ACK code"
     )
     var input = Data()
     var le = timestamp.littleEndian

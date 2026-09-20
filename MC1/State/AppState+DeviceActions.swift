@@ -128,6 +128,14 @@ extension AppState {
       throw AdvertisementError.notConnected
     }
     try await advertisementService.sendSelfAdvertisement(flood: flood)
+    // One of our own transmissions, so one raw row (docs/SIGNAL_MAPPER_V3.md §2). After
+    // the call, not before: the row means "the radio accepted this", and a throw above
+    // means nothing went on the air. Gated on the logger actually being subscribed, which
+    // is the same thing as capture being on — an advert sent with capture off records
+    // nothing, like every other producer.
+    if let logger = mapperSentPacketLogger, logger.isRunning {
+      await logger.recordAdvertSend()
+    }
   }
 
   /// The GPS source to refresh before an advert, or nil when the device's advert

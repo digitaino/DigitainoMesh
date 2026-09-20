@@ -906,3 +906,11 @@
 "packetScope.a11yShowingPathOne" = "正在显示经由 %@ 收到它的 1 个观察站";
 "packetScope.a11yShowingPath" = "正在显示经由 %2$@ 收到它的 %1$d 个观察站";
 "packetScope.a11yShowingDirect" = "正在显示 %@ 的直接接收";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "分组方式";
+"packetScope.groupByPath" = "按路径";
+"packetScope.groupByObserver" = "按观察站";
+"packetScope.sortMostRoutes" = "路由最多";
+"packetScope.hintObserver" = "在地图上显示该观察站的路由";
+"packetScope.tapHintObserver" = "轻点一个观察站，再轻点一条路由，即可在地图上追踪";

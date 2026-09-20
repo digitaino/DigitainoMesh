@@ -1150,9 +1150,6 @@
 /* Location: SignalMapperCoverageView.swift - Explains that frequently-visited areas are excluded from the map */
 "tools.signalMapper.anchorNote" = "Місця, де ви проводите багато часу, навмисно не потрапляють на карту.";
 
-/* Location: SignalMapperCoverageView.swift - Banner counting what the map is showing; %1$lld is cells, %2$lld observations, %3$lld days */
-"tools.signalMapper.summary" = "%1$lld комірок · %2$lld спостережень · %3$lld днів";
-
 /* Location: SignalMapperCoverageView.swift - Map control that frames every captured cell */
 "tools.signalMapper.centerOnCoverage" = "Показати все покриття";
 
@@ -1166,7 +1163,7 @@
 "tools.signalMapper.delete.title" = "Видалити записане покриття?";
 
 /* Location: SignalMapperCoverageView.swift - Confirmation alert body before deleting captured cells */
-"tools.signalMapper.delete.message" = "Вилучає кожен шестикутник, записаний на цьому пристрої. Скасувати це неможливо.";
+"tools.signalMapper.delete.message" = "Видаляє кожен шестикутник і кожне спостереження, записані на цьому пристрої, зокрема рядки, які можна було б експортувати. Цю дію не можна скасувати.";
 
 /* Location: SignalMapperLegend.swift - Legend title */
 "tools.signalMapper.legend.title" = "Легенда";
@@ -1180,68 +1177,8 @@
 /* Location: SignalQuality+Color.swift - Signal quality below the poor threshold */
 "tools.signalMapper.quality.veryPoor" = "Дуже поганий";
 
-/* Location: SignalMapperCellDetailSheet.swift - Title of the tapped-cell sheet */
-"tools.signalMapper.detail.title" = "Відомості про комірку";
-
-/* Location: SignalMapperCellDetailSheet.swift - Row label for the cell's signal grade */
-"tools.signalMapper.detail.quality" = "Якість сигналу";
-
-/* Location: SignalMapperCellDetailSheet.swift - Row label for how much was recorded in this cell */
-"tools.signalMapper.detail.observations" = "Спостереження";
-
-/* Location: SignalMapperCellDetailSheet.swift - Row label for the days this cell was seen on */
-"tools.signalMapper.detail.days" = "Дні";
-
-/* Location: SignalMapperCellDetailSheet.swift - First and last day a cell was observed; %1$@ and %2$@ are dates */
-"tools.signalMapper.detail.dayRange" = "%1$@ — %2$@";
-
-/* Location: SignalMapperCellDetailSheet.swift - Footer showing the H3 cell index; %@ is the index */
-"tools.signalMapper.detail.cellFooter" = "Комірка H3 %@";
-
-/* Location: SignalMapperCellDetailSheet.swift - Section header splitting observations by direction */
-"tools.signalMapper.detail.direction" = "За напрямком";
-
-/* Location: SignalMapperCellDetailSheet.swift - Packets the radio received in this cell */
-"tools.signalMapper.detail.received" = "Отримані пакети";
-
-/* Location: SignalMapperCellDetailSheet.swift - Own packets heard being rebroadcast by a repeater */
-"tools.signalMapper.detail.txHeard" = "Свої пакети, почуті назад";
-
-/* Location: SignalMapperCellDetailSheet.swift - Messages sent from this cell that were acknowledged */
-"tools.signalMapper.detail.acknowledged" = "Підтверджені надсилання";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean round-trip time of acknowledged sends */
-"tools.signalMapper.detail.roundTrip" = "Середній оберт";
-
-/* Location: SignalMapperCellDetailSheet.swift - A duration in milliseconds; %lld is the number */
-"tools.signalMapper.detail.milliseconds" = "%lldмс";
-
-/* Location: SignalMapperCellDetailSheet.swift - Section header for radio measurements */
-"tools.signalMapper.detail.signal" = "Сигнал";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean signal-to-noise ratio in this cell */
-"tools.signalMapper.detail.averageSnr" = "Середній SNR";
-
-/* Location: SignalMapperCellDetailSheet.swift - Best and worst signal-to-noise ratio in this cell */
-"tools.signalMapper.detail.snrRange" = "Діапазон SNR";
-
 /* Location: SignalMapperCellDetailSheet.swift - Shown for a cell proved only by delivery receipts */
 "tools.signalMapper.detail.noPacketsHeard" = "Пакетів не почуто";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean received signal strength in this cell */
-"tools.signalMapper.detail.averageRssi" = "Середній RSSI";
-
-/* Location: SignalMapperCellDetailSheet.swift - How packets in this cell were routed */
-"tools.signalMapper.detail.routeMix" = "Склад маршрутів";
-
-/* Location: SignalMapperCellDetailSheet.swift - Direct versus flood packet split; %1$lld is direct, %2$lld flood */
-"tools.signalMapper.detail.routeSplit" = "%1$lld прямих · %2$lld flood";
-
-/* Location: SignalMapperCellDetailSheet.swift - Section header listing the repeaters heard in this cell */
-"tools.signalMapper.detail.repeaters" = "Почуті ретранслятори";
-
-/* Location: SignalMapperCellDetailSheet.swift - Packets a repeater carried; %lld is the count */
-"tools.signalMapper.detail.packets" = "%lld пакетів";
 
 /* Location: SignalMapperCellDetailSheet.swift - Accessibility label marking a repeater name as a best guess */
 "tools.signalMapper.detail.ambiguousName" = "Цьому хешу відповідає кілька вузлів";
@@ -1253,7 +1190,6 @@
 "tools.signalMapper.survey.spotCheck" = "Точковий замір";
 "tools.signalMapper.survey.hud" = "Заміри · %1$lld зондів · %2$lld відповідей";
 "tools.signalMapper.survey.summary.title" = "Заміри завершено";
-"tools.signalMapper.survey.summary.cellsProbed" = "Обстежено шестикутників";
 "tools.signalMapper.survey.summary.probes" = "Надіслано циклів зондування";
 "tools.signalMapper.survey.summary.replies" = "Почуто відповідей";
 "tools.signalMapper.survey.summary.noReply" = "Зонди без відповіді";
@@ -1305,16 +1241,16 @@
 "tools.signalMapper.layer.title" = "Шар карти";
 
 /* Location: SignalMapperCoverageView.swift - Layer showing what the phone heard (downlink) */
-"tools.signalMapper.layer.heard" = "Чую — що чую я";
+"tools.signalMapper.layer.heard" = "Я їх чую";
 
 /* Location: SignalMapperCoverageView.swift - Layer showing what hears the phone (uplink) */
-"tools.signalMapper.layer.reach" = "Дальність — хто чує мене";
+"tools.signalMapper.layer.reach" = "Вони чують мене";
 
 /* Location: SignalMapperLegend.swift - Legend caption for the Reach layer's color scale */
 "tools.signalMapper.legend.reachSignal" = "Колір показує, наскільки добре ретранслятори чули ваші передачі з цього шестикутника.";
 
 /* Location: SignalMapperLegend.swift - Legend row for probed-but-never-heard cells */
-"tools.signalMapper.legend.noReach" = "Обстежено, ніхто вас не почув";
+"tools.signalMapper.legend.noReach" = "обстежено, ніхто не почув";
 
 /* Location: SignalMapperSessionSummarySheet.swift - Row: how long the run lasted */
 "tools.signalMapper.survey.summary.duration" = "Тривалість";
@@ -1328,29 +1264,23 @@
 /* Location: SignalMapperSessionSummarySheet.swift - Caption under the export button explaining the scrubbing */
 "tools.signalMapper.survey.summary.exportNote" = "Спільні файли очищуються: позиції огрублюються, перші й останні 500 м обрізаються, ключі ретрансляторів скорочуються. Повний журнал залишається на цьому пристрої.";
 
-/* Location: SignalMapperCellDetailSheet.swift - Section: what active probing from this cell proved */
-"tools.signalMapper.detail.uplink" = "Висхідний канал";
-
-/* Location: SignalMapperCellDetailSheet.swift - Probe transmissions sent from this cell */
-"tools.signalMapper.detail.probesSent" = "Надіслано зондів";
-
-/* Location: SignalMapperCellDetailSheet.swift - Probe replies that came back */
-"tools.signalMapper.detail.probeReplies" = "Відповіді на зонди";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean SNR repeaters reported for our transmissions */
-"tools.signalMapper.detail.averageTxSnr" = "Вас почули з";
-
 /* Location: SignalMapperCellDetailSheet.swift - Value when probes went out and nothing ever answered */
 "tools.signalMapper.detail.neverHeardBack" = "Відповіді так і не було";
-
-/* Location: SignalMapperCellDetailSheet.swift - Mean trace-probe round trip */
-"tools.signalMapper.detail.probeRoundTrip" = "Оберт зонда";
 
 /* Location: SignalMapperLiveStrip.swift - Accessibility hint on the live strip (opens run details) */
 "tools.signalMapper.strip.detailHint" = "Показує відомості про заміри";
 
 /* Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes are being rejected */
 "tools.signalMapper.strip.noFix" = "Немає координат";
+
+/* Location: SignalMapperLiveStrip.swift - Warning chip while GPS fixes exist but are too poor to place observations */
+"tools.signalMapper.strip.fixRejected" = "Координати відхилено";
+
+/* Location: SignalMapperLiveStrip.swift - Spoken explanation of the fix-rejected chip */
+"tools.signalMapper.strip.fixRejectedHint" = "Точності GPS замало, щоб прив’язати те, що чує радіо";
+
+/* Location: SignalMapperLiveStrip.swift - Spoken value of the adaptive-power chip; %@ is the step label */
+"tools.signalMapper.strip.power" = "Потужність передавання %@.";
 
 /* Location: SignalMapperLiveStrip.swift - Accessibility summary; %1$@ elapsed, %2$lld probes, %3$lld replies, %4$lld lost, %5$lld hexagons */
 "tools.signalMapper.strip.accessibility" = "Заміри тривають %1$@. Зондів: %2$lld, відповідей: %3$lld, втрачено: %4$lld, шестикутників: %5$lld.";
@@ -1409,62 +1339,8 @@
 /* Location: SignalMapperFocusPickerView.swift - Search field placeholder */
 "tools.signalMapper.focus.search" = "Пошук ретрансляторів";
 
-/* Location: SignalMapperCellCard.swift - Probe reply ratio; %1$lld replies, %2$lld probes, %3$lld percent */
-"tools.signalMapper.card.probeSuccess" = "%1$lld/%2$lld відповідей (%3$lld%%)";
-
-/* Location: SignalMapperCellCard.swift - Live last-heard clock; %@ is a short age like "3s" */
-"tools.signalMapper.card.lastHeard" = "Останнє отримання %@ тому";
-
 /* Location: SignalMapperCellCard.swift - Header when the card follows the rider's current hexagon */
 "tools.signalMapper.card.myCell" = "Моя комірка";
-
-/* Location: SignalMapperCellCard.swift - Packet count under the quality headline */
-"tools.signalMapper.card.packetsReceived" = "Отримано пакетів: %lld";
-
-/* Location: SignalMapperCellCard.swift - Downlink column label */
-"tools.signalMapper.card.rxSignal" = "Сигнал RX";
-
-/* Location: SignalMapperCellCard.swift - Uplink column label */
-"tools.signalMapper.card.txSignal" = "Сигнал TX";
-
-/* Location: SignalMapperCellCard.swift - Active repeater filter; %@ is a repeater name */
-"tools.signalMapper.card.via" = "через %@";
-
-/* Location: SignalMapperCellCard.swift - Clears the repeater filter */
-"tools.signalMapper.card.clear" = "Очистити";
-
-/* Location: SignalMapperCellCard.swift - Uplink is blank because this repeater has never reported hearing us */
-"tools.signalMapper.card.heardOnlyReason" = "Лише чути — жодного разу не повідомив, що чує вас";
-
-/* Location: SignalMapperCellCard.swift - Uplink is blank because no probe has been answered yet */
-"tools.signalMapper.card.waitingUplink" = "Очікування відповіді виявлення";
-
-/* Location: SignalMapperCellCard.swift - Strongest repeater in the cell */
-"tools.signalMapper.card.bestRepeater" = "Найкращий ретранслятор";
-
-/* Location: SignalMapperCellCard.swift - Label of the live last-heard clock */
-"tools.signalMapper.card.lastHeardLabel" = "Останнє отримання";
-
-/* Location: SignalMapperCellCard.swift - Age value; %@ is a short duration like "12 s" */
-"tools.signalMapper.card.ago" = "%@ тому";
-
-/* Location: SignalMapperCellCard.swift - Share of probes that were answered */
-"tools.signalMapper.card.probeSuccessLabel" = "Успішність зондів";
-
-/* Location: SignalMapperCellCard.swift - Probe success; %1$lld percent, %2$lld answered, %3$lld sent */
-"tools.signalMapper.card.probeSuccessValue" = "%1$lld%% (%2$lld/%3$lld) · відповідей: %4$lld";
-
-/* Location: SignalMapperCellCard.swift - Packets split by direction for one repeater */
-"tools.signalMapper.card.packetSplit" = "Пакети";
-
-/* Location: SignalMapperCellCard.swift - Packet split; %1$lld heard from them, %2$lld carrying their reading of us */
-"tools.signalMapper.card.packetSplitValue" = "почуто %1$lld · повідомлено %2$lld";
-
-/* Location: SignalMapperCellCard.swift - Group of repeaters with a two-way link */
-"tools.signalMapper.card.connected" = "Зв’язок в обидва боки";
-
-/* Location: SignalMapperCellCard.swift - Group of repeaters we only hear */
-"tools.signalMapper.card.heardOnly" = "Чути в один бік";
 
 /* Location: SignalMapperCellCard.swift - VoiceOver; %lld is decibels we hear them at */
 "tools.signalMapper.card.downlinkAccessibility" = "ви чуєте їх на рівні %lld децибел";
@@ -1477,12 +1353,6 @@
 
 /* Location: SignalMapperCellCard.swift - Subtitle of the no-response header */
 "tools.signalMapper.card.noResponseDetail" = "Зонд надіслано, відповіді немає";
-
-/* Location: SignalMapperCellCard.swift - Mean reading under the best one; %@ is decibels */
-"tools.signalMapper.card.average" = "сер. %@";
-
-/* Location: SignalMapperCellCard.swift - VoiceOver hint on a repeater chip */
-"tools.signalMapper.card.chipHint" = "Показує показники цього ретранслятора для комірки";
 
 /* Location: SignalMapperFocusBlocks.swift - Removes one repeater from the lock-on set */
 "tools.signalMapper.focus.unlock" = "Зняти захоплення";
@@ -1543,3 +1413,97 @@
 
 /* Location: SignalMapperTransmitBar.swift - Compact button on the ride HUD */
 "tools.signalMapper.transmit.floodShort" = "Flood";
+
+/* Location: SignalMapperCellCard.swift - Packets heard in this hexagon; %lld is the count */
+"tools.signalMapper.card.heardCount" = "%lld почуто";
+/* Location: SignalMapperCellCard.swift - Uplink readings repeaters reported for you here; %lld is the count */
+"tools.signalMapper.card.readingsOfYou" = "%lld вимірювань вас";
+/* Location: SignalMapperCellCard.swift - Age of the most recent evidence; %@ is a duration */
+"tools.signalMapper.card.lastHeardAgo" = "%@ тому";
+/* Location: SignalMapperCellCard.swift - Downlink readings for one repeater; %1$@ latest, %2$@ best, %3$@ average */
+"tools.signalMapper.card.rxLine" = "%1$@ зараз · %2$@ найкращий · %3$@ сер";
+/* Location: SignalMapperCellCard.swift - Uplink readings one repeater reported; %1$@ latest, %2$@ best, %3$@ average */
+"tools.signalMapper.card.txLine" = "чує вас %1$@ зараз · %2$@ найкращий · %3$@ сер";
+/* Location: SignalMapperCellCard.swift - A repeater reported the SNR it received you at; %@ is decibels */
+"tools.signalMapper.card.hearsYou" = "чує вас на %@ дБ";
+/* Location: SignalMapperCellCard.swift - A repeater echoed your packet, proving it heard you without a number */
+"tools.signalMapper.card.heardYou" = "чув вас";
+/* Location: SignalMapperCellCard.swift - Card scope limited to the open ride */
+"tools.signalMapper.card.thisRide" = "Ця поїздка";
+/* Location: SignalMapperCellCard.swift - Card scope covering everything recorded */
+"tools.signalMapper.card.allTime" = "За весь час";
+/* Location: SignalMapperCellCard.swift - Shown when the ride has heard nothing in this hexagon */
+"tools.signalMapper.card.nothingThisRide" = "У цій поїздці тут нічого не почуто";
+
+/* Location: SignalMapperCellCard.swift - Repeater listed from a reply or an echo that our radio has never measured */
+"tools.signalMapper.card.noDirectReading" = "тут напряму не чутно";
+
+/* Location: SignalMapperCellCard.swift - Shown when the ride has captured nothing anywhere yet */
+"tools.signalMapper.card.nothingYet" = "У цій поїздці ще нічого не записано";
+
+/* Location: SignalMapperCellCard.swift - Shown when GPS quality is refusing to place anything */
+"tools.signalMapper.card.fixesRejected" = "GPS надто неточний, щоб щось тут прив’язати";
+/* Location: SignalMapperCellCard.swift - Shown when there is no GPS fix at all yet */
+"tools.signalMapper.card.noFixYet" = "Ще немає GPS-координат, тож нічого не можна прив’язати";
+/* Location: SignalMapperCellCard.swift - Shown when packets were heard here but none credit a repeater; %lld packets heard */
+"tools.signalMapper.card.noneAttributable" = "Почуто %lld, жодного від ретранслятора, який ми можемо назвати";
+/* Location: SignalMapperCellCard.swift - Accessibility hint for a repeater row */
+"tools.signalMapper.card.rowHint" = "Відкриває всі спостереження цього ретранслятора в цьому шестикутнику";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the chevron that grows the repeater list */
+"tools.signalMapper.card.expand" = "Показати більше ретрансляторів";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the chevron that returns the repeater list to three rows */
+"tools.signalMapper.card.collapse" = "Показати менше ретрансляторів";
+/* Location: SignalMapperCellCard.swift - Accessibility label on the header readout for the strongest link in this hexagon */
+"tools.signalMapper.card.bestLink" = "Найкращий зв’язок тут";
+/* Location: SignalMapperCoverageView.swift - Legend totals for the whole map; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.allTime" = "За весь час · %1$lld шестикутників · %2$lld спостережень";
+/* Location: SignalMapperCoverageView.swift - Legend totals for the open ride; %1$lld hexagons, %2$lld observations */
+"tools.signalMapper.legend.thisRide" = "Ця поїздка · %1$lld шестикутників · %2$lld спостережень";
+/* Location: SignalMapperLegend.swift - Legend row for cells where repeaters echoed you but reported no number */
+"tools.signalMapper.legend.heardYou" = "чув вас, без значення";
+/* Location: SignalMapperRepeaterDetailView.swift - Repeater subtitle; %1$lld packets heard directly, %2$@ the first date */
+"tools.signalMapper.detail.inThisHexagon" = "У цьому шестикутнику · %1$lld почуто напряму · з %2$@";
+/* Location: SignalMapperRepeaterDetailView.swift - Chart key for the downlink series */
+"tools.signalMapper.detail.youHearIt" = "↓ ви його чуєте";
+/* Location: SignalMapperRepeaterDetailView.swift - Chart key for the uplink series */
+"tools.signalMapper.detail.itHearsYou" = "↑ він чує вас";
+/* Location: SignalMapperRepeaterDetailView.swift - Section header above the raw rows */
+"tools.signalMapper.detail.observationsHere" = "Спостереження тут";
+/* Location: SignalMapperRepeaterDetailView.swift - Total row count when the list is capped; %lld is the total */
+"tools.signalMapper.detail.allRows" = "Усі %lld …";
+/* Location: SignalMapperRepeaterDetailView.swift - How many hops a packet had taken; %lld is the count */
+"tools.signalMapper.detail.hops" = "%lld переходів";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a received advert */
+"tools.signalMapper.detail.kind.advert" = "оголошення";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a flood-routed packet */
+"tools.signalMapper.detail.kind.flood" = "флуд";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a direct-routed packet */
+"tools.signalMapper.detail.kind.direct" = "прямий";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a received packet of unknown route */
+"tools.signalMapper.detail.kind.heard" = "почуто";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own packets heard being rebroadcast */
+"tools.signalMapper.detail.kind.echo" = "відлуння вашого повідомлення";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a trace probe */
+"tools.signalMapper.detail.kind.traceReply" = "відповідь трасування";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a reply to a discover probe */
+"tools.signalMapper.detail.kind.discoverReply" = "відповідь discover";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe this radio transmitted */
+"tools.signalMapper.detail.kind.probeSent" = "зонд надіслано";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a probe nothing answered */
+"tools.signalMapper.detail.kind.probeLost" = "немає відповіді";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: one of your own transmissions */
+"tools.signalMapper.detail.kind.sent" = "ви надіслали";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: a message confirmed delivered */
+"tools.signalMapper.detail.kind.delivered" = "доставлено";
+/* Location: SignalMapperRepeaterDetailView.swift - Row kind: an observer's sighting of one of your packets */
+"tools.signalMapper.detail.kind.observer" = "спостерігач чув вас";
+/* Location: SignalMapperDataView.swift - Row kind: a repeater answered a probe (trace or discover) */
+"tools.signalMapper.detail.kind.probeReply" = "відповідь на зонд";
+/* Location: SignalMapperDataView.swift - Row kind: a periodic position marker */
+"tools.signalMapper.detail.kind.breadcrumb" = "точка треку";
+/* Location: SignalMapperDataView.swift - Row kind: the link to the radio went down or came back */
+"tools.signalMapper.detail.kind.radioLink" = "зв'язок з радіо";
+/* Location: SignalMapperSessionSummarySheet.swift - Hexagons the ride recorded rows in */
+"tools.signalMapper.survey.summary.hexagons" = "Пройдено шестикутників";
+/* Location: SignalMapperSessionSummarySheet.swift - Distinct repeaters heard directly on the ride */
+"tools.signalMapper.survey.summary.repeatersHeard" = "Ретранслятори, почуті напряму";

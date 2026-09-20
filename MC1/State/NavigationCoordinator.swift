@@ -191,28 +191,37 @@ final class NavigationCoordinator {
   /// Clears deep-link confirmation state and every per-radio detail selection so a pending sheet
   /// cannot re-present, and a selection made on the previous radio cannot drive a detail pane,
   /// after the connection is torn down and replaced.
-  func clearPendingLinks() {
+  func clearPendingLinks(signalMapperRideActive: Bool = false) {
     pendingContactLink = nil
     pendingChannelLink = nil
     pendingHashtag = nil
-    clearPerRadioSelection()
+    clearPerRadioSelection(signalMapperRideActive: signalMapperRideActive)
   }
 
   /// Resets every detail selection scoped to the current radio so a stale selection cannot aim a
   /// section's detail pane at the wrong radio. Runs on disconnect and on a direct radio-to-radio
   /// switch. Line of Sight is preserved because it runs offline and is not radio-scoped.
-  func clearPerRadioSelection() {
+  func clearPerRadioSelection(signalMapperRideActive: Bool = false) {
     selectedContact = nil
     nodesShowingDiscovery = false
     chatsSelectedRoute = nil
-    clearPerDeviceSelection()
+    clearPerDeviceSelection(signalMapperRideActive: signalMapperRideActive)
   }
 
   /// Clears only device-scoped selections (the radio-requiring tool and the My Device settings
   /// page), but keeps an open Chats/Nodes detail so a manual disconnect does not eject the user from
   /// an open conversation. Line of Sight and app-wide settings are radio-independent and preserved.
-  func clearPerDeviceSelection() {
-    if selectedTool?.requiresRadio == true {
+  ///
+  /// `signalMapperRideActive` pins the Signal Mapper for the length of a ride. A ride outlives the
+  /// BLE link on purpose — `tearDownSignalMapper` suspends the probe engine but leaves
+  /// `signalMapperRideSession` recording — so the selection that decides which tool the iPad detail
+  /// column shows, and which tool a rebuilt compact stack seeds from, must not go out from under a
+  /// rider on a reconnect blip. `.signalMapper` is not `requiresRadio` today (its cells belong to
+  /// places, not radios), so the guard bites only if the mapper is ever reclassified; it is written
+  /// down here so that reclassification cannot silently end a ride's screen. Every other tool keeps
+  /// the old rule.
+  func clearPerDeviceSelection(signalMapperRideActive: Bool = false) {
+    if let tool = selectedTool, tool.requiresRadio, !(tool == .signalMapper && signalMapperRideActive) {
       selectedTool = nil
     }
     if selectedSetting?.requiresDevice == true {

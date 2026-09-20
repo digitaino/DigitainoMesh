@@ -108,9 +108,9 @@ Handles message sending with automatic retry logic, flood routing fallback, and 
 ```swift
 struct MessageServiceConfig: Sendable {  // internal; defined in MessageServiceConfig.swift
     let floodFallbackOnRetry: Bool        // Use flood on manual retry (default: true)
-    let maxAttempts: Int                  // Total attempts (default: 5; capped at 5 = 4 direct + 1 flood)
+    let maxAttempts: Int                  // Total attempts (default: 4; capped at 4 = 3 direct + 1 flood)
     let maxFloodAttempts: Int             // Max flood attempts (default: 1)
-    let floodAfter: Int                   // Switch to flood after N direct attempts (default: 4)
+    let floodAfter: Int                   // Switch to flood after N direct attempts (default: 3)
     let minTimeout: TimeInterval          // Minimum timeout seconds (default: 0)
     let triggerPathDiscoveryAfterFlood: Bool // Trigger path discovery after a successful flood
     let ackGiveUpWindow: TimeInterval     // Give-up floor for the ACK deadline on fast presets
@@ -159,7 +159,7 @@ The `ContactService` used for path management during retry is injected via `Mess
 ### Retry Flow
 
 1. Direct routing for the first `floodAfter` attempts (using the contact's outbound path)
-2. Flood routing thereafter (broadcast to all nearby nodes), up to `maxAttempts` (capped at 5 = 4 direct + 1 flood)
+2. Flood routing thereafter (broadcast to all nearby nodes), up to `maxAttempts` (capped at 4 = 3 direct + 1 flood)
 3. Returns immediately when ACK received
 4. Marks failed if all attempts exhausted
 

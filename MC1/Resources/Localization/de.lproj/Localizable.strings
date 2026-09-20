@@ -899,3 +899,11 @@
 "packetScope.a11yShowingPathOne" = "Zeigt 1 Beobachter, der sie über %@ gehört hat";
 "packetScope.a11yShowingPath" = "Zeigt %1$d Beobachter, die sie über %2$@ gehört haben";
 "packetScope.a11yShowingDirect" = "Zeigt den direkten Empfang bei %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Gruppieren nach";
+"packetScope.groupByPath" = "Nach Pfad";
+"packetScope.groupByObserver" = "Nach Beobachter";
+"packetScope.sortMostRoutes" = "Meiste Routen";
+"packetScope.hintObserver" = "Zeigt die Routen dieses Beobachters auf der Karte";
+"packetScope.tapHintObserver" = "Tippe auf einen Beobachter, dann auf eine Route, um sie auf der Karte zu verfolgen";

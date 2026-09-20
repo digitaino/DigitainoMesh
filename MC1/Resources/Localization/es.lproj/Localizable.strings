@@ -903,3 +903,11 @@
 "packetScope.a11yShowingPathOne" = "Mostrando 1 observador que la oyó vía %@";
 "packetScope.a11yShowingPath" = "Mostrando %1$d observadores que la oyeron vía %2$@";
 "packetScope.a11yShowingDirect" = "Mostrando la recepción directa en %@";
+
+/* Location: PacketScopeDetailView.swift - grouping the observer list by path or by observer */
+"packetScope.groupBy" = "Agrupar por";
+"packetScope.groupByPath" = "Por ruta";
+"packetScope.groupByObserver" = "Por observador";
+"packetScope.sortMostRoutes" = "Más rutas";
+"packetScope.hintObserver" = "Muestra las rutas de este observador en el mapa";
+"packetScope.tapHintObserver" = "Toca un observador y luego una ruta para trazarla en el mapa";

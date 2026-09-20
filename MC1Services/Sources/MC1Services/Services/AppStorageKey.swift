@@ -29,6 +29,11 @@ public enum AppStorageKey: String {
   /// CoreScope instance). Off by default: enabling it sends packet hashes of the
   /// user's own messages to the configured server on demand.
   case packetScopeEnabled
+  /// Second switch under Packet Scope: shows an observer count on every message the
+  /// user sends, looked up automatically while a conversation is on screen. Off by
+  /// default, and only honoured while `packetScopeEnabled` is also on — the readers
+  /// AND the two, so a stale `true` here can never leak hashes on its own.
+  case packetScopeObserverCountsEnabled
   /// Base URL of the CoreScope instance queried when `packetScopeEnabled` is on.
   ///
   /// Intentionally device-local: not registered in `BackupUserDefaults`. Every
@@ -58,6 +63,10 @@ public enum AppStorageKey: String {
   /// Channel index the signal mapper's manual flood probe transmits on. Never 0: a flood
   /// on the public channel would put survey noise in front of every stranger on the mesh.
   case mapperFloodChannelIndex
+  /// Whether the signal mapper's cell card lists as many repeaters as the map can spare
+  /// room for, rather than its three. A standing preference rather than per-hexagon state:
+  /// a rider who wants the long list wants it in the next hexagon too (Rafael, 2026-09-05).
+  case signalMapperCardExpanded
   /// Whether incoming messages in a language other than the device's may offer an
   /// in-bubble Translate control.
   case messageTranslationEnabled
@@ -66,6 +75,11 @@ public enum AppStorageKey: String {
   /// obeyed once. The hint teaches the panel's focus model; once the model has
   /// been used, the line is only costing the observer list a row.
   case hasSeenPacketScopeFocusHint
+  /// Whether the Network View's list is grouped by repeater chain or by
+  /// observer. Raw value of `PacketScopeGrouping`; the chain-major list is the
+  /// default, and the observer-major one answers "which paths reached each
+  /// observer".
+  case packetScopeGrouping
   case autoDeleteStaleNodesDays
   case lastStaleCleanupDate
   case frequentEmojis
@@ -97,6 +111,7 @@ public enum AppStorageKey: String {
   public static let defaultShowIncomingSendTime: Bool = false
   public static let defaultLinkPreviewsEnabled: Bool = false
   public static let defaultPacketScopeEnabled: Bool = false
+  public static let defaultPacketScopeObserverCountsEnabled: Bool = false
   public static let defaultPacketScopeBaseURL: String = "https://scope.digitaino.com"
   public static let defaultLinkPreviewsAutoResolveDM: Bool = true
   public static let defaultLinkPreviewsAutoResolveChannels: Bool = true
@@ -110,6 +125,8 @@ public enum AppStorageKey: String {
   public static let defaultMapColorSchemePreference: String = "system"
   public static let defaultHasSeenRepeaterDragHint: Bool = false
   public static let defaultHasSeenPacketScopeFocusHint: Bool = false
+  /// Raw value of `PacketScopeGrouping.path`.
+  public static let defaultPacketScopeGrouping: String = "path"
   public static let defaultLiveActivityEnabled: Bool = true
   /// Days before a non-favorite node is auto-deleted; 0 disables cleanup.
   public static let defaultAutoDeleteStaleNodesDays: Int = 0
@@ -119,6 +136,9 @@ public enum AppStorageKey: String {
   public static let defaultNotificationEnabled: Bool = true
   /// 0 means "none chosen"; the transmit sheet offers to create a private survey channel.
   public static let defaultMapperFloodChannelIndex: Int = 0
+  /// Collapsed: the card sits on the map that is also being read, so the taller list is
+  /// something the rider asks for rather than something they arrive at.
+  public static let defaultSignalMapperCardExpanded: Bool = false
   /// On: the feature arrived from upstream always-on, and turning it off is the opt-out.
   public static let defaultMessageTranslationEnabled: Bool = true
 }

@@ -28,15 +28,18 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
   public var discoverySortOrder: String?
   public var nodesSortOrder: String?
   public var tracePathViewMode: String?
+  public var packetScopeGrouping: String?
   public var linkPreviewsEnabled: Bool?
   public var linkPreviewsAutoResolveDM: Bool?
   public var linkPreviewsAutoResolveChannels: Bool?
   public var packetScopeEnabled: Bool?
+  public var packetScopeObserverCountsEnabled: Bool?
   public var showMapPreviewThumbnails: Bool?
   public var frequentEmojis: [String]?
   public var recentEmojis: [String]?
   public var hasSeenRepeaterDragHint: Bool?
   public var hasSeenPacketScopeFocusHint: Bool?
+  public var signalMapperCardExpanded: Bool?
   public var regionSelection: RegionSelection?
 
   // MARK: - Notification preferences
@@ -120,9 +123,11 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.linkPreviewsAutoResolveDM, AppStorageKey.linkPreviewsAutoResolveDM.rawValue),
     (\.linkPreviewsAutoResolveChannels, AppStorageKey.linkPreviewsAutoResolveChannels.rawValue),
     (\.packetScopeEnabled, AppStorageKey.packetScopeEnabled.rawValue),
+    (\.packetScopeObserverCountsEnabled, AppStorageKey.packetScopeObserverCountsEnabled.rawValue),
     (\.showMapPreviewThumbnails, AppStorageKey.showMapPreviewThumbnails.rawValue),
     (\.hasSeenRepeaterDragHint, AppStorageKey.hasSeenRepeaterDragHint.rawValue),
     (\.hasSeenPacketScopeFocusHint, AppStorageKey.hasSeenPacketScopeFocusHint.rawValue),
+    (\.signalMapperCardExpanded, AppStorageKey.signalMapperCardExpanded.rawValue),
     (\.notifyContactMessages, AppStorageKey.notifyContactMessages.rawValue),
     (\.notifyChannelMessages, AppStorageKey.notifyChannelMessages.rawValue),
     (\.notifyRoomMessages, AppStorageKey.notifyRoomMessages.rawValue),
@@ -152,6 +157,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.discoverySortOrder, AppStorageKey.discoverySortOrder.rawValue),
     (\.nodesSortOrder, AppStorageKey.nodesSortOrder.rawValue),
     (\.tracePathViewMode, AppStorageKey.tracePathViewMode.rawValue),
+    (\.packetScopeGrouping, AppStorageKey.packetScopeGrouping.rawValue),
     (\.selectedThemeID, PersistenceKeys.selectedThemeID),
     (\.appColorSchemePreference, PersistenceKeys.appColorSchemePreference),
   ]

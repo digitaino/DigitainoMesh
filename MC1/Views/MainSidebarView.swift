@@ -146,7 +146,9 @@ struct MainSidebarView: View {
         // radio-only tool and per-device settings page here; a radio-to-radio switch (device
         // stays non-nil) is handled by clearPerRadioSelection instead.
         if newDevice == nil {
-          appState.navigation.clearPerDeviceSelection()
+          appState.navigation.clearPerDeviceSelection(
+            signalMapperRideActive: appState.signalMapperRideSession != nil
+          )
         }
       }
       .sheet(isPresented: $showingDeviceSelection) {
@@ -259,9 +261,28 @@ struct MainSidebarView: View {
   /// Tools selection persists in `NavigationCoordinator`; clear it when leaving the Tools tab so
   /// returning lands on the tool list rather than a previously open tool.
   private func clearToolSelectionWhenLeavingTools() {
-    if selectedTab != .tools {
+    if Self.clearsToolSelection(
+      arrivingAt: selectedTab,
+      selectedTool: appState.navigation.selectedTool,
+      signalMapperRideActive: appState.signalMapperRideSession != nil
+    ) {
       appState.navigation.selectedTool = nil
     }
+  }
+
+  /// Whether a tab change drops the hoisted tool selection: leaving Tools does, except while a
+  /// Signal Mapper ride is recording. A ride keeps logging whatever screen is up, and on a phone in
+  /// landscape this selection is also what a rebuilt compact stack seeds from, so clearing it would
+  /// mean glancing at Chats mid-ride and finding the map gone on the way back. Every other tool
+  /// keeps the old rule — return to Tools and you get the list. `nonisolated` so the navigation
+  /// test can call it, matching `sidebarVisibility` above.
+  nonisolated static func clearsToolSelection(
+    arrivingAt tab: AppTab,
+    selectedTool: ToolSelection?,
+    signalMapperRideActive: Bool
+  ) -> Bool {
+    guard tab != .tools else { return false }
+    return !(selectedTool == .signalMapper && signalMapperRideActive)
   }
 }
 
