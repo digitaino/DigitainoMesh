@@ -1,6 +1,26 @@
 import CoreLocation
 import Foundation
 
+/// Which question the panel's top-level rows answer.
+///
+/// `.path` is the default and the shape 9dbdfb6f settled on: observers are the
+/// network's microphones rather than the mesh, so nine of them reached by three
+/// chains are three facts, and a row per observer stated the third one nine
+/// times. But "which different paths did this packet take to reach each
+/// observer" is a question only the observer-major list answers, and it was the
+/// one that list was good at — so both orders ship and the reader picks.
+enum PacketScopeGrouping: String, CaseIterable, Equatable {
+  case path
+  case observer
+
+  var title: String {
+    switch self {
+    case .path: L10n.Localizable.PacketScope.groupByPath
+    case .observer: L10n.Localizable.PacketScope.groupByObserver
+    }
+  }
+}
+
 /// What the Network View is showing: everything, one repeater path, one
 /// observer's routes, or one route. One value, so "a route selected under no
 /// path" cannot be represented, and every entry point — a row, a pin, a badge,
@@ -47,13 +67,37 @@ enum PacketScopeFocus: Equatable {
     }
   }
 
-  /// One level out: a route to its path, a path or an observer to everything.
-  func popped() -> PacketScopeFocus {
+  /// The key of the list row this focus sits under, in the grouping the panel
+  /// is currently in. Nil for everything, and nil for a level the *other*
+  /// grouping owns: a chain has no observer row to sit under, exactly as an
+  /// observer reached from the map has no chain to sit under. Both cases then
+  /// step from the ends rather than into a row that is not on screen.
+  func groupKey(in mode: PacketScopeGrouping) -> String? {
     switch self {
-    case .all: .all
-    case .path: .all
-    case .observer: .all
-    case let .route(_, routeID): .path(Self.pathKey(fromRouteID: routeID))
+    case .all:
+      nil
+    case let .path(key):
+      mode == .path ? key : nil
+    case let .observer(id):
+      mode == .observer ? id : nil
+    case let .route(observerID, routeID):
+      mode == .path ? Self.pathKey(fromRouteID: routeID) : observerID
+    }
+  }
+
+  /// One level out, in the list's own hierarchy: a route to the row that holds
+  /// it — its chain when the list is grouped by path, its observer when it is
+  /// grouped by observer — and everything else to everything.
+  func popped(in mode: PacketScopeGrouping) -> PacketScopeFocus {
+    switch self {
+    case .all, .path, .observer:
+      .all
+    case let .route(observerID, routeID):
+      if mode == .path {
+        .path(Self.pathKey(fromRouteID: routeID))
+      } else {
+        .observer(observerID)
+      }
     }
   }
 
@@ -84,22 +128,35 @@ enum PacketScopeFocus: Equatable {
 }
 
 /// The panel's order, frozen for the life of a focus so a poll cannot move a
-/// row or re-rank a group under a reaching finger. Paths first heard after the
+/// row or re-rank a group under a reaching finger. Groups first heard after the
 /// freeze append at the tail.
+///
+/// Grouping-neutral: a group key is a chain key while the list is grouped by
+/// path and an observer id while it is grouped by observer. The ladder needs no
+/// other change, because a route id already carries its own observer.
 struct PacketScopeFrozenOrder: Equatable {
-  let pathKeys: [String]
-  /// Route ids per path, in the order that path's observers are listed.
-  let routeIDsByPath: [String: [String]]
+  let groupKeys: [String]
+  /// Route ids per group, in the order that group's routes are listed.
+  let routeIDsByGroup: [String: [String]]
 
-  /// The order with a path heard since the freeze appended at the tail, so the
-  /// steppers can reach it. A path already in the order is left where it is,
-  /// its observers included.
-  func appending(pathKey: String, routeIDs: [String]) -> PacketScopeFrozenOrder {
-    guard !pathKeys.contains(pathKey) else { return self }
-    var lists = routeIDsByPath
-    lists[pathKey] = routeIDs
-    return PacketScopeFrozenOrder(pathKeys: pathKeys + [pathKey], routeIDsByPath: lists)
+  /// The order with a group heard since the freeze appended at the tail, so the
+  /// steppers can reach it. A group already in the order is left where it is,
+  /// its routes included.
+  func appending(groupKey: String, routeIDs: [String]) -> PacketScopeFrozenOrder {
+    guard !groupKeys.contains(groupKey) else { return self }
+    var lists = routeIDsByGroup
+    lists[groupKey] = routeIDs
+    return PacketScopeFrozenOrder(groupKeys: groupKeys + [groupKey], routeIDsByGroup: lists)
   }
+}
+
+/// What the frozen-order merge and the order capture need of a top-level row,
+/// so they can be written once for both groupings. The view keeps two concrete
+/// arrays; only the helpers over them are generic.
+protocol PacketScopeListGroup: Identifiable, Equatable {
+  var id: String { get }
+  var routeIDs: [String] { get }
+  var firstHeard: Date? { get }
 }
 
 /// One repeater chain and every observer that heard the packet by exactly it.
@@ -110,7 +167,7 @@ struct PacketScopeFrozenOrder: Equatable {
 /// chain also makes the numbered hop pills unambiguous — every route in a group
 /// traverses the same repeaters in the same order, so a repeater has one
 /// position here, where an observer with several routes could put it in two.
-struct PacketScopePathGroup: Identifiable, Equatable {
+struct PacketScopePathGroup: PacketScopeListGroup {
   /// ``PacketScopeFocus/pathKey(hops:)`` of `hops`.
   let id: String
   /// The hop hashes, in travel order. Empty for the direct group.
@@ -194,6 +251,63 @@ enum PacketScopePathGrouping {
   }
 }
 
+/// One observer and every route it heard the packet by.
+///
+/// The other list's row model: it answers "which different paths reached this
+/// observer", which is the one question the path-major list cannot put on a
+/// single screen.
+struct PacketScopeObserverGroup: PacketScopeListGroup {
+  /// The observer id, as the receptions carry it.
+  let id: String
+  let reception: PacketScopeReception
+  /// This observer's routes, best first by the builder's ranking, so the row's
+  /// ladder and the map's headline leg agree.
+  let routes: [PacketScopeReception.Route]
+  /// `routes`' route ids, positionally aligned.
+  let routeIDs: [String]
+  let firstHeard: Date?
+  /// The signal this observer measured on the sender's own transmission, and
+  /// only that: nil unless one of its routes was repeater-free. Never a fold
+  /// over the route SNRs — past zero hops those grade a repeater's link into
+  /// this observer, which is the display 9dbdfb6f removed.
+  let directSNR: Double?
+  let routeCount: Int
+}
+
+/// Folds receptions into one row per observer. Main-actor like the builder
+/// whose route ids and ranking it borrows.
+@MainActor
+enum PacketScopeObserverGrouping {
+  /// One group per reception, ordered by the shortest route each observer
+  /// managed, then by how many times it heard the packet, then by id. Total, so
+  /// a poll returning the same data never reshuffles a row under a finger.
+  static func groups(from receptions: [PacketScopeReception]) -> [PacketScopeObserverGroup] {
+    receptions.map { reception in
+      let routes = PacketScopeCoverageBuilder.rankedRoutes(reception.routes)
+      return PacketScopeObserverGroup(
+        id: reception.observerID,
+        reception: reception,
+        routes: routes,
+        routeIDs: routes.map {
+          PacketScopeCoverageBuilder.routeID(observerID: reception.observerID, hops: $0.hops)
+        },
+        firstHeard: reception.firstHeard,
+        directSNR: reception.directSNR,
+        routeCount: routes.count
+      )
+    }
+    .sorted { lhs, rhs in
+      let l = lhs.reception.shortestHopCount ?? .max
+      let r = rhs.reception.shortestHopCount ?? .max
+      if l != r { return l < r }
+      if lhs.reception.receptionCount != rhs.reception.receptionCount {
+        return lhs.reception.receptionCount > rhs.reception.receptionCount
+      }
+      return lhs.id < rhs.id
+    }
+  }
+}
+
 /// The map's answer to a focus: what to draw, what to frame, and whether
 /// there was anything to draw at all.
 struct PacketScopeFocusGeometry {
@@ -220,12 +334,19 @@ struct PacketScopeFocusGeometry {
 /// the builder it ranks and formats through.
 @MainActor
 enum PacketScopeFocusLogic {
-  /// After a poll: a focused route that vanished falls back to its path while
-  /// the path survives, else to the observer while that survives, else to
-  /// everything; a focused path or observer that vanished falls back to
-  /// everything. An intact focus is returned as is.
+  /// After a poll: a focused route that vanished falls back to the row that
+  /// held it — its chain in path mode, its observer in observer mode — then to
+  /// the other level while that survives, then to everything; a focused path or
+  /// observer that vanished falls back to everything. An intact focus is
+  /// returned as is.
+  ///
+  /// A focus belonging to the grouping the panel is *not* in reconciles to
+  /// everything. Changing the grouping already resets the focus, so nothing
+  /// should reach here in that state; the branch is there so a future caller
+  /// that forgets cannot strand the breadcrumb on a row that is not drawn.
   static func reconciled(
     _ focus: PacketScopeFocus,
+    mode: PacketScopeGrouping,
     routeIDs: Set<String>,
     pathKeys: Set<String>,
     observerIDs: Set<String>
@@ -234,53 +355,61 @@ enum PacketScopeFocusLogic {
     case .all:
       return .all
     case let .path(key):
+      guard mode == .path else { return .all }
       return pathKeys.contains(key) ? focus : .all
     case let .observer(id):
+      guard mode == .observer else { return .all }
       return observerIDs.contains(id) ? focus : .all
     case let .route(observerID, routeID):
       if routeIDs.contains(routeID) { return focus }
       let key = PacketScopeFocus.pathKey(fromRouteID: routeID)
-      if pathKeys.contains(key) { return .path(key) }
-      return observerIDs.contains(observerID) ? .observer(observerID) : .all
+      let path: PacketScopeFocus? = pathKeys.contains(key) ? .path(key) : nil
+      let observer: PacketScopeFocus? = observerIDs.contains(observerID) ? .observer(observerID) : nil
+      // The row the reader was looking at first, whichever that is here.
+      let ladder = mode == .path ? [path, observer] : [observer, path]
+      return ladder.compactMap(\.self).first ?? .all
     }
   }
 
   /// The previous (`-1`) or next (`+1`) route in the frozen ladder, wrapping
-  /// into the neighbouring path's first or last route, and around the ends of
-  /// the list. From a path, forward is its first route and back is the previous
-  /// path's last; from everything, forward is the first route of all and back
-  /// is the last. Nil when there is nothing to step to.
+  /// into the neighbouring group's first or last route, and around the ends of
+  /// the list. From a group row, forward is its first route and back is the
+  /// previous group's last; from everything, forward is the first route of all
+  /// and back is the last. Nil when there is nothing to step to.
   static func stepped(
     _ focus: PacketScopeFocus,
     by delta: Int,
+    mode: PacketScopeGrouping,
     order: PacketScopeFrozenOrder
   ) -> PacketScopeFocus? {
-    let ladder = order.pathKeys.flatMap { key in
-      (order.routeIDsByPath[key] ?? []).map { (pathKey: key, routeID: $0) }
+    let ladder = order.groupKeys.flatMap { key in
+      (order.routeIDsByGroup[key] ?? []).map { (groupKey: key, routeID: $0) }
     }
     guard !ladder.isEmpty, delta != 0 else { return nil }
     let step = delta > 0 ? 1 : -1
-    // A focus the order does not know (a path heard after the freeze whose
-    // routes were not appended, or an observer reached from the map, which sits
-    // under no single path) steps from the ends, like `.all`.
+    // A focus the order does not know (a group heard after the freeze whose
+    // routes were not appended, or a level the other grouping owns — an
+    // observer while the list is by path) steps from the ends, like `.all`.
     let ends = step > 0 ? 0 : ladder.count - 1
 
     let target: Int
     switch focus {
-    case .all, .observer:
+    case .all:
       target = ends
-    case let .path(key):
-      guard let first = ladder.firstIndex(where: { $0.pathKey == key }) else {
-        target = ends
-        break
-      }
-      target = step > 0 ? first : first - 1
     case let .route(_, routeID):
       guard let current = ladder.firstIndex(where: { $0.routeID == routeID }) else {
         target = ends
         break
       }
       target = current + step
+    default:
+      guard let key = focus.groupKey(in: mode),
+            let first = ladder.firstIndex(where: { $0.groupKey == key })
+      else {
+        target = ends
+        break
+      }
+      target = step > 0 ? first : first - 1
     }
     let wrapped = ((target % ladder.count) + ladder.count) % ladder.count
     let entry = ladder[wrapped]

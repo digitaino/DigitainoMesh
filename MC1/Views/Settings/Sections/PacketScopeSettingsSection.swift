@@ -12,6 +12,8 @@ struct PacketScopeSettingsSection: View {
   @Environment(\.appTheme) private var theme
   @AppStorage(AppStorageKey.packetScopeEnabled.rawValue)
   private var isEnabled = AppStorageKey.defaultPacketScopeEnabled
+  @AppStorage(AppStorageKey.packetScopeObserverCountsEnabled.rawValue)
+  private var showsObserverCounts = AppStorageKey.defaultPacketScopeObserverCountsEnabled
   @AppStorage(AppStorageKey.packetScopeBaseURL.rawValue)
   private var baseURL = AppStorageKey.defaultPacketScopeBaseURL
 
@@ -22,6 +24,10 @@ struct PacketScopeSettingsSection: View {
       }
 
       if isEnabled {
+        Toggle(isOn: $showsObserverCounts) {
+          TintedLabel(L10n.Settings.PacketScope.observerCounts, systemImage: "eye")
+        }
+
         HStack {
           Text(L10n.Settings.PacketScope.server)
           TextField(
@@ -39,7 +45,7 @@ struct PacketScopeSettingsSection: View {
     } header: {
       Text(L10n.Settings.PacketScope.header)
     } footer: {
-      Text(L10n.Settings.PacketScope.footer)
+      Text(L10n.Settings.PacketScope.footer + " " + L10n.Settings.PacketScope.observerCountsFooter)
     }
     .themedRowBackground(theme)
   }

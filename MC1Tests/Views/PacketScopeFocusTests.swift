@@ -11,11 +11,21 @@ struct PacketScopeFocusTests {
   /// Three chains: the direct one (two observers), a one-hop chain, and a
   /// two-hop chain three observers heard it by.
   private let order = PacketScopeFrozenOrder(
-    pathKeys: ["", "AA", "BB,CC"],
-    routeIDsByPath: [
+    groupKeys: ["", "AA", "BB,CC"],
+    routeIDsByGroup: [
       "": ["one|", "two|"],
       "AA": ["one|AA"],
       "BB,CC": ["one|BB,CC", "three|BB,CC", "four|BB,CC"],
+    ]
+  )
+
+  /// The same six routes as the observer-major list holds them: one row per
+  /// observer, its own routes inside.
+  private let observerOrder = PacketScopeFrozenOrder(
+    groupKeys: ["one", "two"],
+    routeIDsByGroup: [
+      "one": ["one|", "one|AA"],
+      "two": ["two|BB,CC"],
     ]
   )
 
@@ -41,12 +51,37 @@ struct PacketScopeFocusTests {
 
   @Test
   func `Popping walks route → path → all, and an observer pops straight to all`() {
-    #expect(PacketScopeFocus.route(observerID: "one", routeID: "one|AA").popped() == .path("AA"))
-    #expect(PacketScopeFocus.route(observerID: "one", routeID: "one|").popped() == .path(""))
-    #expect(PacketScopeFocus.path("AA").popped() == .all)
+    #expect(PacketScopeFocus.route(observerID: "one", routeID: "one|AA").popped(in: .path) == .path("AA"))
+    #expect(PacketScopeFocus.route(observerID: "one", routeID: "one|").popped(in: .path) == .path(""))
+    #expect(PacketScopeFocus.path("AA").popped(in: .path) == .all)
     // The map's own entry point sits under no single chain.
-    #expect(PacketScopeFocus.observer("one").popped() == .all)
-    #expect(PacketScopeFocus.all.popped() == .all)
+    #expect(PacketScopeFocus.observer("one").popped(in: .path) == .all)
+    #expect(PacketScopeFocus.all.popped(in: .path) == .all)
+  }
+
+  @Test
+  func `Grouped by observer, a route pops to its observer and a chain pops straight to all`() {
+    #expect(PacketScopeFocus.route(observerID: "one", routeID: "one|AA").popped(in: .observer) == .observer("one"))
+    #expect(PacketScopeFocus.route(observerID: "one", routeID: "one|").popped(in: .observer) == .observer("one"))
+    #expect(PacketScopeFocus.observer("one").popped(in: .observer) == .all)
+    // A chain has no row of its own in this list, so there is nothing above it
+    // but everything.
+    #expect(PacketScopeFocus.path("AA").popped(in: .observer) == .all)
+  }
+
+  // MARK: - Group keys
+
+  @Test
+  func `A focus reports a group key only for the level its own grouping lists`() {
+    let route = PacketScopeFocus.route(observerID: "one", routeID: "one|AA")
+    #expect(route.groupKey(in: .path) == "AA")
+    #expect(route.groupKey(in: .observer) == "one")
+    #expect(PacketScopeFocus.path("AA").groupKey(in: .path) == "AA")
+    #expect(PacketScopeFocus.path("AA").groupKey(in: .observer) == nil)
+    #expect(PacketScopeFocus.observer("one").groupKey(in: .observer) == "one")
+    #expect(PacketScopeFocus.observer("one").groupKey(in: .path) == nil)
+    #expect(PacketScopeFocus.all.groupKey(in: .path) == nil)
+    #expect(PacketScopeFocus.all.groupKey(in: .observer) == nil)
   }
 
   // MARK: - Reconciling after a poll
@@ -55,35 +90,56 @@ struct PacketScopeFocusTests {
   func `A focused route that vanishes falls back to its chain, then its observer, then all`() {
     let focus = PacketScopeFocus.route(observerID: "one", routeID: "one|AA")
     #expect(PacketScopeFocusLogic.reconciled(
-      focus, routeIDs: ["one|AA"], pathKeys: ["AA"], observerIDs: ["one"]
+      focus, mode: .path, routeIDs: ["one|AA"], pathKeys: ["AA"], observerIDs: ["one"]
     ) == focus)
     #expect(PacketScopeFocusLogic.reconciled(
-      focus, routeIDs: [], pathKeys: ["AA"], observerIDs: ["one"]
+      focus, mode: .path, routeIDs: [], pathKeys: ["AA"], observerIDs: ["one"]
     ) == .path("AA"))
     #expect(PacketScopeFocusLogic.reconciled(
-      focus, routeIDs: [], pathKeys: [], observerIDs: ["one"]
+      focus, mode: .path, routeIDs: [], pathKeys: [], observerIDs: ["one"]
     ) == .observer("one"))
     #expect(PacketScopeFocusLogic.reconciled(
-      focus, routeIDs: [], pathKeys: [], observerIDs: []
+      focus, mode: .path, routeIDs: [], pathKeys: [], observerIDs: []
+    ) == .all)
+  }
+
+  /// The inverse of the path-mode ladder above: grouped by observer, the row
+  /// the reader was looking at is the observer, so a vanished route falls back
+  /// to it even while its chain is still on the map.
+  @Test
+  func `Grouped by observer, a vanished route falls back to its observer before its chain`() {
+    let focus = PacketScopeFocus.route(observerID: "one", routeID: "one|AA")
+    #expect(PacketScopeFocusLogic.reconciled(
+      focus, mode: .observer, routeIDs: [], pathKeys: ["AA"], observerIDs: ["one"]
+    ) == .observer("one"))
+    #expect(PacketScopeFocusLogic.reconciled(
+      focus, mode: .observer, routeIDs: [], pathKeys: ["AA"], observerIDs: []
+    ) == .path("AA"))
+    // A chain focus belongs to the other list; it cannot survive here.
+    #expect(PacketScopeFocusLogic.reconciled(
+      .path("AA"), mode: .observer, routeIDs: [], pathKeys: ["AA"], observerIDs: []
+    ) == .all)
+    #expect(PacketScopeFocusLogic.reconciled(
+      .observer("one"), mode: .path, routeIDs: [], pathKeys: [], observerIDs: ["one"]
     ) == .all)
   }
 
   @Test
   func `A focused chain or observer that vanishes falls back to all, and an intact one is untouched`() {
     #expect(PacketScopeFocusLogic.reconciled(
-      .path("AA"), routeIDs: [], pathKeys: ["AA"], observerIDs: []
+      .path("AA"), mode: .path, routeIDs: [], pathKeys: ["AA"], observerIDs: []
     ) == .path("AA"))
     #expect(PacketScopeFocusLogic.reconciled(
-      .path("AA"), routeIDs: [], pathKeys: ["BB"], observerIDs: []
+      .path("AA"), mode: .path, routeIDs: [], pathKeys: ["BB"], observerIDs: []
     ) == .all)
     #expect(PacketScopeFocusLogic.reconciled(
-      .observer("one"), routeIDs: [], pathKeys: [], observerIDs: ["one"]
+      .observer("one"), mode: .observer, routeIDs: [], pathKeys: [], observerIDs: ["one"]
     ) == .observer("one"))
     #expect(PacketScopeFocusLogic.reconciled(
-      .observer("one"), routeIDs: [], pathKeys: [], observerIDs: ["two"]
+      .observer("one"), mode: .observer, routeIDs: [], pathKeys: [], observerIDs: ["two"]
     ) == .all)
     #expect(PacketScopeFocusLogic.reconciled(
-      .all, routeIDs: [], pathKeys: [], observerIDs: []
+      .all, mode: .path, routeIDs: [], pathKeys: [], observerIDs: []
     ) == .all)
   }
 
@@ -92,63 +148,87 @@ struct PacketScopeFocusTests {
   @Test
   func `Stepping forward from a chain's last route lands on the next chain's first, and wraps at the end`() {
     let lastOfDirect = PacketScopeFocus.route(observerID: "two", routeID: "two|")
-    #expect(PacketScopeFocusLogic.stepped(lastOfDirect, by: 1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(lastOfDirect, by: 1, mode: .path, order: order)
       == .route(observerID: "one", routeID: "one|AA"))
     let lastOfAll = PacketScopeFocus.route(observerID: "four", routeID: "four|BB,CC")
-    #expect(PacketScopeFocusLogic.stepped(lastOfAll, by: 1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(lastOfAll, by: 1, mode: .path, order: order)
       == .route(observerID: "one", routeID: "one|"))
   }
 
   @Test
   func `Stepping back is the exact inverse of stepping forward`() {
-    let ladder = order.pathKeys.flatMap { key in
-      (order.routeIDsByPath[key] ?? []).map {
+    let ladder = order.groupKeys.flatMap { key in
+      (order.routeIDsByGroup[key] ?? []).map {
         PacketScopeFocus.route(observerID: PacketScopeFocus.observerID(fromRouteID: $0), routeID: $0)
       }
     }
     #expect(ladder.count == 6)
     for focus in ladder {
-      let forward = PacketScopeFocusLogic.stepped(focus, by: 1, order: order)
-      #expect(forward.flatMap { PacketScopeFocusLogic.stepped($0, by: -1, order: order) } == focus)
+      let forward = PacketScopeFocusLogic.stepped(focus, by: 1, mode: .path, order: order)
+      #expect(forward.flatMap { PacketScopeFocusLogic.stepped($0, by: -1, mode: .path, order: order) } == focus)
     }
   }
 
   @Test
   func `From a chain, forward is its first route and back is the previous chain's last; from all, the ends`() {
-    #expect(PacketScopeFocusLogic.stepped(.path("AA"), by: 1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(.path("AA"), by: 1, mode: .path, order: order)
       == .route(observerID: "one", routeID: "one|AA"))
-    #expect(PacketScopeFocusLogic.stepped(.path("AA"), by: -1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(.path("AA"), by: -1, mode: .path, order: order)
       == .route(observerID: "two", routeID: "two|"))
-    #expect(PacketScopeFocusLogic.stepped(.all, by: 1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(.all, by: 1, mode: .path, order: order)
       == .route(observerID: "one", routeID: "one|"))
-    #expect(PacketScopeFocusLogic.stepped(.all, by: -1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(.all, by: -1, mode: .path, order: order)
       == .route(observerID: "four", routeID: "four|BB,CC"))
-    let empty = PacketScopeFrozenOrder(pathKeys: [], routeIDsByPath: [:])
-    #expect(PacketScopeFocusLogic.stepped(.all, by: 1, order: empty) == nil)
+    let empty = PacketScopeFrozenOrder(groupKeys: [], routeIDsByGroup: [:])
+    #expect(PacketScopeFocusLogic.stepped(.all, by: 1, mode: .path, order: empty) == nil)
+  }
+
+  @Test
+  func `From an observer row, forward is its first route and back is the previous observer's last`() {
+    #expect(PacketScopeFocusLogic.stepped(.observer("one"), by: 1, mode: .observer, order: observerOrder)
+      == .route(observerID: "one", routeID: "one|"))
+    // Wrapping: back from the first row lands on the last route of the last.
+    #expect(PacketScopeFocusLogic.stepped(.observer("one"), by: -1, mode: .observer, order: observerOrder)
+      == .route(observerID: "two", routeID: "two|BB,CC"))
+    #expect(PacketScopeFocusLogic.stepped(.observer("two"), by: -1, mode: .observer, order: observerOrder)
+      == .route(observerID: "one", routeID: "one|AA"))
+    #expect(PacketScopeFocusLogic.stepped(.all, by: 1, mode: .observer, order: observerOrder)
+      == .route(observerID: "one", routeID: "one|"))
+    // A chain focus is the other list's level, so it steps from the ends.
+    #expect(PacketScopeFocusLogic.stepped(.path("AA"), by: 1, mode: .observer, order: observerOrder)
+      == .route(observerID: "one", routeID: "one|"))
   }
 
   @Test
   func `A focus the frozen order does not know steps from the ends rather than into a random route`() {
     let unknownRoute = PacketScopeFocus.route(observerID: "five", routeID: "five|GG")
-    #expect(PacketScopeFocusLogic.stepped(unknownRoute, by: 1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(unknownRoute, by: 1, mode: .path, order: order)
       == .route(observerID: "one", routeID: "one|"))
-    #expect(PacketScopeFocusLogic.stepped(unknownRoute, by: -1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(unknownRoute, by: -1, mode: .path, order: order)
       == .route(observerID: "four", routeID: "four|BB,CC"))
     // An observer sits under no single chain, so it steps from the ends too.
-    #expect(PacketScopeFocusLogic.stepped(.observer("one"), by: 1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(.observer("one"), by: 1, mode: .path, order: order)
       == .route(observerID: "one", routeID: "one|"))
-    #expect(PacketScopeFocusLogic.stepped(.path("ZZ"), by: 1, order: order)
+    #expect(PacketScopeFocusLogic.stepped(.path("ZZ"), by: 1, mode: .path, order: order)
       == .route(observerID: "one", routeID: "one|"))
   }
 
   @Test
-  func `Appending a chain to a frozen order puts it at the tail once, its observers included`() {
-    let grown = order.appending(pathKey: "GG", routeIDs: ["five|GG"])
-    #expect(grown.pathKeys == ["", "AA", "BB,CC", "GG"])
-    #expect(grown.routeIDsByPath["GG"] == ["five|GG"])
-    #expect(grown.appending(pathKey: "", routeIDs: ["nine|"]) == grown)
-    #expect(PacketScopeFocusLogic.stepped(.route(observerID: "four", routeID: "four|BB,CC"), by: 1, order: grown)
-      == .route(observerID: "five", routeID: "five|GG"))
+  func `Appending a group to a frozen order puts it at the tail once, its routes included`() {
+    let grown = order.appending(groupKey: "GG", routeIDs: ["five|GG"])
+    #expect(grown.groupKeys == ["", "AA", "BB,CC", "GG"])
+    #expect(grown.routeIDsByGroup["GG"] == ["five|GG"])
+    #expect(grown.appending(groupKey: "", routeIDs: ["nine|"]) == grown)
+    #expect(PacketScopeFocusLogic.stepped(
+      .route(observerID: "four", routeID: "four|BB,CC"), by: 1, mode: .path, order: grown
+    ) == .route(observerID: "five", routeID: "five|GG"))
+
+    // The same append, for an observer heard after the freeze.
+    let grownObservers = observerOrder.appending(groupKey: "three", routeIDs: ["three|DD"])
+    #expect(grownObservers.groupKeys == ["one", "two", "three"])
+    #expect(PacketScopeFocusLogic.stepped(
+      .route(observerID: "two", routeID: "two|BB,CC"), by: 1, mode: .observer, order: grownObservers
+    ) == .route(observerID: "three", routeID: "three|DD"))
   }
 
   // MARK: - Grouping by chain
@@ -232,6 +312,51 @@ struct PacketScopeFocusTests {
     #expect(filtered?.receptions.map(\.observerID) == ["b"])
     #expect(filtered?.routeIDs == ["b|AA"])
     #expect(group.filtered(toObserver: "zz") == nil)
+  }
+
+  // MARK: - Grouping by observer
+
+  @Test
+  func `One group per observer, its routes shortest first and its route ids aligned with them`() throws {
+    let groups = PacketScopeObserverGrouping.groups(from: [
+      reception("a", routes: [route(["BB", "CC"]), route([]), route(["AA"])]),
+      reception("b", routes: [route(["AA"])]),
+    ])
+    #expect(groups.map(\.id) == ["a", "b"])
+    let first = try #require(groups.first)
+    #expect(first.routes.map(\.hops) == [[], ["AA"], ["BB", "CC"]])
+    #expect(first.routeIDs == ["a|", "a|AA", "a|BB,CC"])
+    #expect(first.routeCount == 3)
+    // Positionally aligned, so the row can pair a route with its id by index.
+    #expect(zip(first.routes, first.routeIDs).allSatisfy { route, id in
+      id == PacketScopeCoverageBuilder.routeID(observerID: "a", hops: route.hops)
+    })
+  }
+
+  @Test
+  func `Observers order by their shortest route, then by how many times each heard it`() {
+    let groups = PacketScopeObserverGrouping.groups(from: [
+      reception("far", routes: [route(["AA", "BB"])]),
+      reception("quiet", routes: [route(["AA"])], count: 1),
+      reception("loud", routes: [route(["AA"])], count: 5),
+    ])
+    #expect(groups.map(\.id) == ["loud", "quiet", "far"])
+  }
+
+  /// The guard against resurrecting the display 9dbdfb6f removed: an observer's
+  /// figure is the sender's only when the observer heard the sender's own
+  /// radio, so it is never a fold over the route SNRs.
+  @Test
+  func `An observer's signal is its direct route's, never the loudest of its routes`() {
+    let groups = PacketScopeObserverGrouping.groups(from: [
+      reception("both", routes: [route([], snr: 4.0), route(["AA"], snr: 13.5)]),
+      reception("hopped", routes: [route(["AA"], snr: 13.5)]),
+    ])
+    let both = groups.first { $0.id == "both" }
+    let hopped = groups.first { $0.id == "hopped" }
+    #expect(both?.directSNR == 4.0)
+    // Three hops or one, a route through a repeater prints no decibels at all.
+    #expect(hopped?.directSNR == nil)
   }
 
   // MARK: - Camera focus id

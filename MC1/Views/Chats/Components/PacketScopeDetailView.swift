@@ -172,13 +172,21 @@ struct PacketScopeDetailView: View {
   /// The panel's order, frozen for the life of a focus so a poll cannot move
   /// a row or re-rank a ladder under a reaching finger.
   @State private var frozenOrder: PacketScopeFrozenOrder?
-  /// The rows, in display order — the live sort, or the frozen order with
-  /// paths heard since appended.
+  /// The chain rows, in display order — the live sort, or the frozen order
+  /// with chains heard since appended. Empty while the list is by observer.
   @State private var displayGroups: [PacketScopePathGroup] = []
+  /// The observer rows, on the same terms. Two concrete arrays rather than one
+  /// existential: `@State` over a protocol buys nothing here and would cost
+  /// every read a cast.
+  @State private var displayObserverGroups: [PacketScopeObserverGroup] = []
   /// Every reception, flat, for the surfaces that are not the list: the copy
   /// button and the footer that explains a missing signal figure.
   @State private var displayReceptions: [PacketScopeReception] = []
   @State private var sort: PathSort = .fewestHops
+  /// What the top-level rows are. Persisted: a reader who wants the
+  /// observer-major answer wants it on the next message too.
+  @AppStorage(AppStorageKey.packetScopeGrouping.rawValue)
+  private var grouping = PacketScopeGrouping(rawValue: AppStorageKey.defaultPacketScopeGrouping) ?? .path
   /// Whether the tap-to-focus hint has done its job. Persisted, so the line
   /// costs the list a row once rather than on every message forever.
   @AppStorage(AppStorageKey.hasSeenPacketScopeFocusHint.rawValue)
@@ -247,6 +255,17 @@ struct PacketScopeDetailView: View {
             frozenOrder = captureOrder()
             requestScroll(for: focus)
           }
+        }
+        .onChange(of: grouping) { _, _ in
+          // The focus named a row in the list that was, and that list is gone:
+          // a chain has no row to sit on among observers. Reset to everything
+          // and re-freeze, the same contract a sort change honours.
+          applyFocus(.all, animated: true)
+          // A sort that only one grouping can answer would otherwise stay
+          // selected and silently do nothing.
+          if !availableSorts.contains(sort) { sort = .fewestHops }
+          applySort()
+          announce(L10n.Localizable.PacketScope.a11yShowingAll)
         }
         // A cover over this screen mid-poll must not strand half-drawn
         // elements; the next rebuild starts them again.
@@ -390,7 +409,7 @@ struct PacketScopeDetailView: View {
           .minimumScaleFactor(0.8)
         Spacer(minLength: 0)
         if focus == .all {
-          sortMenu
+          viewMenu
         } else {
           focusControls
         }
@@ -408,7 +427,9 @@ struct PacketScopeDetailView: View {
         // gesture, and a taught gesture does not need re-teaching on every
         // message for the life of the app.
         if !hasSeenFocusHint {
-          Text(L10n.Localizable.PacketScope.tapHint)
+          Text(grouping == .path
+            ? L10n.Localizable.PacketScope.tapHint
+            : L10n.Localizable.PacketScope.tapHintObserver)
             .font(.caption2)
             .foregroundStyle(.tertiary)
         }
@@ -441,28 +462,46 @@ struct PacketScopeDetailView: View {
     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
   }
 
-  /// `All › path › observer`, each crumb a target that pops to its level; the
-  /// current level is the one that is not a link. An observer reached from the
-  /// map sits directly under `All`, since a pin tap names no single path.
+  /// `All › path › observer` while the list is grouped by path, and
+  /// `All › observer › path` while it is grouped by observer — the same trail,
+  /// read in the order its own list reads. Each crumb is a target that pops to
+  /// its level; the current level is the one that is not a link. An observer
+  /// reached from a map pin in path mode sits directly under `All`, since a pin
+  /// tap names no single chain.
   private var breadcrumb: some View {
     HStack(spacing: 4) {
       crumb(L10n.Localizable.PacketScope.filterAll, isCurrent: focus == .all) { clearFocus() }
-      // The chain's own crumb, and the chain is the pills — printing "via A › B"
-      // above the same two hops as numbered pills said it twice, on two lines.
-      // `focusSummary` is computed once per focus change rather than in the
-      // body, which re-evaluates on every animation frame.
-      if let key = focus.pathKey, let summary = focusSummary {
-        crumbSeparator
-        let isCurrent = focus.routeID == nil
-        if summary.hopPills.isEmpty {
-          crumb(summary.title, isCurrent: isCurrent) { setFocus(.path(key)) }
-        } else {
-          pathCrumb(summary.hopPills, isCurrent: isCurrent) { setFocus(.path(key)) }
+      if grouping == .path {
+        // The chain's own crumb, and the chain is the pills — printing "via A › B"
+        // above the same two hops as numbered pills said it twice, on two lines.
+        // `focusSummary` is computed once per focus change rather than in the
+        // body, which re-evaluates on every animation frame.
+        if let key = focus.pathKey, let summary = focusSummary {
+          crumbSeparator
+          let isCurrent = focus.routeID == nil
+          if summary.hopPills.isEmpty {
+            crumb(summary.title, isCurrent: isCurrent) { setFocus(.path(key)) }
+          } else {
+            pathCrumb(summary.hopPills, isCurrent: isCurrent) { setFocus(.path(key)) }
+          }
         }
-      }
-      if let observerID = focus.observerID {
+        if let observerID = focus.observerID {
+          crumbSeparator
+          crumb(observerName(observerID), isCurrent: true) {}
+        }
+      } else if let observerID = focus.observerID {
         crumbSeparator
-        crumb(observerName(observerID), isCurrent: true) {}
+        crumb(observerName(observerID), isCurrent: focus.routeID == nil) {
+          setFocus(.observer(observerID))
+        }
+        if focus.routeID != nil, let summary = focusSummary {
+          crumbSeparator
+          if summary.hopPills.isEmpty {
+            crumb(summary.title, isCurrent: true) {}
+          } else {
+            pathCrumb(summary.hopPills, isCurrent: true) {}
+          }
+        }
       }
     }
     .frame(minHeight: 44)
@@ -510,31 +549,59 @@ struct PacketScopeDetailView: View {
     .accessibilityAddTraits(isCurrent ? .isSelected : [])
   }
 
-  private var sortMenu: some View {
+  /// Both list questions in one control: what the rows are, then how they are
+  /// ordered. A second picker section inside the menu that already existed —
+  /// not a second row of header chrome, which is what 9dbdfb6f spent its third
+  /// act deleting.
+  private var viewMenu: some View {
     Menu {
+      Picker(L10n.Localizable.PacketScope.groupBy, selection: $grouping) {
+        ForEach(PacketScopeGrouping.allCases, id: \.self) { option in
+          Text(option.title).tag(option)
+        }
+      }
+      .pickerStyle(.inline)
       Picker(L10n.Localizable.PacketScope.sort, selection: $sort) {
         ForEach(availableSorts, id: \.self) { option in
           Text(option.title).tag(option)
         }
       }
+      .pickerStyle(.inline)
     } label: {
       HStack(spacing: 4) {
-        Image(systemName: "arrow.up.arrow.down")
-        Text(sort.title)
+        Image(systemName: "line.3.horizontal.decrease")
+        Text(grouping.title)
           .lineLimit(1)
+        // The grouping is what the rows *are*; the sort is only their order, so
+        // it is the half that goes when there is no room for both.
+        if !dynamicTypeSize.isAccessibilitySize {
+          Text("·")
+            .foregroundStyle(.secondary)
+          Text(sort.title)
+            .lineLimit(1)
+            .foregroundStyle(.secondary)
+        }
       }
       .font(.caption)
       .frame(minWidth: 44, minHeight: 44)
       .contentShape(.rect)
     }
-    .accessibilityLabel(L10n.Localizable.PacketScope.sort)
-    .accessibilityValue(sort.title)
+    .accessibilityLabel("\(L10n.Localizable.PacketScope.groupBy), \(L10n.Localizable.PacketScope.sort)")
+    .accessibilityValue("\(grouping.title), \(sort.title)")
   }
 
-  /// "Farthest" is offered only when something has a distance, so it is never
-  /// a control that silently does nothing.
+  /// A sort is offered only where it can do something, so a control never
+  /// silently does nothing: "Farthest" needs a distance, "Most observers" needs
+  /// chain rows to count observers in, and "Most routes" needs observer rows.
   private var availableSorts: [PathSort] {
-    PathSort.allCases.filter { $0 != .farthest || coverage?.observerDistances.isEmpty == false }
+    PathSort.allCases.filter { option in
+      switch option {
+      case .farthest: coverage?.observerDistances.isEmpty == false
+      case .mostObservers: grouping == .path
+      case .mostRoutes: grouping == .observer
+      case .fewestHops, .firstHeard: true
+      }
+    }
   }
 
   /// Previous, next, the observers toggle, close — on the count's row while
@@ -569,9 +636,17 @@ struct PacketScopeDetailView: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(alignment: .leading, spacing: 4) {
-          ForEach(visibleGroups) { group in
-            groupRow(group, onMap: true)
-              .id(Self.scrollID(forPath: group.id))
+          switch grouping {
+          case .path:
+            ForEach(visibleGroups) { group in
+              groupRow(group, onMap: true)
+                .id(Self.scrollID(forPath: group.id))
+            }
+          case .observer:
+            ForEach(displayObserverGroups) { group in
+              observerGroupRow(group, onMap: true)
+                .id(Self.scrollID(forObserver: group.id))
+            }
           }
           VStack(alignment: .leading, spacing: 4) {
             Text(L10n.Localizable.PacketScope.coverageFooter)
@@ -639,15 +714,23 @@ struct PacketScopeDetailView: View {
       } else {
         summarySection(summary)
         Section {
-          ForEach(visibleGroups) { group in
-            groupRow(group, onMap: false)
-              .id(Self.scrollID(forPath: group.id))
+          switch grouping {
+          case .path:
+            ForEach(visibleGroups) { group in
+              groupRow(group, onMap: false)
+                .id(Self.scrollID(forPath: group.id))
+            }
+          case .observer:
+            ForEach(displayObserverGroups) { group in
+              observerGroupRow(group, onMap: false)
+                .id(Self.scrollID(forObserver: group.id))
+            }
           }
         } header: {
           HStack {
             Text(L10n.Localizable.PacketScope.heardBy(summary.observerCount))
             Spacer()
-            sortMenu
+            viewMenu
           }
         } footer: {
           VStack(alignment: .leading, spacing: 4) {
@@ -768,7 +851,7 @@ struct PacketScopeDetailView: View {
         onMap && !isDrawable ? L10n.Localizable.PacketScope.a11yNotDrawable : nil,
         expanded ? L10n.Localizable.PacketScope.a11yExpanded : L10n.Localizable.PacketScope.a11yCollapsed,
       ].compactMap(\.self).joined(separator: ", "))
-      .accessibilityAddTraits(focus.pathKey == group.id ? [.isButton, .isSelected] : .isButton)
+      .accessibilityAddTraits(focus.groupKey(in: grouping) == group.id ? [.isButton, .isSelected] : .isButton)
       .accessibilityHint(L10n.Localizable.PacketScope.hintPath)
       .accessibilityAction { toggle(path: group.id) }
 
@@ -884,6 +967,191 @@ struct PacketScopeDetailView: View {
       senderSNR.map(PacketScopeCoverageBuilder.decibels),
       reception.receptionCount > 1 ? L10n.Localizable.PacketScope.timesHeard(reception.receptionCount) : nil,
       isNew(reception.observerID) ? L10n.Localizable.PacketScope.new : nil,
+      onMap && !isDrawable ? L10n.Localizable.PacketScope.a11yNotDrawable : nil,
+    ].compactMap(\.self).joined(separator: ", "))
+    .accessibilityHint(L10n.Localizable.PacketScope.hintRoute)
+  }
+
+  /// One observer and the routes that reached it.
+  ///
+  /// The other list's top level. Nine observers are nine rows here, which is
+  /// the price of the one question the chain-major list cannot put on a single
+  /// screen: which *different* paths a packet took to reach each of them.
+  /// Tapping the observer promotes its routes on the map and opens them below.
+  private func observerGroupRow(_ group: PacketScopeObserverGroup, onMap: Bool) -> some View {
+    let expanded = isExpanded(group)
+    let isDrawable = group.routeIDs.contains { coverage?.drawableRouteIDs.contains($0) ?? false }
+    return VStack(alignment: .leading, spacing: 4) {
+      // A tap target rather than a `Button`: a button's label does not receive
+      // taps that land on a scroll view nested inside it.
+      HStack(alignment: .top, spacing: 8) {
+        if onMap {
+          // The consequence, before the tap.
+          Image(systemName: isDrawable ? "mappin.and.ellipse" : "mappin.slash")
+            .font(.caption)
+            .foregroundStyle(isDrawable ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+            .frame(width: drawabilityGlyphWidth)
+            .padding(.top, 3)
+        }
+        VStack(alignment: .leading, spacing: 4) {
+          HStack(alignment: .top, spacing: 6) {
+            Text(group.reception.observerName)
+              .font(.subheadline.weight(.medium))
+              .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+            if isNew(group.id) {
+              chip(L10n.Localizable.PacketScope.new, tint: .accentColor)
+            }
+            Spacer(minLength: 4)
+            if let offset = heardOffset(group.firstHeard) {
+              Text(offset)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+            Image(systemName: "chevron.right")
+              .font(.caption2.weight(.semibold))
+              .foregroundStyle(.tertiary)
+              .rotationEffect(.degrees(expanded ? 90 : 0))
+          }
+          observerGroupChips(group, onMap: onMap)
+        }
+      }
+      .contentShape(.rect)
+      .onTapGesture { toggle(observer: group.id) }
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel(group.reception.observerName)
+      .accessibilityValue([
+        PacketScopeFocusLogic.routeCount(group.routeCount),
+        group.directSNR.map(PacketScopeCoverageBuilder.decibels),
+        onMap && !isDrawable ? L10n.Localizable.PacketScope.a11yNotDrawable : nil,
+        expanded ? L10n.Localizable.PacketScope.a11yExpanded : L10n.Localizable.PacketScope.a11yCollapsed,
+      ].compactMap(\.self).joined(separator: ", "))
+      .accessibilityAddTraits(focus.groupKey(in: grouping) == group.id ? [.isButton, .isSelected] : .isButton)
+      .accessibilityHint(L10n.Localizable.PacketScope.hintObserver)
+      .accessibilityAction { toggle(observer: group.id) }
+
+      if expanded {
+        ForEach(Array(group.routeIDs.enumerated()), id: \.element) { index, routeID in
+          routeRow(group.routes[index], routeID: routeID, in: group, onMap: onMap)
+            .id(routeID)
+        }
+      }
+    }
+    .padding(.vertical, 4)
+  }
+
+  /// What the observer is worth knowing for. No hop pills here: this row stands
+  /// for however many chains reached it, and numbering them across chains would
+  /// put one repeater at two positions — the ambiguity the chain-major list was
+  /// built to avoid. The pills live on the route rows, where they are unique.
+  private func observerGroupChips(_ group: PacketScopeObserverGroup, onMap: Bool) -> some View {
+    ChipFlow(spacing: 6) {
+      // A figure only where this observer heard the sender's own radio with no
+      // repeater in between; three hops in, it would grade a repeater's link.
+      if let snr = group.directSNR {
+        Text(PacketScopeCoverageBuilder.decibels(snr))
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(SNRQuality(snr: snr).color)
+      }
+      chip(PacketScopeFocusLogic.routeCount(group.routeCount))
+      if let rssi = group.reception.directRSSI {
+        chip(L10n.Localizable.PacketScope.rssiBest(rssi.formatted()))
+      }
+      if group.reception.receptionCount > 1 {
+        chip(L10n.Localizable.PacketScope.timesHeard(group.reception.receptionCount))
+      }
+      if onMap, rosterLoaded, !isLocated(group.id) {
+        chip(L10n.Localizable.PacketScope.observerNotOnMap, systemImage: "mappin.slash")
+      }
+      if onMap, let distance = coverage?.observerDistances[group.id] {
+        chip(Self.kilometres(distance))
+      }
+    }
+  }
+
+  /// One route under the observer that heard it, named by its hops. Tapping
+  /// focuses that single reception, which is the one route the map then draws.
+  ///
+  /// There is deliberately no "best route" chip: the figure that ranked routes
+  /// was measured on each one's last leg into the observer, so past zero hops
+  /// it ranked repeaters rather than anything about this route.
+  private func routeRow(
+    _ route: PacketScopeReception.Route,
+    routeID: String,
+    in group: PacketScopeObserverGroup,
+    onMap: Bool
+  ) -> some View {
+    let isSelected = focus.routeID == routeID
+    let isDrawable = coverage?.drawableRouteIDs.contains(routeID) ?? false
+    let built = coverage?.routesByID[routeID]
+    let names = hopNamesByRoute[routeID] ?? route.hops
+    let placed = Set(built?.placedHops.map(\.position) ?? [])
+    let pills = names.enumerated().map { index, name in
+      HopPill(position: index + 1, name: name, isPlaced: placed.contains(index + 1))
+    }
+    // Only a route with no repeaters in it measured the sender's own
+    // transmission, so only there is there a figure that is the sender's.
+    let senderSNR = route.hops.isEmpty ? route.bestSNR : nil
+    let title = names.isEmpty
+      ? L10n.Localizable.PacketScope.heardDirectly
+      : L10n.Localizable.PacketScope.via(names.joined(separator: " › "))
+    return HStack(alignment: .top, spacing: 8) {
+      // Selection is never colour alone: a leading bar and weight carry it.
+      RoundedRectangle(cornerRadius: 1.5)
+        .fill(isSelected ? Color.accentColor : Color.clear)
+        .frame(width: 3)
+      if onMap {
+        // Drawability is per route here, so it states the consequence on the
+        // row the tap will act on rather than on the observer above it.
+        Image(systemName: isDrawable ? "mappin.and.ellipse" : "mappin.slash")
+          .font(.caption)
+          .foregroundStyle(isDrawable ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+          .frame(width: drawabilityGlyphWidth)
+          .padding(.top, 3)
+      }
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 6) {
+          if pills.isEmpty {
+            Text(L10n.Localizable.PacketScope.heardDirectly)
+              .font(.subheadline.weight(isSelected ? .semibold : .regular))
+          } else {
+            ChipFlow(spacing: 4) {
+              ForEach(pills) { pill in
+                hopPill(pill)
+              }
+            }
+          }
+          Spacer(minLength: 4)
+        }
+        ChipFlow(spacing: 6) {
+          if let snr = senderSNR {
+            Text(PacketScopeCoverageBuilder.decibels(snr))
+              .font(.caption.monospacedDigit())
+              .foregroundStyle(SNRQuality(snr: snr).color)
+          }
+          chip(Self.routeLength(route.hops.count))
+          if onMap, let tail = built?.unplacedTailCount, tail > 0 {
+            chip(PacketScopeFocusLogic.tailUnknown(tail), systemImage: "mappin.slash")
+          }
+        }
+      }
+    }
+    .frame(minHeight: 44)
+    .padding(.vertical, 4)
+    .padding(.horizontal, 6)
+    .background(
+      isSelected ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.3 : 0.12) : Color.clear,
+      in: RoundedRectangle(cornerRadius: 8)
+    )
+    .contentShape(.rect)
+    .onTapGesture { toggle(route: routeID, observerID: group.id) }
+    .accessibilityElement(children: .ignore)
+    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    .accessibilityAction { toggle(route: routeID, observerID: group.id) }
+    .accessibilityLabel(title)
+    .accessibilityValue([
+      senderSNR != nil ? SNRQuality(snr: senderSNR).localizedLabel : nil,
+      senderSNR.map(PacketScopeCoverageBuilder.decibels),
+      Self.routeLength(route.hops.count),
       onMap && !isDrawable ? L10n.Localizable.PacketScope.a11yNotDrawable : nil,
     ].compactMap(\.self).joined(separator: ", "))
     .accessibilityHint(L10n.Localizable.PacketScope.hintRoute)
@@ -1057,23 +1325,30 @@ struct PacketScopeDetailView: View {
 
   /// The chains the list shows. All of them — except while an observer pin is
   /// focused, when it shows the chains that reached that observer and, in each,
-  /// only that observer.
+  /// only that observer. That filter is a path-mode affair: grouped by
+  /// observer, an observer focus already *is* one row.
   private var visibleGroups: [PacketScopePathGroup] {
-    guard case let .observer(observerID) = focus else { return displayGroups }
+    guard grouping == .path, case let .observer(observerID) = focus else { return displayGroups }
     return displayGroups.compactMap { $0.filtered(toObserver: observerID) }
   }
 
-  /// Open while its own chain is focused, and — since the list is already
-  /// filtered to it — while an observer is.
-  private func isExpanded(_ group: PacketScopePathGroup) -> Bool {
-    if case .observer = focus { return true }
-    return focus.pathKey == group.id
+  /// Open while its own row is focused, and — since the list is already
+  /// filtered to it — while an observer is focused in path mode.
+  private func isExpanded(_ group: some PacketScopeListGroup) -> Bool {
+    if grouping == .path, case .observer = focus { return true }
+    return focus.groupKey(in: grouping) == group.id
   }
 
   /// A path key is empty for the direct chain, and namespaced here so the
   /// scroll proxy is never handed `""`.
   private static func scrollID(forPath key: String) -> String {
     "path:\(key)"
+  }
+
+  /// Namespaced apart from the chain ids for the same proxy: an observer id and
+  /// an empty chain key must never resolve to the same row.
+  private static func scrollID(forObserver id: String) -> String {
+    "obs:\(id)"
   }
 
   private static func routeLength(_ hops: Int) -> String {
@@ -1173,69 +1448,132 @@ struct PacketScopeDetailView: View {
         if l != r { return l > r }
         return lhs.id < rhs.id
       }
+    case .mostRoutes:
+      // Not offered while the list is by chain: a chain has one route per
+      // observer, so this would only restate "most observers".
+      return groups
     }
   }
 
-  /// The live sort, or — while an order is frozen — that order with paths heard
-  /// since appended at the tail, so the `New` chip is where the eye expects and
-  /// nothing already on screen moves.
+  /// The same four questions of the observer rows. Every comparator falls
+  /// through to the id, so a poll returning the same data cannot reshuffle a
+  /// row under a reaching finger.
+  private func sortedObserverGroups(by sort: PathSort) -> [PacketScopeObserverGroup] {
+    let groups = PacketScopeObserverGrouping.groups(from: receptions ?? [])
+    switch sort {
+    case .fewestHops:
+      // The grouping's own order already is shortest route, then most heard.
+      return groups
+    case .mostRoutes:
+      return groups.sorted { lhs, rhs in
+        if lhs.routeCount != rhs.routeCount { return lhs.routeCount > rhs.routeCount }
+        let l = lhs.reception.shortestHopCount ?? .max
+        let r = rhs.reception.shortestHopCount ?? .max
+        if l != r { return l < r }
+        return lhs.id < rhs.id
+      }
+    case .firstHeard:
+      return groups.sorted { lhs, rhs in
+        let l = lhs.firstHeard ?? .distantFuture
+        let r = rhs.firstHeard ?? .distantFuture
+        if l != r { return l < r }
+        return lhs.id < rhs.id
+      }
+    case .farthest:
+      return groups.sorted { lhs, rhs in
+        let l = coverage?.observerDistances[lhs.id] ?? -1
+        let r = coverage?.observerDistances[rhs.id] ?? -1
+        if l != r { return l > r }
+        return lhs.id < rhs.id
+      }
+    case .mostObservers:
+      // Not offered while the list is by observer: one row is one observer.
+      return groups
+    }
+  }
+
+  /// The live sort, or — while an order is frozen — that order with groups
+  /// heard since appended at the tail, so the `New` chip is where the eye
+  /// expects and nothing already on screen moves.
+  private func frozen<Group: PacketScopeListGroup>(_ live: [Group]) -> [Group] {
+    guard let frozenOrder else { return live }
+    let byKey = Dictionary(live.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let known = Set(frozenOrder.groupKeys)
+    return frozenOrder.groupKeys.compactMap { byKey[$0] } + live.filter { !known.contains($0.id) }
+  }
+
+  /// Only the grouping's own array is filled; the other is emptied rather than
+  /// left stale, so nothing downstream can read rows the list is not showing.
   private func applySort() {
     displayReceptions = receptions ?? []
-    let live = sortedGroups(by: sort)
-    guard let frozenOrder else {
-      displayGroups = live
-      return
+    switch grouping {
+    case .path:
+      displayGroups = frozen(sortedGroups(by: sort))
+      displayObserverGroups = []
+    case .observer:
+      displayObserverGroups = frozen(sortedObserverGroups(by: sort))
+      displayGroups = []
     }
-    let byKey = Dictionary(live.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-    let frozen = frozenOrder.pathKeys.compactMap { byKey[$0] }
-    let known = Set(frozenOrder.pathKeys)
-    displayGroups = frozen + live.filter { !known.contains($0.id) }
   }
 
   private func captureOrder() -> PacketScopeFrozenOrder {
+    switch grouping {
+    case .path: Self.order(of: displayGroups)
+    case .observer: Self.order(of: displayObserverGroups)
+    }
+  }
+
+  private static func order(of groups: [some PacketScopeListGroup]) -> PacketScopeFrozenOrder {
     PacketScopeFrozenOrder(
-      pathKeys: displayGroups.map(\.id),
-      routeIDsByPath: Dictionary(
-        displayGroups.map { ($0.id, $0.routeIDs) },
+      groupKeys: groups.map(\.id),
+      routeIDsByGroup: Dictionary(
+        groups.map { ($0.id, $0.routeIDs) },
         uniquingKeysWith: { first, _ in first }
       )
     )
   }
 
-  /// Scrolls the focused row into view: a focused route centred (its chain's
-  /// row and sibling observers around it), a focused chain to the top, and an
-  /// observer reached from the map to the first chain that carries it.
+  /// Scrolls the focused row into view: a focused route centred (its group's
+  /// row and its siblings around it), a focused group row to the top, and — in
+  /// path mode only — an observer reached from the map to the first chain that
+  /// carries it, since it has no row of its own there.
   private func requestScroll(for focus: PacketScopeFocus) {
     if let routeID = focus.routeID {
       scrollRequest = ScrollRequest(id: routeID, anchor: .center, version: scrollRequest.version + 1)
-    } else if let key = focus.pathKey {
-      scrollRequest = ScrollRequest(id: Self.scrollID(forPath: key), anchor: .top, version: scrollRequest.version + 1)
-    } else if let observerID = focus.observerID {
-      let carrier = displayGroups.first { group in
-        group.receptions.contains { $0.observerID == observerID }
-      }
-      guard let carrier else { return }
-      scrollRequest = ScrollRequest(
-        id: Self.scrollID(forPath: carrier.id),
-        anchor: .top,
-        version: scrollRequest.version + 1
-      )
+      return
     }
+    if let key = focus.groupKey(in: grouping) {
+      let id = grouping == .path ? Self.scrollID(forPath: key) : Self.scrollID(forObserver: key)
+      scrollRequest = ScrollRequest(id: id, anchor: .top, version: scrollRequest.version + 1)
+      return
+    }
+    guard grouping == .path, let observerID = focus.observerID else { return }
+    let carrier = displayGroups.first { group in
+      group.receptions.contains { $0.observerID == observerID }
+    }
+    guard let carrier else { return }
+    scrollRequest = ScrollRequest(
+      id: Self.scrollID(forPath: carrier.id),
+      anchor: .top,
+      version: scrollRequest.version + 1
+    )
   }
 
   // MARK: - Focus
 
+  /// Compares on the observer rather than through `groupKey(in:)`, because this
+  /// is also the map's pin tap: in path mode a focused observer has no group
+  /// key, and a second tap on its pin must still clear it.
   private func toggle(observer observerID: String) {
-    switch focus {
-    case .observer(observerID):
+    if focus.observerID == observerID, focus.routeID == nil {
       clearFocus()
-    default:
+    } else {
       setFocus(.observer(observerID))
     }
   }
 
   private func toggle(path key: String) {
-    if focus.pathKey == key, focus.routeID == nil {
+    if focus.groupKey(in: grouping) == key, focus.routeID == nil {
       clearFocus()
     } else {
       setFocus(.path(key))
@@ -1244,8 +1582,9 @@ struct PacketScopeDetailView: View {
 
   private func toggle(route routeID: String, observerID: String) {
     if focus.routeID == routeID {
-      // Symmetric with the chain's row: the focused route pops to its chain.
-      setFocus(.path(PacketScopeFocus.pathKey(fromRouteID: routeID)))
+      // Symmetric with the row above it: the focused route pops to whichever
+      // row holds it in this grouping.
+      setFocus(PacketScopeFocus.route(observerID: observerID, routeID: routeID).popped(in: grouping))
     } else {
       setFocus(.route(observerID: observerID, routeID: routeID))
     }
@@ -1255,7 +1594,7 @@ struct PacketScopeDetailView: View {
   /// one recoverable step, never the whole selection.
   private func popFocus() {
     guard focus != .all else { return }
-    setFocus(focus.popped())
+    setFocus(focus.popped(in: grouping))
   }
 
   private func clearFocus() {
@@ -1265,7 +1604,7 @@ struct PacketScopeDetailView: View {
 
   private func step(by delta: Int) {
     let order = frozenOrder ?? captureOrder()
-    guard let next = PacketScopeFocusLogic.stepped(focus, by: delta, order: order) else { return }
+    guard let next = PacketScopeFocusLogic.stepped(focus, by: delta, mode: grouping, order: order) else { return }
     setFocus(next, isStep: true)
     stepTick += 1
   }
@@ -1611,18 +1950,25 @@ struct PacketScopeDetailView: View {
     }
 
     applySort()
-    // The frozen order learns of paths heard since the freeze, at the tail,
+    // The frozen order learns of groups heard since the freeze, at the tail,
     // so the steppers can reach them.
     if let order = frozenOrder {
-      frozenOrder = displayGroups.reduce(order) { partial, group in
-        partial.appending(pathKey: group.id, routeIDs: group.routeIDs)
+      let live: [(id: String, routeIDs: [String])] = switch grouping {
+      case .path: displayGroups.map { ($0.id, $0.routeIDs) }
+      case .observer: displayObserverGroups.map { ($0.id, $0.routeIDs) }
+      }
+      frozenOrder = live.reduce(order) { partial, group in
+        partial.appending(groupKey: group.id, routeIDs: group.routeIDs)
       }
     }
     let previous = focus
     let reconciled = PacketScopeFocusLogic.reconciled(
       focus,
+      mode: grouping,
       routeIDs: Set(built.routesByID.keys),
-      pathKeys: Set(displayGroups.map(\.id)),
+      // Observer ids already flow through `observerIDs`; there are no chain
+      // rows to fall back to while the list is grouped by observer.
+      pathKeys: grouping == .path ? Set(displayGroups.map(\.id)) : [],
       observerIDs: observerIDs
     )
     applyFocus(reconciled, animated: reconciled != previous)
@@ -1836,7 +2182,9 @@ private struct ChipFlow: Layout {
   }
 }
 
-/// How the chain rows are ordered.
+/// How the top-level rows are ordered, in either grouping. `mostObservers` and
+/// `mostRoutes` are the same question asked of the two lists, and each is
+/// offered only where its own rows can answer it — see `availableSorts`.
 ///
 /// There is deliberately no "strongest signal": the figure it ranked by is
 /// measured on each observer's last leg, so past zero hops it ranked repeaters'
@@ -1844,6 +2192,7 @@ private struct ChipFlow: Layout {
 private enum PathSort: CaseIterable {
   case fewestHops
   case mostObservers
+  case mostRoutes
   case firstHeard
   case farthest
 
@@ -1851,6 +2200,7 @@ private enum PathSort: CaseIterable {
     switch self {
     case .fewestHops: L10n.Localizable.PacketScope.sortFewestHops
     case .mostObservers: L10n.Localizable.PacketScope.sortMostObservers
+    case .mostRoutes: L10n.Localizable.PacketScope.sortMostRoutes
     case .firstHeard: L10n.Localizable.PacketScope.sortFirstHeard
     case .farthest: L10n.Localizable.PacketScope.sortFarthest
     }

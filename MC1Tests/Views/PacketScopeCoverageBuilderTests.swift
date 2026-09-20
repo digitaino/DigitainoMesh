@@ -7,6 +7,10 @@ import Testing
 /// The coverage map's construction rules: where a route starts, which hops pin,
 /// which links are counted, which leg carries the SNR treatment, what the
 /// focus state draws, and how a partial draw grows.
+///
+/// Both focus levels below the top are shipping list modes now, not only map
+/// gestures: `.path` is what a row does while the panel is grouped by chain,
+/// and `.observer` is what a row does while it is grouped by observer.
 @Suite("PacketScope coverage builder")
 @MainActor
 struct PacketScopeCoverageBuilderTests {
@@ -448,6 +452,78 @@ struct PacketScopeCoverageBuilderTests {
 
   private func lineIDs(_ geometry: PacketScopeFocusGeometry) -> [String] {
     geometry.lines.map(\.id)
+  }
+
+  @Test
+  func `Chain focus draws every route along the chain, whichever observers heard it`() throws {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let far = CLLocationCoordinate2D(latitude: 30.9, longitude: -97.9)
+    let map = build(
+      receptions: [
+        reception("one", routes: [route(["AA", "BB"], snr: 5)]),
+        reception("two", routes: [route(["AA", "BB"], snr: 2)]),
+      ],
+      observers: [observer("one"), observer("two", at: far)],
+      repeaters: [a, b]
+    )
+    let focused = PacketScopeCoverageBuilder.geometry(for: .path("AA,BB"), in: map)
+    #expect(focused.isDrawable)
+    #expect(Set(focused.routeIDs) == ["one|AA,BB", "two|AA,BB"])
+    let one = try #require(map.routesByID["one|AA,BB"])
+    let two = try #require(map.routesByID["two|AA,BB"])
+    #expect(Set(lineIDs(focused)) == Set(one.segments.map(\.id) + two.segments.map(\.id)))
+    #expect(focused.focusLinkIDs == one.linkIDs.union(two.linkIDs))
+    // Two observers off one chain would each claim the same readout, so the
+    // chain carries none.
+    #expect(!focused.nodes.contains { $0.point.pinStyle == .badge })
+  }
+
+  /// The reason the chain-major list can number its pills at all: every route
+  /// in a chain traverses the same repeaters in the same order, so a repeater
+  /// has exactly one position however many observers heard it — which is not
+  /// true of observer focus, asserted above.
+  @Test
+  func `Chain focus numbers hops even with several observers on the chain`() {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let b = makeRepeater(firstByte: 0xBB, latitude: 30.2, longitude: -97.2)
+    let far = CLLocationCoordinate2D(latitude: 30.9, longitude: -97.9)
+    let map = build(
+      receptions: [
+        reception("one", routes: [route(["AA", "BB"], snr: 5)]),
+        reception("two", routes: [route(["AA", "BB"], snr: 2)]),
+      ],
+      observers: [observer("one"), observer("two", at: far)],
+      repeaters: [a, b]
+    )
+    let focused = PacketScopeCoverageBuilder.geometry(for: .path("AA,BB"), in: map)
+    func number(_ name: String) -> Int? {
+      focused.nodes.first { $0.point.label == name }?.point.hopIndex
+    }
+    #expect(number(a.resolvableName) == 1)
+    #expect(number(b.resolvableName) == 2)
+  }
+
+  @Test
+  func `A chain no route can draw leaves the map exactly as it was`() {
+    let a = makeRepeater(firstByte: 0xAA, latitude: 30.1, longitude: -97.1)
+    let map = build(
+      receptions: [
+        reception("obs", routes: [route(["AA"], snr: 7.5)]),
+        reception("ghost", routes: [route(["ZZ"], snr: 2.0)]),
+      ],
+      observers: [observer("obs"), observer("ghost", located: false)],
+      repeaters: [a]
+    )
+    let everything = PacketScopeCoverageBuilder.geometry(for: .all, in: map)
+    let undrawable = PacketScopeCoverageBuilder.geometry(for: .path("ZZ"), in: map)
+    #expect(!undrawable.isDrawable)
+    #expect(undrawable.cameraCoordinates.isEmpty)
+    #expect(lineIDs(undrawable) == lineIDs(everything))
+    #expect(undrawable.nodes.map(\.point) == everything.nodes.map(\.point))
+    #expect(undrawable.focusLinkIDs == everything.focusLinkIDs)
+    // A chain nobody heard is undrawable for the same reason, not a crash.
+    #expect(!PacketScopeCoverageBuilder.geometry(for: .path("QQ"), in: map).isDrawable)
   }
 
   @Test
