@@ -26,6 +26,10 @@ public enum WeatherChannelSubject: Sendable, Hashable {
   case text(subject: MeshWXTextSubject, request: WeatherRequest?)
   /// The bot's statement of what it carries (spec §7A).
   case coverage
+  /// One radar tile (spec revision 11, §7D). The tile is the subject: a picture of a square of
+  /// earth, named by its width and its centre rather than by anybody's question — nothing on the
+  /// wire says who asked for it, and the lattice means several people may have.
+  case radar(tile: MeshWXRadarTile)
 }
 
 // MARK: - Heard on the channel
@@ -101,6 +105,11 @@ public enum WeatherHeard {
       if let coverage = state.coverage {
         add("coverage", .coverage, contentAt: nil, receivedAt: coverage.receivedAt)
       }
+      for stored in state.radarTiles {
+        let tile = stored.tile
+        add("radar-\(tile.zoom)-\(tile.south)-\(tile.west)", .radar(tile: tile),
+            contentAt: stored.takenAt, receivedAt: stored.receivedAt)
+      }
     }
     return Array(items.sorted { lhs, rhs in
       lhs.receivedAt != rhs.receivedAt ? lhs.receivedAt > rhs.receivedAt : lhs.id < rhs.id
@@ -120,6 +129,8 @@ public enum WeatherCacheGroup: Sendable, Hashable, CaseIterable {
   case warningNarratives
   /// Warnings the phone holds for somewhere other than the place on screen.
   case warningsElsewhere
+  /// The radar tiles the phone is holding (spec revision 11, §7D), one row per square of earth.
+  case radarPictures
 }
 
 /// One thing the phone is holding, and the screen that shows it in full.
@@ -221,6 +232,20 @@ public struct WeatherCache: Sendable, Hashable {
           contentAt: nil,
           receivedAt: assembly.lastReceivedAt,
           destination: destination(of: assembly.request, tables: tables)))
+      }
+      // One row per square of earth held, whatever its width (spec revision 11, §3). No
+      // destination: the radar screen is reached from the place page's card, which knows which
+      // place it is about; a cached row knows only a tile.
+      for stored in state.radarTiles {
+        let tile = stored.tile
+        add(WeatherCachedItem(
+          id: "radar-\(botID)-\(tile.zoom)-\(tile.south)-\(tile.west)",
+          group: .radarPictures,
+          botID: botID,
+          subject: .radar(tile: tile),
+          contentAt: stored.takenAt,
+          receivedAt: stored.receivedAt,
+          destination: nil))
       }
     }
 

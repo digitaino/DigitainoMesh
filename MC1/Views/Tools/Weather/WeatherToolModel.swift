@@ -112,6 +112,34 @@ struct WeatherPageScreen {
   var missingWarnings: [MeshWXWarningIdentity] { context.sourceState?.missingFromDigest ?? [] }
   var missingWarningsRequest: WeatherRequest? { model.missingWarningsRequest(in: context) }
   var missingNotAvailable: Set<MeshWXWarningIdentity> { model.missingNotAvailable(in: context) }
+
+  // MARK: - Radar (docs/MESHWX_UI.md §18)
+
+  /// The radar section of this page, built with the rest of the snapshot.
+  var radar: WeatherRadarCard { snapshot.radar }
+
+  /// What is held for one width of the radar screen's control, which is a different question from
+  /// "which picture is this place's": a partial tile whose bounds stop short of the place is still
+  /// the tile held for its width, and the screen says so.
+  func radarWidth(_ zoom: UInt8) -> WeatherRadarCard {
+    WeatherRadarCard.width(zoom, place: place, tiles: context.radarTiles, now: now)
+  }
+
+  /// The ask for one width, or nil for a place with no coordinate — which has no Radar section at
+  /// all, and so no way to reach the screen that would send this.
+  ///
+  /// **Always one packet**, whatever the width: a radar answer is one packet or a coarser one
+  /// (spec revision 11, §1.1). That is the whole reason the cost line can be a constant rather
+  /// than the estimate the alert map has to make.
+  func radarRequest(zoom: UInt8) -> WeatherRequest? {
+    WeatherRadarCard.ask(place: place, zoom: zoom)
+  }
+
+  /// The square a radar ask at one width would be answered with, so a screen can frame a map on it
+  /// before anything is held for it.
+  func radarTile(zoom: UInt8) -> MeshWXRadarTile? {
+    place.map { WeatherRadarCard.tile(for: $0, zoom: zoom) }
+  }
 }
 
 /// The Weather tool's model: gathers the inputs, builds one `WeatherScreenSnapshot` **per page**

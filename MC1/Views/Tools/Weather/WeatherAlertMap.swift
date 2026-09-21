@@ -51,40 +51,10 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
     tables: MeshWXTables,
     geometry: MeshWXGeometry
   ) -> WeatherMapDrawing {
-    struct Shape {
-      var tint: MeshWXEventTint
-      var rings: [[CLLocationCoordinate2D]]
-    }
-    var shapes: [Shape] = []
-    var points: [MapPoint] = []
-    var framed: [CLLocationCoordinate2D] = []
-    let useOutlines = loadOutlines || geometry.isLoaded
-
-    for warning in warnings {
-      let tint = MeshWXPresentation.tint(forVTEC: tables.vtec(for: warning.event) ?? "")
-      if let polygon = warning.polygon, polygon.count >= 3 {
-        let ring = polygon.map(coordinate)
-        shapes.append(Shape(tint: tint, rings: [ring]))
-        framed.append(contentsOf: ring)
-        continue
-      }
-      var rings: [[CLLocationCoordinate2D]] = []
-      for area in WeatherFormatting.uniqueAreas(tables.namedAreas(for: warning)) {
-        if useOutlines, let outline = geometry.rings(for: area.ugc) {
-          rings.append(contentsOf: outline.filter { $0.count >= 3 }.map { $0.map(coordinate) })
-        } else if let lat = area.lat, let lon = area.lon {
-          let centre = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-          points.append(MapPoint(
-            id: pointID("area-\(area.ugc)"), coordinate: centre, pinStyle: .droppedPin,
-            label: area.name, isClusterable: false, hopIndex: nil, badgeText: nil))
-          framed.append(centre)
-        }
-      }
-      if !rings.isEmpty {
-        shapes.append(Shape(tint: tint, rings: rings))
-        framed.append(contentsOf: rings.flatMap { $0 })
-      }
-    }
+    let gathered = self.shapes(
+      warnings: warnings, loadOutlines: loadOutlines, tables: tables, geometry: geometry)
+    var points = gathered.points
+    var framed = gathered.framed
 
     // The phone's own location is the map's location dot; only a place that is not where the
     // phone is now gets a pin, and no callout over the map's own labels.
@@ -102,17 +72,74 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
       if framesPlace || framed.isEmpty { framed.append(centre) }
     }
 
-    return WeatherMapDrawing(overlays: overlays(shapes.map { ($0.tint, $0.rings) }), points: points, bounds: bounds(framed))
+    return WeatherMapDrawing(
+      overlays: overlays(gathered.shapes), points: points, bounds: bounds(framed))
+  }
+
+  /// The rings every warning is drawn as and the colour each is drawn in, plus a pin for any area
+  /// this bundle has no outline for and every coordinate the camera has to fit.
+  ///
+  /// Pulled out of ``make(warnings:place:framesPlace:loadOutlines:tables:geometry:)`` so the radar
+  /// screen's map (docs/MESHWX_UI.md §18) draws the *same* shapes from the *same* lookup — the
+  /// alert outlines over a radar picture have to be the alert outlines, and a second gathering of
+  /// them here would be the second country that §17 spent a paragraph making sure did not exist.
+  static func shapes(
+    warnings: [MeshWXWarning],
+    loadOutlines: Bool,
+    tables: MeshWXTables,
+    geometry: MeshWXGeometry
+  ) -> (
+    shapes: [(MeshWXEventTint, [[CLLocationCoordinate2D]])],
+    points: [MapPoint],
+    framed: [CLLocationCoordinate2D]
+  ) {
+    var shapes: [(MeshWXEventTint, [[CLLocationCoordinate2D]])] = []
+    var points: [MapPoint] = []
+    var framed: [CLLocationCoordinate2D] = []
+    let useOutlines = loadOutlines || geometry.isLoaded
+
+    for warning in warnings {
+      let tint = MeshWXPresentation.tint(forVTEC: tables.vtec(for: warning.event) ?? "")
+      if let polygon = warning.polygon, polygon.count >= 3 {
+        let ring = polygon.map(coordinate)
+        shapes.append((tint, [ring]))
+        framed.append(contentsOf: ring)
+        continue
+      }
+      var rings: [[CLLocationCoordinate2D]] = []
+      for area in WeatherFormatting.uniqueAreas(tables.namedAreas(for: warning)) {
+        if useOutlines, let outline = geometry.rings(for: area.ugc) {
+          rings.append(contentsOf: outline.filter { $0.count >= 3 }.map { $0.map(coordinate) })
+        } else if let lat = area.lat, let lon = area.lon {
+          let centre = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+          points.append(MapPoint(
+            id: pointID("area-\(area.ugc)"), coordinate: centre, pinStyle: .droppedPin,
+            label: area.name, isClusterable: false, hopIndex: nil, badgeText: nil))
+          framed.append(centre)
+        }
+      }
+      if !rings.isEmpty {
+        shapes.append((tint, rings))
+        framed.append(contentsOf: rings.flatMap { $0 })
+      }
+    }
+    return (shapes, points, framed)
   }
 
   /// One fill and one outline overlay per colour: the map colours per overlay, not per feature.
   /// Overlays draw in the order given and alerts arrive most urgent first, so they are laid down in
   /// reverse: a tornado warning's polygon sits on top of the heat advisory zones under it.
   ///
-  /// `fileprivate` rather than `private` so the national sweep's drawing
-  /// (``WeatherAreaMapDrawing``) lays its shapes down through exactly this, and one map cannot
-  /// end up tinting or stacking differently from the other.
-  fileprivate static func overlays(_ shapes: [(MeshWXEventTint, [[CLLocationCoordinate2D]])]) -> [MapOverlay] {
+  /// Not private, so the national sweep's drawing (``WeatherAreaMapDrawing``) and the radar
+  /// screen's lay their shapes down through exactly this, and one map cannot end up tinting or
+  /// stacking differently from another.
+  ///
+  /// - Parameter fills: false leaves the **outlines alone**, for a map that has a subject of its
+  ///   own underneath them. On the radar screen a tinted fill over the cells would hide the one
+  ///   thing the screen is for (docs/MESHWX_UI.md §18).
+  static func overlays(
+    _ shapes: [(MeshWXEventTint, [[CLLocationCoordinate2D]])], fills: Bool = true
+  ) -> [MapOverlay] {
     var order: [MeshWXEventTint] = []
     var byTint: [MeshWXEventTint: [[CLLocationCoordinate2D]]] = [:]
     for (tint, rings) in shapes.reversed() {
@@ -122,22 +149,25 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
     return order.flatMap { tint -> [MapOverlay] in
       let rings = byTint[tint] ?? []
       let color = WeatherFormatting.uiColor(for: tint)
-      let fill = MapOverlay(
-        id: "weather-fill-\(tint.rawValue)",
-        features: rings.enumerated().map { MapOverlay.Feature(id: "fill-\($0.offset)", geometry: .polygon($0.element), weight: 1) },
-        paint: .weightedFill(MapOverlay.WeightedFill(color: color, opacity: 0.3...0.3)))
-      // A separate outline above the fill: the fill's own hairline vanishes over imagery.
+      let fill = fills
+        ? MapOverlay(
+          id: "weather-fill-\(tint.rawValue)",
+          features: rings.enumerated().map { MapOverlay.Feature(id: "fill-\($0.offset)", geometry: .polygon($0.element), weight: 1) },
+          paint: .weightedFill(MapOverlay.WeightedFill(color: color, opacity: 0.3...0.3)))
+        : nil
+      // A separate outline above the fill: the fill's own hairline vanishes over imagery, and on
+      // a map with a subject of its own under these it is the whole of what they draw.
       let outline = MapOverlay(
         id: "weather-outline-\(tint.rawValue)",
         features: rings.enumerated().map {
           MapOverlay.Feature(id: "outline-\($0.offset)", geometry: .polyline(closed($0.element)), weight: 1)
         },
         paint: .weightedLine(MapOverlay.WeightedLine(color: color, width: 2...2, opacity: 0.9...0.9)))
-      return [fill, outline]
+      return [fill, outline].compactMap { $0 }
     }
   }
 
-  fileprivate static func coordinate(_ value: MeshWXCoordinate) -> CLLocationCoordinate2D {
+  static func coordinate(_ value: MeshWXCoordinate) -> CLLocationCoordinate2D {
     CLLocationCoordinate2D(latitude: value.latitude, longitude: value.longitude)
   }
 
@@ -148,7 +178,7 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
   }
 
   /// A stable id from a string, so pins keep their identity across updates.
-  private static func pointID(_ key: String) -> UUID {
+  static func pointID(_ key: String) -> UUID {
     var bytes = [UInt8](key.utf8.suffix(16))
     bytes.append(contentsOf: repeatElement(0, count: 16 - bytes.count))
     return UUID(uuid: (

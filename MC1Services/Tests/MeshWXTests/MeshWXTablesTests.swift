@@ -13,7 +13,7 @@ struct MeshWXTablesTests {
   let tables = MeshWXTables.shared
 
   @Test func bundleLoads() {
-    #expect(tables.protocolVersion == 14, "protocol.json version is 14 for v5.0 revision 10")
+    #expect(tables.protocolVersion == 15, "protocol.json version is 15 for v5.0 revision 11")
     #expect(tables.offices.count == 127, "125 WFOs, then NHC and WNS (spec rev 3 §9)")
     #expect(tables.stations.count == 2237)
     #expect(tables.states.count == 78)
@@ -42,6 +42,21 @@ struct MeshWXTablesTests {
     #expect(tables.stationICAO(976) == "KHYI")
     #expect(tables.stationIndex(forICAO: "KAUS") == 202)
     #expect(tables.stationIndex(forICAO: "kaus") == 202)
+  }
+
+  /// Spec revision 11, §7D: the two radar tables a client reads words and numbers from. The
+  /// thresholds are here rather than in the code because a legend that disagreed with the bot's
+  /// own classification would label the picture wrong rather than leave it unlabelled.
+  @Test func radarTablesComeFromTheBundle() {
+    #expect(tables.radarLevelsDBZ == [20, 35, 50], "light, moderate, heavy")
+    #expect(tables.radarLevelsDBZ.count == MeshWXRadarLevel.allCases.count - 1)
+    #expect(tables.radarProductNames.count == 15, "the national mosaic and fourteen regional ones")
+    #expect(tables.radarProductName(0) == "United States")
+    // Product 1 is the mosaic the `radar_tile` vector was cut from.
+    #expect(tables.radarProductName(1) == "Southern Plains")
+    #expect(tables.radarProductName(13) == "Puerto Rico")
+    // A bot newer than the bundle loses the mosaic's name, never the picture.
+    #expect(tables.radarProductName(63) == nil)
   }
 
   @Test func unknownIndicesReturnNilAndStillLabel() {

@@ -46,6 +46,11 @@ public enum MeshWXWire {
   /// Header, the build time, and the three assembly bytes, before the entries (spec §7C).
   static let areaSweepFixedSize = 11
   static let areaSweepEntrySize = 4
+  /// Header, the picture's time, the tile's south-west corner and the shape byte, before the
+  /// optional bounds and the quadtree (spec revision 11, §7D).
+  static let radarFixedSize = 12
+  /// The four inclusive row and column bounds a partial tile carries after the fixed fields.
+  static let radarBoundsSize = 4
 
   // MARK: Counts and limits (spec §3, §5, §6, §7, §8.1)
 
@@ -89,6 +94,26 @@ public enum MeshWXWire {
   /// offers the ask only inside this window: past it the ordinary request is the only honest
   /// offer, because the bot no longer holds the bytes.
   public static let partsCacheSeconds = 600
+  /// Cells along one side of a radar tile (spec revision 11, §7D). 32 × 32 over a tile of 2° at
+  /// zoom 0 is a cell of 1/16°, about 7 km — a thunderstorm core is several cells across, and a
+  /// finer grid would cost more packets than the picture is worth.
+  public static let radarGrid = 32
+  /// Cells along one side of a **coarse** tile: the same tile at half the detail, sent when the
+  /// fine picture does not fit one packet. A 16 × 16 tile always fits.
+  public static let radarCoarseGrid = 16
+  /// The widest tile on the wire: `zoom` is two bits, and a tile spans `2 ^ (zoom + 1)` degrees,
+  /// so 0 to 3 is 2°, 4°, 8° and 16°.
+  public static let maxRadarZoom: UInt8 = 3
+  /// The largest index of a mosaic the tile was cut from (`protocol.json` `v5.radar.products`):
+  /// the shape byte spends six bits on it beside the two the zoom takes.
+  public static let maxRadarProduct: UInt8 = 63
+  /// Bytes of quadtree a Radar packet can carry: the packet budget less the fixed fields. A
+  /// partial tile spends four of them on its bounds, which is what makes it the tighter fit.
+  public static let maxRadarCellsBytes = maxData - radarFixedSize  // 153
+  /// The Not-available letter of `>radar` (spec revision 11, §7D). **Not** `r`: that is `>rain`,
+  /// and a refusal has to say which of the two it refuses. It is the one request in the grammar
+  /// whose letter is not its own first letter.
+  public static let radarRequestLetter: Character = "x"
   /// Consecutive UGC numbers one sweep entry may cover: the run field is six bits, carried less
   /// one, so 1 to 64.
   public static let maxAreaSweepRun: UInt8 = 64
@@ -222,13 +247,28 @@ public enum MeshWXWire {
   /// own way of writing "all of state XX". The decoder lifts them out of ``MeshWXAreaSweep/entries``
   /// and into ``MeshWXAreaSweep/scope``; the encoder puts them back, first.
   public static let sweepScopeEvent: UInt8 = 0
+
+  // MARK: Radar flags nibble and shape byte (spec revision 11, §7D)
+
+  /// Bit 0: the grid is 16 × 16 rather than 32 × 32, because the finer picture did not fit one
+  /// packet. Each coarse cell is the **highest** of the four it replaces, so a small core is
+  /// never averaged away — a coarse tile understates where the rain is, never how hard.
+  public static let radarCoarseBit: UInt8 = 0x01
+  /// Bit 1: four `bounds` bytes follow the fixed fields. The radar picture covers only those rows
+  /// and columns; every cell outside them is **unknown**, and is level 0 on the wire because the
+  /// quadtree has no fourth value. Nothing may draw those cells as dry.
+  public static let radarPartialBit: UInt8 = 0x02
+  /// Shape byte, bits 0-1: the zoom.
+  static let radarZoomMask: UInt8 = 0x03
+  /// How far up the shape byte the product index sits.
+  static let radarProductShift: UInt8 = 2
 }
 
-/// The ten structured message types (spec §2.2, high nibble of the type byte).
+/// The eleven structured message types (spec §2.2, high nibble of the type byte).
 ///
-/// Type 11 is reserved and 12-15 are free for third-party experiments, so this is
-/// deliberately not exhaustive over the nibble: ``MeshWXHeader/rawType`` keeps the byte
-/// and receivers ignore what they do not know.
+/// Nibbles 12-15 are free for third-party experiments, so this is deliberately not
+/// exhaustive over the nibble: ``MeshWXHeader/rawType`` keeps the byte and receivers
+/// ignore what they do not know.
 public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable {
   case warning = 1
   case cancel = 2
@@ -245,6 +285,9 @@ public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable 
   /// Spec revision 8, §7C: every area in the country under an alert, in one sweep of at most
   /// eight packets.
   case areaSweep = 10
+  /// Spec revision 11, §7D: one tile of a radar picture, as a quadtree of two-bit levels. The
+  /// number revision 2 reserved "for a future structured product".
+  case radar = 11
 }
 
 /// Where the weather in a message came from (spec §2.2, revision 7: flags bits 3-2).

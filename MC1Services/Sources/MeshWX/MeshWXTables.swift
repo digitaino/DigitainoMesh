@@ -170,6 +170,16 @@ public final class MeshWXTables: Sendable {
   /// Sky code → the bundle's name for it (`"broken"`, `"thunderstorm"`).
   public let skyNames: [MeshWXSky: String]
 
+  // MARK: Radar (protocol.json `v5.radar`, revision 11)
+
+  /// The radar mosaics a tile's `product` byte indexes, in wire order: the readable names
+  /// ("Southern Plains", "Puerto Rico"), not the EMWIN file codes.
+  public let radarProductNames: [String]
+  /// Where each level starts, in dBZ: `[20, 35, 50]` for light, moderate and heavy. From the
+  /// bundle rather than hard-coded, because a legend that disagreed with the bot's classification
+  /// would be a picture labelled wrong rather than a picture missing a label.
+  public let radarLevelsDBZ: [Int]
+
   // MARK: Reference data
 
   /// Forecast points in wire order.
@@ -242,6 +252,9 @@ public final class MeshWXTables: Sendable {
       sky[code] = name
     }
     skyNames = sky
+
+    radarProductNames = protocolFile?.v5?.radar?.productNames ?? []
+    radarLevelsDBZ = protocolFile?.v5?.radar?.levelsDBZ ?? []
 
     points = (pointsFile?.points ?? []).enumerated().compactMap { index, row in
       guard let wireIndex = UInt16(exactly: index) else { return nil }
@@ -331,6 +344,13 @@ public final class MeshWXTables: Sendable {
 
   public func stateCode(_ index: UInt8) -> String? {
     states.indices.contains(Int(index)) ? states[Int(index)] : nil
+  }
+
+  /// The mosaic a radar tile's `product` byte names, e.g. `1` → `"Southern Plains"`. Nil for an
+  /// index this bundle does not know, which is a bot newer than the bundle and not a bad packet:
+  /// the tile is still a tile, and losing the mosaic's name must not lose the picture.
+  public func radarProductName(_ index: UInt8) -> String? {
+    radarProductNames.indices.contains(Int(index)) ? radarProductNames[Int(index)] : nil
   }
 
   /// VTEC code for an event byte, e.g. `3` → `"SV.W"`.
@@ -588,12 +608,34 @@ extension MeshWXTables {
     let events: [String: Int]
     let eventNames: [String: MeshWXEventName]
     let skyCodes: [String: Int]
+    /// The v5 block. Only the parts the app reads by index are pulled out: the types, flags and
+    /// record sizes in there are the codec's own constants, and a second copy of them that could
+    /// disagree would be worse than none.
+    let v5: V5Block?
 
     enum CodingKeys: String, CodingKey {
       case version
       case events
       case eventNames = "event_names"
       case skyCodes = "sky_codes"
+      case v5
+    }
+  }
+
+  private struct V5Block: Decodable {
+    let radar: RadarBlock?
+  }
+
+  /// `v5.radar` (revision 11): the two tables a client needs words and numbers from. The grid
+  /// sizes, the zoom ceiling and the flag bits are in ``MeshWXWire``, where the codec can be held
+  /// to them.
+  private struct RadarBlock: Decodable {
+    let levelsDBZ: [Int]?
+    let productNames: [String]?
+
+    enum CodingKeys: String, CodingKey {
+      case levelsDBZ = "levels_dbz"
+      case productNames = "product_names"
     }
   }
 

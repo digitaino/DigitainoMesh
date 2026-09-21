@@ -1588,3 +1588,104 @@
 
 /* Location: WeatherTrafficView.swift - Cancel reason 2: a stronger alert follows, so nothing improved */
 "weather.traffic.cancelReason.upgraded" = "upgraded";
+
+// MARK: - Radar, revision 11
+
+/* Location: WeatherRadarSection.swift - The Radar section of a place page, and the radar screen's title */
+"weather.radar.title" = "Radar";
+
+/* Location: WeatherRadarSection.swift - No radar picture is held for the place */
+"weather.radar.empty" = "No radar picture yet.";
+
+/* Location: WeatherRadarSection.swift - The ask, %@ is the weather radio's name */
+"weather.radar.ask" = "Ask %@ for the radar picture";
+
+/* Location: WeatherRadarSection.swift - The ask once a picture is already on screen */
+"weather.radar.askNewer" = "Ask for a newer picture";
+
+/* Location: WeatherRadarSection.swift - Under the ask: how often new radar pictures are made */
+"weather.radar.ask.footnote" = "Pictures are made about every 15 minutes.";
+
+/* Location: WeatherCopy.swift - When the picture was taken, %@ is a clock time */
+"weather.radar.time" = "Picture from %@";
+
+/* Location: WeatherCopy.swift - Added to the time line once the picture is half an hour old */
+"weather.radar.moved" = "Precipitation has moved since.";
+
+/* Location: WeatherCopy.swift - Light precipitation over the place, %@ is the place */
+"weather.radar.here.light" = "Light precipitation at %@.";
+
+/* Location: WeatherCopy.swift - Moderate precipitation over the place, %@ is the place */
+"weather.radar.here.moderate" = "Moderate precipitation at %@.";
+
+/* Location: WeatherCopy.swift - Heavy precipitation over the place, %@ is the place */
+"weather.radar.here.heavy" = "Heavy precipitation at %@.";
+
+/* Location: WeatherCopy.swift - Nothing falling on the place, %@ is the place */
+"weather.radar.here.dry" = "Dry at %@.";
+
+/* Location: WeatherCopy.swift - The place is inside the tile but outside the radar picture, %@ is the place */
+"weather.radar.here.outside" = "This picture does not reach %@.";
+
+/* Location: WeatherCopy.swift - The nearest precipitation elsewhere on the picture. %1$@ is a distance like "45 km", %2$@ a compass point like "NW" */
+"weather.radar.nearest" = "Nearest precipitation %1$@ %2$@.";
+
+/* Location: WeatherCopy.swift - The nearest heavy core, when it is not the cell already named. %1$@ is a distance, %2$@ a compass point */
+"weather.radar.nearestHeavy" = "Heavy precipitation %1$@ %2$@.";
+
+/* Location: WeatherCopy.swift - Nothing at all on this picture */
+"weather.radar.none" = "No precipitation on this picture.";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 20 dBZ and up */
+"weather.radar.level.light" = "Light";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 35 dBZ and up */
+"weather.radar.level.moderate" = "Moderate";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 50 dBZ and up */
+"weather.radar.level.heavy" = "Heavy";
+
+/* Location: WeatherRadarView.swift - Accessibility label for the Local / Regional / Wide control */
+"weather.radar.width" = "Width";
+
+/* Location: WeatherCopy.swift - The narrowest width, a 2 degree square */
+"weather.radar.width.local" = "Local";
+
+/* Location: WeatherCopy.swift - A 4 degree square */
+"weather.radar.width.regional" = "Regional";
+
+/* Location: WeatherCopy.swift - An 8 degree square */
+"weather.radar.width.wide" = "Wide";
+
+/* Location: WeatherRadarView.swift - Nothing held for the width on screen */
+"weather.radar.notAsked" = "Not asked for yet.";
+
+/* Location: WeatherRadarView.swift - Some cells are outside the radar picture and are drawn grey, never as dry */
+"weather.radar.partial" = "Part of this area is outside the radar picture.";
+
+/* Location: WeatherRadarView.swift - The radio halved the detail to fit the picture into one packet */
+"weather.radar.coarse" = "A busy picture, sent at half detail to fit one packet.";
+
+/* Location: WeatherCopy.swift - Which of the Weather Service mosaics the tile was cut from, %@ is its name */
+"weather.radar.mosaic" = "Cut from the %@ mosaic.";
+
+/* Location: WeatherCopy.swift - Refusal reason 0, %@ is the weather radio's name */
+"weather.radar.refused.noPicture" = "%@ has no recent radar picture for this area.";
+
+/* Location: WeatherCopy.swift - Refusal reason 2: the radio has no dish */
+"weather.radar.refused.unsupported" = "%@ does not receive radar pictures.";
+
+/* Location: WeatherCopy.swift - Refusal reason 4: the same picture went out minutes ago */
+"weather.radar.refused.recent" = "%@ sent this picture a few minutes ago and has nothing newer yet.";
+
+/* Location: WeatherCopy.swift - The group of stored radar tiles on the Cached screen */
+"weather.radar.cached.title" = "Radar pictures";
+
+/* Location: WeatherCopy.swift - What a radar answer is called in a request row and in channel traffic */
+"weather.radar.request.title" = "Radar picture";
+
+/* Location: WeatherTrafficView.swift - How many cells of a tile carry precipitation, %lld is two or more */
+"weather.radar.traffic.cells" = "%lld cells with precipitation";
+
+/* Location: WeatherTrafficView.swift - The same when one cell does */
+"weather.radar.traffic.cellsOne" = "1 cell with precipitation";

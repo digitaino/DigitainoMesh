@@ -7,7 +7,8 @@ import Testing
 ///
 /// The fixture is the publisher's own file, byte for byte: `docs/meshwx_v5_vectors.json` from
 /// the bot's repository (thirteen at revision 5, which added the two vectors carrying the new
-/// times beside the revision 4 form of the same two messages).
+/// times beside the revision 4 form of the same two messages; twenty-five at revision 11, which
+/// added a real Dallas radar tile and the three messages around it).
 /// A codec checked only against itself passes forever while being wrong, so nothing in this
 /// file is derived from the Swift implementation.
 enum MeshWXVectors {
@@ -135,6 +136,21 @@ enum MeshWXVectors {
     // as lower-case hex and `ts` is Unix **seconds**, not the minutes every other time here is.
     let sender: String?
     let ts: UInt32?
+
+    // Radar (spec revision 11, §7D). `rows` is one string of the digits 0-3 per row, north row
+    // first, which is how the bot's decoder prints a grid — so a Swift cell array is compared
+    // against the publisher's own characters rather than against another array this file built.
+    let takenMin: UInt32?
+    let south: Int8?
+    let west: Int16?
+    let zoom: UInt8?
+    let product: UInt8?
+    let coarse: Bool?
+    let partial: Bool?
+    /// `[row0, row1, col0, col1]`, or null for a whole tile.
+    let bounds: [UInt8]?
+    let size: Int?
+    let rows: [String]?
 
     // Coverage (the zone runs arrive in `areas`, the warning's own shape)
     let lat: Double?

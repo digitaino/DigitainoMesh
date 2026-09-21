@@ -45,6 +45,12 @@ public enum WeatherStateChange: Sendable, Hashable {
   /// — a newer national sweep, or a newer scoped one whose scope contains this one's — so it
   /// changed nothing. Usually a backlog drained from the radio's queue at connect.
   case areaSweepIgnoredOlder(builtMinutes: UInt32)
+  /// A radar tile landed and is the newest picture held of that square of earth (spec revision
+  /// 11, §7D).
+  case radarStored(tile: MeshWXRadarTile, takenMinutes: UInt32)
+  /// A radar tile the phone already has a picture of at that minute or later, so nothing changed:
+  /// a backlog drained at connect, or the coarse form of a picture it already holds in full.
+  case radarIgnoredOlder(tile: MeshWXRadarTile, takenMinutes: UInt32)
   case notAvailable(MeshWXNotAvailable)
   case unknownType(rawType: UInt8)
 }
@@ -173,6 +179,8 @@ public enum WeatherStateReducer {
       changes.append(store(coverage, in: &state, receivedAt: receivedAt, isOutOfOrder: isOutOfOrder))
     case let .areaSweep(sweep):
       changes.append(store(sweep, in: &state, receivedAt: receivedAt, source: source))
+    case let .radar(radar):
+      changes.append(store(radar, in: &state, receivedAt: receivedAt, source: source))
     case let .notAvailable(notAvailable):
       changes.append(.notAvailable(notAvailable))
     case .request:
@@ -788,6 +796,82 @@ public enum WeatherStateReducer {
     if lhs.builtMinutes != rhs.builtMinutes { return lhs.builtMinutes > rhs.builtMinutes }
     if lhs.lastReceivedAt != rhs.lastReceivedAt { return lhs.lastReceivedAt > rhs.lastReceivedAt }
     return lhs.group < rhs.group
+  }
+
+  // MARK: - Radar
+
+  /// Spec revision 11, §7D: one picture per square of earth, newest `taken` first.
+  ///
+  /// There is no assembly here and never will be — a radar answer is one packet, or the same tile
+  /// at half the detail — so the whole rule is which of two pictures of one square is the one to
+  /// keep. Three parts:
+  ///
+  /// - The **same or a newer** `taken` replaces what is held. Same rather than only newer because
+  ///   the bot re-sends a packet nothing echoed, and because a tile that arrives partial and then
+  ///   whole is the same minute twice with more in it the second time.
+  /// - Except that a **coarse** picture never replaces a fine one of the same `taken`. They are
+  ///   the same minute of the same storm, and the fine one is strictly more of it; the bot cuts a
+  ///   tile coarse only when the fine one would not fit, so this is the phone that already got
+  ///   lucky refusing to give it back.
+  /// - Anything older changes nothing. A backlog drained from the radio's queue at connect would
+  ///   otherwise repaint a live picture with one from an hour ago.
+  ///
+  /// Retention (``retainedRadarTiles(_:)``) runs on every store, so nothing grows without bound.
+  private static func store(
+    _ radar: MeshWXRadar,
+    in state: inout WeatherBotState,
+    receivedAt: Date,
+    source: MeshWXDataSource
+  ) -> WeatherStateChange {
+    let tile = radar.tile
+    if let held = state.radarTiles.first(where: { $0.tile == tile }),
+      !replaces(radar, held: held.radar)
+    {
+      return .radarIgnoredOlder(tile: tile, takenMinutes: radar.takenMinutes)
+    }
+    var kept = state.radarTiles.filter { $0.tile != tile }
+    kept.append(WeatherStoredRadarTile(
+      tile: tile, radar: radar, receivedAt: receivedAt, source: source))
+    state.radarTiles = retainedRadarTiles(kept)
+    return .radarStored(tile: tile, takenMinutes: radar.takenMinutes)
+  }
+
+  /// Whether an arriving tile is the one to keep, against the one held for the same square.
+  static func replaces(_ arriving: MeshWXRadar, held: MeshWXRadar) -> Bool {
+    if arriving.takenMinutes != held.takenMinutes {
+      return arriving.takenMinutes > held.takenMinutes
+    }
+    // The same minute: the finer picture wins, and a second copy of the same one changes nothing
+    // either way.
+    return !(arriving.isCoarse && !held.isCoarse)
+  }
+
+  /// The tiles worth keeping, newest `taken` first (spec revision 11, design §2 "State"):
+  /// nothing more than ``WeatherBotState/radarTileRetentionMinutes`` behind the bot's own clock,
+  /// and at most `limit`, the oldest `taken` dropped.
+  ///
+  /// "The bot's clock" is the newest `taken` this bot has sent, which is the only clock of the
+  /// bot's a radar packet carries. Measuring against the phone's would be measuring a picture's
+  /// age with a clock that was never used to stamp it, and a phone whose time is a day out would
+  /// then hold nothing or hold everything.
+  public static func retainedRadarTiles(
+    _ tiles: [WeatherStoredRadarTile], limit: Int = WeatherBotState.radarTileLimit
+  ) -> [WeatherStoredRadarTile] {
+    let ordered = tiles.sorted(by: isNewerTile)
+    guard let newest = ordered.first?.takenMinutes else { return [] }
+    let cutoff = newest > WeatherBotState.radarTileRetentionMinutes
+      ? newest - WeatherBotState.radarTileRetentionMinutes : 0
+    return Array(ordered.filter { $0.takenMinutes >= cutoff }.prefix(limit))
+  }
+
+  /// Newest first: the picture's own time, then when it arrived, then the tile itself so the
+  /// order never depends on which packet the array happened to be built from.
+  static func isNewerTile(_ lhs: WeatherStoredRadarTile, _ rhs: WeatherStoredRadarTile) -> Bool {
+    if lhs.takenMinutes != rhs.takenMinutes { return lhs.takenMinutes > rhs.takenMinutes }
+    if lhs.receivedAt != rhs.receivedAt { return lhs.receivedAt > rhs.receivedAt }
+    if lhs.tile.zoom != rhs.tile.zoom { return lhs.tile.zoom < rhs.tile.zoom }
+    if lhs.tile.south != rhs.tile.south { return lhs.tile.south < rhs.tile.south }
+    return lhs.tile.west < rhs.tile.west
   }
 
   // MARK: - Ordering

@@ -1591,3 +1591,104 @@
 
 /* Location: WeatherTrafficView.swift - Cancel reason 2: a stronger alert follows, so nothing improved */
 "weather.traffic.cancelReason.upgraded" = "relevée";
+
+// MARK: - Radar, revision 11
+
+/* Location: WeatherRadarSection.swift - The Radar section of a place page, and the radar screen's title */
+"weather.radar.title" = "Radar";
+
+/* Location: WeatherRadarSection.swift - No radar picture is held for the place */
+"weather.radar.empty" = "Pas encore d'image radar.";
+
+/* Location: WeatherRadarSection.swift - The ask, %@ is the weather radio's name */
+"weather.radar.ask" = "Demander l'image radar à %@";
+
+/* Location: WeatherRadarSection.swift - The ask once a picture is already on screen */
+"weather.radar.askNewer" = "Demander une image plus récente";
+
+/* Location: WeatherRadarSection.swift - Under the ask: how often new radar pictures are made */
+"weather.radar.ask.footnote" = "Les images sont produites environ toutes les 15 minutes.";
+
+/* Location: WeatherCopy.swift - When the picture was taken, %@ is a clock time */
+"weather.radar.time" = "Image de %@";
+
+/* Location: WeatherCopy.swift - Added to the time line once the picture is half an hour old */
+"weather.radar.moved" = "Les précipitations se sont déplacées depuis.";
+
+/* Location: WeatherCopy.swift - Light precipitation over the place, %@ is the place */
+"weather.radar.here.light" = "Précipitations faibles à %@.";
+
+/* Location: WeatherCopy.swift - Moderate precipitation over the place, %@ is the place */
+"weather.radar.here.moderate" = "Précipitations modérées à %@.";
+
+/* Location: WeatherCopy.swift - Heavy precipitation over the place, %@ is the place */
+"weather.radar.here.heavy" = "Précipitations fortes à %@.";
+
+/* Location: WeatherCopy.swift - Nothing falling on the place, %@ is the place */
+"weather.radar.here.dry" = "Sec à %@.";
+
+/* Location: WeatherCopy.swift - The place is inside the tile but outside the radar picture, %@ is the place */
+"weather.radar.here.outside" = "Cette image ne va pas jusqu'à %@.";
+
+/* Location: WeatherCopy.swift - The nearest precipitation elsewhere on the picture. %1$@ is a distance like "45 km", %2$@ a compass point like "NW" */
+"weather.radar.nearest" = "Précipitations les plus proches à %1$@ %2$@.";
+
+/* Location: WeatherCopy.swift - The nearest heavy core, when it is not the cell already named. %1$@ is a distance, %2$@ a compass point */
+"weather.radar.nearestHeavy" = "Précipitations fortes à %1$@ %2$@.";
+
+/* Location: WeatherCopy.swift - Nothing at all on this picture */
+"weather.radar.none" = "Aucune précipitation sur cette image.";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 20 dBZ and up */
+"weather.radar.level.light" = "Faibles";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 35 dBZ and up */
+"weather.radar.level.moderate" = "Modérées";
+
+/* Location: WeatherRadarView.swift - Legend swatch, 50 dBZ and up */
+"weather.radar.level.heavy" = "Fortes";
+
+/* Location: WeatherRadarView.swift - Accessibility label for the Local / Regional / Wide control */
+"weather.radar.width" = "Largeur";
+
+/* Location: WeatherCopy.swift - The narrowest width, a 2 degree square */
+"weather.radar.width.local" = "Local";
+
+/* Location: WeatherCopy.swift - A 4 degree square */
+"weather.radar.width.regional" = "Régional";
+
+/* Location: WeatherCopy.swift - An 8 degree square */
+"weather.radar.width.wide" = "Large";
+
+/* Location: WeatherRadarView.swift - Nothing held for the width on screen */
+"weather.radar.notAsked" = "Pas encore demandé.";
+
+/* Location: WeatherRadarView.swift - Some cells are outside the radar picture and are drawn grey, never as dry */
+"weather.radar.partial" = "Une partie de cette zone est hors de l'image radar.";
+
+/* Location: WeatherRadarView.swift - The radio halved the detail to fit the picture into one packet */
+"weather.radar.coarse" = "Une image chargée, envoyée à moitié moins de détail pour tenir dans un paquet.";
+
+/* Location: WeatherCopy.swift - Which of the Weather Service mosaics the tile was cut from, %@ is its name */
+"weather.radar.mosaic" = "Découpé dans la mosaïque %@.";
+
+/* Location: WeatherCopy.swift - Refusal reason 0, %@ is the weather radio's name */
+"weather.radar.refused.noPicture" = "%@ n'a pas d'image radar récente pour cette zone.";
+
+/* Location: WeatherCopy.swift - Refusal reason 2: the radio has no dish */
+"weather.radar.refused.unsupported" = "%@ ne reçoit pas d'images radar.";
+
+/* Location: WeatherCopy.swift - Refusal reason 4: the same picture went out minutes ago */
+"weather.radar.refused.recent" = "%@ a envoyé cette image il y a quelques minutes et n'a rien de plus récent.";
+
+/* Location: WeatherCopy.swift - The group of stored radar tiles on the Cached screen */
+"weather.radar.cached.title" = "Images radar";
+
+/* Location: WeatherCopy.swift - What a radar answer is called in a request row and in channel traffic */
+"weather.radar.request.title" = "Image radar";
+
+/* Location: WeatherTrafficView.swift - How many cells of a tile carry precipitation, %lld is two or more */
+"weather.radar.traffic.cells" = "%lld cellules avec précipitations";
+
+/* Location: WeatherTrafficView.swift - The same when one cell does */
+"weather.radar.traffic.cellsOne" = "1 cellule avec précipitations";

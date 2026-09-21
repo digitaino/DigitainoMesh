@@ -11,6 +11,14 @@ public enum MeshWXDecodeError: Error, Sendable, Hashable {
   /// A Text chunk's body was not valid UTF-8 (a chunk boundary in the wrong place, or
   /// a corrupted packet that still passed the frame MAC).
   case badUTF8
+  /// A Radar tile's quadtree asked for more bits than the packet had (spec revision 11, §7D).
+  /// The tree is self-describing, so a packet that ends early describes a grid nobody can draw —
+  /// half of it would be silently dry, which on a radar picture is the worst possible lie.
+  case radarTreeTruncated(bits: Int)
+  /// A partial tile's `bounds` were not a rectangle of its own grid. Refused rather than clamped:
+  /// the bounds are what says which cells are unknown, and a guess there paints unknown ground
+  /// dry or dry ground unknown.
+  case radarBoundsOutsideGrid(row0: UInt8, row1: UInt8, col0: UInt8, col1: UInt8, size: Int)
 }
 
 /// Decodes one v5 datagram (spec §3-§8).
@@ -46,6 +54,7 @@ public enum MeshWXDecoder {
       case .coverage: .coverage(try decodeCoverage(bytes, header: header))
       case .request: .request(try decodeRequest(bytes, header: header))
       case .areaSweep: .areaSweep(try decodeAreaSweep(bytes, header: header))
+      case .radar: .radar(try decodeRadar(bytes, header: header))
       case nil: .unknown
       }
     return MeshWXMessage(header: header, payload: payload)
@@ -426,6 +435,110 @@ public enum MeshWXDecoder {
       scope: scope,
       entries: entries
     )
+  }
+
+  // MARK: - Radar (type 11, spec revision 11, §7D)
+
+  /// One tile of a radar picture: twelve fixed bytes, four more when the picture is partial, then
+  /// a quadtree of two-bit levels most significant bit first.
+  ///
+  /// The shortest legal packet is **13** bytes, not 12: an all-dry tile is still three bits of
+  /// tree (`0` split, `00` level), so a packet with no cell bytes at all is a truncation and not
+  /// an empty picture. A partial one needs 17 for the same reason.
+  ///
+  /// Bits left over after the tree are padding and are ignored — the writer zero-fills to the byte
+  /// — but a tree that runs out of bits is refused. Half a grid decoded as dry is not a picture
+  /// with a hole in it, it is a picture that says the rain stopped.
+  static func decodeRadar(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXRadar {
+    try need(bytes, MeshWXWire.radarFixedSize + 1, "radar")
+    let isCoarse = header.flags & MeshWXWire.radarCoarseBit != 0
+    let isPartial = header.flags & MeshWXWire.radarPartialBit != 0
+    let size = isCoarse ? MeshWXWire.radarCoarseGrid : MeshWXWire.radarGrid
+    let shape = bytes[11]
+
+    var offset = MeshWXWire.radarFixedSize
+    var bounds: MeshWXRadarBounds?
+    if isPartial {
+      try need(bytes, offset + MeshWXWire.radarBoundsSize + 1, "radar bounds")
+      let box = MeshWXRadarBounds(
+        row0: bytes[offset], row1: bytes[offset + 1], col0: bytes[offset + 2],
+        col1: bytes[offset + 3])
+      guard box.isInside(size: size) else {
+        throw MeshWXDecodeError.radarBoundsOutsideGrid(
+          row0: box.row0, row1: box.row1, col0: box.col0, col1: box.col1, size: size)
+      }
+      bounds = box
+      offset += MeshWXWire.radarBoundsSize
+    }
+
+    return MeshWXRadar(
+      takenMinutes: u32(bytes, 4),
+      south: Int8(bitPattern: bytes[8]),
+      west: i16(bytes, 9),
+      zoom: shape & MeshWXWire.radarZoomMask,
+      product: shape >> MeshWXWire.radarProductShift,
+      isCoarse: isCoarse,
+      bounds: bounds,
+      cells: try unpackRadarCells(bytes, from: offset, size: size)
+    )
+  }
+
+  /// Reads bits most significant bit first from `bytes[start...]`, which is the order the
+  /// quadtree is written in and the only thing about it that has to be said twice.
+  private struct BitReader {
+    let bytes: [UInt8]
+    let start: Int
+    var position = 0
+
+    mutating func take(_ width: Int) throws -> UInt8 {
+      var value: UInt8 = 0
+      for _ in 0..<width {
+        let index = start + (position >> 3)
+        guard index < bytes.count else {
+          throw MeshWXDecodeError.radarTreeTruncated(bits: position)
+        }
+        value = (value << 1) | ((bytes[index] >> (7 - UInt8(position & 7))) & 1)
+        position += 1
+      }
+      return value
+    }
+  }
+
+  /// `node(size)`: at one cell, two bits of level; otherwise one bit — `0` and the whole square is
+  /// one level (two bits follow), `1` and four children follow north-west, north-east, south-west,
+  /// south-east.
+  ///
+  /// Recursion is bounded by the grid: `node(32)` is six levels deep, so there is no stack to
+  /// exhaust even on a packet built to be hostile.
+  private static func unpackRadarCells(
+    _ bytes: [UInt8], from start: Int, size: Int
+  ) throws -> [UInt8] {
+    var cells = [UInt8](repeating: 0, count: size * size)
+    var reader = BitReader(bytes: bytes, start: start)
+
+    func node(row: Int, col: Int, span: Int) throws {
+      if span == 1 {
+        cells[row * size + col] = try reader.take(2)
+        return
+      }
+      if try reader.take(1) == 0 {
+        let level = try reader.take(2)
+        for y in row..<(row + span) {
+          for x in col..<(col + span) {
+            cells[y * size + x] = level
+          }
+        }
+        return
+      }
+      let half = span / 2
+      try node(row: row, col: col, span: half)
+      try node(row: row, col: col + half, span: half)
+      try node(row: row + half, col: col, span: half)
+      try node(row: row + half, col: col + half, span: half)
+    }
+
+    try node(row: 0, col: 0, span: size)
+    return cells
   }
 
   // MARK: - Primitives

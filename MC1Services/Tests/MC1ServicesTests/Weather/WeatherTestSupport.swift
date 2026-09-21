@@ -230,6 +230,49 @@ enum WeatherFixture {
     )
   }
 
+  /// One radar tile (spec revision 11, §7D). The flags nibble is built by hand so the header and
+  /// the body cannot disagree about the grid or the bounds — the two things the decoder reads off
+  /// the nibble rather than out of the body.
+  ///
+  /// - Parameters:
+  ///   - wet: cells to raise, as `(row, col, level)` in the grid this tile is at.
+  ///   - isCoarse: the 16 × 16 grid, which is what a tile too busy for one packet goes out as.
+  ///   - bounds: the part of the tile the picture reaches; cells outside it stay at level 0, which
+  ///     on the wire is what "unknown" is.
+  static func radar(
+    seq: UInt8,
+    takenMinutes: UInt32 = t0Minutes,
+    south: Int8 = 29,
+    west: Int16 = -99,
+    zoom: UInt8 = 0,
+    product: UInt8 = 1,
+    isCoarse: Bool = false,
+    bounds: MeshWXRadarBounds? = nil,
+    wet: [(Int, Int, UInt8)] = [],
+    source: MeshWXDataSource = .goesSatellite,
+    bot: UInt16 = botID
+  ) -> MeshWXMessage {
+    let size = isCoarse ? MeshWXWire.radarCoarseGrid : MeshWXWire.radarGrid
+    var cells = [UInt8](repeating: 0, count: size * size)
+    for (row, col, level) in wet {
+      cells[row * size + col] = level
+    }
+    let flags: UInt8 = (isCoarse ? MeshWXWire.radarCoarseBit : 0)
+      | (bounds == nil ? 0 : MeshWXWire.radarPartialBit) | sourceBits(source)
+    return MeshWXMessage(
+      header: header(seq: seq, type: .radar, flags: flags, bot: bot),
+      payload: .radar(MeshWXRadar(
+        takenMinutes: takenMinutes, south: south, west: west, zoom: zoom, product: product,
+        isCoarse: isCoarse, bounds: bounds, cells: cells))
+    )
+  }
+
+  /// The zoom 0 tile the fixture's radar messages cover: 29N to 31N, 99W to 97W — the tile
+  /// `>radar 30.270,-97.740` resolves to, which is Austin's.
+  static let austinTile = MeshWXRadarTile(south: 29, west: -99, zoom: 0)
+  static let austinLatitude = 30.27
+  static let austinLongitude = -97.74
+
   static func notAvailable(seq: UInt8, letter: Character, reason: MeshWXNotAvailableReason, bot: UInt16 = botID) -> MeshWXMessage {
     MeshWXMessage(
       header: header(seq: seq, type: .notAvailable, bot: bot),

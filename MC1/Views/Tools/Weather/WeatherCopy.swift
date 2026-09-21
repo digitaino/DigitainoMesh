@@ -270,6 +270,13 @@ enum WeatherCopy {
         if case .rateLimited = reason, case .areaSweep? = request {
           return L10n.Weather.Weather.AreaMap.busy(source)
         }
+        // Radar refuses under its own letter and says four different things (spec revision 11,
+        // §3): "no recent picture here", "this radio has no dish", "it sent this picture minutes
+        // ago and has nothing newer". A generic "not available" for all three is a reader tapping
+        // again for ever.
+        if case .radar? = request {
+          return radarRefusal(WeatherRadarRefusal(reason: reason), source: source)
+        }
         return notAvailable(reason, source: sourceStart)
       case .failed:
         return L10n.Weather.Weather.Request.failed(time(at))
@@ -698,6 +705,12 @@ enum WeatherCopy {
       // bundle may hold no index for it at all (revision 10, §1.3).
       return L10n.Weather.Weather.RequestName.forecastAt(
         WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude))
+    case let .radar(latitude, longitude, _):
+      // The coordinate, which is what the request carries; the lattice turns it into the tile
+      // (revision 11, §7D).
+      return withSubject(
+        L10n.Weather.Weather.Radar.Request.title,
+        WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude))
     }
   }
 
@@ -764,6 +777,14 @@ enum WeatherCopy {
       return request.map { requestName($0, tables: tables) } ?? textSubjectName(subject)
     case .coverage:
       return L10n.Weather.Weather.RequestName.coverage
+    case let .radar(tile):
+      // The square of earth, named the way the radar screen names it: the width, then the centre
+      // in degrees. Nothing on the wire says who asked for a tile and the lattice means several
+      // people may have, so the row names the picture and claims nothing about the question
+      // (spec revision 11, §7D).
+      return [
+        L10n.Weather.Weather.Radar.Request.title, radarWidthName(tile.zoom), radarCentre(tile)
+      ].compactMap { $0 }.joined(separator: " · ")
     }
   }
 
@@ -800,6 +821,115 @@ enum WeatherCopy {
     case .airportReports: L10n.Weather.Weather.Cache.airportReports
     case .warningNarratives: L10n.Weather.Weather.Cache.narratives
     case .warningsElsewhere: L10n.Weather.Weather.Cache.warningsElsewhere
+    case .radarPictures: L10n.Weather.Weather.Radar.Cached.title
     }
+  }
+
+  // MARK: - Radar (§18)
+
+  /// "Local", "Regional", "Wide" — and **nil** for zoom 3, which exists on the wire and is not
+  /// offered (spec revision 11, §3).
+  ///
+  /// Not kilometres, which is the whole of the owner's decision: a tile is two degrees, 222 km
+  /// tall everywhere and a different width at every latitude, so a number on the control would be
+  /// wrong everywhere but one parallel.
+  static func radarWidthName(_ zoom: Int) -> String? {
+    switch zoom {
+    case 0: L10n.Weather.Weather.Radar.Width.local
+    case 1: L10n.Weather.Weather.Radar.Width.regional
+    case 2: L10n.Weather.Weather.Radar.Width.wide
+    default: nil
+    }
+  }
+
+  /// The tile's centre, in the same three decimals a request is written in — a square of earth has
+  /// no name, and its middle is the one thing about it a reader can place on a map.
+  static func radarCentre(_ tile: MeshWXRadarTile) -> String {
+    let half = Double(tile.spanDegrees) / 2
+    return WeatherRequest.coordinateKey(
+      latitude: Double(tile.south) + half, longitude: Double(tile.west) + half)
+  }
+
+  /// "Picture from 6:38 PM · 12 min old", and from 30 minutes "· Precipitation has moved since."
+  ///
+  /// The age is the **picture's** own, measured from the time printed on it (``WeatherRadarAge``)
+  /// and never from when the packet arrived: a tile drained from the radio's queue an hour late is
+  /// an hour older than it looks. Under a minute the age is left off rather than shown as "0 s
+  /// old", which reads as a stopwatch and not as a picture.
+  static func radarTime(
+    _ picture: WeatherRadarPicture, now: Date, calendar: Calendar, locale: Locale
+  ) -> String {
+    var parts = [L10n.Weather.Weather.Radar.time(WeatherFormatting.clockTime(
+      picture.stored.takenAt, now: now, calendar: calendar, locale: locale))]
+    if picture.age.minutes >= 1 {
+      parts.append(L10n.Weather.Weather.Time.old(
+        WeatherFormatting.duration(seconds: Double(picture.age.minutes) * 60)))
+    }
+    // The caution the tone alone cannot carry: half an hour is two mosaics, and a reader looking
+    // at where a storm was two mosaics ago has to be told that is what they are looking at.
+    if picture.age.isOld { parts.append(L10n.Weather.Weather.Radar.moved) }
+    return parts.joined(separator: " · ")
+  }
+
+  /// What the picture says about the place, in the sentences of spec revision 11, §3.
+  ///
+  /// "Nearest precipitation" is named only when it is **not** raining on the place: standing in
+  /// the rain, the nearest other wet cell is seven kilometres away and means nothing. A separate
+  /// heavy core is named either way — that is the one thing on the picture worth walking inside
+  /// for — and ``WeatherRadarSummary`` has already dropped it when it is the cell just named or
+  /// when the reader is in it.
+  static func radarSummary(_ summary: WeatherRadarSummary, placeName: String) -> [String] {
+    func reach(_ value: WeatherRadarSummary.Reach, heavy: Bool) -> String {
+      let distance = WeatherFormatting.kilometres(value.kilometres)
+      return heavy
+        ? L10n.Weather.Weather.Radar.nearestHeavy(distance, value.bearing.abbreviation)
+        : L10n.Weather.Weather.Radar.nearest(distance, value.bearing.abbreviation)
+    }
+
+    // Inside the square, outside the picture. Never "dry": the mosaic did not look here.
+    guard let here = summary.here else {
+      return [L10n.Weather.Weather.Radar.Here.outside(placeName)]
+    }
+
+    var lines: [String] = []
+    switch here {
+    case .none:
+      guard let nearest = summary.nearest else { return [L10n.Weather.Weather.Radar.none] }
+      lines.append(L10n.Weather.Weather.Radar.Here.dry(placeName))
+      lines.append(reach(nearest, heavy: false))
+    case .light:
+      lines.append(L10n.Weather.Weather.Radar.Here.light(placeName))
+    case .moderate:
+      lines.append(L10n.Weather.Weather.Radar.Here.moderate(placeName))
+    case .heavy:
+      lines.append(L10n.Weather.Weather.Radar.Here.heavy(placeName))
+    }
+    if let heavy = summary.nearestHeavy { lines.append(reach(heavy, heavy: true)) }
+    return lines
+  }
+
+  /// Why the radio would not send a tile (spec revision 11, §3).
+  ///
+  /// Radar is the request whose refusal carries most of the information: "no recent picture for
+  /// this area" and "this radio has no dish at all" ask the reader to do entirely different
+  /// things, and one "not available" for both would leave them tapping for ever.
+  static func radarRefusal(_ refusal: WeatherRadarRefusal, source: String) -> String {
+    let start = WeatherFormatting.sentenceStart(source)
+    switch refusal {
+    case .noPicture: return L10n.Weather.Weather.Radar.Refused.noPicture(start)
+    case .unsupported: return L10n.Weather.Weather.Radar.Refused.unsupported(start)
+    case .sentRecently: return L10n.Weather.Weather.Radar.Refused.recent(start)
+    // The place did not resolve: the forecast's sentence, because it is the same fact and this
+    // app sends a coordinate, so it means the radio could not place it at all.
+    case .unknownPlace: return L10n.Weather.Weather.Request.NotAvailable.unknownPlace(start)
+    case let .other(reason): return notAvailable(reason, source: start)
+    }
+  }
+
+  /// "Cut from the Southern Plains mosaic." — which of the fourteen pictures this square came out
+  /// of. Nil for a product index this bundle does not know: a newer radio, not a bad packet, and
+  /// losing the mosaic's name must not lose the picture.
+  static func radarMosaic(_ product: UInt8, tables: MeshWXTables = .shared) -> String? {
+    tables.radarProductName(product).map { L10n.Weather.Weather.Radar.mosaic($0) }
   }
 }

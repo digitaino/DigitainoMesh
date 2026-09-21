@@ -1080,6 +1080,250 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
   }
 }
 
+// MARK: - Radar
+
+/// How hard it is raining (or snowing) in one cell (spec revision 11, §7D).
+///
+/// Two bits, and the thresholds are the bundle's (`protocol.json` `v5.radar.levels_dbz`): 20 dBZ
+/// and up is light, 35 moderate, 50 heavy. A cell carries the **strongest** echo in it rather than
+/// an average, so a hail core two kilometres across still reads heavy at seven-kilometre cells.
+///
+/// ``none`` is "no echo here" only inside a partial tile's ``MeshWXRadarBounds``. Outside them it
+/// is the wire's way of writing *unknown* — the quadtree has no fourth value — and nothing may
+/// draw those cells as dry (``MeshWXRadar/isUnknown(row:col:)``).
+public enum MeshWXRadarLevel: UInt8, Sendable, Hashable, Codable, CaseIterable {
+  case none = 0
+  case light = 1
+  case moderate = 2
+  case heavy = 3
+
+  /// Never fails: the field is two bits wide and all four values are defined.
+  public init(bits: UInt8) {
+    self = MeshWXRadarLevel(rawValue: bits & 0x3) ?? .none
+  }
+
+  /// Whether anything is falling in the cell.
+  public var isWet: Bool { self != .none }
+}
+
+/// The part of a tile a partial radar picture reaches (spec revision 11, §7D).
+///
+/// Inclusive rows and columns **in the packet's own grid**, so a coarse tile's bounds run 0-15 and
+/// a fine one's 0-31. The tile still covers the whole square of earth; these say which of its
+/// cells the mosaic had anything to say about.
+public struct MeshWXRadarBounds: Sendable, Hashable, Codable {
+  public var row0: UInt8
+  public var row1: UInt8
+  public var col0: UInt8
+  public var col1: UInt8
+
+  public init(row0: UInt8, row1: UInt8, col0: UInt8, col1: UInt8) {
+    self.row0 = row0
+    self.row1 = row1
+    self.col0 = col0
+    self.col1 = col1
+  }
+
+  /// Whether a cell of the packet's grid is inside the picture.
+  public func contains(row: Int, col: Int) -> Bool {
+    row >= Int(row0) && row <= Int(row1) && col >= Int(col0) && col <= Int(col1)
+  }
+
+  /// Whether the bounds describe a real rectangle of a `size` × `size` grid. Checked on both
+  /// sides of the wire: a `row1` of 200 would otherwise put every cell "outside the picture".
+  public func isInside(size: Int) -> Bool {
+    row0 <= row1 && Int(row1) < size && col0 <= col1 && Int(col1) < size
+  }
+
+  /// The four bytes as the wire orders them.
+  var wireBytes: [UInt8] { [row0, row1, col0, col1] }
+}
+
+/// A square of the earth a radar answer covers (spec revision 11, §7D).
+///
+/// Tiles sit on a fixed lattice of half their span, so a tile one phone asked for is a tile every
+/// phone can use: two people a few kilometres apart ask about the same square and the second one
+/// costs the channel nothing. The lattice is what makes that true, and ``containing(latitude:longitude:zoom:)``
+/// is the whole of it — the same arithmetic in every language a client is written in, ties
+/// included.
+public struct MeshWXRadarTile: Sendable, Hashable, Codable {
+  /// Southern edge, whole degrees.
+  public var south: Int
+  /// Western edge, whole degrees.
+  public var west: Int
+  /// 0 to ``MeshWXWire/maxRadarZoom``.
+  public var zoom: Int
+
+  public init(south: Int, west: Int, zoom: Int) {
+    self.south = south
+    self.west = west
+    self.zoom = zoom
+  }
+
+  /// The tile that answers a coordinate: the one whose **centre** is the nearest lattice point.
+  ///
+  /// `floor(x / step + 0.5) * step - step`, not a rounding function: `round()` is half-to-even in
+  /// Swift and Python and half-away-from-zero in JavaScript, and three clients that disagree about
+  /// 30.5 would ask for two different tiles and each pay for one. A tie falls **up** everywhere.
+  ///
+  /// Centring on the place rather than snapping to a corner is what keeps the asked coordinate at
+  /// least a quarter of the span from every edge — 55 km at zoom 0 — so the picture is about the
+  /// place and not about the county next door.
+  ///
+  /// A zoom outside 0…``MeshWXWire/maxRadarZoom`` is clamped rather than refused: this is the
+  /// lattice, not a request, and every caller wants a tile back.
+  public static func containing(latitude: Double, longitude: Double, zoom: Int) -> MeshWXRadarTile {
+    let level = min(max(zoom, 0), Int(MeshWXWire.maxRadarZoom))
+    let step = Double(1 << level)
+    func origin(_ value: Double) -> Int {
+      Int((value / step + 0.5).rounded(.down) * step - step)
+    }
+    return MeshWXRadarTile(south: origin(latitude), west: origin(longitude), zoom: level)
+  }
+
+  /// How many degrees the tile spans on each side: 2, 4, 8, 16.
+  public var spanDegrees: Int { 1 << (zoom + 1) }
+
+  public var north: Int { south + spanDegrees }
+  public var east: Int { west + spanDegrees }
+
+  /// One cell's width in degrees, for a grid of `size` cells a side.
+  public func cellDegrees(size: Int) -> Double {
+    size > 0 ? Double(spanDegrees) / Double(size) : 0
+  }
+
+  /// Whether a coordinate is in the tile. Half-open on the north and east edges, so two
+  /// neighbouring tiles never both claim a point.
+  public func contains(latitude: Double, longitude: Double) -> Bool {
+    latitude >= Double(south) && latitude < Double(north)
+      && longitude >= Double(west) && longitude < Double(east)
+  }
+
+  /// The patch of earth one cell covers. Row 0 is the **northern** row and column 0 the western
+  /// one (spec revision 11, §7D), which is the picture's order and not the lattice's.
+  public func cellBox(row: Int, col: Int, size: Int) -> (south: Double, west: Double, north: Double, east: Double) {
+    let cell = cellDegrees(size: size)
+    let top = Double(north) - Double(row) * cell
+    let left = Double(west) + Double(col) * cell
+    return (south: top - cell, west: left, north: top, east: left + cell)
+  }
+
+  /// The cell a coordinate falls in, or nil when it is outside the tile.
+  ///
+  /// Clamped into the grid after the division: a coordinate a hair inside the northern edge can
+  /// otherwise land on row −0 through floating point, and an out-of-range index here would be an
+  /// index into somebody's cell array.
+  public func cell(latitude: Double, longitude: Double, size: Int) -> (row: Int, col: Int)? {
+    guard size > 0, contains(latitude: latitude, longitude: longitude) else { return nil }
+    let cell = cellDegrees(size: size)
+    let row = Int(((Double(north) - latitude) / cell).rounded(.down))
+    let col = Int(((longitude - Double(west)) / cell).rounded(.down))
+    return (row: min(max(row, 0), size - 1), col: min(max(col, 0), size - 1))
+  }
+}
+
+/// One tile of a radar picture (type 11, spec revision 11, §7D).
+///
+/// **One packet, always.** Radar was in the v4 protocol and was taken out on 14 September because
+/// it pulled a four-megabyte composite off the internet for every answer; revision 11 brings it
+/// back cut from the mosaics the dish already receives, as a quadtree of two-bit levels that fits
+/// a 165-byte datagram — 131 bytes for Dallas under a squall line, 13 for a clear tile. When the
+/// fine picture does not fit, the same tile goes out at half the detail (``isCoarse``) rather than
+/// in two packets: there is no `>part` for radar and never will be.
+public struct MeshWXRadar: Sendable, Hashable, Codable {
+  /// Unix minutes: the time **printed on the radar picture**. Not when the bot received the
+  /// mosaic, not when it sent the packet. The age on screen is measured from this, so a tile
+  /// drained from the radio's queue an hour late is an hour older than it looks.
+  public var takenMinutes: UInt32
+  /// The tile's southern edge, whole degrees.
+  public var south: Int8
+  /// The tile's western edge, whole degrees (−180 to 179).
+  public var west: Int16
+  /// 0 to ``MeshWXWire/maxRadarZoom``, from the shape byte's low two bits.
+  public var zoom: UInt8
+  /// Which mosaic the tile was cut from: an index into `protocol.json` `v5.radar.products`.
+  public var product: UInt8
+  /// Flags bit 0: the grid is 16 × 16, not 32 × 32.
+  public var isCoarse: Bool
+  /// Flags bit 1: the picture reaches only these rows and columns. Nil means the whole tile is
+  /// inside it, which is the ordinary case.
+  public var bounds: MeshWXRadarBounds?
+  /// The grid, row-major, **north row first and west column first**, `size * size` of them, each
+  /// 0 to 3. Kept as the raw levels rather than as ``MeshWXRadarLevel`` so a decode and re-encode
+  /// is byte-identical whatever a future bot puts in the two bits.
+  public var cells: [UInt8]
+
+  public init(
+    takenMinutes: UInt32,
+    south: Int8,
+    west: Int16,
+    zoom: UInt8,
+    product: UInt8,
+    isCoarse: Bool,
+    bounds: MeshWXRadarBounds? = nil,
+    cells: [UInt8]
+  ) {
+    self.takenMinutes = takenMinutes
+    self.south = south
+    self.west = west
+    self.zoom = zoom
+    self.product = product
+    self.isCoarse = isCoarse
+    self.bounds = bounds
+    self.cells = cells
+  }
+
+  /// Cells along one side: 16 when coarse, else 32.
+  public var size: Int { isCoarse ? MeshWXWire.radarCoarseGrid : MeshWXWire.radarGrid }
+
+  /// The square of earth this is a picture of.
+  public var tile: MeshWXRadarTile {
+    MeshWXRadarTile(south: Int(south), west: Int(west), zoom: Int(zoom))
+  }
+
+  /// The level of one cell, or ``MeshWXRadarLevel/none`` for an index off the grid.
+  public func level(row: Int, col: Int) -> MeshWXRadarLevel {
+    guard row >= 0, col >= 0, row < size, col < size else { return .none }
+    let index = row * size + col
+    guard cells.indices.contains(index) else { return .none }
+    return MeshWXRadarLevel(bits: cells[index])
+  }
+
+  /// Whether a cell is outside the radar picture, so its level 0 means *unknown* rather than dry
+  /// (spec revision 11, §7D). Always false for a whole tile.
+  public func isUnknown(row: Int, col: Int) -> Bool {
+    guard let bounds else { return false }
+    return !bounds.contains(row: row, col: col)
+  }
+
+  /// How many cells carry precipitation. The channel traffic row's number, and the one measure of
+  /// a tile that means the same thing at both grid sizes.
+  public var wetCellCount: Int {
+    cells.reduce(0) { $0 + ($1 & 0x3 != 0 ? 1 : 0) }
+  }
+
+  /// A 32 × 32 grid as 16 × 16, each coarse cell the **highest** of the four it replaces — the
+  /// reference's `radar_coarsen`, and what a bot does when the fine tile does not fit.
+  ///
+  /// Here rather than on the bot's side alone because the app's own tests fabricate tiles, and a
+  /// coarsening that disagreed with the bot's would make every coarse vector fail for the wrong
+  /// reason. Returns the cells unchanged for a grid that is already coarse.
+  public static func coarsened(cells: [UInt8], size: Int) -> [UInt8] {
+    guard size > 1, cells.count == size * size else { return cells }
+    let half = size / 2
+    var out = [UInt8](repeating: 0, count: half * half)
+    for row in 0..<half {
+      for col in 0..<half {
+        let top = 2 * row * size + 2 * col
+        let bottom = (2 * row + 1) * size + 2 * col
+        out[row * half + col] = max(
+          max(cells[top], cells[top + 1]), max(cells[bottom], cells[bottom + 1]))
+      }
+    }
+    return out
+  }
+}
+
 // MARK: - Message
 
 /// The decoded body of a v5 message.
@@ -1097,6 +1341,8 @@ public enum MeshWXPayload: Sendable, Hashable {
   case request(MeshWXRequest)
   /// One packet of a national area sweep (spec §7C).
   case areaSweep(MeshWXAreaSweep)
+  /// One tile of a radar picture (spec revision 11, §7D).
+  case radar(MeshWXRadar)
   /// A reserved or third-party type (spec §2.2, nibbles 8-15). Receivers ignore these,
   /// but the header still decoded, so `(bot, seq)` tracking keeps working.
   case unknown

@@ -27,6 +27,12 @@ public enum MeshWXEncodeError: Error, Sendable, Hashable {
   case codePointTooLarge
   /// A not-available request string had no letter after the `>` prefix.
   case emptyRequest
+  /// A partial radar tile carried an echo where the picture does not reach (spec revision 11,
+  /// §7D). Outside the bounds the wire's level 0 means *unknown*, so a cell there with a level in
+  /// it would arrive as unknown and the reading would be lost.
+  case radarCellOutsideBounds(row: Int, col: Int)
+  /// A radar tile's `bounds` were not a rectangle of its own grid.
+  case radarBoundsOutsideGrid(row0: UInt8, row1: UInt8, col0: UInt8, col1: UInt8, size: Int)
 }
 
 /// Encodes v5 datagrams (spec §3-§8).
@@ -703,6 +709,157 @@ public enum MeshWXEncoder {
     )
   }
 
+  // MARK: - Radar (type 11, spec revision 11, §7D)
+
+  /// One tile of a radar picture. The app never sends one — only a bot cuts a tile out of a
+  /// mosaic — but the vector round trip runs through here, and the radar screen's tests need a
+  /// squall line over Dallas without waiting for one.
+  ///
+  /// `cells` is the grid row-major, north row first, `size * size` of them, each 0 to 3; whether
+  /// the tile is coarse follows from **which grid it is** rather than from a flag the caller could
+  /// set the wrong way. A caller whose fine grid does not fit catches ``MeshWXEncodeError/oversize(what:bytes:)``
+  /// and sends ``MeshWXRadar/coarsened(cells:size:)``, which always does.
+  ///
+  /// - Parameter bounds: the part of the tile the picture reaches, when it does not reach all of
+  ///   it. Every cell outside it must already be level 0, because that is what "unknown" is on the
+  ///   wire; a caller that left an echo out there is refused rather than having it quietly erased.
+  public static func radar(
+    seq: UInt8,
+    bot: UInt16,
+    takenMinutes: UInt32,
+    south: Int8,
+    west: Int16,
+    zoom: UInt8,
+    product: UInt8,
+    cells: [UInt8],
+    bounds: MeshWXRadarBounds? = nil,
+    source: MeshWXDataSource = .unstated
+  ) throws -> Data {
+    let fine = MeshWXWire.radarGrid * MeshWXWire.radarGrid
+    let coarse = MeshWXWire.radarCoarseGrid * MeshWXWire.radarCoarseGrid
+    guard cells.count == fine || cells.count == coarse else {
+      throw MeshWXEncodeError.badCount(what: "radar cells", count: cells.count, allowed: coarse...fine)
+    }
+    let isCoarse = cells.count == coarse
+    let size = isCoarse ? MeshWXWire.radarCoarseGrid : MeshWXWire.radarGrid
+    if let bad = cells.firstIndex(where: { $0 > 3 }) {
+      throw MeshWXEncodeError.outOfRange(field: "radar level", value: Int(cells[bad]))
+    }
+    guard zoom <= MeshWXWire.maxRadarZoom else {
+      throw MeshWXEncodeError.outOfRange(field: "radar zoom", value: Int(zoom))
+    }
+    guard product <= MeshWXWire.maxRadarProduct else {
+      throw MeshWXEncodeError.outOfRange(field: "radar product", value: Int(product))
+    }
+    guard south >= -90, south <= 90 else {
+      throw MeshWXEncodeError.outOfRange(field: "radar south", value: Int(south))
+    }
+    guard west >= -180, west <= 179 else {
+      throw MeshWXEncodeError.outOfRange(field: "radar west", value: Int(west))
+    }
+
+    var flags: UInt8 = isCoarse ? MeshWXWire.radarCoarseBit : 0
+    if bounds != nil { flags |= MeshWXWire.radarPartialBit }
+    flags |= source.flagBits
+
+    var out = try header(seq: seq, bot: bot, type: .radar, flags: flags)
+    out.appendU32(takenMinutes)
+    out.append(UInt8(bitPattern: south))
+    out.appendI16(west)
+    out.append((product << MeshWXWire.radarProductShift) | zoom)
+    if let bounds {
+      guard bounds.isInside(size: size) else {
+        throw MeshWXEncodeError.radarBoundsOutsideGrid(
+          row0: bounds.row0, row1: bounds.row1, col0: bounds.col0, col1: bounds.col1, size: size)
+      }
+      for row in 0..<size {
+        for col in 0..<size where !bounds.contains(row: row, col: col) {
+          guard cells[row * size + col] == 0 else {
+            throw MeshWXEncodeError.radarCellOutsideBounds(row: row, col: col)
+          }
+        }
+      }
+      out.append(contentsOf: bounds.wireBytes)
+    }
+    out.append(packRadarCells(cells, size: size))
+    return try checkSize(out, "radar")
+  }
+
+  /// The body's own fields under a fresh header, for the round trip.
+  public static func radar(
+    seq: UInt8, bot: UInt16, _ radar: MeshWXRadar, source: MeshWXDataSource = .unstated
+  ) throws -> Data {
+    try self.radar(
+      seq: seq,
+      bot: bot,
+      takenMinutes: radar.takenMinutes,
+      south: radar.south,
+      west: radar.west,
+      zoom: radar.zoom,
+      product: radar.product,
+      cells: radar.cells,
+      bounds: radar.bounds,
+      source: source
+    )
+  }
+
+  /// Writes bits most significant bit first and zero-fills the last byte, which is what the
+  /// decoder's padding rule is the other half of.
+  private struct BitWriter {
+    private var bytes: [UInt8] = []
+    private var bitCount = 0
+
+    mutating func put(_ value: UInt8, width: Int) {
+      for shift in stride(from: width - 1, through: 0, by: -1) {
+        if bitCount % 8 == 0 { bytes.append(0) }
+        if (value >> UInt8(shift)) & 1 == 1 {
+          bytes[bitCount / 8] |= 1 << (7 - UInt8(bitCount % 8))
+        }
+        bitCount += 1
+      }
+    }
+
+    var data: Data { Data(bytes) }
+  }
+
+  /// `node(size)`, the mirror of the decoder's: one bit for "this square is all one level", two
+  /// bits for the level, four children in reading order otherwise. A dry tile comes out as three
+  /// bits — one byte — which is the whole reason the tree is a tree.
+  private static func packRadarCells(_ cells: [UInt8], size: Int) -> Data {
+    var writer = BitWriter()
+
+    func isUniform(row: Int, col: Int, span: Int, level: UInt8) -> Bool {
+      for y in row..<(row + span) {
+        for x in col..<(col + span) where cells[y * size + x] != level {
+          return false
+        }
+      }
+      return true
+    }
+
+    func node(row: Int, col: Int, span: Int) {
+      let first = cells[row * size + col]
+      if span == 1 {
+        writer.put(first, width: 2)
+        return
+      }
+      if isUniform(row: row, col: col, span: span, level: first) {
+        writer.put(0, width: 1)
+        writer.put(first, width: 2)
+        return
+      }
+      writer.put(1, width: 1)
+      let half = span / 2
+      node(row: row, col: col, span: half)
+      node(row: row, col: col + half, span: half)
+      node(row: row + half, col: col, span: half)
+      node(row: row + half, col: col + half, span: half)
+    }
+
+    node(row: 0, col: 0, span: size)
+    return writer.data
+  }
+
   // MARK: - Round trip
 
   /// Re-encode a decoded message, header and all.
@@ -729,6 +886,7 @@ public enum MeshWXEncoder {
     case .coverage(let coverage): return try self.coverage(seq: seq, bot: bot, coverage)
     case .request(let request): return try self.request(seq: seq, bot: bot, request)
     case .areaSweep(let sweep): return try areaSweep(seq: seq, bot: bot, sweep, source: source)
+    case .radar(let radar): return try self.radar(seq: seq, bot: bot, radar, source: source)
     case .unknown:
       throw MeshWXEncodeError.outOfRange(field: "type", value: Int(message.header.rawType))
     }

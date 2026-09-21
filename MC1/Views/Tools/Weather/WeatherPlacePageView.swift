@@ -88,6 +88,13 @@ struct WeatherPlacePageView: View {
       WeatherForecastSection(screen: screen)
     }
 
+    // After the forecast (spec revision 11, §3), and outside the empty-place rule above: radar is
+    // the one product that always has something to say about a coordinate — the square is two
+    // degrees and no bundle has to hold a point or a station in it — so a place with nothing else
+    // is exactly the place where it is worth offering. The section has no refusal state to stack
+    // on the calm card (§3.1 U-13): it is one line and an ask, or a picture.
+    WeatherRadarSection(screen: screen)
+
     reports(screen)
 
     WeatherRadioRowSection(screen: screen, onOpen: onOpenRadio)

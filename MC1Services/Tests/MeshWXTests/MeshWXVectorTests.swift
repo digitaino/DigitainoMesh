@@ -31,6 +31,109 @@ struct MeshWXVectorTests {
     #expect(MeshWXVectors.all.contains { $0.name == "area_sweep_scoped_packet0" })
     #expect(MeshWXVectors.all.contains { $0.name == "request_parts" })
     #expect(MeshWXVectors.all.contains { $0.name == "request_forecast_at" })
+    // Revision 11's four: a real tile off the dish, the coarse and partial form, the request and
+    // the refusal that carries the letter no other request has.
+    #expect(MeshWXVectors.all.contains { $0.name == "radar_tile" })
+    #expect(MeshWXVectors.all.contains { $0.name == "radar_tile_coarse_partial" })
+    #expect(MeshWXVectors.all.contains { $0.name == "request_radar" })
+    #expect(MeshWXVectors.all.contains { $0.name == "not_available_radar" })
+  }
+
+  /// Spec revision 11, §7D, against the publisher's own bytes: the Dallas tile of 20 September
+  /// 2026, 23:38Z, cut from the Southern Plains mosaic — 131 bytes for 1,024 cells, which is what
+  /// the quadtree is for.
+  @Test func theRadarTileVectorIsTheSquallLineOverDallas() throws {
+    let vector = try #require(MeshWXVectors.all.first { $0.name == "radar_tile" })
+    let data = try #require(Data(meshWXHex: vector.hex))
+    #expect(data.count == 131)
+    #expect(data[3] == (MeshWXMessageType.radar.rawValue << 4) | 0x4, "type 11, source 1 GOES")
+    let message = try MeshWXDecoder.decode(data)
+    #expect(message.header.dataSource == .goesSatellite)
+    guard case let .radar(radar) = message.payload else {
+      Issue.record("expected a radar tile")
+      return
+    }
+    #expect(radar.takenMinutes == 29_832_458)
+    #expect(!radar.isCoarse)
+    #expect(radar.bounds == nil)
+    #expect(radar.size == MeshWXWire.radarGrid)
+    #expect(radar.cells.count == 32 * 32)
+    #expect(radar.product == 1)
+    // The tile the request for Dallas resolves to, which is what makes the two vectors one
+    // exchange: `>radar 32.780,-96.800` asks for the zoom 0 tile, and this is that tile.
+    #expect(radar.tile == MeshWXRadarTile.containing(latitude: 32.780, longitude: -96.800, zoom: 0))
+    #expect(radar.tile == MeshWXRadarTile(south: 32, west: -98, zoom: 0))
+    #expect(radar.tile.north == 34 && radar.tile.east == -96)
+    // Dallas itself: light rain at the city, from the publisher's own grid.
+    let cell = try #require(radar.tile.cell(latitude: 32.780, longitude: -96.800, size: radar.size))
+    #expect(radar.level(row: cell.row, col: cell.col) == .light)
+    #expect(!radar.isUnknown(row: cell.row, col: cell.col))
+    #expect(radar.wetCellCount > 300 && radar.wetCellCount < 480)
+
+    // Coarsening the publisher's own tile is a picture of the same storm at half the detail, and
+    // it fits a packet with room to spare — which is the bot's fallback, and the reason there is
+    // no `>part` for radar.
+    let coarse = MeshWXRadar.coarsened(cells: radar.cells, size: radar.size)
+    #expect(coarse.count == 16 * 16)
+    let packed = try MeshWXEncoder.radar(
+      seq: 40, bot: 19578, takenMinutes: radar.takenMinutes, south: radar.south, west: radar.west,
+      zoom: radar.zoom, product: radar.product, cells: coarse, source: .goesSatellite)
+    #expect(packed.count < data.count)
+  }
+
+  /// Spec revision 11, §7D: the coarse and partial form, whose four bounds bytes say which rows
+  /// of its own 16 × 16 grid the mosaic reached. Every cell outside them is level 0 on the wire
+  /// and **unknown** on screen, which is the one thing about this message a client can get wrong.
+  @Test func theCoarsePartialVectorMarksTheRowsThePictureDoesNotReach() throws {
+    let vector = try #require(MeshWXVectors.all.first { $0.name == "radar_tile_coarse_partial" })
+    let data = try #require(Data(meshWXHex: vector.hex))
+    #expect(data[3] & 0x3 == MeshWXWire.radarCoarseBit | MeshWXWire.radarPartialBit)
+    #expect(Array(data[12..<16]) == [0, 9, 0, 15], "rows 0-9, columns 0-15")
+    guard case let .radar(radar) = try MeshWXDecoder.decode(data).payload else {
+      Issue.record("expected a radar tile")
+      return
+    }
+    #expect(radar.isCoarse)
+    #expect(radar.size == MeshWXWire.radarCoarseGrid)
+    #expect(radar.bounds == MeshWXRadarBounds(row0: 0, row1: 9, col0: 0, col1: 15))
+    #expect(radar.tile == MeshWXRadarTile(south: 24, west: -100, zoom: 1))
+    #expect(radar.tile.spanDegrees == 4)
+    // Rows 10 and below are outside the picture: nothing in them, and nothing that may be drawn
+    // as clear weather.
+    #expect(radar.isUnknown(row: 12, col: 3))
+    #expect(!radar.isUnknown(row: 9, col: 3))
+    for row in 10..<16 {
+      #expect((0..<16).allSatisfy { radar.level(row: row, col: $0) == MeshWXRadarLevel.none })
+    }
+    // An echo where the picture does not reach has no encoding: level 0 out there already means
+    // unknown, so the reading would be lost rather than carried.
+    var stray = radar.cells
+    stray[12 * 16 + 3] = 1
+    #expect(throws: MeshWXEncodeError.radarCellOutsideBounds(row: 12, col: 3)) {
+      _ = try MeshWXEncoder.radar(
+        seq: 41, bot: 19578, takenMinutes: radar.takenMinutes, south: radar.south,
+        west: radar.west, zoom: radar.zoom, product: radar.product, cells: stray,
+        bounds: radar.bounds, source: .goesSatellite)
+    }
+  }
+
+  /// Spec revision 11, §7D: `>radar` is refused under the letter **`x`**, not `r`. `r` is
+  /// `>rain`, and a refusal that could mean either is a refusal nobody can act on.
+  @Test func theRadarRefusalCarriesTheLetterThatIsNotItsOwnFirst() throws {
+    let vector = try #require(MeshWXVectors.all.first { $0.name == "not_available_radar" })
+    let data = try #require(Data(meshWXHex: vector.hex))
+    guard case let .notAvailable(refusal) = try MeshWXDecoder.decode(data).payload else {
+      Issue.record("expected a not_available")
+      return
+    }
+    #expect(refusal.requestLetter == MeshWXWire.radarRequestLetter)
+    #expect(refusal.requestCode == 0x78)
+    #expect(refusal.reason == .rateLimited, "this tile of this picture went out minutes ago")
+    // The encoder takes the letter, never the request word: `notAvailable(request: ">radar")`
+    // would write `r` and refuse the wrong thing.
+    #expect(try MeshWXEncoder.notAvailable(
+      seq: 42, bot: 19578, requestCode: UInt8(MeshWXWire.radarRequestLetter.asciiValue ?? 0),
+      reason: .rateLimited) == data)
   }
 
   /// Spec revision 10, §1.2, against the publisher's own bytes: `total` is `0x81` — bit 7 set and
@@ -72,7 +175,11 @@ struct MeshWXVectorTests {
     #expect(digest.hex == MeshWXVectors.requestDigestHex)
 
     let sender = Data([0x01, 0x02, 0x03, 0x04, 0x05, 0x06])
-    for (name, text) in [("request_parts", ">part 212 1,4,6"), ("request_forecast_at", ">f 35.687,-105.938")] {
+    for (name, text) in [
+      ("request_parts", ">part 212 1,4,6"),
+      ("request_forecast_at", ">f 35.687,-105.938"),
+      ("request_radar", ">radar 32.780,-96.800")
+    ] {
       let vector = try #require(MeshWXVectors.all.first { $0.name == name })
       let want = try #require(Data(meshWXHex: vector.hex))
       #expect(vector.decoded.text == text)
@@ -128,6 +235,9 @@ struct MeshWXVectorTests {
     case .areaSweep(let sweep):
       #expect(want.name == "area_sweep")
       try expectAreaSweep(sweep, matches: want)
+    case .radar(let radar):
+      #expect(want.name == "radar")
+      try expectRadar(radar, matches: want)
     case .unknown:
       Issue.record("vector \(vector.name) decoded as an unknown type")
     }
@@ -469,6 +579,28 @@ struct MeshWXVectorTests {
       #expect(area.start == expected.start)
       #expect(area.run == expected.run)
     }
+  }
+
+  private func expectRadar(_ radar: MeshWXRadar, matches want: MeshWXVectors.Decoded) throws {
+    #expect(radar.takenMinutes == want.takenMin)
+    #expect(radar.south == want.south)
+    #expect(radar.west == want.west)
+    #expect(radar.zoom == want.zoom)
+    #expect(radar.product == want.product)
+    #expect(radar.isCoarse == want.coarse)
+    #expect((radar.bounds != nil) == want.partial)
+    #expect(radar.size == want.size)
+    if let bounds = radar.bounds {
+      #expect([bounds.row0, bounds.row1, bounds.col0, bounds.col1] == want.bounds)
+    } else {
+      #expect(want.bounds == nil)
+    }
+    // The grid against the publisher's own rows, as strings of the digits 0-3, north row first.
+    let wantRows = try #require(want.rows)
+    let rows = (0..<radar.size).map { row in
+      (0..<radar.size).map { String(radar.level(row: row, col: $0).rawValue) }.joined()
+    }
+    #expect(rows == wantRows)
   }
 
   private func expectNotAvailable(

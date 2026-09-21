@@ -171,6 +171,10 @@ public struct WeatherScreenSnapshot: Sendable {
   public var readings: [WeatherStationReading]
   public var primaryStation: WeatherPrimaryStation
   public var forecast: WeatherForecastCard
+  /// The Radar section of the place page (spec revision 11, §3), carried here exactly as
+  /// ``forecast`` is: the view draws the card and asks the model nothing. ``WeatherRadarCard/noCoordinate``
+  /// is the section being absent, which is what a page with no coordinate gets.
+  public var radar: WeatherRadarCard
   public var otherPlaces: [WeatherOtherPlace]
   public var texts: [WeatherTextItem]
   /// What the channel carried recently, newest first, and everything this phone is holding from
@@ -269,6 +273,10 @@ public struct WeatherScreenSnapshot: Sendable {
       readings: WeatherStations.ordered(readings, leading: primaryStation.index),
       primaryStation: primaryStation,
       forecast: forecast,
+      // Every bot's tiles together: the lattice is shared, so a tile of this square from the bot
+      // next door is a picture of the same storm (spec revision 11, §7D).
+      radar: WeatherRadarCard.make(
+        place: inputs.place, tiles: WeatherRadarCard.tiles(in: inputs.states), now: now),
       otherPlaces: WeatherOtherPlace.make(states: inputs.states, excludingPoint: placePoint, tables: tables, now: now),
       texts: texts,
       heard: WeatherHeard.make(states: inputs.states, now: now),

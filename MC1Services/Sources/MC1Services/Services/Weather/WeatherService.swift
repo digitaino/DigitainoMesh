@@ -392,6 +392,14 @@ public actor WeatherService {
     /// Texas says nothing about Oklahoma, and refusing an Oklahoma tap because somebody asked
     /// about Texas two minutes ago would leave a map with a hole in it and no way to fill it.
     case areaSweep(states: [String])
+    /// `>radar`: the tile for a square of earth (spec revision 11, §7D).
+    ///
+    /// Keyed by the tile and not by the bot, because the lattice is shared: a tile of that square
+    /// from any bot on the channel is the same picture of the same storm, and asking a second bot
+    /// for it a minute later would spend a packet on a picture the phone already has. The bot's
+    /// own rule is the mirror of this one — it refuses the same tile of the same picture for five
+    /// minutes, reason 4.
+    case radar(tile: MeshWXRadarTile)
   }
 
   struct AnswerSlot: Hashable {
@@ -792,6 +800,12 @@ public actor WeatherService {
         if let states = sweepScopeCodes(of: sweep) {
           fill(botID, .areaSweep(states: states), asOf: Date(unixMinutes: sweep.builtMinutes))
         }
+      case let (.radarStored(tile, takenMinutes), .radar):
+        // Filled for every bot's tile of that square, not only the addressed bot's: the answer is
+        // the picture, and the picture is the same one wherever it came from (spec revision 11,
+        // §7D). `contentAsOf` is the time printed on the radar image, which is what the screen
+        // then says the picture is from.
+        fill(nil, .radar(tile: tile), asOf: Date(unixMinutes: takenMinutes))
       case (.coverageStored, .coverage):
         // No content time: the statement describes the bot, not an hour (spec §7A), so the
         // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
@@ -919,6 +933,12 @@ public actor WeatherService {
     case .coverage: AnswerSlot(botID: botID, key: .coverage)
     case let .areaSweep(_, states):
       AnswerSlot(botID: botID, key: .areaSweep(states: WeatherRequest.sweepStates(states)))
+    // By the tile, from any bot (spec revision 11, §7D). Pictures are made about every fifteen
+    // minutes, so five minutes after one arrived there is nothing newer to fetch — and the bot
+    // would refuse the ask anyway, reason 4, spending a packet on the refusal.
+    case let .radar(latitude, longitude, zoom):
+      AnswerSlot(botID: nil, key: .radar(tile: MeshWXRadarTile.containing(
+        latitude: latitude, longitude: longitude, zoom: Int(zoom))))
     // `>part` is the repair, not the answer, and the five-minute rule must never hold it back
     // (spec revision 10, §1.1). The case it exists for is precisely an answer received in the
     // last five minutes that arrived with holes in it: refusing the ask on the grounds that the
@@ -1357,6 +1377,13 @@ public actor WeatherService {
       return fromAddressedBot && sweep.group == group
     case let (.parts(group), .text(chunk)):
       return fromAddressedBot && chunk.group == group
+    case let (.radar(tile), .radar(radar)):
+      // The square of earth and nothing else (spec revision 11, §7D). Not the `taken`: whatever
+      // the bot has is the answer to "show me the radar here", and a phone that held out for a
+      // newer picture would time out on the only one there is. Not the bot either — the lattice
+      // is fixed so that a tile is a tile, and another bot answering somebody else's `>radar` for
+      // the same square settles this one for free.
+      return radar.tile == tile
     default:
       return false
     }

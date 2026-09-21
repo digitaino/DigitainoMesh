@@ -98,6 +98,11 @@ struct WeatherScreenContext: Sendable {
   /// The source bot's state: its missed-messages and missing-warnings requests are chosen from it
   /// alone (`WeatherAlertRequests`).
   var sourceState: WeatherBotState?
+  /// Every bot's radar tiles in one list (spec revision 11, §7D). Not the source bot's alone: the
+  /// lattice is shared, so a tile of this square from the radio next door is a picture of the same
+  /// storm, and the radar screen's width control has to see all of them to say what is held for a
+  /// width. The snapshot's own card is built from exactly this list.
+  var radarTiles: [WeatherStoredRadarTile] = []
   /// A held warning is placed by areas whose outlines have not loaded.
   var needsGeometry = false
   var isGeometryLoaded = false
@@ -252,6 +257,7 @@ enum WeatherScreenBuilder {
     }
 
     context.sourceState = snapshot.source.flatMap { states[$0.botID] }
+    context.radarTiles = WeatherRadarCard.tiles(in: states)
 
     if !geometry.isLoaded {
       context.needsGeometry = Self.needsGeometry(hasPlace: place != nil, states: states)

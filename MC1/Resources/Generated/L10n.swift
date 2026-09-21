@@ -8292,6 +8292,118 @@ public enum L10n {
         /// Location: WeatherConditionsSection.swift - My location page before permission, above the one tap that asks for it
         public static let useMyLocationPrompt = L10n.tr("Weather", "weather.place.useMyLocationPrompt", fallback: "See the weather where you are.")
       }
+      public enum Radar {
+        /// Location: WeatherRadarSection.swift - The ask, %@ is the weather radio's name
+        public static func ask(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.radar.ask", String(describing: p1), fallback: "Ask %@ for the radar picture")
+        }
+        /// Location: WeatherRadarSection.swift - The ask once a picture is already on screen
+        public static let askNewer = L10n.tr("Weather", "weather.radar.askNewer", fallback: "Ask for a newer picture")
+        /// Location: WeatherRadarView.swift - The radio halved the detail to fit the picture into one packet
+        public static let coarse = L10n.tr("Weather", "weather.radar.coarse", fallback: "A busy picture, sent at half detail to fit one packet.")
+        /// Location: WeatherRadarSection.swift - No radar picture is held for the place
+        public static let empty = L10n.tr("Weather", "weather.radar.empty", fallback: "No radar picture yet.")
+        /// Location: WeatherCopy.swift - Which of the Weather Service mosaics the tile was cut from, %@ is its name
+        public static func mosaic(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.radar.mosaic", String(describing: p1), fallback: "Cut from the %@ mosaic.")
+        }
+        /// Location: WeatherCopy.swift - Added to the time line once the picture is half an hour old
+        public static let moved = L10n.tr("Weather", "weather.radar.moved", fallback: "Precipitation has moved since.")
+        /// Location: WeatherCopy.swift - The nearest precipitation elsewhere on the picture. %1$@ is a distance like "45 km", %2$@ a compass point like "NW"
+        public static func nearest(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.radar.nearest", String(describing: p1), String(describing: p2), fallback: "Nearest precipitation %1$@ %2$@.")
+        }
+        /// Location: WeatherCopy.swift - The nearest heavy core, when it is not the cell already named. %1$@ is a distance, %2$@ a compass point
+        public static func nearestHeavy(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.radar.nearestHeavy", String(describing: p1), String(describing: p2), fallback: "Heavy precipitation %1$@ %2$@.")
+        }
+        /// Location: WeatherCopy.swift - Nothing at all on this picture
+        public static let `none` = L10n.tr("Weather", "weather.radar.none", fallback: "No precipitation on this picture.")
+        /// Location: WeatherRadarView.swift - Nothing held for the width on screen
+        public static let notAsked = L10n.tr("Weather", "weather.radar.notAsked", fallback: "Not asked for yet.")
+        /// Location: WeatherRadarView.swift - Some cells are outside the radar picture and are drawn grey, never as dry
+        public static let partial = L10n.tr("Weather", "weather.radar.partial", fallback: "Part of this area is outside the radar picture.")
+        /// Location: WeatherCopy.swift - When the picture was taken, %@ is a clock time
+        public static func time(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.radar.time", String(describing: p1), fallback: "Picture from %@")
+        }
+        /// Location: WeatherRadarSection.swift - The Radar section of a place page, and the radar screen's title
+        public static let title = L10n.tr("Weather", "weather.radar.title", fallback: "Radar")
+        /// Location: WeatherRadarView.swift - Accessibility label for the Local / Regional / Wide control
+        public static let width = L10n.tr("Weather", "weather.radar.width", fallback: "Width")
+        public enum Ask {
+          /// Location: WeatherRadarSection.swift - Under the ask: how often new radar pictures are made
+          public static let footnote = L10n.tr("Weather", "weather.radar.ask.footnote", fallback: "Pictures are made about every 15 minutes.")
+        }
+        public enum Cached {
+          /// Location: WeatherCopy.swift - The group of stored radar tiles on the Cached screen
+          public static let title = L10n.tr("Weather", "weather.radar.cached.title", fallback: "Radar pictures")
+        }
+        public enum Here {
+          /// Location: WeatherCopy.swift - Nothing falling on the place, %@ is the place
+          public static func dry(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.here.dry", String(describing: p1), fallback: "Dry at %@.")
+          }
+          /// Location: WeatherCopy.swift - Heavy precipitation over the place, %@ is the place
+          public static func heavy(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.here.heavy", String(describing: p1), fallback: "Heavy precipitation at %@.")
+          }
+          /// Location: WeatherCopy.swift - Light precipitation over the place, %@ is the place
+          public static func light(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.here.light", String(describing: p1), fallback: "Light precipitation at %@.")
+          }
+          /// Location: WeatherCopy.swift - Moderate precipitation over the place, %@ is the place
+          public static func moderate(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.here.moderate", String(describing: p1), fallback: "Moderate precipitation at %@.")
+          }
+          /// Location: WeatherCopy.swift - The place is inside the tile but outside the radar picture, %@ is the place
+          public static func outside(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.here.outside", String(describing: p1), fallback: "This picture does not reach %@.")
+          }
+        }
+        public enum Level {
+          /// Location: WeatherRadarView.swift - Legend swatch, 50 dBZ and up
+          public static let heavy = L10n.tr("Weather", "weather.radar.level.heavy", fallback: "Heavy")
+          /// Location: WeatherRadarView.swift - Legend swatch, 20 dBZ and up
+          public static let light = L10n.tr("Weather", "weather.radar.level.light", fallback: "Light")
+          /// Location: WeatherRadarView.swift - Legend swatch, 35 dBZ and up
+          public static let moderate = L10n.tr("Weather", "weather.radar.level.moderate", fallback: "Moderate")
+        }
+        public enum Refused {
+          /// Location: WeatherCopy.swift - Refusal reason 0, %@ is the weather radio's name
+          public static func noPicture(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.refused.noPicture", String(describing: p1), fallback: "%@ has no recent radar picture for this area.")
+          }
+          /// Location: WeatherCopy.swift - Refusal reason 4: the same picture went out minutes ago
+          public static func recent(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.refused.recent", String(describing: p1), fallback: "%@ sent this picture a few minutes ago and has nothing newer yet.")
+          }
+          /// Location: WeatherCopy.swift - Refusal reason 2: the radio has no dish
+          public static func unsupported(_ p1: Any) -> String {
+            return L10n.tr("Weather", "weather.radar.refused.unsupported", String(describing: p1), fallback: "%@ does not receive radar pictures.")
+          }
+        }
+        public enum Request {
+          /// Location: WeatherCopy.swift - What a radar answer is called in a request row and in channel traffic
+          public static let title = L10n.tr("Weather", "weather.radar.request.title", fallback: "Radar picture")
+        }
+        public enum Traffic {
+          /// Location: WeatherTrafficView.swift - How many cells of a tile carry precipitation, %lld is two or more
+          public static func cells(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.radar.traffic.cells", p1, fallback: "%lld cells with precipitation")
+          }
+          /// Location: WeatherTrafficView.swift - The same when one cell does
+          public static let cellsOne = L10n.tr("Weather", "weather.radar.traffic.cellsOne", fallback: "1 cell with precipitation")
+        }
+        public enum Width {
+          /// Location: WeatherCopy.swift - The narrowest width, a 2 degree square
+          public static let local = L10n.tr("Weather", "weather.radar.width.local", fallback: "Local")
+          /// Location: WeatherCopy.swift - A 4 degree square
+          public static let regional = L10n.tr("Weather", "weather.radar.width.regional", fallback: "Regional")
+          /// Location: WeatherCopy.swift - An 8 degree square
+          public static let wide = L10n.tr("Weather", "weather.radar.width.wide", fallback: "Wide")
+        }
+      }
       public enum RadioRow {
         /// Location: WeatherCopy.swift - Radio row, how old the alert list is. %@ is a time like "8:02 PM"
         public static func alertsAsOf(_ p1: Any) -> String {

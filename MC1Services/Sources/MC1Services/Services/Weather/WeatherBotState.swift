@@ -468,6 +468,45 @@ public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
   }
 }
 
+/// One radar tile the phone is holding (spec revision 11, §7D).
+///
+/// One picture per tile and no history: a radar answer is a snapshot of a square of earth at a
+/// minute, and the only thing anyone wants of an older one is to know it has been replaced. Keyed
+/// by ``tile`` rather than by the coordinate anybody asked about, because the lattice is shared —
+/// two people three kilometres apart ask about the same square, and the second one costs the
+/// channel nothing.
+public struct WeatherStoredRadarTile: Sendable, Hashable, Codable {
+  /// The square of earth, which is this entry's identity.
+  public var tile: MeshWXRadarTile
+  public var radar: MeshWXRadar
+  /// Phone clock: when the packet arrived. The age on screen is measured from
+  /// ``MeshWXRadar/takenMinutes`` and never from this — a tile drained from the radio's queue an
+  /// hour late is an hour older than it looks.
+  public var receivedAt: Date
+  /// Where the bot got the picture (spec §2.2, revision 7). A tile off the dish is
+  /// ``MeshWXDataSource/goesSatellite``, which is the whole point of revision 11: no internet at
+  /// either end.
+  public var source: MeshWXDataSource
+
+  public init(
+    tile: MeshWXRadarTile,
+    radar: MeshWXRadar,
+    receivedAt: Date,
+    source: MeshWXDataSource = .unstated
+  ) {
+    self.tile = tile
+    self.radar = radar
+    self.receivedAt = receivedAt
+    self.source = source
+  }
+
+  /// When the picture was taken, on the bot's clock.
+  public var takenAt: Date { Date(unixMinutes: radar.takenMinutes) }
+
+  /// The picture's own time, which is what every rule about a tile is written in terms of.
+  public var takenMinutes: UInt32 { radar.takenMinutes }
+}
+
 // MARK: - Per-bot state
 
 /// One accepted message in the duplicate window: its `seq`, and a fingerprint of its content so
@@ -555,11 +594,27 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// list from growing — a national sweep drops everything older than it, a scoped one drops
   /// older scoped sweeps it fully contains, and ``areaSweepLimit`` is the ceiling.
   public var areaSweeps: [WeatherAreaSweepAssembly]
+  /// The radar tiles this bot sent (spec revision 11, §7D), **newest `taken` first**. Empty until
+  /// somebody on the channel asks for one: revision 11 is request-only, and nothing is ever
+  /// broadcast on a schedule.
+  ///
+  /// One entry per square of earth, whatever the zoom: a zoom 1 tile of the same centre is a
+  /// different square and gets a row of its own, which is what lets the radar screen's width
+  /// control show what is held for each width.
+  public var radarTiles: [WeatherStoredRadarTile]
 
   /// The most sweeps kept per bot. Eight because the picker offers fifteen states at a time and
   /// a handful of selections plus the last national sweep is what a map is built out of; past
   /// that the oldest is not on screen anywhere.
   public static let areaSweepLimit = 8
+  /// The most radar tiles kept per bot (spec revision 11, design §2 "State"). Twelve is three
+  /// widths of four places, which is more than a pager of saved places ever has open at once; past
+  /// that the oldest picture is on no screen anywhere.
+  public static let radarTileLimit = 12
+  /// How far behind the bot's own clock a held tile may be. Three hours is well past the two the
+  /// screens will draw one for (``WeatherRadarPick``): this is the rule that keeps the file from
+  /// growing, not the rule that decides what is shown.
+  public static let radarTileRetentionMinutes: UInt32 = 3 * 60
   /// The most coordinate-keyed forecasts kept per bot.
   public static let unbundledForecastLimit = 12
   /// The ``unbundledForecasts`` key for an answer this phone did not ask for. Not a coordinate,
@@ -585,12 +640,13 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     texts = [:]
     coverage = nil
     areaSweeps = []
+    radarTiles = []
   }
 
   private enum CodingKeys: String, CodingKey {
     case botID, lastSeq, recentMessages, lastHeardAt, lastLiveHeardAt, needsDigest, gapDetectedAt, warnings,
       pendingUpgrades, recentCancels, digest, missingFromDigest, observations, forecasts,
-      unbundledForecasts, texts, coverage, areaSweeps
+      unbundledForecasts, texts, coverage, areaSweeps, radarTiles
   }
 
   private enum LegacyCodingKeys: String, CodingKey {
@@ -646,6 +702,9 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
       areaSweeps = (try legacy.decodeIfPresent(WeatherAreaSweepAssembly.self, forKey: .areaSweep))
         .map { [$0] } ?? []
     }
+    // Revision 11, §7D. Absent is empty, which is exactly right for a file written before radar:
+    // nobody had asked for a tile, so there is nothing to lift.
+    radarTiles = try container.decodeIfPresent([WeatherStoredRadarTile].self, forKey: .radarTiles) ?? []
   }
 
   /// The newest sweep held, whatever its scope. What a caller wants when it needs one sweep and

@@ -1,4 +1,5 @@
 import Foundation
+import MeshWX
 
 /// The MeshWX v5 request grammar (spec §8.2), one case per line of the table, with the text
 /// the bot parses and the answer the app should wait for.
@@ -95,6 +96,18 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// the wire carries `group` and the indexes and nothing else — so nothing may pair an answer by
   /// it.
   case parts(group: UInt8, indexes: [UInt8], of: WeatherPartsKind)
+  /// `>radar 30.270,-97.740` / `>radar 30.270,-97.740 z2` — the radar tile around a coordinate,
+  /// as one Radar packet (spec revision 11, §7D).
+  ///
+  /// The coordinate rather than a place name, always: the tile is decided by the lattice
+  /// (``MeshWXRadarTile/containing(latitude:longitude:zoom:)``), and a phone that knows which tile
+  /// it asked for can pair the answer and can tell that somebody else's answer is the same square
+  /// of earth. `>radar round rock tx` exists on the wire for people typing in chat; the app never
+  /// sends it, because a place the bot resolves comes back as a tile this phone did not choose.
+  ///
+  /// `zoom` is 0 to ``MeshWXWire/maxRadarZoom``; the screen offers 0, 1 and 2 (Local, Regional,
+  /// Wide). Zoom 0 sends no `z` word at all, which is the form the bot's own vector carries.
+  case radar(latitude: Double, longitude: Double, zoom: UInt8)
 
   /// The DM body, exactly as the bot parses it.
   public var wireText: String {
@@ -131,6 +144,13 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
       }
     case let .parts(group, indexes, _):
       ">part \(group) \(indexes.map(String.init).joined(separator: ","))"
+    case let .radar(latitude, longitude, zoom):
+      // Zoom 0 sends nothing after the place: it is the default, and "anything else after the
+      // place is part of the place" (spec revision 11, §7D) — so a bare `z0` would be read as a
+      // request for the place "z0" by nothing, but it costs three bytes and says nothing.
+      zoom == 0
+        ? ">radar \(Self.coordinateKey(latitude: latitude, longitude: longitude))"
+        : ">radar \(Self.coordinateKey(latitude: latitude, longitude: longitude)) z\(zoom)"
     }
   }
 
@@ -156,9 +176,14 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
 
   /// The letter a Not-available reply echoes back (spec §8.3): the ASCII code of the
   /// request's first letter after `>`. Revision 10 adds `p`, for `>part`.
+  ///
+  /// `>radar` is the one exception, and revision 11 made it deliberately: it is refused under
+  /// **`x`**, because `r` is already `>rain` and a refusal that could mean either is a refusal
+  /// nobody can act on (spec revision 11, §7D).
   public var requestLetter: Character {
     // `wireText` always starts with `>` followed by a lowercase ASCII letter.
-    wireText[wireText.index(after: wireText.startIndex)]
+    guard case .radar = self else { return wireText[wireText.index(after: wireText.startIndex)] }
+    return MeshWXWire.radarRequestLetter
   }
 
   /// What the bot sends back when it can serve the request.
@@ -188,6 +213,11 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case .coverage: .coverage
     case .areaSweep: .areaSweep
     case let .parts(group, _, _): .parts(group: group)
+    // The tile, not the coordinate: the lattice is what turns a place into a square of earth
+    // (spec revision 11, §7D), and the answer names that square and never the question.
+    case let .radar(latitude, longitude, zoom):
+      .radar(tile: MeshWXRadarTile.containing(
+        latitude: latitude, longitude: longitude, zoom: Int(zoom)))
     }
   }
 
@@ -202,6 +232,12 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   public var acceptsAnswerFromAnyBot: Bool {
     switch self {
     case .forecast, .forecastDiscussion, .stormReports, .rainfall, .metar, .taf, .observation, .warning, .spaceWeather:
+      true
+    // A radar tile is a square of the earth on a lattice every client shares, cut from a mosaic
+    // every bot with a dish receives (spec revision 11, §7D). Two bots' tiles of the same square
+    // are pictures of the same weather, so a second bot's answer to somebody else settles this —
+    // which is the whole reason the lattice is fixed rather than centred on the asker.
+    case .radar:
       true
     // A narrative names its event and areas but not its office or tracking number, so only the
     // bot asked can vouch that the text is for the warning asked about. A coverage statement
@@ -257,7 +293,7 @@ extension WeatherRequest {
   private enum CodingKeys: String, CodingKey {
     case digest, activeWarnings, warning, warningsTouching, warningText, observations, observation,
       homeForecast, forecast, forecastForPlace, forecastAt, forecastDiscussion, spaceWeather,
-      stormReports, rainfall, metar, taf, hazardousOutlook, coverage, areaSweep, parts
+      stormReports, rainfall, metar, taf, hazardousOutlook, coverage, areaSweep, parts, radar
   }
 
   private enum IdentityKeys: String, CodingKey { case identity }
@@ -270,6 +306,7 @@ extension WeatherRequest {
   private enum StateKeys: String, CodingKey { case state }
   private enum AreaSweepKeys: String, CodingKey { case includesAdvisories, states }
   private enum PartsKeys: String, CodingKey { case group, indexes, of }
+  private enum RadarKeys: String, CodingKey { case latitude, longitude, zoom }
 
   public init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -337,6 +374,12 @@ extension WeatherRequest {
         group: try nested.decode(UInt8.self, forKey: .group),
         indexes: try nested.decode([UInt8].self, forKey: .indexes),
         of: try nested.decode(WeatherPartsKind.self, forKey: .of))
+    case .radar:
+      let nested = try container.nestedContainer(keyedBy: RadarKeys.self, forKey: key)
+      self = .radar(
+        latitude: try nested.decode(Double.self, forKey: .latitude),
+        longitude: try nested.decode(Double.self, forKey: .longitude),
+        zoom: try nested.decode(UInt8.self, forKey: .zoom))
     }
   }
 }
@@ -368,6 +411,12 @@ public enum WeatherReplyKind: Sendable, Hashable {
   /// indexes asked for arrived is checked by the service against the request itself, the way a
   /// text reply's words are (`WeatherService.answers`).
   case parts(group: UInt8)
+  /// `>radar <lat>,<lon> [zN]`: the Radar tile for that square of earth (spec revision 11, §7D).
+  ///
+  /// The tile, not the coordinate, and whatever its `taken`: the lattice is shared, so the answer
+  /// to this phone's question and the answer to somebody else's a kilometre away are the same
+  /// packet — and a picture from ten minutes ago is still the picture the bot has.
+  case radar(tile: MeshWXRadarTile)
 }
 
 /// Text subjects on the wire (spec §8.1), kept as raw codes here so this file needs no

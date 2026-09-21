@@ -30,11 +30,34 @@ struct WeatherRequestTests {
       (.hazardousOutlook, ">hwo"),
       (.coverage, ">cov"),
       (.areaSweep(includesAdvisories: false, states: []), ">wmap"),
-      (.areaSweep(includesAdvisories: true, states: []), ">wmap all")
+      (.areaSweep(includesAdvisories: true, states: []), ">wmap all"),
+      // Spec revision 11, §7D: three decimals, the `>f` form, and no `z` word at zoom 0.
+      (.radar(latitude: 30.27, longitude: -97.74, zoom: 0), ">radar 30.270,-97.740"),
+      (.radar(latitude: 30.27, longitude: -97.74, zoom: 2), ">radar 30.270,-97.740 z2"),
+      (.radar(latitude: 32.78, longitude: -96.80, zoom: 0), ">radar 32.780,-96.800"),
+      (.radar(latitude: 32.78, longitude: -96.80, zoom: 3), ">radar 32.780,-96.800 z3")
     ]
     for (request, text) in expected {
       #expect(request.wireText == text)
+      #expect(text.utf8.count <= MeshWXWire.maxRequestTextBytes)
     }
+  }
+
+  /// Spec revision 11, §7D: the tile is decided by the lattice, so the request knows which square
+  /// of earth it is waiting for before the answer arrives — and any bot's tile of that square is
+  /// it, because the lattice is the same arithmetic everywhere.
+  @Test
+  func `a radar request expects the tile its coordinate falls in`() {
+    let request = WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 0)
+    #expect(request.expectedReply == .radar(tile: MeshWXRadarTile(south: 29, west: -99, zoom: 0)))
+    #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 2).expectedReply
+      == .radar(tile: MeshWXRadarTile(south: 28, west: -100, zoom: 2)))
+    // Two places in the same square are one question, which is the whole reason the lattice is
+    // fixed rather than centred on whoever asked: Austin and a town fifty kilometres away ask for
+    // one tile between them, and the second one costs the channel nothing.
+    #expect(WeatherRequest.radar(latitude: 29.88, longitude: -98.40, zoom: 0).expectedReply
+      == request.expectedReply)
+    #expect(request.acceptsAnswerFromAnyBot)
   }
 
   /// Spec §8.3 lists the letters a Not-available reply can carry: w, o, f, a, s, r, m, t, h, d.
@@ -57,6 +80,11 @@ struct WeatherRequestTests {
     // under the same letter (spec §8.3).
     #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: []).requestLetter == "w")
     #expect(WeatherRequest.areaSweep(includesAdvisories: true, states: []).requestLetter == "w")
+    // Spec revision 11, §7D: `>radar` is the one request whose letter is not its own first. `r`
+    // is `>rain`, and a refusal that could mean either is a refusal nobody can act on.
+    #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 0).requestLetter == "x")
+    #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 2).requestLetter == "x")
+    #expect(WeatherRequest.rainfall(state: "TX").requestLetter == "r", "still the rain request")
   }
 
   /// Spec §7A: a statement describes the bot that sent it, so another bot's — or another
@@ -187,7 +215,9 @@ struct WeatherRequestTests {
       .areaSweep(includesAdvisories: false, states: []),
       .areaSweep(includesAdvisories: true, states: ["OK", "TX"]),
       .parts(group: 212, indexes: [1, 4, 6], of: .areaSweep),
-      .parts(group: 7, indexes: [2], of: .text(subject: 3))
+      .parts(group: 7, indexes: [2], of: .text(subject: 3)),
+      .radar(latitude: 30.27, longitude: -97.74, zoom: 0),
+      .radar(latitude: 32.78, longitude: -96.80, zoom: 2)
     ]
     let encoder = JSONEncoder()
     encoder.outputFormatting = .sortedKeys
@@ -205,5 +235,8 @@ struct WeatherRequestTests {
     #expect(String(decoding: try encoder.encode(
       WeatherRequest.parts(group: 212, indexes: [1, 4], of: .text(subject: 3))), as: UTF8.self)
       == #"{"parts":{"group":212,"indexes":[1,4],"of":{"text":{"subject":3}}}}"#)
+    #expect(String(decoding: try encoder.encode(
+      WeatherRequest.radar(latitude: 30.5, longitude: -97.5, zoom: 2)), as: UTF8.self)
+      == #"{"radar":{"latitude":30.5,"longitude":-97.5,"zoom":2}}"#)
   }
 }

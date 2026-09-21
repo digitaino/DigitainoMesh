@@ -101,6 +101,13 @@ struct WeatherSeedScenarioTests {
     (606, 88), (860, 88), (1208, 86), (296, 86), (169, 86), (1014, 86), (1723, 84)
   ]
 
+  /// Local, Regional and Wide around Austin, as they left the bot: a squall line to the north-west.
+  static let austinRadarTiles = [
+    "c81d04b40a35c7011d9dff04f24d6a4d64defd2e649394499354a849a80d6a74af441491350a00d100033344224d4281a0000081020304023880022082230048a00c40e0310d288824832400",
+    "c91d04b40a35c7011c9cff05e30e80c40408fd6701a2e64f04a2454c410d534526d530427db23a9e6ab29559b52e9774f563facaeca4d53aba4d42803810182e2364008e80000066a8680001ea1500222000000c44444046111a03a2000610000000",
+    "ca1d04b40a35c7011c9cff06c4444045622a22188d520d1118024388eaf4b058894456b554fcd53d02cd155f7d02ca36ad29a26a0001e64003018250001c7521d5998ad58fccb57ade7b2be51c16a0468000902083a8440000622a349a00c00000",
+  ]
+
   func header(_ seq: UInt8, _ type: MeshWXMessageType) -> MeshWXHeader {
     MeshWXHeader(seq: seq, bot: Self.botID, type: type)
   }
@@ -187,8 +194,22 @@ struct WeatherSeedScenarioTests {
     _ = WeatherStateReducer.apply(
       MeshWXMessage(header: header(238, .digest), payload: .digest(digest)),
       to: &storm, receivedAt: now.addingTimeInterval(-60))
+    // Radar (revision 11): the three tiles the bot cut around Austin from the Southern Plains
+    // mosaic of 20 September 2026, 23:38Z, one per width, with the picture's time moved to twelve
+    // minutes ago so the card reads as a fresh picture and not as a two-hour-old one.
+    for (offset, hex) in Self.austinRadarTiles.enumerated() {
+      guard case var .radar(radar) = try MeshWXDecoder.decode(Data(hex: hex)).payload else {
+        Issue.record("not a radar tile")
+        continue
+      }
+      radar.takenMinutes = nowMinutes - 12
+      _ = WeatherStateReducer.apply(
+        MeshWXMessage(header: header(UInt8(239 + offset), .radar), payload: .radar(radar)),
+        to: &storm, receivedAt: now.addingTimeInterval(TimeInterval(-40 + offset * 5)))
+    }
     try await FileWeatherStateStore(url: directory.appendingPathComponent("storm/state.json")).save([Self.botID: storm])
 
+    #expect(storm.radarTiles.count == 3)
     #expect(storm.warnings.count == 3)
     #expect(storm.missingFromDigest.isEmpty)
     #expect(!storm.needsDigest)

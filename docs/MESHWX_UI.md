@@ -212,6 +212,20 @@ phone with the national map. They are one design across the bot, the iOS app and
 | U-39 | 2026-09-20: *Your requests is way too long of a list.* Forty rows of a ledger in the middle of a page whose other nine sections are one row each, so everything under it was below the fold | **Adopted.** The radio page shows the **newest three** and an "All requests (27)" row that pushes the whole list. The log itself is untouched — still 40 rows and a week, still only what actually went on the air (§12). What was wrong was the page, not the record |
 | U-40 | 2026-09-20: *a way to see all the GRP_DATA traffic on a channel like we do a chat.* Nothing in the app showed the wire: "nothing arrived" and "eight packets arrived and every one of them was a copy" looked identical on every screen | **Adopted.** **Channel traffic**, from the `#meshwx` card on the radio page (§12): a chat-style timeline of `WeatherTrafficEntry`, oldest at the top, received bubbles leading under the radio's name and this phone's requests trailing, opened at the newest and following new arrivals unless the reader has scrolled up. Each bubble is the summary's title and then what is known — "159 B · seq 212 · SNR 12 dB · 2 hops · 1:35 PM" — with "from the radio's queue" for a backlog drain and "duplicate" for a copy, which are the two facts no other screen records. A tap pushes the decoded fields and the hex, monospaced and selectable; a datagram the codec cannot read says so and claims nothing else. A confirmed **Clear** empties the log, and the weather the phone has stored is not touched. Nothing on the screen spends airtime |
 
+The seven rows below are radar, from the owner's ask of the evening of 20 September. The wire and
+the names are `docs/MESHWX_REV11.md`, which is the contract the bot, this app and the web client
+are all built to; these rows are the screen half, and §18 is the screens.
+
+| # | Finding | Decision |
+|---|---|---|
+| U-41 | 2026-09-20, the owner, after the map work: *can you take a look at what comes down over the GOES satellite that we could use to provide some type of radar coverage on the app?* The dish had been receiving the Weather Service's radar mosaics all along — one national and fourteen regional GIFs, a new one of each every 15 minutes — and the bot opened none of them, because it only opens `.TXT`. Radar had been in the v4 protocol and was cut on 14 September for pulling a 4 MB composite off the internet, about 11 GB a day | **Adopted, and request-only** (the owner, on the findings: *yes, write up revision 11 and build it, request-only to start*). A **Radar section on the place page** after the forecast, and a **radar screen** under it (§18). Nothing asks on its own: no request on appear, none on a pull, none on a timer, and **Update never plans one** (spec revision 11, §4). The only thing that sends is a tap on a button, the way the alert map has worked since U-37 — the difference being that this button costs one packet and that one costs eight. A scheduled radar broadcast is deliberately not in this cut |
+| U-42 | An answer that could be several packets would need `>part`, a progress line, a partial-picture state and a repair button — the whole of §17's machinery for a product a reader glances at | **Adopted: one packet, always.** A tile is a 32 × 32 quadtree of two-bit levels, 131 bytes for Dallas under a squall line and 13 for a clear square. When the fine picture does not fit, the radio sends the **same square at half the detail** (16 × 16, each coarse cell the highest of the four it replaces) rather than a second packet: there is no `>part` for radar and never will be. So the cost line on every radar ask is the constant "1 packet", at every width, held or not — and the screen says the coarse picture is coarse in one quiet line rather than hiding it |
+| U-43 | "Rain" was the obvious word for every sentence on the card | **Rejected.** Radar sees **snow**, and sleet, and a January picture captioned "Nearest rain 45 km NW" would be wrong in the one season it matters most. Every sentence says **precipitation**: "Heavy precipitation at Austin.", "Dry at Austin. Nearest precipitation 45 km NW." It is a longer word and it is the true one. The forecast's own rows keep "rain", where the wire does say rain |
+| U-44 | The width control wanted a number: 2°, 4°, 8°, or the kilometres a reader would actually recognise | **Adopted: names, not kilometres.** The control reads **Local · Regional · Wide** (zoom 0, 1, 2). A tile is two degrees, which is 222 km tall everywhere and a different width at every latitude — 214 km across at Austin, 125 km at Anchorage — so a number on the segment would be right on one parallel and wrong on all the others. Zoom 3 exists on the wire and is **not offered**: a 16° square drawn 50 km to a cell is a picture of eight states and answers nothing anybody opens a radar screen to ask |
+| U-45 | A radar picture with a time on it is read as *now* far more often than it is read as old, and this one comes over a mesh that can hold a packet in a queue for an hour | **Adopted: two ages, and they say different things.** From **30 minutes** the time line takes the caution tone and adds "Precipitation has moved since." — two mosaics have been made since, so either the radio missed them or the phone did, and the picture is still drawn because where a storm was half an hour ago beats nothing. Past **120 minutes** the tile is not drawn at all (`WeatherRadarPick`): two hours of weather is not this weather. Both are measured from the time **printed on the picture** and never from when the packet arrived — a tile drained out of the radio's queue an hour late is an hour older than it looks |
+| U-46 | A partial tile's cells outside the mosaic are level 0 on the wire, which is the same byte as "no echo here" | **Adopted: unknown is drawn, in its own grey.** `WeatherRadarCells.unknownRectangles` is returned separately from the wet runs and never merged into them, the map lays it down in a neutral grey under the line "Part of this area is outside the radar picture.", and the summary says "This picture does not reach Austin." rather than "Dry at Austin." when the place itself falls out there. Left as dry those cells would claim clear weather over ground the mosaic never looked at, which is the one thing a radar screen must not do — the same rule as U-37's unshaded state being unknown and not clear |
+| U-47 | The radar screen and the alert map are the same map with two subjects on it, and §17 fills its warning polygons at 30% | **Adopted: over radar, alerts are outlines only.** A filled polygon covers precisely the cells that made the warning issue, so on this screen the alert shapes carry the stroke and no fill, laid down **above** the radar cells through `WeatherMapDrawing.overlays(_:fills:)` — the same gathering the alert map uses, so the two cannot end up drawing different countries. The three radar colours (light green, moderate amber, heavy red, filled at 55%) are their own constants and are **never** an alert tint: a heavy cell in the Tornado Warning red would make every squall line read as a warning polygon. The place page's card draws the picture alone; the page's banner above it is where the alert covering the place is already said |
+
 ### 3.1.2 Visual pass against the Human Interface Guidelines, 16 September (afternoon)
 
 Rafael, on the build that closed §3.1.1: *"there is a ton of dead black space not being used… the
@@ -1275,3 +1289,118 @@ the country clear on the strength of a question nobody asked.
 Decoding a file written before revision 10 lifts its single `areaSweep` into the array, and both
 scope fields read as absent-means-national: a sweep saved before them was a national one, because
 there was no other kind, and a held map must not stop speaking for the country on upgrade.
+
+## 18. Radar
+
+One request answered with one packet: a square of the earth, 32 × 32 cells, each cell the
+strongest echo the Weather Service's mosaic saw in it. It answers the question the forecast and
+the alerts both talk around — *is it raining on me, and is that line going to get here* — and it
+costs the channel less than a forecast does.
+
+The owner's ask, 20 September: *can you take a look at what comes down over the GOES satellite
+that we could use to provide some type of radar coverage on the app?* The dish had been receiving
+the mosaics all along and the bot opened none of them. The wire, the lattice and the names are
+`docs/MESHWX_REV11.md`; this section is the two screens, and §3.1 rows U-41 to U-47 are the
+decisions behind them.
+
+**Request-only, and never part of Update.** Nothing on either screen asks by itself: not on
+appear, not on a pull, not on a timer. Update plans alerts, readings, the forecast and coverage,
+and it will not plan a radar tile — a picture that arrived because somebody pulled to refresh is a
+packet nobody asked for. Every ask says its cost first, and the cost is always **1 packet**.
+
+**Tiles are shared.** The lattice is fixed, so a tile somebody three kilometres away asked for is
+this place's tile too, and the phone draws it rather than spending a packet on the same square.
+Every radio's tiles go into one list for that reason (`WeatherRadarCard.tiles(in:)`), and the
+picker orders them by what the picture *is* — newest quarter hour, then the narrowest square, then
+the finer grid — and never by who sent it.
+
+### 18.1 The Radar section of a place page
+
+After the forecast. Three states and no fourth:
+
+- **Nothing held**: "No radar picture yet.", then the ask — "Ask WX-AUS for the radar picture",
+  with "1 packet" above it and "Pictures are made about every 15 minutes." under it.
+- **A picture**: a **square** map of the tile, the cells in three colours over the map's own state
+  and county lines, and the place's dot. Under it the summary in words and the time line:
+  "Picture from 6:38 PM · 12 min old". The whole card opens the radar screen; the ask below it
+  reads "Ask for a newer picture".
+- **A place with no coordinate**: no section at all. A tile is decided by a coordinate and by
+  nothing else, so there is nothing to draw and nothing to ask for.
+
+The card's map is a **still** — the row pushes, and a card that both panned and pushed would be
+the dead zone §3.1 U-32 went looking for. It draws the picture alone: the alert covering the place
+is already on the page, in the banner above (§7.3).
+
+The section is **not** inside the empty-place rule (§3.1 U-13) the forecast is. Radar is the one
+product that always has something to say about a coordinate — the square is two degrees and no
+bundle has to hold a point or a station inside it — so a place with nothing else on its page is
+exactly the place where the offer is worth making. It adds no refusal to that card: it is one line
+and a button, or a picture.
+
+The width the card shows is usually Local, and when it is not — somebody asked for Regional and
+that is the newest picture of this place — the card's label carries the width as its quiet value
+rather than letting the reader assume two degrees.
+
+### 18.2 The radar screen
+
+Pushed from the card. An **interactive** map framed on the tile, then what the picture says, then
+the legend, then the width control and the ask.
+
+- **The map.** Radar cells at the bottom; the alerts this device holds over them as **outlines**,
+  no fill; the place's dot on top. Framed on the square exactly, with none of the alert map's
+  padding: the lattice already puts the place at least a quarter of the span inside every edge.
+  A width nothing is held for is still a map of the square the ask would fill.
+- **What it says.** The summary sentences, then the time line, then the honest lines: "Part of
+  this area is outside the radar picture." in orange when the picture is partial, and
+  "A busy picture, sent at half detail to fit one packet." quietly when it is coarse. Last, where
+  it came from: "Cut from the Southern Plains mosaic. · Via GOES satellite" (§12.1).
+- **The legend.** Three swatches — Light, Moderate, Heavy — in the picture's own colours. They are
+  never an alert tint, in either theme and in either client.
+- **The width.** A segmented control: **Local · Regional · Wide**, zoom 0, 1 and 2. Each width
+  shows what is held for **its own square**, or "Not asked for yet.", and has its own ask at the
+  same one packet. "Not asked for yet." and "This picture does not reach Austin." are different
+  answers and must never be shown as one: the first is an absence, the second is a partial tile
+  telling you where its mosaic stopped.
+
+### 18.3 The sentences
+
+The summary is one to three of these, and the place is named because the screen it is pushed from
+is not always on screen:
+
+```
+Heavy precipitation at Austin, TX.
+Dry at Austin, TX.  Nearest precipitation 45 km NW.
+Light precipitation at Austin, TX.  Heavy precipitation 80 km NW.
+No precipitation on this picture.
+This picture does not reach Austin, TX.
+```
+
+"Nearest precipitation" appears only when nothing is falling on the place: standing in the rain,
+the nearest *other* wet cell is seven kilometres away and means nothing. A separate heavy core is
+named either way, and the screen rules have already dropped it when it is the cell just named or
+when the reader is standing in it.
+
+**Refusals** land in the ask's own status line, and radar is the request where the refusal carries
+most of the information — three of the four ask the reader to do entirely different things:
+
+- reason 0, "WX-AUS has no recent radar picture for this area." — nothing newer than an hour
+  covers the square, or it lies outside every mosaic, or the region is not calibrated;
+- reason 2, "WX-AUS does not receive radar pictures." — that radio has no dish. Nothing to retry,
+  at that radio or at any time;
+- reason 4, "WX-AUS sent this picture a few minutes ago and has nothing newer yet." — waiting is
+  the answer, and it is not the radio being busy;
+- reason 1 is the forecast's sentence, because it is the same fact.
+
+The refusal comes back under the letter **`x`** and not `r`: `r` is `>rain`, and a refusal that
+could mean either is a refusal nobody can act on.
+
+### 18.4 Elsewhere in the tool
+
+- **Cached from the channel** grows a "Radar pictures" group, one row per square held: the width,
+  the square's centre, and the picture's own time beside its arrival — "Radar picture · Local ·
+  30.000,-98.000". A square of earth has no name, and nothing on the wire says who asked for it.
+- **Channel traffic** reads "Radar picture · Local · 214 cells with precipitation". The wet-cell
+  count is the one measure of a tile that means the same thing at both grid sizes, so a coarse
+  packet's number is comparable with a fine one's.
+- **Your requests** logs the ask as "Radar picture · 30.267,-97.743": the coordinate, which is
+  what the request carries, and never a place name the radio would have resolved for itself.

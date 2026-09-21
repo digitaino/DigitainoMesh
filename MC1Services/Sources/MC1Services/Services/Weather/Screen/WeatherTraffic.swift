@@ -238,6 +238,8 @@ public enum WeatherTrafficTitle: Sendable, Hashable {
   /// knows about who asked.
   case request(sender: Data)
   case alertMap
+  /// One tile of a radar picture (spec revision 11, §7D).
+  case radar
   /// Bytes on the weather slot the codec could not read at all.
   case undecodable
   /// A reserved or third-party type nibble (spec §2.2, nibbles 11-15).
@@ -276,6 +278,12 @@ public enum WeatherTrafficDetail: Sendable, Hashable {
   /// Entries were dropped to fit (sweep) or the tail was dropped (text).
   case cut
   case includesAdvisories
+  /// Which square of earth a radar tile covers: its south-west corner in whole degrees and its
+  /// zoom, which is the width the screen names Local, Regional or Wide.
+  case tile(south: Int, west: Int, zoom: Int)
+  /// How many cells of a radar tile carry precipitation. The one measure of a tile that means the
+  /// same thing at both grid sizes, so a coarse packet's number is comparable with a fine one's.
+  case wetCells(Int)
 }
 
 /// One row of the channel traffic timeline, read out of the bytes the entry carries
@@ -353,6 +361,16 @@ public struct WeatherTrafficSummary: Sendable, Hashable {
       if sweep.wasCut { detail.append(.cut) }
       if sweep.includesAdvisories { detail.append(.includesAdvisories) }
       return WeatherTrafficSummary(title: .alertMap, detail: detail)
+    case let .radar(radar):
+      // The square and how much of it is wet. The grid size and the bounds are the radar screen's
+      // subject (§18); this row only has to say what went past and what it cost.
+      let tile = radar.tile
+      return WeatherTrafficSummary(
+        title: .radar,
+        detail: [
+          .tile(south: tile.south, west: tile.west, zoom: tile.zoom),
+          .wetCells(radar.wetCellCount)
+        ])
     case .unknown:
       return WeatherTrafficSummary(title: .unknownType(rawType: message.header.rawType))
     }
