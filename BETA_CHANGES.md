@@ -1,5 +1,27 @@
 Beta Changes -- v1.3.0
 
+Weather: Radar, an Alert Map You Choose, and Channel Traffic
+
+Radar. A place page has a new Radar section under the forecast. One tap asks the weather radio for the radar picture around the place, and the answer is a single packet. The pictures are the Weather Service's radar mosaics, which arrive on the bot's own satellite dish every 15 minutes, so no internet is involved. The bot cuts out a square around the place, 32 by 32 cells in three levels, light, moderate and heavy. A cell shows the strongest echo inside it, so a small storm core is never averaged away. Under the map a sentence says what is over the place and how far and which way the nearest precipitation and the nearest heavy core are. The word is precipitation because radar sees snow too. Dallas under a squall line came to 131 bytes, a clear sky to 13.
+
+The radar screen. Tap the card for a map you can move, with the alerts you hold drawn as outlines over the cells. Local, Regional and Wide are squares of 2, 4 and 8 degrees, each its own request and each one packet. A picture too busy for one packet is sent at half detail and the screen says so. Where part of the square lies outside the radar picture it is greyed, never shown as dry.
+
+How old it is. The picture's own time is always on screen, "Picture from 6:38 PM · 12 min old". Pictures are usually 10 to 40 minutes old when they reach a phone. From 30 minutes the line turns to caution and adds "Precipitation has moved since", and past two hours the picture is not drawn. Asking again for the same square of the same picture within five minutes is answered with "sent this picture a few minutes ago and has nothing newer yet". A tile another phone asked for serves your place too. Guam is not covered yet. Without the app, send the bot "radar austin tx" for the same answer in words.
+
+Alert map. The national alert map is now the Alert map, and you choose the states: one, a few, or the whole country. It starts on the state of the place you are looking at and shows the cost before you ask, "About 2 packets". Two states are usually one packet where the country is five. A state you asked for with nothing active says so. A state you did not ask for is unknown, never clear. The five minute rule is now per state.
+
+Missing parts. When some packets of a map or a long text report do not arrive, "4 of 7 parts arrived" now comes with a button that asks for the missing ones only. It appears 15 seconds after the last part and stays for ten minutes, which is how long the bot keeps the bytes.
+
+Tapping a shaded area opens one card: the alerts your phone holds for that area, and, when the map shows something the phone does not hold, a row that says so with a button to ask for the detail.
+
+Forecasts everywhere. "No forecast point near Santa Fe" is gone. When the app knows of no forecast point near a place it asks for the forecast at the coordinate, and the bot answers from the nearest point it holds, labelled "Forecast point chosen by WX-AUS". The app also gained 85 forecast points, most of them for offices that had none: Albuquerque, Boulder, Pocatello, Honolulu and Guam.
+
+The radio page. Your requests shows the newest three, with All requests behind it. The #meshwx card gains Channel traffic: every weather packet on the channel as a timeline, the bot on the left and your requests on the right, each with its size, sequence number, signal and hops. Tap one for its decoded fields and its bytes.
+
+What to try. Ask for radar at Local, then Wide, and check the picture against a radar you trust. Ask for the Alert map for your state and a neighbour. If parts go missing, use the missing parts button. Open Channel traffic while someone else asks for something.
+
+Unchanged: MeshCore companion firmware 1.15 or newer, #meshwx on the radio, one request per tap, nothing about you leaves the phone. New text is in all 11 languages.
+
 Weather
 
 Tools gains Weather: severe weather alerts, current conditions and the forecast for where you are, from the mesh rather than the internet. A weather bot is a chat node named WX-<city> (WX-AUS is on the air in Austin) that puts National Weather Service products on the #meshwx channel as compact binary messages. Nothing is fetched from the internet and nothing about you leaves the phone.
