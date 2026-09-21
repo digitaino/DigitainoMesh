@@ -752,6 +752,30 @@ struct WeatherServiceTests {
     #expect(await h.transport.channelRequestsRefused == 1)
   }
 
+  /// A bot only ever heard on the channel has no advert and so no whole key, and a Request
+  /// datagram needs none: it names the bot by the two bytes every one of its packets carries.
+  @Test
+  func `a bot that was heard but never announced is asked by datagram`() async throws {
+    let h = makeHarness(channelRequests: true)
+    let heard = WeatherBot.heardOnly(botID: F.botID)
+    let pending = try #require(try await h.service.send(.digest, to: heard))
+    #expect(pending.transportKind == .channel)
+    #expect(pending.botID == F.botID)
+    #expect(await h.transport.channelSent.map(\.botID) == [F.botID])
+    #expect(await h.transport.sent.isEmpty, "and never by DM")
+  }
+
+  @Test
+  func `and when the radio cannot send one, it is refused rather than sent to half a key`() async throws {
+    let h = makeHarness(channelRequests: false)
+    let heard = WeatherBot.heardOnly(botID: F.botID)
+    await #expect(throws: WeatherRequestError.transport(
+      "this radio cannot send a channel request, and the weather radio has not announced itself for a direct message")) {
+      try await h.service.send(.digest, to: heard)
+    }
+    #expect(await h.transport.sent.isEmpty)
+  }
+
   /// Requests are flooded now, so a phone on `#meshwx` hears everybody else's. One is not an
   /// answer, not the bot, and not the bot's `seq`.
   @Test

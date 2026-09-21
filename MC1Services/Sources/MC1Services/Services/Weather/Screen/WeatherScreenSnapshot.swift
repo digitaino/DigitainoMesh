@@ -8,8 +8,9 @@ public enum WeatherRequestBlock: Sendable, Hashable {
   case firmwareTooOld
   case channelMissing
   case noBot
-  /// A bot heard on the channel whose advert the radio has not collected: its key, which a DM
-  /// needs, is unknown.
+  /// A bot heard on the channel whose advert the radio has not collected, on a radio that may
+  /// have to ask by DM: a DM needs the bot's whole key, and two bytes of it are all the bot's own
+  /// packets carry. A radio that can flood a Request datagram is not blocked by this at all.
   case botNotAnnounced
 }
 
@@ -101,6 +102,12 @@ public struct WeatherScreenSnapshot: Sendable {
     public var lastHeardAt: Date?
     /// The last message heard live, not drained from the radio's queue (`WeatherBotState`).
     public var lastLiveHeardAt: Date?
+
+    /// Who a request goes to: the announced bot, or, for one only ever heard on the channel, a
+    /// stand-in carrying the two bytes a Request datagram needs
+    /// (``WeatherBot/heardOnly(botID:)``). ``bot`` stays nil for such a source, so it is still
+    /// *named* "Weather radio 041D" everywhere.
+    public var requestBot: WeatherBot { bot ?? .heardOnly(botID: botID) }
   }
 
   public struct Inputs: Sendable {
@@ -232,7 +239,11 @@ public struct WeatherScreenSnapshot: Sendable {
     } else if banner == .channelMissing {
       requestBlock = .channelMissing
     } else if let source {
-      requestBlock = source.bot == nil ? .botNotAnnounced : nil
+      // A bot heard but never seen to advertise can still be asked: a Request datagram names it
+      // by the two bytes its own packets carry (spec §7B). Only a radio that cannot send one
+      // needs the DM, and only the DM needs the whole key an advert brings — so while the
+      // firmware claim is unknown the ask could still fall to a DM, and the block stays.
+      requestBlock = source.bot == nil && inputs.firmwareSupportsWeather != true ? .botNotAnnounced : nil
     } else {
       requestBlock = .noBot
     }

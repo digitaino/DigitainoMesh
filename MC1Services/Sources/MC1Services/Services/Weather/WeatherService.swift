@@ -840,7 +840,8 @@ public actor WeatherService {
   ///
   /// **Channel first** (spec §7B): the request goes out as a datagram flooded on `#meshwx`,
   /// because a DM rides one stored route and fails silently once that route has gone stale. The
-  /// DM ladder of §8.2 is the fallback, for a radio that cannot send a datagram at all.
+  /// DM ladder of §8.2 is the fallback, for a radio that cannot send a datagram at all — and only
+  /// for a bot whose advert has been heard, a DM having nowhere to go without the whole key.
   ///
   /// - Returns: The pending request now on the air, or nil when this phone received the answer
   ///   in the last five minutes and asking again would only spend airtime (a
@@ -894,6 +895,12 @@ public actor WeatherService {
     } catch let WeatherTransportError.channelRequestsUnavailable(reason) {
       // This radio cannot flood a datagram: no v1.15.0 firmware, no `#meshwx` slot, or no key
       // of its own. The DM still works, and the bot still answers it (spec §7B).
+      // Unless the bot was only ever heard and never seen to advertise: a DM needs its whole
+      // key, and two bytes of it are all its packets carry.
+      guard bot.isAnnounced else {
+        throw WeatherRequestError.transport(
+          "this radio cannot send a channel request, and the weather radio has not announced itself for a direct message")
+      }
       logger.notice("Channel requests unavailable (\(reason)); sending \(request.wireText) as a DM")
     } catch {
       throw WeatherRequestError.transport(error.localizedDescription)

@@ -226,6 +226,14 @@ are all built to; these rows are the screen half, and §18 is the screens.
 | U-46 | A partial tile's cells outside the mosaic are level 0 on the wire, which is the same byte as "no echo here" | **Adopted: unknown is drawn, in its own grey.** `WeatherRadarCells.unknownRectangles` is returned separately from the wet runs and never merged into them, the map lays it down in a neutral grey under the line "Part of this area is outside the radar picture.", and the summary says "This picture does not reach Austin." rather than "Dry at Austin." when the place itself falls out there. Left as dry those cells would claim clear weather over ground the mosaic never looked at, which is the one thing a radar screen must not do — the same rule as U-37's unshaded state being unknown and not clear |
 | U-47 | The radar screen and the alert map are the same map with two subjects on it, and §17 fills its warning polygons at 30% | **Adopted: over radar, alerts are outlines only.** A filled polygon covers precisely the cells that made the warning issue, so on this screen the alert shapes carry the stroke and no fill, laid down **above** the radar cells through `WeatherMapDrawing.overlays(_:fills:)` — the same gathering the alert map uses, so the two cannot end up drawing different countries. The three radar colours (light green, moderate amber, heavy red, filled at 55%) are their own constants and are **never** an alert tint: a heavy cell in the Tornado Warning red would make every squall line read as a warning polygon. The place page's card draws the picture alone; the page's banner above it is where the alert covering the place is already said |
 
+U-48 is neither radar nor a visual matter: it is the owner's report of 2026-09-21, recorded here
+because it overturns a rule §10 and §11 both stated, and because the fix is one rule read in three
+places rather than anything a reader of this section can see.
+
+| # | Finding | Decision |
+|---|---|---|
+| U-48 | 2026-09-21: the owner's client sat for a night holding weather from a radio it could hear and refusing to ask it anything — "Can't ask until it announces itself" under every button — because no advert of that radio had ever reached the phone. The radio was **itself** named WX-AUS, and a node can never hear itself announce. The rule dated from v4, when a request was a DM and needed the bot's whole public key | **Adopted: heard is enough to ask.** Since spec revision 6 a request is a Request datagram flooded on `#meshwx` that names the bot by the first two bytes of its public key — which every one of the bot's own packets carries in its header (§2.2, §7B) — so `WeatherScreenSnapshot.Source.requestBot` hands the send a stand-in built from those two bytes (`WeatherBot.heardOnly`) and the block is gone. `source.bot` stays nil, so the bot is still **named** "Weather radio 041D" and the About and radio rows still say it hasn't announced itself: the advert is what a name needs, not what an ask needs. The **DM fallback** is the one path that still needs the whole key, so `WeatherService.send` refuses rather than addressing a DM to half a key, and `botNotAnnounced` survives for the one case that can still reach that fallback — a radio whose firmware claim is unknown |
+
 ### 3.1.2 Visual pass against the Human Interface Guidelines, 16 September (afternoon)
 
 Rafael, on the build that closed §3.1.1: *"there is a ton of dead black space not being used… the
@@ -632,7 +640,11 @@ Banners, at most one, above the weather, for the cases where the radio itself bl
 
 Your radio not being connected is said in place of the Update button and by the alerts list's
 status line, never by a banner. A bot heard on the channel without an advert is named "Weather
-radio 041D" and cannot be asked: "Can't ask until it announces itself".
+radio 041D" — the name is in the advert, and nothing else carries it — and **can** be asked: a
+request is a datagram that names the bot by the two bytes every one of its own packets carries
+(spec §7B, §3.1 U-48). Only the DM fallback needs the whole key an advert brings, so "Can't ask
+until it announces itself" is said just when this radio's ability to send a datagram is still
+unknown, and the About and radio rows go on saying the bot has not announced itself.
 
 ## 11. Requests
 

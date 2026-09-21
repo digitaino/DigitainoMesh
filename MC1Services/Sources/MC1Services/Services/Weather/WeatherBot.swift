@@ -43,9 +43,26 @@ public struct WeatherBot: Sendable, Hashable, Identifiable {
     )
   }
 
+  /// A bot known only from its own packets: every v5 message carries the first two bytes of the
+  /// bot's public key (spec §2.2), and a Request datagram names the bot asked by those same two
+  /// bytes (§7B). So a bot that has been heard can be asked without ever having been seen to
+  /// advertise. It has no name, no position and no full key, which is why the DM fallback — the
+  /// one path that needs the key — stays closed to it (``isAnnounced``).
+  ///
+  /// Found the hard way on 2026-09-21: the owner's client sat for a night on a radio that was
+  /// itself named WX-AUS, which can never hear "itself" announce, with every ask blocked.
+  public static func heardOnly(botID: UInt16) -> WeatherBot {
+    WeatherBot(
+      publicKey: Data([UInt8(botID & 0xFF), UInt8(botID >> 8)]),
+      name: "", latitude: 0, longitude: 0, lastAdvert: nil)
+  }
+
   /// The `bot` field every v5 message carries: the first two bytes of the public key as a
   /// little-endian u16 (spec §2.2).
   public var botID: UInt16 { Self.botID(for: publicKey) }
+
+  /// Whether the bot's whole key is known, from an advert or a link: what a DM needs.
+  public var isAnnounced: Bool { publicKey.count == 32 }
 
   /// The `WX-` prefix stripped: `AUS` for `WX-AUS`.
   public var city: String { String(name.dropFirst(Self.namePrefix.count)) }

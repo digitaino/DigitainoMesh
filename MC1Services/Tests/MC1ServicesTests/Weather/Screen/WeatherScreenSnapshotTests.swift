@@ -107,17 +107,37 @@ struct WeatherScreenSnapshotTests {
   func `with no link of its own the radio still decides`() {
     // Every build over a radio: the link is nil and nothing about the block changes.
     #expect(snapshot(inputs(connected: false, link: nil)).requestBlock == .radioOffline)
-    // Heard on the channel, no contact for it: still the block it always was.
-    #expect(snapshot(inputs(bots: [], connected: true, link: nil)).requestBlock == .botNotAnnounced)
+    // Heard on the channel, no contact for it: askable by datagram since 2026-09-21 (below).
+    #expect(snapshot(inputs(bots: [], connected: true, link: nil)).requestBlock == nil)
     #expect(snapshot(inputs(states: [:], bots: [], connected: true, link: nil)).requestBlock == .noBot)
   }
 
+  /// Until 2026-09-21 this read "can be read but not asked". A Request datagram names the bot by
+  /// the two bytes its own packets carry (spec §7B), so the advert was only ever needed for the
+  /// DM. The owner found the hole from the other side: a client on a radio that was itself named
+  /// WX-AUS, which can never hear itself announce, with every ask blocked for a night.
   @Test
-  func `a bot with no advert can be read but not asked`() {
+  func `a bot with no advert can be read, and asked by datagram`() throws {
     let screen = snapshot(inputs(bots: []))
     #expect(screen.source?.botID == P.botID)
-    #expect(screen.source?.bot == nil)
-    #expect(screen.requestBlock == .botNotAnnounced)
+    #expect(screen.source?.bot == nil)  // still unnamed: "Weather radio 041D"
+    #expect(screen.requestBlock == nil)
+    let stand = try #require(screen.source?.requestBot)
+    #expect(stand.botID == P.botID)
+    #expect(!stand.isAnnounced)
+  }
+
+  @Test
+  func `a radio that may not be able to send a datagram still needs the advert`() {
+    // Firmware unknown: the ask could fall back to a DM, and a DM needs the whole key.
+    #expect(snapshot(inputs(bots: [], firmware: nil)).requestBlock == .botNotAnnounced)
+  }
+
+  @Test
+  func `an announced bot is who the request goes to`() throws {
+    let source = try #require(snapshot(inputs()).source)
+    #expect(source.requestBot == source.bot)
+    #expect(source.bot?.isAnnounced == true)
   }
 
   @Test

@@ -1085,7 +1085,10 @@ final class WeatherToolModel {
   ///   taps; a planned run keeps its own five-second spacing and would otherwise refuse every
   ///   step after the first while the first is still on the air.
   func send(_ request: WeatherRequest, queued: Bool = false) async {
-    guard let service = appState?.services?.weatherService, let bot = snapshot?.source?.bot else { return }
+    guard let service = appState?.services?.weatherService, let source = snapshot?.source else { return }
+    // The announced bot, or a stand-in carrying the two bytes a Request datagram names it by, for
+    // one only ever heard on the channel (`WeatherBot.heardOnly`).
+    let bot = source.requestBot
     switch status(for: request) {
     case .idle, .settled: break
     case .waitingForOther where queued: break
