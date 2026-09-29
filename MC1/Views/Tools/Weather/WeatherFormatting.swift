@@ -46,16 +46,15 @@ enum WeatherFormatting {
     L10n.Weather.Weather.Time.old(duration(seconds: now.timeIntervalSince(date)))
   }
 
-  /// "in 40 min", "in 1 h 20 min", "in 2 h".
-  static func countdown(minutes: Int) -> String {
+  /// "40 min", "1 h 20 min", "2 h": how long is left on an alert, in whole minutes.
+  static func timeLeft(minutes: Int) -> String {
     let minutes = max(0, minutes)
-    if minutes < 60 { return L10n.Weather.Weather.Time.within(L10n.Weather.Weather.Unit.minutes(minutes)) }
+    if minutes < 60 { return L10n.Weather.Weather.Unit.minutes(minutes) }
     let hours = minutes / 60
     let rest = minutes % 60
-    let words = rest == 0
+    return rest == 0
       ? L10n.Weather.Weather.Unit.hours(hours)
       : L10n.Weather.Weather.Unit.hoursMinutes(hours, rest)
-    return L10n.Weather.Weather.Time.within(words)
   }
 
   /// "45 min" or "5 h", for how long a feed has been quiet.
@@ -65,11 +64,64 @@ enum WeatherFormatting {
       : L10n.Weather.Weather.Unit.hours(minutes / 60)
   }
 
-  /// "until 11:41 PM · in 40 min".
-  static func untilLine(expiresAt: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+  // MARK: - When an alert applies (spec §10.2, revision 12)
+
+  /// The longest an alert can have left and still count down: twelve hours. Past it, the day and
+  /// the time say when it ends and a count of hours says nothing more.
+  static let alertCountdownMinutes = 12 * 60
+
+  /// A moment an alert starts or ends (docs/MESHWX_REV12.md §2): "19:00" / "7:00 PM" today or
+  /// within twelve hours ahead; "Fri 19:00" / "Fri 7:00 PM" within the week ahead; "Oct 9 at
+  /// 19:00" beyond, as ``clockTime`` names a date. Always the phone's own 12- or 24-hour clock,
+  /// from the locale — never a pattern written here.
+  ///
+  /// "Within the week" counts calendar days: one to six days after today is named by its weekday,
+  /// and the seventh — the same weekday as today — by its date, so "Tue 19:00" read on a Tuesday
+  /// is never a week away.
+  static func alertClock(_ date: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+    let base = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+    let ahead = date.timeIntervalSince(now)
+    if calendar.isDate(date, inSameDayAs: now) || (ahead > 0 && ahead <= TimeInterval(alertCountdownMinutes * 60)) {
+      return date.formatted(base.hour().minute())
+    }
+    if ahead > 0,
+       let days = calendar.dateComponents(
+         [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day,
+       days < 7 {
+      return date.formatted(base.weekday(.abbreviated).hour().minute())
+    }
+    return date.formatted(base.month(.abbreviated).day().hour().minute())
+  }
+
+  /// When an alert applies, everywhere an alert says so (docs/MESHWX_REV12.md §2–3):
+  ///
+  /// - not in effect yet — a start later than now: "from Wed 19:00 until Fri 19:00". Nothing
+  ///   counts down to an end that has not begun;
+  /// - in effect and ending within twelve hours, with `countdown`: "until 23:41 · 40 min left";
+  /// - in effect and ending later, or without `countdown`: "until Fri 19:00".
+  ///
+  /// A nil start is a product in effect from its issuance, which is every bot before revision 12.
+  /// Notifications pass `countdown: false`: "40 min left" on a lock screen is stale the moment it
+  /// is read. The time left is rounded up to the minute, so an alert is never said to have none.
+  static func alertWindow(
+    beginsAt: Date?,
+    expiresAt: Date,
+    now: Date,
+    calendar: Calendar,
+    locale: Locale,
+    countdown: Bool = true
+  ) -> String {
+    let until = alertClock(expiresAt, now: now, calendar: calendar, locale: locale)
+    if let beginsAt, beginsAt > now {
+      return L10n.Weather.Weather.Alerts.fromUntil(
+        alertClock(beginsAt, now: now, calendar: calendar, locale: locale), until)
+    }
     let minutes = Int(ceil(expiresAt.timeIntervalSince(now) / 60))
+    guard countdown, minutes <= alertCountdownMinutes else {
+      return L10n.Weather.Weather.Alerts.untilOnly(until)
+    }
     return L10n.Weather.Weather.Alerts.until(
-      clockTime(expiresAt, now: now, calendar: calendar, locale: locale), countdown(minutes: minutes))
+      until, L10n.Weather.Weather.Alerts.left(timeLeft(minutes: minutes)))
   }
 
   // MARK: - Distance

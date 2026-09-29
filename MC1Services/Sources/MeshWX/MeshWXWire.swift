@@ -29,6 +29,10 @@ public enum MeshWXWire {
   static let warningFixedSize = 15
   /// The issue time a revision 5 warning appends after the polygon and the areas (spec §3).
   static let warningIssuedSize = 2
+  /// The start a revision 12 warning appends after the issue time, when the product takes effect
+  /// later than it was issued (spec §3). No flag announces it — the nibble is full — so it is
+  /// found by length: read when at least this many bytes remain after the issue time.
+  static let warningBeginsSize = 2
   static let cancelSize = 8
   static let digestFixedSize = 10
   static let digestEntrySize = 6
@@ -149,6 +153,10 @@ public enum MeshWXWire {
   /// The largest issue-to-expiry gap the u16 carries (45.5 days). Saturated rather than wrapped:
   /// at this value the product was issued *at or before* `expires − 65535`.
   public static let issuedBeforeSaturatedMinutes: UInt16 = .max
+  /// The largest start-to-expiry gap the u16 carries (spec §3, revision 12), saturated as
+  /// ``issuedBeforeSaturatedMinutes`` is. A start must also be strictly after the issuance, which
+  /// no saturated value can be, so the decoder never lets this value through as a start.
+  public static let beginsBeforeSaturatedMinutes: UInt16 = .max
 
   // MARK: Warning tag byte (spec §3)
 

@@ -95,6 +95,10 @@ public struct WeatherAlertNotificationSubject: Sendable, Hashable {
   /// the radio was out of range.
   public var isLate: Bool
   public var now: Date
+  /// When the warning takes effect (spec §3, revision 12), from the stored copy
+  /// (``WeatherStoredWarning/beginsAt``); nil when it is in effect from its issuance. A watch
+  /// that has not started says "from … until …" rather than posing as in force.
+  public var beginsAt: Date?
 
   public init(
     warning: MeshWXWarning,
@@ -102,7 +106,8 @@ public struct WeatherAlertNotificationSubject: Sendable, Hashable {
     placement: WeatherAlertPlacement,
     botName: String?,
     isLate: Bool,
-    now: Date
+    now: Date,
+    beginsAt: Date? = nil
   ) {
     self.warning = warning
     self.placeLabel = placeLabel
@@ -110,6 +115,7 @@ public struct WeatherAlertNotificationSubject: Sendable, Hashable {
     self.botName = botName
     self.isLate = isLate
     self.now = now
+    self.beginsAt = beginsAt
   }
 
   public var expiresAt: Date { Date(unixMinutes: warning.expiresMinutes) }
@@ -146,7 +152,7 @@ public struct WeatherAlertDefaultCopy: WeatherAlertNotificationCopy {
     default:
       parts.append(place)
     }
-    parts.append("until \(Self.time(subject.expiresAt))")
+    parts.append(Self.window(beginsAt: subject.beginsAt, expiresAt: subject.expiresAt, now: subject.now))
     if let tag = Self.tag(subject.warning) { parts.append(tag) }
     var body = parts.joined(separator: " · ")
     if subject.isLate {
@@ -162,9 +168,37 @@ public struct WeatherAlertDefaultCopy: WeatherAlertNotificationCopy {
     return String(label[..<comma])
   }
 
-  /// "9:41 PM" on the phone's clock.
-  static func time(_ date: Date) -> String {
-    date.formatted(Date.FormatStyle(locale: .autoupdatingCurrent, calendar: .autoupdatingCurrent).hour().minute())
+  /// "until 9:41 PM", or "from Wed 7:00 PM until Fri 7:00 PM" for a watch that has not started
+  /// (spec §3, revision 12): the English of the app's `WeatherFormatting.alertWindow` with
+  /// `countdown: false`, which is what a notification says.
+  static func window(
+    beginsAt: Date?,
+    expiresAt: Date,
+    now: Date,
+    calendar: Calendar = .autoupdatingCurrent,
+    locale: Locale = .autoupdatingCurrent
+  ) -> String {
+    let until = clock(expiresAt, now: now, calendar: calendar, locale: locale)
+    guard let beginsAt, beginsAt > now else { return "until \(until)" }
+    return "from \(clock(beginsAt, now: now, calendar: calendar, locale: locale)) until \(until)"
+  }
+
+  /// The app's `WeatherFormatting.alertClock`, on the phone's own 12- or 24-hour clock: the time
+  /// alone today or within twelve hours ahead, the weekday and time within the six days after
+  /// today, the date and time beyond.
+  static func clock(_ date: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+    let base = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+    let ahead = date.timeIntervalSince(now)
+    if calendar.isDate(date, inSameDayAs: now) || (ahead > 0 && ahead <= 12 * 3600) {
+      return date.formatted(base.hour().minute())
+    }
+    if ahead > 0,
+       let days = calendar.dateComponents(
+         [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day,
+       days < 7 {
+      return date.formatted(base.weekday(.abbreviated).hour().minute())
+    }
+    return date.formatted(base.month(.abbreviated).day().hour().minute())
   }
 
   static func kilometres(_ kilometres: Double) -> String {

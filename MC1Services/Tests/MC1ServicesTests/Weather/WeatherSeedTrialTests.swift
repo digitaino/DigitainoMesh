@@ -89,8 +89,9 @@ private extension Data {
 /// `WEATHER_SEED_DIR/<scenario>/state.json`: `phone` is the owner's phone as it was on the night
 /// of 2026-09-14 (WX-AUS's 14-station batch, its Austin forecast, New York and San Juan forecasts
 /// somebody else asked for, no alert list); `storm` adds a tornado warning over downtown Austin, a
-/// severe thunderstorm near Llano, a heat advisory by zones and a fresh alert list listing all
-/// three. Skipped unless the variable is set.
+/// severe thunderstorm near Llano, a heat advisory by zones, a flood watch by zones that starts
+/// about ten hours from now (spec revision 12: its rows read "from … until …") and a fresh alert
+/// list listing all four. Skipped unless the variable is set.
 ///
 ///     WEATHER_SEED_DIR=/path/to/seed swift test --filter WeatherSeedScenarioTests
 @Suite("Weather seed scenarios", .enabled(if: ProcessInfo.processInfo.environment["WEATHER_SEED_DIR"] != nil))
@@ -178,21 +179,34 @@ struct WeatherSeedScenarioTests {
     let heat = MeshWXWarning(
       identity: MeshWXWarningIdentity(event: 14, office: 35, etn: 5), expiresMinutes: nowMinutes + 360,
       areas: [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 192, run: 3)])
-    for (offset, warning) in [tornado, llanoStorm, heat].enumerated() {
+    // Revision 12: FA.A.EWX.8 over the zones of the wire vector, issued two hours ago for ten
+    // hours from now through fifty-eight — the shape of the owner's 29 September watch, so the
+    // simulator shows "from … until …" without real weather.
+    let floodWatch = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 10, office: 35, etn: 8), expiresMinutes: nowMinutes + 58 * 60,
+      areas: [
+        MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 191, run: 4),
+        MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 205, run: 2)
+      ],
+      issuedBeforeMinutes: UInt16(60 * 60),
+      beginsBeforeMinutes: UInt16(48 * 60))
+    let alerts = [tornado, llanoStorm, heat, floodWatch]
+    for (offset, warning) in alerts.enumerated() {
       _ = WeatherStateReducer.apply(
         MeshWXMessage(header: header(UInt8(235 + offset), .warning), payload: .warning(warning)),
         to: &storm, receivedAt: now.addingTimeInterval(TimeInterval(-180 + offset * 10)))
     }
     let digest = MeshWXDigest(
       nowMinutes: nowMinutes - 1, feedHealth: 2,
-      entries: [tornado, llanoStorm, heat].map {
+      entries: alerts.map {
         MeshWXDigest.Entry(
           identity: $0.identity,
           expiresRelativeMinutes: UInt16($0.expiresMinutes - (nowMinutes - 1)),
           expiresMinutes: $0.expiresMinutes)
       })
+    // Seqs run on from the warnings' without a gap: a gap trips `needsDigest`.
     _ = WeatherStateReducer.apply(
-      MeshWXMessage(header: header(238, .digest), payload: .digest(digest)),
+      MeshWXMessage(header: header(239, .digest), payload: .digest(digest)),
       to: &storm, receivedAt: now.addingTimeInterval(-60))
     // Radar (revision 11): the three tiles the bot cut around Austin from the Southern Plains
     // mosaic of 20 September 2026, 23:38Z, one per width, with the picture's time moved to twelve
@@ -204,13 +218,17 @@ struct WeatherSeedScenarioTests {
       }
       radar.takenMinutes = nowMinutes - 12
       _ = WeatherStateReducer.apply(
-        MeshWXMessage(header: header(UInt8(239 + offset), .radar), payload: .radar(radar)),
+        MeshWXMessage(header: header(UInt8(240 + offset), .radar), payload: .radar(radar)),
         to: &storm, receivedAt: now.addingTimeInterval(TimeInterval(-40 + offset * 5)))
     }
     try await FileWeatherStateStore(url: directory.appendingPathComponent("storm/state.json")).save([Self.botID: storm])
 
     #expect(storm.radarTiles.count == 3)
-    #expect(storm.warnings.count == 3)
+    #expect(storm.warnings.count == 4)
+    let watch = try #require(storm.warnings[floodWatch.identity])
+    #expect(watch.beginsAt == Date(unixMinutes: nowMinutes + 10 * 60))
+    #expect(watch.issuedAt == Date(unixMinutes: nowMinutes - 2 * 60))
+    #expect(try #require(watch.beginsAt) > now, "not in effect yet")
     #expect(storm.missingFromDigest.isEmpty)
     #expect(!storm.needsDigest)
     print("wrote weather scenarios to \(directory.path)")

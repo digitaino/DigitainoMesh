@@ -8,7 +8,8 @@ import Testing
 /// The fixture is the publisher's own file, byte for byte: `docs/meshwx_v5_vectors.json` from
 /// the bot's repository (thirteen at revision 5, which added the two vectors carrying the new
 /// times beside the revision 4 form of the same two messages; twenty-five at revision 11, which
-/// added a real Dallas radar tile and the three messages around it).
+/// added a real Dallas radar tile and the three messages around it; twenty-six at revision 12,
+/// which added the Flood Watch that starts 33 hours after it was issued).
 /// A codec checked only against itself passes forever while being wrong, so nothing in this
 /// file is derived from the Swift implementation.
 enum MeshWXVectors {
@@ -118,6 +119,10 @@ enum MeshWXVectors {
     // decoder resolves to the same absolute minutes under the same key.
     let point: UInt16?
     let issuedMin: UInt32?
+    /// Revision 12 (spec §3): when a warning takes effect, as absolute minutes. The reference JSON
+    /// writes it on **every** warning since revision 12, `null` when the message carries no start,
+    /// so absent and null read the same here: in effect from issuance.
+    let beginsMin: UInt32?
     let firstPeriod: UInt8?
     let periods: [Period]?
 

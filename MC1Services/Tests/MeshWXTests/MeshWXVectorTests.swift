@@ -37,6 +37,8 @@ struct MeshWXVectorTests {
     #expect(MeshWXVectors.all.contains { $0.name == "radar_tile_coarse_partial" })
     #expect(MeshWXVectors.all.contains { $0.name == "request_radar" })
     #expect(MeshWXVectors.all.contains { $0.name == "not_available_radar" })
+    // Revision 12's one: a watch issued before it takes effect.
+    #expect(MeshWXVectors.all.contains { $0.name == "warning_upcoming_watch" })
   }
 
   /// Spec revision 11, §7D, against the publisher's own bytes: the Dallas tile of 20 September
@@ -347,6 +349,54 @@ struct MeshWXVectorTests {
     #expect(oldWarning.issuedMinutes == nil)
   }
 
+  /// Spec §3, revision 12: FA.A.EWX.8 as the bot sent it — issued Tuesday, in effect from 33 h
+  /// 36 min later, expiring 81 h 36 min after issuance. 28 bytes: the issue time (4896) and then
+  /// two more, 2880 minutes from the start to the expiry, found by length because the flags
+  /// nibble has no bit left. A decoder that stops after the issue time — every one before
+  /// revision 12 — reads the same message as a watch in effect from issuance.
+  @Test func theUpcomingWatchVectorCarriesItsStartAfterTheIssueTime() throws {
+    let vector = try #require(MeshWXVectors.all.first { $0.name == "warning_upcoming_watch" })
+    let data = try #require(Data(meshWXHex: vector.hex))
+    #expect(data.count == 28)
+    #expect(data.suffix(4) == Data([0x20, 0x13, 0x40, 0x0B]), "4896 then 2880, little-endian")
+
+    let message = try MeshWXDecoder.decode(data)
+    #expect(message.header.flags & MeshWXWire.flagWarningIssued != 0)
+    guard case let .warning(watch) = message.payload else {
+      Issue.record("expected a warning")
+      return
+    }
+    #expect(watch.identity == MeshWXWarningIdentity(event: 10, office: 35, etn: 8))
+    #expect(watch.issuedBeforeMinutes == 4896)
+    #expect(watch.beginsBeforeMinutes == 2880)
+    #expect(watch.issuedMinutes == 29_823_900)
+    #expect(watch.beginsMinutes == UInt32(29_823_900 + 2016), "33 h 36 min after issuance")
+    #expect(watch.beginsMinutes == vector.decoded.beginsMin)
+    #expect(watch.expiresMinutes == 29_823_900 + 4896)
+    #expect(try MeshWXEncoder.encode(message) == data)
+
+    // The revision 11 reading: the same bytes without the last two are the watch with no start,
+    // which is what an older decoder makes of the whole message.
+    guard case let .warning(older) = try MeshWXDecoder.decode(data.dropLast(2)).payload else {
+      Issue.record("expected a warning")
+      return
+    }
+    #expect(older.issuedMinutes == watch.issuedMinutes)
+    #expect(older.beginsBeforeMinutes == nil)
+    #expect(older.beginsMinutes == nil)
+
+    // Every other warning vector decodes with no start, and no byte of any of them moved.
+    for other in MeshWXVectors.all where other.decoded.type == 1 && other.name != vector.name {
+      guard case let .warning(warning) = try MeshWXDecoder.decode(
+        try #require(Data(meshWXHex: other.hex))).payload
+      else {
+        Issue.record("expected a warning in \(other.name)")
+        continue
+      }
+      #expect(warning.beginsMinutes == nil, "\(other.name)")
+    }
+  }
+
   /// Spec §7B: the app's own `>d`, as the sixteen bytes the spec prints — the one message this
   /// app transmits, so the encoder's output is checked against the publisher's hex byte for byte
   /// in both directions.
@@ -405,6 +455,9 @@ struct MeshWXVectorTests {
     // Revision 5 (spec §3): absent in the revision 4 vector, and in the new one it resolves to
     // the same absolute minutes the bot's decoder reports, not to the two bytes on the wire.
     #expect(warning.issuedMinutes == want.issuedMin)
+    // Revision 12 (spec §3): null on every warning that carries no start, which is all of them
+    // but the upcoming watch.
+    #expect(warning.beginsMinutes == want.beginsMin)
 
     if let wantPolygon = want.polygon {
       let polygon = try #require(warning.polygon)

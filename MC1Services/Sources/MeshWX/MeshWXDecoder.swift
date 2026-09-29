@@ -111,7 +111,20 @@ public enum MeshWXDecoder {
     // that reaches the packet limit, and cannot drift: both ends of the subtraction ride here.
     if header.flags & MeshWXWire.flagWarningIssued != 0 {
       try need(bytes, offset + MeshWXWire.warningIssuedSize, "warning issue time")
-      warning.issuedBeforeMinutes = u16(bytes, offset)
+      let issuedBefore = u16(bytes, offset)
+      warning.issuedBeforeMinutes = issuedBefore
+      offset += MeshWXWire.warningIssuedSize
+      // Revision 12 (spec §3): the start, found by length — the flags nibble is full, and every
+      // decoder before revision 12 stops at the issue time above, so GRP_DATA's exact length is
+      // what announces it. Only a start strictly between the issuance and the expiry is one;
+      // anything else is dropped here as if absent, so nothing past the decoder has to ask. Bytes
+      // after it belong to a later revision and are left alone.
+      if bytes.count >= offset + MeshWXWire.warningBeginsSize {
+        let beginsBefore = u16(bytes, offset)
+        if beginsBefore > 0, beginsBefore < issuedBefore {
+          warning.beginsBeforeMinutes = beginsBefore
+        }
+      }
     }
     return warning
   }

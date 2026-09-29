@@ -37,8 +37,9 @@ struct WeatherAlertRow: View, Equatable {
         Text(WeatherFormatting.eventName(item.warning.event, tables: tables))
           .font(.headline)
         if item.kind == .active {
-          Text(WeatherFormatting.untilLine(
-            expiresAt: item.expiresAt, now: now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
+          Text(WeatherFormatting.alertWindow(
+            beginsAt: item.beginsAt, expiresAt: item.expiresAt, now: now, calendar: .autoupdatingCurrent,
+            locale: .autoupdatingCurrent))
           .font(.subheadline)
         }
         if let qualifier {

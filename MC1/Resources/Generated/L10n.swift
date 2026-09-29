@@ -7617,6 +7617,14 @@ public enum L10n {
         public static func expired(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.alerts.expired", String(describing: p1), fallback: "Expired %@ ago · no update received")
         }
+        /// Revision 12: an alert not in effect yet, "from Wed 19:00 until Fri 19:00"
+        public static func fromUntil(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.fromUntil", String(describing: p1), String(describing: p2), fallback: "from %1$@ until %2$@")
+        }
+        /// Revision 12: time left on an alert ending within 12 hours, "40 min left"
+        public static func `left`(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.left", String(describing: p1), fallback: "%@ left")
+        }
         /// Location: WeatherPlacePageView.swift - Other alerts covering the place, beside the banner, %lld is how many
         public static func more(_ p1: Int) -> String {
           return L10n.tr("Weather", "weather.alerts.more", p1, fallback: "+%lld more")
@@ -7627,9 +7635,13 @@ public enum L10n {
         }
         /// Location: WeatherAlertsListView.swift - Source line with no known radio
         public static let sourceGeneric = L10n.tr("Weather", "weather.alerts.sourceGeneric", fallback: "National Weather Service alerts via weather radios")
-        /// Location: WeatherFormatting.swift - When an alert ends. %1$@ is a time like "11:41 PM", %2$@ a countdown like "in 40 min"
+        /// Location: WeatherFormatting.swift - When an alert in effect ends within 12 hours. %1$@ is a time like "11:41 PM", %2$@ the time left, "weather.alerts.left", like "40 min left"
         public static func until(_ p1: Any, _ p2: Any) -> String {
           return L10n.tr("Weather", "weather.alerts.until", String(describing: p1), String(describing: p2), fallback: "until %1$@ · %2$@")
+        }
+        /// Revision 12: an alert that ends more than 12 hours from now, "until Fri 19:00"
+        public static func untilOnly(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.untilOnly", String(describing: p1), fallback: "until %@")
         }
         /// Location: WeatherCopy.swift - Row line for a warning cancelled as upgraded whose replacement has not arrived
         public static let upgraded = L10n.tr("Weather", "weather.alerts.upgraded", fallback: "Upgraded — replacement not received")

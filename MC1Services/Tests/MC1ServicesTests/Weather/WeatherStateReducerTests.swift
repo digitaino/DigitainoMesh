@@ -124,6 +124,60 @@ struct WeatherStateReducerTests {
     #expect(stored.warning.issuedMinutes == F.t0Minutes + 54)
   }
 
+  /// Spec §3, revision 12: a watch issued before it takes effect says when it starts, and the
+  /// start is resolved once on arrival, like the issue time. A later copy without one — a second,
+  /// older bot, or a message from before the bot spoke revision 12 — leaves it alone; a copy with
+  /// a moved start replaces it; and a digest extending the expiry does not walk it forward.
+  @Test
+  func `a warning's start is stored, kept across a copy without one, and not moved by a digest`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.warning(
+        seq: 1, expiresMinutes: F.t0Minutes + 4896, issuedMinutes: F.t0Minutes,
+        beginsMinutes: F.t0Minutes + 2016),
+      to: &state, receivedAt: F.t0)
+    var stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.beginsAt == Date(unixMinutes: F.t0Minutes + 2016))
+    #expect(stored.issuedAt == Date(unixMinutes: F.t0Minutes))
+
+    // The same watch from a bot that does not send the start.
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 2, expiresMinutes: F.t0Minutes + 4896, isUpdate: true, issuedMinutes: F.t0Minutes),
+      to: &state, receivedAt: F.t0.addingTimeInterval(60))
+    stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.beginsAt == Date(unixMinutes: F.t0Minutes + 2016), "not erased by a copy without one")
+    #expect(stored.warning.beginsMinutes == nil, "the message itself carried none")
+
+    // A moved start is a material change, and the newer copy's start is the one kept.
+    _ = WeatherStateReducer.apply(
+      F.warning(
+        seq: 3, expiresMinutes: F.t0Minutes + 4896, isUpdate: true, issuedMinutes: F.t0Minutes,
+        beginsMinutes: F.t0Minutes + 1800),
+      to: &state, receivedAt: F.t0.addingTimeInterval(120))
+    stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.beginsAt == Date(unixMinutes: F.t0Minutes + 1800))
+
+    // A digest extends the expiry by two hours: the start stays where it was.
+    _ = WeatherStateReducer.apply(
+      F.digest(seq: 4, nowMinutes: F.t0Minutes, entries: [(F.svw42, 4896 + 120)]), to: &state,
+      receivedAt: F.t0.addingTimeInterval(180))
+    stored = try! #require(state.warnings[F.svw42])
+    #expect(stored.warning.expiresMinutes == F.t0Minutes + 4896 + 120, "the digest extended it")
+    #expect(stored.beginsAt == Date(unixMinutes: F.t0Minutes + 1800))
+    // Recomputed from the wire's expiry-relative field it would now be two hours late, which is
+    // why the resolved instant is the one kept.
+    #expect(stored.warning.beginsMinutes == F.t0Minutes + 1920)
+  }
+
+  /// A warning in effect from issuance — every warning before revision 12 — has no start.
+  @Test
+  func `a warning without a start stores none`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 1, issuedMinutes: F.t0Minutes - 21), to: &state, receivedAt: F.t0)
+    #expect(state.warnings[F.svw42]?.beginsAt == nil)
+  }
+
   @Test
   func `a cancel removes the identity and says why`() {
     var state = fresh()

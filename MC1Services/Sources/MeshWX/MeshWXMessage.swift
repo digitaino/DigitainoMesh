@@ -321,6 +321,17 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
   /// nibble: a re-encode has to reproduce the two bytes. It also keeps the saturation readable —
   /// 65535 means "45.5 days or more", which an absolute time alone cannot say.
   public var issuedBeforeMinutes: UInt16?
+  /// Minutes between the moment the product takes effect and ``expiresMinutes``, exactly as the
+  /// wire carries it (spec §3, revision 12); nil when the message did not carry a start **or
+  /// carried one that is not valid**.
+  ///
+  /// The bot sends it only for a product issued before it takes effect — a watch issued on
+  /// Tuesday morning for Wednesday evening through Friday — and only strictly between the issuance
+  /// and the expiry: `0 < beginsBeforeMinutes < issuedBeforeMinutes`. The decoder applies that
+  /// rule and drops anything else as if absent, so an invalid value never reaches the rest of the
+  /// app. Nil means the product is in effect from its issuance, which is what every bot before
+  /// revision 12 says.
+  public var beginsBeforeMinutes: UInt16?
 
   public init(
     identity: MeshWXWarningIdentity,
@@ -333,7 +344,8 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
     isUpdate: Bool = false,
     polygon: [MeshWXCoordinate]? = nil,
     areas: [MeshWXAreaRun]? = nil,
-    issuedBeforeMinutes: UInt16? = nil
+    issuedBeforeMinutes: UInt16? = nil,
+    beginsBeforeMinutes: UInt16? = nil
   ) {
     self.identity = identity
     self.expiresMinutes = expiresMinutes
@@ -346,6 +358,7 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
     self.polygon = polygon
     self.areas = areas
     self.issuedBeforeMinutes = issuedBeforeMinutes
+    self.beginsBeforeMinutes = beginsBeforeMinutes
   }
 
   public var event: UInt8 { identity.event }
@@ -368,6 +381,18 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
   /// issuance to expiry, so this is a guard against a wrap, not a case a screen will meet.
   public var isIssueTimeSaturated: Bool {
     issuedBeforeMinutes == MeshWXWire.issuedBeforeSaturatedMinutes
+  }
+
+  /// When the product takes effect, in Unix minutes: `expires − begins_before` (spec §3,
+  /// revision 12), the twin of ``issuedMinutes``. Nil when the warning carries no start, which
+  /// means it is in effect from its issuance.
+  ///
+  /// The earliest VTEC begin among the product's active zones, so a watch starting at different
+  /// times in different zones is shown from the first of them. Relative to the expiry on the wire
+  /// for the same reason the issue time is, so an app that keeps it past a digest extending the
+  /// expiry must resolve it once, on arrival (`WeatherStoredWarning.beginsAt`).
+  public var beginsMinutes: UInt32? {
+    beginsBeforeMinutes.map { expiresMinutes &- UInt32($0) }
   }
 
   /// Hail tag in inches, or nil when there is no tag. The *number* is returned, not a

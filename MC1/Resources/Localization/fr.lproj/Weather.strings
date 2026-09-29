@@ -108,8 +108,14 @@
 
 // MARK: - Alerts card
 
-/* Location: WeatherFormatting.swift - When an alert ends. %1$@ is a time like "11:41 PM", %2$@ a countdown like "in 40 min" */
+/* Location: WeatherFormatting.swift - When an alert in effect ends within 12 hours. %1$@ is a time like "11:41 PM", %2$@ the time left, "weather.alerts.left", like "40 min left" */
 "weather.alerts.until" = "jusqu'à %1$@ · %2$@";
+/* Revision 12: an alert that ends more than 12 hours from now, "until Fri 19:00" */
+"weather.alerts.untilOnly" = "jusqu'à %@";
+/* Revision 12: an alert not in effect yet, "from Wed 19:00 until Fri 19:00" */
+"weather.alerts.fromUntil" = "de %1$@ jusqu'à %2$@";
+/* Revision 12: time left on an alert ending within 12 hours, "40 min left" */
+"weather.alerts.left" = "encore %@";
 
 /* Location: WeatherCopy.swift - Row line for a warning cancelled as upgraded whose replacement has not arrived */
 "weather.alerts.upgraded" = "Rehaussée — nouvelle alerte non reçue";

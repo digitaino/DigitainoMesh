@@ -41,6 +41,7 @@ enum WeatherFixture {
     isUpdate: Bool = false,
     windMph: UInt8 = 60,
     issuedMinutes: UInt32? = nil,
+    beginsMinutes: UInt32? = nil,
     source: MeshWXDataSource = .unstated,
     bot: UInt16 = botID
   ) -> MeshWXMessage {
@@ -62,7 +63,9 @@ enum WeatherFixture {
           MeshWXCoordinate(latitude: 30.38, longitude: -97.41)
         ],
         areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)],
-        issuedBeforeMinutes: issuedMinutes.map { UInt16(expiresMinutes - $0) }
+        issuedBeforeMinutes: issuedMinutes.map { UInt16(expiresMinutes - $0) },
+        // Revision 12: found by length, so no flag bit. Set as the decoder would leave it.
+        beginsBeforeMinutes: beginsMinutes.map { UInt16(expiresMinutes - $0) }
       ))
     )
   }

@@ -80,6 +80,7 @@ public enum MeshWXEncoder {
     areas: [MeshWXAreaRun]? = nil,
     isUpdate: Bool = false,
     issuedMinutes: UInt32? = nil,
+    beginsMinutes: UInt32? = nil,
     source: MeshWXDataSource = .unstated
   ) throws -> Data {
     var tags =
@@ -111,8 +112,19 @@ public enum MeshWXEncoder {
     // one is — encodes as 0 rather than failing the message over a bad clock.
     if let issuedMinutes {
       let before = Int(expiresMinutes) - Int(issuedMinutes)
-      out.appendU16(
-        UInt16(max(0, min(Int(MeshWXWire.issuedBeforeSaturatedMinutes), before))))
+      let issuedBefore = UInt16(max(0, min(Int(MeshWXWire.issuedBeforeSaturatedMinutes), before)))
+      out.appendU16(issuedBefore)
+      // Revision 12 (spec §3): the start, two more bytes after the issue time, under exactly the
+      // bot's conditions — only with an issue time, only for a start later than it, and only a
+      // gap strictly between the issuance and the expiry. A product in effect from issuance
+      // carries nothing new and reads exactly as revision 11.
+      if let beginsMinutes, beginsMinutes > issuedMinutes {
+        let gap = Int(expiresMinutes) - Int(beginsMinutes)
+        let beginsBefore = UInt16(max(0, min(Int(MeshWXWire.beginsBeforeSaturatedMinutes), gap)))
+        if beginsBefore > 0, beginsBefore < issuedBefore {
+          out.appendU16(beginsBefore)
+        }
+      }
     }
     return try checkSize(out, "warning")
   }
@@ -140,6 +152,8 @@ public enum MeshWXEncoder {
       // Resolved and subtracted back: `expires − (expires − before)` is the same two bytes,
       // saturation included, so the round trip stays byte-identical.
       issuedMinutes: warning.issuedMinutes,
+      // The same subtraction back, so a decoded start re-encodes as the two bytes it came in.
+      beginsMinutes: warning.beginsMinutes,
       source: source
     )
   }

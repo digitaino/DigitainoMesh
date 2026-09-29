@@ -85,6 +85,42 @@ struct WeatherStateStoreTests {
     #expect(decoded.warnings[warning.identity]?.issuedAt == issued)
   }
 
+  /// Spec §3, revision 12. A file written before the app could read a warning's start is still
+  /// the last picture the bot sent: the start decodes as absent — in effect from issuance, which
+  /// is what every bot before revision 12 said — and a start round-trips once there is one, on
+  /// the stored copy and inside the warning's own wire fields.
+  @Test
+  func `a warning's start round-trips, and a file from before it decodes with it absent`() throws {
+    var state = WeatherBotState(botID: 7)
+    guard case let .warning(warning) = WeatherFixture.warning(seq: 1).payload else {
+      Issue.record("expected a warning")
+      return
+    }
+    state.warnings[warning.identity] = WeatherStoredWarning(
+      warning: warning, receivedAt: Date(timeIntervalSince1970: 1_789_440_000), seq: 1,
+      issuedAt: Date(timeIntervalSince1970: 1_789_436_700))
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .secondsSince1970
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .secondsSince1970
+
+    let old = try encoder.encode(state)
+    let oldText = String(decoding: old, as: UTF8.self)
+    #expect(!oldText.contains("beginsAt") && !oldText.contains("beginsBeforeMinutes"))
+    let fromOldFile = try decoder.decode(WeatherBotState.self, from: old)
+    #expect(fromOldFile.warnings[warning.identity]?.beginsAt == nil)
+    #expect(fromOldFile.warnings[warning.identity]?.warning.beginsBeforeMinutes == nil)
+    #expect(fromOldFile == state)
+
+    let begins = Date(timeIntervalSince1970: 1_789_500_000)
+    state.warnings[warning.identity]?.beginsAt = begins
+    state.warnings[warning.identity]?.warning.beginsBeforeMinutes = 30
+    let decoded = try decoder.decode(WeatherBotState.self, from: encoder.encode(state))
+    #expect(decoded == state)
+    #expect(decoded.warnings[warning.identity]?.beginsAt == begins)
+    #expect(decoded.warnings[warning.identity]?.warning.beginsBeforeMinutes == 30)
+  }
+
   /// Spec §7A. A file written before the bot could state its coverage is still the last picture
   /// it sent: the field decodes as absent, which falls back to the station footprint.
   @Test

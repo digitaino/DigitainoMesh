@@ -618,6 +618,91 @@ struct MeshWXCodecTests {
     }
   }
 
+  // MARK: - Warning start (spec §3, revision 12)
+
+  /// A watch issued at `issued`, starting 2016 minutes later and expiring 4896 minutes after
+  /// issuance: the shape of the revision 12 vector, on the fixed identity above.
+  private func watch(
+    issued: UInt32? = 29_823_900, begins: UInt32?, expires: UInt32 = 29_823_900 + 4896
+  ) throws -> Data {
+    try MeshWXEncoder.warning(
+      seq: 33, bot: 19578, identity: svw, expiresMinutes: expires,
+      areas: [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 191, run: 4)],
+      issuedMinutes: issued, beginsMinutes: begins)
+  }
+
+  /// Two bytes after the issue time, minutes from the start to the expiry, and no flag: the
+  /// nibble is full, so it is found by the message's length.
+  @Test func theStartIsTwoBytesAfterTheIssueTimeAndNeedsNoFlag() throws {
+    let without = try watch(begins: nil)
+    let with = try watch(begins: 29_823_900 + 2016)
+    #expect(with.count == without.count + MeshWXWire.warningBeginsSize)
+    #expect(with.prefix(without.count) == without, "nothing before the start moved")
+    #expect(with.suffix(2) == Data([0x40, 0x0B]), "2880 minutes, little-endian")
+    #expect(with[3] == without[3], "the same flags nibble")
+
+    let warning = try #require(try warningBody(with))
+    #expect(warning.beginsBeforeMinutes == 2880)
+    #expect(warning.beginsMinutes == UInt32(29_823_900 + 2016))
+    #expect(try MeshWXEncoder.encode(try MeshWXDecoder.decode(with)) == with)
+    let plain = try #require(try warningBody(without))
+    #expect(plain.beginsBeforeMinutes == nil)
+    #expect(plain.beginsMinutes == nil)
+  }
+
+  /// The bot's own conditions: only with an issue time, and only a start strictly between the
+  /// issuance and the expiry. A product in effect from issuance carries nothing new.
+  @Test func theEncoderWritesAStartOnlyStrictlyBetweenIssuanceAndExpiry() throws {
+    let bare = try watch(begins: nil).count
+    #expect(try watch(begins: 29_823_900).count == bare, "in effect from issuance")
+    #expect(try watch(begins: 29_823_900 - 60).count == bare, "a start before issuance")
+    #expect(try watch(begins: 29_823_900 + 4896).count == bare, "a start at the expiry")
+    #expect(try watch(begins: 29_823_900 + 5000).count == bare, "a start after the expiry")
+    #expect(try watch(begins: 29_823_900 + 1).count == bare + 2, "a minute after issuance is one")
+    #expect(try watch(begins: 29_823_900 + 4895).count == bare + 2, "a minute before expiry is one")
+    // No issue time, no start: the start rides after it and is measured against it.
+    #expect(
+      try watch(issued: nil, begins: 29_823_900 + 2016).count == (try watch(issued: nil, begins: nil).count))
+  }
+
+  /// A value that is not a start after issuance is ignored as if absent, so an invalid one never
+  /// reaches the app: 0, one equal to the issue gap, one beyond it (which is also every saturated
+  /// value, since the issue gap cannot exceed the u16).
+  @Test func aStartThatIsNotBetweenIssuanceAndExpiryIsIgnored() throws {
+    let base = try watch(begins: nil)
+    for bad: UInt16 in [0, 4896, 4897, MeshWXWire.beginsBeforeSaturatedMinutes] {
+      var data = base
+      data.append(UInt8(bad & 0xFF))
+      data.append(UInt8(bad >> 8))
+      let warning = try #require(try warningBody(data))
+      #expect(warning.beginsBeforeMinutes == nil, "begins_before \(bad)")
+      #expect(warning.beginsMinutes == nil, "begins_before \(bad)")
+      #expect(warning.issuedBeforeMinutes == 4896, "the issue time is read as before")
+    }
+  }
+
+  /// Found by length: one stray byte is not a start and is not an error, and bytes after a start
+  /// belong to a later revision and are left alone.
+  @Test func theStartIsReadOnlyWhenTwoBytesRemainAndLaterBytesAreIgnored() throws {
+    var oneByte = try watch(begins: nil)
+    oneByte.append(0x40)
+    let short = try #require(try warningBody(oneByte))
+    #expect(short.beginsBeforeMinutes == nil)
+    #expect(short.issuedBeforeMinutes == 4896)
+
+    var later = try watch(begins: 29_823_900 + 2016)
+    later.append(contentsOf: [0x01, 0x02, 0x03])
+    let warning = try #require(try warningBody(later))
+    #expect(warning.beginsMinutes == UInt32(29_823_900 + 2016))
+
+    // Without the issue-time flag the trailing bytes are never read as either time.
+    var noIssue = try watch(issued: nil, begins: nil)
+    noIssue.append(contentsOf: [0x40, 0x0B])
+    let unflagged = try #require(try warningBody(noIssue))
+    #expect(unflagged.issuedBeforeMinutes == nil)
+    #expect(unflagged.beginsBeforeMinutes == nil)
+  }
+
   // MARK: - Coverage (type 8, spec §7A)
 
   private func coverageBody(_ data: Data) throws -> MeshWXCoverage? {

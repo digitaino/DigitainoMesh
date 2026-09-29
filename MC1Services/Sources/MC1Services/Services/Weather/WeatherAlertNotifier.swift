@@ -193,7 +193,12 @@ public actor WeatherAlertNotifier {
           placement: placement,
           botName: await name(of: held.botID),
           isLate: isLate,
-          now: now)
+          now: now,
+          // The copy's own start, else another bot's, as the alerts list reads it
+          // (`WeatherAlertItems.make`): a bot older than revision 12 saying nothing is not a
+          // bot saying the watch has begun.
+          beginsAt: held.stored.beginsAt ?? states.keys.sorted().lazy
+            .compactMap { states[$0]?.warnings[identity]?.beginsAt }.first)
         await poster.post(WeatherAlertNotification(
           identifier: identifier,
           threadIdentifier: WeatherAlertNotificationRules.threadIdentifier(placeID: place.id),

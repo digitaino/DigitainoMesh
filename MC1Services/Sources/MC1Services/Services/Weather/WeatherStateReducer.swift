@@ -356,6 +356,11 @@ public enum WeatherStateReducer {
       // sent before the bot spoke revision 5 — therefore leaves what is already known alone
       // rather than erasing it.
       issuedAt: warning.issuedMinutes.map { Date(unixMinutes: $0) } ?? existing?.issuedAt,
+      // Spec §3, revision 12: the start, resolved once and kept the same way. A later copy
+      // without one (a second, older bot, or a message from before the bot spoke revision 12)
+      // does not erase it; a copy with a moved start replaces it, since a moved start is a
+      // material change the bot resends for.
+      beginsAt: warning.beginsMinutes.map { Date(unixMinutes: $0) } ?? existing?.beginsAt,
       source: source
     )
     state.missingFromDigest.removeAll { $0 == warning.identity }

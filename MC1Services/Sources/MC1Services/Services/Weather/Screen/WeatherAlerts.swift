@@ -154,6 +154,12 @@ public struct WeatherAlertItem: Sendable, Hashable, Identifiable {
   public var rank: Int
   public var botIDs: [UInt16]
   public var receivedAt: Date
+  /// When it takes effect (spec §3, revision 12), from the stored copy rather than recomputed from
+  /// the wire's expiry-relative field. Nil when it is in effect from its issuance — or the bot did
+  /// not say — which is every warning before revision 12. A start still ahead is what makes an
+  /// alert read "from Wed 19:00 until Fri 19:00" instead of counting down to an end that has not
+  /// begun; it changes nothing about where the alert sorts or whether it covers the place.
+  public var beginsAt: Date?
 
   public var id: MeshWXWarningIdentity { identity }
   public var expiresAt: Date { Date(unixMinutes: warning.expiresMinutes) }
@@ -187,6 +193,9 @@ public enum WeatherAlertItems {
       var stored: WeatherStoredWarning
       var kind: WeatherAlertItem.Kind
       var botIDs: Set<UInt16>
+      /// The start from the first bot, in bot order, whose copy states one: the shown copy's own
+      /// wins below, and this stands in when that copy came from a bot that said nothing.
+      var anyBeginsAt: Date?
     }
     var candidates: [MeshWXWarningIdentity: Candidate] = [:]
     // Bot order fixed, so which copy wins a full tie does not depend on dictionary order.
@@ -204,10 +213,12 @@ public enum WeatherAlertItems {
           continue
         }
         guard var held = candidates[stored.identity] else {
-          candidates[stored.identity] = Candidate(stored: stored, kind: kind, botIDs: [botID])
+          candidates[stored.identity] = Candidate(
+            stored: stored, kind: kind, botIDs: [botID], anyBeginsAt: stored.beginsAt)
           continue
         }
         held.botIDs.insert(botID)
+        held.anyBeginsAt = held.anyBeginsAt ?? stored.beginsAt
         if prefers(stored, kind, over: held.stored, held.kind) {
           held.stored = stored
           held.kind = kind
@@ -220,7 +231,9 @@ public enum WeatherAlertItems {
     for botID in botIDs {
       guard let state = states[botID] else { continue }
       for (identity, pending) in state.pendingUpgrades where candidates[identity] == nil {
-        let stored = WeatherStoredWarning(warning: pending.warning, receivedAt: pending.cancelledAt)
+        let stored = WeatherStoredWarning(
+          warning: pending.warning, receivedAt: pending.cancelledAt,
+          beginsAt: pending.warning.beginsMinutes.map { Date(unixMinutes: $0) })
         let kind = WeatherAlertItem.Kind.upgradedAwaitingReplacement(cancelledAt: pending.cancelledAt)
         guard var held = markers[identity] else {
           markers[identity] = Candidate(stored: stored, kind: kind, botIDs: [botID])
@@ -249,7 +262,10 @@ public enum WeatherAlertItems {
         placement: placement,
         rank: WeatherAlertPriority.rank(candidate.stored.warning, tables: tables),
         botIDs: candidate.botIDs.sorted(),
-        receivedAt: candidate.stored.receivedAt
+        receivedAt: candidate.stored.receivedAt,
+        // The shown copy's start, else another bot's: a start is a fact about the product, and a
+        // copy from a bot older than revision 12 saying nothing is not a copy saying it began.
+        beginsAt: candidate.stored.beginsAt ?? candidate.anyBeginsAt
       )
     }
     return items.sorted { lhs, rhs in

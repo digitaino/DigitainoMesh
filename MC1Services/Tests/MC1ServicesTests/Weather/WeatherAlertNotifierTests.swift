@@ -154,12 +154,14 @@ struct WeatherAlertNotifierTests {
     to harness: Harness,
     botID: UInt16 = F.botID,
     isBacklog: Bool = false,
-    replacedExisting: Bool = false
+    replacedExisting: Bool = false,
+    beginsAt: Date? = nil
   ) async {
     var state = harness.states.value[botID] ?? WeatherBotState(botID: botID)
     let existing = state.warnings[warning.identity]
     state.warnings[warning.identity] = WeatherStoredWarning(
-      warning: warning, receivedAt: harness.clock.now, updateCount: existing.map { $0.updateCount + 1 } ?? 0)
+      warning: warning, receivedAt: harness.clock.now, updateCount: existing.map { $0.updateCount + 1 } ?? 0,
+      beginsAt: beginsAt)
     harness.states.value[botID] = state
     await harness.notifier.apply(
       botID: botID,
@@ -262,6 +264,47 @@ struct WeatherAlertNotifierTests {
     #expect(posted.identifier.hasPrefix("wx-4C7A-TO.W.EWX.42@"))
     #expect(posted.threadIdentifier == Rules.threadIdentifier(placeID: Self.here().id))
     #expect(harness.ledger.value.count == 1)
+  }
+
+  /// Revision 12: a warning that has not started says so, from its start until its end, and a
+  /// notification never counts down (docs/MESHWX_REV12.md §2).
+  @Test("a warning that has not started is posted from its start until its end")
+  func postsUpcomingWarningFromUntil() async throws {
+    let harness = makeHarness(watch: WeatherAlertWatch(places: [Self.here()]))
+    await deliver(
+      Self.warning("TO.W", expiresMinutes: F.t0Minutes + 4896, tornado: .radarIndicated), to: harness,
+      beginsAt: Date(unixMinutes: F.t0Minutes + 2016))
+
+    let posted = try #require(await harness.poster.last)
+    #expect(posted.content.body.hasPrefix("Austin · from "))
+    #expect(posted.content.body.contains(" until "))
+    #expect(!posted.content.body.contains("left"))
+  }
+
+  /// The English fallback's words, on fixed clocks: the app's `alertWindow` without the countdown.
+  @Test("the English fallback names a start and an end the way the app does")
+  func defaultCopyWindow() {
+    // Tuesday 29 September 2026, 09:24 in Austin: the Flood Watch of the owner's report.
+    let now = Date(timeIntervalSince1970: 1_790_691_840)
+    let begins = now.addingTimeInterval(2016 * 60)   // Wednesday 19:00
+    let expires = now.addingTimeInterval(4896 * 60)  // Friday 19:00
+    for (identifier, want) in [
+      ("en_GB", ["from Wed 19:00 until Fri 19:00", "until Fri 19:00", "until 19:00"]),
+      ("en_US", ["from Wed 7:00 PM until Fri 7:00 PM", "until Fri 7:00 PM", "until 7:00 PM"])
+    ] {
+      let locale = Locale(identifier: identifier)
+      var calendar = Calendar(identifier: .gregorian)
+      calendar.timeZone = TimeZone(identifier: "America/Chicago") ?? .gmt
+      calendar.locale = locale
+      func window(at moment: Date) -> String {
+        WeatherAlertDefaultCopy.window(
+          beginsAt: begins, expiresAt: expires, now: moment, calendar: calendar, locale: locale)
+          .replacingOccurrences(of: "\u{202F}", with: " ")
+      }
+      #expect(window(at: now) == want[0], "\(identifier), Tuesday morning")
+      #expect(window(at: begins) == want[1], "\(identifier), Wednesday 19:00")
+      #expect(window(at: expires.addingTimeInterval(-12 * 3600)) == want[2], "\(identifier), Friday 07:00")
+    }
   }
 
   @Test("a warning that covers one watched place and not another posts once, for that one")

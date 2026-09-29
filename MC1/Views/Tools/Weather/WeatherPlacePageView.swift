@@ -219,13 +219,14 @@ struct WeatherWarningBannerSection: View {
     .themedRowBackground(theme)
   }
 
-  /// "until 9:41 PM · in 40 min" for a live warning; for one that just ended, or an upgrade whose
+  /// "until 9:41 PM · 40 min left" for a live warning, "from Wed 7:00 PM until Fri 7:00 PM" for
+  /// one that has not started (revision 12); for one that just ended, or an upgrade whose
   /// replacement never came, what became of it instead.
   private var qualifier: String {
     WeatherCopy.alertQualifier(banner.item, placeName: screen.placeName, now: screen.now)
-      ?? WeatherFormatting.untilLine(
-        expiresAt: banner.item.expiresAt, now: screen.now, calendar: .autoupdatingCurrent,
-        locale: .autoupdatingCurrent)
+      ?? WeatherFormatting.alertWindow(
+        beginsAt: banner.item.beginsAt, expiresAt: banner.item.expiresAt, now: screen.now,
+        calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
   }
 }
 

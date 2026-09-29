@@ -113,6 +113,33 @@ struct WeatherAlertRulesTests {
     #expect(three.first?.expiresAt == longer.expiresAt)
   }
 
+  /// Spec §3, revision 12: an alert carries its start from the stored copy, and a copy from a bot
+  /// that said nothing about the start does not make a watch read as begun. The start changes
+  /// nothing about where it sorts or whether it covers the place (docs/MESHWX_REV12.md §3).
+  @Test
+  func `an alert carries its start, from another bot's copy when the shown one has none`() throws {
+    let begins = P.now.addingTimeInterval(10 * 3600)
+    var upcoming = stored(event: 3, etn: 42, minutes: 58 * 60)
+    upcoming.beginsAt = begins
+    let silent = stored(event: 3, etn: 42, minutes: 58 * 60 + 30)   // later expiry: the shown copy
+
+    let one = try #require(items([P.botID: state([upcoming])]).first)
+    #expect(one.beginsAt == begins)
+    #expect(one.placement == .here)
+    #expect(one.kind == .active, "a watch that has not started is still an alert about the place")
+
+    let two = try #require(items([0x0001: state([upcoming], bot: 0x0001), 0x0002: state([silent], bot: 0x0002)]).first)
+    #expect(two.expiresAt == silent.expiresAt, "the later expiry is the copy shown")
+    #expect(two.beginsAt == begins, "the other bot's start stands in")
+
+    #expect(try #require(items([P.botID: state([silent])]).first).beginsAt == nil)
+
+    // Order is untouched: the start does not move a row.
+    let withStart = items([P.botID: state([upcoming, stored(event: 1, etn: 12, polygonAt: 30.57)])])
+    let without = items([P.botID: state([stored(event: 3, etn: 42, minutes: 58 * 60), stored(event: 1, etn: 12, polygonAt: 30.57)])])
+    #expect(withStart.map(\.identity) == without.map(\.identity))
+  }
+
   @Test
   func `an upgrade marker stands in only when no bot holds the warning`() {
     let copy = stored(event: 3, etn: 42)

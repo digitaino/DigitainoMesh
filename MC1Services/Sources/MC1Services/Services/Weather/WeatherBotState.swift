@@ -23,6 +23,15 @@ public struct WeatherStoredWarning: Sendable, Hashable, Codable {
   /// (`WeatherStateReducer.applyDigest`): recomputing would then walk the issue time forward with
   /// it. The instant a warning was issued never moves.
   public var issuedAt: Date?
+  /// When the product takes effect (spec §3, revision 12), resolved once from the message that
+  /// carried it, exactly like ``issuedAt`` and for the same reason: the wire states it relative to
+  /// the expiry, and a digest may later extend that expiry. Nil for a product in effect from its
+  /// issuance, for a warning from a bot older than revision 12, and in state saved before the app
+  /// could read it — all of which read as in effect now, as revision 11 did.
+  ///
+  /// A watch issued on Tuesday morning for Wednesday evening through Friday is the case: without
+  /// this, a phone shows it as in force two days early.
+  public var beginsAt: Date?
   /// Where the bot got this warning (spec §2.2, revision 7), from the header of the message that
   /// carried it. ``MeshWXDataSource/unstated`` for a bot older than revision 7 and for state
   /// saved before the app could read it — which is not a source, and says nothing on screen.
@@ -34,6 +43,7 @@ public struct WeatherStoredWarning: Sendable, Hashable, Codable {
     updateCount: Int = 0,
     seq: UInt8? = nil,
     issuedAt: Date? = nil,
+    beginsAt: Date? = nil,
     source: MeshWXDataSource = .unstated
   ) {
     self.warning = warning
@@ -41,15 +51,17 @@ public struct WeatherStoredWarning: Sendable, Hashable, Codable {
     self.updateCount = updateCount
     self.seq = seq
     self.issuedAt = issuedAt
+    self.beginsAt = beginsAt
     self.source = source
   }
 
   private enum CodingKeys: String, CodingKey {
-    case warning, receivedAt, updateCount, seq, issuedAt, source
+    case warning, receivedAt, updateCount, seq, issuedAt, beginsAt, source
   }
 
-  /// `source` arrived with revision 7, so a state file written before it decodes as unstated
-  /// rather than failing: the warning is still the last one the bot sent.
+  /// `source` arrived with revision 7 and `beginsAt` with revision 12, so a state file written
+  /// before either decodes with it absent rather than failing: the warning is still the last one
+  /// the bot sent.
   public init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     warning = try container.decode(MeshWXWarning.self, forKey: .warning)
@@ -57,6 +69,7 @@ public struct WeatherStoredWarning: Sendable, Hashable, Codable {
     updateCount = try container.decode(Int.self, forKey: .updateCount)
     seq = try container.decodeIfPresent(UInt8.self, forKey: .seq)
     issuedAt = try container.decodeIfPresent(Date.self, forKey: .issuedAt)
+    beginsAt = try container.decodeIfPresent(Date.self, forKey: .beginsAt)
     source = try container.decodeIfPresent(MeshWXDataSource.self, forKey: .source) ?? .unstated
   }
 

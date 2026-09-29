@@ -228,11 +228,13 @@ are all built to; these rows are the screen half, and §18 is the screens.
 
 U-48 is neither radar nor a visual matter: it is the owner's report of 2026-09-21, recorded here
 because it overturns a rule §10 and §11 both stated, and because the fix is one rule read in three
-places rather than anything a reader of this section can see.
+places rather than anything a reader of this section can see. U-49 follows it: the owner's report
+of 2026-09-29, a wording fault that took a wire field to fix (spec revision 12).
 
 | # | Finding | Decision |
 |---|---|---|
 | U-48 | 2026-09-21: the owner's client sat for a night holding weather from a radio it could hear and refusing to ask it anything — "Can't ask until it announces itself" under every button — because no advert of that radio had ever reached the phone. The radio was **itself** named WX-AUS, and a node can never hear itself announce. The rule dated from v4, when a request was a DM and needed the bot's whole public key | **Adopted: heard is enough to ask.** Since spec revision 6 a request is a Request datagram flooded on `#meshwx` that names the bot by the first two bytes of its public key — which every one of the bot's own packets carries in its header (§2.2, §7B) — so `WeatherScreenSnapshot.Source.requestBot` hands the send a stand-in built from those two bytes (`WeatherBot.heardOnly`) and the block is gone. `source.bot` stays nil, so the bot is still **named** "Weather radio 041D" and the About and radio rows still say it hasn't announced itself: the advert is what a name needs, not what an ask needs. The **DM fallback** is the one path that still needs the whole key, so `WeatherService.send` refuses rather than addressing a DM to half a key, and `botNotAnnounced` survives for the one case that can still reach that fallback — a radio whose firmware claim is unknown |
+| U-49 | 2026-09-29, the owner, on a Flood Watch issued Tuesday 09:24 for "Wednesday evening through Friday evening": *in the watch here it starts tomorrow through friday but the wording is weird. we see "until oct 2" but then it says in 81 hours.. it's just weird.* The detail said **until Oct 2 at 19:00 · in 81 h 28 min**. Two faults. **The phone could not know the watch had not started**: the bot had the start (its text replies said "Flood Watch Wed 7PM–Fri 7PM") and v4 carried it, but v5 dropped it, so a watch two days from starting showed as in force. **The countdown knew only hours**, and put "in 81 h 28 min" beside a date that already said when it ends — the same clash as "until 23:41 · in 40 min" reading as two moments | **Adopted, as spec revision 12** (`docs/MESHWX_REV12.md`). The bot now sends the start after the issue time when a product takes effect later than it was issued (spec §3, found by length; `MeshWXWarning.beginsBeforeMinutes`), the phone resolves it once like the issue time (`WeatherStoredWarning.beginsAt`), and **everywhere an alert says when it applies** — the banner, the alerts list and the alert map's rows, the detail card, notification bodies — reads `WeatherFormatting.alertWindow`: **not started** "from Wed 19:00 until Fri 19:00", and nothing counts down to an end that has not begun; **in effect, ending within 12 hours** "until 23:41 · 40 min left"; **in effect, ending later** "until Fri 19:00". Notifications never count down ("40 min left" in a notification centre is stale when read). A moment is named by `alertClock`: the time alone today or within 12 hours, the weekday within the six days after today, the date beyond, always on the phone's own 12- or 24-hour clock. No start on the wire means in effect from issuance, which is every revision 11 bot. Nothing else moves: order, colours, the map's fills and the banner's choice are as before, because an alert that has not started is still an alert about the place — the words were what said the wrong thing. The detail for that watch now reads "from Wed 19:00 until Fri 19:00 / issued 09:24" on Tuesday morning, "until Fri 19:00" from Wednesday 19:00, and "until 19:00 · 12 h left" from Friday 07:00 |
 
 ### 3.1.2 Visual pass against the Human Interface Guidelines, 16 September (afternoon)
 
@@ -471,8 +473,10 @@ caption, and it is the only thing about alerts on the page.
   than reacted to.
 - The one it names is the most important covering the place: live before recently expired, then
   the §7.2 rank, then the soonest expiry (`WeatherWarningBanner`).
-- It carries the event's colour and icon, its name, and "until 9:41 PM · in 40 min" — or, for an
-  upgrade whose replacement never came or one that has just expired, what became of it instead.
+- It carries the event's colour and icon, its name, and when it applies (§3.1 U-49): "until
+  9:41 PM · 40 min left" ending within 12 hours, "until Fri 7:00 PM" ending later, "from Wed
+  7:00 PM until Fri 7:00 PM" not started yet — or, for an upgrade whose replacement never came or
+  one that has just expired, what became of it instead.
 - Any others covering the place are "+2 more" at the trailing edge, on the same line.
 - Tapping it opens the alert's detail.
 

@@ -163,8 +163,9 @@ struct WeatherAlertDetailView: View {
       }
       switch item.kind {
       case .active:
-        Text(WeatherFormatting.untilLine(
-          expiresAt: item.expiresAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent))
+        Text(WeatherFormatting.alertWindow(
+          beginsAt: item.beginsAt, expiresAt: item.expiresAt, now: screen.now, calendar: .autoupdatingCurrent,
+          locale: .autoupdatingCurrent))
         .font(.subheadline)
       case .upgradedAwaitingReplacement, .expiredRecently:
         if let qualifier = WeatherCopy.alertQualifier(item, placeName: nil, now: screen.now) {
