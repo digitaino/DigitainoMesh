@@ -167,9 +167,10 @@ extension WeatherEmptyPlace {
 // MARK: - The warning banner (§7)
 
 /// The one strip under the weather, always the same height: the alert covering this place, when
-/// it ends, and a count of any others. Tapping it opens the alert; the count opens the list on the
-/// radio page. There is no card, ever — a page that rearranges itself in a storm is a page whose
-/// shape cannot be learned.
+/// it ends, and a count of any others. Tapping it opens the alert when it is the only one, and the
+/// alerts list when there are others, whose first section is exactly the alerts covering this
+/// place (§3.1 U-50): a count that opened one of them would hide the rest. There is no card,
+/// ever — a page that rearranges itself in a storm is a page whose shape cannot be learned.
 struct WeatherWarningBannerSection: View {
   @Environment(\.appTheme) private var theme
 
@@ -183,7 +184,11 @@ struct WeatherWarningBannerSection: View {
 
     Section {
       NavigationLink {
-        WeatherAlertDetailView(screen: screen, identity: item.identity)
+        if banner.more > 0 {
+          WeatherAlertsListView(screen: screen)
+        } else {
+          WeatherAlertDetailView(screen: screen, identity: item.identity)
+        }
       } label: {
         HStack(alignment: .center, spacing: 10) {
           Image(systemName: WeatherFormatting.symbol(for: item.warning.event, tables: tables))

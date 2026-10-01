@@ -13,7 +13,8 @@ import Foundation
 public struct WeatherWarningBanner: Sendable, Hashable {
   /// The one the strip names: the most important alert covering the place.
   public var item: WeatherAlertItem
-  /// How many others also cover it. The strip stays one line; "+2 more" opens the list.
+  /// How many others also cover it. The strip stays one line; with any others, a tap on it opens
+  /// the alerts list rather than the one alert it names (docs/MESHWX_UI.md §3.1 U-50).
   public var more: Int
 
   public init(item: WeatherAlertItem, more: Int) {
