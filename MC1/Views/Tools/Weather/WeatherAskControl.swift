@@ -16,6 +16,9 @@ struct WeatherAskButton: View {
   let title: String
   let request: WeatherRequest
   var showsFootnotes = false
+  /// False where the section's own footer already says the answer goes to everyone; the quiet-
+  /// radio caption, which nothing else says, stays.
+  var showsPublicNote = true
   /// This button is the screen's own voice for why nothing can be asked. False on a screen that
   /// already says it once — the station screen's Update control carries it above these buttons,
   /// and METAR and TAF printed the same sentence twice more under it (docs/MESHWX_UI.md §3.1
@@ -65,7 +68,7 @@ struct WeatherAskButton: View {
             .accessibilityHidden(true)
         }
         if showsFootnotes {
-          WeatherAskFootnotes(screen: screen)
+          WeatherAskFootnotes(screen: screen, showsPublicNote: showsPublicNote)
         }
       }
     }
@@ -94,12 +97,15 @@ struct WeatherAskButton: View {
 /// "Everyone listening on #meshwx gets the answer." and, for a quiet bot, that it may not answer.
 struct WeatherAskFootnotes: View {
   let screen: WeatherPageScreen
+  var showsPublicNote = true
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text(L10n.Weather.Weather.Request.publicNote)
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      if showsPublicNote {
+        Text(L10n.Weather.Weather.Request.publicNote)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
       if let since = screen.snapshot.sourceQuietSince {
         Text(WeatherCopy.quietCaption(
           source: screen.sourceName, since: since, now: screen.now, calendar: .autoupdatingCurrent,
@@ -143,6 +149,17 @@ extension View {
     }
   }
 
+  /// The same bar floating **over** the screen rather than insetting it, for a screen whose map
+  /// is sized from the space it is given: an inset that comes and goes resizes the map, and
+  /// MapLibre relays out its whole style when it is resized (docs/MESHWX_UI.md §3.1 U-33).
+  func weatherPendingOverlay(model: WeatherToolModel, requestsOnScreen: Set<WeatherRequest>) -> some View {
+    overlay(alignment: .bottom) {
+      WeatherPendingBar(model: model, requestsOnScreen: requestsOnScreen)
+        .allowsHitTesting(false)
+    }
+    .animation(.default, value: model.activeRequest)
+  }
+
   /// Every screen of the tool — the pager and everything pushed over it — takes the app's tab bar
   /// off the screen while it is up (docs/MESHWX_UI.md §4).
   ///
@@ -155,5 +172,25 @@ extension View {
   /// during a ride.
   func weatherToolChrome() -> some View {
     toolbar(.hidden, for: .tabBar)
+  }
+
+  /// Keeps a list's rows to a readable width in a wide column (docs/MESHWX_UI.md §3.1 U-57). An
+  /// inset-grouped list on an iPad, or across a landscape Max, stretches "Today" and "102° / 77°"
+  /// a thousand points apart; past ``WeatherReadableWidth/maximum`` the rest becomes margin.
+  func weatherReadableWidth() -> some View {
+    modifier(WeatherReadableWidth())
+  }
+}
+
+struct WeatherReadableWidth: ViewModifier {
+  /// About the width of a readable line of body text, and of the list in a regular iPad column.
+  static let maximum: CGFloat = 672
+
+  @State private var width: CGFloat = 0
+
+  func body(content: Content) -> some View {
+    content
+      .contentMargins(.horizontal, max(0, (width - Self.maximum) / 2), for: .scrollContent)
+      .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
   }
 }

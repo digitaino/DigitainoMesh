@@ -50,6 +50,7 @@ struct WeatherStationsView: View {
       }
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(L10n.Weather.Weather.Stations.title)
     .navigationBarTitleDisplayMode(.inline)
@@ -76,22 +77,24 @@ struct WeatherStationsView: View {
     return NavigationLink {
       WeatherStationDetailView(screen: screen, index: reading.index)
     } label: {
-      HStack(spacing: 12) {
-        // An unknown sky keeps the column but shows nothing, rather than a made-up condition.
-        let symbol = MeshWXPresentation.observationSymbolName(for: observation.sky, isNight: isNight)
-        Image(systemName: symbol ?? "cloud")
-          .symbolRenderingMode(.multicolor)
-          .opacity(symbol == nil ? 0 : 1)
-          .frame(width: iconWidth)
-          .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(WeatherNames.stationName(reading.station.name))
-            .font(.headline)
-          Text(meta.joined(separator: " · "))
-            .font(.footnote)
-            .foregroundStyle(reading.isStale ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+      WeatherValueRow {
+        HStack(spacing: 12) {
+          // An unknown sky keeps the column but shows nothing, rather than a made-up condition.
+          let symbol = MeshWXPresentation.observationSymbolName(for: observation.sky, isNight: isNight)
+          Image(systemName: symbol ?? "cloud")
+            .symbolRenderingMode(.multicolor)
+            .opacity(symbol == nil ? 0 : 1)
+            .frame(width: iconWidth)
+            .accessibilityHidden(true)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(WeatherNames.stationName(reading.station.name))
+              .font(.headline)
+            Text(meta.joined(separator: " · "))
+              .font(.footnote)
+              .foregroundStyle(reading.isStale ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+          }
         }
-        Spacer(minLength: 8)
+      } trailing: {
         if let tempF = observation.tempF {
           Text(WeatherFormatting.temperature(fahrenheit: Int(tempF)))
             .font(.title3)
@@ -142,8 +145,11 @@ struct WeatherStationDetailView: View {
     List {
       if let station {
         summary(station)
+        // What Update would ask for and what it last did. The button is in the bottom bar, where
+        // it is on a place page (docs/MESHWX_UI.md §3.1 U-51): a bordered button between the
+        // station's name and its numbers was the one screen asking in the list's own voice.
         Section {
-          WeatherUpdateControl(screen: screen, plan: plan, showsCaption: true)
+          WeatherUpdateControl(screen: screen, plan: plan, showsCaption: true, showsButton: false)
         }
         .themedRowBackground(theme)
         if let reading {
@@ -153,10 +159,12 @@ struct WeatherStationDetailView: View {
       }
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(station.map { WeatherNames.stationName($0.name) } ?? L10n.Weather.Weather.Stations.title)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(model: model, requestsOnScreen: requestsOnScreen(plan))
+    .modifier(WeatherStationUpdateBar(screen: screen, plan: plan, hasStation: station != nil))
     .weatherToolChrome()
   }
 
@@ -289,6 +297,34 @@ struct WeatherStationDetailView: View {
           item.assembly.lastReceivedAt, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)))
         .font(.caption)
         .foregroundStyle(.secondary)
+      }
+    }
+  }
+}
+
+/// Update in the bottom bar's trailing slot, the place page's position for it
+/// (`WeatherBottomToolbar`). The branch is on the OS, fixed for the life of the process.
+private struct WeatherStationUpdateBar: ViewModifier {
+  let screen: WeatherPageScreen
+  let plan: WeatherUpdatePlan
+  let hasStation: Bool
+
+  func body(content: Content) -> some View {
+    if !hasStation {
+      content
+    } else if #available(iOS 26, *) {
+      content.toolbar {
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        ToolbarItem(placement: .bottomBar) {
+          WeatherUpdateControl(screen: screen, plan: plan)
+        }
+      }
+    } else {
+      content.toolbar {
+        ToolbarItemGroup(placement: .bottomBar) {
+          Spacer()
+          WeatherUpdateControl(screen: screen, plan: plan)
+        }
       }
     }
   }

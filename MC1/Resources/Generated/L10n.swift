@@ -7494,7 +7494,7 @@ public enum L10n {
         /// Location: WeatherRadioView.swift - Last weather datagram label
         public static let lastMessage = L10n.tr("Weather", "weather.about.lastMessage", fallback: "Last weather message")
         /// Location: WeatherRadioView.swift - How it works, first line
-        public static let line1 = L10n.tr("Weather", "weather.about.line1", fallback: "Your request goes to the weather radio as a private message.")
+        public static let line1 = L10n.tr("Weather", "weather.about.line1", fallback: "Your request goes out on #meshwx, addressed to the weather radio.")
         /// Location: WeatherRadioView.swift - How it works, second line
         public static let line2 = L10n.tr("Weather", "weather.about.line2", fallback: "Its answer is broadcast on #meshwx.")
         /// Location: WeatherRadioView.swift - How it works, third line
@@ -7823,7 +7823,7 @@ public enum L10n {
         }
         /// Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name
         public static func tapHint(_ p1: Any) -> String {
-          return L10n.tr("Weather", "weather.areaMap.tapHint", String(describing: p1), fallback: "Tap a shaded area to ask %@ what it is.")
+          return L10n.tr("Weather", "weather.areaMap.tapHint", String(describing: p1), fallback: "Tap a shaded area to see what %@ has said about it.")
         }
         /// Location: WeatherAreaMapView.swift - Screen title, and the row in the alerts list that opens it
         public static let title = L10n.tr("Weather", "weather.areaMap.title", fallback: "Alert map")
@@ -7833,6 +7833,12 @@ public enum L10n {
         }
         /// Location: WeatherAreaMapView.swift - Status card: the national part, where nothing newer covers any state
         public static let wholeCountry = L10n.tr("Weather", "weather.areaMap.wholeCountry", fallback: "The whole country")
+      }
+      public enum AskBar {
+        /// Location: WeatherAskBar.swift - The capsule over the bottom bar: scrolls back up to where a screen's answer landed
+        public static let show = L10n.tr("Weather", "weather.askBar.show", fallback: "Show")
+        /// Location: WeatherAskBar.swift - VoiceOver hint for the Show button in the capsule over the bottom bar
+        public static let showHint = L10n.tr("Weather", "weather.askBar.showHint", fallback: "Scrolls back to the answer.")
       }
       public enum Banner {
         /// Location: WeatherPlacePageView.swift - Banner button that offers to add #meshwx
@@ -8311,6 +8317,8 @@ public enum L10n {
         }
         /// Location: WeatherRadarSection.swift - The ask once a picture is already on screen
         public static let askNewer = L10n.tr("Weather", "weather.radar.askNewer", fallback: "Ask for a newer picture")
+        /// Location: WeatherRadarView.swift - The radar screen's bottom-bar ask, for a width with no picture yet
+        public static let askShort = L10n.tr("Weather", "weather.radar.askShort", fallback: "Ask for radar")
         /// Location: WeatherRadarView.swift - The radio halved the detail to fit the picture into one packet
         public static let coarse = L10n.tr("Weather", "weather.radar.coarse", fallback: "A busy picture, sent at half detail to fit one packet.")
         /// Location: WeatherRadarSection.swift - No radar picture is held for the place
@@ -8833,6 +8841,10 @@ public enum L10n {
         public static func yesterday(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.time.yesterday", String(describing: p1), fallback: "yesterday %@")
         }
+      }
+      public enum TitleMenu {
+        /// Location: WeatherToolView.swift - The title menu's way to the alerts list for the radio's area
+        public static let alerts = L10n.tr("Weather", "weather.titleMenu.alerts", fallback: "Alerts")
       }
       public enum TornadoTag {
         /// Location: WeatherFormatting.swift - Tornado tag value

@@ -55,6 +55,7 @@ struct WeatherCachedView: View {
       }
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(L10n.Weather.Weather.Cache.title)
     .navigationBarTitleDisplayMode(.inline)
@@ -70,9 +71,9 @@ struct WeatherCachedView: View {
       ForEach(screen.snapshot.heard) { item in
         label(subject: item.subject, contentAt: item.contentAt, receivedAt: item.receivedAt)
       }
-    } footer: {
-      Text(L10n.Weather.Weather.Heard.footer)
     }
+    // No footer: "this phone can't tell who asked" is the screen's first line, one section up,
+    // and the footer was the same sentence under it (docs/MESHWX_UI.md §3.1 U-57).
     .themedRowBackground(theme)
   }
 

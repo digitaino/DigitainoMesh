@@ -19,6 +19,8 @@ struct WeatherRadarSection: View {
   let screen: WeatherPageScreen
 
   @State private var drawing = WeatherMapDrawing()
+  /// Compact height is a landscape iPhone, where a full-width square is twice the screen.
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   private var model: WeatherToolModel { screen.model }
   /// The page's own ask is the narrowest width: the one that is actually about the place. The
@@ -101,8 +103,11 @@ struct WeatherRadarSection: View {
   private func map(_ picture: WeatherRadarPicture) -> some View {
     WeatherAlertMapView(drawing: drawing, isInteractive: false)
       .aspectRatio(1, contentMode: .fit)
-      .frame(maxWidth: .infinity, minHeight: 180)
+      // In landscape the square is capped and centred, so the card is a picture on the page
+      // rather than the page (docs/MESHWX_UI.md §3.1 U-57).
+      .frame(maxWidth: verticalSizeClass == .compact ? 260 : .infinity, minHeight: 180)
       .clipShape(.rect(cornerRadius: 10))
+      .frame(maxWidth: .infinity)
       .allowsHitTesting(false)
       .accessibilityHidden(true)
       .task(id: drawingKey(picture)) {
@@ -137,6 +142,11 @@ struct WeatherRadarSection: View {
   /// The ask, its cost above it and the footnotes under it — the shape every ask in the tool has
   /// (§11). **Always one packet**, whatever is held and whatever the width: a radar answer is one
   /// packet or a coarser packet, never two (spec revision 11, §1.1).
+  ///
+  /// The place page's one inline ask, so it is kept to the cost and the button: "Pictures are
+  /// made about every 15 minutes" and the public note are the radar screen's, where the question
+  /// of whether to ask is actually being weighed, and *How it works* says the second once for the
+  /// whole tool (docs/MESHWX_UI.md §3.1 U-56, U-57). A quiet radio is still said, in orange.
   @ViewBuilder
   private func ask(title: String) -> some View {
     if let request {
@@ -145,10 +155,8 @@ struct WeatherRadarSection: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
-      WeatherAskButton(screen: screen, title: title, request: request, showsFootnotes: true)
-      Text(L10n.Weather.Weather.Radar.Ask.footnote)
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      WeatherAskButton(
+        screen: screen, title: title, request: request, showsFootnotes: true, showsPublicNote: false)
     }
   }
 }

@@ -864,7 +864,7 @@
 "weather.about.howItWorks" = "Comment ça marche";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
-"weather.about.line1" = "Votre demande part vers la radio météo en message privé.";
+"weather.about.line1" = "Votre demande part sur #meshwx, adressée à la radio météo.";
 
 /* Location: WeatherRadioView.swift - How it works, second line */
 "weather.about.line2" = "Sa réponse est diffusée sur #meshwx.";
@@ -1260,7 +1260,7 @@
 "weather.areaMap.legend" = "Ce que signifient les couleurs";
 
 /* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
-"weather.areaMap.tapHint" = "Touche une zone colorée pour demander à %@ ce qu'il s'y passe.";
+"weather.areaMap.tapHint" = "Touche une zone colorée pour voir ce que %@ en a dit.";
 
 /* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
 "weather.areaMap.mapLabel" = "Carte du pays, avec les zones sous alerte colorées";
@@ -1698,3 +1698,15 @@
 
 /* Location: WeatherTrafficView.swift - The same when one cell does */
 "weather.radar.traffic.cellsOne" = "1 cellule avec précipitations";
+
+/* Location: WeatherRadarView.swift - The radar screen's bottom-bar ask, for a width with no picture yet */
+"weather.radar.askShort" = "Demander le radar";
+
+/* Location: WeatherAskBar.swift - The capsule over the bottom bar: scrolls back up to where a screen's answer landed */
+"weather.askBar.show" = "Afficher";
+
+/* Location: WeatherAskBar.swift - VoiceOver hint for the Show button in the capsule over the bottom bar */
+"weather.askBar.showHint" = "Remonte jusqu'à la réponse.";
+
+/* Location: WeatherToolView.swift - The title menu's way to the alerts list for the radio's area */
+"weather.titleMenu.alerts" = "Alertes";

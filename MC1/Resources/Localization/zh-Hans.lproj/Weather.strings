@@ -864,7 +864,7 @@
 "weather.about.howItWorks" = "工作方式";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
-"weather.about.line1" = "你的请求以私信发送给气象电台。";
+"weather.about.line1" = "你的请求通过 #meshwx 发出，发给气象电台。";
 
 /* Location: WeatherRadioView.swift - How it works, second line */
 "weather.about.line2" = "它的回答在 #meshwx 上广播。";
@@ -1260,7 +1260,7 @@
 "weather.areaMap.legend" = "颜色的含义";
 
 /* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
-"weather.areaMap.tapHint" = "点按上色的区域，向 %@ 询问那里的情况。";
+"weather.areaMap.tapHint" = "点按上色的区域，查看 %@ 对那里说了什么。";
 
 /* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
 "weather.areaMap.mapLabel" = "全国地图，处于预警之下的区域已上色";
@@ -1698,3 +1698,15 @@
 
 /* Location: WeatherTrafficView.swift - The same when one cell does */
 "weather.radar.traffic.cellsOne" = "1 个格子有降水";
+
+/* Location: WeatherRadarView.swift - The radar screen's bottom-bar ask, for a width with no picture yet */
+"weather.radar.askShort" = "请求雷达图";
+
+/* Location: WeatherAskBar.swift - The capsule over the bottom bar: scrolls back up to where a screen's answer landed */
+"weather.askBar.show" = "显示";
+
+/* Location: WeatherAskBar.swift - VoiceOver hint for the Show button in the capsule over the bottom bar */
+"weather.askBar.showHint" = "滚动回到答复。";
+
+/* Location: WeatherToolView.swift - The title menu's way to the alerts list for the radio's area */
+"weather.titleMenu.alerts" = "预警";

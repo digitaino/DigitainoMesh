@@ -69,7 +69,11 @@ struct WeatherAlertDetailView: View {
     }
     .navigationTitle(eventName)
     .navigationBarTitleDisplayMode(.inline)
-    .weatherPendingBar(model: model, requestsOnScreen: Set([identityString.map { WeatherRequest.warningText(identity: $0) }].compactMap { $0 }))
+    // Over the screen, not an inset: the map's height is a share of the space it is given.
+    .weatherPendingOverlay(model: model, requestsOnScreen: Set([identityString.map { WeatherRequest.warningText(identity: $0) }].compactMap { $0 }))
+    .weatherAskBar(screen: screen, ask: item == nil ? nil : identityString.map {
+      WeatherBarAsk(title: L10n.Weather.Weather.Request.askFullText, request: .warningText(identity: $0))
+    })
     .weatherToolChrome()
     .task(id: drawingKey) {
       guard let key = drawingKey else { return }
@@ -107,9 +111,10 @@ struct WeatherAlertDetailView: View {
       if let identityString {
         Section {
           WeatherCardLabel(title: L10n.Weather.Weather.AlertDetail.fullText)
-          WeatherAskButton(
-            screen: screen, title: L10n.Weather.Weather.Request.askFullText,
-            request: .warningText(identity: identityString), showsFootnotes: true)
+            .weatherAskResult()
+          // The tap is the bar's (docs/MESHWX_UI.md §3.1 U-51); what it is doing is said here,
+          // over the text it brings.
+          WeatherAskStatusRow(screen: screen, request: .warningText(identity: identityString))
           if let narrative = narrative(identityString) {
             Text(WeatherReportText.body(narrative.assembly))
               .font(.system(.footnote, design: .monospaced))
@@ -142,6 +147,7 @@ struct WeatherAlertDetailView: View {
       }
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
   }
 

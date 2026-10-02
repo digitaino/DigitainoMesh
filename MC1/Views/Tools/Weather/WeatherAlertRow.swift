@@ -79,9 +79,8 @@ struct WeatherAlertStatusRow: View {
   let screen: WeatherPageScreen
   let line: WeatherCopy.AlertStatusLine
   let source: String
-  /// The request the line's own button sends.
+  /// The request the bar's Ask sends for this line.
   let request: WeatherRequest?
-  let showsAskFootnotes: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -94,10 +93,9 @@ struct WeatherAlertStatusRow: View {
       }
       switch line.action {
       case .askForAlerts:
+        // The tap is the bar's (docs/MESHWX_UI.md §3.1 U-51); what it is doing is said here.
         if let request {
-          WeatherAskButton(
-            screen: screen, title: WeatherCopy.askAlertsTitle(for: request, tables: .shared), request: request,
-            showsFootnotes: showsAskFootnotes)
+          WeatherAskStatusRow(screen: screen, request: request)
         }
       case .updateLocation:
         Button(L10n.Weather.Weather.Place.updateLocation) {

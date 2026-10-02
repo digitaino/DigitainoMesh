@@ -25,6 +25,10 @@ struct WeatherRadarView: View {
   /// pushing the card shows the same picture rather than an empty Local square.
   @State private var zoom: UInt8
   @State private var drawing = WeatherMapDrawing()
+  /// The list's height, which caps the square: at full width in landscape, or on an iPad, a 1:1
+  /// map is taller than the screen, and an interactive map that fills the screen takes every drag
+  /// there is — the rest of the screen could only be reached through the row's 12 pt inset.
+  @State private var listHeight: CGFloat = 0
 
   init(screen: WeatherPageScreen, zoom: UInt8 = WeatherRadarCard.pageZoom) {
     self.screen = screen
@@ -42,18 +46,30 @@ struct WeatherRadarView: View {
 
   var body: some View {
     let card = card
+    // The width is set under the picture it changes, and the ask is in the bar (docs/MESHWX_UI.md
+    // §3.1 U-51): both used to be the last section, under the legend, so choosing a width moved a
+    // map that had scrolled off the top, and an answer landed where the tap could not see it.
     List {
       mapSection(card)
       readingSection(card)
       legendSection
-      widthSection(card)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
+    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
     .navigationTitle(L10n.Weather.Weather.Radar.title)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(model: model, requestsOnScreen: Set([request].compactMap { $0 }))
+    .weatherAskBar(screen: screen, ask: request.map { WeatherBarAsk(title: askTitle(card), request: $0) })
     .weatherToolChrome()
+  }
+
+  /// The longest side the square may have: the width it is given, but never more than two
+  /// thirds of the screen's height, so the controls under it are always a scroll away and never
+  /// behind it.
+  private var mapSide: CGFloat {
+    listHeight > 0 ? max(220, listHeight * 0.65) : .infinity
   }
 
   // MARK: - The map
@@ -63,25 +79,42 @@ struct WeatherRadarView: View {
   /// square being talked about whether or not a picture has arrived for it.
   @ViewBuilder
   private func mapSection(_ card: WeatherRadarCard) -> some View {
-    if let key = drawingKey(card) {
-      Section {
+    Section {
+      if let key = drawingKey(card) {
         // Square, because the tile is: the outer frame is only the floor under a map that has no
-        // size of its own (§18.2).
+        // size of its own (§18.2). Centred when the height caps it.
         WeatherAlertMapView(drawing: drawing, isInteractive: true)
           .aspectRatio(1, contentMode: .fit)
-          .frame(maxWidth: .infinity, minHeight: 220)
+          .frame(maxWidth: mapSide, minHeight: 220)
           .clipShape(.rect(cornerRadius: 10))
+          .frame(maxWidth: .infinity)
           .accessibilityLabel(L10n.Weather.Weather.Radar.title)
           .accessibilityIdentifier("weather.radar.map")
           .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+          // The picture is the answer: the capsule's Show scrolls back to it.
+          .weatherAskResult()
           .task(id: key) {
             drawing = await Task.detached(priority: .userInitiated) {
               WeatherRadarDrawing.make(key, tables: .shared, geometry: .shared)
             }.value
           }
       }
-      .themedRowBackground(theme)
+      widthPicker
     }
+    .themedRowBackground(theme)
+  }
+
+  /// Local, Regional, Wide — **not** kilometres. A tile is two degrees: 222 km tall everywhere and
+  /// a different width at every latitude, so a number on this control would be right on one
+  /// parallel and wrong on all the others.
+  private var widthPicker: some View {
+    Picker(L10n.Weather.Weather.Radar.width, selection: $zoom) {
+      ForEach(Self.offeredZooms, id: \.self) { option in
+        Text(WeatherCopy.radarWidthName(Int(option)) ?? "").tag(option)
+      }
+    }
+    .pickerStyle(.segmented)
+    .accessibilityIdentifier("weather.radar.width")
   }
 
   /// The alerts this device holds go on **this** map and not on the card's: here there is room to
@@ -102,10 +135,31 @@ struct WeatherRadarView: View {
   @ViewBuilder
   private func readingSection(_ card: WeatherRadarCard) -> some View {
     Section {
+      if drawingKey(card) == nil {
+        readingRows(card)
+          .weatherAskResult()
+      } else {
+        readingRows(card)
+      }
+      // What the bar's Ask is doing, beside the picture it will change. One packet, whatever the
+      // width and whatever is held: a radar answer is one packet or a coarser packet, never two
+      // (spec revision 11, §1.1). Said before the tap, like every other cost in the tool.
+      if let request {
+        WeatherAskStatusRow(
+          screen: screen, request: request, cost: WeatherAreaMapCopy.packets(1),
+          note: L10n.Weather.Weather.Radar.Ask.footnote)
+      }
+    }
+    .themedRowBackground(theme)
+  }
+
+  @ViewBuilder
+  private func readingRows(_ card: WeatherRadarCard) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
       switch card {
       case .noCoordinate, .missing:
         // Not "no radar picture": this width's square has simply never been asked for, and the
-        // button below is the whole of what to do about it.
+        // bar's Ask is the whole of what to do about it.
         Text(L10n.Weather.Weather.Radar.notAsked)
           .font(.subheadline)
           .foregroundStyle(.secondary)
@@ -144,7 +198,7 @@ struct WeatherRadarView: View {
         }
       }
     }
-    .themedRowBackground(theme)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   /// "Cut from the Southern Plains mosaic. · Via GOES satellite" — which of the fourteen pictures
@@ -194,45 +248,14 @@ struct WeatherRadarView: View {
     }
   }
 
-  // MARK: - Width, and the ask
+  // MARK: - The ask
 
-  /// Local, Regional, Wide — **not** kilometres. A tile is two degrees: 222 km tall everywhere and
-  /// a different width at every latitude, so a number on this control would be right on one
-  /// parallel and wrong on all the others.
-  private func widthSection(_ card: WeatherRadarCard) -> some View {
-    Section {
-      Picker(L10n.Weather.Weather.Radar.width, selection: $zoom) {
-        ForEach(Self.offeredZooms, id: \.self) { option in
-          Text(WeatherCopy.radarWidthName(Int(option)) ?? "").tag(option)
-        }
-      }
-      .pickerStyle(.segmented)
-      .accessibilityIdentifier("weather.radar.width")
-
-      if let request {
-        // One packet, whatever the width and whatever is held: a radar answer is one packet or a
-        // coarser packet, never two (spec revision 11, §1.1). Said before the tap, like every
-        // other cost in the tool.
-        if model.status(for: request).isAskable {
-          Text(WeatherAreaMapCopy.packets(1))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
-        WeatherAskButton(
-          screen: screen, title: askTitle(card), request: request, showsFootnotes: true)
-        Text(L10n.Weather.Weather.Radar.Ask.footnote)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-    }
-    .themedRowBackground(theme)
-  }
-
-  /// "Ask WX-AUS for the radar picture" for a width with nothing on it; "Ask for a newer picture"
-  /// once there is one, because that is what the tap is actually for.
+  /// "Ask for radar" for a width with nothing on it; "Ask for a newer picture" once there is one,
+  /// because that is what the tap is actually for. Short, because it is a bar button: the radio it
+  /// asks is named in the status beside the picture.
   private func askTitle(_ card: WeatherRadarCard) -> String {
     card.picture == nil
-      ? L10n.Weather.Weather.Radar.ask(screen.sourceName)
+      ? L10n.Weather.Weather.Radar.askShort
       : L10n.Weather.Weather.Radar.askNewer
   }
 }

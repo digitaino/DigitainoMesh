@@ -16,6 +16,9 @@ struct WeatherAlertNotificationsView: View {
   @Environment(\.scenePhase) private var scenePhase
 
   let model: WeatherToolModel
+  /// Opens Places from the empty state, where the bells are. Nil where Places is already one
+  /// back-tap away — pushed inside the Places sheet — or where the screen cannot reach it.
+  var onOpenPlaces: (() -> Void)?
 
   var body: some View {
     List {
@@ -25,6 +28,7 @@ struct WeatherAlertNotificationsView: View {
       promiseSection
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(L10n.Weather.Weather.Notifications.title)
     .navigationBarTitleDisplayMode(.inline)
@@ -61,17 +65,22 @@ struct WeatherAlertNotificationsView: View {
   private var placesSection: some View {
     Section {
       WeatherCardLabel(title: L10n.Weather.Weather.Notifications.placesHeader, systemImage: "bell")
+      // Whether anything can arrive is one fact about the radio, said once for every place
+      // rather than under each of them (docs/MESHWX_UI.md §3.1 U-57).
+      if model.isWatchingAnything {
+        Text(deliveryState)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
       if model.isMyLocationWatched {
         row(
           title: L10n.Weather.Weather.Notifications.myLocation,
-          detail: deliveryState,
           caption: myLocationAge,
           stop: { await model.setMyLocationWatch(false) })
       }
       ForEach(model.watchedPlaces) { place in
         row(
-          title: place.label,
-          detail: deliveryState,
+          title: WeatherFormatting.placeName(place.label),
           caption: nil,
           stop: { await model.setWatch(false, forPlaceID: place.id) })
       }
@@ -79,6 +88,11 @@ struct WeatherAlertNotificationsView: View {
         Text(L10n.Weather.Weather.Notifications.empty)
           .font(.subheadline)
           .foregroundStyle(.secondary)
+        // The sentence says where the bells are; this goes there.
+        if let onOpenPlaces {
+          Button(L10n.Weather.Weather.Place.manage, action: onOpenPlaces)
+            .accessibilityIdentifier("weather.notifications.openPlaces")
+        }
       }
     }
     .themedRowBackground(theme)
@@ -88,16 +102,12 @@ struct WeatherAlertNotificationsView: View {
   /// stops it.
   private func row(
     title: String,
-    detail: String,
     caption: String?,
     stop: @escaping () async -> Void
   ) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: 12) {
+    HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
-        Text(detail)
-          .font(.footnote)
-          .foregroundStyle(.secondary)
         if let caption {
           Text(caption)
             .font(.footnote)
@@ -109,9 +119,10 @@ struct WeatherAlertNotificationsView: View {
       Button {
         Task { await stop() }
       } label: {
+        // The system's 44 pt, as the bells in Places have (docs/MESHWX_UI.md §3.1 U-21).
         Image(systemName: "bell.fill")
           .foregroundStyle(.tint)
-          .padding(.vertical, 4)
+          .frame(minWidth: 44, minHeight: 44)
           .contentShape(.rect)
       }
       .buttonStyle(.plain)

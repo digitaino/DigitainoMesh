@@ -61,6 +61,7 @@ struct WeatherPlacePickerView: View {
           currentLocationSection
           deniedSection
           savedSection
+          notificationsSection
           heardSection
         } else {
           Section {
@@ -108,6 +109,7 @@ struct WeatherPlacePickerView: View {
       // Rows are buttons; the default style tints their labels with the accent colour.
       .buttonStyle(.plain)
       .listStyle(.insetGrouped)
+      .weatherReadableWidth()
       .themedCanvas(theme)
       .searchable(
         text: $query, placement: .navigationBarDrawer(displayMode: .always),
@@ -307,6 +309,28 @@ struct WeatherPlacePickerView: View {
     }
   }
 
+  /// The bells are here and what they ring for is on its own screen, so the way to it is here too
+  /// (docs/MESHWX_UI.md §3.1 U-52): the two "also notify me about" switches were three screens
+  /// away, on the radio page, from the bell that makes them mean anything.
+  private var notificationsSection: some View {
+    Section {
+      NavigationLink {
+        WeatherAlertNotificationsView(model: model)
+      } label: {
+        LabeledContent {
+          Text(model.isWatchingAnything
+            ? L10n.Weather.Weather.Notifications.watchingCount(
+              model.watchedPlaces.count + (model.isMyLocationWatched ? 1 : 0))
+            : L10n.Weather.Weather.Notifications.watchingNone)
+        } label: {
+          Label(L10n.Weather.Weather.Notifications.title, systemImage: "bell")
+        }
+      }
+      .accessibilityIdentifier("weather.places.notifications")
+    }
+    .themedRowBackground(theme)
+  }
+
   /// Forecasts the channel carried that this phone did not ask for. Worded as what was heard,
   /// never as who asked: the phone does not record that and cannot know it.
   @ViewBuilder
@@ -356,7 +380,7 @@ struct WeatherPlacePickerView: View {
   /// A row: the place, what it is, and — for a place the screen can answer for — the reading the
   /// phone holds, greyed when it is old.
   private func placeRow(title: String, detail: String?, reading: WeatherPlaceRowReading? = nil) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: 10) {
+    WeatherValueRow(alignment: .firstTextBaseline, spacing: 10) {
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .foregroundStyle(.primary)
@@ -366,8 +390,8 @@ struct WeatherPlacePickerView: View {
             .foregroundStyle(.secondary)
         }
       }
+    } trailing: {
       if let reading {
-        Spacer(minLength: 8)
         Text(WeatherCopy.placeRow(reading, now: model.now))
           .font(.subheadline)
           .foregroundStyle(reading.isStale || reading.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))

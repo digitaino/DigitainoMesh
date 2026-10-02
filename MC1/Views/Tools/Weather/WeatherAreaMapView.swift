@@ -50,22 +50,35 @@ struct WeatherAreaMapView: View {
 
   var body: some View {
     let picture = picture
+    // What the next map will cover sits **under the map**, and the tap that spends it is in the
+    // bar (docs/MESHWX_UI.md §3.1 U-51). It used to be the fifth of six sections, under every
+    // part, every kind and every swatch, so asking meant scrolling past the whole answer and
+    // coming back up to see whether it had changed.
     List {
       mapSection(picture)
-      statusSection(picture)
+      // With no map held, "no map yet" is the answer the screen leads with, and the choice of
+      // what to ask for follows it.
+      if picture.parts.isEmpty {
+        statusSection(picture)
+        askSection(picture)
+      } else {
+        askSection(picture)
+        statusSection(picture)
+      }
       alertListSection(picture)
       legendSection
-      askSection(picture)
       sourceSection
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(L10n.Weather.Weather.AreaMap.title)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(model: model, requestsOnScreen: [request])
+    .weatherAskBar(screen: screen, ask: WeatherBarAsk(title: L10n.Weather.Weather.AreaMap.ask, request: request))
     .weatherToolChrome()
     .navigationDestination(isPresented: $isShowingMap) {
-      WeatherAreaFullMapView(screen: screen, drawing: drawing)
+      WeatherAreaFullMapView(screen: screen, drawing: drawing, request: request)
     }
     .task(id: drawingKey) {
       // The resolved picture, not the raw sweeps: where a newer scoped part has replaced a
@@ -113,6 +126,8 @@ struct WeatherAreaMapView: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("weather.areaMap.open")
         .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+        // The map is the answer: the capsule's Show scrolls back to it.
+        .weatherAskResult()
       }
       .themedRowBackground(theme)
     }
@@ -126,6 +141,8 @@ struct WeatherAreaMapView: View {
         Text(L10n.Weather.Weather.AreaMap.empty)
           .font(.subheadline)
           .foregroundStyle(.secondary)
+          // No map yet: the first one will be drawn above this line once it lands.
+          .weatherAskResult()
       } else {
         ForEach(picture.parts) { part in
           partRow(part, picture: picture)
@@ -240,28 +257,13 @@ struct WeatherAreaMapView: View {
     if !drawing.legend.isEmpty {
       Section {
         WeatherCardLabel(title: L10n.Weather.Weather.AreaMap.legend, systemImage: "paintpalette")
-        ForEach(drawing.legend) { item in
-          HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 3)
-              .fill(WeatherFormatting.color(for: item.tint).opacity(0.35))
-              .overlay(
-                RoundedRectangle(cornerRadius: 3)
-                  .strokeBorder(WeatherFormatting.color(for: item.tint), lineWidth: 2))
-              .frame(width: 22, height: 14)
-            Text(item.name)
-              .font(.subheadline)
-          }
-          // One element per row: the swatch is the colour the name is drawn in, and a reader who
-          // cannot see it gets the name, which is the part that means anything.
-          .accessibilityElement(children: .ignore)
-          .accessibilityLabel(item.name)
-        }
+        WeatherAreaLegendRows(legend: drawing.legend)
       }
       .themedRowBackground(theme)
     }
   }
 
-  /// What the next map covers, what it costs, and the tap that spends it.
+  /// What the next map covers and what it costs. The tap that spends it is the bar's Ask.
   @ViewBuilder
   private func askSection(_ picture: WeatherAlertMapPicture) -> some View {
     let selection = selection
@@ -289,22 +291,13 @@ struct WeatherAreaMapView: View {
           .font(.footnote)
           .foregroundStyle(.orange)
       }
-      // The cost above the button, not under it: it is what the tap is about to spend, and a
-      // reader who has already tapped, or who cannot tap at all, does not need telling.
-      if model.status(for: request).isAskable {
-        Text(WeatherAreaMapCopy.cost(WeatherAreaSweepCost.packets(
+      // The cost before the tap, not after it: it is what the tap is about to spend, and a
+      // reader who has already tapped, or who cannot tap at all, does not need telling. The
+      // status row carries it, and then what the tap did.
+      WeatherAskStatusRow(
+        screen: screen, request: request,
+        cost: WeatherAreaMapCopy.cost(WeatherAreaSweepCost.packets(
           for: selection, advisories: level.includesAdvisories, held: picture)))
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-      }
-      WeatherAskButton(
-        screen: screen, title: WeatherAreaMapCopy.askTitle(selection), request: request,
-        showsFootnotes: true)
-      if !picture.parts.isEmpty, model.status(for: request).isAskable {
-        Text(L10n.Weather.Weather.AreaMap.tapHint(screen.sourceName))
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
     }
     .themedRowBackground(theme)
   }
@@ -393,6 +386,7 @@ struct WeatherAreaPickerView: View {
       .themedRowBackground(theme)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .searchable(text: $search, prompt: L10n.Weather.Weather.AreaMap.pickerSearch)
     .navigationTitle(L10n.Weather.Weather.AreaMap.areasToAsk)
@@ -451,8 +445,12 @@ struct WeatherAreaPickerView: View {
 struct WeatherAreaFullMapView: View {
   let screen: WeatherPageScreen
   let drawing: WeatherAreaMapDrawing
+  /// The ask the screen it was pushed from would send, so the zoomed-in map can be refreshed
+  /// without going back for it (docs/MESHWX_UI.md §3.1 U-51).
+  let request: WeatherRequest
 
   @State private var picked: WeatherPickedArea?
+  @State private var isShowingLegend = false
 
   private var model: WeatherToolModel { screen.model }
 
@@ -484,6 +482,23 @@ struct WeatherAreaFullMapView: View {
           .allowsHitTesting(false)
       }
       .animation(.default, value: model.activeRequest)
+      // The colours are named here too: zoomed in, the legend on the screen behind is a back
+      // tap away, and a map whose shading cannot be read is the U-32 complaint again.
+      .toolbar {
+        if !drawing.legend.isEmpty {
+          ToolbarItem(placement: .bottomBar) {
+            Button(L10n.Weather.Weather.AreaMap.legend, systemImage: "paintpalette") {
+              isShowingLegend = true
+            }
+            .accessibilityIdentifier("weather.areaMap.legendButton")
+            .popover(isPresented: $isShowingLegend) {
+              WeatherAreaLegendList(legend: drawing.legend)
+                .presentationCompactAdaptation(.popover)
+            }
+          }
+        }
+      }
+      .weatherAskBar(screen: screen, ask: WeatherBarAsk(title: L10n.Weather.Weather.AreaMap.ask, request: request))
       .navigationDestination(item: $picked) { area in
         WeatherAreaDetailView(screen: screen, area: area)
       }
@@ -598,13 +613,16 @@ struct WeatherAreaDetailView: View {
           title: alerts.isEmpty
             ? L10n.Weather.Weather.AreaMap.askArea
             : L10n.Weather.Weather.AreaMap.askAreaAgain,
-          request: request, showsFootnotes: true)
+          // The footer says one packet and that everyone gets the answer; the button said the
+          // second half again right above it (docs/MESHWX_UI.md §3.1 U-57).
+          request: request, showsFootnotes: true, showsPublicNote: false)
       } footer: {
         Text(L10n.Weather.Weather.AreaMap.askAreaFootnote(screen.sourceName))
       }
       .themedRowBackground(theme)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(WeatherAreaMapList.areaName(area.ugc, tables: .shared))
     .navigationBarTitleDisplayMode(.inline)
@@ -936,12 +954,24 @@ struct WeatherAreaListView: View {
   let screen: WeatherPageScreen
   let group: WeatherAreaMapGroup
 
+  @State private var search = ""
+
   private var model: WeatherToolModel { screen.model }
+
+  /// A Heat Advisory can cover hundreds of counties: found by name or by code.
+  private var codes: [String] {
+    let query = search.trimmingCharacters(in: .whitespaces)
+    guard !query.isEmpty else { return group.codes }
+    return group.codes.filter {
+      $0.localizedCaseInsensitiveContains(query)
+        || WeatherAreaMapList.areaName($0, tables: .shared).localizedCaseInsensitiveContains(query)
+    }
+  }
 
   var body: some View {
     List {
       Section {
-        ForEach(group.codes, id: \.self) { code in
+        ForEach(codes, id: \.self) { code in
           NavigationLink {
             WeatherAreaDetailView(screen: screen, area: WeatherPickedArea(ugc: code))
           } label: {
@@ -955,16 +985,54 @@ struct WeatherAreaListView: View {
           }
           .accessibilityIdentifier("weather.areaMap.area.\(code)")
         }
-      } footer: {
-        Text(L10n.Weather.Weather.AreaMap.tapHint(screen.sourceName))
       }
       .themedRowBackground(theme)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
+    .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic))
     .navigationTitle(group.name)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(model: model, requestsOnScreen: [])
     .weatherToolChrome()
+  }
+}
+
+// MARK: - Legend
+
+/// The swatches and their names, one element per row: the swatch is the colour the name is
+/// drawn in, and a reader who cannot see it gets the name, which is the part that means anything.
+struct WeatherAreaLegendRows: View {
+  let legend: [WeatherAreaMapDrawing.LegendItem]
+
+  var body: some View {
+    ForEach(legend) { item in
+      HStack(spacing: 10) {
+        RoundedRectangle(cornerRadius: 3)
+          .fill(WeatherFormatting.color(for: item.tint).opacity(0.35))
+          .overlay(
+            RoundedRectangle(cornerRadius: 3)
+              .strokeBorder(WeatherFormatting.color(for: item.tint), lineWidth: 2))
+          .frame(width: 22, height: 14)
+        Text(item.name)
+          .font(.subheadline)
+      }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(item.name)
+    }
+  }
+}
+
+/// The legend on its own, for the full map's popover.
+struct WeatherAreaLegendList: View {
+  let legend: [WeatherAreaMapDrawing.LegendItem]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      WeatherAreaLegendRows(legend: legend)
+    }
+    .padding()
+    .frame(minWidth: 220, alignment: .leading)
   }
 }

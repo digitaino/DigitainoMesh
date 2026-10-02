@@ -78,11 +78,19 @@ private struct WeatherToolScreen: View {
     /// page's own screen like every other destination, and it is reached from the title menu
     /// rather than from three taps down the radio page (docs/MESHWX_UI.md §3.1 U-32).
     case areaMap(pageID: String)
+    /// The alerts, the stations and the notifications, reached from the title menu as well as
+    /// from the radio page (docs/MESHWX_UI.md §3.1 U-52): they were the radio page's, behind a
+    /// grey row at the foot of every place page that names a bot, which is not where anybody
+    /// looks for "what alerts are out".
+    case alerts(pageID: String)
+    case stations(pageID: String)
+    case notifications(pageID: String)
 
     var pageID: String {
       switch self {
       case let .station(pageID, _), let .alert(pageID, _), let .radio(pageID),
-           let .areaMap(pageID): pageID
+           let .areaMap(pageID), let .alerts(pageID), let .stations(pageID),
+           let .notifications(pageID): pageID
       }
     }
   }
@@ -182,7 +190,9 @@ private struct WeatherToolScreen: View {
       set: { model.showPage($0) })
   }
 
-  /// The title's menu: every page, the one on screen ticked, and the way into Places.
+  /// The title's menu: every page, the one on screen ticked, the way into Places, and then the
+  /// screens that are about the area rather than the place — what is out, where, from which
+  /// stations, and what the phone will tell you about without the tool open.
   @ViewBuilder
   private var titleMenu: some View {
     Picker(L10n.Weather.Weather.Place.places, selection: selection) {
@@ -201,8 +211,19 @@ private struct WeatherToolScreen: View {
     Button(L10n.Weather.Weather.Place.manage, systemImage: "list.bullet") {
       isShowingPlaces = true
     }
-    Button(L10n.Weather.Weather.AreaMap.title, systemImage: "map") {
-      pushed = .areaMap(pageID: model.selectedPageID)
+    Section {
+      Button(L10n.Weather.Weather.TitleMenu.alerts, systemImage: "exclamationmark.triangle") {
+        pushed = .alerts(pageID: model.selectedPageID)
+      }
+      Button(L10n.Weather.Weather.AreaMap.title, systemImage: "map") {
+        pushed = .areaMap(pageID: model.selectedPageID)
+      }
+      Button(L10n.Weather.Weather.Stations.title, systemImage: "thermometer.medium") {
+        pushed = .stations(pageID: model.selectedPageID)
+      }
+      Button(L10n.Weather.Weather.Notifications.title, systemImage: "bell") {
+        pushed = .notifications(pageID: model.selectedPageID)
+      }
     }
   }
 
@@ -266,6 +287,15 @@ private struct WeatherToolScreen: View {
           WeatherRadioView(screen: screen)
         case .areaMap:
           WeatherAreaMapView(screen: screen)
+        case .alerts:
+          WeatherAlertsListView(screen: screen)
+        case .stations:
+          WeatherStationsView(screen: screen)
+        case .notifications:
+          WeatherAlertNotificationsView(model: model) {
+            pushed = nil
+            isShowingPlaces = true
+          }
         }
       } else {
         // A tapped notification can open the tool straight onto its alert, before the page it
@@ -364,7 +394,7 @@ private struct WeatherBottomToolbar: ViewModifier {
   }
 
   private var dots: some View {
-    WeatherPageDots(pages: model.pages, selectedID: model.selectedPageID)
+    WeatherPageDots(pages: model.pages, selectedID: model.selectedPageID, onSelect: model.showPage)
   }
 }
 
@@ -374,6 +404,7 @@ private struct WeatherBottomToolbar: ViewModifier {
 private struct WeatherPageDots: View {
   let pages: [WeatherPage]
   let selectedID: String
+  let onSelect: (String) -> Void
 
   var body: some View {
     HStack(spacing: 9) {
@@ -396,6 +427,16 @@ private struct WeatherPageDots: View {
     .accessibilityLabel(L10n.Weather.Weather.Place.pageOf(
       (pages.firstIndex { $0.id == selectedID } ?? 0) + 1, pages.count))
     .accessibilityIdentifier("weather.pageDots")
+    // The page control's own gesture: swipe up or down on it to change the page, which is how a
+    // VoiceOver user turns the pager whose sideways swipe VoiceOver keeps for itself.
+    .accessibilityAdjustableAction { direction in
+      guard let index = pages.firstIndex(where: { $0.id == selectedID }) else { return }
+      switch direction {
+      case .increment where index + 1 < pages.count: onSelect(pages[index + 1].id)
+      case .decrement where index > 0: onSelect(pages[index - 1].id)
+      default: break
+      }
+    }
   }
 }
 

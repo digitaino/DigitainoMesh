@@ -32,13 +32,15 @@ struct WeatherAlertsListView: View {
       content(screen.snapshot)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(model: screen.model, requestsOnScreen: requestsOnScreen)
+    .weatherAskBar(screen: screen, ask: barAsk)
     .weatherToolChrome()
     .navigationDestination(isPresented: $isShowingMap) {
-      WeatherAlertFullMapView(drawing: drawing, title: title)
+      WeatherAlertFullMapView(screen: screen, drawing: drawing, title: title)
     }
     .task(id: drawingKey) {
       let key = drawingKey
@@ -57,6 +59,22 @@ struct WeatherAlertsListView: View {
     let status = line?.action == .askForAlerts ? screen.alertsRequest(for: snapshot.alertStatus) : nil
     let missing = screen.missingWarnings.isEmpty ? nil : screen.missingWarningsRequest
     return Set([status, missing].compactMap { $0 })
+  }
+
+  /// The one ask the bar carries (docs/MESHWX_UI.md §3.1 U-51): the status line's, when the line
+  /// says the list needs asking for, else the next missing warning's. Both used to be buttons at
+  /// the foot of the list, under every alert in it — the longest list in the tool on exactly the
+  /// night it matters — while what they changed was at the top.
+  private var barAsk: WeatherBarAsk? {
+    let snapshot = screen.snapshot
+    if statusLine(snapshot)?.action == .askForAlerts {
+      let request = screen.alertsRequest(for: snapshot.alertStatus)
+      return WeatherBarAsk(title: WeatherCopy.askAlertsTitle(for: request, tables: .shared), request: request)
+    }
+    if !screen.missingWarnings.isEmpty, let request = screen.missingWarningsRequest {
+      return WeatherBarAsk(title: WeatherCopy.askAlertsTitle(for: request, tables: .shared), request: request)
+    }
+    return nil
   }
 
   /// The §7.4 line, which lives here now that the card is gone: this screen is where the alert
@@ -100,11 +118,16 @@ struct WeatherAlertsListView: View {
           .clipShape(.rect(cornerRadius: 10))
           .allowsHitTesting(false)
           .accessibilityHidden(true)
+          // The map has stopped taking hits, so the button needs a hit area of its own or the
+          // preview looks tappable and does nothing — the alert map's U-32 fix, missed here.
+          .contentShape(.rect)
       }
       .buttonStyle(.plain)
       .accessibilityLabel(L10n.Weather.Weather.AlertsList.openMap)
       .accessibilityAddTraits(.isButton)
       .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+      // The top of the answer: the capsule's Show scrolls back here.
+      .weatherAskResult()
 
       // The whole country, one screen away (docs/MESHWX_UI.md §17). A row rather than anything
       // that loads: opening it asks for nothing, and the map it shows is whatever sweep the
@@ -122,27 +145,14 @@ struct WeatherAlertsListView: View {
     }
     .themedRowBackground(theme)
 
-    if snapshot.place == nil {
-      alertSection(L10n.Weather.Weather.AlertsList.all(screen.sourceName), snapshot.alerts, showsLocation: true)
-    } else {
-      alertSection(L10n.Weather.Weather.AlertsList.here, snapshot.alerts.filter { $0.placement == .here })
-      alertSection(L10n.Weather.Weather.AlertsList.unsure, snapshot.alerts.filter {
-        $0.placement == .checking || $0.placement == .unplaced
-      })
-      alertSection(L10n.Weather.Weather.AlertsList.near, snapshot.alerts.filter {
-        if case .near = $0.placement { return true }
-        return false
-      })
-      alertSection(
-        L10n.Weather.Weather.AlertsList.elsewhere, snapshot.alerts.filter { $0.placement == .elsewhere },
-        showsLocation: true)
-    }
-
+    // Whether the list is whole comes **before** the list (docs/MESHWX_UI.md §3.1 U-51): it was
+    // the last thing on the screen, under every alert, so the line that says "this list may be
+    // missing something" was read — if at all — after the list it qualifies.
     Section {
       if let line {
         WeatherAlertStatusRow(
           screen: screen, line: line, source: sourceLine(snapshot),
-          request: alertsRequest, showsAskFootnotes: statusAsks)
+          request: alertsRequest)
       } else {
         Text(sourceLine(snapshot))
           .font(.caption)
@@ -168,14 +178,36 @@ struct WeatherAlertsListView: View {
           }
           .accessibilityElement(children: .combine)
         }
-        // One warning per tap, named on the button, so each tap visibly asks for the next one.
+        // One warning per tap, named on the bar's button, so each tap visibly asks for the next
+        // one. Only when the bar is busy with the status line's ask does this one keep a button
+        // of its own.
         if let missingRequest {
-          WeatherAskButton(
-            screen: screen, title: WeatherCopy.askAlertsTitle(for: missingRequest, tables: .shared),
-            request: missingRequest, showsFootnotes: !statusAsks)
+          if statusAsks, missingRequest != alertsRequest {
+            WeatherAskButton(
+              screen: screen, title: WeatherCopy.askAlertsTitle(for: missingRequest, tables: .shared),
+              request: missingRequest, showsFootnotes: false)
+          } else if !statusAsks {
+            WeatherAskStatusRow(screen: screen, request: missingRequest)
+          }
         }
       }
       .themedRowBackground(theme)
+    }
+
+    if snapshot.place == nil {
+      alertSection(L10n.Weather.Weather.AlertsList.all(screen.sourceName), snapshot.alerts, showsLocation: true)
+    } else {
+      alertSection(L10n.Weather.Weather.AlertsList.here, snapshot.alerts.filter { $0.placement == .here })
+      alertSection(L10n.Weather.Weather.AlertsList.unsure, snapshot.alerts.filter {
+        $0.placement == .checking || $0.placement == .unplaced
+      })
+      alertSection(L10n.Weather.Weather.AlertsList.near, snapshot.alerts.filter {
+        if case .near = $0.placement { return true }
+        return false
+      })
+      alertSection(
+        L10n.Weather.Weather.AlertsList.elsewhere, snapshot.alerts.filter { $0.placement == .elsewhere },
+        showsLocation: true)
     }
   }
 

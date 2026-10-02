@@ -18,6 +18,8 @@ import SwiftUI
 /// Nothing here spends airtime. There is no ask on this screen at all.
 struct WeatherTrafficView: View {
   @Environment(\.appTheme) private var theme
+  /// A bubble's widest, scaled with the text it holds.
+  @ScaledMetric(relativeTo: .subheadline) private var bubbleWidth: CGFloat = 320
 
   /// The page this was opened from, for the radios it names (docs/MESHWX_UI.md §13).
   let screen: WeatherPageScreen
@@ -125,7 +127,9 @@ struct WeatherTrafficView: View {
         .multilineTextAlignment(.leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .frame(maxWidth: 320, alignment: .leading)
+        // Grows with the text size: a fixed 320 pt bubble at the accessibility sizes held three
+        // words a line (docs/MESHWX_UI.md §3.1 U-57).
+        .frame(maxWidth: bubbleWidth, alignment: .leading)
         .background(
           RoundedRectangle(cornerRadius: 14)
             .fill(isSent ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.14)))

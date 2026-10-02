@@ -44,6 +44,7 @@ struct WeatherPlacePageView: View {
     }
     .listStyle(.insetGrouped)
     .themedCanvas(theme)
+    .weatherReadableWidth()
     // No bottom content margin of its own: the tool's controls are in the system's bottom
     // toolbar, so the list is inset by exactly that bar (docs/MESHWX_UI.md §3.1 U-7).
     .refreshable {
@@ -117,12 +118,33 @@ struct WeatherPlacePageView: View {
         NavigationLink {
           WeatherReportProductView(screen: screen, product: product)
         } label: {
-          Text(product.title)
+          // When the text a row opens arrived, so a row that has something to read says so
+          // before the tap (docs/MESHWX_UI.md §3.1 U-57). Nothing when nothing is held.
+          LabeledContent {
+            if let received = received(product, screen: screen) {
+              Text(received)
+                .monospacedDigit()
+            }
+          } label: {
+            Text(product.title)
+          }
         }
         .accessibilityIdentifier(product.accessibilityIdentifier)
       }
     }
     .themedRowBackground(theme)
+  }
+
+  /// The receipt time of the text the product's screen would show: the same choice it makes.
+  private func received(_ product: WeatherReportProduct, screen: WeatherPageScreen) -> String? {
+    let choice = WeatherReportSelection.choose(
+      texts: screen.snapshot.texts, subject: product.subject, request: product.request(screen: screen),
+      isByArea: product.isByArea)
+    return choice.map {
+      WeatherFormatting.clockTime(
+        $0.item.assembly.lastReceivedAt, now: screen.now, calendar: .autoupdatingCurrent,
+        locale: .autoupdatingCurrent)
+    }
   }
 
   // MARK: - Swiping past
@@ -190,19 +212,21 @@ struct WeatherWarningBannerSection: View {
           WeatherAlertDetailView(screen: screen, identity: item.identity)
         }
       } label: {
-        HStack(alignment: .center, spacing: 10) {
-          Image(systemName: WeatherFormatting.symbol(for: item.warning.event, tables: tables))
-            .font(.title3)
-            .foregroundStyle(tint)
-            .accessibilityHidden(true)
-          VStack(alignment: .leading, spacing: 2) {
-            Text(WeatherFormatting.eventName(item.warning.event, tables: tables))
-              .font(.headline)
-            Text(qualifier)
-              .font(.subheadline)
-              .foregroundStyle(item.kind == .active ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+        WeatherValueRow(spacing: 10) {
+          HStack(alignment: .center, spacing: 10) {
+            Image(systemName: WeatherFormatting.symbol(for: item.warning.event, tables: tables))
+              .font(.title3)
+              .foregroundStyle(tint)
+              .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(WeatherFormatting.eventName(item.warning.event, tables: tables))
+                .font(.headline)
+              Text(qualifier)
+                .font(.subheadline)
+                .foregroundStyle(item.kind == .active ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+            }
           }
-          Spacer(minLength: 8)
+        } trailing: {
           if banner.more > 0 {
             Text(L10n.Weather.Weather.Alerts.more(banner.more))
               .font(.subheadline)

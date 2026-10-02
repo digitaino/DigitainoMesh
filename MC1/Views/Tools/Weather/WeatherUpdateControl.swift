@@ -18,6 +18,8 @@ struct WeatherUpdateControl: View {
   /// A station screen shows the caption under the button; a place screen shows it at the top of
   /// the list, where the pull reveals it.
   var showsCaption = false
+  /// False for the caption alone, under a screen whose button is in the bottom bar.
+  var showsButton = true
 
   /// Nothing can be asked at all: the reason replaces the button (§3 A2), and it is said **once**.
   private var block: WeatherRequestBlock? { screen?.snapshot.requestBlock }
@@ -28,11 +30,13 @@ struct WeatherUpdateControl: View {
       // so every station screen said "Connect your radio to ask WX-AUS" twice, one line apart
       // (docs/MESHWX_UI.md §3.1 U-5). `caption` already returns the reason when there is one, so
       // the reason is the caption and there is only ever one of it.
-      if showsCaption, block == nil {
-        button
-          .buttonStyle(.bordered)
-      } else if !showsCaption {
-        button
+      if showsButton {
+        if showsCaption, block == nil {
+          button
+            .buttonStyle(.bordered)
+        } else if !showsCaption {
+          button
+        }
       }
       if showsCaption {
         Text(Self.caption(screen: screen, plan: plan))

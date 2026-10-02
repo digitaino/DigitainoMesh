@@ -121,29 +121,31 @@ struct WeatherForecastRowView: View, Equatable {
       isNight: row.isNightIcon)
     let label = WeatherCopy.rowLabel(row.label, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
 
-    HStack(alignment: .center, spacing: 12) {
-      HStack(spacing: 2) {
-        Image(systemName: icon.symbolName)
-          .symbolRenderingMode(.multicolor)
-        if icon.showsWindAccent {
-          Image(systemName: "wind")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+    WeatherValueRow {
+      HStack(alignment: .center, spacing: 12) {
+        HStack(spacing: 2) {
+          Image(systemName: icon.symbolName)
+            .symbolRenderingMode(.multicolor)
+          if icon.showsWindAccent {
+            Image(systemName: "wind")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+          }
         }
-      }
-      .frame(minWidth: iconWidth, alignment: .leading)
-      .accessibilityHidden(true)
+        .frame(minWidth: iconWidth, alignment: .leading)
+        .accessibilityHidden(true)
 
-      VStack(alignment: .leading, spacing: 2) {
-        Text(label)
-          .font(.body)
-        if let hazards = WeatherCopy.hazards(row) {
-          Text(hazards)
-            .font(.footnote)
-            .foregroundStyle(.orange)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(label)
+            .font(.body)
+          if let hazards = WeatherCopy.hazards(row) {
+            Text(hazards)
+              .font(.footnote)
+              .foregroundStyle(.orange)
+          }
         }
       }
-      Spacer(minLength: 8)
+    } trailing: {
       VStack(alignment: .trailing, spacing: 2) {
         if let temperatures = WeatherCopy.temperatures(highF: row.highF, lowF: row.lowF) {
           Text(temperatures)

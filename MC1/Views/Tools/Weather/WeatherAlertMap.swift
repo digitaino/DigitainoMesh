@@ -358,15 +358,40 @@ struct WeatherAlertMapView: View {
   }
 }
 
-/// The full, interactive map the list's header opens.
+/// The full, interactive map the list's header opens. A tap on an alert opens it, the way a tap
+/// on a shaded area opens the area on the alert map one row below the header (§3.1 U-34): two maps
+/// that look the same answered a tap in two different ways, and this one did nothing at all.
 struct WeatherAlertFullMapView: View {
+  let screen: WeatherPageScreen
   let drawing: WeatherMapDrawing
   let title: String
 
+  @State private var picked: MeshWXWarningIdentity?
+
   var body: some View {
-    WeatherAlertMapView(drawing: drawing, isInteractive: true)
+    WeatherAlertMapView(drawing: drawing, isInteractive: true, onTap: tapped)
       .ignoresSafeArea(edges: .bottom)
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
+      .navigationDestination(item: $picked) { identity in
+        WeatherAlertDetailView(screen: screen, identity: identity)
+      }
+  }
+
+  /// The most important alert under the tap: the list is in priority order (§7.2), so the first
+  /// one the point is inside wins, and a tap on bare ground opens nothing.
+  private func tapped(_ point: MeshWXCoordinate) {
+    let alerts = screen.snapshot.alerts
+    Task {
+      // Polygons and county outlines both, which on a storm night is not a main-actor job.
+      let hit = await Task.detached(priority: .userInitiated) {
+        let place = WeatherPlace(kind: .searched, coordinate: point, label: "", uncertaintyKilometres: 0.5)
+        return alerts.first {
+          WeatherAlertPlacement.place(
+            $0.warning, at: place, geometry: MeshWXGeometry.shared, tables: .shared) == .here
+        }?.identity
+      }.value
+      if let hit { picked = hit }
+    }
   }
 }

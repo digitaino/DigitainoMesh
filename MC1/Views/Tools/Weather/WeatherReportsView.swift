@@ -160,9 +160,10 @@ struct WeatherReportProductView: View {
           }
           .accessibilityIdentifier("weather.report.askParts")
         }
+        // The tap is the bar's (docs/MESHWX_UI.md §3.1 U-51); what it is doing is said here, over
+        // the text it will replace.
         if let request {
-          WeatherAskButton(
-            screen: screen, title: L10n.Weather.Weather.Request.askLatest, request: request, showsFootnotes: true)
+          WeatherAskStatusRow(screen: screen, request: request)
         } else {
           Text(L10n.Weather.Weather.Reports.needsPlace)
             .font(.footnote)
@@ -177,6 +178,7 @@ struct WeatherReportProductView: View {
           // mesh asked for this" underneath was the same fact a second time, in a second voice
           // that also claimed to know somebody asked (§3.1 U-15).
           WeatherCardLabel(title: header(choice), trailing: received(choice))
+            .weatherAskResult()
           Text(WeatherReportText.body(choice.item.assembly))
             .font(.system(.footnote, design: .monospaced))
             .textSelection(.enabled)
@@ -198,15 +200,20 @@ struct WeatherReportProductView: View {
         Section {
           Text(L10n.Weather.Weather.Reports.nothingYet)
             .foregroundStyle(.secondary)
+            .weatherAskResult()
         }
         .themedRowBackground(theme)
       }
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(product.title)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(model: model, requestsOnScreen: Set([request, offer].compactMap { $0 }))
+    .weatherAskBar(screen: screen, ask: request.map {
+      WeatherBarAsk(title: L10n.Weather.Weather.Request.askLatest, request: $0)
+    })
     .weatherToolChrome()
   }
 
@@ -247,8 +254,12 @@ struct WeatherStatePickerView: View {
 
   let screen: WeatherPageScreen
 
+  @State private var search = ""
+
   var body: some View {
+    // Found the way the alert map's area picker finds them: by letters or by name.
     let states = WeatherReferenceNames.requestableStates(from: MeshWXTables.shared.states)
+      .filter { WeatherAreaPickerView.matches($0, search: search) }
     List {
       Section {
         ForEach(states, id: \.self) { code in
@@ -274,7 +285,9 @@ struct WeatherStatePickerView: View {
       .themedRowBackground(theme)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
+    .searchable(text: $search, prompt: L10n.Weather.Weather.AreaMap.pickerSearch)
     .navigationTitle(L10n.Weather.Weather.Reports.stateTitle)
     .navigationBarTitleDisplayMode(.inline)
     .weatherToolChrome()

@@ -865,7 +865,7 @@
 "weather.about.howItWorks" = "How it works";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
-"weather.about.line1" = "Your request goes to the weather radio as a private message.";
+"weather.about.line1" = "Your request goes out on #meshwx, addressed to the weather radio.";
 
 /* Location: WeatherRadioView.swift - How it works, second line */
 "weather.about.line2" = "Its answer is broadcast on #meshwx.";
@@ -1257,7 +1257,7 @@
 "weather.areaMap.legend" = "What the colors mean";
 
 /* Location: WeatherAreaMapView.swift - How to ask about one shaded area, %@ is the radio's name */
-"weather.areaMap.tapHint" = "Tap a shaded area to ask %@ what it is.";
+"weather.areaMap.tapHint" = "Tap a shaded area to see what %@ has said about it.";
 
 /* Location: WeatherAreaMapView.swift - Accessibility label for the map itself */
 "weather.areaMap.mapLabel" = "Map of the country, with the areas under an alert shaded";
@@ -1609,6 +1609,9 @@
 /* Location: WeatherRadarSection.swift - The ask once a picture is already on screen */
 "weather.radar.askNewer" = "Ask for a newer picture";
 
+/* Location: WeatherRadarView.swift - The radar screen's bottom-bar ask, for a width with no picture yet */
+"weather.radar.askShort" = "Ask for radar";
+
 /* Location: WeatherRadarSection.swift - Under the ask: how often new radar pictures are made */
 "weather.radar.ask.footnote" = "Pictures are made about every 15 minutes.";
 
@@ -1695,3 +1698,12 @@
 
 /* Location: WeatherTrafficView.swift - The same when one cell does */
 "weather.radar.traffic.cellsOne" = "1 cell with precipitation";
+
+/* Location: WeatherAskBar.swift - The capsule over the bottom bar: scrolls back up to where a screen's answer landed */
+"weather.askBar.show" = "Show";
+
+/* Location: WeatherAskBar.swift - VoiceOver hint for the Show button in the capsule over the bottom bar */
+"weather.askBar.showHint" = "Scrolls back to the answer.";
+
+/* Location: WeatherToolView.swift - The title menu's way to the alerts list for the radio's area */
+"weather.titleMenu.alerts" = "Alerts";

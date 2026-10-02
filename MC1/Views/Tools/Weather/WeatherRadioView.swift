@@ -40,17 +40,24 @@ struct WeatherRadioView: View {
   /// three times over — "Heard on #meshwx", "19 weather stations", "Cached from the channel (29)"
   /// — because what was heard and what is cached are one pile counted twice. It is now the
   /// newest-first view inside Cached.
+  ///
+  /// **What the radio is carrying comes first** (docs/MESHWX_UI.md §3.1 U-53, amending U-16). The
+  /// U-16 order opened on four lines of how asking works, the coverage card and the request log, so
+  /// on a phone the alerts, the stations and the notifications — the three rows people open this
+  /// page for — were below the fold; U-39 already shortened the log for the same reason. Now:
+  /// what it carries, what it covers, the radios and the channel, the phone's own history, and the
+  /// explainer last, beside the way to throw it all away.
   var body: some View {
     List {
-      howItWorksSection
-      coverageSection
-      requestsSection
-      stationsSection
       alertsSection
+      stationsSection
       notificationsSection
-      cacheSection
-      channelSection
+      coverageSection
       radiosSection
+      channelSection
+      requestsSection
+      cacheSection
+      howItWorksSection
 
       Section {
         Button(L10n.Weather.Weather.About.clear, role: .destructive) {
@@ -64,6 +71,7 @@ struct WeatherRadioView: View {
       .themedRowBackground(theme)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(WeatherFormatting.sentenceStart(screen.sourceName))
     .navigationBarTitleDisplayMode(.inline)
@@ -350,15 +358,20 @@ struct WeatherRadioView: View {
         .buttonStyle(.plain)
       }
       ForEach(screen.context.botRows) { row in
-        Button {
-          model.selectBot(row.botID)
-        } label: {
-          checkRow(
-            title: model.botName(row.botID), detail: detail(row),
-            isSelected: screen.context.botRows.count >= 2 && model.preferredBotID == row.botID)
+        if screen.context.botRows.count >= 2 {
+          Button {
+            model.selectBot(row.botID)
+          } label: {
+            checkRow(
+              title: model.botName(row.botID), detail: detail(row),
+              isSelected: model.preferredBotID == row.botID)
+          }
+          .buttonStyle(.plain)
+        } else {
+          // One radio is a fact, not a choice: a row, not a disabled button, which greyed out the
+          // one radio there is and its status with it.
+          checkRow(title: model.botName(row.botID), detail: detail(row), isSelected: false)
         }
-        .buttonStyle(.plain)
-        .disabled(screen.context.botRows.count < 2)
       }
     } footer: {
       Text(L10n.Weather.Weather.About.radiosFooter)
@@ -503,6 +516,7 @@ struct WeatherRequestsListView: View {
       .themedRowBackground(theme)
     }
     .listStyle(.insetGrouped)
+    .weatherReadableWidth()
     .themedCanvas(theme)
     .navigationTitle(L10n.Weather.Weather.Requests.allTitle)
     .navigationBarTitleDisplayMode(.inline)

@@ -241,7 +241,11 @@ struct WeatherConditionsSection: View {
       .font(.footnote)
       .foregroundStyle(.secondary)
       .padding(.top, 2)
+      // A footnote-high line is a 16 pt target. The hit area is grown to the system's 44 pt and
+      // the padding taken back out of the layout, so the hero keeps its spacing.
+      .padding(.vertical, 12)
       .contentShape(.rect)
+      .padding(.vertical, -12)
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier("weather.honestyLine")
@@ -326,13 +330,15 @@ struct WeatherCardLabel: View {
   var accessibilityLabel: String?
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 8) {
+    // The time under the title at the accessibility sizes: beside it, "ISSUED 2:30 PM" squeezed
+    // "FORECAST" until it broke mid-word (docs/MESHWX_UI.md §3.1 U-57).
+    WeatherValueRow(alignment: .firstTextBaseline, spacing: 8) {
       if let systemImage {
         Label(title, systemImage: systemImage)
       } else {
         Text(title)
       }
-      Spacer(minLength: 8)
+    } trailing: {
       if let trailing {
         Text(trailing)
           .multilineTextAlignment(.trailing)
@@ -346,5 +352,34 @@ struct WeatherCardLabel: View {
     .accessibilityElement(children: .combine)
     .accessibilityLabel(accessibilityLabel ?? [title, trailing].compactMap { $0 }.joined(separator: ", "))
     .accessibilityAddTraits(.isHeader)
+  }
+}
+
+/// A row's text and its trailing value side by side — and, at the accessibility text sizes, the
+/// value **under** the text, where it has the row's whole width (docs/MESHWX_UI.md §3.1 U-57).
+/// At those sizes a side-by-side row gives the name a few letters a line and pushes "102° / 77°"
+/// or "+2 more" off the edge or into a column one character wide.
+struct WeatherValueRow<Leading: View, Trailing: View>: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  var alignment: VerticalAlignment = .center
+  var spacing: CGFloat = 12
+  @ViewBuilder var leading: Leading
+  @ViewBuilder var trailing: Trailing
+
+  var body: some View {
+    if dynamicTypeSize.isAccessibilitySize {
+      VStack(alignment: .leading, spacing: 4) {
+        leading
+        trailing
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    } else {
+      HStack(alignment: alignment, spacing: spacing) {
+        leading
+        Spacer(minLength: 8)
+        trailing
+      }
+    }
   }
 }
