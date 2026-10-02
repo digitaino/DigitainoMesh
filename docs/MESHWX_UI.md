@@ -1200,9 +1200,10 @@ That is the most expensive answer in the protocol, and it is the whole design of
   above the button, not under it, because a reader who has already tapped does not need telling
   afterwards. The estimate is read from the map actually held (`WeatherAreaSweepCost`): the last
   national sweep's own packet count for the country, and for a scope, the runs this phone believes
-  are active in those states plus one scope entry each, over 38 entries to a packet. With nothing
-  held at all it is four states to a packet, and four packets for the country (seven with
-  advisories) — what the bot measurably sent on 2026-09-20.
+  are active in those states plus one scope entry each, over the 36 entries a bot puts in a
+  packet since 1 October 2026 (38 before). With nothing held at all it is four states to a
+  packet, and five packets for the country (eight with advisories): the 148 and 263 runs the bot
+  measurably sent on 2026-09-20, at 36 to a packet.
 - **Asking for less is the cheap path, and it is the default.** The selection starts as the state
   of the page's own place, because somebody opening the map from their own town wants their own
   state and one state is usually one packet.

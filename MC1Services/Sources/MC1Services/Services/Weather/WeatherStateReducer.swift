@@ -434,10 +434,10 @@ public enum WeatherStateReducer {
     }
     let speaksBefore = Date(unixMinutes: digest.nowMinutes).addingTimeInterval(-digestMargin)
     let listed = Set(digest.entries.map(\.identity))
-    // A full list is sorted soonest expiry first and cut at 25, so it says nothing about a warning
-    // expiring at or after its last entry: that one may be among the cut (ties included, since
-    // the cut can fall between equal expiries).
-    let horizon: UInt32? = digest.entries.count >= MeshWXWire.maxDigestEntries
+    // A full list is sorted soonest expiry first and cut (at 25 by older bots, 24 under the send
+    // limit), so it says nothing about a warning expiring at or after its last entry: that one may
+    // be among the cut (ties included, since the cut can fall between equal expiries).
+    let horizon: UInt32? = digest.entries.count >= MeshWXWire.digestMayBeCutAt
       ? digest.entries.map(\.expiresMinutes).max()
       : nil
 

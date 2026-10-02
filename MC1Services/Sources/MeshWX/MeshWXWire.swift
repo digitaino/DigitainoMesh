@@ -15,8 +15,16 @@ public enum MeshWXWire {
   /// MeshCore `data_type` carrying a v5 message (development range, spec §2.1).
   public static let dataType: UInt16 = 0xFF10
 
-  /// Largest `data` payload the transport accepts, in bytes.
+  /// Largest `data` payload the transport accepts, in bytes: what a decoder must read, because
+  /// bots before 1 October 2026 filled packets to it. The counts below are this budget's, so a
+  /// message from one of those bots still decodes and re-encodes.
   public static let maxData = 165
+
+  /// Largest `data` payload a bot sends since 1 October 2026 (spec §2.1). A bot confirms a send by
+  /// hearing a repeater's copy, and the companion firmware reports a heard packet only up to 169
+  /// raw bytes: 157 bytes of data come back as 167, 158 to 165 as 183. A full Digest of 25
+  /// entries (160 bytes) is the one exception.
+  public static let maxSend = 157
 
   /// Size of the common header (spec §2.2).
   public static let headerSize = 4
@@ -58,7 +66,8 @@ public enum MeshWXWire {
 
   // MARK: Counts and limits (spec §3, §5, §6, §7, §8.1)
 
-  /// Text bytes one chunk can carry: the packet budget minus the 8-byte text header.
+  /// Text bytes one chunk can carry: the packet budget minus the 8-byte text header. A bot since
+  /// 1 October 2026 sends at most `maxSend - textFixedSize`, 149.
   public static let maxTextBytes = maxData - textFixedSize  // 157
   /// Chunks one reply may be split into.
   public static let maxTextChunks = 8
@@ -66,16 +75,24 @@ public enum MeshWXWire {
   public static let maxPolygonVertices = 30
   public static let maxAreaRuns = 30
   public static let maxDigestEntries = 25
+  /// A Digest this long may have been cut (spec §5): it lists the warnings that expire soonest,
+  /// so a warning expiring at or after its last entry may simply not have fitted. A bot before
+  /// 1 October 2026 cut at ``maxDigestEntries``; one under the 157-byte ``maxSend`` holds 24
+  /// (`10 + 6 × 24` is 154). A whole list of 24 read as maybe cut only keeps an ended warning
+  /// until it expires or the next digest, which is the safe side.
+  public static let digestMayBeCutAt = 24
+  /// Stations one Observations batch may carry: 14 from a bot before 1 October 2026, 13 since.
   public static let maxStations = 14
   /// Stations one batch may carry when it also carries the per-station ages (spec §6.1). A full
   /// batch is already 163 bytes and the nibbles cost `ceil(n / 2)` more, so 14 with ages is 170
   /// and does not fit: the bot drops the farthest station — the list is nearest first — and never
   /// the ages, because a batch honest about some stations and silent about the rest is worse than
   /// one that says nothing. Not enforced separately; the packet budget is what refuses the 14th.
-  public static let maxStationsWithAges = 13
+  public static let maxStationsWithAges = 13  // 12 from a bot since 1 October 2026
   public static let maxPeriods = 14
   /// Offices one Coverage message may list (spec §7A). 24 offices and 30 runs together are 159
   /// bytes, so a full list of either never costs the other one; past it the bot cuts and says so.
+  /// A bot since 1 October 2026 lists at most 22, to stay inside ``maxSend``.
   public static let maxCoverageOffices = 24
   /// Bytes of the sender's public key a Request carries: the same six-byte prefix a DM
   /// identifies the phone by, so one phone's DM and its datagram are one sender (spec §7B).
@@ -84,8 +101,11 @@ public enum MeshWXWire {
   /// §8.2 grammar fits, and a request is not the place to spend airtime.
   public static let maxRequestTextBytes = 40
   /// Entries one Area sweep packet carries (spec §7C): `(165 − 11) / 4` is 38, and the packet
-  /// budget is what the cap is made of.
+  /// budget is what the cap is made of. What a decoder reads; see ``areaSweepEntriesSent``.
   public static let maxAreaSweepEntries = 38
+  /// Entries a bot puts in one sweep packet since 1 October 2026: `(157 − 11) / 4` is 36. What
+  /// the cost of the next sweep is counted in.
+  public static let areaSweepEntriesSent = 36
   /// Packets one sweep may be split into (spec §7C), the same ceiling a Text reply has. Eight
   /// packets is the whole country's worth of airtime, which is why the screen never asks by itself.
   public static let maxAreaSweepPackets = 8
@@ -113,7 +133,7 @@ public enum MeshWXWire {
   public static let maxRadarProduct: UInt8 = 63
   /// Bytes of quadtree a Radar packet can carry: the packet budget less the fixed fields. A
   /// partial tile spends four of them on its bounds, which is what makes it the tighter fit.
-  public static let maxRadarCellsBytes = maxData - radarFixedSize  // 153
+  public static let maxRadarCellsBytes = maxData - radarFixedSize  // 153; 145 from a bot since 1 October 2026
   /// The Not-available letter of `>radar` (spec revision 11, §7D). **Not** `r`: that is `>rain`,
   /// and a refusal has to say which of the two it refuses. It is the one request in the grammar
   /// whose letter is not its own first letter.

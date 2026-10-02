@@ -283,13 +283,13 @@ public struct WeatherAreaSelectionStore: @unchecked Sendable {
 /// It is an estimate and the screen words it as one ("About N packets"). There is no way to know
 /// exactly: the bot builds the answer when it is asked, out of products this phone has not seen.
 /// What the phone does have is the last sweep of the country, which says how many runs are active
-/// and where — and one packet holds ``MeshWXWire/maxAreaSweepEntries`` of them.
+/// and where — and one packet holds ``MeshWXWire/areaSweepEntriesSent`` of them.
 public enum WeatherAreaSweepCost {
   /// What a national sweep costs when this phone has never seen one. Measured against the bot's
-  /// live products on 2026-09-20: warnings and watches were 148 runs, four packets; with
-  /// advisories 263 runs, seven.
-  public static let typicalNationalPackets = 4
-  public static let typicalNationalPacketsWithAdvisories = 7
+  /// live products on 2026-09-20: warnings and watches were 148 runs, five packets at 36 to a
+  /// packet; with advisories 263 runs, eight.
+  public static let typicalNationalPackets = 5
+  public static let typicalNationalPacketsWithAdvisories = 8
   /// What one state costs when nothing at all is held: four states to a packet. A guess, and
   /// deliberately a cheap-sounding one — the number a person is deciding against is eight.
   public static let statesPerPacketWithoutASweep = 4
@@ -325,6 +325,6 @@ public enum WeatherAreaSweepCost {
       return states.contains(code)
     }
     let total = runs + states.count
-    return max(1, (total + MeshWXWire.maxAreaSweepEntries - 1) / MeshWXWire.maxAreaSweepEntries)
+    return max(1, (total + MeshWXWire.areaSweepEntriesSent - 1) / MeshWXWire.areaSweepEntriesSent)
   }
 }

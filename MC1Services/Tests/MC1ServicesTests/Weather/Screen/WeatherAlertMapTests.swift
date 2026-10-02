@@ -294,13 +294,14 @@ struct WeatherAreaSelectionTests {
   }
 
   /// Nothing held: the last national sweep's own count is the best estimate there is, and
-  /// without one the figures measured against the bot's live products on 2026-09-20.
+  /// without one the runs measured against the bot's live products on 2026-09-20, 148 and 263,
+  /// at the 36 entries a packet a bot sends since 1 October 2026.
   @Test
-  func `the national cost is the last national sweep's count, else four and seven`() {
+  func `the national cost is the last national sweep's count, else five and eight`() {
     #expect(WeatherAreaSweepCost.packets(
-      for: .wholeCountry, advisories: false, held: .empty) == 4)
+      for: .wholeCountry, advisories: false, held: .empty) == 5)
     #expect(WeatherAreaSweepCost.packets(
-      for: .wholeCountry, advisories: true, held: .empty) == 7)
+      for: .wholeCountry, advisories: true, held: .empty) == 8)
 
     let held = picture([
       F.areaSweep(seq: 1, group: 1, index: 0, total: 6, entries: [F.texasSweepEntry])
@@ -322,18 +323,18 @@ struct WeatherAreaSelectionTests {
   }
 
   /// With a sweep of the country held, the runs in those states plus one scope entry per state,
-  /// over the thirty-eight an entry list holds — the scope rides in the entry list and spends the
-  /// same budget the areas do.
+  /// over the thirty-six a bot puts in a packet since 1 October 2026 — the scope rides in the
+  /// entry list and spends the same budget the areas do.
   @Test
   func `a scoped ask counts the runs the map holds in those states`() {
-    let texas = (0..<40).map {
+    let texas = (0..<36).map {
       MeshWXAreaSweep.Entry(event: 3, stateIndex: F.texasState, isCounty: false, start: UInt16($0), run: 1)
     }
     let held = picture([
-      F.areaSweep(seq: 1, group: 1, index: 0, total: 2, entries: Array(texas.prefix(38))),
-      F.areaSweep(seq: 2, group: 1, index: 1, total: 2, entries: Array(texas.suffix(2)) + [F.montanaSweepEntry])
+      F.areaSweep(seq: 1, group: 1, index: 0, total: 2, entries: texas),
+      F.areaSweep(seq: 2, group: 1, index: 1, total: 2, entries: [F.montanaSweepEntry])
     ])
-    // 40 Texas runs and one state: ceil(41 / 38) = 2.
+    // 36 Texas runs and one state: ceil(37 / 36) = 2, where the 38 an older bot packed made it 1.
     #expect(WeatherAreaSweepCost.packets(
       for: WeatherAreaSelection(isWholeCountry: false, states: ["TX"]),
       advisories: false, held: held) == 2)

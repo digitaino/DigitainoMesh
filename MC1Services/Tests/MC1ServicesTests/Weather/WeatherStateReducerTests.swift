@@ -306,14 +306,19 @@ struct WeatherStateReducerTests {
       return state
     }
 
-    var full = held()
-    let changes = WeatherStateReducer.apply(F.digest(seq: 3, entries: entries), to: &full, receivedAt: F.t0)
-    // The one expiring before the last entry would have been listed; the later one may have been cut.
-    #expect(changes == [.digestApplied(missing: entries.map(\.0), removed: [soon])])
-    #expect(full.warnings[late] != nil)
+    // 25 is a list an older bot cut; 24 is one cut under the 157-byte send limit.
+    for count in [MeshWXWire.maxDigestEntries, MeshWXWire.digestMayBeCutAt] {
+      var full = held()
+      let listed = Array(entries.prefix(count))
+      let changes = WeatherStateReducer.apply(F.digest(seq: 3, entries: listed), to: &full, receivedAt: F.t0)
+      // The one expiring before the last entry would have been listed; the later one may have been cut.
+      #expect(changes == [.digestApplied(missing: listed.map(\.0), removed: [soon])], "\(count) entries")
+      #expect(full.warnings[late] != nil, "\(count) entries")
+    }
 
     var short = held()
-    _ = WeatherStateReducer.apply(F.digest(seq: 3, entries: Array(entries.dropLast())), to: &short, receivedAt: F.t0)
+    let whole = Array(entries.prefix(MeshWXWire.digestMayBeCutAt - 1))
+    _ = WeatherStateReducer.apply(F.digest(seq: 3, entries: whole), to: &short, receivedAt: F.t0)
     #expect(short.warnings.isEmpty, "a list with room to spare speaks for everything")
   }
 
