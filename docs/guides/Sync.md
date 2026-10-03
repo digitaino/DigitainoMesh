@@ -250,6 +250,10 @@ not (a replacement radio that received the identity but not the contacts, a re-f
 factory reset). One such sync deleted ~250 contacts and every DM with them before this
 rule existed. Kept rows are logged as `Full sync prune: keeping …`.
 
+The same rule applies to the overwrite-oldest push (0x8F) since 2026-10-03. The radio ran out of
+room and the user deleted nothing, so a favourite or a contact with messages stays on the phone.
+Only cache contacts are deleted.
+
 **Radio swap guard (2026-10-03).** When a radio takes on history it has never been synced
 against, `buildServicesAndSaveDevice` arms a `SwapGuard` on its Device row and clears its
 contact watermark. That covers three cases: a known public key on a radio this phone has

@@ -833,6 +833,47 @@ struct AdvertisementServiceTests {
     #expect(second)
   }
 
+  // MARK: - 0x8F keeps history
+
+  @Test
+  func `contactDeleted keeps a contact with messages: the radio ran out of room, the user deleted nothing`() async throws {
+    let store = try await makeStore()
+    let session = MockMeshCoreSession()
+    let service = makeService(session: session, store: store)
+
+    let key = makePublicKey(seed: 0x4A)
+    let saved = try await store.saveContact(
+      radioID: radioID, from: makeContactFrame(publicKey: key, name: "Friend")
+    )
+    try await store.saveMessage(MessageDTO(
+      id: UUID(), radioID: radioID, contactID: saved.id, channelIndex: nil,
+      text: "keep me", timestamp: 1, createdAt: Date(),
+      direction: .incoming, status: .delivered, textType: .plain,
+      ackCode: nil, pathLength: 0, snr: nil, senderKeyPrefix: nil, senderNodeName: nil,
+      isRead: true, replyToID: nil, roundTripTime: nil, heardRepeats: 0,
+      retryAttempt: 0, maxRetryAttempts: 0
+    ))
+
+    let counter = EventCounter()
+    let events = service.events()
+    let listener = Task {
+      for await event in events {
+        await counter.note(event)
+      }
+    }
+    await startMonitoring(service, session: session)
+    await session.yieldEvent(.contactDeleted(publicKey: key))
+    let handled = await waitUntil { await counter.contactUpdatedCount >= 1 }
+    #expect(handled)
+
+    #expect(try await store.fetchContact(radioID: radioID, publicKey: key) != nil)
+    #expect(try await store.fetchMessages(contactID: saved.id, limit: 10, offset: 0).count == 1)
+
+    await service.stopEventMonitoring()
+    service.finishEvents()
+    _ = await listener.result
+  }
+
   // MARK: - 0x8F drops pending key
 
   @Test

@@ -605,6 +605,20 @@ public actor AdvertisementService {
 
       let contactID = contact.id
 
+      // The radio ran out of room; the user deleted nothing. Like a full-sync prune, this
+      // reconciles the cache and never history: a favorite or a contact with messages stays
+      // on the phone (and, for an identity on several radios, may well still be on another).
+      // deleteContact would take every DM with it. Rule of 2026-09-01, docs/guides/Sync.md.
+      let hasHistory = try await !dataStore.fetchMessages(contactID: contactID, limit: 1, offset: 0).isEmpty
+      if contact.isFavorite || hasHistory {
+        logger.notice(
+          "Overwrite oldest: keeping '\(contactName)' on the phone (favorite=\(contact.isFavorite), hasMessages=\(hasHistory))"
+        )
+        eventBroadcaster.yield(.nodeStorageFullChanged(isFull: false))
+        eventBroadcaster.yield(.contactUpdated)
+        return
+      }
+
       try await dataStore.deleteContact(id: contactID)
       logger.info("Overwrite oldest: deleted contact '\(contactName)' and its messages from local database")
 
