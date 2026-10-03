@@ -13,7 +13,7 @@ enum WeatherFixture {
     publicKey: botPublicKey, name: "WX-AUS", latitude: 30.27, longitude: -97.74, lastAdvert: nil
   )
 
-  static let t0 = Date(timeIntervalSince1970: 1_789_436_700) // 2026-09-15 00:45 UTC
+  static let t0 = Date(timeIntervalSince1970: 1_789_436_700) // 2026-09-15 01:45 UTC
   /// Unix minutes of `t0`.
   static let t0Minutes: UInt32 = UInt32(1_789_436_700 / 60)
 
@@ -245,9 +245,9 @@ enum WeatherFixture {
   static func radar(
     seq: UInt8,
     takenMinutes: UInt32 = t0Minutes,
-    south: Int8 = 29,
-    west: Int16 = -99,
-    zoom: UInt8 = 0,
+    south: Double = 29,
+    west: Double = -99,
+    zoom: Int = 0,
     product: UInt8 = 1,
     isCoarse: Bool = false,
     bounds: MeshWXRadarBounds? = nil,
@@ -262,8 +262,10 @@ enum WeatherFixture {
     }
     let flags: UInt8 = (isCoarse ? MeshWXWire.radarCoarseBit : 0)
       | (bounds == nil ? 0 : MeshWXWire.radarPartialBit) | sourceBits(source)
+    // The detail level travels as type 12 (spec revision 13, §7E); the payload is the same.
+    let type: MeshWXMessageType = zoom == MeshWXWire.radarDetailZoom ? .radarDetail : .radar
     return MeshWXMessage(
-      header: header(seq: seq, type: .radar, flags: flags, bot: bot),
+      header: header(seq: seq, type: type, flags: flags, bot: bot),
       payload: .radar(MeshWXRadar(
         takenMinutes: takenMinutes, south: south, west: west, zoom: zoom, product: product,
         isCoarse: isCoarse, bounds: bounds, cells: cells))

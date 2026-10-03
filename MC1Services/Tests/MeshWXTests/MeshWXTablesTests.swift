@@ -13,7 +13,7 @@ struct MeshWXTablesTests {
   let tables = MeshWXTables.shared
 
   @Test func bundleLoads() {
-    #expect(tables.protocolVersion == 16, "protocol.json version is 16 for v5.0 revision 12")
+    #expect(tables.protocolVersion == 17, "protocol.json version is 17 for v5.0 revision 13")
     #expect(tables.offices.count == 127, "125 WFOs, then NHC and WNS (spec rev 3 §9)")
     #expect(tables.stations.count == 2237)
     #expect(tables.states.count == 78)

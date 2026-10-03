@@ -35,12 +35,78 @@ struct WeatherRequestTests {
       (.radar(latitude: 30.27, longitude: -97.74, zoom: 0), ">radar 30.270,-97.740"),
       (.radar(latitude: 30.27, longitude: -97.74, zoom: 2), ">radar 30.270,-97.740 z2"),
       (.radar(latitude: 32.78, longitude: -96.80, zoom: 0), ">radar 32.780,-96.800"),
-      (.radar(latitude: 32.78, longitude: -96.80, zoom: 3), ">radar 32.780,-96.800 z3")
+      (.radar(latitude: 32.78, longitude: -96.80, zoom: 3), ">radar 32.780,-96.800 z3"),
+      // Spec revision 13, §7E: the detail level is `z-1`, the `request_radar_detail` vector.
+      (.radar(latitude: 32.78, longitude: -96.80, zoom: -1), ">radar 32.780,-96.800 z-1"),
+      // §7D.4: `loop` after the zoom, and the held pictures as UTC `HHMM`, newest first — the
+      // `request_radar_loop` vector, whatever order the minutes were handed over in.
+      (.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: []), ">radar 30.270,-97.740 loop"),
+      (.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: [Self.at2338, Self.at2353]),
+       ">radar 30.270,-97.740 loop 2353 2338"),
+      (.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 2, held: [Self.at2353]),
+       ">radar 30.270,-97.740 z2 loop 2353"),
+      (.radarLoop(latitude: 32.78, longitude: -96.80, zoom: -1, held: []),
+       ">radar 32.780,-96.800 z-1 loop")
     ]
     for (request, text) in expected {
       #expect(request.wireText == text)
       #expect(text.utf8.count <= MeshWXWire.maxRequestTextBytes)
     }
+  }
+
+  /// 2026-09-20 23:38 UTC, the minute printed on the vectors' Dallas picture, and the picture a
+  /// quarter hour after it.
+  static let at2338: UInt32 = 29_832_458
+  static let at2353: UInt32 = 29_832_473
+
+  /// Spec revision 13, §7D.4: the held pictures go newest first and only as many as keep the
+  /// request within 40 bytes. `>radar 30.270,-97.740 loop` is 26 bytes, so two fit and a third
+  /// would be 41; the detail level's ` z-1` still leaves room for exactly two; a coordinate that
+  /// is southern and western both leaves room for one. Never more than five, whatever fits.
+  @Test
+  func `a loop lists its newest held pictures, as many as fit 40 bytes`() {
+    let hour = (0..<5).map { Self.at2353 - UInt32($0) * 15 }  // 2353 2338 2323 2308 2253
+    let austin = WeatherRequest.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: hour.reversed())
+    #expect(austin.wireText == ">radar 30.270,-97.740 loop 2353 2338")
+    #expect(austin.wireText.utf8.count == 36)
+
+    let detail = WeatherRequest.radarLoop(latitude: 30.27, longitude: -97.74, zoom: -1, held: hour)
+    #expect(detail.wireText == ">radar 30.270,-97.740 z-1 loop 2353 2338")
+    #expect(detail.wireText.utf8.count == MeshWXWire.maxRequestTextBytes)
+
+    let sydney = WeatherRequest.radarLoop(latitude: -33.9, longitude: -151.2, zoom: -1, held: hour)
+    #expect(sydney.wireText == ">radar -33.900,-151.200 z-1 loop 2353")
+
+    // The shortest coordinate there is leaves room for three.
+    let equator = WeatherRequest.radarLoop(latitude: 0, longitude: 0, zoom: 0, held: hour)
+    #expect(equator.wireText == ">radar 0.000,0.000 loop 2353 2338 2323")
+
+    // Hour and minute in UTC, four digits, across midnight; a picture listed twice is listed once.
+    let pastMidnight = Self.at2353 + 15  // 00:08
+    #expect(WeatherRequest.radarLoop(
+      latitude: 30.27, longitude: -97.74, zoom: 0, held: [pastMidnight, Self.at2353, Self.at2353]
+    ).wireText == ">radar 30.270,-97.740 loop 0008 2353")
+    for request in [austin, detail, sydney] {
+      #expect(request.wireText.utf8.count <= MeshWXWire.maxRequestTextBytes)
+    }
+  }
+
+  /// Spec revision 13, §7E: the bot answers a detail ask with the zoom 0 tile for the same
+  /// coordinate where no picture is fine enough, so that tile settles it as well. A loop expects
+  /// the same tile its single picture would.
+  @Test
+  func `a detail ask also expects the Local tile the bot falls back to`() {
+    let detail = WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: -1)
+    #expect(detail.expectedReply == .radar(
+      tile: MeshWXRadarTile(south: 30, west: -98, zoom: -1),
+      fallback: MeshWXRadarTile(south: 29, west: -99, zoom: 0)))
+    #expect(WeatherRequest.radarLoop(latitude: 30.27, longitude: -97.74, zoom: -1, held: [Self.at2338])
+      .expectedReply == detail.expectedReply)
+    #expect(WeatherRequest.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 1, held: [])
+      .expectedReply == .radar(tile: MeshWXRadarTile(south: 28, west: -100, zoom: 1), fallback: nil))
+    #expect(detail.acceptsAnswerFromAnyBot)
+    #expect(WeatherRequest.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: [])
+      .acceptsAnswerFromAnyBot)
   }
 
   /// Spec revision 11, §7D: the tile is decided by the lattice, so the request knows which square
@@ -49,9 +115,10 @@ struct WeatherRequestTests {
   @Test
   func `a radar request expects the tile its coordinate falls in`() {
     let request = WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 0)
-    #expect(request.expectedReply == .radar(tile: MeshWXRadarTile(south: 29, west: -99, zoom: 0)))
+    #expect(request.expectedReply
+      == .radar(tile: MeshWXRadarTile(south: 29, west: -99, zoom: 0), fallback: nil))
     #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 2).expectedReply
-      == .radar(tile: MeshWXRadarTile(south: 28, west: -100, zoom: 2)))
+      == .radar(tile: MeshWXRadarTile(south: 28, west: -100, zoom: 2), fallback: nil))
     // Two places in the same square are one question, which is the whole reason the lattice is
     // fixed rather than centred on whoever asked: Austin and a town fifty kilometres away ask for
     // one tile between them, and the second one costs the channel nothing.
@@ -84,6 +151,10 @@ struct WeatherRequestTests {
     // is `>rain`, and a refusal that could mean either is a refusal nobody can act on.
     #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 0).requestLetter == "x")
     #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 2).requestLetter == "x")
+    // Revision 13: the detail level and the loop are `>radar` too.
+    #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: -1).requestLetter == "x")
+    #expect(WeatherRequest.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: [])
+      .requestLetter == "x")
     #expect(WeatherRequest.rainfall(state: "TX").requestLetter == "r", "still the rain request")
   }
 
@@ -217,7 +288,10 @@ struct WeatherRequestTests {
       .parts(group: 212, indexes: [1, 4, 6], of: .areaSweep),
       .parts(group: 7, indexes: [2], of: .text(subject: 3)),
       .radar(latitude: 30.27, longitude: -97.74, zoom: 0),
-      .radar(latitude: 32.78, longitude: -96.80, zoom: 2)
+      .radar(latitude: 32.78, longitude: -96.80, zoom: 2),
+      .radar(latitude: 32.78, longitude: -96.80, zoom: -1),
+      .radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: []),
+      .radarLoop(latitude: 32.78, longitude: -96.80, zoom: -1, held: [Self.at2353, Self.at2338])
     ]
     let encoder = JSONEncoder()
     encoder.outputFormatting = .sortedKeys
@@ -238,5 +312,18 @@ struct WeatherRequestTests {
     #expect(String(decoding: try encoder.encode(
       WeatherRequest.radar(latitude: 30.5, longitude: -97.5, zoom: 2)), as: UTF8.self)
       == #"{"radar":{"latitude":30.5,"longitude":-97.5,"zoom":2}}"#)
+    #expect(String(decoding: try encoder.encode(
+      WeatherRequest.radarLoop(latitude: 30.5, longitude: -97.5, zoom: -1, held: [Self.at2353])),
+      as: UTF8.self)
+      == #"{"radarLoop":{"held":[29832473],"latitude":30.5,"longitude":-97.5,"zoom":-1}}"#)
+  }
+
+  /// A request log written before revision 13 holds a radar zoom of 0 to 2, which reads the same
+  /// as an `Int`.
+  @Test
+  func `a radar request saved before revision 13 still decodes`() throws {
+    let old = Data(#"{"radar":{"latitude":30.27,"longitude":-97.74,"zoom":1}}"#.utf8)
+    #expect(try JSONDecoder().decode(WeatherRequest.self, from: old)
+      == .radar(latitude: 30.27, longitude: -97.74, zoom: 1))
   }
 }

@@ -21,19 +21,20 @@ struct MeshWXCodecTests {
   }
 
   @Test func unknownTypeKeepsTheHeaderAndDropsTheBody() throws {
-    // Nibble 12 is in the third-party experimental range (spec §2.2): the bot never
+    // Nibble 13 is in the third-party experimental range (spec §2.2): the bot never
     // sends it, so it must be ignored — but `(bot, seq)` tracking still needs it, which
-    // is why this is a decode, not an error.
-    let message = try MeshWXDecoder.decode(Data([0x05, 0x7A, 0x4C, 0xC3, 0xAA, 0xBB]))
+    // is why this is a decode, not an error. (This was nibble 12 until revision 13 made 12
+    // Radar detail; the bot's own test moved the same way.)
+    let message = try MeshWXDecoder.decode(Data([0x05, 0x7A, 0x4C, 0xD3, 0xAA, 0xBB]))
     #expect(message.header.seq == 5)
-    #expect(message.header.rawType == 12)
+    #expect(message.header.rawType == 13)
     #expect(message.header.type == nil)
     #expect(message.header.flags == 3)
     #expect(message.payload == .unknown)
   }
 
   @Test func unknownTypeHasNoEncoding() throws {
-    let message = try MeshWXDecoder.decode(Data([0x05, 0x7A, 0x4C, 0xC3]))
+    let message = try MeshWXDecoder.decode(Data([0x05, 0x7A, 0x4C, 0xD3]))
     #expect(throws: MeshWXEncodeError.self) {
       _ = try MeshWXEncoder.encode(message)
     }

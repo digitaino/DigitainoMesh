@@ -24,7 +24,13 @@ public enum WeatherRadarPick {
   /// 23:38 that is the better picture.
   public static let takenBucketMinutes: UInt32 = 15
 
-  /// The best tile held for a coordinate at any width, or nil when nothing reaches it.
+  /// The best tile held for a coordinate at any width the place page shows, or nil when nothing
+  /// reaches it.
+  ///
+  /// **Zoom 0 to 3 only** (spec revision 13, §3): the place page never shows a detail tile. A
+  /// detail square is one degree around a spot somebody picked on the radar screen's map, and it
+  /// would win "the lowest zoom" from every Local picture of the place the moment one arrived —
+  /// a picture of somewhere else, centred a quarter of a degree from where this card is about.
   public static func best(
     for coordinate: MeshWXCoordinate,
     tiles: [WeatherStoredRadarTile],
@@ -33,24 +39,30 @@ public enum WeatherRadarPick {
     best(for: coordinate, zoom: nil, tiles: tiles, now: now)
   }
 
-  /// The best tile held for a coordinate at one width, for the radar screen's Local / Regional /
-  /// Wide control: each width shows the tile held for it, or nothing.
+  /// The best tile held for a coordinate at one width, for the radar screen's width control:
+  /// each width shows the tile held for it, or nothing. Takes −1, the detail level, like any
+  /// zoom; nil is every width the place page shows (0 to 3).
   public static func best(
     for coordinate: MeshWXCoordinate,
-    zoom: UInt8?,
+    zoom: Int?,
     tiles: [WeatherStoredRadarTile],
     now: Date
   ) -> WeatherStoredRadarTile? {
     let nowMinutes = MeshWXPresentation.unixMinutes(for: now)
     let usable = tiles.filter { stored in
-      if let zoom, stored.tile.zoom != Int(zoom) { return false }
+      if let zoom {
+        guard stored.tile.zoom == zoom else { return false }
+      } else {
+        guard stored.tile.zoom >= 0 else { return false }
+      }
       guard reaches(stored, coordinate: coordinate) else { return false }
       return age(ofTakenMinutes: stored.takenMinutes, nowMinutes: nowMinutes) <= maximumAgeMinutes
     }
     return usable.max { lhs, rhs in isBetter(rhs, than: lhs) }
   }
 
-  /// The picture held for one **exact** square, whether or not it reaches the place.
+  /// The picture held for one **exact** square, whether or not it reaches the place: the newest
+  /// of its frames (spec revision 13), any zoom, the detail level included.
   ///
   /// This is the radar screen's width control (spec revision 11, §3): each width shows the tile
   /// held for it, and a partial tile whose bounds stop short of the place is still the tile held
@@ -284,9 +296,10 @@ public enum WeatherRadarCard: Sendable, Hashable {
   /// A picture to draw.
   case held(picture: WeatherRadarPicture)
 
-  /// The width the place page's own ask uses: the narrowest, which is the one that is actually
-  /// about the place. The radar screen offers the others.
-  public static let pageZoom: UInt8 = 0
+  /// The width the place page's own ask uses: the narrowest of the place's own squares, which is
+  /// the one that is actually about the place. The radar screen offers the others, and Detail for
+  /// a spot picked on its map.
+  public static let pageZoom = 0
 
   public static func make(
     place: WeatherPlace?,
@@ -301,7 +314,7 @@ public enum WeatherRadarCard: Sendable, Hashable {
       stored: stored,
       age: WeatherRadarAge.make(takenMinutes: stored.takenMinutes, now: now),
       summary: WeatherRadarSummary.make(tile: stored, coordinate: place.coordinate),
-      isWiderThanAsked: stored.tile.zoom > Int(pageZoom)))
+      isWiderThanAsked: stored.tile.zoom > pageZoom))
   }
 
   /// One width of the radar screen's control (spec revision 11, §3): the tile held for the square
@@ -313,7 +326,7 @@ public enum WeatherRadarCard: Sendable, Hashable {
   /// it: the summary's ``WeatherRadarSummary/here`` comes back nil and the screen says the picture
   /// does not reach the place, which is an answer and not an absence.
   public static func width(
-    _ zoom: UInt8,
+    _ zoom: Int,
     place: WeatherPlace?,
     tiles: [WeatherStoredRadarTile],
     now: Date
@@ -326,7 +339,7 @@ public enum WeatherRadarCard: Sendable, Hashable {
       stored: stored,
       age: WeatherRadarAge.make(takenMinutes: stored.takenMinutes, now: now),
       summary: WeatherRadarSummary.make(tile: stored, coordinate: place.coordinate),
-      isWiderThanAsked: stored.tile.zoom > Int(pageZoom)))
+      isWiderThanAsked: stored.tile.zoom > pageZoom))
   }
 
   /// Every bot's tiles in one list, which is what ``make(place:tiles:now:)`` wants: a tile is a
@@ -341,7 +354,7 @@ public enum WeatherRadarCard: Sendable, Hashable {
   /// The coordinate, never the place's name: the lattice turns the coordinate into a tile this
   /// phone can name before the answer arrives, and a place the bot resolves for itself would come
   /// back as a square nobody here chose (spec revision 11, §7D).
-  public static func ask(place: WeatherPlace?, zoom: UInt8 = pageZoom) -> WeatherRequest? {
+  public static func ask(place: WeatherPlace?, zoom: Int = pageZoom) -> WeatherRequest? {
     guard let place else { return nil }
     return .radar(
       latitude: place.coordinate.latitude, longitude: place.coordinate.longitude, zoom: zoom)
@@ -349,14 +362,180 @@ public enum WeatherRadarCard: Sendable, Hashable {
 
   /// The tile a place's ask at one width would be answered with, for a screen that wants to say
   /// what it already holds for that width before spending a packet.
-  public static func tile(for place: WeatherPlace, zoom: UInt8 = pageZoom) -> MeshWXRadarTile {
+  public static func tile(for place: WeatherPlace, zoom: Int = pageZoom) -> MeshWXRadarTile {
     MeshWXRadarTile.containing(
-      latitude: place.coordinate.latitude, longitude: place.coordinate.longitude, zoom: Int(zoom))
+      latitude: place.coordinate.latitude, longitude: place.coordinate.longitude, zoom: zoom)
   }
 
   public var picture: WeatherRadarPicture? {
     guard case let .held(picture) = self else { return nil }
     return picture
+  }
+}
+
+// MARK: - The loop
+
+/// The last hour of one square, as the radar screen plays it (spec revision 13, §7D.4, §3).
+///
+/// Built from the frames held of that **exact** tile, from every bot: a frame is a picture of a
+/// square at a minute, and two bots' copies of the same minute are one frame — the finer copy, by
+/// ``WeatherRadarPick``'s own order. The newest frame anchors the hour; nothing past the two hours
+/// a tile is drawn for at all is in it.
+public struct WeatherRadarLoop: Sendable, Hashable {
+  /// The frames, **oldest first**: the order they play in.
+  public var frames: [WeatherStoredRadarTile]
+  /// Two consecutive frames are more than ``gapMinutes`` apart: a picture of the hour is missing,
+  /// and the screen says so rather than letting a jump in the storm read as its speed.
+  public var hasGap: Bool
+  /// The frames' `taken` minutes, **newest first** — the order a loop request lists them in
+  /// (``WeatherRequest/radarLoop(latitude:longitude:zoom:held:)``).
+  public var held: [UInt32]
+
+  public init(frames: [WeatherStoredRadarTile], hasGap: Bool, held: [UInt32]) {
+    self.frames = frames
+    self.hasGap = hasGap
+    self.held = held
+  }
+
+  /// No frames: nothing to play and nothing held.
+  public static let empty = WeatherRadarLoop(frames: [], hasGap: false, held: [])
+
+  /// The most frames a loop holds: an hour at 15-minute steps, the newest included.
+  public static let maxFrames = MeshWXWire.radarLoopMaxFrames
+  /// How far back from the newest frame the loop reaches.
+  public static let windowMinutes = MeshWXWire.radarLoopWindowMinutes
+  /// Past this between two frames, one is missing. Pictures are made every 15 minutes, so 20 is
+  /// one picture late and not yet one picture lost.
+  public static let gapMinutes = 20
+
+  /// Play and Pause are offered from two frames: one frame is a picture, not a loop.
+  public var canPlay: Bool { frames.count >= 2 }
+  /// The hour is all here: the ask for it is not offered.
+  public var isFull: Bool { frames.count >= Self.maxFrames }
+  /// The frame the screen shows when nothing is playing.
+  public var newest: WeatherStoredRadarTile? { frames.last }
+
+  /// The frames of `tile` whose `taken` is within ``windowMinutes`` before the newest held for it
+  /// and at most ``WeatherRadarPick/maximumAgeMinutes`` old, at most ``maxFrames``, the newest
+  /// kept when there are more.
+  public static func make(
+    tile: MeshWXRadarTile, tiles: [WeatherStoredRadarTile], now: Date
+  ) -> WeatherRadarLoop {
+    let nowMinutes = MeshWXPresentation.unixMinutes(for: now)
+    var byTaken: [UInt32: WeatherStoredRadarTile] = [:]
+    for stored in tiles where stored.tile == tile {
+      guard WeatherRadarPick.age(ofTakenMinutes: stored.takenMinutes, nowMinutes: nowMinutes)
+        <= WeatherRadarPick.maximumAgeMinutes
+      else { continue }
+      if let other = byTaken[stored.takenMinutes], !WeatherRadarPick.isBetter(stored, than: other) {
+        continue
+      }
+      byTaken[stored.takenMinutes] = stored
+    }
+    guard let newest = byTaken.keys.max() else { return .empty }
+    let floor = newest >= UInt32(windowMinutes) ? newest - UInt32(windowMinutes) : 0
+    let frames = Array(
+      byTaken.values.filter { $0.takenMinutes >= floor }
+        .sorted { $0.takenMinutes < $1.takenMinutes }
+        .suffix(maxFrames))
+    let hasGap = zip(frames, frames.dropFirst()).contains { earlier, later in
+      later.takenMinutes - earlier.takenMinutes > UInt32(gapMinutes)
+    }
+    return WeatherRadarLoop(
+      frames: frames, hasGap: hasGap, held: frames.map(\.takenMinutes).reversed())
+  }
+
+  /// The ask for the rest of the hour at one width, listing what this loop already holds so the
+  /// bot leaves those pictures out (spec revision 13, §7D.4). The coordinate is the place's for
+  /// Local, Regional and Wide, and the picked spot's for Detail.
+  public func ask(latitude: Double, longitude: Double, zoom: Int) -> WeatherRequest {
+    .radarLoop(latitude: latitude, longitude: longitude, zoom: zoom, held: held)
+  }
+}
+
+// MARK: - Detail
+
+/// The radar screen's Detail width: one degree around a spot picked on its map (spec revision 13,
+/// §7E, §3).
+///
+/// Three states, the middle one the bot's own fallback: where no picture is fine enough for
+/// detail the bot sends the Local tile for the spot instead, and the screen draws that and says
+/// so rather than calling it a detailed picture.
+public enum WeatherRadarDetail: Sendable, Hashable {
+  /// A detail picture of the spot's square, at most two hours old.
+  case held(picture: WeatherRadarPicture)
+  /// No detail picture, but the zoom 0 tile containing the spot: "No detailed picture of this
+  /// spot. Showing Local."
+  case local(picture: WeatherRadarPicture)
+  /// Neither: "Not asked for yet."
+  case missing
+
+  /// The detail square a spot is in: the one-degree tile whose centre is the nearest half-degree
+  /// lattice point.
+  public static func tile(for spot: MeshWXCoordinate) -> MeshWXRadarTile {
+    MeshWXRadarTile.containing(
+      latitude: spot.latitude, longitude: spot.longitude, zoom: MeshWXWire.radarDetailZoom)
+  }
+
+  /// The Local tile the bot falls back to for a spot: the zoom 0 tile containing it.
+  public static func localTile(for spot: MeshWXCoordinate) -> MeshWXRadarTile {
+    MeshWXRadarTile.containing(latitude: spot.latitude, longitude: spot.longitude, zoom: 0)
+  }
+
+  /// What the Detail width shows for a spot. Through ``WeatherRadarPick/held(_:tiles:now:)``, the
+  /// exact square, like every width: a partial tile that stops short of the spot is still the
+  /// picture held for it. The pictures' summaries are about the spot; the screen speaks about
+  /// the place only when the place is inside (``summary(of:place:)``).
+  public static func card(
+    spot: MeshWXCoordinate, tiles: [WeatherStoredRadarTile], now: Date
+  ) -> WeatherRadarDetail {
+    if let stored = WeatherRadarPick.held(tile(for: spot), tiles: tiles, now: now) {
+      return .held(picture: picture(stored, spot: spot, now: now))
+    }
+    if let stored = WeatherRadarPick.held(localTile(for: spot), tiles: tiles, now: now) {
+      return .local(picture: picture(stored, spot: spot, now: now))
+    }
+    return .missing
+  }
+
+  /// The single ask for a spot: `>radar <lat>,<lon> z-1`.
+  public static func ask(spot: MeshWXCoordinate) -> WeatherRequest {
+    .radar(latitude: spot.latitude, longitude: spot.longitude, zoom: MeshWXWire.radarDetailZoom)
+  }
+
+  /// The summary sentences about the **place**, when the place is inside the tile drawn: a
+  /// detail square is about a spot, and a sentence naming Austin under a square of Round Rock
+  /// would be about a place the picture is not of. Nil when the place is outside it.
+  public static func summary(
+    of picture: WeatherRadarPicture, place: MeshWXCoordinate?
+  ) -> WeatherRadarSummary? {
+    guard let place,
+      picture.stored.tile.contains(latitude: place.latitude, longitude: place.longitude)
+    else { return nil }
+    return WeatherRadarSummary.make(tile: picture.stored, coordinate: place)
+  }
+
+  public var picture: WeatherRadarPicture? {
+    switch self {
+    case let .held(picture), let .local(picture): picture
+    case .missing: nil
+    }
+  }
+
+  /// The Local tile is on screen in place of a detail picture.
+  public var isFallback: Bool {
+    if case .local = self { return true }
+    return false
+  }
+
+  private static func picture(
+    _ stored: WeatherStoredRadarTile, spot: MeshWXCoordinate, now: Date
+  ) -> WeatherRadarPicture {
+    WeatherRadarPicture(
+      stored: stored,
+      age: WeatherRadarAge.make(takenMinutes: stored.takenMinutes, now: now),
+      summary: WeatherRadarSummary.make(tile: stored, coordinate: spot),
+      isWiderThanAsked: stored.tile.zoom > MeshWXWire.radarDetailZoom)
   }
 }
 

@@ -362,9 +362,10 @@ enum WeatherTrafficCopy {
       return L10n.Weather.Weather.Traffic.Detail.cut
     case .includesAdvisories:
       return L10n.Weather.Weather.Traffic.Detail.advisories
-    // The width the screens name this square (revision 11, §7D), and for the zoom the wire has
-    // but the screens do not offer, the square's own centre — a row that said nothing at all
-    // about where a packet was a picture of would be a row worth less than its bytes.
+    // The width the screens name this square (revision 11, §7D; "Detail" for zoom −1, revision
+    // 13), and for the zoom the wire has but the screens do not offer, the square's own centre —
+    // a row that said nothing at all about where a packet was a picture of would be a row worth
+    // less than its bytes.
     case let .tile(south, west, zoom):
       return WeatherCopy.radarWidthName(zoom)
         ?? WeatherCopy.radarCentre(MeshWXRadarTile(south: south, west: west, zoom: zoom))

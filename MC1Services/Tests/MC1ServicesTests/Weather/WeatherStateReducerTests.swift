@@ -558,9 +558,10 @@ struct WeatherStateReducerTests {
     var changes = WeatherStateReducer.apply(F.notAvailable(seq: 1, letter: "f", reason: .unknownLocation), to: &state, receivedAt: F.t0)
     #expect(changes == [.notAvailable(MeshWXNotAvailable(requestCode: 102, reason: .unknownLocation))])
 
-    let unknown = MeshWXMessage(header: MeshWXHeader(seq: 2, bot: F.botID, rawType: 12, flags: 0), payload: .unknown)
+    // Nibble 13: 12 is Radar detail since revision 13.
+    let unknown = MeshWXMessage(header: MeshWXHeader(seq: 2, bot: F.botID, rawType: 13, flags: 0), payload: .unknown)
     changes = WeatherStateReducer.apply(unknown, to: &state, receivedAt: F.t0)
-    #expect(changes == [.unknownType(rawType: 12)])
+    #expect(changes == [.unknownType(rawType: 13)])
     #expect(state.lastSeq == 2)
     #expect(state.warnings.isEmpty)
   }

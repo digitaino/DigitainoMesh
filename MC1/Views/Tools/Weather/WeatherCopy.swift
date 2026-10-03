@@ -274,8 +274,11 @@ enum WeatherCopy {
         // §3): "no recent picture here", "this radio has no dish", "it sent this picture minutes
         // ago and has nothing newer". A generic "not available" for all three is a reader tapping
         // again for ever.
-        if case .radar? = request {
+        switch request {
+        case .radar?, .radarLoop?:
           return radarRefusal(WeatherRadarRefusal(reason: reason), source: source)
+        default:
+          break
         }
         return notAvailable(reason, source: sourceStart)
       case .failed:
@@ -711,6 +714,12 @@ enum WeatherCopy {
       return withSubject(
         L10n.Weather.Weather.Radar.Request.title,
         WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude))
+    case let .radarLoop(latitude, longitude, _, _):
+      // "Radar, last hour · 30.267,-97.743" (revision 13, §7D.4). The pictures it listed as held
+      // are the wire's business, not the row's.
+      return withSubject(
+        L10n.Weather.Weather.Radar.Loop.Request.title,
+        WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude))
     }
   }
 
@@ -777,13 +786,14 @@ enum WeatherCopy {
       return request.map { requestName($0, tables: tables) } ?? textSubjectName(subject)
     case .coverage:
       return L10n.Weather.Weather.RequestName.coverage
-    case let .radar(tile):
+    case let .radar(tile, frames):
       // The square of earth, named the way the radar screen names it: the width, then the centre
       // in degrees. Nothing on the wire says who asked for a tile and the lattice means several
       // people may have, so the row names the picture and claims nothing about the question
-      // (spec revision 11, §7D).
+      // (spec revision 11, §7D). Several frames of it held: "5 pictures" (revision 13).
       return [
-        L10n.Weather.Weather.Radar.Request.title, radarWidthName(tile.zoom), radarCentre(tile)
+        L10n.Weather.Weather.Radar.Request.title, radarWidthName(tile.zoom), radarCentre(tile),
+        frames > 1 ? L10n.Weather.Weather.Radar.Cached.frames(frames) : nil
       ].compactMap { $0 }.joined(separator: " · ")
     }
   }
@@ -827,14 +837,15 @@ enum WeatherCopy {
 
   // MARK: - Radar (§18)
 
-  /// "Local", "Regional", "Wide" — and **nil** for zoom 3, which exists on the wire and is not
-  /// offered (spec revision 11, §3).
+  /// "Local", "Regional", "Wide", "Detail" for zoom −1 (spec revision 13) — and **nil** for zoom
+  /// 3, which exists on the wire and is not offered (spec revision 11, §3).
   ///
   /// Not kilometres, which is the whole of the owner's decision: a tile is two degrees, 222 km
   /// tall everywhere and a different width at every latitude, so a number on the control would be
   /// wrong everywhere but one parallel.
   static func radarWidthName(_ zoom: Int) -> String? {
     switch zoom {
+    case MeshWXWire.radarDetailZoom: L10n.Weather.Weather.Radar.Width.detail
     case 0: L10n.Weather.Weather.Radar.Width.local
     case 1: L10n.Weather.Weather.Radar.Width.regional
     case 2: L10n.Weather.Weather.Radar.Width.wide
@@ -845,9 +856,8 @@ enum WeatherCopy {
   /// The tile's centre, in the same three decimals a request is written in — a square of earth has
   /// no name, and its middle is the one thing about it a reader can place on a map.
   static func radarCentre(_ tile: MeshWXRadarTile) -> String {
-    let half = Double(tile.spanDegrees) / 2
-    return WeatherRequest.coordinateKey(
-      latitude: Double(tile.south) + half, longitude: Double(tile.west) + half)
+    let half = tile.spanDegrees / 2
+    return WeatherRequest.coordinateKey(latitude: tile.south + half, longitude: tile.west + half)
   }
 
   /// "Picture from 6:38 PM · 12 min old", and from 30 minutes "· Precipitation has moved since."

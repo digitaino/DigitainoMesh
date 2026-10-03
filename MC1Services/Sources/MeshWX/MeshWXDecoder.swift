@@ -19,6 +19,13 @@ public enum MeshWXDecodeError: Error, Sendable, Hashable {
   /// the bounds are what says which cells are unknown, and a guess there paints unknown ground
   /// dry or dry ground unknown.
   case radarBoundsOutsideGrid(row0: UInt8, row1: UInt8, col0: UInt8, col1: UInt8, size: Int)
+  /// A Radar detail tile's `depth` was not 0 (spec revision 13, §7E). The other values are
+  /// reserved for a finer tile from a finer picture, and a tile drawn at a size this build cannot
+  /// know would put the storm in the wrong place.
+  case radarDetailDepthReserved(depth: UInt8)
+  /// A Radar detail tile's edges were not on the half-degree lattice: an odd number of quarter
+  /// degrees (spec revision 13, §7E). Given in degrees, as the bytes say them.
+  case radarDetailOffLattice(south: Double, west: Double)
 }
 
 /// Decodes one v5 datagram (spec §3-§8).
@@ -55,6 +62,7 @@ public enum MeshWXDecoder {
       case .request: .request(try decodeRequest(bytes, header: header))
       case .areaSweep: .areaSweep(try decodeAreaSweep(bytes, header: header))
       case .radar: .radar(try decodeRadar(bytes, header: header))
+      case .radarDetail: .radar(try decodeRadarDetail(bytes, header: header))
       case nil: .unknown
       }
     return MeshWXMessage(header: header, payload: payload)
@@ -464,12 +472,65 @@ public enum MeshWXDecoder {
   /// with a hole in it, it is a picture that says the rain stopped.
   static func decodeRadar(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXRadar {
     try need(bytes, MeshWXWire.radarFixedSize + 1, "radar")
+    let shape = bytes[11]
+    let body = try decodeRadarBody(bytes, header: header, from: MeshWXWire.radarFixedSize)
+    return MeshWXRadar(
+      takenMinutes: u32(bytes, 4),
+      south: Double(Int8(bitPattern: bytes[8])),
+      west: Double(i16(bytes, 9)),
+      zoom: Int(shape & MeshWXWire.radarZoomMask),
+      product: shape >> MeshWXWire.radarProductShift,
+      isCoarse: body.isCoarse,
+      bounds: body.bounds,
+      cells: body.cells
+    )
+  }
+
+  // MARK: - Radar detail (type 12, spec revision 13, §7E)
+
+  /// One tile at the detail level: type 11's body behind a fixed part one byte longer. `south` and
+  /// `west` are i16 in **quarter degrees**, and the shape byte carries `depth` where type 11 has
+  /// the zoom. It decodes into the same ``MeshWXRadar`` as type 11, with `zoom` −1, so nothing
+  /// after the decoder has to know there were two types.
+  ///
+  /// Two refusals type 11 does not have: a `depth` other than 0 is reserved (a finer tile from a
+  /// finer picture, some day), and an edge off the half-degree lattice is not a tile any phone
+  /// could have asked for. Either would be a picture drawn in the wrong place.
+  static func decodeRadarDetail(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXRadar {
+    try need(bytes, MeshWXWire.radarDetailFixedSize + 1, "radar detail")
+    let southUnits = i16(bytes, 8)
+    let westUnits = i16(bytes, 10)
+    let shape = bytes[12]
+    let depth = shape & MeshWXWire.radarDetailDepthMask
+    guard depth == 0 else { throw MeshWXDecodeError.radarDetailDepthReserved(depth: depth) }
+    let south = Double(southUnits) / MeshWXWire.radarDetailUnitsPerDegree
+    let west = Double(westUnits) / MeshWXWire.radarDetailUnitsPerDegree
+    guard southUnits % 2 == 0, westUnits % 2 == 0 else {
+      throw MeshWXDecodeError.radarDetailOffLattice(south: south, west: west)
+    }
+    let body = try decodeRadarBody(bytes, header: header, from: MeshWXWire.radarDetailFixedSize)
+    return MeshWXRadar(
+      takenMinutes: u32(bytes, 4),
+      south: south,
+      west: west,
+      zoom: MeshWXWire.radarDetailZoom,
+      product: shape >> MeshWXWire.radarProductShift,
+      isCoarse: body.isCoarse,
+      bounds: body.bounds,
+      cells: body.cells
+    )
+  }
+
+  /// What types 11 and 12 share after their fixed fields: the grid size from the flags, the
+  /// optional bounds and the quadtree.
+  private static func decodeRadarBody(
+    _ bytes: [UInt8], header: MeshWXHeader, from fixedSize: Int
+  ) throws -> (isCoarse: Bool, bounds: MeshWXRadarBounds?, cells: [UInt8]) {
     let isCoarse = header.flags & MeshWXWire.radarCoarseBit != 0
     let isPartial = header.flags & MeshWXWire.radarPartialBit != 0
     let size = isCoarse ? MeshWXWire.radarCoarseGrid : MeshWXWire.radarGrid
-    let shape = bytes[11]
 
-    var offset = MeshWXWire.radarFixedSize
+    var offset = fixedSize
     var bounds: MeshWXRadarBounds?
     if isPartial {
       try need(bytes, offset + MeshWXWire.radarBoundsSize + 1, "radar bounds")
@@ -483,17 +544,7 @@ public enum MeshWXDecoder {
       bounds = box
       offset += MeshWXWire.radarBoundsSize
     }
-
-    return MeshWXRadar(
-      takenMinutes: u32(bytes, 4),
-      south: Int8(bitPattern: bytes[8]),
-      west: i16(bytes, 9),
-      zoom: shape & MeshWXWire.radarZoomMask,
-      product: shape >> MeshWXWire.radarProductShift,
-      isCoarse: isCoarse,
-      bounds: bounds,
-      cells: try unpackRadarCells(bytes, from: offset, size: size)
-    )
+    return (isCoarse, bounds, try unpackRadarCells(bytes, from: offset, size: size))
   }
 
   /// Reads bits most significant bit first from `bytes[start...]`, which is the order the

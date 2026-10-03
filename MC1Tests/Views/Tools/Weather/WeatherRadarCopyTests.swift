@@ -173,11 +173,13 @@ struct WeatherRadarCopyTests {
   /// Not kilometres, which is the owner's decision: a tile is two degrees, 222 km tall everywhere
   /// and a different width at every latitude.
   @Test
-  func `the three offered widths have names and the fourth has none`() {
+  func `the offered widths have names and the widest has none`() {
     #expect(WeatherCopy.radarWidthName(0) == "Local")
     #expect(WeatherCopy.radarWidthName(1) == "Regional")
     #expect(WeatherCopy.radarWidthName(2) == "Wide")
     #expect(WeatherCopy.radarWidthName(3) == nil)
+    // Revision 13: the detail level, wherever a width is named.
+    #expect(WeatherCopy.radarWidthName(-1) == "Detail")
   }
 
   @Test
@@ -201,8 +203,73 @@ struct WeatherRadarCopyTests {
   @Test
   func `a cached radar row is the width and the tile's centre`() {
     #expect(WeatherCopy.cacheGroup(.radarPictures) == "Radar pictures")
-    #expect(WeatherCopy.channelSubject(.radar(tile: Self.tile))
+    #expect(WeatherCopy.channelSubject(.radar(tile: Self.tile, frames: 1))
       == "Radar picture · Local · 30.000,-98.000")
+  }
+
+  // MARK: - Revision 13: loops and detail
+
+  /// One row per square, its newest time, and how many pictures of it are held when there is more
+  /// than one (docs/MESHWX_REV13.md §3).
+  @Test
+  func `a cached row with several frames counts its pictures`() {
+    #expect(WeatherCopy.channelSubject(.radar(tile: Self.tile, frames: 5))
+      == "Radar picture · Local · 30.000,-98.000 · 5 pictures")
+    #expect(WeatherCopy.channelSubject(
+      .radar(tile: MeshWXRadarTile(south: 30, west: -98, zoom: -1), frames: 2))
+      == "Radar picture · Detail · 30.500,-97.500 · 2 pictures")
+  }
+
+  @Test
+  func `a detail tile's traffic row reads Detail`() {
+    let summary = WeatherTrafficSummary(
+      title: .radar,
+      detail: [.tile(south: 32.5, west: -97.5, zoom: -1), .wetCells(214)])
+    #expect(WeatherTrafficCopy.details(summary, tables: .shared)
+      == ["Detail", "214 cells with precipitation"])
+  }
+
+  @Test
+  func `a loop request row reads Radar, last hour`() {
+    #expect(WeatherCopy.requestName(
+      .radarLoop(latitude: 30.2672, longitude: -97.7431, zoom: 0, held: [1, 2]), tables: .shared)
+      == "Radar, last hour · 30.267,-97.743")
+    // A detail ask is a radar picture like any other, named by the spot asked about.
+    #expect(WeatherCopy.requestName(
+      .radar(latitude: 30.4, longitude: -97.6, zoom: -1), tables: .shared)
+      == "Radar picture · 30.400,-97.600")
+  }
+
+  /// A loop is refused under `x` like any `>radar`, and says the radar's own sentences.
+  @Test
+  func `a loop's refusal is the radar's sentence`() {
+    let loop = WeatherCopy.requestStatus(
+      .settled(.notAvailable(.noData), at: Self.now), source: "WX-AUS",
+      request: .radarLoop(latitude: Self.austin.latitude, longitude: Self.austin.longitude, zoom: 0, held: []),
+      now: Self.now, calendar: F.calendar, locale: F.locale)
+    #expect(loop == "WX-AUS has no recent radar picture for this area.")
+  }
+
+  /// The English is fixed by the contract (docs/MESHWX_REV13.md §3.1), so both clients say the
+  /// same thing.
+  @Test
+  func `the revision 13 sentences are the contract's`() {
+    #expect(L10n.Weather.Weather.Radar.Width.detail == "Detail")
+    #expect(L10n.Weather.Weather.Radar.Detail.hint == "Tap the map for a detailed picture of that spot.")
+    #expect(L10n.Weather.Weather.Radar.Detail.ask == "Ask for detail here")
+    #expect(L10n.Weather.Weather.Radar.Detail.footnote
+      == "Twice the detail of Local, over a quarter of the area.")
+    #expect(L10n.Weather.Weather.Radar.Detail.fallback == "No detailed picture of this spot. Showing Local.")
+    #expect(L10n.Weather.Weather.Radar.Loop.play == "Play")
+    #expect(L10n.Weather.Weather.Radar.Loop.pause == "Pause")
+    #expect(L10n.Weather.Weather.Radar.Loop.ask == "Ask for the last hour")
+    #expect(L10n.Weather.Weather.Radar.Loop.cost(5) == "Up to 5 packets")
+    #expect(L10n.Weather.Weather.Radar.Loop.footnote
+      == "Pictures this device already has are not sent again.")
+    #expect(L10n.Weather.Weather.Radar.Loop.frame("6:08 PM", 2, 5) == "6:08 PM · 2 of 5")
+    #expect(L10n.Weather.Weather.Radar.Loop.missing == "Some pictures from this hour are missing.")
+    #expect(L10n.Weather.Weather.Radar.Loop.Request.title == "Radar, last hour")
+    #expect(L10n.Weather.Weather.Radar.Cached.frames(5) == "5 pictures")
   }
 
   @Test

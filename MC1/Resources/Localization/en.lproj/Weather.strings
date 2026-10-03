@@ -1699,6 +1699,50 @@
 /* Location: WeatherTrafficView.swift - The same when one cell does */
 "weather.radar.traffic.cellsOne" = "1 cell with precipitation";
 
+// MARK: - Radar loops and detail, revision 13
+
+/* Location: WeatherCopy.swift - The fourth width: a 1 degree square around a spot picked on the radar map */
+"weather.radar.width.detail" = "Detail";
+
+/* Location: WeatherRadarView.swift - Quiet line under the width control before any spot is picked */
+"weather.radar.detail.hint" = "Tap the map for a detailed picture of that spot.";
+
+/* Location: WeatherRadarView.swift - The bottom-bar ask on the Detail width when no detailed picture is held */
+"weather.radar.detail.ask" = "Ask for detail here";
+
+/* Location: WeatherRadarView.swift - Under the Detail ask: what a detailed picture is */
+"weather.radar.detail.footnote" = "Twice the detail of Local, over a quarter of the area.";
+
+/* Location: WeatherRadarView.swift - The radio had no detailed picture of the spot and the Local one is drawn instead */
+"weather.radar.detail.fallback" = "No detailed picture of this spot. Showing Local.";
+
+/* Location: WeatherRadarView.swift - Plays the last hour of radar pictures as a loop */
+"weather.radar.loop.play" = "Play";
+
+/* Location: WeatherRadarView.swift - Pauses the loop on the picture on screen */
+"weather.radar.loop.pause" = "Pause";
+
+/* Location: WeatherRadarView.swift - Asks the radio for the radar pictures of the last hour */
+"weather.radar.loop.ask" = "Ask for the last hour";
+
+/* Location: WeatherRadarView.swift - Above the loop ask, %lld is the most packets it can cost */
+"weather.radar.loop.cost" = "Up to %lld packets";
+
+/* Location: WeatherRadarView.swift - Under the loop ask */
+"weather.radar.loop.footnote" = "Pictures this device already has are not sent again.";
+
+/* Location: WeatherRadarView.swift - The time line while the loop plays. %1$@ is a clock time, %2$lld the picture on screen, %3$lld how many pictures the loop has */
+"weather.radar.loop.frame" = "%1$@ · %2$lld of %3$lld";
+
+/* Location: WeatherRadarView.swift - Two pictures of the loop are more than 20 minutes apart */
+"weather.radar.loop.missing" = "Some pictures from this hour are missing.";
+
+/* Location: WeatherCopy.swift - What a loop request is called in a request row */
+"weather.radar.loop.request.title" = "Radar, last hour";
+
+/* Location: WeatherCopy.swift - On the Cached screen, how many pictures of one square are held, %lld is two or more */
+"weather.radar.cached.frames" = "%lld pictures";
+
 /* Location: WeatherAskBar.swift - The capsule over the bottom bar: scrolls back up to where a screen's answer landed */
 "weather.askBar.show" = "Show";
 

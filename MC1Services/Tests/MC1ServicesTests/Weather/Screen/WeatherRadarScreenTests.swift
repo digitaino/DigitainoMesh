@@ -29,9 +29,9 @@ struct WeatherRadarScreenTests {
   /// A held tile, built from the cells it should carry rather than from a wire round trip: these
   /// rules are about the grid, and the codec has its own suite.
   static func tile(
-    south: Int8 = 29,
-    west: Int16 = -99,
-    zoom: UInt8 = 0,
+    south: Double = 29,
+    west: Double = -99,
+    zoom: Int = 0,
     takenMinutes: UInt32 = takenMinutes,
     isCoarse: Bool = false,
     bounds: MeshWXRadarBounds? = nil,
@@ -454,5 +454,157 @@ struct WeatherRadarScreenTests {
       geometry: UnloadedGeometry(),
       tables: .shared)
     #expect(noPlace.radar == .noCoordinate)
+  }
+
+  // MARK: - Revision 13: frames, loops and detail
+
+  /// Austin's detail square: 30N to 31N, 98W to 97W.
+  static let austinDetail = MeshWXRadarTile(south: 30, west: -98, zoom: -1)
+
+  /// Spec revision 13, §3: the place page never shows a detail tile, even the newest and the
+  /// narrowest; the radar screen's own width asks for −1 like any zoom.
+  @Test
+  func `the place page never shows a detail tile`() {
+    let now = Self.taken.addingTimeInterval(120)
+    let detail = Self.tile(south: 30, west: -98, zoom: -1, wet: [(1, 1, 3)])
+    let local = Self.tile(takenMinutes: Self.takenMinutes - 15)
+    #expect(detail.tile == Self.austinDetail)
+    #expect(WeatherRadarPick.best(for: Self.austin, tiles: [detail, local], now: now)?.tile == local.tile)
+    #expect(WeatherRadarPick.best(for: Self.austin, tiles: [detail], now: now) == nil)
+    #expect(WeatherRadarCard.make(place: Self.place(), tiles: [detail], now: now) == .missing)
+    #expect(WeatherRadarPick.best(for: Self.austin, zoom: -1, tiles: [detail, local], now: now) == detail)
+    #expect(WeatherRadarPick.held(Self.austinDetail, tiles: [detail, local], now: now) == detail)
+  }
+
+  /// Frames: the width control shows the newest of a square's pictures.
+  @Test
+  func `a square's newest frame is the one held for it`() {
+    let now = Self.taken.addingTimeInterval(120)
+    let frames = [30, 0, 15].map { Self.tile(takenMinutes: Self.takenMinutes - UInt32($0)) }
+    #expect(WeatherRadarPick.held(frames[0].tile, tiles: frames, now: now)?.takenMinutes == Self.takenMinutes)
+    #expect(WeatherRadarCard.make(place: Self.place(), tiles: frames, now: now).picture?.stored.takenMinutes
+      == Self.takenMinutes)
+  }
+
+  /// The last hour of one square, oldest first, five at most, the newest kept; `held` newest
+  /// first; nothing from another square.
+  @Test
+  func `a loop is the last hour of one square, oldest first`() {
+    let now = Self.taken.addingTimeInterval(120)
+    let frames = [75, 60, 45, 30, 15, 0].map { Self.tile(takenMinutes: Self.takenMinutes - UInt32($0)) }
+    let other = Self.tile(south: 28, west: -100, zoom: 2, takenMinutes: Self.takenMinutes - 5)
+    let loop = WeatherRadarLoop.make(tile: frames[0].tile, tiles: frames.shuffled() + [other], now: now)
+    #expect(loop.frames.map(\.takenMinutes) == [60, 45, 30, 15, 0].map { Self.takenMinutes - UInt32($0) },
+      "within 60 minutes of the newest, and 75 is not")
+    #expect(loop.held == [0, 15, 30, 45, 60].map { Self.takenMinutes - UInt32($0) })
+    #expect(!loop.hasGap)
+    #expect(loop.canPlay)
+    #expect(loop.isFull)
+    #expect(loop.newest?.takenMinutes == Self.takenMinutes)
+
+    // Seven pictures ten minutes apart inside the hour: the newest five.
+    let dense = [60, 50, 40, 30, 20, 10, 0].map { Self.tile(takenMinutes: Self.takenMinutes - UInt32($0)) }
+    let five = WeatherRadarLoop.make(tile: dense[0].tile, tiles: dense, now: now)
+    #expect(five.frames.count == WeatherRadarLoop.maxFrames)
+    #expect(five.frames.map(\.takenMinutes) == [40, 30, 20, 10, 0].map { Self.takenMinutes - UInt32($0) })
+  }
+
+  /// More than 20 minutes between two frames is a missing picture; one picture late is not.
+  @Test
+  func `a gap of more than twenty minutes is a missing picture`() {
+    let now = Self.taken.addingTimeInterval(120)
+    let gapped = [45, 0].map { Self.tile(takenMinutes: Self.takenMinutes - UInt32($0)) }
+    #expect(WeatherRadarLoop.make(tile: gapped[0].tile, tiles: gapped, now: now).hasGap)
+    let late = [35, 15, 0].map { Self.tile(takenMinutes: Self.takenMinutes - UInt32($0)) }
+    #expect(!WeatherRadarLoop.make(tile: late[0].tile, tiles: late, now: now).hasGap)
+    let one = WeatherRadarLoop.make(tile: late[0].tile, tiles: [late[0]], now: now)
+    #expect(!one.canPlay)
+    #expect(!one.isFull)
+  }
+
+  /// The "not drawn" rule of revision 11 holds for every frame: past two hours a picture is in
+  /// no loop, and a square whose newest picture is that old has no loop at all.
+  @Test
+  func `frames past two hours old are not in the loop`() {
+    let frames = [30, 0].map { Self.tile(takenMinutes: Self.takenMinutes - UInt32($0)) }
+    let later = Self.taken.addingTimeInterval(100 * 60)
+    #expect(WeatherRadarLoop.make(tile: frames[0].tile, tiles: frames, now: later).frames.map(\.takenMinutes)
+      == [Self.takenMinutes])
+    let muchLater = Self.taken.addingTimeInterval(130 * 60)
+    #expect(WeatherRadarLoop.make(tile: frames[0].tile, tiles: frames, now: muchLater) == .empty)
+    #expect(WeatherRadarLoop.make(tile: frames[0].tile, tiles: [], now: later) == .empty)
+  }
+
+  /// Two radios' copies of one minute are one frame — the finer copy — and the loop's ask lists
+  /// that minute once.
+  @Test
+  func `two copies of one minute are one frame, the finer`() {
+    let now = Self.taken.addingTimeInterval(120)
+    let fine = Self.tile(receivedAt: Self.taken)
+    let coarse = Self.tile(isCoarse: true, receivedAt: Self.taken.addingTimeInterval(30))
+    let loop = WeatherRadarLoop.make(tile: fine.tile, tiles: [coarse, fine], now: now)
+    #expect(loop.frames == [fine])
+    #expect(loop.held == [Self.takenMinutes])
+    #expect(loop.ask(latitude: Self.austin.latitude, longitude: Self.austin.longitude, zoom: 0)
+      == .radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: [Self.takenMinutes]))
+  }
+
+  /// Spec revision 13, §3: the detail picture of the spot, else the Local one the radio sends in
+  /// its place, else nothing.
+  @Test
+  func `detail shows the detail picture, else the Local one, else nothing`() {
+    let now = Self.taken.addingTimeInterval(120)
+    let spot = Self.austin
+    #expect(WeatherRadarDetail.tile(for: spot) == Self.austinDetail)
+    #expect(WeatherRadarDetail.localTile(for: spot) == MeshWXRadarTile(south: 29, west: -99, zoom: 0))
+    let detail = Self.tile(south: 30, west: -98, zoom: -1, wet: [(16, 8, 2)])
+    let local = Self.tile(wet: [(0, 0, 1)])
+
+    guard case let .held(held) = WeatherRadarDetail.card(spot: spot, tiles: [local, detail], now: now)
+    else {
+      Issue.record("expected the detail picture")
+      return
+    }
+    #expect(held.stored == detail)
+    #expect(!held.isWiderThanAsked)
+
+    let fallback = WeatherRadarDetail.card(spot: spot, tiles: [local], now: now)
+    #expect(fallback.isFallback)
+    #expect(fallback.picture?.stored == local)
+    #expect(fallback.picture?.isWiderThanAsked == true)
+    #expect(WeatherRadarDetail.card(spot: spot, tiles: [], now: now) == .missing)
+
+    // A detail picture past two hours is not drawn, so the Local one stands in.
+    let stale = Self.tile(south: 30, west: -98, zoom: -1, takenMinutes: Self.takenMinutes - 130)
+    #expect(WeatherRadarDetail.card(spot: spot, tiles: [stale, local], now: now).isFallback)
+    // A Local tile of another square is no fallback for this spot.
+    let elsewhere = Self.tile(south: 32, west: -98)
+    #expect(WeatherRadarDetail.card(spot: spot, tiles: [elsewhere], now: now) == .missing)
+
+    #expect(WeatherRadarDetail.ask(spot: spot) == .radar(latitude: 30.27, longitude: -97.74, zoom: -1))
+    #expect(WeatherRadarDetail.ask(spot: spot).wireText == ">radar 30.270,-97.740 z-1")
+  }
+
+  /// The summary names the place only when the place is inside the square drawn: a square of
+  /// somewhere else says nothing about Austin.
+  @Test
+  func `detail speaks about the place only when the place is inside`() {
+    let now = Self.taken.addingTimeInterval(120)
+    let cell = Self.austinDetail.cell(
+      latitude: Self.austin.latitude, longitude: Self.austin.longitude, size: MeshWXWire.radarGrid)
+    let detail = Self.tile(
+      south: 30, west: -98, zoom: -1, wet: [(cell?.row ?? 0, cell?.col ?? 0, 3)])
+    let picture = WeatherRadarDetail.card(spot: Self.austin, tiles: [detail], now: now).picture
+    let here = picture.flatMap { WeatherRadarDetail.summary(of: $0, place: Self.austin) }
+    #expect(here?.here == .heavy)
+
+    // A spot forty kilometres north-east: its square is 30.5N to 31.5N, 97.5W to 96.5W.
+    let northEast = MeshWXCoordinate(latitude: 31.2, longitude: -97.2)
+    #expect(WeatherRadarDetail.tile(for: northEast) == MeshWXRadarTile(south: 30.5, west: -97.5, zoom: -1))
+    let away = Self.tile(south: 30.5, west: -97.5, zoom: -1, wet: [(3, 3, 1)])
+    let awayPicture = WeatherRadarDetail.card(spot: northEast, tiles: [away], now: now).picture
+    #expect(awayPicture != nil)
+    #expect(awayPicture.flatMap { WeatherRadarDetail.summary(of: $0, place: Self.austin) } == nil)
+    #expect(awayPicture.flatMap { WeatherRadarDetail.summary(of: $0, place: nil) } == nil)
   }
 }

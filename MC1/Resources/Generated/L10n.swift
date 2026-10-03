@@ -8356,8 +8356,22 @@ public enum L10n {
           public static let footnote = L10n.tr("Weather", "weather.radar.ask.footnote", fallback: "Pictures are made about every 15 minutes.")
         }
         public enum Cached {
+          /// Location: WeatherCopy.swift - On the Cached screen, how many pictures of one square are held, %lld is two or more
+          public static func frames(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.radar.cached.frames", p1, fallback: "%lld pictures")
+          }
           /// Location: WeatherCopy.swift - The group of stored radar tiles on the Cached screen
           public static let title = L10n.tr("Weather", "weather.radar.cached.title", fallback: "Radar pictures")
+        }
+        public enum Detail {
+          /// Location: WeatherRadarView.swift - The bottom-bar ask on the Detail width when no detailed picture is held
+          public static let ask = L10n.tr("Weather", "weather.radar.detail.ask", fallback: "Ask for detail here")
+          /// Location: WeatherRadarView.swift - The radio had no detailed picture of the spot and the Local one is drawn instead
+          public static let fallback = L10n.tr("Weather", "weather.radar.detail.fallback", fallback: "No detailed picture of this spot. Showing Local.")
+          /// Location: WeatherRadarView.swift - Under the Detail ask: what a detailed picture is
+          public static let footnote = L10n.tr("Weather", "weather.radar.detail.footnote", fallback: "Twice the detail of Local, over a quarter of the area.")
+          /// Location: WeatherRadarView.swift - Quiet line under the width control before any spot is picked
+          public static let hint = L10n.tr("Weather", "weather.radar.detail.hint", fallback: "Tap the map for a detailed picture of that spot.")
         }
         public enum Here {
           /// Location: WeatherCopy.swift - Nothing falling on the place, %@ is the place
@@ -8389,6 +8403,30 @@ public enum L10n {
           /// Location: WeatherRadarView.swift - Legend swatch, 35 dBZ and up
           public static let moderate = L10n.tr("Weather", "weather.radar.level.moderate", fallback: "Moderate")
         }
+        public enum Loop {
+          /// Location: WeatherRadarView.swift - Asks the radio for the radar pictures of the last hour
+          public static let ask = L10n.tr("Weather", "weather.radar.loop.ask", fallback: "Ask for the last hour")
+          /// Location: WeatherRadarView.swift - Above the loop ask, %lld is the most packets it can cost
+          public static func cost(_ p1: Int) -> String {
+            return L10n.tr("Weather", "weather.radar.loop.cost", p1, fallback: "Up to %lld packets")
+          }
+          /// Location: WeatherRadarView.swift - Under the loop ask
+          public static let footnote = L10n.tr("Weather", "weather.radar.loop.footnote", fallback: "Pictures this device already has are not sent again.")
+          /// Location: WeatherRadarView.swift - The time line while the loop plays. %1$@ is a clock time, %2$lld the picture on screen, %3$lld how many pictures the loop has
+          public static func frame(_ p1: Any, _ p2: Int, _ p3: Int) -> String {
+            return L10n.tr("Weather", "weather.radar.loop.frame", String(describing: p1), p2, p3, fallback: "%1$@ · %2$lld of %3$lld")
+          }
+          /// Location: WeatherRadarView.swift - Two pictures of the loop are more than 20 minutes apart
+          public static let missing = L10n.tr("Weather", "weather.radar.loop.missing", fallback: "Some pictures from this hour are missing.")
+          /// Location: WeatherRadarView.swift - Pauses the loop on the picture on screen
+          public static let pause = L10n.tr("Weather", "weather.radar.loop.pause", fallback: "Pause")
+          /// Location: WeatherRadarView.swift - Plays the last hour of radar pictures as a loop
+          public static let play = L10n.tr("Weather", "weather.radar.loop.play", fallback: "Play")
+          public enum Request {
+            /// Location: WeatherCopy.swift - What a loop request is called in a request row
+            public static let title = L10n.tr("Weather", "weather.radar.loop.request.title", fallback: "Radar, last hour")
+          }
+        }
         public enum Refused {
           /// Location: WeatherCopy.swift - Refusal reason 0, %@ is the weather radio's name
           public static func noPicture(_ p1: Any) -> String {
@@ -8416,6 +8454,8 @@ public enum L10n {
           public static let cellsOne = L10n.tr("Weather", "weather.radar.traffic.cellsOne", fallback: "1 cell with precipitation")
         }
         public enum Width {
+          /// Location: WeatherCopy.swift - The fourth width: a 1 degree square around a spot picked on the radar map
+          public static let detail = L10n.tr("Weather", "weather.radar.width.detail", fallback: "Detail")
           /// Location: WeatherCopy.swift - The narrowest width, a 2 degree square
           public static let local = L10n.tr("Weather", "weather.radar.width.local", fallback: "Local")
           /// Location: WeatherCopy.swift - A 4 degree square

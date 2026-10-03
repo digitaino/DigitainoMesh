@@ -29,7 +29,11 @@ public enum WeatherChannelSubject: Sendable, Hashable {
   /// One radar tile (spec revision 11, §7D). The tile is the subject: a picture of a square of
   /// earth, named by its width and its centre rather than by anybody's question — nothing on the
   /// wire says who asked for it, and the lattice means several people may have.
-  case radar(tile: MeshWXRadarTile)
+  ///
+  /// `frames` is how many pictures of the square the row stands for (spec revision 13): 1 for a
+  /// row of the channel history, which lists each frame as the packet it was, and the count held
+  /// on the Cached screen, which keeps one row per square and says "5 pictures".
+  case radar(tile: MeshWXRadarTile, frames: Int)
 }
 
 // MARK: - Heard on the channel
@@ -105,9 +109,12 @@ public enum WeatherHeard {
       if let coverage = state.coverage {
         add("coverage", .coverage, contentAt: nil, receivedAt: coverage.receivedAt)
       }
+      // One row per frame, with its own time: an older picture off a loop went past on the
+      // channel like any other (spec revision 13).
       for stored in state.radarTiles {
         let tile = stored.tile
-        add("radar-\(tile.zoom)-\(tile.south)-\(tile.west)", .radar(tile: tile),
+        add("radar-\(tile.zoom)-\(tile.south)-\(tile.west)-\(stored.takenMinutes)",
+            .radar(tile: tile, frames: 1),
             contentAt: stored.takenAt, receivedAt: stored.receivedAt)
       }
     }
@@ -129,7 +136,8 @@ public enum WeatherCacheGroup: Sendable, Hashable, CaseIterable {
   case warningNarratives
   /// Warnings the phone holds for somewhere other than the place on screen.
   case warningsElsewhere
-  /// The radar tiles the phone is holding (spec revision 11, §7D), one row per square of earth.
+  /// The radar tiles the phone is holding (spec revision 11, §7D), one row per square of earth
+  /// however many frames of it are held (revision 13).
   case radarPictures
 }
 
@@ -233,18 +241,23 @@ public struct WeatherCache: Sendable, Hashable {
           receivedAt: assembly.lastReceivedAt,
           destination: destination(of: assembly.request, tables: tables)))
       }
-      // One row per square of earth held, whatever its width (spec revision 11, §3). No
-      // destination: the radar screen is reached from the place page's card, which knows which
-      // place it is about; a cached row knows only a tile.
-      for stored in state.radarTiles {
-        let tile = stored.tile
+      // One row per square of earth held, whatever its width (spec revision 11, §3), however
+      // many frames of it (revision 13): the newest frame's times, and the count when there is
+      // more than one. No destination: the radar screen is reached from the place page's card,
+      // which knows which place it is about; a cached row knows only a tile.
+      let squares = Dictionary(grouping: state.radarTiles, by: \.tile)
+      for (tile, frames) in squares {
+        guard let newest = frames.max(by: { lhs, rhs in
+          lhs.takenMinutes != rhs.takenMinutes
+            ? lhs.takenMinutes < rhs.takenMinutes : lhs.receivedAt < rhs.receivedAt
+        }) else { continue }
         add(WeatherCachedItem(
           id: "radar-\(botID)-\(tile.zoom)-\(tile.south)-\(tile.west)",
           group: .radarPictures,
           botID: botID,
-          subject: .radar(tile: tile),
-          contentAt: stored.takenAt,
-          receivedAt: stored.receivedAt,
+          subject: .radar(tile: tile, frames: Set(frames.map(\.takenMinutes)).count),
+          contentAt: newest.takenAt,
+          receivedAt: newest.receivedAt,
           destination: nil))
       }
     }

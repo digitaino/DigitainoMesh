@@ -64,7 +64,7 @@ struct WeatherRadarSection: View {
           ? WeatherCopy.radarWidthName(picture.stored.tile.zoom) : nil)
 
       NavigationLink {
-        WeatherRadarView(screen: screen, zoom: UInt8(picture.stored.tile.zoom))
+        WeatherRadarView(screen: screen, zoom: picture.stored.tile.zoom)
       } label: {
         VStack(alignment: .leading, spacing: 8) {
           map(picture)

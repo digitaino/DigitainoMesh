@@ -45,11 +45,11 @@ public enum WeatherStateChange: Sendable, Hashable {
   /// — a newer national sweep, or a newer scoped one whose scope contains this one's — so it
   /// changed nothing. Usually a backlog drained from the radio's queue at connect.
   case areaSweepIgnoredOlder(builtMinutes: UInt32)
-  /// A radar tile landed and is the newest picture held of that square of earth (spec revision
-  /// 11, §7D).
+  /// A radar frame landed: a picture of that square of earth at that minute, older or newer than
+  /// what was held (spec revision 11, §7D; revision 13, §7D.4).
   case radarStored(tile: MeshWXRadarTile, takenMinutes: UInt32)
-  /// A radar tile the phone already has a picture of at that minute or later, so nothing changed:
-  /// a backlog drained at connect, or the coarse form of a picture it already holds in full.
+  /// A radar frame that changed nothing: the phone already holds that minute of that square at
+  /// the same or a finer detail, or the frame is older than everything retention keeps.
   case radarIgnoredOlder(tile: MeshWXRadarTile, takenMinutes: UInt32)
   case notAvailable(MeshWXNotAvailable)
   case unknownType(rawType: UInt8)
@@ -805,23 +805,19 @@ public enum WeatherStateReducer {
 
   // MARK: - Radar
 
-  /// Spec revision 11, §7D: one picture per square of earth, newest `taken` first.
+  /// Spec revision 13, "State": one **frame** per `(tile, taken)`, newest `taken` first.
   ///
   /// There is no assembly here and never will be — a radar answer is one packet, or the same tile
-  /// at half the detail — so the whole rule is which of two pictures of one square is the one to
-  /// keep. Three parts:
+  /// at half the detail — so the whole rule is which pictures to keep. Three parts:
   ///
-  /// - The **same or a newer** `taken` replaces what is held. Same rather than only newer because
-  ///   the bot re-sends a packet nothing echoed, and because a tile that arrives partial and then
-  ///   whole is the same minute twice with more in it the second time.
-  /// - Except that a **coarse** picture never replaces a fine one of the same `taken`. They are
-  ///   the same minute of the same storm, and the fine one is strictly more of it; the bot cuts a
-  ///   tile coarse only when the fine one would not fit, so this is the phone that already got
-  ///   lucky refusing to give it back.
-  /// - Anything older changes nothing. A backlog drained from the radio's queue at connect would
-  ///   otherwise repaint a live picture with one from an hour ago.
-  ///
-  /// Retention (``retainedRadarTiles(_:)``) runs on every store, so nothing grows without bound.
+  /// - A **different** `taken` is another frame, older or newer, and is kept beside the others:
+  ///   the loop plays them (§7D.4). Until revision 13 an older one changed nothing.
+  /// - The **same** `taken` follows revision 11: it replaces what is held, because the bot
+  ///   re-sends a packet nothing echoed and a tile that arrives partial and then whole is the
+  ///   same minute twice with more in it the second time — except that a **coarse** picture never
+  ///   replaces a fine one of the same minute. The fine one is strictly more of the same storm.
+  /// - Retention (``retainedRadarTiles(_:limit:)``) runs on every store, so nothing grows without
+  ///   bound, and a frame it drops at once is reported as changing nothing.
   private static func store(
     _ radar: MeshWXRadar,
     in state: inout WeatherBotState,
@@ -829,19 +825,29 @@ public enum WeatherStateReducer {
     source: MeshWXDataSource
   ) -> WeatherStateChange {
     let tile = radar.tile
-    if let held = state.radarTiles.first(where: { $0.tile == tile }),
-      !replaces(radar, held: held.radar)
-    {
-      return .radarIgnoredOlder(tile: tile, takenMinutes: radar.takenMinutes)
+    let taken = radar.takenMinutes
+    func isSameFrame(_ stored: WeatherStoredRadarTile) -> Bool {
+      stored.tile == tile && stored.takenMinutes == taken
     }
-    var kept = state.radarTiles.filter { $0.tile != tile }
-    kept.append(WeatherStoredRadarTile(
-      tile: tile, radar: radar, receivedAt: receivedAt, source: source))
-    state.radarTiles = retainedRadarTiles(kept)
-    return .radarStored(tile: tile, takenMinutes: radar.takenMinutes)
+    if let held = state.radarTiles.first(where: isSameFrame), !replaces(radar, held: held.radar) {
+      return .radarIgnoredOlder(tile: tile, takenMinutes: taken)
+    }
+    var kept = state.radarTiles.filter { !isSameFrame($0) }
+    let arriving = WeatherStoredRadarTile(
+      tile: tile, radar: radar, receivedAt: receivedAt, source: source)
+    kept.append(arriving)
+    let retained = retainedRadarTiles(kept)
+    // Older than three hours behind this bot's newest picture, or the oldest of a full list: the
+    // frame is gone as soon as it came, and the held pictures are exactly what they were.
+    guard retained.contains(arriving) else {
+      return .radarIgnoredOlder(tile: tile, takenMinutes: taken)
+    }
+    state.radarTiles = retained
+    return .radarStored(tile: tile, takenMinutes: taken)
   }
 
-  /// Whether an arriving tile is the one to keep, against the one held for the same square.
+  /// Whether an arriving tile is the one to keep, against the one held for the same square. Since
+  /// revision 13 it is only ever asked about the same `taken`; a different one is another frame.
   static func replaces(_ arriving: MeshWXRadar, held: MeshWXRadar) -> Bool {
     if arriving.takenMinutes != held.takenMinutes {
       return arriving.takenMinutes > held.takenMinutes
@@ -851,7 +857,7 @@ public enum WeatherStateReducer {
     return !(arriving.isCoarse && !held.isCoarse)
   }
 
-  /// The tiles worth keeping, newest `taken` first (spec revision 11, design §2 "State"):
+  /// The frames worth keeping, newest `taken` first (spec revision 11, design §2 "State"):
   /// nothing more than ``WeatherBotState/radarTileRetentionMinutes`` behind the bot's own clock,
   /// and at most `limit`, the oldest `taken` dropped.
   ///

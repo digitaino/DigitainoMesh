@@ -481,13 +481,14 @@ public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
   }
 }
 
-/// One radar tile the phone is holding (spec revision 11, §7D).
+/// One radar picture the phone is holding: one **frame** of a square of earth (spec revision 11,
+/// §7D; revision 13, §7D.4).
 ///
-/// One picture per tile and no history: a radar answer is a snapshot of a square of earth at a
-/// minute, and the only thing anyone wants of an older one is to know it has been replaced. Keyed
-/// by ``tile`` rather than by the coordinate anybody asked about, because the lattice is shared —
-/// two people three kilometres apart ask about the same square, and the second one costs the
-/// channel nothing.
+/// Since revision 13 a tile has a history: the loop plays the last hour of it, so an older
+/// picture is no longer something that has merely been replaced. A frame is identified by
+/// ``tile`` and ``takenMinutes`` together. Keyed by the tile rather than by the coordinate anybody
+/// asked about, because the lattice is shared — two people three kilometres apart ask about the
+/// same square, and the second one costs the channel nothing.
 public struct WeatherStoredRadarTile: Sendable, Hashable, Codable {
   /// The square of earth, which is this entry's identity.
   public var tile: MeshWXRadarTile
@@ -607,23 +608,23 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// list from growing — a national sweep drops everything older than it, a scoped one drops
   /// older scoped sweeps it fully contains, and ``areaSweepLimit`` is the ceiling.
   public var areaSweeps: [WeatherAreaSweepAssembly]
-  /// The radar tiles this bot sent (spec revision 11, §7D), **newest `taken` first**. Empty until
-  /// somebody on the channel asks for one: revision 11 is request-only, and nothing is ever
-  /// broadcast on a schedule.
+  /// The radar frames this bot sent (spec revision 11, §7D; revision 13), **newest `taken`
+  /// first**. Empty until somebody on the channel asks for one: radar is request-only, and nothing
+  /// is ever broadcast on a schedule.
   ///
-  /// One entry per square of earth, whatever the zoom: a zoom 1 tile of the same centre is a
-  /// different square and gets a row of its own, which is what lets the radar screen's width
-  /// control show what is held for each width.
+  /// One entry per **frame**, `(tile, taken)`, since revision 13: a picture of the same square at
+  /// another time is another frame, older or newer, and the loop plays them. A zoom 1 tile of the
+  /// same centre is a different square, and the detail level (zoom −1) another again.
   public var radarTiles: [WeatherStoredRadarTile]
 
   /// The most sweeps kept per bot. Eight because the picker offers fifteen states at a time and
   /// a handful of selections plus the last national sweep is what a map is built out of; past
   /// that the oldest is not on screen anywhere.
   public static let areaSweepLimit = 8
-  /// The most radar tiles kept per bot (spec revision 11, design §2 "State"). Twelve is three
-  /// widths of four places, which is more than a pager of saved places ever has open at once; past
-  /// that the oldest picture is on no screen anywhere.
-  public static let radarTileLimit = 12
+  /// The most radar frames kept per bot (spec revision 13, "State"), the oldest `taken` dropped.
+  /// Forty is eight loops of five frames: four widths of a place and the detail square a reader
+  /// picked, with room for a second place. It was twelve, one picture per square, until frames.
+  public static let radarTileLimit = 40
   /// How far behind the bot's own clock a held tile may be. Three hours is well past the two the
   /// screens will draw one for (``WeatherRadarPick``): this is the rule that keeps the file from
   /// growing, not the rule that decides what is shown.

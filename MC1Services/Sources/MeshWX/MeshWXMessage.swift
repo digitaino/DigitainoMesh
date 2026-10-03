@@ -1164,22 +1164,27 @@ public struct MeshWXRadarBounds: Sendable, Hashable, Codable {
   var wireBytes: [UInt8] { [row0, row1, col0, col1] }
 }
 
-/// A square of the earth a radar answer covers (spec revision 11, §7D).
+/// A square of the earth a radar answer covers (spec revision 11, §7D; revision 13, §7E).
 ///
 /// Tiles sit on a fixed lattice of half their span, so a tile one phone asked for is a tile every
 /// phone can use: two people a few kilometres apart ask about the same square and the second one
 /// costs the channel nothing. The lattice is what makes that true, and ``containing(latitude:longitude:zoom:)``
 /// is the whole of it — the same arithmetic in every language a client is written in, ties
 /// included.
+///
+/// The edges are `Double` since revision 13: the detail level (zoom −1, one degree on a side) sits
+/// on a lattice of half a degree, so its edges are half degrees. At zoom 0 and up they are still
+/// whole numbers, and a stored state written before revision 13 — integers in the JSON — decodes
+/// unchanged.
 public struct MeshWXRadarTile: Sendable, Hashable, Codable {
-  /// Southern edge, whole degrees.
-  public var south: Int
-  /// Western edge, whole degrees.
-  public var west: Int
-  /// 0 to ``MeshWXWire/maxRadarZoom``.
+  /// Southern edge, degrees: whole at zoom 0 and up, a multiple of 0.5 at the detail level.
+  public var south: Double
+  /// Western edge, degrees.
+  public var west: Double
+  /// ``MeshWXWire/minRadarZoom`` (−1, the detail level) to ``MeshWXWire/maxRadarZoom``.
   public var zoom: Int
 
-  public init(south: Int, west: Int, zoom: Int) {
+  public init(south: Double, west: Double, zoom: Int) {
     self.south = south
     self.west = west
     self.zoom = zoom
@@ -1192,44 +1197,53 @@ public struct MeshWXRadarTile: Sendable, Hashable, Codable {
   /// 30.5 would ask for two different tiles and each pay for one. A tie falls **up** everywhere.
   ///
   /// Centring on the place rather than snapping to a corner is what keeps the asked coordinate at
-  /// least a quarter of the span from every edge — 55 km at zoom 0 — so the picture is about the
-  /// place and not about the county next door.
+  /// least a quarter of the span from every edge — 55 km at zoom 0, 28 km at the detail level —
+  /// so the picture is about the place and not about the county next door.
   ///
-  /// A zoom outside 0…``MeshWXWire/maxRadarZoom`` is clamped rather than refused: this is the
-  /// lattice, not a request, and every caller wants a tile back.
+  /// A zoom outside ``MeshWXWire/minRadarZoom``…``MeshWXWire/maxRadarZoom`` is clamped rather
+  /// than refused: this is the lattice, not a request, and every caller wants a tile back.
   public static func containing(latitude: Double, longitude: Double, zoom: Int) -> MeshWXRadarTile {
-    let level = min(max(zoom, 0), Int(MeshWXWire.maxRadarZoom))
-    let step = Double(1 << level)
-    func origin(_ value: Double) -> Int {
-      Int((value / step + 0.5).rounded(.down) * step - step)
+    let level = min(max(zoom, MeshWXWire.minRadarZoom), MeshWXWire.maxRadarZoom)
+    let step = stepDegrees(zoom: level)
+    func origin(_ value: Double) -> Double {
+      (value / step + 0.5).rounded(.down) * step - step
     }
     return MeshWXRadarTile(south: origin(latitude), west: origin(longitude), zoom: level)
   }
 
-  /// How many degrees the tile spans on each side: 2, 4, 8, 16.
-  public var spanDegrees: Int { 1 << (zoom + 1) }
+  /// The lattice step at a zoom, `2 ^ zoom` degrees: 0.5, 1, 2, 4, 8. Exact in binary at every
+  /// zoom, so the edges compare and hash exactly.
+  static func stepDegrees(zoom: Int) -> Double {
+    zoom >= 0 ? Double(1 << zoom) : 1 / Double(1 << -zoom)
+  }
 
-  public var north: Int { south + spanDegrees }
-  public var east: Int { west + spanDegrees }
+  /// How many degrees the tile spans on each side: 1, 2, 4, 8, 16.
+  public var spanDegrees: Double { 2 * Self.stepDegrees(zoom: zoom) }
+
+  public var north: Double { south + spanDegrees }
+  public var east: Double { west + spanDegrees }
+
+  /// The detail level (spec revision 13, §7E), which travels as type 12.
+  public var isDetail: Bool { zoom == MeshWXWire.radarDetailZoom }
 
   /// One cell's width in degrees, for a grid of `size` cells a side.
   public func cellDegrees(size: Int) -> Double {
-    size > 0 ? Double(spanDegrees) / Double(size) : 0
+    size > 0 ? spanDegrees / Double(size) : 0
   }
 
   /// Whether a coordinate is in the tile. Half-open on the north and east edges, so two
   /// neighbouring tiles never both claim a point.
   public func contains(latitude: Double, longitude: Double) -> Bool {
-    latitude >= Double(south) && latitude < Double(north)
-      && longitude >= Double(west) && longitude < Double(east)
+    latitude >= south && latitude < north
+      && longitude >= west && longitude < east
   }
 
   /// The patch of earth one cell covers. Row 0 is the **northern** row and column 0 the western
   /// one (spec revision 11, §7D), which is the picture's order and not the lattice's.
   public func cellBox(row: Int, col: Int, size: Int) -> (south: Double, west: Double, north: Double, east: Double) {
     let cell = cellDegrees(size: size)
-    let top = Double(north) - Double(row) * cell
-    let left = Double(west) + Double(col) * cell
+    let top = north - Double(row) * cell
+    let left = west + Double(col) * cell
     return (south: top - cell, west: left, north: top, east: left + cell)
   }
 
@@ -1241,13 +1255,14 @@ public struct MeshWXRadarTile: Sendable, Hashable, Codable {
   public func cell(latitude: Double, longitude: Double, size: Int) -> (row: Int, col: Int)? {
     guard size > 0, contains(latitude: latitude, longitude: longitude) else { return nil }
     let cell = cellDegrees(size: size)
-    let row = Int(((Double(north) - latitude) / cell).rounded(.down))
-    let col = Int(((longitude - Double(west)) / cell).rounded(.down))
+    let row = Int(((north - latitude) / cell).rounded(.down))
+    let col = Int(((longitude - west) / cell).rounded(.down))
     return (row: min(max(row, 0), size - 1), col: min(max(col, 0), size - 1))
   }
 }
 
-/// One tile of a radar picture (type 11, spec revision 11, §7D).
+/// One tile of a radar picture (type 11, spec revision 11, §7D; or type 12 at the detail level,
+/// spec revision 13, §7E).
 ///
 /// **One packet, always.** Radar was in the v4 protocol and was taken out on 14 September because
 /// it pulled a four-megabyte composite off the internet for every answer; revision 11 brings it
@@ -1260,12 +1275,16 @@ public struct MeshWXRadar: Sendable, Hashable, Codable {
   /// mosaic, not when it sent the packet. The age on screen is measured from this, so a tile
   /// drained from the radio's queue an hour late is an hour older than it looks.
   public var takenMinutes: UInt32
-  /// The tile's southern edge, whole degrees.
-  public var south: Int8
-  /// The tile's western edge, whole degrees (−180 to 179).
-  public var west: Int16
-  /// 0 to ``MeshWXWire/maxRadarZoom``, from the shape byte's low two bits.
-  public var zoom: UInt8
+  /// The tile's southern edge in degrees: whole from a type 11 packet, a multiple of 0.5 from a
+  /// type 12 one. `Double` since revision 13; a stored state written before it has whole numbers
+  /// here and decodes unchanged.
+  public var south: Double
+  /// The tile's western edge in degrees (−180 to 179, or 179.5 at the detail level).
+  public var west: Double
+  /// 0 to ``MeshWXWire/maxRadarZoom`` from a type 11 shape byte's low two bits, or −1
+  /// (``MeshWXWire/radarDetailZoom``) for a type 12 tile. The encoder writes type 12 for −1 and
+  /// type 11 for everything else.
+  public var zoom: Int
   /// Which mosaic the tile was cut from: an index into `protocol.json` `v5.radar.products`.
   public var product: UInt8
   /// Flags bit 0: the grid is 16 × 16, not 32 × 32.
@@ -1280,9 +1299,9 @@ public struct MeshWXRadar: Sendable, Hashable, Codable {
 
   public init(
     takenMinutes: UInt32,
-    south: Int8,
-    west: Int16,
-    zoom: UInt8,
+    south: Double,
+    west: Double,
+    zoom: Int,
     product: UInt8,
     isCoarse: Bool,
     bounds: MeshWXRadarBounds? = nil,
@@ -1303,7 +1322,7 @@ public struct MeshWXRadar: Sendable, Hashable, Codable {
 
   /// The square of earth this is a picture of.
   public var tile: MeshWXRadarTile {
-    MeshWXRadarTile(south: Int(south), west: Int(west), zoom: Int(zoom))
+    MeshWXRadarTile(south: south, west: west, zoom: zoom)
   }
 
   /// The level of one cell, or ``MeshWXRadarLevel/none`` for an index off the grid.
@@ -1366,9 +1385,10 @@ public enum MeshWXPayload: Sendable, Hashable {
   case request(MeshWXRequest)
   /// One packet of a national area sweep (spec §7C).
   case areaSweep(MeshWXAreaSweep)
-  /// One tile of a radar picture (spec revision 11, §7D).
+  /// One tile of a radar picture (spec revision 11, §7D), from a type 11 packet or — at zoom −1,
+  /// the detail level — a type 12 one (spec revision 13, §7E).
   case radar(MeshWXRadar)
-  /// A reserved or third-party type (spec §2.2, nibbles 8-15). Receivers ignore these,
+  /// A reserved or third-party type (spec §2.2, nibbles 13-15). Receivers ignore these,
   /// but the header still decoded, so `(bot, seq)` tracking keeps working.
   case unknown
 }

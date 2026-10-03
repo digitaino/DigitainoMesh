@@ -1699,6 +1699,50 @@
 /* Location: WeatherTrafficView.swift - The same when one cell does */
 "weather.radar.traffic.cellsOne" = "1 комірка з опадами";
 
+// MARK: - Radar loops and detail, revision 13
+
+/* Location: WeatherCopy.swift - The fourth width: a 1 degree square around a spot picked on the radar map */
+"weather.radar.width.detail" = "Детально";
+
+/* Location: WeatherRadarView.swift - Quiet line under the width control before any spot is picked */
+"weather.radar.detail.hint" = "Торкнися карти, щоб отримати детальний знімок цього місця.";
+
+/* Location: WeatherRadarView.swift - The bottom-bar ask on the Detail width when no detailed picture is held */
+"weather.radar.detail.ask" = "Запитати деталі тут";
+
+/* Location: WeatherRadarView.swift - Under the Detail ask: what a detailed picture is */
+"weather.radar.detail.footnote" = "Удвічі детальніше, ніж «Локально», на чверті площі.";
+
+/* Location: WeatherRadarView.swift - The radio had no detailed picture of the spot and the Local one is drawn instead */
+"weather.radar.detail.fallback" = "Детального знімка цього місця немає. Показано «Локально».";
+
+/* Location: WeatherRadarView.swift - Plays the last hour of radar pictures as a loop */
+"weather.radar.loop.play" = "Відтворити";
+
+/* Location: WeatherRadarView.swift - Pauses the loop on the picture on screen */
+"weather.radar.loop.pause" = "Пауза";
+
+/* Location: WeatherRadarView.swift - Asks the radio for the radar pictures of the last hour */
+"weather.radar.loop.ask" = "Запитати останню годину";
+
+/* Location: WeatherRadarView.swift - Above the loop ask, %lld is the most packets it can cost */
+"weather.radar.loop.cost" = "До %lld пакетів";
+
+/* Location: WeatherRadarView.swift - Under the loop ask */
+"weather.radar.loop.footnote" = "Знімки, які вже є на цьому пристрої, повторно не надсилаються.";
+
+/* Location: WeatherRadarView.swift - The time line while the loop plays. %1$@ is a clock time, %2$lld the picture on screen, %3$lld how many pictures the loop has */
+"weather.radar.loop.frame" = "%1$@ · %2$lld з %3$lld";
+
+/* Location: WeatherRadarView.swift - Two pictures of the loop are more than 20 minutes apart */
+"weather.radar.loop.missing" = "Деяких знімків за цю годину немає.";
+
+/* Location: WeatherCopy.swift - What a loop request is called in a request row */
+"weather.radar.loop.request.title" = "Радар, остання година";
+
+/* Location: WeatherCopy.swift - On the Cached screen, how many pictures of one square are held, %lld is two or more */
+"weather.radar.cached.frames" = "Знімків: %lld";
+
 /* Location: WeatherRadarView.swift - The radar screen's bottom-bar ask, for a width with no picture yet */
 "weather.radar.askShort" = "Запитати радар";
 

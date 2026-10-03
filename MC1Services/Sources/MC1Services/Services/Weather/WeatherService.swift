@@ -805,7 +805,20 @@ public actor WeatherService {
         // the picture, and the picture is the same one wherever it came from (spec revision 11,
         // §7D). `contentAsOf` is the time printed on the radar image, which is what the screen
         // then says the picture is from.
-        fill(nil, .radar(tile: tile), asOf: Date(unixMinutes: takenMinutes))
+        //
+        // Only by the **newest** frame held of that square (revision 13, §7D.4): an older frame
+        // off somebody's loop is not "the newest picture the bot has", which is what a `>radar`
+        // asks for, and filling the slot with it would answer the next ask with an hour-old map.
+        guard isNewestRadarFrame(tile: tile, takenMinutes: takenMinutes) else { break }
+        let asOf = Date(unixMinutes: takenMinutes)
+        fill(nil, .radar(tile: tile), asOf: asOf)
+        // The bot's fallback: a detail ask answered with the zoom 0 tile because no picture fine
+        // enough holds the spot (§7E). Asked again inside five minutes, the bot would send the
+        // same Local tile or refuse it, reason 4; the detail square has been answered too.
+        for case let .radar(latitude, longitude, zoom) in settled where zoom == MeshWXWire.radarDetailZoom {
+          let detail = MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: zoom)
+          if detail != tile { fill(nil, .radar(tile: detail), asOf: asOf) }
+        }
       case (.coverageStored, .coverage):
         // No content time: the statement describes the bot, not an hour (spec §7A), so the
         // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
@@ -819,6 +832,14 @@ public actor WeatherService {
         break
       }
     }
+  }
+
+  /// Whether a frame is the newest held of its square across every bot: the one a `>radar` for
+  /// that square would be answered with.
+  private func isNewestRadarFrame(tile: MeshWXRadarTile, takenMinutes: UInt32) -> Bool {
+    let newest = states.values.lazy.flatMap(\.radarTiles).filter { $0.tile == tile }
+      .map(\.takenMinutes).max()
+    return newest.map { takenMinutes >= $0 } ?? true
   }
 
   /// What a sweep packet says it covers, as the state codes an ``AnswerKey/areaSweep(states:)``
@@ -945,7 +966,11 @@ public actor WeatherService {
     // would refuse the ask anyway, reason 4, spending a packet on the refusal.
     case let .radar(latitude, longitude, zoom):
       AnswerSlot(botID: nil, key: .radar(tile: MeshWXRadarTile.containing(
-        latitude: latitude, longitude: longitude, zoom: Int(zoom))))
+        latitude: latitude, longitude: longitude, zoom: zoom)))
+    // A loop asks for the pictures this phone does **not** hold (spec revision 13, §7D.4), so a
+    // tile received a minute ago says nothing about whether it is answered. The bot keeps its own
+    // five-minute rule per frame and leaves out what everyone listening already has.
+    case .radarLoop: nil
     // `>part` is the repair, not the answer, and the five-minute rule must never hold it back
     // (spec revision 10, §1.1). The case it exists for is precisely an answer received in the
     // last five minutes that arrived with holes in it: refusing the ask on the grounds that the
@@ -1384,13 +1409,16 @@ public actor WeatherService {
       return fromAddressedBot && sweep.group == group
     case let (.parts(group), .text(chunk)):
       return fromAddressedBot && chunk.group == group
-    case let (.radar(tile), .radar(radar)):
+    case let (.radar(tile, fallback), .radar(radar)):
       // The square of earth and nothing else (spec revision 11, §7D). Not the `taken`: whatever
       // the bot has is the answer to "show me the radar here", and a phone that held out for a
       // newer picture would time out on the only one there is. Not the bot either — the lattice
       // is fixed so that a tile is a tile, and another bot answering somebody else's `>radar` for
       // the same square settles this one for free.
-      return radar.tile == tile
+      //
+      // A detail ask also takes the zoom 0 tile for its coordinate: that is what the bot sends
+      // where no picture is fine enough for detail (revision 13, §7E).
+      return radar.tile == tile || (fallback != nil && radar.tile == fallback)
     default:
       return false
     }

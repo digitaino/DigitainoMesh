@@ -140,6 +140,65 @@ struct WeatherRadarMapTests {
     #expect(ids.contains { $0.hasPrefix("weather-outline-") })
   }
 
+  // MARK: - Revision 13: the picked square and the loop
+
+  /// The picked detail square is outlined over everything but the place, in the selection ring's
+  /// colour — never a radar or an alert tint. No spot, no outline, and the drawing is what it was.
+  @Test
+  func `a picked square is outlined, and nothing is when none is picked`() throws {
+    let square = MeshWXRadarTile(south: 30, west: -98, zoom: -1)
+    let drawing = WeatherRadarDrawing.make(
+      WeatherRadarMapKey(
+        radar: Self.radar([(0, 0, .heavy)]), tile: square, warnings: [Self.tornado],
+        place: Self.austin, outline: square),
+      tables: .shared, geometry: .shared)
+    let ids = drawing.overlays.map(\.id)
+    #expect(ids.last == "radar-detail-square", "above the cells and the alert outlines")
+    let outline = try #require(drawing.overlays.last)
+    guard case let .weightedLine(line) = outline.paint else {
+      Issue.record("expected a line")
+      return
+    }
+    #expect(line.color == .label)
+    guard case let .polyline(ring) = outline.features.first?.geometry else {
+      Issue.record("expected a closed ring")
+      return
+    }
+    #expect(ring.count == 5)
+    #expect(Set(ring.map(\.latitude)) == [30, 31])
+    #expect(Set(ring.map(\.longitude)) == [-98, -97])
+    // The camera frames the picked square, not the 2° picture drawn in it.
+    #expect(drawing.bounds?.minLatitude == 30)
+    #expect(drawing.bounds?.maxLongitude == -97)
+
+    #expect(!Self.drawing(Self.radar([(0, 0, .heavy)])).overlays.contains { $0.id == "radar-detail-square" })
+  }
+
+  /// Each frame's drawing is made once (spec revision 13, §3): one drawing per frame, each with
+  /// its own cells and the same alerts, place and camera, so a step swaps a drawing and never
+  /// moves the camera.
+  @Test
+  func `a loop draws each frame once over the same furniture`() {
+    let frames = [Self.radar([(0, 0, .light)]), Self.radar([(0, 0, .heavy)]), Self.radar([])]
+    let key = WeatherRadarLoopKey(
+      base: WeatherRadarMapKey(radar: nil, tile: Self.tile, warnings: [Self.tornado], place: Self.austin),
+      radars: frames)
+    let drawings = WeatherRadarDrawing.loop(key, tables: .shared, geometry: .shared)
+    #expect(drawings.count == 3)
+    #expect(drawings.allSatisfy { $0.bounds == drawings[0].bounds })
+    #expect(drawings[0].overlays.contains { $0.id == "radar-1" })
+    #expect(drawings[1].overlays.contains { $0.id == "radar-3" })
+    #expect(!drawings[2].overlays.contains { $0.id.hasPrefix("radar-") })
+    for drawing in drawings {
+      #expect(drawing.overlays.contains { $0.id.hasPrefix("weather-outline-") })
+      #expect(drawing.points.count == 1)
+    }
+    // The same frame drawn alone is the same drawing.
+    #expect(drawings[1] == WeatherRadarDrawing.make(
+      WeatherRadarMapKey(radar: frames[1], tile: Self.tile, warnings: [Self.tornado], place: Self.austin),
+      tables: .shared, geometry: .shared))
+  }
+
   // MARK: - Framing and the place
 
   /// The square is the answer. The lattice already puts the place a quarter of the span inside
@@ -279,11 +338,28 @@ struct WeatherRadarRequestTests {
     #expect(local.requestLetter == "x")
   }
 
-  /// The radar screen offers three of the four widths the wire has.
+  /// The radar screen offers three of the four place widths the wire has, and Detail (zoom −1)
+  /// once a spot is picked (spec revision 13, §3).
   @Test
   func `the width control offers zoom 0, 1 and 2 and stops there`() {
     #expect(WeatherRadarView.offeredZooms == [0, 1, 2])
     #expect(WeatherRadarView.widestOffered == 2)
-    #expect(Int(WeatherRadarView.widestOffered) < Int(MeshWXWire.maxRadarZoom))
+    #expect(WeatherRadarView.widestOffered < MeshWXWire.maxRadarZoom)
+    #expect(WeatherRadarView.detailZoom == MeshWXWire.radarDetailZoom)
+    // 0.8 s a frame and 2 s on the newest.
+    #expect(WeatherRadarView.frameSeconds == 0.8)
+    #expect(WeatherRadarView.newestFrameSeconds == 2)
+  }
+
+  /// Nothing asks by itself (revision 13 keeps revision 11's rule): a loop costs up to five
+  /// packets and Update never plans one.
+  @Test
+  func `Update never plans a radar loop`() {
+    for withTile in [false, true] {
+      let plan = WeatherUpdatePlan.make(
+        snapshot: Self.snapshot(withTile: withTile), sourceState: Self.state(withTile: withTile),
+        tables: .shared, now: F.now)
+      #expect(!plan.requests.contains { if case .radarLoop = $0 { return true } else { return false } })
+    }
   }
 }

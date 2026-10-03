@@ -244,6 +244,16 @@ of 2026-09-29, a wording fault that took a wire field to fix (spec revision 12).
 | U-56 | Same review, smaller things: the place page's radar card carried three grey lines round one button; the bell on the notifications screen and the station line under the temperature were under 44 pt; the reports' state picker (50 rows) and the alert map's area list (hundreds of counties under a Heat Advisory) had no search; VoiceOver could not turn the pager from the dots; the notifications screen named places raw (U-12) | **Adopted.** The radar card drops "Pictures are made about every 15 minutes" (the radar screen keeps it); both targets grow to 44 pt without moving the layout; both lists are `searchable`; the dots take the adjustable action; the notifications screen uses `WeatherFormatting.placeName`. **Left for the owner:** the alert map's level resetting on every visit, discussion text in monospaced type |
 | U-57 | The rest of the same review, the owner's go-ahead on 1 October. **Said twice:** the area screen's public note above a footer saying the same; Cached's "can't tell who asked" as its first line and again as the newest-first footer; the radar card's public note on the page whose *How it works* says it once; "Watching · radio connected" under every watched place. **Crushed at the accessibility sizes:** the alert strip's "+2 more", forecast temperatures, Places readings, station temperatures and every card label's trailing time, squeezed into columns a few letters wide ("FORE-/CAST"). **Stretched:** an inset-grouped list across an iPad, "Today" a thousand points from "102° / 77°", and the radar card a full-width square in landscape. **Elsewhere:** the alert detail's map resized by the pending bar's inset (the U-33 flash); traffic bubbles fixed at 320 pt whatever the text size; report rows that gave no sign a text was held; the notifications screen's "turn on the bell in Places" with no way there | **Adopted.** One of each sentence (`WeatherAskButton(showsPublicNote:)`; the quiet-radio caption stays, nothing else says it); the delivery state once, under the screen's label. `WeatherValueRow` puts a row's trailing value under its text at the accessibility sizes, for the strip, forecast rows, Places rows, station rows and `WeatherCardLabel`. `weatherReadableWidth()` keeps every list of the tool to 672 pt and makes the rest margin; the radar card is capped at 260 pt in compact height. The alert detail's bar is an overlay (`weatherPendingOverlay`); bubbles scale with `@ScaledMetric`; a report row carries its text's receipt time, chosen exactly as its screen chooses the text; the empty notifications screen, opened from the title menu, offers "Add or edit places…", which closes it and opens Places |
 
+The three rows below are radar again: the owner's ask of 3 October, built as spec revision 13.
+The wire and the names are `docs/MESHWX_REV13.md`, the contract the bot, this app and the web
+client are built to; these rows are the screen half, and §18 is the screens.
+
+| # | Finding | Decision |
+|---|---|---|
+| U-58 | 2026-10-03, the owner: *I would like to improve the radar system in a way that the user can request older radar images and the client presents them in a loop.* On the findings: one hour at 15-minute steps, and the loop on its own button. A picture with one time on it says where the line *is* and nothing about where it is going, which is the question a radar screen is opened to answer | **Adopted.** Every width of the radar screen can play **the last hour of its own square** (§18.2): up to five frames, oldest first, 0.8 s each and 2 s on the newest, round and round until paused. **Nothing plays by itself**, and leaving the screen or changing width stops it — a picture moving on its own is a picture nobody can read the time off. Each frame's drawing is made once, when Play is first pressed, and a step only swaps drawings: the camera never moves under a playing loop. While it plays, or rests on an older frame, the time line is that frame's — "6:08 PM · 2 of 5", in the caution tone whenever the frame is half an hour old — and the summary sentences stay the **newest** picture's, because "dry at Austin" said of a frame forty minutes old would be the one wrong sentence on the screen. **Ask for the last hour** sits under the loop, not in the bar: the bar keeps the single picture's one-packet ask, and a five-packet ask beside it is said as its own cost, "Up to 5 packets", with "Pictures this device already has are not sent again." under it. It lists the frames held, newest first and as many as fit the 40-byte request, so the radio leaves them out; a gap of more than 20 minutes between frames reads "Some pictures from this hour are missing." rather than letting a jump in the storm read as its speed. Update still never asks for radar, loop or picture |
+| U-59 | Same ask: *we should be able to zoom in further into a specific area and be able to request a more detailed picture of an area.* On the findings: one detail level, Local sent instead where there is no regional picture, and picked by zooming the map and asking for detail at a spot. The regional mosaics hold about twice the detail of a Local cell and no more, so there is one level, a one-degree square, and no second | **Adopted.** **A tap on the radar map picks a spot** — zoom in first to aim — and the width control gains a fourth segment, **Detail**, which appears once a spot is picked and is then selected; another tap moves the spot, and the segment stays until the screen closes. The camera frames the one-degree square, outlined in the selection ring the signal mapper uses (the label colour, never a radar or alert tint); the other widths draw as they always did. Until a spot is picked a quiet line under the control says "Tap the map for a detailed picture of that spot." VoiceOver cannot aim a tap, so the map's **Detail** action picks the place itself. With no detail picture but the Local one the radio sends in its place, Detail draws Local, framed on the picked square, under "No detailed picture of this spot. Showing Local." The bar's ask reads "Ask for detail here" until a detailed picture is held, then "Ask for a newer picture", at "1 packet" with "Twice the detail of Local, over a quarter of the area." The summary speaks about the place only when the place is inside the square drawn: a square of Round Rock says nothing about Austin. **The place page never shows a detail tile** — its card picks among zoom 0 to 3 only, so a square somebody picked a quarter of a degree away can never become the place's picture |
+| U-60 | A tile has a history now. Revision 11 kept one picture per square and threw the older one away, which is exactly what a loop is made of | **Adopted.** State holds **frames**, one per square and minute, forty at most per radio (three hours behind the radio's newest picture, as before). A coarse frame still never replaces a fine one of the same minute. **Cached** keeps one row per square, its newest time, and "5 pictures" when it holds more than one; **Channel traffic** and the radio page's history list every frame as the packet it was, with its own time; a detail tile reads "Radar picture · Detail · 214 cells with precipitation"; a loop logs as "Radar, last hour · 30.267,-97.743". Two pairing rules follow. An **older** frame off somebody's loop is not "the newest picture the radio has", so it never counts as an answer for the five-minute rule, and a single-picture ask after it still goes out. The **Local tile the radio falls back to** settles a detail ask, and answers that detail square for five minutes as well: asked again, the radio would send the same Local tile or refuse it |
+
 ### 3.1.2 Visual pass against the Human Interface Guidelines, 16 September (afternoon)
 
 Rafael, on the build that closed §3.1.1: *"there is a ton of dead black space not being used… the
@@ -711,7 +721,8 @@ being dropped. Progress shows in the caption, and in the bottom bar on a screen 
 not speak for it.
 
 **Every pushed screen asks from the bottom bar** (§3.1 U-51), in Update's trailing slot: the
-radar ("Ask for radar" / "Ask for a newer picture"), the alert map and its full map ("Ask for the
+radar ("Ask for radar" / "Ask for a newer picture", and on Detail "Ask for detail here"; the
+loop's "Ask for the last hour" is its own button under the map, §18.5), the alert map and its full map ("Ask for the
 map"), the alerts list (the status line's ask, else the next missing warning's), an alert ("Ask
 for full text"), a product screen ("Ask for latest"), and a station, whose Update moved there from
 the list. What the tap is doing is said **beside the answer**, in `WeatherAskStatusRow`: the cost
@@ -1345,7 +1356,8 @@ decisions behind them.
 **Request-only, and never part of Update.** Nothing on either screen asks by itself: not on
 appear, not on a pull, not on a timer. Update plans alerts, readings, the forecast and coverage,
 and it will not plan a radar tile — a picture that arrived because somebody pulled to refresh is a
-packet nobody asked for. Every ask says its cost first, and the cost is always **1 packet**.
+packet nobody asked for. Every ask says its cost first: **1 packet** for a picture at any width,
+the detail level included, and **up to 5 packets** for the last hour (§18.5, revision 13).
 
 **Tiles are shared.** The lattice is fixed, so a tile somebody three kilometres away asked for is
 this place's tile too, and the phone draws it rather than spending a packet on the same square.
@@ -1378,7 +1390,10 @@ and a button, or a picture.
 
 The width the card shows is usually Local, and when it is not — somebody asked for Regional and
 that is the newest picture of this place — the card's label carries the width as its quiet value
-rather than letting the reader assume two degrees.
+rather than letting the reader assume two degrees. It is **never Detail** (revision 13): the card
+picks among zoom 0 to 3 only, because a detail square is about a spot somebody picked on the radar
+screen, and the newest, narrowest picture of it would otherwise win the place's card the moment it
+arrived (§3.1 U-59).
 
 ### 18.2 The radar screen
 
@@ -1395,11 +1410,14 @@ the legend, then the width control and the ask.
   it came from: "Cut from the Southern Plains mosaic. · Via GOES satellite" (§12.1).
 - **The legend.** Three swatches — Light, Moderate, Heavy — in the picture's own colours. They are
   never an alert tint, in either theme and in either client.
-- **The width.** A segmented control: **Local · Regional · Wide**, zoom 0, 1 and 2. Each width
-  shows what is held for **its own square**, or "Not asked for yet.", and has its own ask at the
-  same one packet. "Not asked for yet." and "This picture does not reach Austin." are different
-  answers and must never be shown as one: the first is an absence, the second is a partial tile
-  telling you where its mosaic stopped.
+- **The width.** A segmented control: **Local · Regional · Wide**, zoom 0, 1 and 2, and **Detail**
+  once a spot is picked (§18.5). Each width shows what is held for **its own square** — the newest
+  of its frames — or "Not asked for yet.", and has its own ask at the same one packet. "Not asked
+  for yet." and "This picture does not reach Austin." are different answers and must never be
+  shown as one: the first is an absence, the second is a partial tile telling you where its mosaic
+  stopped. Until a spot is picked, a quiet line under the control: "Tap the map for a detailed
+  picture of that spot."
+- **The loop**, under the map, for whatever width is on screen (§18.5).
 
 ### 18.3 The sentences
 
@@ -1442,4 +1460,53 @@ could mean either is a refusal nobody can act on.
   count is the one measure of a tile that means the same thing at both grid sizes, so a coarse
   packet's number is comparable with a fine one's.
 - **Your requests** logs the ask as "Radar picture · 30.267,-97.743": the coordinate, which is
-  what the request carries, and never a place name the radio would have resolved for itself.
+  what the request carries, and never a place name the radio would have resolved for itself. A
+  detail ask is the same row with the spot's coordinate; a loop reads "Radar, last hour ·
+  30.267,-97.743".
+- Since revision 13 a square can be held as several **frames**. Cached keeps one row per square,
+  its newest time, and "5 pictures" when it holds more than one; Channel traffic lists every frame
+  as the packet it was, with its own time, and a detail tile reads "Radar picture · Detail · 214
+  cells with precipitation".
+
+### 18.5 Loops and detail (revision 13)
+
+The owner's ask, 3 October: *request older radar images and the client presents them in a loop
+… zoom in further into a specific area and be able to request a more detailed picture of an
+area.* The wire and the names are `docs/MESHWX_REV13.md`; §3.1 rows U-58 to U-60 are the
+decisions.
+
+**The loop.** Under the map, for whatever width is on screen, Detail included:
+
+- **Play / Pause**, when at least two frames of the square are held. Each frame shows for 0.8 s
+  and the newest for 2 s, repeating until paused. From the still, Play starts at the oldest frame;
+  from a pause, where it paused. Nothing plays by itself, and leaving the screen or changing width
+  (or moving the spot) stops it and returns to the newest picture. Each frame's drawing is made
+  once, when Play is first pressed, and a step swaps drawings: the camera never moves.
+- While playing, or paused on an older frame, the time line is that frame's: "6:08 PM · 2 of 5",
+  in the caution tone when the frame is half an hour old. The summary sentences always describe
+  the **newest** picture.
+- **Ask for the last hour**, when fewer than five frames are held: "Up to 5 packets" above it,
+  "Pictures this device already has are not sent again." under it. It sends `>radar … loop` with
+  the frames on screen listed as held — newest first, as many as fit the 40-byte request — so the
+  radio leaves them out. The bar keeps the single picture's ask.
+- "Some pictures from this hour are missing." when two frames are more than 20 minutes apart.
+- The loop is the frames of that exact square held from every radio, within the hour before the
+  newest and at most two hours old, five at most, the newest kept; two radios' copies of one
+  minute are one frame, the finer.
+
+**Detail.** A tap on the map picks a spot (zoom in first to aim); the **Detail** segment appears
+and is selected, and the camera frames the one-degree square around the spot — the tile whose
+centre is the nearest half-degree point — outlined in the selection ring's colour on Detail.
+Another tap moves the spot; the segment stays until the screen closes. VoiceOver's **Detail**
+action on the map picks the place itself.
+
+- **A detail picture held**: drawn, with its own time line, and the summary sentences when the
+  place is inside the square. The bar's ask reads "Ask for a newer picture".
+- **No detail picture, but the Local one for the spot** — what the radio sends where no picture is
+  fine enough (Alaska, the national picture's ground): Local is drawn, still framed on the picked
+  square, under "No detailed picture of this spot. Showing Local." The ask reads "Ask for detail
+  here".
+- **Neither**: "Not asked for yet." and "Ask for detail here".
+- The ask's cost is "1 packet", with "Twice the detail of Local, over a quarter of the area."
+  under it. A detail ask is settled by the detail tile or by the Local tile the radio falls back
+  to; the loop on Detail asks at the detail level and lists the frames on screen as held.

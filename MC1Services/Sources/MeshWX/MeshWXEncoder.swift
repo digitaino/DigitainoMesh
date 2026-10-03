@@ -33,6 +33,9 @@ public enum MeshWXEncodeError: Error, Sendable, Hashable {
   case radarCellOutsideBounds(row: Int, col: Int)
   /// A radar tile's `bounds` were not a rectangle of its own grid.
   case radarBoundsOutsideGrid(row0: UInt8, row1: UInt8, col0: UInt8, col1: UInt8, size: Int)
+  /// A radar tile's edges were not on its lattice: whole degrees at zoom 0 and up, half degrees
+  /// at the detail level (spec revision 13, §7E). No phone could have asked for such a tile.
+  case radarEdgeOffLattice(south: Double, west: Double, zoom: Int)
 }
 
 /// Encodes v5 datagrams (spec §3-§8).
@@ -723,9 +726,10 @@ public enum MeshWXEncoder {
     )
   }
 
-  // MARK: - Radar (type 11, spec revision 11, §7D)
+  // MARK: - Radar (type 11, spec revision 11, §7D; type 12, spec revision 13, §7E)
 
-  /// One tile of a radar picture. The app never sends one — only a bot cuts a tile out of a
+  /// One tile of a radar picture: **type 12** (Radar detail) at zoom −1, **type 11** at every
+  /// other zoom. The app never sends one — only a bot cuts a tile out of a
   /// mosaic — but the vector round trip runs through here, and the radar screen's tests need a
   /// squall line over Dallas without waiting for one.
   ///
@@ -741,9 +745,9 @@ public enum MeshWXEncoder {
     seq: UInt8,
     bot: UInt16,
     takenMinutes: UInt32,
-    south: Int8,
-    west: Int16,
-    zoom: UInt8,
+    south: Double,
+    west: Double,
+    zoom: Int,
     product: UInt8,
     cells: [UInt8],
     bounds: MeshWXRadarBounds? = nil,
@@ -759,28 +763,45 @@ public enum MeshWXEncoder {
     if let bad = cells.firstIndex(where: { $0 > 3 }) {
       throw MeshWXEncodeError.outOfRange(field: "radar level", value: Int(cells[bad]))
     }
-    guard zoom <= MeshWXWire.maxRadarZoom else {
-      throw MeshWXEncodeError.outOfRange(field: "radar zoom", value: Int(zoom))
+    guard zoom >= MeshWXWire.minRadarZoom, zoom <= MeshWXWire.maxRadarZoom else {
+      throw MeshWXEncodeError.outOfRange(field: "radar zoom", value: zoom)
     }
     guard product <= MeshWXWire.maxRadarProduct else {
       throw MeshWXEncodeError.outOfRange(field: "radar product", value: Int(product))
     }
+    let isDetail = zoom == MeshWXWire.radarDetailZoom
     guard south >= -90, south <= 90 else {
-      throw MeshWXEncodeError.outOfRange(field: "radar south", value: Int(south))
+      throw MeshWXEncodeError.outOfRange(field: "radar south", value: Int(south.rounded(.down)))
     }
-    guard west >= -180, west <= 179 else {
-      throw MeshWXEncodeError.outOfRange(field: "radar west", value: Int(west))
+    guard west >= -180, west <= (isDetail ? 179.5 : 179) else {
+      throw MeshWXEncodeError.outOfRange(field: "radar west", value: Int(west.rounded(.down)))
+    }
+    // Whole degrees on type 11, half degrees on type 12: an edge between the two is not a tile
+    // on either lattice, and truncating it would send a picture of a different square.
+    let unit = isDetail ? 2.0 : 1.0
+    guard (south * unit).rounded() == south * unit, (west * unit).rounded() == west * unit else {
+      throw MeshWXEncodeError.radarEdgeOffLattice(south: south, west: west, zoom: zoom)
     }
 
     var flags: UInt8 = isCoarse ? MeshWXWire.radarCoarseBit : 0
     if bounds != nil { flags |= MeshWXWire.radarPartialBit }
     flags |= source.flagBits
 
-    var out = try header(seq: seq, bot: bot, type: .radar, flags: flags)
-    out.appendU32(takenMinutes)
-    out.append(UInt8(bitPattern: south))
-    out.appendI16(west)
-    out.append((product << MeshWXWire.radarProductShift) | zoom)
+    var out: Data
+    if isDetail {
+      // Quarter degrees, and `depth` 0 in the shape's low bits (spec revision 13, §7E).
+      out = try header(seq: seq, bot: bot, type: .radarDetail, flags: flags)
+      out.appendU32(takenMinutes)
+      out.appendI16(Int16(south * MeshWXWire.radarDetailUnitsPerDegree))
+      out.appendI16(Int16(west * MeshWXWire.radarDetailUnitsPerDegree))
+      out.append(product << MeshWXWire.radarProductShift)
+    } else {
+      out = try header(seq: seq, bot: bot, type: .radar, flags: flags)
+      out.appendU32(takenMinutes)
+      out.append(UInt8(bitPattern: Int8(south)))
+      out.appendI16(Int16(west))
+      out.append((product << MeshWXWire.radarProductShift) | UInt8(zoom))
+    }
     if let bounds {
       guard bounds.isInside(size: size) else {
         throw MeshWXEncodeError.radarBoundsOutsideGrid(
@@ -796,7 +817,7 @@ public enum MeshWXEncoder {
       out.append(contentsOf: bounds.wireBytes)
     }
     out.append(packRadarCells(cells, size: size))
-    return try checkSize(out, "radar")
+    return try checkSize(out, isDetail ? "radar detail" : "radar")
   }
 
   /// The body's own fields under a fresh header, for the round trip.

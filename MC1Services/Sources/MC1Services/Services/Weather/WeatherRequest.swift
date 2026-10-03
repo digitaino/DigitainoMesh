@@ -105,9 +105,24 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// of earth. `>radar round rock tx` exists on the wire for people typing in chat; the app never
   /// sends it, because a place the bot resolves comes back as a tile this phone did not choose.
   ///
-  /// `zoom` is 0 to ``MeshWXWire/maxRadarZoom``; the screen offers 0, 1 and 2 (Local, Regional,
-  /// Wide). Zoom 0 sends no `z` word at all, which is the form the bot's own vector carries.
-  case radar(latitude: Double, longitude: Double, zoom: UInt8)
+  /// `zoom` is ``MeshWXWire/minRadarZoom`` to ``MeshWXWire/maxRadarZoom``; the screen offers 0,
+  /// 1 and 2 (Local, Regional, Wide) and, for a spot picked on its map, −1 (Detail, spec
+  /// revision 13, §7E), which goes out as `z-1`. Zoom 0 sends no `z` word at all, which is the
+  /// form the bot's own vector carries.
+  ///
+  /// At −1 the bot answers with the detail tile, or — where it has no picture fine enough — with
+  /// the zoom 0 tile for the same coordinate, and both settle the request
+  /// (``WeatherReplyKind/radar(tile:fallback:)``).
+  case radar(latitude: Double, longitude: Double, zoom: Int)
+  /// `>radar 30.270,-97.740 loop 2353 2338` — the last hour of the tile at that width, as up to
+  /// five ordinary Radar packets, oldest first (spec revision 13, §7D.4).
+  ///
+  /// `held` is the `taken` minutes of the frames this phone already holds for that tile
+  /// (`WeatherRadarLoop.held`). They go on the wire as UTC `HHMM` after `loop`, **newest first,
+  /// as many as keep the request within** ``MeshWXWire/maxRequestTextBytes``: the bot leaves those
+  /// pictures out. A held frame that does not fit the list is sent again, which costs a packet
+  /// and breaks nothing; the newest are the ones a phone is likeliest to hold, so they go first.
+  case radarLoop(latitude: Double, longitude: Double, zoom: Int, held: [UInt32])
 
   /// The DM body, exactly as the bot parses it.
   public var wireText: String {
@@ -145,13 +160,42 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case let .parts(group, indexes, _):
       ">part \(group) \(indexes.map(String.init).joined(separator: ","))"
     case let .radar(latitude, longitude, zoom):
-      // Zoom 0 sends nothing after the place: it is the default, and "anything else after the
-      // place is part of the place" (spec revision 11, §7D) — so a bare `z0` would be read as a
-      // request for the place "z0" by nothing, but it costs three bytes and says nothing.
-      zoom == 0
-        ? ">radar \(Self.coordinateKey(latitude: latitude, longitude: longitude))"
-        : ">radar \(Self.coordinateKey(latitude: latitude, longitude: longitude)) z\(zoom)"
+      Self.radarText(latitude: latitude, longitude: longitude, zoom: zoom)
+    case let .radarLoop(latitude, longitude, zoom, held):
+      Self.radarLoopText(latitude: latitude, longitude: longitude, zoom: zoom, held: held)
     }
+  }
+
+  /// `>radar 30.270,-97.740`, with ` z<n>` after it for any zoom but 0 — `z-1` for the detail
+  /// level. Zoom 0 sends nothing after the place: it is the default, and "anything else after the
+  /// place is part of the place" (spec revision 11, §7D) — so a bare `z0` would be read as a
+  /// request for the place "z0" by nothing, but it costs three bytes and says nothing.
+  static func radarText(latitude: Double, longitude: Double, zoom: Int) -> String {
+    let base = ">radar \(coordinateKey(latitude: latitude, longitude: longitude))"
+    return zoom == 0 ? base : "\(base) z\(zoom)"
+  }
+
+  /// `>radar 30.270,-97.740 [z<n>] loop [HHMM …]` (spec revision 13, §7D.4): the held pictures'
+  /// UTC hour and minute, newest first, as many as fit the 40-byte request and never more than
+  /// ``MeshWXWire/radarLoopHeldMax``. `>radar 30.270,-97.740 loop` is 26 bytes, so two always
+  /// fit; a southern, western coordinate at the detail level leaves room for one.
+  ///
+  /// Hour and minute, not minutes alone: at 15-minute steps the newest picture and the one an
+  /// hour before it end in the same two digits.
+  static func radarLoopText(latitude: Double, longitude: Double, zoom: Int, held: [UInt32]) -> String {
+    var text = "\(radarText(latitude: latitude, longitude: longitude, zoom: zoom)) loop"
+    for minutes in Array(Set(held)).sorted(by: >).prefix(MeshWXWire.radarLoopHeldMax) {
+      let next = "\(text) \(utcHourMinute(minutes))"
+      guard next.utf8.count <= MeshWXWire.maxRequestTextBytes else { break }
+      text = next
+    }
+    return text
+  }
+
+  /// A picture's `taken` as the loop request writes it: UTC `HHMM`, four digits.
+  static func utcHourMinute(_ takenMinutes: UInt32) -> String {
+    let ofDay = Int(takenMinutes % (24 * 60))
+    return String(format: "%02d%02d", ofDay / 60, ofDay % 60)
   }
 
   /// A coordinate as the wire writes it: three decimals, always a `.`, never a thousands
@@ -181,9 +225,14 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// **`x`**, because `r` is already `>rain` and a refusal that could mean either is a refusal
   /// nobody can act on (spec revision 11, §7D).
   public var requestLetter: Character {
-    // `wireText` always starts with `>` followed by a lowercase ASCII letter.
-    guard case .radar = self else { return wireText[wireText.index(after: wireText.startIndex)] }
-    return MeshWXWire.radarRequestLetter
+    switch self {
+    // A loop is a `>radar` too (spec revision 13, §7D.4), and is refused under the same letter.
+    case .radar, .radarLoop:
+      return MeshWXWire.radarRequestLetter
+    default:
+      // `wireText` always starts with `>` followed by a lowercase ASCII letter.
+      return wireText[wireText.index(after: wireText.startIndex)]
+    }
   }
 
   /// What the bot sends back when it can serve the request.
@@ -215,9 +264,16 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case let .parts(group, _, _): .parts(group: group)
     // The tile, not the coordinate: the lattice is what turns a place into a square of earth
     // (spec revision 11, §7D), and the answer names that square and never the question.
-    case let .radar(latitude, longitude, zoom):
-      .radar(tile: MeshWXRadarTile.containing(
-        latitude: latitude, longitude: longitude, zoom: Int(zoom)))
+    //
+    // A loop is settled by the first of its frames, like `>w` by its first warning; the rest keep
+    // flowing into state (spec revision 13, §7D.4). At the detail level the bot answers with the
+    // zoom 0 tile for the same coordinate where it has no picture fine enough (§7E), so that tile
+    // settles a `z-1` ask as well.
+    case let .radar(latitude, longitude, zoom), let .radarLoop(latitude, longitude, zoom, _):
+      .radar(
+        tile: MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: zoom),
+        fallback: zoom == MeshWXWire.radarDetailZoom
+          ? MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: 0) : nil)
     }
   }
 
@@ -237,7 +293,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     // every bot with a dish receives (spec revision 11, §7D). Two bots' tiles of the same square
     // are pictures of the same weather, so a second bot's answer to somebody else settles this —
     // which is the whole reason the lattice is fixed rather than centred on the asker.
-    case .radar:
+    case .radar, .radarLoop:
       true
     // A narrative names its event and areas but not its office or tracking number, so only the
     // bot asked can vouch that the text is for the warning asked about. A coverage statement
@@ -293,7 +349,8 @@ extension WeatherRequest {
   private enum CodingKeys: String, CodingKey {
     case digest, activeWarnings, warning, warningsTouching, warningText, observations, observation,
       homeForecast, forecast, forecastForPlace, forecastAt, forecastDiscussion, spaceWeather,
-      stormReports, rainfall, metar, taf, hazardousOutlook, coverage, areaSweep, parts, radar
+      stormReports, rainfall, metar, taf, hazardousOutlook, coverage, areaSweep, parts, radar,
+      radarLoop
   }
 
   private enum IdentityKeys: String, CodingKey { case identity }
@@ -307,6 +364,7 @@ extension WeatherRequest {
   private enum AreaSweepKeys: String, CodingKey { case includesAdvisories, states }
   private enum PartsKeys: String, CodingKey { case group, indexes, of }
   private enum RadarKeys: String, CodingKey { case latitude, longitude, zoom }
+  private enum RadarLoopKeys: String, CodingKey { case latitude, longitude, zoom, held }
 
   public init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -379,7 +437,16 @@ extension WeatherRequest {
       self = .radar(
         latitude: try nested.decode(Double.self, forKey: .latitude),
         longitude: try nested.decode(Double.self, forKey: .longitude),
-        zoom: try nested.decode(UInt8.self, forKey: .zoom))
+        // An `Int` since revision 13, for the detail level's −1. A log written before it holds
+        // 0 to 2 here, which read the same.
+        zoom: try nested.decode(Int.self, forKey: .zoom))
+    case .radarLoop:
+      let nested = try container.nestedContainer(keyedBy: RadarLoopKeys.self, forKey: key)
+      self = .radarLoop(
+        latitude: try nested.decode(Double.self, forKey: .latitude),
+        longitude: try nested.decode(Double.self, forKey: .longitude),
+        zoom: try nested.decode(Int.self, forKey: .zoom),
+        held: try nested.decode([UInt32].self, forKey: .held))
     }
   }
 }
@@ -411,12 +478,17 @@ public enum WeatherReplyKind: Sendable, Hashable {
   /// indexes asked for arrived is checked by the service against the request itself, the way a
   /// text reply's words are (`WeatherService.answers`).
   case parts(group: UInt8)
-  /// `>radar <lat>,<lon> [zN]`: the Radar tile for that square of earth (spec revision 11, §7D).
+  /// `>radar <lat>,<lon> [zN] [loop …]`: the Radar tile for that square of earth (spec revision
+  /// 11, §7D), or any frame of it for a loop (revision 13, §7D.4).
   ///
   /// The tile, not the coordinate, and whatever its `taken`: the lattice is shared, so the answer
   /// to this phone's question and the answer to somebody else's a kilometre away are the same
   /// packet — and a picture from ten minutes ago is still the picture the bot has.
-  case radar(tile: MeshWXRadarTile)
+  ///
+  /// `fallback` is the one addition of revision 13: an ask at the detail level (`z-1`) is also
+  /// settled by the zoom 0 tile containing the same coordinate, because that is what the bot
+  /// sends instead where it has no picture fine enough (§7E). Nil at every other zoom.
+  case radar(tile: MeshWXRadarTile, fallback: MeshWXRadarTile?)
 }
 
 /// Text subjects on the wire (spec §8.1), kept as raw codes here so this file needs no
