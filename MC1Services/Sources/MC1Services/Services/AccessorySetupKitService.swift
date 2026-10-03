@@ -273,7 +273,44 @@
 
     /// Show the accessory picker for new device pairing
     /// - Returns: The Bluetooth identifier (UUID) for the paired device
+    ///
+    /// AccessorySetupKit refuses the picker while the app is not active: `pickerRestricted`,
+    /// documented as "the app is in the background". A system dialog raised just before leaves
+    /// the app inactive until it has finished dismissing, and its completion arrives first: the
+    /// confirmation for removing a stale pairing that `pairNewDevice` sweeps ahead of the picker,
+    /// or the removal behind "Remove and Try Again". Presenting straight after it failed with
+    /// "Cannot show device picker" (Rafael, 2026-10-03). So wait for the app to be active, and
+    /// retry once if the system still refuses.
     func showPicker() async throws -> UUID {
+      await waitUntilAppIsActive(timeout: .seconds(3))
+      do {
+        return try await presentPicker()
+      } catch AccessorySetupKitError.pickerRestricted {
+        logger.warning("[ASK] Picker restricted with app \(appStateDescription); retrying once it is active")
+        await waitUntilAppIsActive(timeout: .seconds(5))
+        try await Task.sleep(for: .milliseconds(300))
+        return try await presentPicker()
+      }
+    }
+
+    private func waitUntilAppIsActive(timeout: Duration) async {
+      let clock = ContinuousClock()
+      let deadline = clock.now.advanced(by: timeout)
+      while UIApplication.shared.applicationState != .active, clock.now < deadline, !Task.isCancelled {
+        try? await Task.sleep(for: .milliseconds(100))
+      }
+    }
+
+    private var appStateDescription: String {
+      switch UIApplication.shared.applicationState {
+      case .active: "active"
+      case .inactive: "inactive"
+      case .background: "in background"
+      @unknown default: "in an unknown state"
+      }
+    }
+
+    private func presentPicker() async throws -> UUID {
       guard let session else {
         throw AccessorySetupKitError.sessionNotActive
       }
@@ -305,6 +342,7 @@
       logger.info(
         """
         [ASK] Presenting picker on iOS \(currentOSVersion), \
+        app: \(appStateDescription), \
         sessionActive: \(isSessionActive), \
         pairedCount: \(pairedAccessories.count), \
         displayItems: \(displayItems.count), \
