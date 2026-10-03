@@ -3,8 +3,8 @@ import Foundation
 import MC1Services
 import Testing
 
-/// docs/RADIO_SWAP.md, owner decision 2: the copy is offered once per radio taking on an
-/// identity, and only while its swap guard is armed with a stored profile.
+/// docs/RADIO_SWAP.md, owner decision 2: a radio not yet set up from these records is offered
+/// the copy once per arming; one already copied to is topped up quietly.
 @Suite("RadioSwapPromptState")
 @MainActor
 struct RadioSwapPromptStateTests {
@@ -25,40 +25,47 @@ struct RadioSwapPromptStateTests {
   }
 
   @Test
-  func `An armed guard with a profile offers the copy under the identity's name`() throws {
+  func `A radio never set up from these records is offered the copy under the identity's name`() throws {
     let harness = try Harness()
     defer { harness.tearDown() }
+    let profile = Self.profile()
 
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: .all, profile: Self.profile())
+    #expect(harness.state.step(deviceID: Self.deviceID, swapGuard: .all, profile: profile) == .offer)
+    harness.state.offer(deviceID: Self.deviceID, profile: profile)
 
     #expect(harness.state.pending?.identityName == "Digitaino")
   }
 
   @Test
-  func `Nothing is offered without an armed guard or without a profile`() throws {
+  func `Nothing happens without an armed guard or without a profile`() throws {
     let harness = try Harness()
     defer { harness.tearDown() }
 
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: [], profile: Self.profile())
-    #expect(harness.state.pending == nil)
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: .all, profile: nil)
-    #expect(harness.state.pending == nil)
+    #expect(harness.state.step(deviceID: Self.deviceID, swapGuard: [], profile: Self.profile()) == .none)
+    #expect(harness.state.step(deviceID: Self.deviceID, swapGuard: .all, profile: nil) == .none)
   }
 
   @Test
-  func `Once answered, the same arming is not offered again, but a new one is`() throws {
+  func `Once answered, the same arming is not offered again, but the next switch is`() throws {
     let harness = try Harness()
     defer { harness.tearDown() }
     let first = Self.profile()
 
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: .all, profile: first)
+    harness.state.offer(deviceID: Self.deviceID, profile: first)
     harness.state.dismiss()
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: .all, profile: first)
-    #expect(harness.state.pending == nil)
+    #expect(harness.state.step(deviceID: Self.deviceID, swapGuard: .all, profile: first) == .none)
 
     let rearmed = Self.profile(capturedAt: first.capturedAt.addingTimeInterval(3600))
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: .all, profile: rearmed)
-    #expect(harness.state.pending != nil)
+    #expect(harness.state.step(deviceID: Self.deviceID, swapGuard: .all, profile: rearmed) == .offer)
+  }
+
+  @Test
+  func `A radio already copied to is topped up quietly instead of offered`() throws {
+    let harness = try Harness()
+    defer { harness.tearDown() }
+    harness.preferences.setCopiedRecordsToRadio(deviceID: Self.deviceID)
+
+    #expect(harness.state.step(deviceID: Self.deviceID, swapGuard: .all, profile: Self.profile()) == .topUp)
   }
 
   @Test
@@ -66,16 +73,16 @@ struct RadioSwapPromptStateTests {
     let harness = try Harness()
     defer { harness.tearDown() }
 
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: .all, profile: Self.profile())
+    harness.state.offer(deviceID: Self.deviceID, profile: Self.profile())
     harness.state.endSession()
-    harness.state.evaluate(deviceID: Self.deviceID, swapGuard: .all, profile: Self.profile())
 
-    #expect(harness.state.pending != nil)
+    #expect(harness.state.step(deviceID: Self.deviceID, swapGuard: .all, profile: Self.profile()) == .offer)
   }
 
   private struct Harness {
     let suiteName: String
     let defaults: UserDefaults
+    let preferences: DevicePreferenceStore
     let state: RadioSwapPromptState
 
     @MainActor
@@ -84,7 +91,8 @@ struct RadioSwapPromptStateTests {
       let defaults = try #require(UserDefaults(suiteName: name))
       suiteName = name
       self.defaults = defaults
-      state = RadioSwapPromptState(store: DevicePreferenceStore(userDefaults: defaults))
+      preferences = DevicePreferenceStore(userDefaults: defaults)
+      state = RadioSwapPromptState(store: preferences)
     }
 
     func tearDown() {

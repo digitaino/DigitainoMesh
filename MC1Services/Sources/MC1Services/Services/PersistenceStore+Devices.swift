@@ -24,26 +24,54 @@ public extension PersistenceStore {
     return try modelContext.fetch(descriptor).first.map { DeviceDTO(from: $0) }
   }
 
-  /// Fetch a device by radio ID
+  /// The radio that most recently carried this identity. One identity can be on several
+  /// radios, each with its own row sharing the `radioID` (docs/RADIO_SWAP.md, R1); the
+  /// connected radio is always the most recent, since every connect stamps `lastConnected`.
   func fetchDevice(radioID: UUID) throws -> DeviceDTO? {
-    let targetRadioID = radioID
-    let predicate = #Predicate<Device> { device in
-      device.radioID == targetRadioID
-    }
-    var descriptor = FetchDescriptor(predicate: predicate)
-    descriptor.fetchLimit = 1
-    return try modelContext.fetch(descriptor).first.map { DeviceDTO(from: $0) }
+    try primaryDeviceModel(radioID: radioID).map { DeviceDTO(from: $0) }
   }
 
-  /// Fetch a device by public key
+  /// Every radio row carrying this identity, most recently connected first.
+  func fetchDevices(radioID: UUID) throws -> [DeviceDTO] {
+    try deviceModels(radioID: radioID).map { DeviceDTO(from: $0) }
+  }
+
+  /// Fetch a device by public key: the most recently connected row carrying it.
   func fetchDevice(publicKey: Data) throws -> DeviceDTO? {
     let targetKey = publicKey
     let predicate = #Predicate<Device> { device in
       device.publicKey == targetKey
     }
-    var descriptor = FetchDescriptor(predicate: predicate)
+    var descriptor = FetchDescriptor(
+      predicate: predicate,
+      sortBy: [SortDescriptor(\Device.lastConnected, order: .reverse)]
+    )
     descriptor.fetchLimit = 1
     return try modelContext.fetch(descriptor).first.map { DeviceDTO(from: $0) }
+  }
+
+  private func deviceModels(radioID: UUID) throws -> [Device] {
+    let targetRadioID = radioID
+    let predicate = #Predicate<Device> { device in
+      device.radioID == targetRadioID
+    }
+    return try modelContext.fetch(FetchDescriptor(
+      predicate: predicate,
+      sortBy: [SortDescriptor(\Device.lastConnected, order: .reverse)]
+    ))
+  }
+
+  private func primaryDeviceModel(radioID: UUID) throws -> Device? {
+    let targetRadioID = radioID
+    let predicate = #Predicate<Device> { device in
+      device.radioID == targetRadioID
+    }
+    var descriptor = FetchDescriptor(
+      predicate: predicate,
+      sortBy: [SortDescriptor(\Device.lastConnected, order: .reverse)]
+    )
+    descriptor.fetchLimit = 1
+    return try modelContext.fetch(descriptor).first
   }
 
   /// Fetch the active device
@@ -106,15 +134,11 @@ public extension PersistenceStore {
   /// upper bound can pin the watermark below every lastmod when the radio RTC
   /// leads the phone, so every delta re-matches the full table and never
   /// converges.
+  ///
+  /// The watermark belongs to one radio's table, so it is written to the radio that most
+  /// recently carried the identity: the one just synced.
   func updateDeviceLastContactSync(radioID: UUID, timestamp: UInt32) throws {
-    let targetRadioID = radioID
-    let predicate = #Predicate<Device> { device in
-      device.radioID == targetRadioID
-    }
-    var descriptor = FetchDescriptor(predicate: predicate)
-    descriptor.fetchLimit = 1
-
-    guard let device = try modelContext.fetch(descriptor).first else {
+    guard let device = try primaryDeviceModel(radioID: radioID) else {
       throw PersistenceStoreError.deviceNotFound
     }
     device.lastContactSync = timestamp
@@ -145,13 +169,7 @@ public extension PersistenceStore {
   }
 
   func fetchSwapProfile(radioID: UUID) throws -> IdentityProfile? {
-    let targetRadioID = radioID
-    let predicate = #Predicate<Device> { device in
-      device.radioID == targetRadioID
-    }
-    var descriptor = FetchDescriptor(predicate: predicate)
-    descriptor.fetchLimit = 1
-    guard let data = try modelContext.fetch(descriptor).first?.swapProfile else { return nil }
+    guard let data = try primaryDeviceModel(radioID: radioID)?.swapProfile else { return nil }
     return try? JSONDecoder().decode(IdentityProfile.self, from: data)
   }
 
@@ -180,24 +198,12 @@ public extension PersistenceStore {
   }
 
   func fetchSwapGuard(radioID: UUID) throws -> SwapGuard {
-    let targetRadioID = radioID
-    let predicate = #Predicate<Device> { device in
-      device.radioID == targetRadioID
-    }
-    var descriptor = FetchDescriptor(predicate: predicate)
-    descriptor.fetchLimit = 1
-    guard let device = try modelContext.fetch(descriptor).first else { return [] }
+    guard let device = try primaryDeviceModel(radioID: radioID) else { return [] }
     return SwapGuard(rawValue: device.swapGuard)
   }
 
   func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) throws {
-    let targetRadioID = radioID
-    let predicate = #Predicate<Device> { device in
-      device.radioID == targetRadioID
-    }
-    var descriptor = FetchDescriptor(predicate: predicate)
-    descriptor.fetchLimit = 1
-    guard let device = try modelContext.fetch(descriptor).first else { return }
+    guard let device = try primaryDeviceModel(radioID: radioID) else { return }
 
     let remaining = SwapGuard(rawValue: device.swapGuard).subtracting(parts)
     guard remaining.rawValue != device.swapGuard else { return }
@@ -205,19 +211,20 @@ public extension PersistenceStore {
     try modelContext.save()
   }
 
-  /// Adds a known region to a device if not already present
+  /// Adds a known region if not already present. Regions belong to the identity, so every
+  /// radio row carrying it gets the region.
   func addDeviceKnownRegion(radioID: UUID, region: String) throws {
-    let targetRadioID = radioID
-    let devicePredicate = #Predicate<Device> { $0.radioID == targetRadioID }
-    var deviceDescriptor = FetchDescriptor<Device>(predicate: devicePredicate)
-    deviceDescriptor.fetchLimit = 1
-
-    guard let device = try modelContext.fetch(deviceDescriptor).first else {
+    let devices = try deviceModels(radioID: radioID)
+    guard !devices.isEmpty else {
       throw PersistenceStoreError.deviceNotFound
     }
 
-    guard !device.knownRegions.contains(region) else { return }
-    device.knownRegions.append(region)
+    var changed = false
+    for device in devices where !device.knownRegions.contains(region) {
+      device.knownRegions.append(region)
+      changed = true
+    }
+    guard changed else { return }
     try modelContext.save()
   }
 
@@ -225,15 +232,14 @@ public extension PersistenceStore {
   /// to the removed region back to ``ChannelFloodScope/inherit``.
   func removeDeviceKnownRegion(radioID: UUID, region: String) throws {
     let targetRadioID = radioID
-    let devicePredicate = #Predicate<Device> { $0.radioID == targetRadioID }
-    var deviceDescriptor = FetchDescriptor<Device>(predicate: devicePredicate)
-    deviceDescriptor.fetchLimit = 1
-
-    guard let device = try modelContext.fetch(deviceDescriptor).first else {
+    let devices = try deviceModels(radioID: radioID)
+    guard !devices.isEmpty else {
       throw PersistenceStoreError.deviceNotFound
     }
 
-    device.knownRegions.removeAll { $0 == region }
+    for device in devices {
+      device.knownRegions.removeAll { $0 == region }
+    }
 
     let channelPredicate = #Predicate<Channel> { $0.radioID == targetRadioID }
     let channels = try modelContext.fetch(FetchDescriptor<Channel>(predicate: channelPredicate))
@@ -301,6 +307,31 @@ public extension PersistenceStore {
     ghost.swapProfile = existing.swapProfile
     modelContext.insert(ghost)
     try modelContext.save()
+  }
+
+  /// The other radios carrying this radio's identity: rows sharing its `radioID` that still
+  /// have a way to connect (ghosts and backup shadows have none).
+  func otherRadios(sharingIdentityWith id: UUID) throws -> [DeviceDTO] {
+    guard let device = try fetchDeviceModel(id: id) else { return [] }
+    return try deviceModels(radioID: device.radioID)
+      .filter { $0.id != id && !$0.connectionMethods.isEmpty }
+      .map { DeviceDTO(from: $0) }
+  }
+
+  /// Removes one radio's row while keeping its history. With another radio still carrying
+  /// the identity, the history stays with that radio and the row simply goes. Otherwise the
+  /// row becomes a ghost, keeping the key-to-history bridge for a later re-pair.
+  /// - Returns: whether another radio still carries the identity.
+  @discardableResult
+  func forgetRadio(id: UUID) throws -> Bool {
+    guard let device = try fetchDeviceModel(id: id) else { return false }
+    guard try !otherRadios(sharingIdentityWith: id).isEmpty else {
+      try demoteDeviceToGhost(id: id)
+      return false
+    }
+    modelContext.delete(device)
+    try modelContext.save()
+    return true
   }
 
   /// Delete a device and all its associated data atomically (single save).

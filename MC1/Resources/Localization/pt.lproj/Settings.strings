@@ -581,6 +581,9 @@
 /* Button to forget device and delete all associated data */
 "dangerZone.dialog.forget.deleteAll" = "Esquecer dispositivo e eliminar dados";
 
+/* Forget dialog body when another radio carries the same node - %@ names the other radio(s) by hardware, e.g. "RAK 3401" */
+"dangerZone.dialog.forget.sharedMessage" = "Este rádio será desemparelhado. As suas mensagens, contactos e canais ficam neste telemóvel, porque o mesmo nó também está em %@.";
+
 /* Alert title for factory reset confirmation */
 "dangerZone.alert.reset.title" = "Reposição de fábrica";
 
@@ -589,6 +592,9 @@
 
 /* Alert message for factory reset */
 "dangerZone.alert.reset.message" = "Isto irá apagar todos os dados do dispositivo, incluindo contactos, mensagens e definições. Toque em Remover quando for pedido para desemparelhar o dispositivo.";
+
+/* Factory reset alert body when another radio carries the same node - %@ names the other radio(s) by hardware */
+"dangerZone.alert.reset.sharedMessage" = "Isto irá apagar os contactos e as definições deste rádio. As suas mensagens, contactos e canais ficam neste telemóvel, porque o mesmo nó também está em %@. Toque em Remover quando for pedido para desemparelhar o rádio.";
 
 /* Error when services are not available */
 "dangerZone.error.servicesUnavailable" = "Serviços indisponíveis";

@@ -14,6 +14,14 @@ final class DangerZoneViewModel {
   var unfavoritedCount = 0
   var showRemoveResult = false
   var removeResult: String?
+  /// Other radios carrying the connected radio's node. While there are any, the history is
+  /// theirs too: Forget and Factory Reset keep it, and the wording says so.
+  var otherRadios: [DeviceDTO] = []
+
+  /// How the other radios are named in that wording: they share the node name, so by hardware.
+  var otherRadiosDescription: String {
+    ListFormatter.localizedString(byJoining: otherRadios.map { $0.manufacturerName.isEmpty ? $0.nodeName : $0.manufacturerName })
+  }
 
   private var removeTask: Task<Void, Never>?
 
@@ -44,6 +52,10 @@ final class DangerZoneViewModel {
     settingsServiceProvider = settingsService
     connectedDeviceProvider = connectedDevice
     self.connectionManager = connectionManager
+  }
+
+  func loadOtherRadios() async {
+    otherRadios = await connectionManager?.otherRadiosCarryingConnectedIdentity() ?? []
   }
 
   func cancelPendingRemoval() {

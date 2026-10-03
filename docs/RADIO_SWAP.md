@@ -1,6 +1,6 @@
 # Radio swap: one identity, any radio
 
-Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1 and P2 built the same day (§4.1, §4.2); P3 to P5 not built. Code references were read from source on that date.
+Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1, P2 and P4 built the same day (§4.1–§4.3); P3 and P5 not built; deletions do not yet carry across radios (§4.3). Code references were read from source on that date.
 
 Rafael's brief: *"I would be using the same key on both radios. so I want everything to transfer over. can we design a better process to do this? I would like to be able to swap radios easily and keep all the same contacts and conversations etc."*
 
@@ -129,7 +129,7 @@ Settings → Radio gets "Remember this identity on this iPhone" and "Forget save
 | P1 | Protected first sync on new hardware or a new key (R2), and the watermark reset. **Built 2026-10-03** | H1, H2, H6 | Small; contact and channel sync gates plus tests |
 | P2 | Config from the app's records, slot-exact channels, and a "Copy to this radio" action in Settings (R3, R4) | H3, H7 (data half) | Medium; planner input and one screen. **Built 2026-10-03** |
 | P3 | Keychain key custody, and "Set up as …" at pairing (R5, R6) | H5, H7 (key half), H8 | Medium |
-| P4 | Sibling rows: every radio in the list, one-tap switching, Forget-one semantics (R1) | H4 | Largest; Device lookups, delete paths, picker |
+| P4 | Sibling rows: every radio in the list, one-tap switching, Forget-one semantics (R1) | H4 | Largest; Device lookups, delete paths, picker. **Built 2026-10-03** |
 | P5 | Same-key-on-air warning (R7, optional) | none | Small, if the RX log shows it |
 
 P1 is worth building before your next swap even if nothing else is. P1 to P3 cover a one-way replacement. P4 is what makes going back and forth one tap.
@@ -209,6 +209,59 @@ P1 is worth building before your next swap even if nothing else is. P1 to P3 cov
 - A "keep this radio's channels as mine" action, which would release the guard without copying. Until then a declined copy leaves the guard armed, which is harmless.
 
 **Verification.** 1,076 services tests pass across the sync, contact, channel, persistence, device, import and swap suites. Two notification-sync tests time out only when the whole set runs in parallel; they pass on their own. The app target's offer, location-prompt and import-screen suites pass too. In the simulator, the copy screen can't be driven past "Checking this radio…" because the simulator's mock transport never answers reads. The on-radio check is outstanding.
+
+### 4.3 P4 as built
+
+**One row per radio, one history per identity.**
+- When a known key turns up on a radio this phone has no row for, and a row that still has a connection method carries that key, the new radio gets its own row beside it with the same `radioID`. It used to take over that row and delete it, which is H4.
+- The new row borrows only the identity's fields (`ConnectionManager.identityTemplate`): partition, name and known regions. Connection methods, battery curve, pre-repeat settings and watermark belong to the hardware.
+- A ghost or backup shadow (no connection methods) is still adopted and removed.
+- Reads by `radioID` go to the most recently connected row (`primaryDeviceModel`): `fetchDevice(radioID:)`, the watermark, and the guard and profile. The connected radio is always the most recent, because every connect stamps `lastConnected` before any sync.
+- Known regions are written to every row carrying the identity.
+
+**Every switch arms the guard.**
+- The guard now also arms when a known radio connects while another radio was the last to carry the identity (`switchedFromRadio`). The profile is captured from that other radio and the channel rows before the sync.
+- Its tables were last synced before the identity moved on, so its first sync deletes nothing, exactly as in P1.
+- This also applies between a radio's Bluetooth row and its Wi-Fi row. That is harmless: the radio matches itself, so the guard releases during the first sync.
+
+**Offer or top up** (`RadioSwapPromptState.step`):
+- A radio never copied to is offered the copy screen, once per arming.
+- A radio copied to before (`DevicePreferenceStore.hasCopiedRecordsToRadio`) is topped up quietly by `NodeConfigService.topUpFromRecords`: missing channels into empty slots and missing contacts, never settings, never Make Room.
+  - If that leaves one of the identity's channels blocked, the copy screen is offered.
+- A copy or top-up releases the parts of the guard it settled straight away (`settleSwapGuard`), so the next switch captures a fresh profile from a radio that agrees with the identity.
+
+**Radio list.**
+- Rows show the hardware next to the transport, because radios carrying the same key share a node name.
+- A radio paired with this phone but without a row is listed, and tapping it connects it. This covers Rafael's old radio, whose row H4 deleted.
+- Pairing no longer re-asks about a stray pairing the user declined to remove (`pairing.keptStrayAssociations`). That pairing is listed instead.
+
+**Forgetting.**
+- `forgetRadio(id:)` deletes only the row when another radio carries the identity, and makes a ghost otherwise. It is used by Forget (keep data), the radio list's Delete, removal in iOS Settings, and Remove and Try Again.
+- With another radio carrying the identity:
+  - the Forget dialog offers no "Delete Data", and both Forget and Factory Reset keep the history and say so, naming the other radio by its hardware;
+  - the last-connected record moves to the other radio, so Chats keeps showing the history while disconnected.
+
+**Fixed on the way:**
+- **Overwrite-oldest eviction (0x8F)** now keeps favourites and contacts with messages, as the full-sync prune has since 2026-09-01. It used to delete them, DMs included.
+- **Contact detail Delete** falls back to deleting only the phone's row when the connected radio does not hold the contact.
+- **Device picker:** "Cannot show device picker" (`4b328e9b`). The picker now waits for the app to be active, since a removal confirmation shown just before leaves it inactive, and retries once.
+
+**Not built: deletions do not carry across radios.**
+- A contact or channel deleted while on radio A is still on radio B. Switching to B brings it back, and the top-up then writes it to A again.
+- Fixing this needs deletion records (tombstones), compared against each radio's copy: a radio's record older than the deletion is removed from that radio.
+- Not done yet; it is the next step.
+
+**Verification.**
+- 1,102 services tests pass across the sync, contact, channel, persistence, device, import, advertisement and swap suites, plus every connection-manager suite run one by one. The two notification-sync timeouts that appear only under parallel load pass on their own.
+- New tests cover:
+  - the most-recent-row reads;
+  - forget with and without another radio;
+  - regions written to every radio;
+  - the identity template;
+  - the offer-or-top-up decision;
+  - eviction keeping a messaged contact.
+- The app's swap, import, error-coverage, location-prompt and radio-list suites pass.
+- Not tested: the connect ceremony end to end and `topUpFromRecords` against a live session. The simulator's mock radio does not answer reads, so the on-radio check is outstanding.
 
 ## 5. Owner decisions (taken 2026-10-03)
 

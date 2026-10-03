@@ -5156,6 +5156,10 @@ public enum L10n {
           public static let confirm = L10n.tr("Settings", "dangerZone.alert.reset.confirm", fallback: "Reset")
           /// Alert message for factory reset
           public static let message = L10n.tr("Settings", "dangerZone.alert.reset.message", fallback: "This will erase all device data including contacts, messages, and settings. Tap Remove when prompted to unpair the device.")
+          /// Factory reset alert body when another radio carries the same node - %@ names the other radio(s) by hardware
+          public static func sharedMessage(_ p1: Any) -> String {
+            return L10n.tr("Settings", "dangerZone.alert.reset.sharedMessage", String(describing: p1), fallback: "This will erase this radio's contacts and settings. Your messages, contacts and channels stay on this phone, because the same node is also on %@. Tap Remove when prompted to unpair the radio.")
+          }
           /// Alert title for factory reset confirmation
           public static let title = L10n.tr("Settings", "dangerZone.alert.reset.title", fallback: "Factory Reset")
         }
@@ -5168,6 +5172,10 @@ public enum L10n {
           public static let keepData = L10n.tr("Settings", "dangerZone.dialog.forget.keepData", fallback: "Forget Device")
           /// Confirmation dialog message for forget device
           public static let message = L10n.tr("Settings", "dangerZone.dialog.forget.message", fallback: "Your device will be unpaired. You can choose to keep or delete your messages, contacts, and channels.")
+          /// Forget dialog body when another radio carries the same node - %@ names the other radio(s) by hardware, e.g. "RAK 3401"
+          public static func sharedMessage(_ p1: Any) -> String {
+            return L10n.tr("Settings", "dangerZone.dialog.forget.sharedMessage", String(describing: p1), fallback: "This radio will be unpaired. Your messages, contacts and channels stay on this phone, because the same node is also on %@.")
+          }
           /// Confirmation dialog title for forget device
           public static let title = L10n.tr("Settings", "dangerZone.dialog.forget.title", fallback: "Forget Device")
         }

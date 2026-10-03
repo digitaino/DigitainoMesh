@@ -231,6 +231,46 @@ public actor NodeConfigService {
       writers: makeWriters(), logger: logger, onProgress: onProgress,
       notifyContactsChanged: { await coordinator?.notifyContactsChanged() }
     )
+    if config.channels?.contains(where: { $0.slot != nil }) == true {
+      await settleSwapGuard(after: plan, sections: sections, radioID: radioID)
+    }
+  }
+
+  /// Quietly brings a radio this phone has already set up back in line with the identity after
+  /// a switch: the channels and contacts it is missing, never its settings and never a slot that
+  /// holds one of its own channels (owner decision 2, docs/RADIO_SWAP.md). The preview says what
+  /// it left for the user to decide.
+  public func topUpFromRecords(radioID: UUID) async throws -> ImportPreview {
+    let sections = ConfigSections(channels: true, contacts: true)
+    let config = try await recordsConfig(radioID: radioID, sections: sections)
+    let plan = try await buildImportPlan(config, sections: sections, radioID: radioID)
+    if Self.stepCount(for: plan) > 0 {
+      let coordinator = syncCoordinator
+      try await executeConfigImport(
+        plan: plan, sections: sections, radioID: radioID,
+        writers: makeWriters(), logger: logger, onProgress: nil,
+        notifyContactsChanged: { await coordinator?.notifyContactsChanged() }
+      )
+      logger.info("Topped up radio from records: \(plan.channelWrites.count) channel(s), \(plan.contactRecords.count) contact(s)")
+    }
+    await settleSwapGuard(after: plan, sections: sections, radioID: radioID)
+    return Self.preview(from: plan)
+  }
+
+  /// After a copy from this phone's records, the radio holds what the plan wrote, so the parts
+  /// of its swap guard the copy settled can end now rather than at the next full sync: the
+  /// channels when every one of the identity's channels is in its slot, the contacts when none
+  /// was left out for room.
+  private func settleSwapGuard(after plan: ConfigImportPlan, sections: ConfigSections, radioID: UUID) async {
+    var settled: SwapGuard = []
+    if sections.channels, plan.channelsBlocked.isEmpty, plan.channelsBeyondCapacity.isEmpty {
+      settled.insert(.channels)
+    }
+    if sections.contacts, plan.contactCapacityDropped.isEmpty {
+      settled.insert(.contacts)
+    }
+    guard !settled.isEmpty else { return }
+    try? await dataStore.releaseSwapGuard(radioID: radioID, settled)
   }
 
   /// Builds the concrete write closures `executeConfigImport` calls, capturing this actor's
@@ -314,6 +354,10 @@ public actor NodeConfigService {
     let plan = try await buildImportPlan(
       config, sections: sections, radioID: radioID, makeRoomForChannels: makeRoomForChannels
     )
+    return Self.preview(from: plan)
+  }
+
+  static func preview(from plan: ConfigImportPlan) -> ImportPreview {
     var preview = ImportPreview(
       channelsOverwriteExisting: plan.channelsOverwriteExisting,
       contactCoordinateFallbacks: plan.contactCoordinateFallbacks,

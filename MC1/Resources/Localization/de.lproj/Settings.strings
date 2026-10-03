@@ -650,6 +650,9 @@
 /* Button to forget device and delete all associated data */
 "dangerZone.dialog.forget.deleteAll" = "Gerät vergessen & Daten löschen";
 
+/* Forget dialog body when another radio carries the same node - %@ names the other radio(s) by hardware, e.g. "RAK 3401" */
+"dangerZone.dialog.forget.sharedMessage" = "Dieses Funkgerät wird entkoppelt. Deine Nachrichten, Kontakte und Kanäle bleiben auf diesem Telefon, weil sich derselbe Knoten auch auf %@ befindet.";
+
 /* Alert title for factory reset confirmation */
 "dangerZone.alert.reset.title" = "Werkseinstellungen";
 
@@ -658,6 +661,9 @@
 
 /* Alert message for factory reset */
 "dangerZone.alert.reset.message" = "Alle Gerätedaten werden gelöscht, einschließlich Kontakte, Nachrichten und Einstellungen. Tippe auf \U201EEntfernen\U201C, wenn du aufgefordert wirst, das Gerät zu entkoppeln.";
+
+/* Factory reset alert body when another radio carries the same node - %@ names the other radio(s) by hardware */
+"dangerZone.alert.reset.sharedMessage" = "Die Kontakte und Einstellungen dieses Funkgeräts werden gelöscht. Deine Nachrichten, Kontakte und Kanäle bleiben auf diesem Telefon, weil sich derselbe Knoten auch auf %@ befindet. Tippe auf \U201EEntfernen\U201C, wenn du aufgefordert wirst, das Funkgerät zu entkoppeln.";
 
 /* Error when services are not available */
 "dangerZone.error.servicesUnavailable" = "Dienste nicht verfügbar";

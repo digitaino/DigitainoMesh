@@ -650,6 +650,9 @@
 /* Button to forget device and delete all associated data */
 "dangerZone.dialog.forget.deleteAll" = "忘记设备并删除数据";
 
+/* Forget dialog body when another radio carries the same node - %@ names the other radio(s) by hardware, e.g. "RAK 3401" */
+"dangerZone.dialog.forget.sharedMessage" = "此电台将取消配对。您的消息、联系人和频道仍会保留在这台手机上，因为 %@ 上也有同一个节点。";
+
 /* Alert title for factory reset confirmation */
 "dangerZone.alert.reset.title" = "恢复出厂设置";
 
@@ -658,6 +661,9 @@
 
 /* Alert message for factory reset */
 "dangerZone.alert.reset.message" = "这将擦除设备上的所有数据，包括联系人、消息和设置。出现提示时，请轻点\U201C移除\U201D以取消配对设备。";
+
+/* Factory reset alert body when another radio carries the same node - %@ names the other radio(s) by hardware */
+"dangerZone.alert.reset.sharedMessage" = "这将擦除此电台上的联系人和设置。您的消息、联系人和频道仍会保留在这台手机上，因为 %@ 上也有同一个节点。出现提示时，请轻点\U201C移除\U201D以取消配对电台。";
 
 /* Error when services are not available */
 "dangerZone.error.servicesUnavailable" = "服务不可用";

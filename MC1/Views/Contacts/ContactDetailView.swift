@@ -480,12 +480,22 @@ struct ContactDetailView: View {
   }
 
   private func deleteContact() async {
+    guard let contactService = appState.services?.contactService else { return }
     do {
-      try await appState.services?.contactService.removeContact(
+      try await contactService.removeContact(
         radioID: currentContact.radioID,
         publicKey: currentContact.publicKey
       )
       dismiss()
+    } catch ContactServiceError.contactNotFound {
+      // The connected radio does not hold this contact (another radio carrying this node may,
+      // or a prior attempt already removed it), so only the phone's row is left to delete.
+      do {
+        try await contactService.removeLocalContact(contactID: currentContact.id, publicKey: currentContact.publicKey)
+        dismiss()
+      } catch {
+        errorMessage = error.userFacingMessage
+      }
     } catch {
       errorMessage = error.userFacingMessage
     }

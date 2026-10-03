@@ -246,7 +246,7 @@ public final class ConnectionManager {
   // MARK: - Internal Components
 
   let modelContainer: ModelContainer
-  private let defaults: UserDefaults
+  let defaults: UserDefaults
   private let lastConnectionStore: LastConnectionStore
   let transport: any iOSMeshTransport
   var wifiTransport: WiFiTransport?
@@ -523,11 +523,22 @@ public final class ConnectionManager {
   func clearPersistedConnection(for deviceID: UUID) async {
     bondRefreshPersistEpoch &+= 1
     let wasLastConnected = lastConnectionStore.deviceID == deviceID
+    // Another radio still carrying this radio's identity takes over as the last connected, so
+    // the shared history stays on screen while disconnected (docs/RADIO_SWAP.md, R1).
+    let handover: DeviceDTO? = if wasLastConnected, let radioID = lastConnectionStore.radioID {
+      (try? await persistenceStore.fetchDevices(radioID: radioID))?
+        .first { $0.id != deviceID && !$0.connectionMethods.isEmpty }
+    } else {
+      nil
+    }
     await stateMachine.clearBondVerification(deviceID: deviceID)
     if await stateMachine.isAppSessionLive(deviceID: deviceID) {
       await stateMachine.setAppSessionLive(deviceID: nil)
     }
     lastConnectionStore.clear(for: deviceID)
+    if let handover {
+      persistConnection(deviceID: handover.id, radioID: handover.radioID, deviceName: handover.nodeName)
+    }
     if wasLastConnected {
       onLastConnectedDeviceCleared?()
     }
@@ -875,7 +886,13 @@ public final class ConnectionManager {
     } else {
       nil
     }
-    let effectiveExisting = existingDevice ?? deviceByPublicKey
+    // A row found by key that still has a way to connect is another radio carrying this
+    // identity, not a leftover: this radio gets its own row beside it, sharing the history
+    // (docs/RADIO_SWAP.md, R1). It lends the new row only what belongs to the identity, never
+    // its connection methods or its battery curve. A ghost or backup shadow (no methods) is
+    // still adopted and removed below.
+    let siblingRadio = deviceByPublicKey.flatMap { $0.connectionMethods.isEmpty ? nil : $0 }
+    let effectiveExisting = existingDevice ?? siblingRadio.map(Self.identityTemplate(from:)) ?? deviceByPublicKey
     var resolvedRadioID = effectiveExisting?.radioID ?? UUID()
 
     // A row already known by BLE id can still be the wrong home for this
@@ -901,8 +918,15 @@ public final class ConnectionManager {
     // a radio this phone has no row for, a ghost rejoin, or a key that changed on a known
     // radio. Its contact table and channel slots say nothing about that history yet, so
     // the first syncs must not delete from it (docs/RADIO_SWAP.md, rule R2).
+    // A switch counts too: a radio this phone knows, connecting while another radio was the
+    // last to carry the identity. Its tables were last synced before the identity moved on,
+    // so it gets the same protection and the same profile of where the identity is now.
+    // Read before the save below stamps this radio as the most recent.
+    let lastRadioForIdentity = try? await persistenceStore.fetchDevice(radioID: resolvedRadioID)
+    let switchedFromRadio = lastRadioForIdentity.flatMap { $0.id == deviceID ? nil : $0 }
     let tookOnIdentity = rejoinedGhost
       || deviceByPublicKey != nil
+      || switchedFromRadio != nil
       || (existingDevice.map { $0.publicKey != selfInfo.publicKey } ?? false)
 
     let newServices = ServiceContainer(
@@ -945,12 +969,14 @@ public final class ConnectionManager {
     // Arm before any sync runs. A failure fails the connect rather than letting the
     // first full sync prune against a table that never held this history.
     if tookOnIdentity {
-      try await newServices.dataStore.armSwapGuard(id: deviceID, previousDeviceID: deviceByPublicKey?.id)
+      let previousID = rejoinedGhost ? nil : (switchedFromRadio ?? deviceByPublicKey)?.id
+      try await newServices.dataStore.armSwapGuard(id: deviceID, previousDeviceID: previousID)
       logger.notice("Radio swap guard armed: radio \(deviceID.uuidString.prefix(8)) took on radioID \(resolvedRadioID)")
     }
 
-    // Clean up orphaned Device row from backup import
-    if let oldDevice = deviceByPublicKey, oldDevice.id != deviceID {
+    // Clean up a ghost or backup shadow this radio adopted. Another radio carrying the
+    // identity keeps its row.
+    if let oldDevice = deviceByPublicKey, oldDevice.id != deviceID, oldDevice.connectionMethods.isEmpty {
       try? await newServices.dataStore.deleteDevice(id: oldDevice.id)
     }
 
@@ -1203,6 +1229,22 @@ public final class ConnectionManager {
   /// scope and the persisted `Device.radioID` cannot diverge on first pair.
   /// A bare `?? UUID()` fallback here would mint a second UUID that the
   /// container would never see.
+  /// What a new radio row borrows from another radio carrying the same identity: the
+  /// partition and the identity-level settings. Connection methods, the battery curve and the
+  /// pre-repeat radio settings belong to that radio's hardware, and the watermark to its table.
+  nonisolated static func identityTemplate(from sibling: DeviceDTO) -> DeviceDTO {
+    sibling.copy {
+      $0.connectionMethods = []
+      $0.ocvPreset = nil
+      $0.customOCVArrayString = nil
+      $0.preRepeatFrequency = nil
+      $0.preRepeatBandwidth = nil
+      $0.preRepeatSpreadingFactor = nil
+      $0.preRepeatCodingRate = nil
+      $0.lastContactSync = 0
+    }
+  }
+
   func createDevice(
     deviceID: UUID,
     radioID: UUID,

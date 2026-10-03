@@ -140,7 +140,14 @@ struct DeviceSelectionSheet: View {
         DeviceSelectionFilter.isConnectable($0, pairedAccessoryIDs: pairedAccessoryIDs, hasSystemPairingRegistry: hasSystemPairingRegistry)
       }
       if !connectableDevices.isEmpty {
+        // A radio paired with this phone but with no row of its own is listed too: one whose
+        // row was replaced when another radio took over its key before radios could share an
+        // identity. Tapping it connects, and it rejoins the history by key.
+        let savedIDs = Set(connectableDevices.map(\.id))
+        let unsavedAccessories = appState.connectionManager.pairedAccessoryInfos
+          .filter { !savedIDs.contains($0.id) }
         devices = connectableDevices.map { .saved($0) }
+          + unsavedAccessories.map { .accessory(id: $0.id, name: $0.name) }
 
         // Check which devices are connected elsewhere (BLE only)
         var connectedElsewhere: Set<UUID> = []
@@ -153,6 +160,9 @@ struct DeviceSelectionSheet: View {
               connectedElsewhere.insert(device.id)
             }
           }
+        }
+        for accessory in unsavedAccessories where await appState.connectionManager.isDeviceConnectedToOtherApp(accessory.id) {
+          connectedElsewhere.insert(accessory.id)
         }
         devicesConnectedElsewhere = connectedElsewhere
         return
@@ -355,10 +365,14 @@ private struct DeviceRow: View {
   }
 
   private var connectionDescription: String {
-    if let method = device.primaryConnectionMethod, method.isWiFi {
-      return method.shortDescription
+    let transport = if let method = device.primaryConnectionMethod, method.isWiFi {
+      method.shortDescription
+    } else {
+      L10n.Settings.DeviceSelection.bluetooth
     }
-    return L10n.Settings.DeviceSelection.bluetooth
+    // Radios carrying the same key share a node name, so the hardware tells them apart.
+    guard case let .saved(saved) = device, !saved.manufacturerName.isEmpty else { return transport }
+    return "\(transport) · \(saved.manufacturerName)"
   }
 
   var body: some View {

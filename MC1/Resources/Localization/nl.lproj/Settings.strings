@@ -650,6 +650,9 @@
 /* Button to forget device and delete all associated data */
 "dangerZone.dialog.forget.deleteAll" = "Apparaat vergeten en gegevens verwijderen";
 
+/* Forget dialog body when another radio carries the same node - %@ names the other radio(s) by hardware, e.g. "RAK 3401" */
+"dangerZone.dialog.forget.sharedMessage" = "Deze radio wordt ontkoppeld. Je berichten, contacten en kanalen blijven op deze telefoon, omdat dezelfde knoop ook op %@ staat.";
+
 /* Alert title for factory reset confirmation */
 "dangerZone.alert.reset.title" = "Fabrieksinstellingen herstellen";
 
@@ -658,6 +661,9 @@
 
 /* Alert message for factory reset */
 "dangerZone.alert.reset.message" = "Dit wist alle gegevens op het apparaat inclusief contacten, berichten en instellingen. Tik op Verwijder wanneer daarom wordt gevraagd om het apparaat te ontkoppelen.";
+
+/* Factory reset alert body when another radio carries the same node - %@ names the other radio(s) by hardware */
+"dangerZone.alert.reset.sharedMessage" = "Dit wist de contacten en instellingen op deze radio. Je berichten, contacten en kanalen blijven op deze telefoon, omdat dezelfde knoop ook op %@ staat. Tik op Verwijder wanneer daarom wordt gevraagd om de radio te ontkoppelen.";
 
 /* Error when services are not available */
 "dangerZone.error.servicesUnavailable" = "Services niet beschikbaar";

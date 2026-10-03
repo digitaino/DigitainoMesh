@@ -115,8 +115,13 @@ public extension ConnectionManager {
     if let attemptID = activeConnectionAttemptDeviceID { protectedIDs.insert(attemptID) }
 
     let dataStore = persistenceStore
+    // A pairing the user already declined to remove is theirs to keep, often another radio
+    // carrying their key whose row predates radios sharing an identity; it is listed in the
+    // device list rather than asked about again on every pairing.
+    var kept = Set(defaults.stringArray(forKey: Self.keptPairingAssociationsKey) ?? [])
 
-    for info in pairing.registeredDeviceInfos() where !protectedIDs.contains(info.id) {
+    for info in pairing.registeredDeviceInfos()
+      where !protectedIDs.contains(info.id) && !kept.contains(info.id.uuidString) {
       let existingDevice: DeviceDTO?
       do {
         existingDevice = try await dataStore.fetchDevice(id: info.id)
@@ -130,10 +135,14 @@ public extension ConnectionManager {
         try await pairing.removeDevice(info.id)
         logger.info("Removed stranded pairing association \(info.id.uuidString.prefix(8)) with no device record")
       } catch {
-        logger.warning("Failed to remove stranded association \(info.id.uuidString.prefix(8)): \(error.localizedDescription)")
+        logger.warning("Kept stranded association \(info.id.uuidString.prefix(8)), not asking again: \(error.localizedDescription)")
+        kept.insert(info.id.uuidString)
+        defaults.set(Array(kept), forKey: Self.keptPairingAssociationsKey)
       }
     }
   }
+
+  static let keptPairingAssociationsKey = "pairing.keptStrayAssociations"
 
   /// Removes a device that failed to connect after pairing, for the guided
   /// "remove and retry" recovery. Demotes the row to a ghost rather than deleting
@@ -153,7 +162,7 @@ public extension ConnectionManager {
     }
 
     let dataStore = persistenceStore
-    try? await dataStore.demoteDeviceToGhost(id: deviceID)
+    try? await dataStore.forgetRadio(id: deviceID)
 
     // Always clear this device's bond verification; store keys are holder-matched.
     await clearPersistedConnection(for: deviceID)
@@ -221,12 +230,15 @@ public extension ConnectionManager {
     await disconnect(reason: .forgetDevice)
     try await pairing.removeDevice(deviceID)
 
+    // History another radio still carries is never deleted with this one: the dialog does not
+    // offer it then, and this is the backstop.
     let dataStore = persistenceStore
     do {
-      if deleteData {
+      let shared = try await !dataStore.otherRadios(sharingIdentityWith: deviceID).isEmpty
+      if deleteData, !shared {
         try await dataStore.deleteDeviceAndData(id: deviceID)
       } else {
-        try await dataStore.demoteDeviceToGhost(id: deviceID)
+        try await dataStore.forgetRadio(id: deviceID)
       }
     } catch {
       logger.warning("Failed to demote device in SwiftData: \(error.localizedDescription)")
@@ -250,9 +262,15 @@ public extension ConnectionManager {
       logger.warning("Failed to remove device from pairing registry: \(error.localizedDescription)")
     }
 
+    // A factory reset erases this radio, not the identity: while another radio carries it,
+    // the history stays for that radio.
     let dataStore = persistenceStore
     do {
-      try await dataStore.deleteDeviceAndData(id: id)
+      if try await dataStore.otherRadios(sharingIdentityWith: id).isEmpty {
+        try await dataStore.deleteDeviceAndData(id: id)
+      } else {
+        try await dataStore.forgetRadio(id: id)
+      }
     } catch {
       logger.warning("Failed to delete device data from SwiftData: \(error.localizedDescription)")
     }
@@ -543,7 +561,7 @@ public extension ConnectionManager {
   func deleteDevice(id: UUID) async throws {
     logger.info("deleteDevice called for device: \(id)")
     let dataStore = persistenceStore
-    try await dataStore.demoteDeviceToGhost(id: id)
+    try await dataStore.forgetRadio(id: id)
 
     // Always clear this device's bond verification; store keys are holder-matched
     // so removing a non-last-connected device still drops its shield and, when it
@@ -551,6 +569,13 @@ public extension ConnectionManager {
     await clearPersistedConnection(for: id)
 
     logger.info("deleteDevice completed for device: \(id)")
+  }
+
+  /// The other radios carrying the connected radio's identity, for the Forget and Factory Reset
+  /// wording: their history is shared and must not be offered for deletion.
+  func otherRadiosCarryingConnectedIdentity() async -> [DeviceDTO] {
+    guard let deviceID = connectedDevice?.id else { return [] }
+    return (try? await persistenceStore.otherRadios(sharingIdentityWith: deviceID)) ?? []
   }
 
   /// Returns devices registered with the system pairing registry (AccessorySetupKit on iOS).
@@ -594,10 +619,11 @@ extension ConnectionManager: DevicePairingDelegate {
         await disconnect(reason: .deviceRemovedFromSettings)
       }
 
-      // Demote to ghost — preserve publicKey ↔ radioID bridge
+      // Keep the history: with another radio carrying the identity the row just goes,
+      // otherwise it becomes a ghost that preserves the publicKey ↔ radioID bridge.
       let dataStore = persistenceStore
       do {
-        try await dataStore.demoteDeviceToGhost(id: bluetoothID)
+        try await dataStore.forgetRadio(id: bluetoothID)
       } catch {
         logger.warning("Failed to demote device in SwiftData: \(error.localizedDescription)")
       }

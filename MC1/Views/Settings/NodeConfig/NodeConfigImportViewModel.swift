@@ -324,7 +324,15 @@ final class NodeConfigImportViewModel {
   }
 
   /// Apply the imported config to the device. Nil parameters mirror a disconnected state.
-  func applyConfig(nodeConfigService: NodeConfigService?, settingsService: SettingsService?, radioID: UUID?) {
+  /// `deviceID` is the connected radio, recorded as set up once a copy from records lands so
+  /// a later switch back to it is topped up quietly.
+  func applyConfig(
+    nodeConfigService: NodeConfigService?,
+    settingsService: SettingsService?,
+    radioID: UUID?,
+    deviceID: UUID? = nil,
+    preferences: DevicePreferenceStore = DevicePreferenceStore()
+  ) {
     guard !isApplying else { return }
     guard let config = importedConfig,
           let service = nodeConfigService,
@@ -366,7 +374,12 @@ final class NodeConfigImportViewModel {
         isApplying = false
         importComplete = true
         // A records copy stays on its result: there is no file to pick again.
-        guard source == .file else { return }
+        guard source == .file else {
+          if let deviceID {
+            preferences.setCopiedRecordsToRadio(deviceID: deviceID)
+          }
+          return
+        }
         try? await Task.sleep(for: .seconds(1.5))
         guard !Task.isCancelled else { return }
         resetToFileSelection()

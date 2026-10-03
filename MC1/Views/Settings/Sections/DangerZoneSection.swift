@@ -61,6 +61,7 @@ struct DangerZoneSection: View {
         connectedDevice: { appState.connectedDevice },
         connectionManager: appState.connectionManager
       )
+      await viewModel.loadOtherRadios()
     }
     .confirmationDialog(
       L10n.Settings.DangerZone.Dialog.Forget.title,
@@ -70,12 +71,17 @@ struct DangerZoneSection: View {
       Button(L10n.Settings.DangerZone.Dialog.Forget.keepData, role: .destructive) {
         forgetDevice(deleteData: false)
       }
-      Button(L10n.Settings.DangerZone.Dialog.Forget.deleteAll, role: .destructive) {
-        forgetDevice(deleteData: true)
+      // History another radio carries is not this radio's to delete.
+      if viewModel.otherRadios.isEmpty {
+        Button(L10n.Settings.DangerZone.Dialog.Forget.deleteAll, role: .destructive) {
+          forgetDevice(deleteData: true)
+        }
       }
       Button(L10n.Localizable.Common.cancel, role: .cancel) {}
     } message: {
-      Text(L10n.Settings.DangerZone.Dialog.Forget.message)
+      Text(viewModel.otherRadios.isEmpty
+        ? L10n.Settings.DangerZone.Dialog.Forget.message
+        : L10n.Settings.DangerZone.Dialog.Forget.sharedMessage(viewModel.otherRadiosDescription))
     }
     .alert(L10n.Settings.DangerZone.Alert.Reset.title, isPresented: $viewModel.showingResetAlert) {
       Button(L10n.Localizable.Common.cancel, role: .cancel) {}
@@ -87,7 +93,9 @@ struct DangerZoneSection: View {
         }
       }
     } message: {
-      Text(L10n.Settings.DangerZone.Alert.Reset.message)
+      Text(viewModel.otherRadios.isEmpty
+        ? L10n.Settings.DangerZone.Alert.Reset.message
+        : L10n.Settings.DangerZone.Alert.Reset.sharedMessage(viewModel.otherRadiosDescription))
     }
     .alert(
       L10n.Settings.DangerZone.Alert.RemoveUnfavorited.title,

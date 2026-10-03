@@ -75,7 +75,8 @@ struct NodeConfigImportView: View {
         viewModel.applyConfig(
           nodeConfigService: appState.services?.nodeConfigService,
           settingsService: appState.services?.settingsService,
-          radioID: appState.connectedDevice?.radioID
+          radioID: appState.connectedDevice?.radioID,
+          deviceID: appState.connectedDevice?.id
         )
       }
       Button(L10n.Localizable.Common.cancel, role: .cancel) {}

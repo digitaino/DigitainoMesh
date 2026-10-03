@@ -91,6 +91,16 @@ struct DevicePreferenceStore {
     )
   }
 
+  /// Whether this phone's records have been copied onto this radio at least once. From then on
+  /// a switch back to it is topped up quietly instead of offered (owner decision 2).
+  func hasCopiedRecordsToRadio(deviceID: UUID) -> Bool {
+    userDefaults.bool(forKey: Self.radioSwapCopiedKey(deviceID: deviceID))
+  }
+
+  func setCopiedRecordsToRadio(deviceID: UUID) {
+    userDefaults.set(true, forKey: Self.radioSwapCopiedKey(deviceID: deviceID))
+  }
+
   // MARK: - Adaptive Power
 
   func isAdaptivePowerEnabled(deviceID: UUID) -> Bool {
@@ -146,6 +156,10 @@ struct DevicePreferenceStore {
 
   private static func radioSwapOfferedProfileDateKey(deviceID: UUID) -> String {
     "device.\(deviceID.uuidString).radioSwapOfferedProfileDate"
+  }
+
+  private static func radioSwapCopiedKey(deviceID: UUID) -> String {
+    "device.\(deviceID.uuidString).radioSwapCopied"
   }
 
   private static func adaptivePowerEnabledKey(deviceID: UUID) -> String {

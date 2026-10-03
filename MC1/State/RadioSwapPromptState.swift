@@ -15,10 +15,22 @@ struct PendingRadioSwapOffer: Identifiable, Equatable {
   }
 }
 
-/// Owns the one-time offer, after a radio takes on an identity's history, to copy this phone's
-/// records of it onto the radio (docs/RADIO_SWAP.md, owner decision 2: ask the first time each
-/// radio is used). The offer is the copy screen itself, so nothing is written until the user
-/// confirms there; "Not Now" leaves it in Settings.
+/// What happens after the first sync on a radio whose swap guard is armed: it took on the
+/// identity for the first time, or the identity just switched back to it from another radio
+/// (docs/RADIO_SWAP.md, owner decision 2).
+enum RadioSwapStep: Equatable {
+  /// Nothing to do: no guard, no profile, or this arming was already offered and answered.
+  case none
+  /// Offer the copy screen.
+  case offer
+  /// A radio already set up from these records: top it up quietly, and offer the copy screen
+  /// only if the top-up leaves one of the identity's channels out.
+  case topUp
+}
+
+/// Owns the offer, after a radio takes on an identity's history, to copy this phone's records
+/// of it onto the radio. The offer is the copy screen itself, so nothing is written until the
+/// user confirms there; "Not Now" leaves it in Settings.
 @Observable
 @MainActor
 final class RadioSwapPromptState {
@@ -31,11 +43,19 @@ final class RadioSwapPromptState {
     self.store = store
   }
 
-  /// Offers the copy when the radio's swap guard is armed with a stored profile this radio has
-  /// not answered an offer for yet.
-  func evaluate(deviceID: UUID, swapGuard: SwapGuard, profile: IdentityProfile?) {
-    guard pending == nil, !swapGuard.isEmpty, let profile else { return }
-    guard store.radioSwapOfferedProfileDate(deviceID: deviceID) != profile.capturedAt else { return }
+  /// Decides what this arming calls for. A radio never copied to is offered the copy once per
+  /// arming; one copied to before is topped up quietly.
+  func step(deviceID: UUID, swapGuard: SwapGuard, profile: IdentityProfile?) -> RadioSwapStep {
+    guard pending == nil, !swapGuard.isEmpty, let profile else { return .none }
+    if store.hasCopiedRecordsToRadio(deviceID: deviceID) {
+      return .topUp
+    }
+    return store.radioSwapOfferedProfileDate(deviceID: deviceID) == profile.capturedAt ? .none : .offer
+  }
+
+  /// Presents the copy screen for this arming, unless it was already answered.
+  func offer(deviceID: UUID, profile: IdentityProfile) {
+    guard pending == nil, store.radioSwapOfferedProfileDate(deviceID: deviceID) != profile.capturedAt else { return }
     pending = PendingRadioSwapOffer(
       deviceID: deviceID,
       identityName: profile.nodeName,

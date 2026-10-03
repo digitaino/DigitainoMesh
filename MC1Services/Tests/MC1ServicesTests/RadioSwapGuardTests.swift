@@ -194,6 +194,95 @@ struct RadioSwapGuardTests {
     #expect(try await store.fetchSwapProfile(radioID: historyRadioID)?.nodeName == "Digitaino")
   }
 
+  // MARK: - One identity, several radios
+
+  private static func bluetooth(_ id: UUID) -> [ConnectionMethod] {
+    [.bluetooth(peripheralUUID: id, displayName: nil)]
+  }
+
+  @Test
+  func `Reads by identity go to the radio that connected most recently`() async throws {
+    let store = try await createStore()
+    let radioID = UUID()
+    let older = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+      .copy { $0.lastConnected = Date(timeIntervalSinceReferenceDate: 1000); $0.lastContactSync = 111 }
+    let newer = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+      .copy { $0.lastConnected = Date(timeIntervalSinceReferenceDate: 2000); $0.lastContactSync = 222 }
+    try await store.saveDevice(older)
+    try await store.saveDevice(newer)
+
+    #expect(try await store.fetchDevice(radioID: radioID)?.id == newer.id)
+    try await store.updateDeviceLastContactSync(radioID: radioID, timestamp: 333)
+    #expect(try await store.fetchDevice(id: newer.id)?.lastContactSync == 333)
+    #expect(try await store.fetchDevice(id: older.id)?.lastContactSync == 111)
+  }
+
+  @Test
+  func `Forgetting one of two radios removes only its row and keeps the shared history`() async throws {
+    let store = try await createStore()
+    let radioID = UUID()
+    let first = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+    let second = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+    try await store.saveDevice(first.copy { $0.connectionMethods = Self.bluetooth(first.id) })
+    try await store.saveDevice(second.copy { $0.connectionMethods = Self.bluetooth(second.id) })
+    _ = try await store.saveChannel(radioID: radioID, from: ChannelInfo(index: 0, name: "Public", secret: Data(repeating: 0x01, count: 16)))
+
+    #expect(try await store.otherRadios(sharingIdentityWith: first.id).map(\.id) == [second.id])
+    #expect(try await store.forgetRadio(id: first.id))
+
+    #expect(try await store.fetchDevice(id: first.id) == nil)
+    #expect(try await store.fetchDevices(radioID: radioID).map(\.id) == [second.id])
+    #expect(try await store.fetchChannels(radioID: radioID).count == 1)
+  }
+
+  @Test
+  func `Forgetting the only radio leaves a ghost that keeps the key-to-history bridge`() async throws {
+    let store = try await createStore()
+    let radioID = UUID()
+    let only = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+    try await store.saveDevice(only.copy { $0.connectionMethods = Self.bluetooth(only.id) })
+
+    #expect(try await store.forgetRadio(id: only.id) == false)
+
+    let ghost = try #require(try await store.fetchDevice(publicKey: Self.identityKey))
+    #expect(ghost.radioID == radioID)
+    #expect(ghost.connectionMethods.isEmpty)
+    #expect(try await store.otherRadios(sharingIdentityWith: ghost.id).isEmpty)
+  }
+
+  @Test
+  func `Known regions belong to the identity, so every radio carrying it gets them`() async throws {
+    let store = try await createStore()
+    let radioID = UUID()
+    let first = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+    let second = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+    try await store.saveDevice(first)
+    try await store.saveDevice(second)
+
+    try await store.addDeviceKnownRegion(radioID: radioID, region: "us-nm")
+
+    #expect(try await store.fetchDevice(id: first.id)?.knownRegions == ["us-nm"])
+    #expect(try await store.fetchDevice(id: second.id)?.knownRegions == ["us-nm"])
+  }
+
+  @Test
+  func `A new radio borrows only what belongs to the identity from the radio carrying it`() {
+    let sibling = DeviceDTO.testDevice(radioID: UUID(), publicKey: Self.identityKey, lastContactSync: 1_700_000_000)
+      .copy {
+        $0.connectionMethods = Self.bluetooth(UUID())
+        $0.ocvPreset = "liFePO4"
+        $0.knownRegions = ["us-nm"]
+      }
+
+    let template = ConnectionManager.identityTemplate(from: sibling)
+
+    #expect(template.radioID == sibling.radioID)
+    #expect(template.knownRegions == ["us-nm"])
+    #expect(template.connectionMethods.isEmpty)
+    #expect(template.ocvPreset == nil)
+    #expect(template.lastContactSync == 0)
+  }
+
   // MARK: - createDevice
 
   @Test
