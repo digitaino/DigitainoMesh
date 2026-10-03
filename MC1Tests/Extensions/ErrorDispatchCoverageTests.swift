@@ -34,6 +34,9 @@ struct ErrorDispatchCoverageTests {
     "MapperRawLogStoreError": "Every caller opens the raw ride log with try? and treats a "
       + "store that will not open as \"no ride log\" by design (ACTIVE_SURVEY_M3_5 §6 F3); "
       + "runNotFound is an internal invariant. Nothing routes it to .errorAlert.",
+    "BridgeError": "DEBUG-only simulator bridge to the MeshWX bot (RemoteBotWeatherTransport); "
+      + "WeatherService wraps every transport error in WeatherRequestError.transport, so it "
+      + "never reaches .errorAlert as itself.",
   ]
 
   // MARK: - Test

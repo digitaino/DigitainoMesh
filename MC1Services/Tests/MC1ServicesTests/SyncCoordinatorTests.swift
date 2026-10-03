@@ -1931,10 +1931,10 @@ struct SyncCoordinatorTests {
 
   @Test
   @MainActor
-  func `Full sync prune removes a favourite absent from a complete device set`() async throws {
-    // Device returns a complete list that omits one favourite the user deleted on
-    // the radio. received (3) == reported (3), so the snapshot is complete and the
-    // prune runs; the favourite has no favourite-only exemption.
+  func `Full sync prune keeps a favourite absent from a complete device set`() async throws {
+    // Device returns a complete list that omits one favourite. received (3) == reported (3),
+    // so the snapshot is complete and the prune runs, but a favourite is the user's data, not
+    // a mirror of the radio's table: it survives (prune rule of 2026-09-01, Sync.md).
     let testDeviceID = UUID()
     let dataStore = try await createTestDataStore(
       radioID: testDeviceID,
@@ -1972,7 +1972,7 @@ struct SyncCoordinatorTests {
 
     _ = try await contactService.syncContacts(radioID: testDeviceID, since: nil)
 
-    #expect(try await dataStore.fetchContact(radioID: testDeviceID, publicKey: favouriteKey) == nil)
+    #expect(try await dataStore.fetchContact(radioID: testDeviceID, publicKey: favouriteKey) != nil)
     for key in keptKeys {
       #expect(try await dataStore.fetchContact(radioID: testDeviceID, publicKey: key) != nil)
     }
