@@ -15,9 +15,8 @@ import SwiftUI
 /// what is held for **its own square**, or that nobody has asked for it yet, which is a different
 /// thing from a picture that does not reach the place.
 ///
-/// Since revision 13 (docs/MESHWX_REV13.md §3) a tap on the map picks a spot, and a fourth width,
-/// **Detail**, shows the one-degree square around it; and every width can play the last hour of
-/// its square as a loop. Nothing plays and nothing asks by itself.
+/// Since revision 13 (docs/MESHWX_REV13.md §3) every width can play the last hour of its square as
+/// a loop. Nothing plays and nothing asks by itself.
 struct WeatherRadarView: View {
   @Environment(\.appTheme) private var theme
 
@@ -25,13 +24,9 @@ struct WeatherRadarView: View {
   /// are all that page's (docs/MESHWX_UI.md §13).
   let screen: WeatherPageScreen
 
-  /// Which width is on screen: 0, 1 or 2, or −1 for Detail once a spot is picked. Opened on the
-  /// width of the picture the card was showing, so pushing the card shows the same picture
-  /// rather than an empty Local square.
+  /// Which width is on screen. Opened on the width of the picture the card was showing, so
+  /// pushing the card shows the same picture rather than an empty Local square.
   @State private var zoom: Int
-  /// The spot picked on the map for the Detail width. It stays, and so does the Detail segment,
-  /// until the screen closes (spec revision 13, §3).
-  @State private var spot: MeshWXCoordinate?
   @State private var drawing = WeatherMapDrawing()
   /// The list's height, which caps the square: at full width in landscape, or on an iPad, a 1:1
   /// map is taller than the screen, and an interactive map that fills the screen takes every drag
@@ -59,27 +54,30 @@ struct WeatherRadarView: View {
   /// of eight states, drawn 50 km to a cell, and nothing anybody opens a radar screen to ask.
   static let widestOffered = 2
   static let offeredZooms = [0, 1, 2]
-  /// The fourth segment, offered once a spot is picked.
-  static let detailZoom = MeshWXWire.radarDetailZoom
   /// How long a frame of the loop stays up, and the newest: long enough to read where the line
   /// was, and a beat on the newest so the loop reads as arriving at now (spec revision 13, §3).
   static let frameSeconds = 0.8
   static let newestFrameSeconds = 2.0
 
   private var model: WeatherToolModel { screen.model }
+  private var card: WeatherRadarCard { screen.radarWidth(zoom) }
+  private var request: WeatherRequest? { screen.radarRequest(zoom: zoom) }
+  /// The square on screen: the place's at this width, whether or not a picture is held for it.
+  /// The camera frames it, and its frames are the loop.
+  private var tile: MeshWXRadarTile? { screen.radarTile(zoom: zoom) }
 
   var body: some View {
-    let width = currentWidth
-    let loop = width.drawnTile.map { screen.radarLoop(tile: $0) } ?? .empty
-    let loopRequest = loopAsk(width, loop: loop)
-    let framesToDraw = activeLoopKey(width, loop: loop)
+    let card = card
+    let loop = tile.map { screen.radarLoop(tile: $0) } ?? .empty
+    let loopRequest = loopAsk(loop)
+    let framesToDraw = activeLoopKey(card, loop: loop)
     // The width is set under the picture it changes, and the ask is in the bar (docs/MESHWX_UI.md
     // §3.1 U-51): both used to be the last section, under the legend, so choosing a width moved a
     // map that had scrolled off the top, and an answer landed where the tap could not see it.
     List {
-      mapSection(width, loop: loop)
+      mapSection(card, loop: loop)
       loopSection(loop, request: loopRequest)
-      readingSection(width, loop: loop)
+      readingSection(card, loop: loop)
       legendSection
     }
     .listStyle(.insetGrouped)
@@ -89,13 +87,11 @@ struct WeatherRadarView: View {
     .navigationTitle(L10n.Weather.Weather.Radar.title)
     .navigationBarTitleDisplayMode(.inline)
     .weatherPendingBar(
-      model: model, requestsOnScreen: Set([width.request, loopRequest].compactMap { $0 }))
-    .weatherAskBar(
-      screen: screen, ask: width.request.map { WeatherBarAsk(title: width.askTitle, request: $0) })
+      model: model, requestsOnScreen: Set([request, loopRequest].compactMap { $0 }))
+    .weatherAskBar(screen: screen, ask: request.map { WeatherBarAsk(title: askTitle(card), request: $0) })
     .weatherToolChrome()
-    // Changing width, or the square under it, stops the loop: the frames are another square's.
+    // Changing width stops the loop: the frames are another square's.
     .onChange(of: zoom) { stop() }
-    .onChange(of: spot) { stop() }
     // Leaving the screen stops it too. Coming back shows the newest picture, still.
     .onDisappear { stop() }
     .task(id: isPlaying) { await play() }
@@ -109,93 +105,23 @@ struct WeatherRadarView: View {
     listHeight > 0 ? max(220, listHeight * 0.65) : .infinity
   }
 
-  // MARK: - The width on screen
-
-  /// Everything the screen says about the width it is on, worked out once per build.
-  private struct Width {
-    /// The picture to draw when nothing is playing: the newest held for the square.
-    var picture: WeatherRadarPicture?
-    /// The square the camera frames: the place's square at its width, or the picked one-degree
-    /// square on Detail — even when the Local picture is what is drawn there.
-    var frameTile: MeshWXRadarTile?
-    /// The square whose frames are drawn and looped: the picture's own, or the square the ask
-    /// would fill when nothing is held.
-    var drawnTile: MeshWXRadarTile?
-    /// The sentences about the place: the newest picture's, and on Detail only when the place is
-    /// inside the square drawn.
-    var summary: WeatherRadarSummary?
-    /// Detail is drawing the Local picture the radio sent instead (spec revision 13, §7E).
-    var isFallback = false
-    var isDetail = false
-    /// Where a loop ask for this width asks about: the place, or the picked spot.
-    var coordinate: MeshWXCoordinate?
-    var request: WeatherRequest?
-    var askTitle = ""
-    var note: String?
-  }
-
-  private var currentWidth: Width {
-    if zoom == Self.detailZoom, let spot {
-      let detail = screen.radarDetail(spot: spot)
-      let square = WeatherRadarDetail.tile(for: spot)
-      let picture = detail.picture
-      return Width(
-        picture: picture,
-        frameTile: square,
-        drawnTile: picture?.stored.tile ?? square,
-        summary: picture.flatMap { WeatherRadarDetail.summary(of: $0, place: screen.place?.coordinate) },
-        isFallback: detail.isFallback,
-        isDetail: true,
-        coordinate: spot,
-        request: WeatherRadarDetail.ask(spot: spot),
-        // "Ask for detail here" until a detailed picture is held: the Local one drawn in its
-        // place is not one.
-        askTitle: {
-          if case .held = detail { return L10n.Weather.Weather.Radar.askNewer }
-          return L10n.Weather.Weather.Radar.Detail.ask
-        }(),
-        note: L10n.Weather.Weather.Radar.Detail.footnote)
-    }
-    let card = screen.radarWidth(zoom)
-    let tile = screen.radarTile(zoom: zoom)
-    return Width(
-      picture: card.picture,
-      frameTile: tile,
-      drawnTile: tile,
-      summary: card.picture?.summary,
-      coordinate: screen.place?.coordinate,
-      request: screen.radarRequest(zoom: zoom),
-      // "Ask for radar" for a width with nothing on it; "Ask for a newer picture" once there is
-      // one, because that is what the tap is actually for. Short, because it is a bar button: the
-      // radio it asks is named in the status beside the picture.
-      askTitle: card.picture == nil
-        ? L10n.Weather.Weather.Radar.askShort
-        : L10n.Weather.Weather.Radar.askNewer,
-      note: L10n.Weather.Weather.Radar.Ask.footnote)
-  }
-
   // MARK: - The map
 
   /// Interactive, and framed on the square rather than on what is drawn in it: an empty width is
   /// still a map of the tile the ask would fill, so switching widths moves the camera to the
   /// square being talked about whether or not a picture has arrived for it.
   @ViewBuilder
-  private func mapSection(_ width: Width, loop: WeatherRadarLoop) -> some View {
+  private func mapSection(_ card: WeatherRadarCard, loop: WeatherRadarLoop) -> some View {
     Section {
-      if let key = drawingKey(width) {
+      if let key = drawingKey(card) {
         // Square, because the tile is: the outer frame is only the floor under a map that has no
         // size of its own (§18.2). Centred when the height caps it.
-        WeatherAlertMapView(drawing: shownDrawing(width, loop: loop), isInteractive: true, onTap: pick)
+        WeatherAlertMapView(drawing: shownDrawing(card, loop: loop), isInteractive: true)
           .aspectRatio(1, contentMode: .fit)
           .frame(maxWidth: mapSide, minHeight: 220)
           .clipShape(.rect(cornerRadius: 10))
           .frame(maxWidth: .infinity)
           .accessibilityLabel(L10n.Weather.Weather.Radar.title)
-          // A tap on the map is how a spot is picked, which VoiceOver cannot aim: the place
-          // itself is the spot it can pick.
-          .accessibilityAction(named: L10n.Weather.Weather.Radar.Width.detail) {
-            if let place = screen.place { pick(place.coordinate) }
-          }
           .accessibilityIdentifier("weather.radar.map")
           .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
           // The picture is the answer: the capsule's Show scrolls back to it.
@@ -207,24 +133,16 @@ struct WeatherRadarView: View {
           }
       }
       widthPicker
-      // Quiet, and only until it has been done once: after that the Detail segment is there and
-      // a second tap simply moves the spot.
-      if spot == nil, screen.place != nil {
-        Text(L10n.Weather.Weather.Radar.Detail.hint)
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
     }
     .themedRowBackground(theme)
   }
 
   /// Local, Regional, Wide — **not** kilometres. A tile is two degrees: 222 km tall everywhere and
   /// a different width at every latitude, so a number on this control would be right on one
-  /// parallel and wrong on all the others. Detail joins them, last, once a spot is picked.
+  /// parallel and wrong on all the others.
   private var widthPicker: some View {
     Picker(L10n.Weather.Weather.Radar.width, selection: $zoom) {
-      ForEach(spot == nil ? Self.offeredZooms : Self.offeredZooms + [Self.detailZoom], id: \.self) { option in
+      ForEach(Self.offeredZooms, id: \.self) { option in
         Text(WeatherCopy.radarWidthName(option) ?? "").tag(option)
       }
     }
@@ -232,38 +150,24 @@ struct WeatherRadarView: View {
     .accessibilityIdentifier("weather.radar.width")
   }
 
-  /// A tap picks the spot and shows its square (spec revision 13, §3): Detail is selected, and
-  /// the camera frames the one-degree square, which is outlined. Another tap moves the spot.
-  private func pick(_ coordinate: MeshWXCoordinate) {
-    // A map that wraps the world hands back longitudes past ±180.
-    let longitude = (coordinate.longitude + 180).truncatingRemainder(dividingBy: 360)
-    let picked = MeshWXCoordinate(
-      latitude: min(max(coordinate.latitude, -90), 90),
-      longitude: (longitude < 0 ? longitude + 360 : longitude) - 180)
-    spot = picked
-    zoom = Self.detailZoom
-  }
-
   /// The alerts this device holds go on **this** map and not on the card's: here there is room to
   /// draw them without hiding the picture, and the two together are the only place in the tool
   /// that says whether the warning polygon has the storm in it.
-  private func drawingKey(_ width: Width) -> WeatherRadarMapKey? {
-    guard let tile = width.frameTile else { return nil }
+  private func drawingKey(_ card: WeatherRadarCard) -> WeatherRadarMapKey? {
+    guard let tile else { return nil }
     return WeatherRadarMapKey(
-      radar: width.picture?.stored.radar,
+      radar: card.picture?.stored.radar,
       tile: tile,
       warnings: screen.snapshot.alerts.map(\.warning),
       place: screen.place,
-      isGeometryLoaded: screen.context.isGeometryLoaded,
-      // The picked square, outlined on Detail: the camera frames it whatever is drawn in it.
-      outline: width.isDetail ? width.frameTile : nil)
+      isGeometryLoaded: screen.context.isGeometryLoaded)
   }
 
   /// The frame on screen while the loop plays or is paused, else the still. A frame whose drawing
   /// is not made yet — the moment after Play — shows the still rather than nothing.
-  private func shownDrawing(_ width: Width, loop: WeatherRadarLoop) -> WeatherMapDrawing {
+  private func shownDrawing(_ card: WeatherRadarCard, loop: WeatherRadarLoop) -> WeatherMapDrawing {
     guard let index = frameIndex, let key = frameDrawingsKey,
-      key == loopKey(width, loop: loop), frameDrawings.indices.contains(index)
+      key == loopKey(card, loop: loop), frameDrawings.indices.contains(index)
     else { return drawing }
     return frameDrawings[index]
   }
@@ -323,24 +227,23 @@ struct WeatherRadarView: View {
   }
 
   /// The loop's ask lists the frames on screen as held, so the radio leaves them out (spec
-  /// revision 13, §7D.4). On Detail it asks about the spot, at the detail level, whatever is drawn.
-  private func loopAsk(_ width: Width, loop: WeatherRadarLoop) -> WeatherRequest? {
-    guard let coordinate = width.coordinate else { return nil }
+  /// revision 13, §7D.4).
+  private func loopAsk(_ loop: WeatherRadarLoop) -> WeatherRequest? {
+    guard let place = screen.place else { return nil }
     return loop.ask(
-      latitude: coordinate.latitude, longitude: coordinate.longitude,
-      zoom: width.isDetail ? Self.detailZoom : zoom)
+      latitude: place.coordinate.latitude, longitude: place.coordinate.longitude, zoom: zoom)
   }
 
-  private func loopKey(_ width: Width, loop: WeatherRadarLoop) -> WeatherRadarLoopKey? {
-    guard loop.canPlay, var base = drawingKey(width) else { return nil }
+  private func loopKey(_ card: WeatherRadarCard, loop: WeatherRadarLoop) -> WeatherRadarLoopKey? {
+    guard loop.canPlay, var base = drawingKey(card) else { return nil }
     base.radar = nil
     return WeatherRadarLoopKey(base: base, radars: loop.frames.map(\.radar))
   }
 
   /// The frames to draw while the player is in use, and nil otherwise: nobody who never presses
   /// Play pays for five drawings.
-  private func activeLoopKey(_ width: Width, loop: WeatherRadarLoop) -> WeatherRadarLoopKey? {
-    isPlaying || frameIndex != nil ? loopKey(width, loop: loop) : nil
+  private func activeLoopKey(_ card: WeatherRadarCard, loop: WeatherRadarLoop) -> WeatherRadarLoopKey? {
+    isPlaying || frameIndex != nil ? loopKey(card, loop: loop) : nil
   }
 
   private func drawFrames(_ key: WeatherRadarLoopKey?) async {
@@ -368,7 +271,7 @@ struct WeatherRadarView: View {
   private func play() async {
     guard isPlaying else { return }
     while !Task.isCancelled, isPlaying {
-      let count = currentWidth.drawnTile.map { screen.radarLoop(tile: $0).frames.count } ?? 0
+      let count = tile.map { screen.radarLoop(tile: $0).frames.count } ?? 0
       guard count >= 2 else {
         stop()
         return
@@ -390,44 +293,42 @@ struct WeatherRadarView: View {
   // MARK: - What the picture says
 
   @ViewBuilder
-  private func readingSection(_ width: Width, loop: WeatherRadarLoop) -> some View {
+  private func readingSection(_ card: WeatherRadarCard, loop: WeatherRadarLoop) -> some View {
     Section {
-      if drawingKey(width) == nil {
-        readingRows(width, loop: loop)
+      if drawingKey(card) == nil {
+        readingRows(card, loop: loop)
           .weatherAskResult()
       } else {
-        readingRows(width, loop: loop)
+        readingRows(card, loop: loop)
       }
       // What the bar's Ask is doing, beside the picture it will change. One packet, whatever the
       // width and whatever is held: a radar answer is one packet or a coarser packet, never two
       // (spec revision 11, §1.1). Said before the tap, like every other cost in the tool.
-      if let request = width.request {
+      if let request {
         WeatherAskStatusRow(
-          screen: screen, request: request, cost: WeatherAreaMapCopy.packets(1), note: width.note)
+          screen: screen, request: request, cost: WeatherAreaMapCopy.packets(1),
+          note: L10n.Weather.Weather.Radar.Ask.footnote)
       }
     }
     .themedRowBackground(theme)
   }
 
   @ViewBuilder
-  private func readingRows(_ width: Width, loop: WeatherRadarLoop) -> some View {
+  private func readingRows(_ card: WeatherRadarCard, loop: WeatherRadarLoop) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      if let picture = width.picture {
-        // Said first, because everything under it is about a picture of a wider square than the
-        // one picked.
-        if width.isFallback {
-          Text(L10n.Weather.Weather.Radar.Detail.fallback)
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+      switch card {
+      case .noCoordinate, .missing:
+        // Not "no radar picture": this width's square has simply never been asked for, and the
+        // bar's Ask is the whole of what to do about it.
+        Text(L10n.Weather.Weather.Radar.notAsked)
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+      case let .held(picture):
         // Always the newest picture's, whatever frame is on screen (spec revision 13, §3).
-        if let summary = width.summary {
-          Text(WeatherCopy.radarSummary(summary, placeName: screen.placeName ?? "")
-            .joined(separator: " "))
-            .font(.subheadline)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+        Text(WeatherCopy.radarSummary(picture.summary, placeName: screen.placeName ?? "")
+          .joined(separator: " "))
+          .font(.subheadline)
+          .fixedSize(horizontal: false, vertical: true)
         timeLine(picture, loop: loop)
         // Orange, like every other hole in a picture on this tool: grey cells are ground the
         // mosaic never covered, and a reader who takes them for clear weather has been misled by
@@ -452,12 +353,6 @@ struct WeatherRadarView: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
-      } else {
-        // Not "no radar picture": this width's square has simply never been asked for, and the
-        // bar's Ask is the whole of what to do about it.
-        Text(L10n.Weather.Weather.Radar.notAsked)
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -536,5 +431,16 @@ struct WeatherRadarView: View {
     // light rather than inventing a fourth word for nothing.
     case .light, .none: L10n.Weather.Weather.Radar.Level.light
     }
+  }
+
+  // MARK: - The ask
+
+  /// "Ask for radar" for a width with nothing on it; "Ask for a newer picture" once there is one,
+  /// because that is what the tap is actually for. Short, because it is a bar button: the radio it
+  /// asks is named in the status beside the picture.
+  private func askTitle(_ card: WeatherRadarCard) -> String {
+    card.picture == nil
+      ? L10n.Weather.Weather.Radar.askShort
+      : L10n.Weather.Weather.Radar.askNewer
   }
 }

@@ -173,13 +173,11 @@ struct WeatherRadarCopyTests {
   /// Not kilometres, which is the owner's decision: a tile is two degrees, 222 km tall everywhere
   /// and a different width at every latitude.
   @Test
-  func `the offered widths have names and the widest has none`() {
+  func `the three offered widths have names and the fourth has none`() {
     #expect(WeatherCopy.radarWidthName(0) == "Local")
     #expect(WeatherCopy.radarWidthName(1) == "Regional")
     #expect(WeatherCopy.radarWidthName(2) == "Wide")
     #expect(WeatherCopy.radarWidthName(3) == nil)
-    // Revision 13: the detail level, wherever a width is named.
-    #expect(WeatherCopy.radarWidthName(-1) == "Detail")
   }
 
   @Test
@@ -207,7 +205,7 @@ struct WeatherRadarCopyTests {
       == "Radar picture · Local · 30.000,-98.000")
   }
 
-  // MARK: - Revision 13: loops and detail
+  // MARK: - Revision 13: loops
 
   /// One row per square, its newest time, and how many pictures of it are held when there is more
   /// than one (docs/MESHWX_REV13.md §3).
@@ -215,18 +213,6 @@ struct WeatherRadarCopyTests {
   func `a cached row with several frames counts its pictures`() {
     #expect(WeatherCopy.channelSubject(.radar(tile: Self.tile, frames: 5))
       == "Radar picture · Local · 30.000,-98.000 · 5 pictures")
-    #expect(WeatherCopy.channelSubject(
-      .radar(tile: MeshWXRadarTile(south: 30, west: -98, zoom: -1), frames: 2))
-      == "Radar picture · Detail · 30.500,-97.500 · 2 pictures")
-  }
-
-  @Test
-  func `a detail tile's traffic row reads Detail`() {
-    let summary = WeatherTrafficSummary(
-      title: .radar,
-      detail: [.tile(south: 32.5, west: -97.5, zoom: -1), .wetCells(214)])
-    #expect(WeatherTrafficCopy.details(summary, tables: .shared)
-      == ["Detail", "214 cells with precipitation"])
   }
 
   @Test
@@ -234,10 +220,6 @@ struct WeatherRadarCopyTests {
     #expect(WeatherCopy.requestName(
       .radarLoop(latitude: 30.2672, longitude: -97.7431, zoom: 0, held: [1, 2]), tables: .shared)
       == "Radar, last hour · 30.267,-97.743")
-    // A detail ask is a radar picture like any other, named by the spot asked about.
-    #expect(WeatherCopy.requestName(
-      .radar(latitude: 30.4, longitude: -97.6, zoom: -1), tables: .shared)
-      == "Radar picture · 30.400,-97.600")
   }
 
   /// A loop is refused under `x` like any `>radar`, and says the radar's own sentences.
@@ -254,12 +236,6 @@ struct WeatherRadarCopyTests {
   /// same thing.
   @Test
   func `the revision 13 sentences are the contract's`() {
-    #expect(L10n.Weather.Weather.Radar.Width.detail == "Detail")
-    #expect(L10n.Weather.Weather.Radar.Detail.hint == "Tap the map for a detailed picture of that spot.")
-    #expect(L10n.Weather.Weather.Radar.Detail.ask == "Ask for detail here")
-    #expect(L10n.Weather.Weather.Radar.Detail.footnote
-      == "Twice the detail of Local, over a quarter of the area.")
-    #expect(L10n.Weather.Weather.Radar.Detail.fallback == "No detailed picture of this spot. Showing Local.")
     #expect(L10n.Weather.Weather.Radar.Loop.play == "Play")
     #expect(L10n.Weather.Weather.Radar.Loop.pause == "Pause")
     #expect(L10n.Weather.Weather.Radar.Loop.ask == "Ask for the last hour")

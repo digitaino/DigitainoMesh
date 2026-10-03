@@ -456,25 +456,7 @@ struct WeatherRadarScreenTests {
     #expect(noPlace.radar == .noCoordinate)
   }
 
-  // MARK: - Revision 13: frames, loops and detail
-
-  /// Austin's detail square: 30N to 31N, 98W to 97W.
-  static let austinDetail = MeshWXRadarTile(south: 30, west: -98, zoom: -1)
-
-  /// Spec revision 13, §3: the place page never shows a detail tile, even the newest and the
-  /// narrowest; the radar screen's own width asks for −1 like any zoom.
-  @Test
-  func `the place page never shows a detail tile`() {
-    let now = Self.taken.addingTimeInterval(120)
-    let detail = Self.tile(south: 30, west: -98, zoom: -1, wet: [(1, 1, 3)])
-    let local = Self.tile(takenMinutes: Self.takenMinutes - 15)
-    #expect(detail.tile == Self.austinDetail)
-    #expect(WeatherRadarPick.best(for: Self.austin, tiles: [detail, local], now: now)?.tile == local.tile)
-    #expect(WeatherRadarPick.best(for: Self.austin, tiles: [detail], now: now) == nil)
-    #expect(WeatherRadarCard.make(place: Self.place(), tiles: [detail], now: now) == .missing)
-    #expect(WeatherRadarPick.best(for: Self.austin, zoom: -1, tiles: [detail, local], now: now) == detail)
-    #expect(WeatherRadarPick.held(Self.austinDetail, tiles: [detail, local], now: now) == detail)
-  }
+  // MARK: - Revision 13: frames and loops
 
   /// Frames: the width control shows the newest of a square's pictures.
   @Test
@@ -547,64 +529,5 @@ struct WeatherRadarScreenTests {
     #expect(loop.held == [Self.takenMinutes])
     #expect(loop.ask(latitude: Self.austin.latitude, longitude: Self.austin.longitude, zoom: 0)
       == .radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: [Self.takenMinutes]))
-  }
-
-  /// Spec revision 13, §3: the detail picture of the spot, else the Local one the radio sends in
-  /// its place, else nothing.
-  @Test
-  func `detail shows the detail picture, else the Local one, else nothing`() {
-    let now = Self.taken.addingTimeInterval(120)
-    let spot = Self.austin
-    #expect(WeatherRadarDetail.tile(for: spot) == Self.austinDetail)
-    #expect(WeatherRadarDetail.localTile(for: spot) == MeshWXRadarTile(south: 29, west: -99, zoom: 0))
-    let detail = Self.tile(south: 30, west: -98, zoom: -1, wet: [(16, 8, 2)])
-    let local = Self.tile(wet: [(0, 0, 1)])
-
-    guard case let .held(held) = WeatherRadarDetail.card(spot: spot, tiles: [local, detail], now: now)
-    else {
-      Issue.record("expected the detail picture")
-      return
-    }
-    #expect(held.stored == detail)
-    #expect(!held.isWiderThanAsked)
-
-    let fallback = WeatherRadarDetail.card(spot: spot, tiles: [local], now: now)
-    #expect(fallback.isFallback)
-    #expect(fallback.picture?.stored == local)
-    #expect(fallback.picture?.isWiderThanAsked == true)
-    #expect(WeatherRadarDetail.card(spot: spot, tiles: [], now: now) == .missing)
-
-    // A detail picture past two hours is not drawn, so the Local one stands in.
-    let stale = Self.tile(south: 30, west: -98, zoom: -1, takenMinutes: Self.takenMinutes - 130)
-    #expect(WeatherRadarDetail.card(spot: spot, tiles: [stale, local], now: now).isFallback)
-    // A Local tile of another square is no fallback for this spot.
-    let elsewhere = Self.tile(south: 32, west: -98)
-    #expect(WeatherRadarDetail.card(spot: spot, tiles: [elsewhere], now: now) == .missing)
-
-    #expect(WeatherRadarDetail.ask(spot: spot) == .radar(latitude: 30.27, longitude: -97.74, zoom: -1))
-    #expect(WeatherRadarDetail.ask(spot: spot).wireText == ">radar 30.270,-97.740 z-1")
-  }
-
-  /// The summary names the place only when the place is inside the square drawn: a square of
-  /// somewhere else says nothing about Austin.
-  @Test
-  func `detail speaks about the place only when the place is inside`() {
-    let now = Self.taken.addingTimeInterval(120)
-    let cell = Self.austinDetail.cell(
-      latitude: Self.austin.latitude, longitude: Self.austin.longitude, size: MeshWXWire.radarGrid)
-    let detail = Self.tile(
-      south: 30, west: -98, zoom: -1, wet: [(cell?.row ?? 0, cell?.col ?? 0, 3)])
-    let picture = WeatherRadarDetail.card(spot: Self.austin, tiles: [detail], now: now).picture
-    let here = picture.flatMap { WeatherRadarDetail.summary(of: $0, place: Self.austin) }
-    #expect(here?.here == .heavy)
-
-    // A spot forty kilometres north-east: its square is 30.5N to 31.5N, 97.5W to 96.5W.
-    let northEast = MeshWXCoordinate(latitude: 31.2, longitude: -97.2)
-    #expect(WeatherRadarDetail.tile(for: northEast) == MeshWXRadarTile(south: 30.5, west: -97.5, zoom: -1))
-    let away = Self.tile(south: 30.5, west: -97.5, zoom: -1, wet: [(3, 3, 1)])
-    let awayPicture = WeatherRadarDetail.card(spot: northEast, tiles: [away], now: now).picture
-    #expect(awayPicture != nil)
-    #expect(awayPicture.flatMap { WeatherRadarDetail.summary(of: $0, place: Self.austin) } == nil)
-    #expect(awayPicture.flatMap { WeatherRadarDetail.summary(of: $0, place: nil) } == nil)
   }
 }

@@ -63,11 +63,6 @@ public enum MeshWXWire {
   static let radarFixedSize = 12
   /// The four inclusive row and column bounds a partial tile carries after the fixed fields.
   static let radarBoundsSize = 4
-  /// Header, the picture's time, the tile's south-west corner in quarter degrees (two i16) and the
-  /// shape byte, before the optional bounds and the quadtree (spec revision 13, §7E). One byte
-  /// longer than a type 11 tile's: `south` is an i16 here, because a quarter degree of latitude
-  /// does not fit an i8.
-  static let radarDetailFixedSize = 13
 
   // MARK: Counts and limits (spec §3, §5, §6, §7, §8.1)
 
@@ -130,27 +125,9 @@ public enum MeshWXWire {
   /// Cells along one side of a **coarse** tile: the same tile at half the detail, sent when the
   /// fine picture does not fit one packet. A 16 × 16 tile always fits.
   public static let radarCoarseGrid = 16
-  /// The widest tile on the wire: `zoom` is two bits of a type 11 shape byte, and a tile spans
+  /// The widest tile on the wire: `zoom` is two bits of the shape byte, and a tile spans
   /// `2 ^ (zoom + 1)` degrees, so 0 to 3 is 2°, 4°, 8° and 16°.
   public static let maxRadarZoom = 3
-  /// The narrowest tile in the data model (spec revision 13, §7E): zoom −1, one degree on a side
-  /// on a lattice of half a degree. It travels as type 12 (``MeshWXMessageType/radarDetail``),
-  /// never in a type 11 shape byte, whose two zoom bits cannot say −1 and whose whole-degree
-  /// edges cannot say 32.5°.
-  public static let minRadarZoom = -1
-  /// The detail level's zoom: the same number as ``minRadarZoom``, named for what it is.
-  public static let radarDetailZoom = -1
-  /// How fine a mosaic must be for the bot to cut a detail tile from it (spec revision 13,
-  /// §7E): the twelve calibrated regional pictures, Hawaii's and Puerto Rico's, and not the
-  /// national picture (9.8 pixels a degree) or Alaska's (12). Bot only; kept for the record, so
-  /// a reader of this file knows why a detail ask over Alaska comes back as Local.
-  public static let radarDetailMinPixelsPerDegree = 30
-  /// A detail tile's edges are in quarter degrees on the wire (spec revision 13, §7E), and must
-  /// be on the half-degree lattice: an even number of them.
-  static let radarDetailUnitsPerDegree = 4.0
-  /// Shape byte of a detail tile, bits 0-1: `depth`. Always 0 — a 1° tile — and a decoder
-  /// refuses any other value rather than drawing a tile at a size it cannot know.
-  static let radarDetailDepthMask: UInt8 = 0x03
   /// The most frames one `>radar … loop` answer sends (spec revision 13, §7D.4): the newest
   /// picture and the older ones of the same product, an hour at 15-minute steps.
   public static let radarLoopMaxFrames = 5
@@ -167,8 +144,6 @@ public enum MeshWXWire {
   /// Bytes of quadtree a Radar packet can carry: the packet budget less the fixed fields. A
   /// partial tile spends four of them on its bounds, which is what makes it the tighter fit.
   public static let maxRadarCellsBytes = maxData - radarFixedSize  // 153; 145 from a bot since 1 October 2026
-  /// The same for a detail tile, whose fixed part is a byte longer.
-  public static let maxRadarDetailCellsBytes = maxData - radarDetailFixedSize  // 152; 144 from a bot
   /// The Not-available letter of `>radar` (spec revision 11, §7D). **Not** `r`: that is `>rain`,
   /// and a refusal has to say which of the two it refuses. It is the one request in the grammar
   /// whose letter is not its own first letter.
@@ -327,9 +302,9 @@ public enum MeshWXWire {
   static let radarProductShift: UInt8 = 2
 }
 
-/// The twelve structured message types (spec §2.2, high nibble of the type byte).
+/// The eleven structured message types (spec §2.2, high nibble of the type byte).
 ///
-/// Nibbles 13-15 are free for third-party experiments, so this is deliberately not
+/// Nibbles 12-15 are free for third-party experiments, so this is deliberately not
 /// exhaustive over the nibble: ``MeshWXHeader/rawType`` keeps the byte and receivers
 /// ignore what they do not know.
 public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable {
@@ -351,12 +326,6 @@ public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable 
   /// Spec revision 11, §7D: one tile of a radar picture, as a quadtree of two-bit levels. The
   /// number revision 2 reserved "for a future structured product".
   case radar = 11
-  /// Spec revision 13, §7E: one tile of a radar picture at the detail level, zoom −1 — one degree
-  /// on a side, its edges in quarter degrees. It decodes into the **same**
-  /// ``MeshWXPayload/radar(_:)`` as type 11, with ``MeshWXRadar/zoom`` −1: a detail tile is a
-  /// radar tile, and only the wire needed a second shape for it. An app before revision 13
-  /// ignores it like any unknown type.
-  case radarDetail = 12
 }
 
 /// Where the weather in a message came from (spec §2.2, revision 7: flags bits 3-2).

@@ -865,10 +865,13 @@ public enum WeatherStateReducer {
   /// bot's a radar packet carries. Measuring against the phone's would be measuring a picture's
   /// age with a clock that was never used to stamp it, and a phone whose time is a day out would
   /// then hold nothing or hold everything.
+  ///
+  /// A frame off the wire's lattice (``WeatherStoredRadarTile/isOnWireLattice``) is dropped before
+  /// anything else, so it never sets the bot's clock either.
   public static func retainedRadarTiles(
     _ tiles: [WeatherStoredRadarTile], limit: Int = WeatherBotState.radarTileLimit
   ) -> [WeatherStoredRadarTile] {
-    let ordered = tiles.sorted(by: isNewerTile)
+    let ordered = tiles.filter(\.isOnWireLattice).sorted(by: isNewerTile)
     guard let newest = ordered.first?.takenMinutes else { return [] }
     let cutoff = newest > WeatherBotState.radarTileRetentionMinutes
       ? newest - WeatherBotState.radarTileRetentionMinutes : 0

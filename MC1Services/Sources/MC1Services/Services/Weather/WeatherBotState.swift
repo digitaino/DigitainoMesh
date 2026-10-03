@@ -517,6 +517,18 @@ public struct WeatherStoredRadarTile: Sendable, Hashable, Codable {
   /// When the picture was taken, on the bot's clock.
   public var takenAt: Date { Date(unixMinutes: radar.takenMinutes) }
 
+  /// Whether the frame is a tile the wire can carry: zoom 0 to ``MeshWXWire/maxRadarZoom`` and
+  /// whole-degree edges.
+  ///
+  /// False only for a frame saved by the first build of revision 13, which had a detail level at
+  /// zoom −1 with half-degree edges (docs/MESHWX_REV13.md §2). Such a frame is dropped when the
+  /// state is read and by retention, so nothing that draws, pairs or asks ever sees one.
+  public var isOnWireLattice: Bool {
+    (0...MeshWXWire.maxRadarZoom).contains(tile.zoom)
+      && tile.south.rounded() == tile.south && tile.west.rounded() == tile.west
+      && radar.tile == tile
+  }
+
   /// The picture's own time, which is what every rule about a tile is written in terms of.
   public var takenMinutes: UInt32 { radar.takenMinutes }
 }
@@ -614,7 +626,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   ///
   /// One entry per **frame**, `(tile, taken)`, since revision 13: a picture of the same square at
   /// another time is another frame, older or newer, and the loop plays them. A zoom 1 tile of the
-  /// same centre is a different square, and the detail level (zoom −1) another again.
+  /// same centre is a different square.
   public var radarTiles: [WeatherStoredRadarTile]
 
   /// The most sweeps kept per bot. Eight because the picker offers fifteen states at a time and
@@ -622,8 +634,8 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// that the oldest is not on screen anywhere.
   public static let areaSweepLimit = 8
   /// The most radar frames kept per bot (spec revision 13, "State"), the oldest `taken` dropped.
-  /// Forty is eight loops of five frames: four widths of a place and the detail square a reader
-  /// picked, with room for a second place. It was twelve, one picture per square, until frames.
+  /// Forty is eight loops of five frames: the three widths the radar screen offers for two places,
+  /// with room to spare. It was twelve, one picture per square, until frames.
   public static let radarTileLimit = 40
   /// How far behind the bot's own clock a held tile may be. Three hours is well past the two the
   /// screens will draw one for (``WeatherRadarPick``): this is the rule that keeps the file from
@@ -717,8 +729,10 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
         .map { [$0] } ?? []
     }
     // Revision 11, §7D. Absent is empty, which is exactly right for a file written before radar:
-    // nobody had asked for a tile, so there is nothing to lift.
-    radarTiles = try container.decodeIfPresent([WeatherStoredRadarTile].self, forKey: .radarTiles) ?? []
+    // nobody had asked for a tile, so there is nothing to lift. A frame off the wire's lattice —
+    // zoom −1, saved by the build that had a detail level — is dropped here and the rest kept.
+    radarTiles = (try container.decodeIfPresent([WeatherStoredRadarTile].self, forKey: .radarTiles) ?? [])
+      .filter(\.isOnWireLattice)
   }
 
   /// The newest sweep held, whatever its scope. What a caller wants when it needs one sweep and

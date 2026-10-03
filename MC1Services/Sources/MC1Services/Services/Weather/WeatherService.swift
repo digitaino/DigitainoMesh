@@ -810,15 +810,7 @@ public actor WeatherService {
         // off somebody's loop is not "the newest picture the bot has", which is what a `>radar`
         // asks for, and filling the slot with it would answer the next ask with an hour-old map.
         guard isNewestRadarFrame(tile: tile, takenMinutes: takenMinutes) else { break }
-        let asOf = Date(unixMinutes: takenMinutes)
-        fill(nil, .radar(tile: tile), asOf: asOf)
-        // The bot's fallback: a detail ask answered with the zoom 0 tile because no picture fine
-        // enough holds the spot (§7E). Asked again inside five minutes, the bot would send the
-        // same Local tile or refuse it, reason 4; the detail square has been answered too.
-        for case let .radar(latitude, longitude, zoom) in settled where zoom == MeshWXWire.radarDetailZoom {
-          let detail = MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: zoom)
-          if detail != tile { fill(nil, .radar(tile: detail), asOf: asOf) }
-        }
+        fill(nil, .radar(tile: tile), asOf: Date(unixMinutes: takenMinutes))
       case (.coverageStored, .coverage):
         // No content time: the statement describes the bot, not an hour (spec §7A), so the
         // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
@@ -1409,16 +1401,13 @@ public actor WeatherService {
       return fromAddressedBot && sweep.group == group
     case let (.parts(group), .text(chunk)):
       return fromAddressedBot && chunk.group == group
-    case let (.radar(tile, fallback), .radar(radar)):
+    case let (.radar(tile), .radar(radar)):
       // The square of earth and nothing else (spec revision 11, §7D). Not the `taken`: whatever
       // the bot has is the answer to "show me the radar here", and a phone that held out for a
       // newer picture would time out on the only one there is. Not the bot either — the lattice
       // is fixed so that a tile is a tile, and another bot answering somebody else's `>radar` for
       // the same square settles this one for free.
-      //
-      // A detail ask also takes the zoom 0 tile for its coordinate: that is what the bot sends
-      // where no picture is fine enough for detail (revision 13, §7E).
-      return radar.tile == tile || (fallback != nil && radar.tile == fallback)
+      return radar.tile == tile
     default:
       return false
     }

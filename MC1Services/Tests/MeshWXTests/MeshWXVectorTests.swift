@@ -39,61 +39,8 @@ struct MeshWXVectorTests {
     #expect(MeshWXVectors.all.contains { $0.name == "not_available_radar" })
     // Revision 12's one: a watch issued before it takes effect.
     #expect(MeshWXVectors.all.contains { $0.name == "warning_upcoming_watch" })
-    // Revision 13's four: the detail tile over Dallas off the same picture as `radar_tile`, a
-    // coarse and partial detail tile, and the two new request forms.
-    #expect(MeshWXVectors.all.contains { $0.name == "radar_detail_tile" })
-    #expect(MeshWXVectors.all.contains { $0.name == "radar_detail_coarse_partial" })
-    #expect(MeshWXVectors.all.contains { $0.name == "request_radar_detail" })
+    // Revision 13's one: the request for the last hour of a tile.
     #expect(MeshWXVectors.all.contains { $0.name == "request_radar_loop" })
-  }
-
-  /// Spec revision 13, §7E, against the publisher's own bytes: the one-degree tile at Dallas cut
-  /// from the same Southern Plains picture as `radar_tile` — type 12, its edges in quarter
-  /// degrees, and the same ``MeshWXRadar`` at zoom −1 once decoded.
-  @Test func theRadarDetailVectorIsDallasAtTwiceTheDetail() throws {
-    let vector = try #require(MeshWXVectors.all.first { $0.name == "radar_detail_tile" })
-    let data = try #require(Data(meshWXHex: vector.hex))
-    #expect(data[3] == (MeshWXMessageType.radarDetail.rawValue << 4) | 0x4, "type 12, source 1 GOES")
-    #expect(data.count <= MeshWXWire.maxSend)
-
-    guard case let .radar(radar) = try MeshWXDecoder.decode(data).payload else {
-      Issue.record("expected a radar tile")
-      return
-    }
-    #expect(radar.zoom == MeshWXWire.radarDetailZoom)
-    #expect(radar.tile == MeshWXRadarTile(south: 32.5, west: -97.5, zoom: -1))
-    // The request vector beside it asks `>radar 32.780,-96.800 z-1`, and this is that tile.
-    #expect(radar.tile == MeshWXRadarTile.containing(latitude: 32.780, longitude: -96.800, zoom: -1))
-    #expect(radar.tile.spanDegrees == 1)
-    #expect(!radar.isCoarse)
-    #expect(radar.bounds == nil)
-    #expect(radar.product == 1)
-    // The same minute as the Local tile it is twice the detail of.
-    let local = try #require(MeshWXVectors.all.first { $0.name == "radar_tile" })
-    guard case let .radar(localRadar) = try MeshWXDecoder.decode(
-      try #require(Data(meshWXHex: local.hex))).payload
-    else {
-      Issue.record("expected the Local tile")
-      return
-    }
-    #expect(radar.takenMinutes == localRadar.takenMinutes)
-    #expect(localRadar.tile.contains(latitude: radar.tile.south, longitude: radar.tile.west))
-  }
-
-  /// The coarse and partial detail tile: both flags on type 12 mean what they mean on type 11.
-  @Test func theCoarsePartialDetailVectorKeepsItsUnknownCells() throws {
-    let vector = try #require(MeshWXVectors.all.first { $0.name == "radar_detail_coarse_partial" })
-    let data = try #require(Data(meshWXHex: vector.hex))
-    #expect(data[3] == (MeshWXMessageType.radarDetail.rawValue << 4) | 0x7)
-    guard case let .radar(radar) = try MeshWXDecoder.decode(data).payload else {
-      Issue.record("expected a radar tile")
-      return
-    }
-    #expect(radar.tile == MeshWXRadarTile(south: 24.0, west: -98.5, zoom: -1))
-    #expect(radar.isCoarse)
-    #expect(radar.bounds == MeshWXRadarBounds(row0: 0, row1: 7, col0: 0, col1: 15))
-    #expect(radar.isUnknown(row: 8, col: 0))
-    #expect(radar.level(row: 2, col: 3) == .heavy)
   }
 
   /// Spec revision 11, §7D, against the publisher's own bytes: the Dallas tile of 20 September
@@ -236,7 +183,6 @@ struct MeshWXVectorTests {
       ("request_parts", ">part 212 1,4,6"),
       ("request_forecast_at", ">f 35.687,-105.938"),
       ("request_radar", ">radar 32.780,-96.800"),
-      ("request_radar_detail", ">radar 32.780,-96.800 z-1"),
       ("request_radar_loop", ">radar 30.270,-97.740 loop 2353 2338")
     ] {
       let vector = try #require(MeshWXVectors.all.first { $0.name == name })
@@ -295,8 +241,7 @@ struct MeshWXVectorTests {
       #expect(want.name == "area_sweep")
       try expectAreaSweep(sweep, matches: want)
     case .radar(let radar):
-      // One payload for both types: type 12 is a radar tile at zoom −1 (revision 13, §7E).
-      #expect(want.name == (radar.zoom == MeshWXWire.radarDetailZoom ? "radar_detail" : "radar"))
+      #expect(want.name == "radar")
       try expectRadar(radar, matches: want)
     case .unknown:
       Issue.record("vector \(vector.name) decoded as an unknown type")

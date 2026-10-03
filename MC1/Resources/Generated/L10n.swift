@@ -8363,16 +8363,6 @@ public enum L10n {
           /// Location: WeatherCopy.swift - The group of stored radar tiles on the Cached screen
           public static let title = L10n.tr("Weather", "weather.radar.cached.title", fallback: "Radar pictures")
         }
-        public enum Detail {
-          /// Location: WeatherRadarView.swift - The bottom-bar ask on the Detail width when no detailed picture is held
-          public static let ask = L10n.tr("Weather", "weather.radar.detail.ask", fallback: "Ask for detail here")
-          /// Location: WeatherRadarView.swift - The radio had no detailed picture of the spot and the Local one is drawn instead
-          public static let fallback = L10n.tr("Weather", "weather.radar.detail.fallback", fallback: "No detailed picture of this spot. Showing Local.")
-          /// Location: WeatherRadarView.swift - Under the Detail ask: what a detailed picture is
-          public static let footnote = L10n.tr("Weather", "weather.radar.detail.footnote", fallback: "Twice the detail of Local, over a quarter of the area.")
-          /// Location: WeatherRadarView.swift - Quiet line under the width control before any spot is picked
-          public static let hint = L10n.tr("Weather", "weather.radar.detail.hint", fallback: "Tap the map for a detailed picture of that spot.")
-        }
         public enum Here {
           /// Location: WeatherCopy.swift - Nothing falling on the place, %@ is the place
           public static func dry(_ p1: Any) -> String {
@@ -8454,8 +8444,6 @@ public enum L10n {
           public static let cellsOne = L10n.tr("Weather", "weather.radar.traffic.cellsOne", fallback: "1 cell with precipitation")
         }
         public enum Width {
-          /// Location: WeatherCopy.swift - The fourth width: a 1 degree square around a spot picked on the radar map
-          public static let detail = L10n.tr("Weather", "weather.radar.width.detail", fallback: "Detail")
           /// Location: WeatherCopy.swift - The narrowest width, a 2 degree square
           public static let local = L10n.tr("Weather", "weather.radar.width.local", fallback: "Local")
           /// Location: WeatherCopy.swift - A 4 degree square

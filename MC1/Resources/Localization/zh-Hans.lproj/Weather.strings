@@ -1699,22 +1699,7 @@
 /* Location: WeatherTrafficView.swift - The same when one cell does */
 "weather.radar.traffic.cellsOne" = "1 个格子有降水";
 
-// MARK: - Radar loops and detail, revision 13
-
-/* Location: WeatherCopy.swift - The fourth width: a 1 degree square around a spot picked on the radar map */
-"weather.radar.width.detail" = "精细";
-
-/* Location: WeatherRadarView.swift - Quiet line under the width control before any spot is picked */
-"weather.radar.detail.hint" = "点按地图，获取那个地点的精细雷达图。";
-
-/* Location: WeatherRadarView.swift - The bottom-bar ask on the Detail width when no detailed picture is held */
-"weather.radar.detail.ask" = "请求此处的精细图";
-
-/* Location: WeatherRadarView.swift - Under the Detail ask: what a detailed picture is */
-"weather.radar.detail.footnote" = "精细度是本地的两倍，覆盖面积为四分之一。";
-
-/* Location: WeatherRadarView.swift - The radio had no detailed picture of the spot and the Local one is drawn instead */
-"weather.radar.detail.fallback" = "没有这个地点的精细图，正在显示本地。";
+// MARK: - Radar loops, revision 13
 
 /* Location: WeatherRadarView.swift - Plays the last hour of radar pictures as a loop */
 "weather.radar.loop.play" = "播放";

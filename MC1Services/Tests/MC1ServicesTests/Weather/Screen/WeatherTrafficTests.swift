@@ -149,8 +149,7 @@ struct WeatherTrafficTests {
   /// A reserved or third-party nibble (spec §2.2) shows as itself rather than as nothing.
   @Test
   func `an unknown type shows its own nibble`() {
-    // Type 13, flags 0, four bytes: a header and nothing this build knows behind it. (Type 12
-    // until revision 13 made it Radar detail.)
+    // Type 13, flags 0, four bytes: a header and nothing this build knows behind it.
     let row = WeatherTrafficEntry(
       at: F.t0, direction: .received, channelIndex: 3, length: 4, hex: "017a4cd0")
     #expect(WeatherTrafficSummary.make(entry: row, tables: tables).title == .unknownType(rawType: 13))

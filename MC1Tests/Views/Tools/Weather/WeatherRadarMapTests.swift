@@ -140,39 +140,7 @@ struct WeatherRadarMapTests {
     #expect(ids.contains { $0.hasPrefix("weather-outline-") })
   }
 
-  // MARK: - Revision 13: the picked square and the loop
-
-  /// The picked detail square is outlined over everything but the place, in the selection ring's
-  /// colour — never a radar or an alert tint. No spot, no outline, and the drawing is what it was.
-  @Test
-  func `a picked square is outlined, and nothing is when none is picked`() throws {
-    let square = MeshWXRadarTile(south: 30, west: -98, zoom: -1)
-    let drawing = WeatherRadarDrawing.make(
-      WeatherRadarMapKey(
-        radar: Self.radar([(0, 0, .heavy)]), tile: square, warnings: [Self.tornado],
-        place: Self.austin, outline: square),
-      tables: .shared, geometry: .shared)
-    let ids = drawing.overlays.map(\.id)
-    #expect(ids.last == "radar-detail-square", "above the cells and the alert outlines")
-    let outline = try #require(drawing.overlays.last)
-    guard case let .weightedLine(line) = outline.paint else {
-      Issue.record("expected a line")
-      return
-    }
-    #expect(line.color == .label)
-    guard case let .polyline(ring) = outline.features.first?.geometry else {
-      Issue.record("expected a closed ring")
-      return
-    }
-    #expect(ring.count == 5)
-    #expect(Set(ring.map(\.latitude)) == [30, 31])
-    #expect(Set(ring.map(\.longitude)) == [-98, -97])
-    // The camera frames the picked square, not the 2° picture drawn in it.
-    #expect(drawing.bounds?.minLatitude == 30)
-    #expect(drawing.bounds?.maxLongitude == -97)
-
-    #expect(!Self.drawing(Self.radar([(0, 0, .heavy)])).overlays.contains { $0.id == "radar-detail-square" })
-  }
+  // MARK: - Revision 13: the loop
 
   /// Each frame's drawing is made once (spec revision 13, §3): one drawing per frame, each with
   /// its own cells and the same alerts, place and camera, so a step swaps a drawing and never
@@ -338,14 +306,12 @@ struct WeatherRadarRequestTests {
     #expect(local.requestLetter == "x")
   }
 
-  /// The radar screen offers three of the four place widths the wire has, and Detail (zoom −1)
-  /// once a spot is picked (spec revision 13, §3).
+  /// The radar screen offers three of the four widths the wire has.
   @Test
   func `the width control offers zoom 0, 1 and 2 and stops there`() {
     #expect(WeatherRadarView.offeredZooms == [0, 1, 2])
     #expect(WeatherRadarView.widestOffered == 2)
     #expect(WeatherRadarView.widestOffered < MeshWXWire.maxRadarZoom)
-    #expect(WeatherRadarView.detailZoom == MeshWXWire.radarDetailZoom)
     // 0.8 s a frame and 2 s on the newest.
     #expect(WeatherRadarView.frameSeconds == 0.8)
     #expect(WeatherRadarView.newestFrameSeconds == 2)

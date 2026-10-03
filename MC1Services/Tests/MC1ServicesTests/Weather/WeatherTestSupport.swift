@@ -262,10 +262,8 @@ enum WeatherFixture {
     }
     let flags: UInt8 = (isCoarse ? MeshWXWire.radarCoarseBit : 0)
       | (bounds == nil ? 0 : MeshWXWire.radarPartialBit) | sourceBits(source)
-    // The detail level travels as type 12 (spec revision 13, §7E); the payload is the same.
-    let type: MeshWXMessageType = zoom == MeshWXWire.radarDetailZoom ? .radarDetail : .radar
     return MeshWXMessage(
-      header: header(seq: seq, type: type, flags: flags, bot: bot),
+      header: header(seq: seq, type: .radar, flags: flags, bot: bot),
       payload: .radar(MeshWXRadar(
         takenMinutes: takenMinutes, south: south, west: west, zoom: zoom, product: product,
         isCoarse: isCoarse, bounds: bounds, cells: cells))

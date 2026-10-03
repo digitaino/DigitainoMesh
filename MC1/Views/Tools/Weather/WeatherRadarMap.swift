@@ -60,16 +60,11 @@ struct WeatherRadarMapKey: Hashable {
   /// The picture itself, or nil for a width nothing is held for — which is still a map, framed on
   /// the square the ask would name.
   var radar: MeshWXRadar?
-  /// The square the camera frames. Usually the picture's own; on the Detail width with the Local
-  /// fallback drawn it is still the one-degree square that was picked (spec revision 13, §3).
   var tile: MeshWXRadarTile
   /// Empty on the place page's card, which draws the picture and nothing over it.
   var warnings: [MeshWXWarning] = []
   var place: WeatherPlace?
   var isGeometryLoaded = false
-  /// The detail square around a spot picked on the radar screen's map, outlined (spec revision
-  /// 13, §3). Nil everywhere else, which draws exactly what it drew before.
-  var outline: MeshWXRadarTile?
 }
 
 /// A radar tile as a map draws it (docs/MESHWX_UI.md §18).
@@ -89,8 +84,8 @@ enum WeatherRadarDrawing {
   }
 
   /// Every frame of a loop, each drawn **once** (spec revision 13, §3): the player steps through
-  /// these and never builds a drawing on a step. The alerts, the place and the picked square are
-  /// the same on every frame, so they are gathered once and laid over each frame's own cells.
+  /// these and never builds a drawing on a step. The alerts, the place and the camera are the
+  /// same on every frame, so they are gathered once and laid over each frame's own cells.
   static func loop(
     _ key: WeatherRadarLoopKey, tables: MeshWXTables, geometry: MeshWXGeometry
   ) -> [WeatherMapDrawing] {
@@ -107,7 +102,7 @@ enum WeatherRadarDrawing {
     return drawing
   }
 
-  /// Everything over the cells: the alert outlines, the picked square, the place, and the camera.
+  /// Everything over the cells: the alert outlines, the place, and the camera.
   private static func furniture(
     _ key: WeatherRadarMapKey, tables: MeshWXTables, geometry: MeshWXGeometry
   ) -> WeatherMapDrawing {
@@ -118,12 +113,6 @@ enum WeatherRadarDrawing {
     let shapes = WeatherMapDrawing.shapes(
       warnings: key.warnings, loadOutlines: false, tables: tables, geometry: geometry)
     overlays.append(contentsOf: WeatherMapDrawing.overlays(shapes.shapes, fills: false))
-    // The picked square on top of everything but the place, in the selection ring the signal
-    // mapper uses: the label colour, never a radar or an alert tint, so it reads as "here" and
-    // not as weather.
-    if let outline = key.outline {
-      overlays.append(squareOutline(outline))
-    }
 
     var points: [MapPoint] = []
     if let place = key.place, place.kind != .current {
@@ -146,20 +135,6 @@ enum WeatherRadarDrawing {
       bounds: WeatherMapBounds(
         minLatitude: tile.south, maxLatitude: tile.north,
         minLongitude: tile.west, maxLongitude: tile.east))
-  }
-
-  /// A tile's edge as a closed ring.
-  private static func squareOutline(_ tile: MeshWXRadarTile) -> MapOverlay {
-    let box = WeatherRadarRectangle(
-      level: .none, south: tile.south, west: tile.west, north: tile.north, east: tile.east)
-    var corners = ring(box)
-    corners.append(corners[0])
-    return MapOverlay(
-      id: "radar-detail-square",
-      features: [MapOverlay.Feature(id: "square", geometry: .polyline(corners), weight: 1)],
-      paint: .weightedLine(MapOverlay.WeightedLine(
-        color: .label, width: 2.5...2.5, opacity: 0.9...0.9,
-        casing: MapOverlay.Casing(extraWidth: 2))))
   }
 
   /// One overlay per level, plus one for the cells outside a partial picture. Colour is per

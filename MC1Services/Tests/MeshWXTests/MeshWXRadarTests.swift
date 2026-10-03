@@ -29,15 +29,7 @@ struct MeshWXRadarTests {
     (30.27, -97.74, 2, 28, -100),
     // Step 8: the same centre, twice the tile.
     (30.27, -97.74, 3, 24, -104),
-    (18.22, -66.59, 0, 17, -68),
-    // The detail level (revision 13, §7E): step 0.5, so the edges are half degrees. Dallas:
-    // centre 33.0, −97.0.
-    (32.78, -96.80, -1, 32.5, -97.5),
-    // Austin: centre 30.5, −97.5.
-    (30.27, -97.74, -1, 30.0, -98.0),
-    // Ties round up at this step too.
-    (30.25, -97.75, -1, 30.0, -98.0),
-    (-0.1, 0.1, -1, -0.5, -0.5)
+    (18.22, -66.59, 0, 17, -68)
   ])
   func `the tile for a coordinate is the one whose centre is nearest`(
     _ latitude: Double, _ longitude: Double, _ zoom: Int, _ south: Double, _ west: Double
@@ -50,7 +42,7 @@ struct MeshWXRadarTests {
   /// Why the lattice centres on the place rather than snapping to a corner: the asked coordinate
   /// is never nearer than a quarter of the span to an edge, which at zoom 0 is 55 km. A picture
   /// whose subject sits on its border is a picture of the county next door.
-  @Test(arguments: -1...3)
+  @Test(arguments: 0...3)
   func `a place is never near the edge of its tile`(_ zoom: Int) {
     let places = [(30.27, -97.74), (47.61, -122.33), (25.76, -80.19), (64.84, -147.72), (-33.9, 151.2)]
     for (latitude, longitude) in places {
@@ -64,34 +56,13 @@ struct MeshWXRadarTests {
     }
   }
 
-  /// The lattice is not a request, so a zoom off either end is clamped rather than refused: every
+  /// The lattice is not a request, so a zoom off the end is clamped rather than refused: every
   /// caller here wants a tile back, and the encoder is where an out-of-range zoom is a failure.
-  /// −1 is no longer off the end since revision 13: it is the detail level.
-  @Test func `a zoom past either end clamps to the nearest tile there is`() {
+  @Test func `a zoom past the ceiling clamps to the widest tile`() {
     #expect(MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: 4)
       == MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: 3))
-    #expect(MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: -2)
-      == MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: -1))
-    let detail = MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: -1)
-    #expect(detail.zoom == MeshWXWire.radarDetailZoom)
-    #expect(detail.isDetail)
-    #expect(detail.spanDegrees == 1)
-    #expect(detail != MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: 0))
-  }
-
-  /// A detail tile's cell is 1/32°, about 3.5 km north to south, on the same 32 × 32 grid.
-  @Test func `a detail tile's cells are a thirty-second of a degree`() {
-    let tile = MeshWXRadarTile(south: 32.5, west: -97.5, zoom: -1)
-    #expect(tile.north == 33.5 && tile.east == -96.5)
-    #expect(tile.cellDegrees(size: 32) == 1.0 / 32)
-    let top = tile.cellBox(row: 0, col: 0, size: 32)
-    #expect(top.north == 33.5)
-    #expect(top.south == 33.5 - 1.0 / 32)
-    #expect(top.west == -97.5)
-    // Dallas, 32.780 −96.800, is 23 rows down and 22 columns across.
-    let cell = tile.cell(latitude: 32.780, longitude: -96.800, size: 32)
-    #expect(cell?.row == 23)
-    #expect(cell?.col == 22)
+    #expect(MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: -1)
+      == MeshWXRadarTile.containing(latitude: 30.27, longitude: -97.74, zoom: 0))
   }
 
   /// Row 0 is the **northern** row and column 0 the western one, which is the picture's order
@@ -343,7 +314,7 @@ struct MeshWXRadarTests {
         product: product, cells: cells)
     }
     #expect(throws: MeshWXEncodeError.outOfRange(field: "radar zoom", value: 4)) { try encode(zoom: 4) }
-    #expect(throws: MeshWXEncodeError.outOfRange(field: "radar zoom", value: -2)) { try encode(zoom: -2) }
+    #expect(throws: MeshWXEncodeError.outOfRange(field: "radar zoom", value: -1)) { try encode(zoom: -1) }
     #expect(throws: MeshWXEncodeError.outOfRange(field: "radar product", value: 64)) { try encode(product: 64) }
     #expect(throws: MeshWXEncodeError.outOfRange(field: "radar west", value: 180)) { try encode(west: 180) }
     #expect(throws: MeshWXEncodeError.outOfRange(field: "radar level", value: 4)) {
@@ -352,80 +323,31 @@ struct MeshWXRadarTests {
       try encode(cells: cells)
     }
     #expect(throws: MeshWXEncodeError.self) { try encode(cells: Self.grid(8)) }
-    // Whole degrees at zoom 0 and up, half degrees at the detail level (revision 13, §7E).
-    #expect(throws: MeshWXEncodeError.radarEdgeOffLattice(south: 30.5, west: -98, zoom: 0)) {
+    // Whole degrees: the edges are an i8 and an i16 on the wire, and a fraction truncated would
+    // be a picture of a different square.
+    #expect(throws: MeshWXEncodeError.outOfRange(field: "radar south", value: 30)) {
       try encode(south: 30.5, west: -98)
     }
-    #expect(throws: MeshWXEncodeError.radarEdgeOffLattice(south: 30.25, west: -98, zoom: -1)) {
-      try encode(zoom: -1, south: 30.25, west: -98)
+    #expect(throws: MeshWXEncodeError.outOfRange(field: "radar west", value: -98)) {
+      try encode(south: 30, west: -97.5)
     }
-    // A detail tile may start at 179.5°: its square still ends at the antimeridian.
-    #expect(throws: Never.self) { try encode(zoom: -1, west: 179.5) }
-  }
-
-  // MARK: - Radar detail (type 12, revision 13)
-
-  /// Zoom −1 goes out as **type 12**, its edges in quarter degrees and `depth` 0 in the shape's
-  /// low bits, and comes back as the same ``MeshWXRadar`` at zoom −1.
-  @Test func `a detail tile is type 12 with its edges in quarter degrees`() throws {
-    var cells = Self.grid(32)
-    cells[23 * 32 + 22] = 2
-    let data = try MeshWXEncoder.radar(
-      seq: 9, bot: 0x4C7A, takenMinutes: 29_832_458, south: 32.5, west: -97.5, zoom: -1,
-      product: 1, cells: cells, source: .goesSatellite)
-    #expect(data[3] == (MeshWXMessageType.radarDetail.rawValue << 4) | 0x4)
-    #expect(Array(data[8..<10]) == [130, 0], "32.5° is 130 quarter degrees")
-    #expect(Array(data[10..<12]) == [0x7A, 0xFE], "−97.5° is −390 quarter degrees")
-    #expect(data[12] == 1 << 2, "product 1, depth 0")
-
-    guard case let .radar(radar) = try MeshWXDecoder.decode(data).payload else {
-      Issue.record("expected a radar tile")
-      return
-    }
-    #expect(radar.zoom == MeshWXWire.radarDetailZoom)
-    #expect(radar.south == 32.5)
-    #expect(radar.west == -97.5)
-    #expect(radar.tile == MeshWXRadarTile.containing(latitude: 32.78, longitude: -96.80, zoom: -1))
-    #expect(radar.cells == cells)
-    #expect(try MeshWXEncoder.encode(MeshWXDecoder.decode(data)) == data)
-
-    // A dry detail tile is 14 bytes: a byte longer than type 11's, for the wider `south`.
-    let dry = try MeshWXEncoder.radar(
-      seq: 9, bot: 0x4C7A, takenMinutes: 1, south: 32.5, west: -97.5, zoom: -1, product: 1,
-      cells: Self.grid(32))
-    #expect(dry.count == 14)
-    #expect(throws: MeshWXDecodeError.truncated(what: "radar detail", need: 14, have: 13)) {
-      _ = try MeshWXDecoder.decode(dry.prefix(13))
+    #expect(throws: MeshWXEncodeError.outOfRange(field: "radar south", value: 0)) {
+      try encode(south: .nan)
     }
   }
 
-  /// `depth` other than 0 is reserved for a finer tile some day, and an edge off the half-degree
-  /// lattice is no tile at all: either would be a picture drawn in the wrong place.
-  @Test func `a detail tile with a reserved depth or an edge off the lattice is refused`() throws {
-    let data = try MeshWXEncoder.radar(
-      seq: 9, bot: 0x4C7A, takenMinutes: 1, south: 32.5, west: -97.5, zoom: -1, product: 1,
-      cells: Self.grid(32))
-    var deeper = data
-    deeper[12] |= 0x01
-    #expect(throws: MeshWXDecodeError.radarDetailDepthReserved(depth: 1)) {
-      _ = try MeshWXDecoder.decode(deeper)
-    }
-    var odd = data
-    odd[8] = 131  // 32.75°
-    #expect(throws: MeshWXDecodeError.radarDetailOffLattice(south: 32.75, west: -97.5)) {
-      _ = try MeshWXDecoder.decode(odd)
-    }
-  }
-
-  /// A type 11 shape byte cannot say −1, and a type 12 one never carries a zoom: the two types
-  /// are told apart by the type nibble alone, and a zoom 0 tile is still type 11.
-  @Test func `only the detail level is type 12`() throws {
-    for zoom in 0...3 {
-      let data = try MeshWXEncoder.radar(
-        seq: 1, bot: 0x4C7A, takenMinutes: 1, south: 0, west: 0, zoom: zoom, product: 0,
-        cells: Self.grid(16))
-      #expect(data[3] >> 4 == MeshWXMessageType.radar.rawValue)
-    }
+  /// Type 12 is free again (docs/MESHWX_REV13.md): the detail tile the first build of revision 13
+  /// sent under it is gone from the bot and both clients, and a packet of that nibble is ignored
+  /// like any unknown type — its header still decoded, for `(bot, seq)` tracking.
+  @Test func `type 12 is an unknown type again`() throws {
+    #expect(MeshWXMessageType(rawValue: 12) == nil)
+    // A type 12 header (source GOES) and the body that build would have put behind it.
+    let data = Data([0x09, 0x7A, 0x4C, 0xC4, 0x4A, 0x34, 0xC7, 0x01, 0x82, 0x00, 0x7A, 0xFE, 0x04, 0x00, 0x00])
+    let message = try MeshWXDecoder.decode(data)
+    #expect(message.header.seq == 9)
+    #expect(message.header.rawType == 12)
+    #expect(message.header.type == nil)
+    #expect(message.payload == .unknown)
   }
 
   // MARK: - Helpers

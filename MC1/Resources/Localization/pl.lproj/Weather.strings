@@ -1699,22 +1699,7 @@
 /* Location: WeatherTrafficView.swift - The same when one cell does */
 "weather.radar.traffic.cellsOne" = "1 komórka z opadami";
 
-// MARK: - Radar loops and detail, revision 13
-
-/* Location: WeatherCopy.swift - The fourth width: a 1 degree square around a spot picked on the radar map */
-"weather.radar.width.detail" = "Szczegółowy";
-
-/* Location: WeatherRadarView.swift - Quiet line under the width control before any spot is picked */
-"weather.radar.detail.hint" = "Dotknij mapy, żeby dostać szczegółowy obraz tego miejsca.";
-
-/* Location: WeatherRadarView.swift - The bottom-bar ask on the Detail width when no detailed picture is held */
-"weather.radar.detail.ask" = "Zapytaj o szczegóły tutaj";
-
-/* Location: WeatherRadarView.swift - Under the Detail ask: what a detailed picture is */
-"weather.radar.detail.footnote" = "Dwa razy więcej szczegółów niż Lokalny, na jednej czwartej obszaru.";
-
-/* Location: WeatherRadarView.swift - The radio had no detailed picture of the spot and the Local one is drawn instead */
-"weather.radar.detail.fallback" = "Brak szczegółowego obrazu tego miejsca. Pokazuję Lokalny.";
+// MARK: - Radar loops, revision 13
 
 /* Location: WeatherRadarView.swift - Plays the last hour of radar pictures as a loop */
 "weather.radar.loop.play" = "Odtwórz";

@@ -105,14 +105,8 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// of earth. `>radar round rock tx` exists on the wire for people typing in chat; the app never
   /// sends it, because a place the bot resolves comes back as a tile this phone did not choose.
   ///
-  /// `zoom` is ``MeshWXWire/minRadarZoom`` to ``MeshWXWire/maxRadarZoom``; the screen offers 0,
-  /// 1 and 2 (Local, Regional, Wide) and, for a spot picked on its map, −1 (Detail, spec
-  /// revision 13, §7E), which goes out as `z-1`. Zoom 0 sends no `z` word at all, which is the
-  /// form the bot's own vector carries.
-  ///
-  /// At −1 the bot answers with the detail tile, or — where it has no picture fine enough — with
-  /// the zoom 0 tile for the same coordinate, and both settle the request
-  /// (``WeatherReplyKind/radar(tile:fallback:)``).
+  /// `zoom` is 0 to ``MeshWXWire/maxRadarZoom``; the screen offers 0, 1 and 2 (Local, Regional,
+  /// Wide). Zoom 0 sends no `z` word at all, which is the form the bot's own vector carries.
   case radar(latitude: Double, longitude: Double, zoom: Int)
   /// `>radar 30.270,-97.740 loop 2353 2338` — the last hour of the tile at that width, as up to
   /// five ordinary Radar packets, oldest first (spec revision 13, §7D.4).
@@ -166,19 +160,24 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     }
   }
 
-  /// `>radar 30.270,-97.740`, with ` z<n>` after it for any zoom but 0 — `z-1` for the detail
-  /// level. Zoom 0 sends nothing after the place: it is the default, and "anything else after the
-  /// place is part of the place" (spec revision 11, §7D) — so a bare `z0` would be read as a
-  /// request for the place "z0" by nothing, but it costs three bytes and says nothing.
+  /// `>radar 30.270,-97.740`, with ` z<n>` after it for any zoom but 0. Zoom 0 sends nothing
+  /// after the place: it is the default, and "anything else after the place is part of the place"
+  /// (spec revision 11, §7D) — so a bare `z0` would be read as a request for the place "z0" by
+  /// nothing, but it costs three bytes and says nothing.
+  ///
+  /// The zoom is clamped to the wire's 0 to 3, as the lattice clamps it (``expectedReply``): a
+  /// request logged by the build that had a detail level may say −1, and the bot reads `z0` to
+  /// `z3` only.
   static func radarText(latitude: Double, longitude: Double, zoom: Int) -> String {
     let base = ">radar \(coordinateKey(latitude: latitude, longitude: longitude))"
-    return zoom == 0 ? base : "\(base) z\(zoom)"
+    let level = min(max(zoom, 0), MeshWXWire.maxRadarZoom)
+    return level == 0 ? base : "\(base) z\(level)"
   }
 
   /// `>radar 30.270,-97.740 [z<n>] loop [HHMM …]` (spec revision 13, §7D.4): the held pictures'
   /// UTC hour and minute, newest first, as many as fit the 40-byte request and never more than
   /// ``MeshWXWire/radarLoopHeldMax``. `>radar 30.270,-97.740 loop` is 26 bytes, so two always
-  /// fit; a southern, western coordinate at the detail level leaves room for one.
+  /// fit; a southern, western coordinate at a zoom other than 0 leaves room for one.
   ///
   /// Hour and minute, not minutes alone: at 15-minute steps the newest picture and the one an
   /// hour before it end in the same two digits.
@@ -266,14 +265,9 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     // (spec revision 11, §7D), and the answer names that square and never the question.
     //
     // A loop is settled by the first of its frames, like `>w` by its first warning; the rest keep
-    // flowing into state (spec revision 13, §7D.4). At the detail level the bot answers with the
-    // zoom 0 tile for the same coordinate where it has no picture fine enough (§7E), so that tile
-    // settles a `z-1` ask as well.
+    // flowing into state (spec revision 13, §7D.4).
     case let .radar(latitude, longitude, zoom), let .radarLoop(latitude, longitude, zoom, _):
-      .radar(
-        tile: MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: zoom),
-        fallback: zoom == MeshWXWire.radarDetailZoom
-          ? MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: 0) : nil)
+      .radar(tile: MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: zoom))
     }
   }
 
@@ -437,8 +431,9 @@ extension WeatherRequest {
       self = .radar(
         latitude: try nested.decode(Double.self, forKey: .latitude),
         longitude: try nested.decode(Double.self, forKey: .longitude),
-        // An `Int` since revision 13, for the detail level's −1. A log written before it holds
-        // 0 to 2 here, which read the same.
+        // An `Int` since revision 13. A log written before it holds 0 to 2 here, which read the
+        // same; one written by the build that had a detail level may hold −1, which still reads
+        // and goes on the wire, if ever again, as Local (``radarText(latitude:longitude:zoom:)``).
         zoom: try nested.decode(Int.self, forKey: .zoom))
     case .radarLoop:
       let nested = try container.nestedContainer(keyedBy: RadarLoopKeys.self, forKey: key)
@@ -484,11 +479,7 @@ public enum WeatherReplyKind: Sendable, Hashable {
   /// The tile, not the coordinate, and whatever its `taken`: the lattice is shared, so the answer
   /// to this phone's question and the answer to somebody else's a kilometre away are the same
   /// packet — and a picture from ten minutes ago is still the picture the bot has.
-  ///
-  /// `fallback` is the one addition of revision 13: an ask at the detail level (`z-1`) is also
-  /// settled by the zoom 0 tile containing the same coordinate, because that is what the bot
-  /// sends instead where it has no picture fine enough (§7E). Nil at every other zoom.
-  case radar(tile: MeshWXRadarTile, fallback: MeshWXRadarTile?)
+  case radar(tile: MeshWXRadarTile)
 }
 
 /// Text subjects on the wire (spec §8.1), kept as raw codes here so this file needs no

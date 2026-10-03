@@ -9,9 +9,8 @@ import Testing
 /// the bot's repository (thirteen at revision 5, which added the two vectors carrying the new
 /// times beside the revision 4 form of the same two messages; twenty-five at revision 11, which
 /// added a real Dallas radar tile and the three messages around it; twenty-six at revision 12,
-/// which added the Flood Watch that starts 33 hours after it was issued; thirty at revision 13,
-/// which added the one-degree Dallas detail tile, a coarse and partial detail tile, and the two
-/// new `>radar` request forms).
+/// which added the Flood Watch that starts 33 hours after it was issued; twenty-seven at revision
+/// 13, which added the `>radar … loop` request).
 /// A codec checked only against itself passes forever while being wrong, so nothing in this
 /// file is derived from the Swift implementation.
 enum MeshWXVectors {
@@ -148,8 +147,7 @@ enum MeshWXVectors {
     // first, which is how the bot's decoder prints a grid — so a Swift cell array is compared
     // against the publisher's own characters rather than against another array this file built.
     let takenMin: UInt32?
-    /// Degrees. Whole numbers from a type 11 vector; a type 12 (Radar detail, revision 13) vector
-    /// prints decimal degrees, 32.5, and `zoom` −1.
+    /// Whole degrees, read as the `Double` ``MeshWXRadar`` keeps them in.
     let south: Double?
     let west: Double?
     let zoom: Int?

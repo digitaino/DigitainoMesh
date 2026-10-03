@@ -278,9 +278,8 @@ public enum WeatherTrafficDetail: Sendable, Hashable {
   /// Entries were dropped to fit (sweep) or the tail was dropped (text).
   case cut
   case includesAdvisories
-  /// Which square of earth a radar tile covers: its south-west corner in degrees (half degrees at
-  /// the detail level) and its zoom, which is the width the screen names Local, Regional, Wide or
-  /// Detail.
+  /// Which square of earth a radar tile covers: its south-west corner in whole degrees and its
+  /// zoom, which is the width the screen names Local, Regional or Wide.
   case tile(south: Double, west: Double, zoom: Int)
   /// How many cells of a radar tile carry precipitation. The one measure of a tile that means the
   /// same thing at both grid sizes, so a coarse packet's number is comparable with a fine one's.

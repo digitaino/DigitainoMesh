@@ -107,17 +107,15 @@ struct WeatherRadarTests {
   }
 
   /// A different zoom over the same centre is a different square and gets a row of its own, which
-  /// is what lets the radar screen say what it holds for each width — the detail level included.
+  /// is what lets the radar screen say what it holds for each width.
   @Test
   func `each width is a square of its own`() {
     var state = WeatherBotState(botID: F.botID)
     _ = WeatherStateReducer.apply(F.radar(seq: 1), to: &state, receivedAt: F.t0)
     _ = WeatherStateReducer.apply(
       F.radar(seq: 2, south: 28, west: -100, zoom: 2), to: &state, receivedAt: F.t0)
-    _ = WeatherStateReducer.apply(
-      F.radar(seq: 3, south: 30, west: -98, zoom: -1), to: &state, receivedAt: F.t0)
-    #expect(state.radarTiles.count == 3)
-    #expect(Set(state.radarTiles.map(\.tile.zoom)) == [-1, 0, 2])
+    #expect(state.radarTiles.count == 2)
+    #expect(Set(state.radarTiles.map(\.tile.zoom)) == [0, 2])
   }
 
   /// Retention: nothing more than three hours behind the bot's own clock, and forty at most.
@@ -181,12 +179,53 @@ struct WeatherRadarTests {
     #expect(stored.radar.bounds == MeshWXRadarBounds(row0: 0, row1: 9, col0: 0, col1: 15))
     #expect(stored.takenMinutes == 29_832_458)
     #expect(stored.source == .goesSatellite)
-    // And what this build writes for a detail tile reads back as the same half-degree square.
+  }
+
+  /// A state saved by the first build of revision 13 may hold a detail frame: zoom −1, half-degree
+  /// edges. The detail level was removed the same day (docs/MESHWX_REV13.md §2) and the owner's
+  /// phone has such a state, so it must still load: the detail frame is dropped when the state is
+  /// read, and every other frame is kept.
+  @Test
+  func `a detail frame saved by the first revision 13 build is dropped and the rest kept`() throws {
     var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.radar(seq: 1, wet: [(1, 1, 1)]), to: &state, receivedAt: F.t0)
     _ = WeatherStateReducer.apply(
-      F.radar(seq: 1, south: 30, west: -98, zoom: -1, wet: [(1, 1, 1)]), to: &state, receivedAt: F.t0)
+      F.radar(seq: 2, takenMinutes: F.t0Minutes - 15, south: 28, west: -100, zoom: 2),
+      to: &state, receivedAt: F.t0)
+    #expect(state.radarTiles.count == 2)
+
+    // That build's frame of Austin's one-degree square, the newest picture held, written exactly
+    // as it wrote one: half-degree edges and zoom −1 in both the square and the picture.
     let encoded = try JSONEncoder().encode(state)
-    #expect(try JSONDecoder().decode(WeatherBotState.self, from: encoded) == state)
+    var object = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    var frames = try #require(object["radarTiles"] as? [[String: Any]])
+    var detail = try #require(frames.first)
+    var radar = try #require(detail["radar"] as? [String: Any])
+    detail["tile"] = ["south": 30.5, "west": -97.5, "zoom": -1]
+    radar["south"] = 30.5
+    radar["west"] = -97.5
+    radar["zoom"] = -1
+    radar["takenMinutes"] = Int(F.t0Minutes) + 15
+    detail["radar"] = radar
+    frames.insert(detail, at: 0)
+    object["radarTiles"] = frames
+    let saved = try JSONSerialization.data(withJSONObject: object)
+
+    // The frame itself still decodes: the edges are `Double` and the zoom `Int` for this.
+    let lone = try JSONDecoder().decode(
+      WeatherStoredRadarTile.self, from: JSONSerialization.data(withJSONObject: detail))
+    #expect(lone.tile == MeshWXRadarTile(south: 30.5, west: -97.5, zoom: -1))
+    #expect(!lone.isOnWireLattice)
+
+    let loaded = try JSONDecoder().decode(WeatherBotState.self, from: saved)
+    #expect(loaded.radarTiles == state.radarTiles, "the detail frame dropped, both others kept")
+    #expect(loaded.radarTiles.allSatisfy { $0.isOnWireLattice })
+
+    // Retention drops one too, before it can set the bot's clock: five hours newer than the rest,
+    // it would otherwise have aged both of them out.
+    var later = lone
+    later.radar.takenMinutes = F.t0Minutes + 300
+    #expect(WeatherStateReducer.retainedRadarTiles(state.radarTiles + [later]) == state.radarTiles)
   }
 
   /// A file written before revision 11 holds no tiles, which is exactly right: nobody had asked
@@ -387,69 +426,7 @@ struct WeatherRadarTests {
     #expect(stored.source == .goesSatellite)
   }
 
-  // MARK: - Revision 13: detail and loops through the service
-
-  /// Austin's detail square: 30N to 31N, 98W to 97W. Its Local fallback is `F.austinTile`.
-  private var austinDetail: WeatherRequest {
-    .radar(latitude: F.austinLatitude, longitude: F.austinLongitude, zoom: -1)
-  }
-
-  @Test
-  func `a detail tile for the spot settles a detail ask`() async throws {
-    let h = makeHarness()
-    let settled = settlements(h.events)
-    _ = try await h.service.send(austinDetail, to: F.bot)
-    #expect(await h.transport.sent.map(\.text) == [">radar 30.270,-97.740 z-1"])
-    h.clock.advance(by: 2)
-    _ = await h.service.ingest(F.radar(seq: 1, south: 30, west: -98, zoom: -1, wet: [(3, 3, 2)]))
-    #expect(await weatherWaitUntil { settled.value.count == 1 })
-    #expect(settled.value.first?.1 == .answered)
-    let stored = try #require(await h.service.state(for: F.botID)?.radarTiles.first)
-    #expect(stored.tile == MeshWXRadarTile(south: 30, west: -98, zoom: -1))
-  }
-
-  /// Spec revision 13, §7E: where no picture is fine enough the bot sends the Local tile for the
-  /// same coordinate instead, and that settles the detail ask. Asked again inside five minutes,
-  /// the bot would send the same Local tile or refuse it, so the phone does not ask.
-  @Test
-  func `the Local tile the bot falls back to settles a detail ask`() async throws {
-    let h = makeHarness()
-    let settled = settlements(h.events)
-    _ = try await h.service.send(austinDetail, to: F.bot)
-    h.clock.advance(by: 2)
-    _ = await h.service.ingest(F.radar(seq: 1))
-    #expect(await weatherWaitUntil { settled.value.count == 1 })
-    #expect(settled.value.first?.1 == .answered)
-
-    h.clock.advance(by: 60)
-    #expect(try await h.service.send(austinDetail, to: F.bot) == nil)
-    #expect(await h.transport.sent.count == 1)
-  }
-
-  /// Only the zoom 0 tile **containing the asked coordinate** is the fallback: a Local tile next
-  /// door, or the Regional tile over the same place, is somebody else's answer.
-  @Test
-  func `only the Local tile of the asked spot is the fallback`() async throws {
-    let h = makeHarness()
-    let settled = settlements(h.events)
-    _ = try await h.service.send(austinDetail, to: F.bot)
-    h.clock.advance(by: 2)
-    _ = await h.service.ingest(F.radar(seq: 1, south: 32, west: -98))
-    _ = await h.service.ingest(F.radar(seq: 2, south: 28, west: -100, zoom: 1))
-    _ = await h.service.ingest(F.radar(seq: 3, south: 30.5, west: -98, zoom: -1))
-    #expect(await h.service.pendingRequests().count == 1)
-    #expect(settled.value.isEmpty)
-  }
-
-  /// A Local ask is not settled by a detail tile: there is no fallback the other way.
-  @Test
-  func `a detail tile does not settle a Local ask`() async throws {
-    let h = makeHarness()
-    _ = try await h.service.send(austinRadar, to: F.bot)
-    h.clock.advance(by: 2)
-    _ = await h.service.ingest(F.radar(seq: 1, south: 30, west: -98, zoom: -1))
-    #expect(await h.service.pendingRequests().count == 1)
-  }
+  // MARK: - Revision 13: loops through the service
 
   /// Spec revision 13, §7D.4: a loop lists the pictures held and is settled by the first frame
   /// that comes back; the rest keep landing as frames of their own. A tile received a minute ago
@@ -529,21 +506,6 @@ struct WeatherRadarTests {
       at: F.t0, isBacklog: false, isDuplicate: false)
     #expect(WeatherTrafficSummary.make(entry: entry, tables: .shared).title
       == .notAvailable(letter: "x"))
-  }
-
-  /// A detail tile's row names its width "Detail" in the view; the summary carries zoom −1 and
-  /// the half-degree corner.
-  @Test
-  func `a traffic row says a detail tile is the detail square`() throws {
-    let payload = try MeshWXEncoder.encode(
-      F.radar(seq: 1, south: 30, west: -98, zoom: -1, wet: [(0, 0, 1)]))
-    #expect(payload[3] >> 4 == MeshWXMessageType.radarDetail.rawValue)
-    let entry = WeatherTrafficEntry.received(
-      payload, channelIndex: 3, dataType: MeshWXWire.dataType, snr: nil, pathLength: nil,
-      at: F.t0, isBacklog: false, isDuplicate: false)
-    let summary = WeatherTrafficSummary.make(entry: entry, tables: .shared)
-    #expect(summary.title == .radar)
-    #expect(summary.detail == [.tile(south: 30, west: -98, zoom: -1), .wetCells(1)])
   }
 
   // MARK: - The cached screen

@@ -837,15 +837,14 @@ enum WeatherCopy {
 
   // MARK: - Radar (§18)
 
-  /// "Local", "Regional", "Wide", "Detail" for zoom −1 (spec revision 13) — and **nil** for zoom
-  /// 3, which exists on the wire and is not offered (spec revision 11, §3).
+  /// "Local", "Regional", "Wide" — and **nil** for zoom 3, which exists on the wire and is not
+  /// offered (spec revision 11, §3).
   ///
   /// Not kilometres, which is the whole of the owner's decision: a tile is two degrees, 222 km
   /// tall everywhere and a different width at every latitude, so a number on the control would be
   /// wrong everywhere but one parallel.
   static func radarWidthName(_ zoom: Int) -> String? {
     switch zoom {
-    case MeshWXWire.radarDetailZoom: L10n.Weather.Weather.Radar.Width.detail
     case 0: L10n.Weather.Weather.Radar.Width.local
     case 1: L10n.Weather.Weather.Radar.Width.regional
     case 2: L10n.Weather.Weather.Radar.Width.wide

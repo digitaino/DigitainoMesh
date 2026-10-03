@@ -141,12 +141,6 @@ struct WeatherPageScreen {
     place.map { WeatherRadarCard.tile(for: $0, zoom: zoom) }
   }
 
-  /// What the Detail width shows for a spot picked on the radar map (spec revision 13, §7E): the
-  /// detail picture, the Local one the radio sent instead, or nothing.
-  func radarDetail(spot: MeshWXCoordinate) -> WeatherRadarDetail {
-    WeatherRadarDetail.card(spot: spot, tiles: context.radarTiles, now: now)
-  }
-
   /// The last hour held of one exact square, every radio's frames together (spec revision 13,
   /// §7D.4).
   func radarLoop(tile: MeshWXRadarTile) -> WeatherRadarLoop {
