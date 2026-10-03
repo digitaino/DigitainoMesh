@@ -7,6 +7,9 @@ import UniformTypeIdentifiers
 @MainActor
 final class NodeConfigExportViewModel {
   var sections = ConfigSections()
+  /// Build the file from this phone's records instead of reading the radio, so it works when
+  /// the radio the records came from is gone. Never carries the private key.
+  var fromRecords = false
   var isExporting = false
   var exportedDocument: NodeConfigDocument?
   var showFileExporter = false
@@ -15,14 +18,18 @@ final class NodeConfigExportViewModel {
   private let logger = Logger(subsystem: "com.mc1", category: "NodeConfigExportVM")
 
   /// A nil service mirrors a disconnected state and is a no-op.
-  func exportConfig(nodeConfigService: NodeConfigService?, deviceNodeName: String?) async {
+  func exportConfig(nodeConfigService: NodeConfigService?, deviceNodeName: String?, radioID: UUID?) async {
     guard let service = nodeConfigService else { return }
 
     isExporting = true
     errorMessage = nil
 
     do {
-      let config = try await service.exportConfig(sections: sections)
+      let config = if fromRecords, let radioID {
+        try await service.recordsConfig(radioID: radioID, sections: sections)
+      } else {
+        try await service.exportConfig(sections: sections)
+      }
 
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -122,6 +122,78 @@ struct RadioSwapGuardTests {
     #expect(try await store.fetchDevice(id: newRadio.id)?.lastContactSync == 0)
   }
 
+  // MARK: - Identity profile
+
+  @Test
+  func `Arming captures the previous radio's settings and the channel rows before any sync`() async throws {
+    let store = try await createStore()
+    let historyRadioID = UUID()
+    let oldRadio = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "Digitaino")
+      .copy { $0.frequency = 910_525 }
+    try await store.saveDevice(oldRadio)
+    _ = try await store.saveChannel(
+      radioID: historyRadioID, from: ChannelInfo(index: 4, name: "Club", secret: Data(repeating: 0x02, count: 16))
+    )
+    let newRadio = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "MeshCore-1234")
+    try await store.saveDevice(newRadio)
+
+    try await store.armSwapGuard(id: newRadio.id, previousDeviceID: oldRadio.id)
+    try await store.deleteDevice(id: oldRadio.id)
+
+    let profile = try #require(try await store.fetchSwapProfile(radioID: historyRadioID))
+    #expect(profile.nodeName == "Digitaino")
+    #expect(profile.radio.frequency == 910_525)
+    #expect(profile.channels == [IdentityProfile.Channel(slot: 4, name: "Club", secret: Data(repeating: 0x02, count: 16))])
+  }
+
+  @Test
+  func `An unsettled swap carries its profile to the next radio`() async throws {
+    let store = try await createStore()
+    let historyRadioID = UUID()
+    let first = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "Digitaino")
+    try await store.saveDevice(first)
+    _ = try await store.saveChannel(
+      radioID: historyRadioID, from: ChannelInfo(index: 1, name: "Club", secret: Data(repeating: 0x02, count: 16))
+    )
+    let second = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "Second")
+    try await store.saveDevice(second)
+    try await store.armSwapGuard(id: second.id, previousDeviceID: first.id)
+    try await store.deleteDevice(id: first.id)
+    // The second radio's guarded sync relabels slot 1; its swap is never settled.
+    _ = try await store.saveChannel(
+      radioID: historyRadioID, from: ChannelInfo(index: 1, name: "Theirs", secret: Data(repeating: 0x09, count: 16))
+    )
+
+    let third = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "Third")
+    try await store.saveDevice(third)
+    try await store.armSwapGuard(id: third.id, previousDeviceID: second.id)
+    try await store.deleteDevice(id: second.id)
+
+    let profile = try #require(try await store.fetchSwapProfile(radioID: historyRadioID))
+    #expect(profile.nodeName == "Digitaino")
+    #expect(profile.channels.map(\.name) == ["Club"])
+  }
+
+  @Test
+  func `Forgetting a radio mid-swap keeps its guard and profile on the ghost, and a rejoin takes them`() async throws {
+    let store = try await createStore()
+    let historyRadioID = UUID()
+    let oldRadio = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "Digitaino")
+    try await store.saveDevice(oldRadio)
+    let swapped = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "Swapped")
+    try await store.saveDevice(swapped)
+    try await store.armSwapGuard(id: swapped.id, previousDeviceID: oldRadio.id)
+    try await store.deleteDevice(id: oldRadio.id)
+
+    try await store.demoteDeviceToGhost(id: swapped.id)
+    let replacement = DeviceDTO.testDevice(radioID: UUID(), publicKey: Data(repeating: 0x02, count: 32))
+    try await store.saveDevice(replacement)
+    _ = try await store.reconcileGhostIdentity(currentDeviceID: replacement.id, newPublicKey: Self.identityKey)
+
+    #expect(try await store.fetchSwapGuard(radioID: historyRadioID) == .all)
+    #expect(try await store.fetchSwapProfile(radioID: historyRadioID)?.nodeName == "Digitaino")
+  }
+
   // MARK: - createDevice
 
   @Test

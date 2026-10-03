@@ -58,6 +58,23 @@ struct ConfigImportPlan: Equatable {
   /// not refused wholesale over a handful of entries the radio cannot take: what fits is
   /// written, newest first, and the rest is reported.
   var contactCapacityDropped: [String] = []
+
+  // Slot alignment, planned only for a config built from this phone's records (its channels
+  // carry slots). See ``planChannelAlignment``.
+
+  /// Slots emptied after the writes, so a channel moved into its own slot is not also left in
+  /// the one it sat in: firmware files an incoming message under the first slot whose secret
+  /// matches.
+  var channelClears: [UInt8] = []
+  /// Channels only this radio had, moved to a free slot to make room for the identity's.
+  var channelsRelocated: [String] = []
+  /// Channels only this radio had, removed from it because no free slot was left.
+  var channelsRemoved: [String] = []
+  /// The identity's channels left off because their slot holds one of this radio's own and
+  /// making room was not allowed.
+  var channelsBlocked: [String] = []
+  /// The identity's channels whose slot is past this radio's last one.
+  var channelsBeyondCapacity: [String] = []
 }
 
 // MARK: - Planner
@@ -75,7 +92,8 @@ func planConfigImport(
   maxTxPower: Int8,
   existingChannels: [DeviceChannelSlot],
   existingContacts: [String: MeshContact],
-  protectedContactKeys: Set<String> = []
+  protectedContactKeys: Set<String> = [],
+  makeRoomForChannels: Bool = false
 ) throws -> ConfigImportPlan {
   var plan = ConfigImportPlan(
     importPrivateKey: nil,
@@ -108,11 +126,25 @@ func planConfigImport(
   }
 
   if sections.channels, let channels = config.channels {
-    let (writes, overwrite) = try planChannelWrites(
-      channels, maxChannels: maxChannels, existingChannels: existingChannels
-    )
-    plan.channelWrites = writes
-    plan.channelsOverwriteExisting = overwrite
+    if channels.contains(where: { $0.slot != nil }) {
+      let alignment = try planChannelAlignment(
+        channels, maxChannels: maxChannels, existingChannels: existingChannels,
+        makeRoom: makeRoomForChannels
+      )
+      plan.channelWrites = alignment.writes
+      plan.channelsOverwriteExisting = alignment.overwrite
+      plan.channelClears = alignment.clears
+      plan.channelsRelocated = alignment.relocated
+      plan.channelsRemoved = alignment.removed
+      plan.channelsBlocked = alignment.blocked
+      plan.channelsBeyondCapacity = alignment.beyondCapacity
+    } else {
+      let (writes, overwrite) = try planChannelWrites(
+        channels, maxChannels: maxChannels, existingChannels: existingChannels
+      )
+      plan.channelWrites = writes
+      plan.channelsOverwriteExisting = overwrite
+    }
   }
 
   if sections.contacts, let contacts = config.contacts {
@@ -328,6 +360,149 @@ private func planChannelWrites(
   }
 
   return (writes, overwrite)
+}
+
+// MARK: - Channel Slot Alignment
+
+struct ChannelAlignment: Equatable {
+  var writes: [ConfigImportPlan.ChannelWrite] = []
+  var clears: [UInt8] = []
+  var overwrite = false
+  var relocated: [String] = []
+  var removed: [String] = []
+  var blocked: [String] = []
+  var beyondCapacity: [String] = []
+}
+
+/// Plans the writes that put each of the identity's channels back in its own slot on this
+/// radio. Used for a config built from this phone's records, where every channel carries the
+/// slot its history is filed under, so "first free slot" would file it under the wrong chat.
+///
+/// Per slot the identity uses:
+/// - the radio already holds that channel there: nothing to do (a name-only difference is
+///   rewritten);
+/// - the slot is empty, or holds one of the identity's own channels sitting in the wrong
+///   slot: write it;
+/// - the slot holds a channel only this radio has: with `makeRoom`, that channel moves to a
+///   free slot the identity does not use (or is removed when none is left); without it, the
+///   identity's channel is left off and reported as blocked. The radio's own channels are
+///   never replaced without the user saying so.
+///
+/// A slot left holding a second copy of a channel that now sits in its own slot is reused for
+/// a displaced channel or emptied: firmware files an incoming message under the first slot
+/// whose secret matches. Pure, so it is unit-tested directly.
+func planChannelAlignment(
+  _ channels: [MeshCoreNodeConfig.ChannelConfig],
+  maxChannels: UInt8,
+  existingChannels: [DeviceChannelSlot],
+  makeRoom: Bool
+) throws -> ChannelAlignment {
+  struct Entry: Equatable {
+    let name: String
+    let secret: Data
+    /// The name as the device stores it, for comparison.
+    var storedName: String { name.utf8Prefix(maxBytes: ProtocolLimits.maxUsableNameBytes) }
+  }
+
+  var result = ChannelAlignment()
+  var targets: [UInt8: Entry] = [:]
+  for (i, channel) in channels.enumerated() {
+    guard channel.secret.allSatisfy(\.isHexDigit),
+          let secret = Data(hexString: channel.secret),
+          secret.count == ProtocolLimits.channelSecretSize else {
+      throw NodeConfigServiceError.invalidChannelSecret(index: i, hexLength: channel.secret.count)
+    }
+    let slot = channel.slot ?? UInt8(clamping: i)
+    if slot >= maxChannels {
+      result.beyondCapacity.append(channel.name)
+    } else {
+      targets[slot] = Entry(name: channel.name, secret: secret)
+    }
+  }
+  let targetSecrets = Set(targets.values.map(\.secret))
+
+  var current: [UInt8: Entry] = [:]
+  for slot in existingChannels where slot.isConfigured && slot.index < maxChannels {
+    current[slot.index] = Entry(name: slot.name, secret: slot.secret)
+  }
+
+  // Without leave to make room, a slot holding one of this radio's own channels stays as it
+  // is. So does a slot holding one of the identity's channels whose own slot is blocked that
+  // way: overwriting it would take that channel off the radio altogether. Runs to a fixpoint,
+  // since each newly blocked slot can strand the channel another slot was waiting to receive.
+  var blockedSlots: Set<UInt8> = []
+  if !makeRoom {
+    for (slot, target) in targets {
+      if let held = current[slot], held.secret != target.secret, !targetSecrets.contains(held.secret) {
+        blockedSlots.insert(slot)
+      }
+    }
+    var grew = true
+    while grew {
+      grew = false
+      for (slot, target) in targets where !blockedSlots.contains(slot) {
+        guard let held = current[slot], held.secret != target.secret else { continue }
+        let homes = targets.filter { $0.value.secret == held.secret }.map(\.key)
+        if !homes.isEmpty, homes.allSatisfy({ blockedSlots.contains($0) }) {
+          blockedSlots.insert(slot)
+          grew = true
+        }
+      }
+    }
+  }
+
+  var final = current
+  var displaced: [Entry] = []
+  for slot in targets.keys.sorted() {
+    let target = targets[slot]!
+    if blockedSlots.contains(slot) {
+      result.blocked.append(target.name)
+      continue
+    }
+    if let held = current[slot], held.secret != target.secret, !targetSecrets.contains(held.secret) {
+      displaced.append(held)
+    }
+    final[slot] = target
+  }
+
+  // Slots outside the identity's layout that still hold a copy of a channel now in its own slot.
+  let placedSecrets = Set(targets.keys.compactMap { final[$0] == targets[$0] ? targets[$0]!.secret : nil })
+  var duplicateSlots = final.keys.sorted().filter { slot in
+    targets[slot] == nil && placedSecrets.contains(final[slot]!.secret)
+  }
+  let emptySlots = (0..<maxChannels).filter { final[$0] == nil }
+  var freeSlots = duplicateSlots + emptySlots
+
+  var relocationSlots: Set<UInt8> = []
+  for channel in displaced {
+    guard !freeSlots.isEmpty else {
+      result.removed.append(channel.name)
+      continue
+    }
+    let slot = freeSlots.removeFirst()
+    duplicateSlots.removeAll { $0 == slot }
+    final[slot] = channel
+    relocationSlots.insert(slot)
+    result.relocated.append(channel.name)
+  }
+  for slot in duplicateSlots {
+    final[slot] = nil
+    result.clears.append(slot)
+  }
+
+  // Relocations first, so a displaced channel exists in its new slot before its old one is
+  // overwritten; then the identity's channels, in slot order.
+  let changed = final.keys.sorted().filter { slot in
+    guard let held = current[slot] else { return true }
+    return held.secret != final[slot]!.secret || held.storedName != final[slot]!.storedName
+  }
+  for slot in changed.filter({ relocationSlots.contains($0) }) + changed.filter({ !relocationSlots.contains($0) }) {
+    let entry = final[slot]!
+    if current[slot] != nil { result.overwrite = true }
+    result.writes.append(ConfigImportPlan.ChannelWrite(index: slot, name: entry.name, secret: entry.secret))
+  }
+  if !result.clears.isEmpty { result.overwrite = true }
+  return result
 }
 
 // MARK: - Contacts

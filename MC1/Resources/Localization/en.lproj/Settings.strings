@@ -1217,6 +1217,10 @@
 "configExport.contacts" = "Contacts";
 "configExport.contacts.description" = "Names, keys, and last known positions";
 
+/* Export option: build the file from what this phone has stored instead of reading the radio */
+"configExport.fromRecords" = "From This Phone's Records";
+"configExport.fromRecords.description" = "Builds the file from what this phone holds, so it works without the radio the records came from. Never includes the private key.";
+
 // MARK: - Config Import
 
 /* Import screen navigation title */
@@ -1296,6 +1300,44 @@
 
 /* Generic device-name fallback used in confirmation messages when the node has no name */
 "configImport.thisDevice" = "this device";
+
+// MARK: - Copy to This Radio
+
+/* Settings row and screen title: write this phone's records of your node (contacts, channels, settings) onto the connected radio */
+"configImport.copyFromRecords.title" = "Copy to This Radio";
+
+/* Intro on the Copy to This Radio screen */
+"configImport.copyFromRecords.intro" = "Writes the contacts, channels and settings this phone holds for you onto the connected radio. Each channel goes back into its own slot, so its messages stay with it. The private key is not included.";
+
+/* Intro when the screen opens by itself after a radio takes on your node's key - %@ is the node's name */
+"configImport.copyFromRecords.swapIntro" = "This radio has taken on %@. Copy the contacts, channels and settings this phone holds for it, so the radio can reach everyone you talk to. Nothing is written until you confirm.";
+
+/* Shown while the app reads the connected radio to work out what would be copied */
+"configImport.copyFromRecords.loading" = "Checking this radio…";
+
+/* Button that closes the Copy to This Radio offer without copying */
+"configImport.copyFromRecords.notNow" = "Not Now";
+
+/* Toggle allowing the radio's own channels to move out of the slots your channels belong in */
+"configImport.makeRoom" = "Make Room for Your Channels";
+
+/* Footer under the Make Room toggle - %@ lists your channels whose slots hold one of this radio's own channels */
+"configImport.makeRoom.footer" = "This radio has its own channels in the slots of %@. Turn this on to move them to free slots, or remove them when none are left, so yours go back where their messages are.";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRelocated" = "%1$d of this radio's own channel(s) will move to another slot: %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRemoved" = "%1$d of this radio's own channel(s) will be removed, as no free slot is left: %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBlocked" = "%1$d of your channel(s) will be left off, as this radio has its own channel in their slot: %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBeyondCapacity" = "%1$d of your channel(s) sit in slots this radio does not have and will be left off: %2$@";
+
+/* Progress step - %d is the channel slot number being emptied */
+"configImport.stepClearChannelSlot" = "Freeing channel slot %d";
 
 /* Import progress: applying position */
 "configImport.stepPosition" = "Setting position";

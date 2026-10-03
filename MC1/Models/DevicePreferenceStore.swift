@@ -73,6 +73,24 @@ struct DevicePreferenceStore {
     )
   }
 
+  // MARK: - Radio Swap Offer
+
+  /// The capture date of the identity profile the "Copy to This Radio" offer was last made
+  /// for. The offer is made once per arming of a radio's swap guard, and each arming stores a
+  /// fresh profile, so a matching date means this arming was already offered.
+  func radioSwapOfferedProfileDate(deviceID: UUID) -> Date? {
+    let stored = userDefaults.double(forKey: Self.radioSwapOfferedProfileDateKey(deviceID: deviceID))
+    guard stored != 0 else { return nil }
+    return Date(timeIntervalSinceReferenceDate: stored)
+  }
+
+  func setRadioSwapOfferedProfileDate(_ date: Date, deviceID: UUID) {
+    userDefaults.set(
+      date.timeIntervalSinceReferenceDate,
+      forKey: Self.radioSwapOfferedProfileDateKey(deviceID: deviceID)
+    )
+  }
+
   // MARK: - Adaptive Power
 
   func isAdaptivePowerEnabled(deviceID: UUID) -> Bool {
@@ -124,6 +142,10 @@ struct DevicePreferenceStore {
   /// have changed in the meantime.
   private static func nodeLocationPromptSnoozedAtKey(deviceID: UUID) -> String {
     "device.\(deviceID.uuidString).nodeLocationPromptSnoozedAt"
+  }
+
+  private static func radioSwapOfferedProfileDateKey(deviceID: UUID) -> String {
+    "device.\(deviceID.uuidString).radioSwapOfferedProfileDate"
   }
 
   private static func adaptivePowerEnabledKey(deviceID: UUID) -> String {

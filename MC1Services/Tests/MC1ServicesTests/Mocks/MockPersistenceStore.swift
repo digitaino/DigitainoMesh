@@ -1676,6 +1676,12 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     swapGuards[radioID]?.subtract(parts)
   }
 
+  public var swapProfiles: [UUID: IdentityProfile] = [:]
+
+  public func fetchSwapProfile(radioID: UUID) async throws -> IdentityProfile? {
+    swapProfiles[radioID]
+  }
+
   // MARK: - Room Session State
 
   public var remoteNodeSessions: [UUID: RemoteNodeSessionDTO] = [:]

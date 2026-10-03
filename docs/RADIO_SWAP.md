@@ -1,6 +1,6 @@
 # Radio swap: one identity, any radio
 
-Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1 built the same day (§4.1); P2 to P5 not built. Code references were read from source on that date.
+Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1 and P2 built the same day (§4.1, §4.2); P3 to P5 not built. Code references were read from source on that date.
 
 Rafael's brief: *"I would be using the same key on both radios. so I want everything to transfer over. can we design a better process to do this? I would like to be able to swap radios easily and keep all the same contacts and conversations etc."*
 
@@ -127,7 +127,7 @@ Settings → Radio gets "Remember this identity on this iPhone" and "Forget save
 | Phase | What | Fixes | Size |
 |---|---|---|---|
 | P1 | Protected first sync on new hardware or a new key (R2), and the watermark reset. **Built 2026-10-03** | H1, H2, H6 | Small; contact and channel sync gates plus tests |
-| P2 | Config from the app's records, slot-exact channels, and a "Copy to this radio" action in Settings (R3, R4) | H3, H7 (data half) | Medium; planner input and one screen |
+| P2 | Config from the app's records, slot-exact channels, and a "Copy to this radio" action in Settings (R3, R4) | H3, H7 (data half) | Medium; planner input and one screen. **Built 2026-10-03** |
 | P3 | Keychain key custody, and "Set up as …" at pairing (R5, R6) | H5, H7 (key half), H8 | Medium |
 | P4 | Sibling rows: every radio in the list, one-tap switching, Forget-one semantics (R1) | H4 | Largest; Device lookups, delete paths, picker |
 | P5 | Same-key-on-air warning (R7, optional) | none | Small, if the RX log shows it |
@@ -171,6 +171,44 @@ P1 is worth building before your next swap even if nothing else is. P1 to P3 cov
 **Known-red tests found while verifying, not caused by P1:**
 - `SyncCoordinatorTests` "Full sync prune removes a favourite absent from a complete device set" asserts the pre-2026-09-01 behaviour, which deleted favourites. HEAD's rule keeps them, so the test is stale.
 - The full `swift test` run aborts on the macOS Bluetooth privacy (TCC) check in `ConnectionManagerBLEHealthTests`, as recorded on 2026-08-30.
+
+### 4.2 P2 as built
+
+**The identity profile.** `IdentityProfile` holds the identity's name, LoRa settings, position, other settings and channel layout, slot by slot. It is stored on the Device row as `swapProfile`, model-only like `swapGuard`.
+- `armSwapGuard(id:previousDeviceID:)` captures it from the previous radio's row and from the channel rows before any guarded sync touches them. `reconcileGhostIdentity` captures it from the ghost.
+- If the previous radio's own swap was never settled, its stored profile carries forward, because its rows may already mix two radios' channels.
+- A forget-and-re-pair carries both the guard and the profile into the ghost.
+- **Why this is needed:** the connect that arms the guard rebuilds the Device row from the new radio's `SelfInfo`, and the first guarded sync relabels any slot where the new radio holds a different channel. Without the profile, "copy from the phone" would copy the new radio back onto itself.
+
+**Channel release.** The channel guard is now released only when nothing would be deleted *and* the radio holds every profile channel in its own slot (`IdentityProfile.channelsOutOfPlace`). Before P2, a relabelled slot released the guard, and the identity's channel was lost from the records.
+
+**Config from the phone's records.**
+- `NodeConfigService.recordsConfig(radioID:sections:)` builds a `MeshCoreNodeConfig` from the profile while the guard is armed, and from the Device row and channel rows otherwise.
+- Every contact comes from the store. A favourite gets the radio's favourite flag, so overwrite-oldest spares it.
+- TX power is capped at this radio's maximum.
+- The private key is never included.
+- Channels carry `ChannelConfig.slot`. It is excluded from the JSON coding keys, so files are unchanged.
+
+**Slot alignment.** `planChannelAlignment` is pure and unit-tested. For each of the identity's slots:
+- **Already in place:** nothing is written.
+- **Empty slot:** the channel is written there.
+- **One of your channels sitting in the wrong slot:** your channel is written to its own slot. The slot it vacated is reused or emptied (`ChannelService.vacateSlot`, which keeps the messages), because firmware files a message under the first slot whose secret matches.
+- **The radio's own channel in your slot:** this needs **Make Room for Your Channels**, which is off by default.
+  - With it on, the radio's channel moves to a free slot, or is removed if none is left. Both cases are listed in the confirmation.
+  - With it off, your channel is left off and reported. So is any slot whose occupant could not otherwise reach its home slot.
+- A slot past this radio's last one is reported, not shifted.
+- A file config without slots still uses the old first-free-slot planner.
+
+**Screens.**
+- Settings → Device Configuration → **Copy to This Radio** reuses the import screen with the phone's records as its source. Name, channels and contacts start switched on. Radio, position and other settings start off, with their difference shown: one tap aligns them (decision 3). A profile captured from a restored backup's row carries factory defaults in exactly those fields, so a radio must never be retuned to them unasked. The channel and contact counts come from a planner preview.
+- Export gains **From This Phone's Records**, so a file can be made without the old radio.
+- After the first sync on a radio whose guard is armed with a profile, the same screen opens as a sheet (`RadioSwapPromptState`, owner decision 2). It is offered once per arming: closing it records the profile's capture date per radio. An offer the connection ended before showing comes back next connect. It yields to the connection alerts and What's New, and the stale-location alert yields to it.
+
+**Not built in P2:**
+- The quiet top-up on later switches. Before P4, every switch re-arms the guard, so every switch asks; the top-up belongs with P4.
+- A "keep this radio's channels as mine" action, which would release the guard without copying. Until then a declined copy leaves the guard armed, which is harmless.
+
+**Verification.** 1,076 services tests pass across the sync, contact, channel, persistence, device, import and swap suites. Two notification-sync tests time out only when the whole set runs in parallel; they pass on their own. The app target's offer, location-prompt and import-screen suites pass too. In the simulator, the copy screen can't be driven past "Checking this radio…" because the simulator's mock transport never answers reads. The on-radio check is outstanding.
 
 ## 5. Owner decisions (taken 2026-10-03)
 

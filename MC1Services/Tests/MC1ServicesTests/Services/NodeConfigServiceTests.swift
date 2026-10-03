@@ -734,6 +734,7 @@ struct NodeConfigServiceTests {
       setRadioParams: writers.setRadioParams,
       setTxPower: writers.setTxPower,
       setChannel: writers.setChannel,
+      clearChannelSlot: writers.clearChannelSlot,
       addContact: { _, contact in
         spy.record("addContact:\(contact.advertisedName)")
         // Models the post-device-add local save failing; the production closure must
@@ -804,6 +805,7 @@ struct NodeConfigServiceTests {
       case .radioParameters: return "radio"
       case .txPower: return "txPower"
       case .channel: return "channel"
+      case .clearChannelSlot: return "clearChannelSlot"
       case .contact: return "contact"
       }
     })
@@ -968,6 +970,7 @@ private func makeSpyWriters(
     setRadioParams: { _ in try step("setRadioParams") },
     setTxPower: { _ in try step("setTxPower") },
     setChannel: { _, write in try step("setChannel:\(write.name)") },
+    clearChannelSlot: { _, index in try step("clearChannelSlot:\(index)") },
     addContact: { _, contact in try step("addContact:\(contact.advertisedName)") }
   )
 }

@@ -261,7 +261,9 @@ While the guard is armed, deletions are held back:
 - Channel sync keeps rows at slots the radio reports empty and at slots beyond its capacity.
 
 Each part is released by the first complete sync of that part that would delete nothing.
-After that, pruning works as above. The guard is model-only state, not part of `DeviceDTO`
+After that, pruning works as above. Since P2 (`docs/RADIO_SWAP.md`, section 4.2), the channels part is
+also held until the radio carries every channel of the stored `IdentityProfile` in its own
+slot. The guard is model-only state, not part of `DeviceDTO`
 and not in backups, so a snapshot-then-save cannot release it. Logs read
 `radio swap guard kept …` and `radio swap guard released …`. See docs/RADIO_SWAP.md, rule R2.
 

@@ -453,8 +453,19 @@ public actor ChannelService {
     }
 
     if holdForSwap {
+      // The identity's layout lives in the swap profile, not the rows: this pass has already
+      // relabelled any slot where the radio holds a different channel. The hold ends only once
+      // the radio carries every profile channel in its own slot, so a later unguarded sync can
+      // never delete a row whose channel was simply never copied over.
+      let profile = try? await dataStore.fetchSwapProfile(radioID: radioID)
+      let outOfPlace = profile?.channelsOutOfPlace(
+        configured: configured.map { ($0.index, $0.secret) },
+        maxChannels: maxChannels
+      ) ?? []
       if !wouldDelete.isEmpty {
         logger.notice("Channel sync: radio swap guard kept channel rows at slots \(wouldDelete.sorted()) this radio reports empty")
+      } else if !outOfPlace.isEmpty {
+        logger.notice("Channel sync: radio swap guard held, slots \(outOfPlace.map(\.slot)) do not hold this identity's channels yet")
       } else if priorChannels != nil, syncErrors.isEmpty {
         try? await dataStore.releaseSwapGuard(radioID: radioID, .channels)
         logger.notice("Channel sync: nothing to delete, radio swap guard released for channels")
@@ -726,6 +737,32 @@ public actor ChannelService {
     await draftClearHandler?(radioID, [index])
 
     // Refresh the decryption cache with the updated channel list
+    let channels = try await dataStore.fetchChannels(radioID: radioID)
+    await rxLogService?.updateChannels(from: channels)
+  }
+
+  /// Empties a slot on the radio and drops its local row, leaving any messages filed under the
+  /// slot where they are, as a sync of an emptied slot does. Used when "Copy to This Radio" has
+  /// written a channel into its own slot and the slot it sat in must not keep a second copy:
+  /// firmware files an incoming message under the first slot whose secret matches.
+  public func vacateSlot(radioID: UUID, index: UInt8) async throws {
+    let row = try await dataStore.fetchChannel(radioID: radioID, index: index)
+
+    do {
+      try await session.setChannel(
+        index: index,
+        name: "",
+        secret: Data(repeating: 0, count: ProtocolLimits.channelSecretSize)
+      )
+    } catch let error as MeshCoreError {
+      throw ChannelServiceError.sessionError(error)
+    }
+
+    if let row {
+      try await dataStore.deleteChannel(id: row.id)
+    }
+    await draftClearHandler?(radioID, [index])
+
     let channels = try await dataStore.fetchChannels(radioID: radioID)
     await rxLogService?.updateChannels(from: channels)
   }

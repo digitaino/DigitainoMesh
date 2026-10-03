@@ -152,10 +152,20 @@ public extension MeshCoreNodeConfig {
     public var name: String
     /// Hex-encoded 16-byte secret (32 hex characters).
     public var secret: String
+    /// The slot this channel must occupy, set only on a config built from this phone's
+    /// records, where history is keyed by slot. Never read from or written to a file: the
+    /// companion format has no slot field.
+    public var slot: UInt8?
 
-    public init(name: String, secret: String) {
+    public init(name: String, secret: String, slot: UInt8? = nil) {
       self.name = name
       self.secret = secret
+      self.slot = slot
+    }
+
+    // swiftlint:disable:next nesting
+    enum CodingKeys: String, CodingKey {
+      case name, secret
     }
   }
 }

@@ -7,6 +7,7 @@ enum SettingsSubpage: Hashable {
   case publicKey(Data)
   case configExport
   case configImport
+  case copyToRadio
   case blockedChannelSenders
   case blockedContacts
   case trustedContacts
@@ -28,6 +29,8 @@ extension View {
           NodeConfigExportView()
         case .configImport:
           NodeConfigImportView()
+        case .copyToRadio:
+          NodeConfigImportView(source: .records)
         case .blockedChannelSenders:
           BlockedChannelSendersView()
         case .blockedContacts:

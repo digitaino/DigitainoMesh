@@ -1196,6 +1196,10 @@
 "configExport.contacts" = "Contacts";
 "configExport.contacts.description" = "Noms, clés et dernières positions connues";
 
+/* Export option: build the file from what this phone has stored instead of reading the radio */
+"configExport.fromRecords" = "À partir des données de ce téléphone";
+"configExport.fromRecords.description" = "Crée le fichier à partir de ce que ce téléphone conserve, et fonctionne donc sans la radio d'où proviennent les données. N'inclut jamais la clé privée.";
+
 // MARK: - Config Import
 
 /* Import screen navigation title */
@@ -1275,6 +1279,44 @@
 
 /* Generic device-name fallback used in confirmation messages when the node has no name */
 "configImport.thisDevice" = "cet appareil";
+
+// MARK: - Copy to This Radio
+
+/* Settings row and screen title: write this phone's records of your node (contacts, channels, settings) onto the connected radio */
+"configImport.copyFromRecords.title" = "Copier sur cette radio";
+
+/* Intro on the Copy to This Radio screen */
+"configImport.copyFromRecords.intro" = "Écrit sur la radio connectée les contacts, canaux et paramètres que ce téléphone conserve pour vous. Chaque canal retrouve son propre emplacement, et ses messages restent ainsi avec lui. La clé privée n'est pas incluse.";
+
+/* Intro when the screen opens by itself after a radio takes on your node's key - %@ is the node's name */
+"configImport.copyFromRecords.swapIntro" = "Cette radio a repris l'identité de %@. Copiez les contacts, canaux et paramètres que ce téléphone conserve pour ce nœud, afin que la radio puisse joindre toutes les personnes avec qui vous échangez. Rien n'est écrit tant que vous n'avez pas confirmé.";
+
+/* Shown while the app reads the connected radio to work out what would be copied */
+"configImport.copyFromRecords.loading" = "Vérification de cette radio…";
+
+/* Button that closes the Copy to This Radio offer without copying */
+"configImport.copyFromRecords.notNow" = "Plus tard";
+
+/* Toggle allowing the radio's own channels to move out of the slots your channels belong in */
+"configImport.makeRoom" = "Faire de la place pour vos canaux";
+
+/* Footer under the Make Room toggle - %@ lists your channels whose slots hold one of this radio's own channels */
+"configImport.makeRoom.footer" = "Cette radio a ses propres canaux dans les emplacements de %@. Activez cette option pour les déplacer vers des emplacements libres, ou les supprimer s'il n'en reste plus, afin que les vôtres retrouvent l'emplacement de leurs messages.";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRelocated" = "Canaux propres à cette radio qui seront déplacés vers un autre emplacement (%1$d) : %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRemoved" = "Canaux propres à cette radio qui seront supprimés, faute d'emplacement libre (%1$d) : %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBlocked" = "Vos canaux qui seront ignorés, car cette radio a son propre canal à leur emplacement (%1$d) : %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBeyondCapacity" = "Vos canaux situés dans des emplacements que cette radio n'a pas, qui seront ignorés (%1$d) : %2$@";
+
+/* Progress step - %d is the channel slot number being emptied */
+"configImport.stepClearChannelSlot" = "Libération de l'emplacement de canal %d";
 
 /* Import progress: applying position */
 "configImport.stepPosition" = "Définition de la position";

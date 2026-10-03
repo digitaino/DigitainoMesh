@@ -124,23 +124,59 @@ public extension PersistenceStore {
   // MARK: - Swap Guard
 
   /// Arms every part of the ``SwapGuard`` on a radio that has just taken on an identity's
-  /// history, and clears its contact watermark. The watermark is the previous radio's RTC
-  /// `lastmod` and means nothing against this radio's table, so the next contact sync must
-  /// read the whole table.
-  func armSwapGuard(id: UUID) throws {
+  /// history, clears its contact watermark, and stores the ``IdentityProfile`` it should take on.
+  /// The watermark is the previous radio's RTC `lastmod` and means nothing against this radio's
+  /// table, so the next contact sync must read the whole table.
+  ///
+  /// The profile comes from `previousDeviceID`'s row (the radio the identity was on) and the
+  /// channel rows, read before any sync against the new radio has touched them. When that row's
+  /// own swap was never settled, its rows may already mix two radios' channels, so its stored
+  /// profile carries forward instead. With no `previousDeviceID` the row itself is the previous
+  /// state (a key change on known hardware).
+  func armSwapGuard(id: UUID, previousDeviceID: UUID? = nil) throws {
+    guard let device = try fetchDeviceModel(id: id) else {
+      throw PersistenceStoreError.deviceNotFound
+    }
+    let previous = try previousDeviceID.flatMap { try fetchDeviceModel(id: $0) } ?? device
+    device.swapProfile = try swapProfileData(inheritingFrom: previous)
+    device.swapGuard = SwapGuard.all.rawValue
+    device.lastContactSync = 0
+    try modelContext.save()
+  }
+
+  func fetchSwapProfile(radioID: UUID) throws -> IdentityProfile? {
+    let targetRadioID = radioID
+    let predicate = #Predicate<Device> { device in
+      device.radioID == targetRadioID
+    }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+    guard let data = try modelContext.fetch(descriptor).first?.swapProfile else { return nil }
+    return try? JSONDecoder().decode(IdentityProfile.self, from: data)
+  }
+
+  /// The profile a radio taking over from `previous` should carry: `previous`'s own stored
+  /// profile while its swap is unsettled, otherwise a fresh capture of `previous` and the
+  /// channel rows of its partition.
+  private func swapProfileData(inheritingFrom previous: Device) throws -> Data? {
+    if previous.swapGuard != 0, let carried = previous.swapProfile {
+      return carried
+    }
+    let profile = IdentityProfile.capture(
+      device: DeviceDTO(from: previous),
+      channels: try fetchChannels(radioID: previous.radioID)
+    )
+    return try JSONEncoder().encode(profile)
+  }
+
+  private func fetchDeviceModel(id: UUID) throws -> Device? {
     let targetID = id
     let predicate = #Predicate<Device> { device in
       device.id == targetID
     }
     var descriptor = FetchDescriptor(predicate: predicate)
     descriptor.fetchLimit = 1
-
-    guard let device = try modelContext.fetch(descriptor).first else {
-      throw PersistenceStoreError.deviceNotFound
-    }
-    device.swapGuard = SwapGuard.all.rawValue
-    device.lastContactSync = 0
-    try modelContext.save()
+    return try modelContext.fetch(descriptor).first
   }
 
   func fetchSwapGuard(radioID: UUID) throws -> SwapGuard {
@@ -259,6 +295,10 @@ public extension PersistenceStore {
 
     modelContext.delete(existing)
     let ghost = Device(dto: ghostDTO)
+    // Model-only swap state is not in the DTO; carry it so an unsettled swap survives a
+    // forget-and-re-pair.
+    ghost.swapGuard = existing.swapGuard
+    ghost.swapProfile = existing.swapProfile
     modelContext.insert(ghost)
     try modelContext.save()
   }
@@ -299,7 +339,8 @@ public extension PersistenceStore {
   ///   - newPublicKey: The radio's `selfInfo.publicKey` after `importPrivateKey`.
   /// - Returns: The new `radioID` if reconciliation occurred, otherwise `nil`.
   ///
-  /// A rejoin arms the current row's ``SwapGuard`` and clears its contact watermark.
+  /// A rejoin arms the current row's ``SwapGuard``, clears its contact watermark, and stores
+  /// the ghost's ``IdentityProfile`` on it.
   func reconcileGhostIdentity(currentDeviceID: UUID, newPublicKey: Data) throws -> UUID? {
     let lookupKey = newPublicKey
     let lookupID = currentDeviceID
@@ -328,7 +369,9 @@ public extension PersistenceStore {
     current.radioID = newRadioID
     current.publicKey = newPublicKey
     // This radio's tables were never synced against the ghost's history: hold back the
-    // deletions a full sync would make, and drop the watermark of the partition it left.
+    // deletions a full sync would make, drop the watermark of the partition it left, and
+    // keep the ghost's settings and channel layout for "Copy to This Radio".
+    current.swapProfile = try swapProfileData(inheritingFrom: ghost)
     current.swapGuard = SwapGuard.all.rawValue
     current.lastContactSync = 0
     for method in ghost.connectionMethods where !method.isBluetooth {

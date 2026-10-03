@@ -281,8 +281,14 @@ struct ChannelServicePipelineTests {
 /// slots, so an empty slot there is not a channel the user removed.
 @Suite("ChannelService radio swap guard")
 struct ChannelServiceSwapGuardTests {
-  /// Serial two-slot sync: slot 0 holds "ch0", slot 1 is empty on the radio.
-  private func syncTwoSlots(_ service: ChannelService, _ transport: MockTransport, radioID: UUID) async throws {
+  /// Serial two-slot sync: slot 0 holds "ch0"; slot 1 is empty on the radio unless `slot1` names
+  /// a channel and its secret byte.
+  private func syncTwoSlots(
+    _ service: ChannelService,
+    _ transport: MockTransport,
+    radioID: UUID,
+    slot1: (name: String, secretByte: UInt8)? = nil
+  ) async throws {
     let syncTask = Task {
       try await service.syncChannels(radioID: radioID, maxChannels: 2, usePipelinedRead: false)
     }
@@ -296,7 +302,11 @@ struct ChannelServiceSwapGuardTests {
       await transport.sentData.count == 3
     }
     await transport.simulateReceive(
-      makeChannelInfoPacket(index: 1, name: "", secret: Data(repeating: 0, count: 16))
+      makeChannelInfoPacket(
+        index: 1,
+        name: slot1?.name ?? "",
+        secret: Data(repeating: slot1?.secretByte ?? 0, count: 16)
+      )
     )
     _ = try await syncTask.value
   }
@@ -343,6 +353,45 @@ struct ChannelServiceSwapGuardTests {
     // The contacts half is released only by a contact sync.
     #expect(held.contains(.contacts))
     #expect(try await dataStore.fetchChannels(radioID: radioID).map(\.index) == [0])
+  }
+
+  @Test
+  func `armed guard holds while the radio has a different channel in one of your slots`() async throws {
+    let radioID = UUID()
+    let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)
+    _ = try await dataStore.saveChannel(
+      radioID: radioID, from: ChannelInfo(index: 1, name: "Club", secret: Data(repeating: 0xCD, count: 16))
+    )
+    // The profile captures Club at slot 1.
+    try await dataStore.armSwapGuard(id: radioID)
+
+    let transport = MockTransport()
+    let session = try await startedSession(transport)
+    defer { Task { await session.stop() } }
+    let service = ChannelService(session: session, dataStore: dataStore, rxLogService: nil)
+    try await syncTwoSlots(service, transport, radioID: radioID, slot1: ("Theirs", 0x99))
+
+    // Nothing would be deleted, but slot 1 does not hold Club: the hold stays.
+    #expect(try await dataStore.fetchSwapGuard(radioID: radioID).contains(.channels))
+    #expect(try await dataStore.fetchSwapProfile(radioID: radioID)?.channels.map(\.name) == ["Club"])
+  }
+
+  @Test
+  func `armed guard is released once the radio holds your channels in their slots`() async throws {
+    let radioID = UUID()
+    let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)
+    _ = try await dataStore.saveChannel(
+      radioID: radioID, from: ChannelInfo(index: 1, name: "Club", secret: Data(repeating: 0xCD, count: 16))
+    )
+    try await dataStore.armSwapGuard(id: radioID)
+
+    let transport = MockTransport()
+    let session = try await startedSession(transport)
+    defer { Task { await session.stop() } }
+    let service = ChannelService(session: session, dataStore: dataStore, rxLogService: nil)
+    try await syncTwoSlots(service, transport, radioID: radioID, slot1: ("Club", 0xCD))
+
+    #expect(try await dataStore.fetchSwapGuard(radioID: radioID).contains(.channels) == false)
   }
 
   @Test

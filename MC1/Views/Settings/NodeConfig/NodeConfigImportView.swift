@@ -3,18 +3,58 @@ import SwiftUI
 
 struct NodeConfigImportView: View {
   @Environment(\.appState) private var appState
-  @State private var viewModel = NodeConfigImportViewModel()
+  @State private var viewModel: NodeConfigImportViewModel
+  /// Set when the screen opens as the offer after a radio takes on an identity: the name the
+  /// intro uses for that identity.
+  private let swapIdentityName: String?
+  /// Closes the screen when it is presented as that offer's sheet.
+  private let onClose: (() -> Void)?
+
+  init(
+    source: NodeConfigImportViewModel.Source = .file,
+    swapIdentityName: String? = nil,
+    onClose: (() -> Void)? = nil
+  ) {
+    _viewModel = State(initialValue: NodeConfigImportViewModel(source: source))
+    self.swapIdentityName = swapIdentityName
+    self.onClose = onClose
+  }
 
   var body: some View {
     Group {
       if let config = viewModel.importedConfig {
-        ImportPreviewList(viewModel: viewModel, config: config)
+        ImportPreviewList(viewModel: viewModel, config: config, swapIdentityName: swapIdentityName)
+      } else if viewModel.source == .records {
+        RecordsLoadingList(viewModel: viewModel)
       } else {
         SelectFileList(viewModel: viewModel)
       }
     }
-    .navigationTitle(L10n.Settings.ConfigImport.title)
+    .navigationTitle(
+      viewModel.source == .records ? L10n.Settings.ConfigImport.CopyFromRecords.title : L10n.Settings.ConfigImport.title
+    )
+    .task {
+      viewModel.loadFromRecords(
+        nodeConfigService: appState.services?.nodeConfigService,
+        settingsService: appState.services?.settingsService,
+        radioID: appState.connectedDevice?.radioID
+      )
+    }
     .onDisappear { viewModel.handleDismissal() }
+    .toolbar {
+      if let onClose {
+        ToolbarItem(placement: .cancellationAction) {
+          Button(viewModel.importComplete
+            ? L10n.Localizable.Common.done
+            : L10n.Settings.ConfigImport.CopyFromRecords.notNow) {
+            onClose()
+          }
+          .disabled(viewModel.isApplying)
+        }
+      }
+    }
+    // A sheet must not be swiped away halfway through writing to the radio.
+    .interactiveDismissDisabled(viewModel.isApplying)
     .fileImporter(
       isPresented: $viewModel.showFilePicker,
       allowedContentTypes: [.json]
@@ -81,15 +121,52 @@ private struct SelectFileList: View {
   }
 }
 
+// MARK: - Records Loading
+
+private struct RecordsLoadingList: View {
+  @Environment(\.appTheme) private var theme
+  @Bindable var viewModel: NodeConfigImportViewModel
+
+  var body: some View {
+    List {
+      Section {
+        if let error = viewModel.errorMessage {
+          Label(error, systemImage: "exclamationmark.triangle")
+            .foregroundStyle(.red)
+        } else {
+          HStack {
+            Text(L10n.Settings.ConfigImport.CopyFromRecords.loading)
+            Spacer()
+            ProgressView()
+          }
+        }
+      }
+      .themedRowBackground(theme)
+    }
+    .themedCanvas(theme)
+  }
+}
+
 // MARK: - Import Preview
 
 private struct ImportPreviewList: View {
   @Environment(\.appTheme) private var theme
   @Bindable var viewModel: NodeConfigImportViewModel
   let config: MeshCoreNodeConfig
+  let swapIdentityName: String?
 
   var body: some View {
     List {
+      if viewModel.source == .records {
+        Section {
+          Text(swapIdentityName.map { L10n.Settings.ConfigImport.CopyFromRecords.swapIntro($0) }
+            ?? L10n.Settings.ConfigImport.CopyFromRecords.intro)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .themedRowBackground(theme)
+      }
+
       if config.name != nil || config.privateKey != nil {
         NodeIdentitySection(viewModel: viewModel, config: config)
       }
@@ -230,18 +307,42 @@ private struct PositionSection: View {
 
 private struct ChannelsSection: View {
   @Environment(\.appTheme) private var theme
+  @Environment(\.appState) private var appState
   @Bindable var viewModel: NodeConfigImportViewModel
   let channels: [MeshCoreNodeConfig.ChannelConfig]
+
+  /// The radio's own channels sitting in the identity's slots: blocked while "Make Room" is
+  /// off, moved or removed once it is on.
+  private var conflicts: [String] {
+    guard let preview = viewModel.recordsPreview else { return [] }
+    return viewModel.makeRoomForChannels
+      ? preview.channelsRelocated + preview.channelsRemoved
+      : preview.channelsBlocked
+  }
 
   var body: some View {
     Section {
       Toggle(isOn: $viewModel.sections.channels) {
         VStack(alignment: .leading) {
           Text(L10n.Settings.ConfigExport.channels)
-          Text(L10n.Settings.ConfigImport.channelCount(channels.count))
+          Text(L10n.Settings.ConfigImport.channelCount(viewModel.recordsPreview?.channelWriteCount ?? channels.count))
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+      }
+      if !conflicts.isEmpty || viewModel.makeRoomForChannels {
+        Toggle(L10n.Settings.ConfigImport.makeRoom, isOn: $viewModel.makeRoomForChannels)
+          .disabled(!viewModel.sections.channels || viewModel.isLoadingRecords)
+          .onChange(of: viewModel.makeRoomForChannels) {
+            viewModel.refreshRecordsPreview(
+              nodeConfigService: appState.services?.nodeConfigService,
+              radioID: appState.connectedDevice?.radioID
+            )
+          }
+      }
+    } footer: {
+      if let blocked = viewModel.recordsPreview?.channelsBlocked, !blocked.isEmpty, !viewModel.makeRoomForChannels {
+        Text(L10n.Settings.ConfigImport.MakeRoom.footer(ListFormatter.localizedString(byJoining: blocked)))
       }
     }
     .themedRowBackground(theme)
@@ -258,7 +359,7 @@ private struct ContactsSection: View {
       Toggle(isOn: $viewModel.sections.contacts) {
         VStack(alignment: .leading) {
           Text(L10n.Settings.ConfigExport.contacts)
-          Text(L10n.Settings.ConfigImport.contactCount(contacts.count))
+          Text(L10n.Settings.ConfigImport.contactCount(viewModel.recordsPreview?.contactWriteCount ?? contacts.count))
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
@@ -292,7 +393,7 @@ private struct ApplySection: View {
             radioID: appState.connectedDevice?.radioID
           )
         }
-        .disabled(viewModel.isPreparingConfirmation)
+        .disabled(viewModel.isPreparingConfirmation || viewModel.isLoadingRecords)
       }
     }
     .themedRowBackground(theme)

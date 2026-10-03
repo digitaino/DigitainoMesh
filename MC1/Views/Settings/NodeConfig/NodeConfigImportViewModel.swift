@@ -5,6 +5,28 @@ import SwiftUI
 @Observable
 @MainActor
 final class NodeConfigImportViewModel {
+  /// Where the config comes from: a JSON file, or this phone's own records of the identity
+  /// ("Copy to This Radio", docs/RADIO_SWAP.md R3), which puts each channel back in its slot.
+  enum Source {
+    case file
+    case records
+  }
+
+  let source: Source
+
+  init(source: Source = .file) {
+    self.source = source
+  }
+
+  // Records state
+  /// Planner preview of the records config with every section on, for the per-section counts
+  /// and the slot notes. Re-run when "Make Room" changes.
+  var recordsPreview: ImportPreview?
+  var isLoadingRecords = false
+  /// Leave to move this radio's own channels out of the identity's slots. Off until the user
+  /// turns it on: a slot holding a different channel is never replaced without asking.
+  var makeRoomForChannels = false
+
   // Parse state
   var importedConfig: MeshCoreNodeConfig?
   var errorMessage: String?
@@ -36,6 +58,11 @@ final class NodeConfigImportViewModel {
   private var contactCoordinateFallbacks: [String] = []
   /// Contacts the preview found no free slot for; named so the user knows what stays behind.
   private var contactCapacityDropped: [String] = []
+  /// Slot alignment notes from the preview (records source only).
+  private var channelsRelocated: [String] = []
+  private var channelsRemoved: [String] = []
+  private var channelsBlocked: [String] = []
+  private var channelsBeyondCapacity: [String] = []
 
   /// True once the import has reported progress, i.e. at least one destructive write reached the
   /// device. Distinguishes "cancelled before anything changed" from "cancelled mid-write."
@@ -97,6 +124,17 @@ final class NodeConfigImportViewModel {
       let names = ListFormatter.localizedString(byJoining: contactCoordinateFallbacks)
       notes.append(L10n.Settings.ConfigImport.contactCoordinateFallback(contactCoordinateFallbacks.count, names))
     }
+    if sections.channels {
+      let slotNotes: [([String], (Int, String) -> String)] = [
+        (channelsRelocated, { L10n.Settings.ConfigImport.channelsRelocated($0, $1) }),
+        (channelsRemoved, { L10n.Settings.ConfigImport.channelsRemoved($0, $1) }),
+        (channelsBlocked, { L10n.Settings.ConfigImport.channelsBlocked($0, $1) }),
+        (channelsBeyondCapacity, { L10n.Settings.ConfigImport.channelsBeyondCapacity($0, $1) }),
+      ]
+      for (channelNames, format) in slotNotes where !channelNames.isEmpty {
+        notes.append(format(channelNames.count, ListFormatter.localizedString(byJoining: channelNames)))
+      }
+    }
     guard !notes.isEmpty else { return base }
     return ([base] + notes).joined(separator: "\n\n")
   }
@@ -133,6 +171,79 @@ final class NodeConfigImportViewModel {
         await self?.applyParseFailure(error, for: taskID)
       }
     }
+  }
+
+  // MARK: - From This Phone's Records
+
+  /// Builds the config from this phone's records and previews it against the connected radio,
+  /// so every section shows what would actually be written. Nil parameters mirror a
+  /// disconnected state.
+  func loadFromRecords(nodeConfigService: NodeConfigService?, settingsService: SettingsService?, radioID: UUID?) {
+    guard source == .records, !isLoadingRecords, !isApplying else { return }
+    guard let service = nodeConfigService, let radioID else { return }
+
+    isLoadingRecords = true
+    errorMessage = nil
+    previewTask?.cancel()
+    previewTask = Task {
+      defer { isLoadingRecords = false }
+      do {
+        var everything = ConfigSections()
+        everything.selectAll()
+        let config = try await service.recordsConfig(radioID: radioID, sections: everything)
+        await loadCurrentDeviceState(settingsService: settingsService)
+        let preview = try await service.previewImport(
+          config, sections: everything, radioID: radioID, makeRoomForChannels: makeRoomForChannels
+        )
+        guard !Task.isCancelled else { return }
+        importedConfig = config
+        recordsPreview = preview
+        selectChangedSections(of: config)
+      } catch is CancellationError {
+        // The screen went away; its dismissal owns the state.
+      } catch {
+        errorMessage = error.userFacingMessage
+        logger.error("Records load failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  /// Re-runs the records preview after "Make Room" changes, so the channel row and its notes
+  /// describe what would now happen.
+  func refreshRecordsPreview(nodeConfigService: NodeConfigService?, radioID: UUID?) {
+    guard source == .records, let config = importedConfig,
+          let service = nodeConfigService, let radioID else { return }
+    var everything = ConfigSections()
+    everything.selectAll()
+    previewTask?.cancel()
+    isLoadingRecords = true
+    previewTask = Task {
+      defer { isLoadingRecords = false }
+      do {
+        let preview = try await service.previewImport(
+          config, sections: everything, radioID: radioID, makeRoomForChannels: makeRoomForChannels
+        )
+        guard !Task.isCancelled else { return }
+        recordsPreview = preview
+      } catch is CancellationError {
+        // Superseded or dismissed.
+      } catch {
+        errorMessage = error.userFacingMessage
+      }
+    }
+  }
+
+  /// Turns on the name when it differs, and channels and contacts. Radio, position and other
+  /// settings start off with their difference shown, one tap to align (owner decision 3): a
+  /// profile captured from a restored backup's row carries factory defaults for exactly those
+  /// fields, and a radio must never be retuned to them unasked.
+  private func selectChangedSections(of config: MeshCoreNodeConfig) {
+    sections.nodeIdentity = config.name != nil && config.name != currentName
+    sections.radioSettings = false
+    sections.positionSettings = false
+    sections.otherSettings = false
+    sections.channels = config.channels?.isEmpty == false
+    sections.contacts = config.contacts?.isEmpty == false
   }
 
   private func applyParseSuccess(_ config: MeshCoreNodeConfig, for taskID: UUID) {
@@ -186,7 +297,9 @@ final class NodeConfigImportViewModel {
     previewTask = Task {
       defer { isPreparingConfirmation = false }
       do {
-        let preview = try await service.previewImport(config, sections: sections, radioID: radioID)
+        let preview = try await service.previewImport(
+          config, sections: sections, radioID: radioID, makeRoomForChannels: makeRoomForChannels
+        )
         // If the user left the screen while the round-trip was in flight, the dismissal has
         // already reset the UI; presenting the confirmation now would pop an alert over a
         // stale, off-screen state, so honour the cancellation even when the BLE call won the
@@ -195,6 +308,10 @@ final class NodeConfigImportViewModel {
         channelsWouldOverwrite = preview.channelsOverwriteExisting
         contactCoordinateFallbacks = preview.contactCoordinateFallbacks
         contactCapacityDropped = preview.contactCapacityDropped
+        channelsRelocated = preview.channelsRelocated
+        channelsRemoved = preview.channelsRemoved
+        channelsBlocked = preview.channelsBlocked
+        channelsBeyondCapacity = preview.channelsBeyondCapacity
         errorMessage = nil
         showConfirmation = true
       } catch is CancellationError {
@@ -235,7 +352,8 @@ final class NodeConfigImportViewModel {
         try await service.importConfig(
           config,
           sections: sections,
-          radioID: radioID
+          radioID: radioID,
+          makeRoomForChannels: makeRoomForChannels
         ) { progress in
           progressContinuation.yield(progress)
         }
@@ -247,6 +365,8 @@ final class NodeConfigImportViewModel {
         }
         isApplying = false
         importComplete = true
+        // A records copy stays on its result: there is no file to pick again.
+        guard source == .file else { return }
         try? await Task.sleep(for: .seconds(1.5))
         guard !Task.isCancelled else { return }
         resetToFileSelection()
@@ -295,6 +415,7 @@ final class NodeConfigImportViewModel {
     case .radioParameters: L10n.Settings.ConfigImport.stepRadioParameters
     case .txPower: L10n.Settings.ConfigImport.stepTxPower
     case let .channel(name): L10n.Settings.ConfigImport.stepChannel(name)
+    case let .clearChannelSlot(index): L10n.Settings.ConfigImport.stepClearChannelSlot(Int(index))
     case let .contact(name): L10n.Settings.ConfigImport.stepContact(name)
     }
   }
@@ -332,5 +453,12 @@ final class NodeConfigImportViewModel {
     showConfirmation = false
     channelsWouldOverwrite = false
     didApplyAnyWrite = false
+    recordsPreview = nil
+    isLoadingRecords = false
+    makeRoomForChannels = false
+    channelsRelocated = []
+    channelsRemoved = []
+    channelsBlocked = []
+    channelsBeyondCapacity = []
   }
 }

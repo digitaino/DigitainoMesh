@@ -20,6 +20,11 @@ struct ConfigExportImportSection: View {
         TintedLabel(L10n.Settings.ConfigImport.importConfig, systemImage: "square.and.arrow.down")
       }
       .disabled(isDisabled)
+
+      NavigationLink(value: SettingsSubpage.copyToRadio) {
+        TintedLabel(L10n.Settings.ConfigImport.CopyFromRecords.title, systemImage: "arrow.triangle.2.circlepath")
+      }
+      .disabled(isDisabled)
     } header: {
       Text(L10n.Settings.ConfigExport.sectionTitle)
     } footer: {

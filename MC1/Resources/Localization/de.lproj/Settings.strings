@@ -1196,6 +1196,10 @@
 "configExport.contacts" = "Kontakte";
 "configExport.contacts.description" = "Namen, Schlüssel und zuletzt bekannte Positionen";
 
+/* Export option: build the file from what this phone has stored instead of reading the radio */
+"configExport.fromRecords" = "Aus den Daten dieses Telefons";
+"configExport.fromRecords.description" = "Erstellt die Datei aus dem, was dieses Telefon gespeichert hat, und funktioniert daher auch ohne das Funkgerät, von dem die Daten stammen. Enthält nie den privaten Schlüssel.";
+
 // MARK: - Config Import
 
 /* Import screen navigation title */
@@ -1275,6 +1279,44 @@
 
 /* Generic device-name fallback used in confirmation messages when the node has no name */
 "configImport.thisDevice" = "dieses Gerät";
+
+// MARK: - Copy to This Radio
+
+/* Settings row and screen title: write this phone's records of your node (contacts, channels, settings) onto the connected radio */
+"configImport.copyFromRecords.title" = "Auf dieses Funkgerät kopieren";
+
+/* Intro on the Copy to This Radio screen */
+"configImport.copyFromRecords.intro" = "Schreibt die Kontakte, Kanäle und Einstellungen, die dieses Telefon für dich gespeichert hat, auf das verbundene Funkgerät. Jeder Kanal kommt zurück auf seinen eigenen Platz, sodass seine Nachrichten bei ihm bleiben. Der private Schlüssel ist nicht enthalten.";
+
+/* Intro when the screen opens by itself after a radio takes on your node's key - %@ is the node's name */
+"configImport.copyFromRecords.swapIntro" = "Dieses Funkgerät hat die Identität von %@ übernommen. Kopiere die Kontakte, Kanäle und Einstellungen, die dieses Telefon dafür gespeichert hat, damit das Funkgerät alle erreicht, mit denen du schreibst. Es wird nichts geschrieben, bevor du bestätigst.";
+
+/* Shown while the app reads the connected radio to work out what would be copied */
+"configImport.copyFromRecords.loading" = "Dieses Funkgerät wird geprüft…";
+
+/* Button that closes the Copy to This Radio offer without copying */
+"configImport.copyFromRecords.notNow" = "Jetzt nicht";
+
+/* Toggle allowing the radio's own channels to move out of the slots your channels belong in */
+"configImport.makeRoom" = "Platz für deine Kanäle schaffen";
+
+/* Footer under the Make Room toggle - %@ lists your channels whose slots hold one of this radio's own channels */
+"configImport.makeRoom.footer" = "Dieses Funkgerät hat eigene Kanäle auf den Plätzen von %@. Schalte dies ein, um sie auf freie Plätze zu verschieben oder, wenn keine mehr frei sind, zu entfernen, damit deine Kanäle dorthin zurückkehren, wo ihre Nachrichten sind.";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRelocated" = "Eigene Kanäle dieses Funkgeräts werden auf einen anderen Platz verschoben (%1$d): %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRemoved" = "Eigene Kanäle dieses Funkgeräts werden entfernt, da kein freier Platz mehr übrig ist (%1$d): %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBlocked" = "Deine Kanäle werden ausgelassen, da dieses Funkgerät auf ihrem Platz einen eigenen Kanal hat (%1$d): %2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBeyondCapacity" = "Deine Kanäle liegen auf Plätzen, die dieses Funkgerät nicht hat, und werden ausgelassen (%1$d): %2$@";
+
+/* Progress step - %d is the channel slot number being emptied */
+"configImport.stepClearChannelSlot" = "Kanalplatz %d wird freigegeben";
 
 /* Import progress: applying position */
 "configImport.stepPosition" = "Position wird festgelegt";

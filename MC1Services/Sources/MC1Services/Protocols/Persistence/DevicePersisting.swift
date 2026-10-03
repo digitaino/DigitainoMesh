@@ -21,4 +21,8 @@ public protocol DevicePersisting: Actor {
 
   /// Ends the hold on `parts` once a sync of that part found nothing it would delete.
   func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) async throws
+
+  /// The settings and channel layout the radio should take on, stored when its swap guard
+  /// was armed; nil when none is stored. See ``IdentityProfile``.
+  func fetchSwapProfile(radioID: UUID) async throws -> IdentityProfile?
 }

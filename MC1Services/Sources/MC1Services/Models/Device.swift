@@ -134,6 +134,10 @@ public final class Device {
   /// and no backup can arm or release it.
   public var swapGuard: UInt8 = 0
 
+  /// JSON-encoded ``IdentityProfile``: the settings and channel layout this radio should take
+  /// on, captured when its swap guard was armed. Model-only for the same reasons as `swapGuard`.
+  public var swapProfile: Data?
+
   public init(
     id: UUID = UUID(),
     radioID: UUID = UUID(),

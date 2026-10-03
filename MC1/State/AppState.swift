@@ -360,6 +360,7 @@ final class AppState {
   /// current position when the two have drifted far apart. Driven by
   /// `evaluateNodeLocationStaleness()`.
   let nodeLocationPrompt = NodeLocationPromptState()
+  let radioSwapPrompt = RadioSwapPromptState()
 
   // MARK: - Navigation State
 
@@ -508,6 +509,10 @@ final class AppState {
       // Reconcile the firmware's notification rules with current iOS state on every
       // post-sync ready transition — covers fresh boot, reconnect, and reflash.
       Task { [weak self] in await self?.reconcileNotifSync() }
+      // After the first sync on a radio that took on an identity, offer to copy this phone's
+      // records of it onto the radio. The sync has run, so a radio that already matched has
+      // released its guard and is not asked.
+      Task { [weak self] in await self?.evaluateRadioSwapOffer() }
     }
 
     loadPersistedRegionSelection()
@@ -589,6 +594,7 @@ final class AppState {
     messageEventDispatcher.cancelAll()
     navigation.clearPendingLinks(signalMapperRideActive: signalMapperRideSession != nil)
     nodeLocationPrompt.endSession()
+    radioSwapPrompt.endSession()
   }
 
   /// Presents the guided pairing-failure recovery for an invalidated bond, only

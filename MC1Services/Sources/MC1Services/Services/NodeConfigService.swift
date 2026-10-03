@@ -62,6 +62,7 @@ public enum ImportStep: Sendable, Equatable {
   case position, otherParameters, privateKey, nodeName
   case radioParameters, txPower
   case channel(name: String)
+  case clearChannelSlot(index: UInt8)
   case contact(name: String)
 }
 
@@ -85,6 +86,16 @@ public struct ImportPreview: Sendable {
   public let contactCoordinateFallbacks: [String]
   /// Contacts left out because the device has no free slot for them.
   public let contactCapacityDropped: [String]
+  /// Channel and contact writes the import would make, after dedup and no-op skips.
+  public var channelWriteCount = 0
+  public var contactWriteCount = 0
+  /// Slot alignment, for a config built from this phone's records: this radio's own channels
+  /// moved to make room, removed for lack of room, and the identity's channels left off
+  /// because making room was not allowed or their slot is past this radio's last.
+  public var channelsRelocated: [String] = []
+  public var channelsRemoved: [String] = []
+  public var channelsBlocked: [String] = []
+  public var channelsBeyondCapacity: [String] = []
 }
 
 // MARK: - Node Config Service
@@ -204,10 +215,13 @@ public actor NodeConfigService {
     _ config: MeshCoreNodeConfig,
     sections: ConfigSections,
     radioID: UUID,
+    makeRoomForChannels: Bool = false,
     onProgress: (@Sendable (ImportProgress) -> Void)? = nil
   ) async throws {
     // Read + validate/plan phase (non-destructive): rejects a poison/malformed config before any write.
-    let plan = try await buildImportPlan(config, sections: sections, radioID: radioID)
+    let plan = try await buildImportPlan(
+      config, sections: sections, radioID: radioID, makeRoomForChannels: makeRoomForChannels
+    )
 
     // Execute phase, driven through the testable `executeConfigImport` seam. The actor supplies
     // the concrete write closures; the sequencing, progress, and cancellation live in the seam.
@@ -250,6 +264,9 @@ public actor NodeConfigService {
           radioID: radioID, index: write.index, name: write.name, secret: write.secret
         )
       },
+      clearChannelSlot: { radioID, index in
+        try await channels.vacateSlot(radioID: radioID, index: index)
+      },
       addContact: { radioID, contact in
         try await session.addContact(contact)
         // The device add is the irreversible change. The local row is an idempotent
@@ -278,6 +295,7 @@ public actor NodeConfigService {
     if plan.position != nil { count += 1 }
     if plan.otherSettings != nil { count += 1 }
     count += plan.channelWrites.count
+    count += plan.channelClears.count
     count += plan.contactRecords.count
     if plan.radioSettings != nil { count += 2 } // radio params + tx power
     return count
@@ -290,13 +308,100 @@ public actor NodeConfigService {
   public func previewImport(
     _ config: MeshCoreNodeConfig,
     sections: ConfigSections,
-    radioID: UUID? = nil
+    radioID: UUID? = nil,
+    makeRoomForChannels: Bool = false
   ) async throws -> ImportPreview {
-    let plan = try await buildImportPlan(config, sections: sections, radioID: radioID)
-    return ImportPreview(
+    let plan = try await buildImportPlan(
+      config, sections: sections, radioID: radioID, makeRoomForChannels: makeRoomForChannels
+    )
+    var preview = ImportPreview(
       channelsOverwriteExisting: plan.channelsOverwriteExisting,
       contactCoordinateFallbacks: plan.contactCoordinateFallbacks,
       contactCapacityDropped: plan.contactCapacityDropped
+    )
+    preview.channelWriteCount = plan.channelWrites.count
+    preview.contactWriteCount = plan.contactRecords.count
+    preview.channelsRelocated = plan.channelsRelocated
+    preview.channelsRemoved = plan.channelsRemoved
+    preview.channelsBlocked = plan.channelsBlocked
+    preview.channelsBeyondCapacity = plan.channelsBeyondCapacity
+    return preview
+  }
+
+  // MARK: - From This Phone's Records
+
+  /// The identity as this phone records it, in the form the import planner takes, so a radio
+  /// can be brought up to date without the old radio or a file (docs/RADIO_SWAP.md, R3).
+  ///
+  /// While the radio's swap guard is armed, settings and the channel layout come from the
+  /// ``IdentityProfile`` stored when it was armed: by then the Device row describes the new
+  /// radio, and the first guarded sync has relabelled any slot where it holds a different
+  /// channel. Otherwise they come from the Device row and channel rows. Channels carry their
+  /// slots, so the planner puts each back where its history is filed. Contacts always come from
+  /// the store, a favorite with its radio favorite flag set so overwrite-oldest spares it. TX
+  /// power is capped at this radio's maximum. The private key is never included: the phone does
+  /// not hold it.
+  public func recordsConfig(radioID: UUID, sections: ConfigSections) async throws -> MeshCoreNodeConfig {
+    guard let device = try await dataStore.fetchDevice(radioID: radioID) else {
+      throw PersistenceStoreError.deviceNotFound
+    }
+    let swapGuard = try await dataStore.fetchSwapGuard(radioID: radioID)
+    let profile = swapGuard.isEmpty ? nil : try await dataStore.fetchSwapProfile(radioID: radioID)
+    let source = if let profile {
+      profile
+    } else {
+      try await IdentityProfile.capture(device: device, channels: dataStore.fetchChannels(radioID: radioID))
+    }
+
+    var config = MeshCoreNodeConfig()
+    if sections.nodeIdentity {
+      config.name = source.nodeName
+    }
+    if sections.radioSettings {
+      var radio = source.radio
+      radio.txPower = min(radio.txPower, device.maxTxPower)
+      config.radioSettings = radio
+    }
+    if sections.positionSettings {
+      config.positionSettings = MeshCoreNodeConfig.PositionSettings(
+        latitude: String(source.latitude),
+        longitude: String(source.longitude)
+      )
+    }
+    if sections.otherSettings {
+      config.otherSettings = source.other
+    }
+    if sections.channels {
+      config.channels = source.channels.map {
+        MeshCoreNodeConfig.ChannelConfig(name: $0.name, secret: $0.secret.hexString, slot: $0.slot)
+      }
+    }
+    if sections.contacts {
+      config.contacts = try await dataStore.fetchContacts(radioID: radioID)
+        .map { Self.buildContactConfig(from: Self.meshContact(from: $0)) }
+    }
+    return config
+  }
+
+  /// The radio-side record of a stored contact, carrying the app's favorite as the radio flag.
+  static func meshContact(from contact: ContactDTO) -> MeshContact {
+    var flags = ContactFlags(rawValue: contact.flags)
+    if contact.isFavorite {
+      flags.insert(.favorite)
+    }
+    return MeshContact(
+      id: contact.publicKey.hexString,
+      publicKey: contact.publicKey,
+      type: ContactType(rawValue: contact.typeRawValue) ?? .chat,
+      typeRawValue: contact.typeRawValue,
+      flags: flags,
+      outPathLength: contact.outPathLength,
+      outPath: contact.outPath,
+      advertisedName: contact.name,
+      lastAdvertisement: Date(timeIntervalSince1970: TimeInterval(contact.lastAdvertTimestamp)),
+      latitude: contact.latitude,
+      longitude: contact.longitude,
+      lastModified: Date(timeIntervalSince1970: TimeInterval(contact.lastModified))
     )
   }
 
@@ -310,7 +415,8 @@ public actor NodeConfigService {
   private func buildImportPlan(
     _ config: MeshCoreNodeConfig,
     sections: ConfigSections,
-    radioID: UUID?
+    radioID: UUID?,
+    makeRoomForChannels: Bool = false
   ) async throws -> ConfigImportPlan {
     let capabilities = try await settingsService.queryDevice()
     let maxChannels = UInt8(capabilities.maxChannels)
@@ -376,7 +482,8 @@ public actor NodeConfigService {
       maxTxPower: maxTxPower,
       existingChannels: existingChannels,
       existingContacts: existingContacts,
-      protectedContactKeys: protectedContactKeys
+      protectedContactKeys: protectedContactKeys,
+      makeRoomForChannels: makeRoomForChannels
     )
   }
 
@@ -490,6 +597,7 @@ struct ConfigImportWriters {
   let setRadioParams: @Sendable (MeshCoreNodeConfig.RadioSettings) async throws -> Void
   let setTxPower: @Sendable (Int8) async throws -> Void
   let setChannel: @Sendable (_ radioID: UUID, _ write: ConfigImportPlan.ChannelWrite) async throws -> Void
+  let clearChannelSlot: @Sendable (_ radioID: UUID, _ index: UInt8) async throws -> Void
   let addContact: @Sendable (_ radioID: UUID, _ contact: MeshContact) async throws -> Void
 }
 
@@ -614,6 +722,14 @@ func executeConfigImport(
     try await writers.setChannel(effectiveRadioID, write)
     progress(.channel(name: write.name))
     logger.info("Set channel \(write.index): \(write.name)")
+  }
+  // After the writes: each cleared slot held a second copy of a channel just written to its
+  // own slot.
+  for index in plan.channelClears {
+    try checkCancellation()
+    try await writers.clearChannelSlot(effectiveRadioID, index)
+    progress(.clearChannelSlot(index: index))
+    logger.info("Cleared channel slot \(index)")
   }
 
   for contact in plan.contactRecords {

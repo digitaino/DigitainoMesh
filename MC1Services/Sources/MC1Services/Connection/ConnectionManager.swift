@@ -945,7 +945,7 @@ public final class ConnectionManager {
     // Arm before any sync runs. A failure fails the connect rather than letting the
     // first full sync prune against a table that never held this history.
     if tookOnIdentity {
-      try await newServices.dataStore.armSwapGuard(id: deviceID)
+      try await newServices.dataStore.armSwapGuard(id: deviceID, previousDeviceID: deviceByPublicKey?.id)
       logger.notice("Radio swap guard armed: radio \(deviceID.uuidString.prefix(8)) took on radioID \(resolvedRadioID)")
     }
 

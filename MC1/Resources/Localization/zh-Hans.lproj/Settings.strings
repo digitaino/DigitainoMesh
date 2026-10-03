@@ -1196,6 +1196,10 @@
 "configExport.contacts" = "联系人";
 "configExport.contacts.description" = "姓名、密钥和最后已知位置";
 
+/* Export option: build the file from what this phone has stored instead of reading the radio */
+"configExport.fromRecords" = "来自这台手机的记录";
+"configExport.fromRecords.description" = "根据这台手机保存的内容生成文件，因此无需这些记录所来自的电台也能使用。绝不包含私钥。";
+
 // MARK: - Config Import
 
 /* Import screen navigation title */
@@ -1275,6 +1279,44 @@
 
 /* Generic device-name fallback used in confirmation messages when the node has no name */
 "configImport.thisDevice" = "此设备";
+
+// MARK: - Copy to This Radio
+
+/* Settings row and screen title: write this phone's records of your node (contacts, channels, settings) onto the connected radio */
+"configImport.copyFromRecords.title" = "复制到此电台";
+
+/* Intro on the Copy to This Radio screen */
+"configImport.copyFromRecords.intro" = "将这台手机为你保存的联系人、频道和设置写入已连接的电台。每个频道都会回到自己的槽位，其消息也随之保留。不包含私钥。";
+
+/* Intro when the screen opens by itself after a radio takes on your node's key - %@ is the node's name */
+"configImport.copyFromRecords.swapIntro" = "此电台已接管 %@ 的身份。复制这台手机为其保存的联系人、频道和设置，让电台能联系到所有与你聊天的人。在你确认之前不会写入任何内容。";
+
+/* Shown while the app reads the connected radio to work out what would be copied */
+"configImport.copyFromRecords.loading" = "正在检查此电台…";
+
+/* Button that closes the Copy to This Radio offer without copying */
+"configImport.copyFromRecords.notNow" = "暂不";
+
+/* Toggle allowing the radio's own channels to move out of the slots your channels belong in */
+"configImport.makeRoom" = "为你的频道腾出空间";
+
+/* Footer under the Make Room toggle - %@ lists your channels whose slots hold one of this radio's own channels */
+"configImport.makeRoom.footer" = "此电台在 %@ 的槽位中放有它自己的频道。打开此项可将它们移到空闲槽位，没有空闲槽位时则将其删除，让你的频道回到其消息所在的位置。";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRelocated" = "此电台自己的 %1$d 个频道将移到其他槽位：%2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsRemoved" = "此电台自己的 %1$d 个频道将被删除，因为已没有空闲槽位：%2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBlocked" = "你的 %1$d 个频道将被跳过，因为此电台在其槽位中有自己的频道：%2$@";
+
+/* Confirmation note - %1$d is a count, %2$@ lists channel names */
+"configImport.channelsBeyondCapacity" = "你的 %1$d 个频道位于此电台没有的槽位中，将被跳过：%2$@";
+
+/* Progress step - %d is the channel slot number being emptied */
+"configImport.stepClearChannelSlot" = "正在释放频道槽位 %d";
 
 /* Import progress: applying position */
 "configImport.stepPosition" = "正在设置位置";

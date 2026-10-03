@@ -103,6 +103,19 @@ struct ContentView: View {
     )) { release in
       WhatsNewSheet(release: release)
     }
+    // After a radio takes on an identity: the "Copy to This Radio" screen itself, so the offer
+    // shows exactly what would be written and nothing is written until the user confirms.
+    // Same co-presentation contract as the What's New sheet, which it yields to.
+    .sheet(item: Binding(
+      get: { radioSwapOfferPresentable ? appState.radioSwapPrompt.pending : nil },
+      set: { if $0 == nil { appState.radioSwapPrompt.dismiss() } }
+    )) { offer in
+      NavigationStack {
+        NodeConfigImportView(source: .records, swapIdentityName: offer.identityName) {
+          appState.radioSwapPrompt.dismiss()
+        }
+      }
+    }
     // Same co-presentation contract as the What's New sheet above: the getter yields the
     // prompt only while this host is quiescent, and `pending` stays set meanwhile, so the
     // alert re-presents on a later render once the higher-priority surface clears.
@@ -138,12 +151,20 @@ struct ContentView: View {
       && !(appState.connectionManager.bluetoothScanPicker?.isPresenting ?? false)
   }
 
+  /// The radio swap offer yields to the connection alerts, the scan picker, and What's New.
+  private var radioSwapOfferPresentable: Bool {
+    appState.radioSwapPrompt.pending != nil
+      && connectionUIQuiescent
+      && appState.whatsNew.pendingRelease == nil
+  }
+
   /// The stale-location prompt is the lowest-priority surface on this host: it yields to the
-  /// connection alerts, the scan picker, and the What's New sheet.
+  /// connection alerts, the scan picker, the What's New sheet, and the radio swap offer.
   private var nodeLocationPromptPresentable: Bool {
     appState.nodeLocationPrompt.pending != nil
       && connectionUIQuiescent
       && appState.whatsNew.pendingRelease == nil
+      && appState.radioSwapPrompt.pending == nil
   }
 }
 

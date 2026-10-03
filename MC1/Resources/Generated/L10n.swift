@@ -4870,6 +4870,8 @@ public enum L10n {
       public static let exportFull = L10n.tr("Settings", "configExport.exportFull", fallback: "Export Full Config")
       /// Export selected sections button
       public static let exportSelected = L10n.tr("Settings", "configExport.exportSelected", fallback: "Export Selected Sections")
+      /// Export option: build the file from what this phone has stored instead of reading the radio
+      public static let fromRecords = L10n.tr("Settings", "configExport.fromRecords", fallback: "From This Phone's Records")
       /// Toggle labels for export sections
       public static let nodeIdentity = L10n.tr("Settings", "configExport.nodeIdentity", fallback: "Node Identity (Name & Keys)")
       /// Other Settings
@@ -4893,6 +4895,10 @@ public enum L10n {
       public enum Contacts {
         /// Names, keys, and last known positions
         public static let description = L10n.tr("Settings", "configExport.contacts.description", fallback: "Names, keys, and last known positions")
+      }
+      public enum FromRecords {
+        /// Builds the file from what this phone holds, so it works without the radio the records came from. Never includes the private key.
+        public static let description = L10n.tr("Settings", "configExport.fromRecords.description", fallback: "Builds the file from what this phone holds, so it works without the radio the records came from. Never includes the private key.")
       }
       public enum NodeIdentity {
         /// Device name, public key, and private key
@@ -4925,6 +4931,22 @@ public enum L10n {
       /// Channel count (param: integer)
       public static func channelCount(_ p1: Int) -> String {
         return L10n.tr("Settings", "configImport.channelCount", p1, fallback: "Will add/update %d channels on device")
+      }
+      /// Confirmation note - %1$d is a count, %2$@ lists channel names
+      public static func channelsBeyondCapacity(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.channelsBeyondCapacity", p1, String(describing: p2), fallback: "%1$d of your channel(s) sit in slots this radio does not have and will be left off: %2$@")
+      }
+      /// Confirmation note - %1$d is a count, %2$@ lists channel names
+      public static func channelsBlocked(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.channelsBlocked", p1, String(describing: p2), fallback: "%1$d of your channel(s) will be left off, as this radio has its own channel in their slot: %2$@")
+      }
+      /// Confirmation note - %1$d is a count, %2$@ lists channel names
+      public static func channelsRelocated(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.channelsRelocated", p1, String(describing: p2), fallback: "%1$d of this radio's own channel(s) will move to another slot: %2$@")
+      }
+      /// Confirmation note - %1$d is a count, %2$@ lists channel names
+      public static func channelsRemoved(_ p1: Int, _ p2: Any) -> String {
+        return L10n.tr("Settings", "configImport.channelsRemoved", p1, String(describing: p2), fallback: "%1$d of this radio's own channel(s) will be removed, as no free slot is left: %2$@")
       }
       /// Confirmation alert message (param: device name)
       public static func confirmMessage(_ p1: Any) -> String {
@@ -4972,6 +4994,8 @@ public enum L10n {
       public static let importConfig = L10n.tr("Settings", "configImport.importConfig", fallback: "Import Config")
       /// Import success
       public static let importSuccess = L10n.tr("Settings", "configImport.importSuccess", fallback: "Configuration imported successfully")
+      /// Toggle allowing the radio's own channels to move out of the slots your channels belong in
+      public static let makeRoom = L10n.tr("Settings", "configImport.makeRoom", fallback: "Make Room for Your Channels")
       /// New: %@
       public static func new(_ p1: Any) -> String {
         return L10n.tr("Settings", "configImport.new", String(describing: p1), fallback: "New: %@")
@@ -4987,6 +5011,10 @@ public enum L10n {
       /// Import progress: importing a channel (param: channel name)
       public static func stepChannel(_ p1: Any) -> String {
         return L10n.tr("Settings", "configImport.stepChannel", String(describing: p1), fallback: "Importing channel: %@")
+      }
+      /// Progress step - %d is the channel slot number being emptied
+      public static func stepClearChannelSlot(_ p1: Int) -> String {
+        return L10n.tr("Settings", "configImport.stepClearChannelSlot", p1, fallback: "Freeing channel slot %d")
       }
       /// Import progress: importing a contact (param: contact name)
       public static func stepContact(_ p1: Any) -> String {
@@ -5008,6 +5036,20 @@ public enum L10n {
       public static let thisDevice = L10n.tr("Settings", "configImport.thisDevice", fallback: "this device")
       /// Import screen navigation title
       public static let title = L10n.tr("Settings", "configImport.title", fallback: "Import Configuration")
+      public enum CopyFromRecords {
+        /// Intro on the Copy to This Radio screen
+        public static let intro = L10n.tr("Settings", "configImport.copyFromRecords.intro", fallback: "Writes the contacts, channels and settings this phone holds for you onto the connected radio. Each channel goes back into its own slot, so its messages stay with it. The private key is not included.")
+        /// Shown while the app reads the connected radio to work out what would be copied
+        public static let loading = L10n.tr("Settings", "configImport.copyFromRecords.loading", fallback: "Checking this radio…")
+        /// Button that closes the Copy to This Radio offer without copying
+        public static let notNow = L10n.tr("Settings", "configImport.copyFromRecords.notNow", fallback: "Not Now")
+        /// Intro when the screen opens by itself after a radio takes on your node's key - %@ is the node's name
+        public static func swapIntro(_ p1: Any) -> String {
+          return L10n.tr("Settings", "configImport.copyFromRecords.swapIntro", String(describing: p1), fallback: "This radio has taken on %@. Copy the contacts, channels and settings this phone holds for it, so the radio can reach everyone you talk to. Nothing is written until you confirm.")
+        }
+        /// Settings row and screen title: write this phone's records of your node (contacts, channels, settings) onto the connected radio
+        public static let title = L10n.tr("Settings", "configImport.copyFromRecords.title", fallback: "Copy to This Radio")
+      }
       public enum Error {
         /// Validation error: not enough free contact slots (params: needed count, available count)
         public static func contactCapacityExceeded(_ p1: Int, _ p2: Int) -> String {
@@ -5065,6 +5107,12 @@ public enum L10n {
         public static let spreadingFactor = L10n.tr("Settings", "configImport.field.spreadingFactor", fallback: "Spreading factor")
         /// Validation field label: TX power
         public static let txPower = L10n.tr("Settings", "configImport.field.txPower", fallback: "TX power")
+      }
+      public enum MakeRoom {
+        /// Footer under the Make Room toggle - %@ lists your channels whose slots hold one of this radio's own channels
+        public static func footer(_ p1: Any) -> String {
+          return L10n.tr("Settings", "configImport.makeRoom.footer", String(describing: p1), fallback: "This radio has its own channels in the slots of %@. Turn this on to move them to free slots, or remove them when none are left, so yours go back where their messages are.")
+        }
       }
     }
     public enum DangerZone {

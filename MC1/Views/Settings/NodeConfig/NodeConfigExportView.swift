@@ -58,11 +58,21 @@ struct NodeConfigExportView: View {
       .themedRowBackground(theme)
 
       Section {
+        ExportToggleRow(
+          L10n.Settings.ConfigExport.fromRecords,
+          description: L10n.Settings.ConfigExport.FromRecords.description,
+          isOn: $viewModel.fromRecords
+        )
+      }
+      .themedRowBackground(theme)
+
+      Section {
         Button {
           Task {
             await viewModel.exportConfig(
               nodeConfigService: appState.services?.nodeConfigService,
-              deviceNodeName: appState.connectedDevice?.nodeName
+              deviceNodeName: appState.connectedDevice?.nodeName,
+              radioID: appState.connectedDevice?.radioID
             )
           }
         } label: {
