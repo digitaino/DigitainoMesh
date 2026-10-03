@@ -176,6 +176,77 @@ struct ContactServiceSyncTests {
     #expect(Set(stored.map(\.name)) == ["Alice", "Existing"])
   }
 
+  // MARK: - Radio swap guard
+
+  @Test
+  func `Swap guard keeps cache contacts a newly swapped radio does not list`() async throws {
+    let radioID = UUID()
+    let store = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 8)
+    // History from the previous radio: a cache contact nobody messaged, with a nickname.
+    let saved = try await store.saveContact(radioID: radioID, from: contactFrame(0xEE, name: "Cache"))
+    let cache = try #require(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xEE)))
+    try await store.saveContact(ContactDTO(
+      id: saved.id, radioID: radioID, publicKey: cache.publicKey, name: cache.name,
+      typeRawValue: cache.typeRawValue, flags: cache.flags,
+      outPathLength: cache.outPathLength, outPath: cache.outPath,
+      lastAdvertTimestamp: cache.lastAdvertTimestamp,
+      latitude: cache.latitude, longitude: cache.longitude,
+      lastModified: cache.lastModified, lastHeardTimestamp: cache.lastHeardTimestamp,
+      nickname: "Neighbour", isBlocked: false, isMuted: false, isFavorite: false,
+      lastMessageDate: nil, unreadCount: 0
+    ))
+    // The replacement radio carries the key but only one contact.
+    try await store.armSwapGuard(id: radioID)
+
+    let session = MockMeshCoreSession()
+    await session.setStubbedContacts([meshContact(0xAA, name: "Alice")])
+
+    let service = ContactService(session: session, dataStore: store, syncCoordinator: nil, cleanupCoordinator: nil)
+    _ = try await service.syncContacts(radioID: radioID, since: nil)
+
+    let kept = try #require(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xEE)))
+    #expect(kept.nickname == "Neighbour")
+    #expect(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xAA)) != nil)
+    #expect(try await store.fetchSwapGuard(radioID: radioID).contains(.contacts))
+  }
+
+  @Test
+  func `Swap guard releases once a complete snapshot would delete nothing, and the next prune runs`() async throws {
+    let radioID = UUID()
+    let store = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 8)
+    _ = try await store.saveContact(radioID: radioID, from: contactFrame(0xEE, name: "Copied"))
+    try await store.armSwapGuard(id: radioID)
+
+    // The contacts were written onto the new radio: it now lists everything the app has.
+    let session = MockMeshCoreSession()
+    await session.setStubbedContacts([meshContact(0xAA, name: "Alice"), meshContact(0xEE, name: "Copied")])
+    let service = ContactService(session: session, dataStore: store, syncCoordinator: nil, cleanupCoordinator: nil)
+    _ = try await service.syncContacts(radioID: radioID, since: nil)
+
+    #expect(try await store.fetchSwapGuard(radioID: radioID).contains(.contacts) == false)
+
+    // From here on the radio's table is authoritative for cache contacts again.
+    await session.setStubbedContacts([meshContact(0xAA, name: "Alice")])
+    _ = try await service.syncContacts(radioID: radioID, since: nil)
+    #expect(try await store.fetchContact(radioID: radioID, publicKey: publicKey(0xEE)) == nil)
+  }
+
+  @Test
+  func `Swap guard stays armed when the snapshot is incomplete`() async throws {
+    let radioID = UUID()
+    let store = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 8)
+    try await store.armSwapGuard(id: radioID)
+
+    let session = MockMeshCoreSession()
+    await session.setStubbedContacts([meshContact(0xAA, name: "Alice")])
+    await session.setStubbedReportedTotal(5)
+    let service = ContactService(session: session, dataStore: store, syncCoordinator: nil, cleanupCoordinator: nil)
+    _ = try await service.syncContacts(radioID: radioID, since: nil)
+
+    // Nothing locally would be deleted, but a truncated stream proves nothing.
+    #expect(try await store.fetchSwapGuard(radioID: radioID).contains(.contacts))
+  }
+
   @Test
   func `Manual refresh waits for an in-flight advert delta sync`() async throws {
     let radioID = UUID()

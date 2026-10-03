@@ -275,6 +275,94 @@ struct ChannelServicePipelineTests {
   }
 }
 
+// MARK: - Radio swap guard
+
+/// docs/RADIO_SWAP.md, rule R2: a radio that has just taken on an identity reports its own
+/// slots, so an empty slot there is not a channel the user removed.
+@Suite("ChannelService radio swap guard")
+struct ChannelServiceSwapGuardTests {
+  /// Serial two-slot sync: slot 0 holds "ch0", slot 1 is empty on the radio.
+  private func syncTwoSlots(_ service: ChannelService, _ transport: MockTransport, radioID: UUID) async throws {
+    let syncTask = Task {
+      try await service.syncChannels(radioID: radioID, maxChannels: 2, usePipelinedRead: false)
+    }
+    try await waitUntil("first serial read should be sent") {
+      await transport.sentData.count == 2
+    }
+    await transport.simulateReceive(
+      makeChannelInfoPacket(index: 0, name: "ch0", secret: Data(repeating: 0xAB, count: 16))
+    )
+    try await waitUntil("second serial read should be sent after the first responds") {
+      await transport.sentData.count == 3
+    }
+    await transport.simulateReceive(
+      makeChannelInfoPacket(index: 1, name: "", secret: Data(repeating: 0, count: 16))
+    )
+    _ = try await syncTask.value
+  }
+
+  @Test
+  func `armed guard keeps rows at empty slots and beyond capacity`() async throws {
+    let radioID = UUID()
+    let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)
+    // History from the previous radio, which had more slots.
+    _ = try await dataStore.saveChannel(
+      radioID: radioID, from: ChannelInfo(index: 1, name: "Private", secret: Data(repeating: 0xCD, count: 16))
+    )
+    _ = try await dataStore.saveChannel(
+      radioID: radioID, from: ChannelInfo(index: 5, name: "Far", secret: Data(repeating: 0xEF, count: 16))
+    )
+    try await dataStore.armSwapGuard(id: radioID)
+
+    let transport = MockTransport()
+    let session = try await startedSession(transport)
+    defer { Task { await session.stop() } }
+    let service = ChannelService(session: session, dataStore: dataStore, rxLogService: nil)
+    try await syncTwoSlots(service, transport, radioID: radioID)
+
+    let stored = try await dataStore.fetchChannels(radioID: radioID).sorted { $0.index < $1.index }
+    #expect(stored.map(\.index) == [0, 1, 5])
+    #expect(stored.first { $0.index == 1 }?.name == "Private")
+    #expect(try await dataStore.fetchSwapGuard(radioID: radioID).contains(.channels))
+  }
+
+  @Test
+  func `armed guard is released by a complete pass with nothing to delete`() async throws {
+    let radioID = UUID()
+    let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)
+    try await dataStore.armSwapGuard(id: radioID)
+
+    let transport = MockTransport()
+    let session = try await startedSession(transport)
+    defer { Task { await session.stop() } }
+    let service = ChannelService(session: session, dataStore: dataStore, rxLogService: nil)
+    try await syncTwoSlots(service, transport, radioID: radioID)
+
+    let held = try await dataStore.fetchSwapGuard(radioID: radioID)
+    #expect(held.contains(.channels) == false)
+    // The contacts half is released only by a contact sync.
+    #expect(held.contains(.contacts))
+    #expect(try await dataStore.fetchChannels(radioID: radioID).map(\.index) == [0])
+  }
+
+  @Test
+  func `without the guard an empty slot still deletes its row`() async throws {
+    let radioID = UUID()
+    let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)
+    _ = try await dataStore.saveChannel(
+      radioID: radioID, from: ChannelInfo(index: 1, name: "Removed", secret: Data(repeating: 0xCD, count: 16))
+    )
+
+    let transport = MockTransport()
+    let session = try await startedSession(transport)
+    defer { Task { await session.stop() } }
+    let service = ChannelService(session: session, dataStore: dataStore, rxLogService: nil)
+    try await syncTwoSlots(service, transport, radioID: radioID)
+
+    #expect(try await dataStore.fetchChannels(radioID: radioID).map(\.index) == [0])
+  }
+}
+
 // MARK: - Helpers
 
 private func startedSession(_ transport: MockTransport) async throws -> MeshCoreSession {

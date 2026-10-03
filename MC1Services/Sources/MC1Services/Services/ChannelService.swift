@@ -113,7 +113,7 @@ public actor ChannelService {
   // MARK: - Properties
 
   private let session: any MeshCoreSessionProtocol
-  private let dataStore: any ChannelPersisting
+  private let dataStore: any ChannelPersisting & DevicePersisting
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "ChannelService")
 
   /// Decryption cache consumer: channel writes and syncs forward the fresh
@@ -134,7 +134,7 @@ public actor ChannelService {
 
   init(
     session: any MeshCoreSessionProtocol,
-    dataStore: any ChannelPersisting,
+    dataStore: any ChannelPersisting & DevicePersisting,
     rxLogService: RxLogService?
   ) {
     self.session = session
@@ -391,6 +391,7 @@ public actor ChannelService {
   /// Shared by the serial and pipelined paths so their classification-to-persist tail cannot
   /// drift: it upserts configured channels, deletes stale rows at unconfigured slots, prunes
   /// orphans beyond capacity, and never touches an index that landed in neither list.
+  /// While the radio's ``SwapGuard/channels`` is armed it deletes nothing.
   private func finalizeChannelSync(
     radioID: UUID,
     maxChannels: UInt8,
@@ -411,13 +412,23 @@ public actor ChannelService {
     }
     let occupiedBeforeSync = Set(priorChannels?.map(\.index) ?? [])
 
+    // A radio that has just taken on this identity reports its own slots, not this
+    // history's: an empty slot there is not a channel the user removed. Keep every row
+    // (its messages, notification level and scope stay with it) until a complete pass
+    // finds nothing it would delete. A failed guard read holds back too.
+    let swapGuard = (try? await dataStore.fetchSwapGuard(radioID: radioID)) ?? SwapGuard.all
+    let holdForSwap = swapGuard.contains(.channels)
+    let wouldDelete = occupiedBeforeSync.filter { index in
+      unconfiguredIndices.contains(index) || index >= maxChannels
+    }
+
     let channels: [ChannelDTO]
     do {
       channels = try await dataStore.batchSaveChannels(
         radioID: radioID,
         configured: configured,
-        unconfiguredIndices: unconfiguredIndices,
-        pruneBeyond: maxChannels
+        unconfiguredIndices: holdForSwap ? [] : unconfiguredIndices,
+        pruneBeyond: holdForSwap ? nil : maxChannels
       )
     } catch {
       logger.error("Channel batch persist failed: \(error.localizedDescription)")
@@ -439,6 +450,15 @@ public actor ChannelService {
       logger.warning(
         "Channel sync detected empty-name channels with non-zero secrets at indices: \(emptyNameWithSecretIndices)"
       )
+    }
+
+    if holdForSwap {
+      if !wouldDelete.isEmpty {
+        logger.notice("Channel sync: radio swap guard kept channel rows at slots \(wouldDelete.sorted()) this radio reports empty")
+      } else if priorChannels != nil, syncErrors.isEmpty {
+        try? await dataStore.releaseSwapGuard(radioID: radioID, .channels)
+        logger.notice("Channel sync: nothing to delete, radio swap guard released for channels")
+      }
     }
 
     let vacatedSlots = occupiedBeforeSync.subtracting(channels.map(\.index))

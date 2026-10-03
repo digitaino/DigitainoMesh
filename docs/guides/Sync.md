@@ -250,6 +250,21 @@ not (a replacement radio that received the identity but not the contacts, a re-f
 factory reset). One such sync deleted ~250 contacts and every DM with them before this
 rule existed. Kept rows are logged as `Full sync prune: keeping …`.
 
+**Radio swap guard (2026-10-03).** When a radio takes on history it has never been synced
+against, `buildServicesAndSaveDevice` arms a `SwapGuard` on its Device row and clears its
+contact watermark. That covers three cases: a known public key on a radio this phone has
+no row for, a ghost rejoin, and a key that changed on a known radio. Config import's
+rejoin arms it too, through `reconcileGhostIdentity`.
+
+While the guard is armed, deletions are held back:
+- The contact prune keeps cache contacts as well, with their nicknames, blocks and mutes.
+- Channel sync keeps rows at slots the radio reports empty and at slots beyond its capacity.
+
+Each part is released by the first complete sync of that part that would delete nothing.
+After that, pruning works as above. The guard is model-only state, not part of `DeviceDTO`
+and not in backups, so a snapshot-then-save cannot release it. Logs read
+`radio swap guard kept …` and `radio swap guard released …`. See docs/RADIO_SWAP.md, rule R2.
+
 Used on first connection or when data may be stale:
 
 ```swift

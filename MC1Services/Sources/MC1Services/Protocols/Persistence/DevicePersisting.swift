@@ -14,4 +14,11 @@ public protocol DevicePersisting: Actor {
 
   /// Save or update a device
   func saveDevice(_ dto: DeviceDTO) async throws
+
+  /// The sync deletions currently held back for the radio, empty when none are
+  /// (or when no device row exists). See ``SwapGuard``.
+  func fetchSwapGuard(radioID: UUID) async throws -> SwapGuard
+
+  /// Ends the hold on `parts` once a sync of that part found nothing it would delete.
+  func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) async throws
 }

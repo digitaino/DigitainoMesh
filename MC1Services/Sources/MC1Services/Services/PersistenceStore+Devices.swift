@@ -121,6 +121,54 @@ public extension PersistenceStore {
     try modelContext.save()
   }
 
+  // MARK: - Swap Guard
+
+  /// Arms every part of the ``SwapGuard`` on a radio that has just taken on an identity's
+  /// history, and clears its contact watermark. The watermark is the previous radio's RTC
+  /// `lastmod` and means nothing against this radio's table, so the next contact sync must
+  /// read the whole table.
+  func armSwapGuard(id: UUID) throws {
+    let targetID = id
+    let predicate = #Predicate<Device> { device in
+      device.id == targetID
+    }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+
+    guard let device = try modelContext.fetch(descriptor).first else {
+      throw PersistenceStoreError.deviceNotFound
+    }
+    device.swapGuard = SwapGuard.all.rawValue
+    device.lastContactSync = 0
+    try modelContext.save()
+  }
+
+  func fetchSwapGuard(radioID: UUID) throws -> SwapGuard {
+    let targetRadioID = radioID
+    let predicate = #Predicate<Device> { device in
+      device.radioID == targetRadioID
+    }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+    guard let device = try modelContext.fetch(descriptor).first else { return [] }
+    return SwapGuard(rawValue: device.swapGuard)
+  }
+
+  func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) throws {
+    let targetRadioID = radioID
+    let predicate = #Predicate<Device> { device in
+      device.radioID == targetRadioID
+    }
+    var descriptor = FetchDescriptor(predicate: predicate)
+    descriptor.fetchLimit = 1
+    guard let device = try modelContext.fetch(descriptor).first else { return }
+
+    let remaining = SwapGuard(rawValue: device.swapGuard).subtracting(parts)
+    guard remaining.rawValue != device.swapGuard else { return }
+    device.swapGuard = remaining.rawValue
+    try modelContext.save()
+  }
+
   /// Adds a known region to a device if not already present
   func addDeviceKnownRegion(radioID: UUID, region: String) throws {
     let targetRadioID = radioID
@@ -250,6 +298,8 @@ public extension PersistenceStore {
   ///   - currentDeviceID: The BLE peripheral UUID of the live, currently-paired device.
   ///   - newPublicKey: The radio's `selfInfo.publicKey` after `importPrivateKey`.
   /// - Returns: The new `radioID` if reconciliation occurred, otherwise `nil`.
+  ///
+  /// A rejoin arms the current row's ``SwapGuard`` and clears its contact watermark.
   func reconcileGhostIdentity(currentDeviceID: UUID, newPublicKey: Data) throws -> UUID? {
     let lookupKey = newPublicKey
     let lookupID = currentDeviceID
@@ -277,6 +327,10 @@ public extension PersistenceStore {
     let newRadioID = ghost.radioID
     current.radioID = newRadioID
     current.publicKey = newPublicKey
+    // This radio's tables were never synced against the ghost's history: hold back the
+    // deletions a full sync would make, and drop the watermark of the partition it left.
+    current.swapGuard = SwapGuard.all.rawValue
+    current.lastContactSync = 0
     for method in ghost.connectionMethods where !method.isBluetooth {
       if !current.connectionMethods.contains(where: { $0.id == method.id }) {
         current.connectionMethods.append(method)

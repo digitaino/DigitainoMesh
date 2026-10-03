@@ -1665,6 +1665,17 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     devices[dto.radioID] = dto
   }
 
+  /// Swap guard bits by radioID; nothing is held back unless a test arms it.
+  public var swapGuards: [UUID: SwapGuard] = [:]
+
+  public func fetchSwapGuard(radioID: UUID) async throws -> SwapGuard {
+    swapGuards[radioID] ?? []
+  }
+
+  public func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) async throws {
+    swapGuards[radioID]?.subtract(parts)
+  }
+
   // MARK: - Room Session State
 
   public var remoteNodeSessions: [UUID: RemoteNodeSessionDTO] = [:]

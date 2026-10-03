@@ -186,6 +186,11 @@ public actor ContactService {
   /// with them. Contacts that are neither favorite nor messaged are the
   /// cache, and still prune.
   ///
+  /// **Except on a radio that has just taken on the identity** (``SwapGuard/contacts``):
+  /// its table was never synced against this history, so cache contacts it lacks are
+  /// kept too, with their nicknames, blocks and mutes. The first complete snapshot that
+  /// would delete nothing releases the hold.
+  ///
   /// A `nil` `reportedTotal` means the reply carried no `contactsStart` header,
   /// so the device total is unknown and the snapshot cannot be proven complete;
   /// the prune skips.
@@ -221,13 +226,26 @@ public actor ContactService {
     if !orphans.isEmpty {
       logger.notice("Full sync prune: \(orphans.count) local contact(s) not found on device (device has \(devicePublicKeys.count), local has \(localContacts.count))")
     }
+
+    // A radio that has just taken on this identity holds a table that was never synced
+    // against this history. Delete nothing until a complete snapshot shows nothing to
+    // delete; that sync releases the hold and the next one prunes as normal. A failed
+    // read holds back too: skipping a prune never loses data.
+    let swapGuard = (try? await dataStore.fetchSwapGuard(radioID: radioID)) ?? SwapGuard.all
+    let holdForSwap = swapGuard.contains(.contacts)
+
     var kept = 0
+    var heldForSwap = 0
     for localContact in orphans {
       let keyPrefix = localContact.publicKey.prefix(4).map { String(format: "%02x", $0) }.joined()
       let hasHistory = try await !dataStore.fetchMessages(contactID: localContact.id, limit: 1, offset: 0).isEmpty
       if localContact.isFavorite || hasHistory {
         kept += 1
         logger.notice("Full sync prune: keeping '\(localContact.name)' [\(keyPrefix)…] not on device (favorite=\(localContact.isFavorite), hasMessages=\(hasHistory))")
+        continue
+      }
+      if holdForSwap {
+        heldForSwap += 1
         continue
       }
       logger.notice("Full sync prune: deleting '\(localContact.name)' [\(keyPrefix)…] (type=\(localContact.typeRawValue), lastModified=\(localContact.lastModified))")
@@ -238,6 +256,12 @@ public actor ContactService {
     }
     if kept > 0 {
       logger.notice("Full sync prune: kept \(kept) contact(s) with history or favorite status that the device no longer lists")
+    }
+    if heldForSwap > 0 {
+      logger.notice("Full sync prune: radio swap guard kept \(heldForSwap) contact(s) this radio does not list")
+    } else if holdForSwap {
+      try? await dataStore.releaseSwapGuard(radioID: radioID, .contacts)
+      logger.notice("Full sync prune: nothing to delete, radio swap guard released for contacts")
     }
   }
 

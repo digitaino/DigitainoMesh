@@ -886,6 +886,7 @@ public final class ConnectionManager {
     // if the import ran in that order. Rejoin on connect as well, so the order
     // stops mattering. The predicate only ever matches an inactive row with no
     // Bluetooth method, so a real saved radio is never merged away.
+    var rejoinedGhost = false
     if existingDevice != nil,
        let rejoinedRadioID = try? await persistenceStore.reconcileGhostIdentity(
          currentDeviceID: deviceID,
@@ -893,7 +894,16 @@ public final class ConnectionManager {
        ) {
       logger.info("Rejoined ghost identity on connect: radioID \(rejoinedRadioID)")
       resolvedRadioID = rejoinedRadioID
+      rejoinedGhost = true
     }
+
+    // This radio is taking on history it has never been synced against: a known key on
+    // a radio this phone has no row for, a ghost rejoin, or a key that changed on a known
+    // radio. Its contact table and channel slots say nothing about that history yet, so
+    // the first syncs must not delete from it (docs/RADIO_SWAP.md, rule R2).
+    let tookOnIdentity = rejoinedGhost
+      || deviceByPublicKey != nil
+      || (existingDevice.map { $0.publicKey != selfInfo.publicKey } ?? false)
 
     let newServices = ServiceContainer(
       session: session,
@@ -923,13 +933,21 @@ public final class ConnectionManager {
       capabilities: capabilities,
       autoAddConfig: autoAddConfig,
       existingDevice: effectiveExisting,
-      connectionMethods: connectionMethods
+      connectionMethods: connectionMethods,
+      tookOnIdentity: tookOnIdentity
     )
 
     let deviceDTO = DeviceDTO(from: device)
     // Persist before warmUp so purgeOrphanPendingSends sees the in-progress
     // radio's Device row and does not classify its PendingSends as orphans.
     try await newServices.dataStore.saveDevice(deviceDTO)
+
+    // Arm before any sync runs. A failure fails the connect rather than letting the
+    // first full sync prune against a table that never held this history.
+    if tookOnIdentity {
+      try await newServices.dataStore.armSwapGuard(id: deviceID)
+      logger.notice("Radio swap guard armed: radio \(deviceID.uuidString.prefix(8)) took on radioID \(resolvedRadioID)")
+    }
 
     // Clean up orphaned Device row from backup import
     if let oldDevice = deviceByPublicKey, oldDevice.id != deviceID {
@@ -1192,7 +1210,8 @@ public final class ConnectionManager {
     capabilities: MeshCore.DeviceCapabilities,
     autoAddConfig: MeshCore.AutoAddConfig,
     existingDevice: DeviceDTO? = nil,
-    connectionMethods: [ConnectionMethod] = []
+    connectionMethods: [ConnectionMethod] = [],
+    tookOnIdentity: Bool = false
   ) -> Device {
     // Merge new connection methods with existing ones, replacing by transport type
     var mergedMethods = existingDevice?.connectionMethods ?? []
@@ -1241,7 +1260,9 @@ public final class ConnectionManager {
       telemetryModeEnv: selfInfo.telemetryModeEnvironment,
       advertLocationPolicy: selfInfo.advertisementLocationPolicy,
       lastConnected: Date(),
-      lastContactSync: existingDevice?.lastContactSync ?? 0,
+      // The watermark is the previous radio's RTC `lastmod`; it means nothing against
+      // the table of a radio that has just taken on this identity.
+      lastContactSync: tookOnIdentity ? 0 : existingDevice?.lastContactSync ?? 0,
       isActive: true,
       ocvPreset: existingDevice?.ocvPreset
         ?? OCVPreset.preset(forManufacturer: capabilities.model)?.rawValue,

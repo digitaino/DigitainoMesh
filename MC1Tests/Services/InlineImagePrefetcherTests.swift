@@ -547,6 +547,8 @@ private actor StubDataStore: PersistenceStoreProtocol {
   }
 
   func updateDeviceLastContactSync(radioID: UUID, timestamp: UInt32) async throws {}
+  func fetchSwapGuard(radioID: UUID) async throws -> SwapGuard { [] }
+  func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) async throws {}
   func fetchRemoteNodeSession(id: UUID) async throws -> RemoteNodeSessionDTO? {
     nil
   }

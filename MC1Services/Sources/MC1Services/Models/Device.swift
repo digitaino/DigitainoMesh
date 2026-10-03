@@ -128,6 +128,12 @@ public final class Device {
   /// Region codes known to this device
   public var knownRegions: [String] = []
 
+  /// Raw ``SwapGuard`` bits: sync deletions held back since this radio took on an
+  /// identity's history. Owned solely by `armSwapGuard`, `reconcileGhostIdentity` and
+  /// `releaseSwapGuard`; it is not part of `DeviceDTO`, so no snapshot-then-save caller
+  /// and no backup can arm or release it.
+  public var swapGuard: UInt8 = 0
+
   public init(
     id: UUID = UUID(),
     radioID: UUID = UUID(),
