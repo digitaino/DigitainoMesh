@@ -1,4 +1,34 @@
-Beta Changes -- v1.3.0
+Beta Changes -- v1.3.0 (Build 3)
+
+Weather: Ask From the Bottom Bar, and Watches That Say When They Start
+
+What is different from the radar build of 20 September.
+
+Asking. Every weather screen now asks from the bottom bar, the same button as Update on a place page. The radar, the alert map and the alerts list used to put their ask at the foot of the screen while the answer arrived at the top. What a request is doing is shown beside the answer, and when you have scrolled away from it a small capsule above the bar says so, with Show to scroll back. Controls sit by what they change: the radar's Local, Regional and Wide under its map, the alert map's areas under its map.
+
+A radio you can hear can be asked. A weather radio your radio has heard can be asked at once. Before, every button said "Can't ask until it announces itself" until the bot's advert reached your phone, which never happens when your own radio is the bot.
+
+When an alert applies. A watch issued ahead of time says when it starts, "from Wed 19:00 until Fri 19:00", instead of looking as if it were already in force with "in 81 h 28 min". An alert in effect reads "until 23:41 · 40 min left" when it ends within 12 hours and "until Fri 19:00" when it ends later. The strip, the alerts list, the alert map, the detail and notifications all use this line, in your phone's 12 or 24 hour clock. It needs a bot that sends the start, as WX-AUS does; with an older bot it reads as before.
+
+"+1 more". When more than one alert covers a place, tapping the strip opens the alerts list, starting with exactly those alerts. With one alert it opens that alert, as before.
+
+Finding things. Alerts, Alert map, Weather stations and Alert notifications are in the title menu, and Alert notifications is also in Places under your saved places. The radio page starts with Alerts, Weather stations and Alert notifications; How it works is last. The map in the alerts list opens the full map, and tapping an alert on it opens that alert. The full alert map has a legend. The state list in Reports and the alert map's area list can be searched.
+
+Large text and iPad. At the accessibility text sizes a row puts its value under its label instead of squeezing both into narrow columns: the alert strip, forecast rows, Places, stations and card labels. On iPad the lists keep a readable width, and the radar card no longer fills the screen in landscape.
+
+Wording. How it works no longer says a request goes out as a private message: it goes out on #meshwx, addressed to the weather radio. The alert map no longer says a tap asks the radio. Sentences that appeared twice on one screen appear once.
+
+The alert map's cost. "About N packets" counts the smaller packets WX-AUS sends now. The whole country with nothing held reads about 5 packets, 8 with advisories.
+
+On WX-AUS itself. Its packets are a little smaller, so it can hear a repeater pass each one on, and it no longer sends again packets that already got through. An answer to a request that came through repeaters waits about a second, so it is not lost under the repeaters' own copies of the request. When its hourly budget is spent it says it is busy instead of staying silent, and the budget is four times what it was.
+
+What to try. Ask from the bottom bar on the radar, the alert map and the alerts list, and scroll away while it waits. Look at a watch issued ahead of time. Tap "+1 more" when two alerts cover a place. Open things from the title menu. If you use large text, look at the forecast, Places and the stations.
+
+Unchanged: MeshCore companion firmware 1.15 or newer, #meshwx on the radio, one request per tap, nothing about you leaves the phone. New text is in all 11 languages.
+
+---
+
+Beta Changes -- v1.3.0 (radar build, 20 September)
 
 Weather: Radar, an Alert Map You Choose, and Channel Traffic
 
