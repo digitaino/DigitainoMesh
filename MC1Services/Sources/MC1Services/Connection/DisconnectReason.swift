@@ -12,4 +12,5 @@ public enum DisconnectReason: String, Sendable {
   case deviceRemovedFromSettings = "device removed from iOS Settings"
   case pairingFailed = "device pairing failed"
   case wifiReconnectPrep = "preparing for WiFi reconnect"
+  case identityChanged = "radio set up as another node"
 }

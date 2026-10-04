@@ -73,6 +73,9 @@ public enum AppStorageKey: String {
   /// `TranslationSwitchMigration`.
   case messageTranslationEnabled
   case hasSeenRepeaterDragHint
+  /// Whether this iPhone keeps each node's private key in the Keychain, so a new radio can be
+  /// set up as that node (`IdentityKeyVault`, docs/RADIO_SWAP.md R5).
+  case keepNodeKeysOnPhone
   /// Whether the Network View's "tap an observer, then a route" hint has been
   /// obeyed once. The hint teaches the panel's focus model; once the model has
   /// been used, the line is only costing the observer list a row.
@@ -156,4 +159,6 @@ public enum AppStorageKey: String {
   /// Collapsed: the card sits on the map that is also being read, so the taller list is
   /// something the rider asks for rather than something they arrive at.
   public static let defaultSignalMapperCardExpanded: Bool = false
+  /// On: owner decision 1 of docs/RADIO_SWAP.md §5.
+  public static let defaultKeepNodeKeysOnPhone: Bool = true
 }

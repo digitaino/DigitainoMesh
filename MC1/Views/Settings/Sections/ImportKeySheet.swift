@@ -40,6 +40,8 @@ struct ImportKeySheet: View {
           Task {
             if await viewModel.importKey() {
               dismiss()
+              // Join the history of the node this key belongs to now, not at the next connect.
+              Task { await appState.reconnectAfterIdentityChange() }
             }
           }
         }

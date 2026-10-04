@@ -379,6 +379,9 @@ final class AppState {
   let nodeLocationPrompt = NodeLocationPromptState()
   let radioSwapPrompt = RadioSwapPromptState()
 
+  /// The question asked of a blank radio: set it up as one of the user's saved nodes.
+  let radioSetUpPrompt = RadioSetUpPromptState()
+
   // MARK: - Navigation State
 
   /// Navigation coordinator (tab selection, pending targets, cross-tab navigation)
@@ -533,6 +536,9 @@ final class AppState {
       // records of it onto the radio. The sync has run, so a radio that already matched has
       // released its guard and is not asked.
       Task { [weak self] in await self?.evaluateRadioSwapOffer() }
+      // A blank radio, with the user's own node keys on this iPhone: ask whether to set it up
+      // as one of them. A radio that took on a node is never blank, so the two never overlap.
+      Task { [weak self] in await self?.evaluateRadioSetUp() }
     }
 
     loadPersistedRegionSelection()
@@ -615,6 +621,7 @@ final class AppState {
     navigation.clearPendingLinks(signalMapperRideActive: signalMapperRideSession != nil)
     nodeLocationPrompt.endSession()
     radioSwapPrompt.endSession()
+    radioSetUpPrompt.endSession()
   }
 
   /// Presents the guided pairing-failure recovery for an invalidated bond, only

@@ -2329,3 +2329,53 @@
 
 /* Support the Developer screen - where questions about the fork go */
 "Support.Fork.Footer" = "关于此分支的问题请发送至 mesh@digitaino.com，而不是 Avi0n。";
+
+/* MARK: Set up a blank radio as a saved node (docs/RADIO_SWAP.md flow B, R5) */
+
+/* Set-up question for a blank radio - sheet title */
+"radioSetUp.title" = "新电台";
+
+/* Set-up question - explanation; %@ is the radio's current node name, like 480A1F8A */
+"radioSetUp.body" = "这台电台是一个新节点 %@，在此应用中没有历史记录。你可以改为将它设置为你的某个节点：它会使用该节点的密钥，你的聊天、联系人和频道都会随之而来。";
+
+/* Set-up question - button; %@ is one of the user's saved node names */
+"radioSetUp.setUpAs" = "设置为 %@";
+
+/* Set-up question - footer under the set-up buttons */
+"radioSetUp.setUpFooter" = "密钥来自这部 iPhone，因此你的另一台电台无需开机。接下来，在写入任何内容之前，你会看到还将复制哪些内容。";
+
+/* Set-up question - button keeping the radio as its own new node */
+"radioSetUp.useAsNewNode" = "作为新节点使用";
+
+/* Set-up question - footer under Use as a New Node */
+"radioSetUp.useAsNewNodeFooter" = "让这台电台保持现在的节点。对这台电台不会再询问。";
+
+/* Set-up confirmation - title; %@ is the saved node name */
+"radioSetUp.confirm.title" = "设置为 %@？";
+
+/* Set-up confirmation - message; %1$@ is the radio's current node, %2$@ the saved node */
+"radioSetUp.confirm.message" = "这会替换电台自己的密钥，节点 %1$@ 将消失。使用这台电台时，请让你的另一台电台 %2$@ 保持关机。";
+
+/* Set-up confirmation - confirm button */
+"radioSetUp.confirm.button" = "设置";
+
+/* Set-up progress; %@ is the saved node name */
+"radioSetUp.settingUp" = "正在设置为 %@…";
+
+/* Set-up progress footer */
+"radioSetUp.settingUpFooter" = "正在写入密钥，然后重新连接。";
+
+/* Set-up failed footer */
+"radioSetUp.failedFooter" = "其他内容均未更改。你可以在这台电台下次连接时重试。";
+
+/* Set-up error - the saved key is gone */
+"radioSetUp.error.keyNotSaved" = "这部 iPhone 上已没有该节点的密钥。";
+
+/* Set-up error - the radio did not take the key */
+"radioSetUp.error.radioKeptItsKey" = "电台未接受该密钥。它的固件可能不支持导入密钥。";
+
+/* Advanced > Identity - toggle keeping node keys in the iPhone Keychain */
+"nodeKeys.keep" = "在这部 iPhone 上保留节点密钥";
+
+/* Advanced > Identity - footer explaining kept node keys */
+"nodeKeys.footer" = "让应用可以将新的或重新刷机的电台设置为你的某个节点，即使另一台电台不在身边。密钥只保存在这部 iPhone 上：绝不进入 iCloud 或应用备份，也绝不会显示。关闭后会删除所有已保存的密钥。";

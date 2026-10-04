@@ -325,6 +325,21 @@ public extension PersistenceStore {
       .map { DeviceDTO(from: $0) }
   }
 
+  /// Whether a partition holds any message: a radio with none is a blank one, which the app may
+  /// offer to set up as one of the user's saved nodes.
+  func hasMessages(radioID: UUID) throws -> Bool {
+    let targetRadioID = radioID
+    var descriptor = FetchDescriptor(predicate: #Predicate<Message> { $0.radioID == targetRadioID })
+    descriptor.fetchLimit = 1
+    return try modelContext.fetchCount(descriptor) > 0
+  }
+
+  /// How many radio rows this phone keeps, saved or forgotten, carry `publicKey`.
+  func deviceCount(publicKey: Data) throws -> Int {
+    let targetKey = publicKey
+    return try modelContext.fetchCount(FetchDescriptor(predicate: #Predicate<Device> { $0.publicKey == targetKey }))
+  }
+
   /// The most recently connected other radio that carries `publicKey` and can still connect:
   /// the radio whose history a radio newly given that key should join.
   func fetchSiblingRadio(publicKey: Data, excluding id: UUID) throws -> DeviceDTO? {

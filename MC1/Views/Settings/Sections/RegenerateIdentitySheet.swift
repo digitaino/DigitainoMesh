@@ -46,6 +46,8 @@ struct RegenerateIdentitySheet: View {
           Task {
             if await viewModel.replaceIdentity() {
               dismiss()
+              // Reconnect at once, so the first sync under the new key holds its deletions.
+              Task { await appState.reconnectAfterIdentityChange() }
             }
           }
         }

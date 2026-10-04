@@ -595,7 +595,10 @@ public extension ConnectionManager {
     // Only clear user intent and clean-channel state for explicit disconnects.
     // Transient reasons preserve both so the next reconnect can skip redundant channel sync.
     switch reason {
-    case .userInitiated, .statusMenuDisconnectTap, .forgetDevice, .deviceRemovedFromSettings, .factoryReset, .switchingDevice:
+    // A radio set up as another node reconnects straight away as that node: its channel sync
+    // state belongs to the node it was, so it goes like a device switch's.
+    case .userInitiated, .statusMenuDisconnectTap, .forgetDevice, .deviceRemovedFromSettings, .factoryReset,
+         .switchingDevice, .identityChanged:
       connectionIntent = .userDisconnected
       persistIntent()
       surfacedAuthFailureDeviceID = nil

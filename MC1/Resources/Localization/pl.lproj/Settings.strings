@@ -2329,3 +2329,53 @@
 
 /* Support the Developer screen - where questions about the fork go */
 "Support.Fork.Footer" = "Pytania o ten fork kieruj na mesh@digitaino.com, nie do Avi0n.";
+
+/* MARK: Set up a blank radio as a saved node (docs/RADIO_SWAP.md flow B, R5) */
+
+/* Set-up question for a blank radio - sheet title */
+"radioSetUp.title" = "Nowe radio";
+
+/* Set-up question - explanation; %@ is the radio's current node name, like 480A1F8A */
+"radioSetUp.body" = "To radio jest nowym węzłem, %@, bez historii w tej aplikacji. Możesz zamiast tego skonfigurować je jako jeden ze swoich węzłów: przejmie klucz tego węzła, a czaty, kontakty i kanały pójdą za nim.";
+
+/* Set-up question - button; %@ is one of the user's saved node names */
+"radioSetUp.setUpAs" = "Skonfiguruj jako %@";
+
+/* Set-up question - footer under the set-up buttons */
+"radioSetUp.setUpFooter" = "Klucz pochodzi z tego iPhone'a, więc drugie radio nie musi być włączone. Następnie zobaczysz, co jeszcze zostanie skopiowane, zanim cokolwiek zostanie zapisane.";
+
+/* Set-up question - button keeping the radio as its own new node */
+"radioSetUp.useAsNewNode" = "Użyj jako nowego węzła";
+
+/* Set-up question - footer under Use as a New Node */
+"radioSetUp.useAsNewNodeFooter" = "Zachowaj to radio jako węzeł, którym jest teraz. Nie zapytamy ponownie o to radio.";
+
+/* Set-up confirmation - title; %@ is the saved node name */
+"radioSetUp.confirm.title" = "Skonfigurować jako %@?";
+
+/* Set-up confirmation - message; %1$@ is the radio's current node, %2$@ the saved node */
+"radioSetUp.confirm.message" = "To zastąpi własny klucz radia, więc węzeł %1$@ zniknie. Trzymaj drugie radio %2$@ wyłączone, gdy używasz tego.";
+
+/* Set-up confirmation - confirm button */
+"radioSetUp.confirm.button" = "Skonfiguruj";
+
+/* Set-up progress; %@ is the saved node name */
+"radioSetUp.settingUp" = "Konfigurowanie jako %@…";
+
+/* Set-up progress footer */
+"radioSetUp.settingUpFooter" = "Zapisywanie klucza, potem ponowne połączenie.";
+
+/* Set-up failed footer */
+"radioSetUp.failedFooter" = "Nic więcej nie zostało zmienione. Możesz spróbować ponownie przy następnym połączeniu tego radia.";
+
+/* Set-up error - the saved key is gone */
+"radioSetUp.error.keyNotSaved" = "Ten iPhone nie ma już klucza tego węzła.";
+
+/* Set-up error - the radio did not take the key */
+"radioSetUp.error.radioKeptItsKey" = "Radio nie przyjęło klucza. Jego firmware może nie obsługiwać importu kluczy.";
+
+/* Advanced > Identity - toggle keeping node keys in the iPhone Keychain */
+"nodeKeys.keep" = "Przechowuj klucze węzłów na tym iPhonie";
+
+/* Advanced > Identity - footer explaining kept node keys */
+"nodeKeys.footer" = "Pozwala aplikacji skonfigurować nowe lub ponownie wgrane radio jako jeden z Twoich węzłów, nawet gdy drugiego radia nie masz przy sobie. Klucze zostają tylko na tym iPhonie: nigdy w iCloud ani w kopiach zapasowych aplikacji i nigdy nie są pokazywane. Wyłączenie usuwa wszystkie zapisane klucze.";

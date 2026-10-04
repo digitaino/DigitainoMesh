@@ -125,6 +125,14 @@ struct ContentView: View {
         }
       }
     }
+    // A blank radio: set it up as one of the user's saved nodes, or keep it as a new node.
+    // Same co-presentation contract; a swipe closes it unanswered, so it is asked again.
+    .sheet(item: Binding(
+      get: { radioSetUpPresentable ? appState.radioSetUpPrompt.pending : nil },
+      set: { if $0 == nil { appState.radioSetUpPrompt.close() } }
+    )) { setUp in
+      RadioSetUpSheet(setUp: setUp)
+    }
     // Same co-presentation contract as the What's New sheet above: the getter yields the
     // prompt only while this host is quiescent, and `pending` stays set meanwhile, so the
     // alert re-presents on a later render once the higher-priority surface clears.
@@ -168,13 +176,23 @@ struct ContentView: View {
       && appState.whatsNew.pendingRelease == nil
   }
 
+  /// The set-up question yields to the same surfaces as the swap offer, and to the offer itself.
+  private var radioSetUpPresentable: Bool {
+    appState.radioSetUpPrompt.pending != nil
+      && connectionUIQuiescent
+      && appState.whatsNew.pendingRelease == nil
+      && appState.radioSwapPrompt.pending == nil
+  }
+
   /// The stale-location prompt is the lowest-priority surface on this host: it yields to the
-  /// connection alerts, the scan picker, the What's New sheet, and the radio swap offer.
+  /// connection alerts, the scan picker, the What's New sheet, the radio swap offer and the
+  /// set-up question.
   private var nodeLocationPromptPresentable: Bool {
     appState.nodeLocationPrompt.pending != nil
       && connectionUIQuiescent
       && appState.whatsNew.pendingRelease == nil
       && appState.radioSwapPrompt.pending == nil
+      && appState.radioSetUpPrompt.pending == nil
   }
 }
 

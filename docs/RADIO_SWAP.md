@@ -1,6 +1,6 @@
 # Radio swap: one identity, any radio
 
-Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1, P2 and P4 built the same day (§4.1–§4.3), and deletions now carry across radios (§4.4); P3 and P5 not built. Checked on Rafael's Wio Tracker L1 the same evening (§4.3). Code references were read from source on that date.
+Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1, P2 and P4 built the same day (§4.1–§4.3), and deletions now carry across radios (§4.4); P3 built 2026-10-04 (§4.5); P5 not built. Checked on Rafael's Wio Tracker L1 the same evening (§4.3). Code references were read from source on that date.
 
 Rafael's brief: *"I would be using the same key on both radios. so I want everything to transfer over. can we design a better process to do this? I would like to be able to swap radios easily and keep all the same contacts and conversations etc."*
 
@@ -128,7 +128,7 @@ Settings → Radio gets "Remember this identity on this iPhone" and "Forget save
 |---|---|---|---|
 | P1 | Protected first sync on new hardware or a new key (R2), and the watermark reset. **Built 2026-10-03** | H1, H2, H6 | Small; contact and channel sync gates plus tests |
 | P2 | Config from the app's records, slot-exact channels, and a "Copy to this radio" action in Settings (R3, R4) | H3, H7 (data half) | Medium; planner input and one screen. **Built 2026-10-03** |
-| P3 | Keychain key custody, and "Set up as …" at pairing (R5, R6) | H5, H7 (key half), H8 | Medium |
+| P3 | Keychain key custody, and "Set up as …" at pairing (R5, R6) | H5, H7 (key half), H8 | Medium. **Built 2026-10-04** |
 | P4 | Sibling rows: every radio in the list, one-tap switching, Forget-one semantics (R1) | H4 | Largest; Device lookups, delete paths, picker. **Built 2026-10-03** |
 | P5 | Same-key-on-air warning (R7, optional) | none | Small, if the RX log shows it |
 
@@ -290,6 +290,44 @@ His "auto-remove stale nodes" setting then removed about 70 nodes it found older
 - Records are kept until undone. They are tiny, and a radio can come back after any length of time.
 
 **Tests:** `IdentityDeletionTests`, covering the store, recording a deletion, and both the stale and the re-added contact. A channel test in `ChannelServiceSwapGuardTests` covers the emptied slot. 1,138 services tests pass, apart from the two known parallel-load notification timeouts.
+
+### 4.5 P3 as built (2026-10-04)
+
+Prompted by Rafael erasing and reflashing his RAK 3401: the firmware gave it a new key, so the
+app rightly saw a new node with nothing, and there was no way back short of exporting a config
+file from the Wio Tracker and importing its Node Identity section.
+
+**Key custody (R5).** `IdentityKeyVault` keeps each node's 64-byte private key in the Keychain
+under its public key, labelled with the node name: generic-password items, service
+`com.digitaino.mesh.node-identity-keys`, `AfterFirstUnlockThisDeviceOnly`, not synchronizable.
+The key is copied on every connect from the export the app already makes for DM decryption
+(`SyncCoordinator+Sync`), validated as an expanded key first. It is never shown or exported by
+the app, so no Face ID gate was needed. Settings › Advanced › Identity has one switch, "Keep Node
+Keys on This iPhone" (on by default, owner decision 1); off forgets every saved key and stops
+saving. A per-node "Forget" was dropped: the next connect would save the key again.
+
+**Set up a blank radio (flow B).** After the first sync, `evaluateRadioSetUp` asks a radio
+whose node has no messages in this app and that no other radio row carries
+(`RadioSetUpPolicy`), offering every saved node that still has a radio row (its history). The
+sheet: "Set Up as Digitaino" (confirmation names the node the radio stops being and says to keep
+the other radio off) or "Use as a New Node" (remembered for that radio while it keeps that key;
+a swipe is not). Setting up writes the saved key with the stock import command, checks the radio
+now reports the node's public key (`appStart`), forgets the radio's throwaway key, then
+disconnects and reconnects (`DisconnectReason.identityChanged`). On reconnect the radio joins the
+node's history beside its other radio (c55d655a, `joinSiblingIdentity`) or rejoins a ghost, with
+deletions held, and its first sync brings the usual "Copy to This Radio" screen, which is the
+confirmation listing everything else that will be written.
+
+**H8.** Import Key and Regenerate Key reconnect at once (`reconnectAfterIdentityChange`), so the
+radio joins the right history now rather than at the next connect.
+
+**Differences from §2–§3:**
+- R6 asked before the first sync. The question comes after it: the first sync of a blank radio
+  writes only into that radio's own new partition, which the set-up abandons (a Public channel,
+  out of sight). Holding the connect for an answer would have meant a new pause in the connect
+  ceremony for no saving.
+- Flow C's closing question (keep as spare / forget / new identity) is not built; owner decision 5
+  was tentative. The confirmation carries the "keep the other radio off" reminder instead.
 
 ## 5. Owner decisions (taken 2026-10-03)
 

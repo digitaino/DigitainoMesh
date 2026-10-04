@@ -2329,3 +2329,53 @@
 
 /* Support the Developer screen - where questions about the fork go */
 "Support.Fork.Footer" = "Las preguntas sobre este fork van a mesh@digitaino.com, no a Avi0n.";
+
+/* MARK: Set up a blank radio as a saved node (docs/RADIO_SWAP.md flow B, R5) */
+
+/* Set-up question for a blank radio - sheet title */
+"radioSetUp.title" = "Radio nueva";
+
+/* Set-up question - explanation; %@ is the radio's current node name, like 480A1F8A */
+"radioSetUp.body" = "Esta radio es un nodo nuevo, %@, sin historial en esta app. Puedes configurarla como uno de tus nodos: toma la clave de ese nodo, y tus chats, contactos y canales la acompañan.";
+
+/* Set-up question - button; %@ is one of the user's saved node names */
+"radioSetUp.setUpAs" = "Configurar como %@";
+
+/* Set-up question - footer under the set-up buttons */
+"radioSetUp.setUpFooter" = "La clave sale de este iPhone, así que tu otra radio no necesita estar encendida. Después verás qué más se copiará antes de escribir nada.";
+
+/* Set-up question - button keeping the radio as its own new node */
+"radioSetUp.useAsNewNode" = "Usar como nodo nuevo";
+
+/* Set-up question - footer under Use as a New Node */
+"radioSetUp.useAsNewNodeFooter" = "Mantén esta radio como el nodo que es ahora. No se te volverá a preguntar por esta radio.";
+
+/* Set-up confirmation - title; %@ is the saved node name */
+"radioSetUp.confirm.title" = "¿Configurar como %@?";
+
+/* Set-up confirmation - message; %1$@ is the radio's current node, %2$@ the saved node */
+"radioSetUp.confirm.message" = "Esto reemplaza la clave propia de la radio, así que el nodo %1$@ desaparece. Mantén apagada tu otra radio %2$@ mientras uses esta.";
+
+/* Set-up confirmation - confirm button */
+"radioSetUp.confirm.button" = "Configurar";
+
+/* Set-up progress; %@ is the saved node name */
+"radioSetUp.settingUp" = "Configurando como %@…";
+
+/* Set-up progress footer */
+"radioSetUp.settingUpFooter" = "Escribiendo la clave y volviendo a conectar.";
+
+/* Set-up failed footer */
+"radioSetUp.failedFooter" = "No se cambió nada más. Puedes intentarlo de nuevo la próxima vez que se conecte esta radio.";
+
+/* Set-up error - the saved key is gone */
+"radioSetUp.error.keyNotSaved" = "Este iPhone ya no tiene la clave de ese nodo.";
+
+/* Set-up error - the radio did not take the key */
+"radioSetUp.error.radioKeptItsKey" = "La radio no aceptó la clave. Puede que su firmware no admita importar claves.";
+
+/* Advanced > Identity - toggle keeping node keys in the iPhone Keychain */
+"nodeKeys.keep" = "Guardar claves de nodo en este iPhone";
+
+/* Advanced > Identity - footer explaining kept node keys */
+"nodeKeys.footer" = "Permite que la app configure una radio nueva o reflasheada como uno de tus nodos, aunque tu otra radio no esté contigo. Las claves se quedan solo en este iPhone: nunca en iCloud ni en copias de seguridad de la app, y nunca se muestran. Al desactivarlo se olvidan todas las claves guardadas.";

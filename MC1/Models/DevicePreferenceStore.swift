@@ -101,6 +101,16 @@ struct DevicePreferenceStore {
     userDefaults.set(true, forKey: Self.radioSwapCopiedKey(deviceID: deviceID))
   }
 
+  /// The key a radio carried when the user chose "Use as a New Node" over setting it up as a
+  /// saved node. That radio is not asked again while it keeps that key.
+  func radioSetUpDeclinedKey(deviceID: UUID) -> Data? {
+    userDefaults.data(forKey: Self.radioSetUpDeclinedKeyKey(deviceID: deviceID))
+  }
+
+  func setRadioSetUpDeclined(publicKey: Data, deviceID: UUID) {
+    userDefaults.set(publicKey, forKey: Self.radioSetUpDeclinedKeyKey(deviceID: deviceID))
+  }
+
   // MARK: - Adaptive Power
 
   func isAdaptivePowerEnabled(deviceID: UUID) -> Bool {
@@ -160,6 +170,10 @@ struct DevicePreferenceStore {
 
   private static func radioSwapCopiedKey(deviceID: UUID) -> String {
     "device.\(deviceID.uuidString).radioSwapCopied"
+  }
+
+  private static func radioSetUpDeclinedKeyKey(deviceID: UUID) -> String {
+    "device.\(deviceID.uuidString).radioSetUpDeclinedKey"
   }
 
   private static func adaptivePowerEnabledKey(deviceID: UUID) -> String {

@@ -5745,6 +5745,12 @@ public enum L10n {
         }
       }
     }
+    public enum NodeKeys {
+      /// Advanced > Identity - footer explaining kept node keys
+      public static let footer = L10n.tr("Settings", "nodeKeys.footer", fallback: "Lets the app set up a new or reflashed radio as one of your nodes, even when your other radio isn't with you. Keys stay on this iPhone only: never in iCloud or in app backups, and never shown. Turning this off forgets every saved key.")
+      /// Advanced > Identity - toggle keeping node keys in the iPhone Keychain
+      public static let keep = L10n.tr("Settings", "nodeKeys.keep", fallback: "Keep Node Keys on This iPhone")
+    }
     public enum Nodes {
       /// Toggle label for auto-add contacts
       public static let autoAddContacts = L10n.tr("Settings", "nodes.autoAddContacts", fallback: "Contacts")
@@ -5997,6 +6003,50 @@ public enum L10n {
           /// Confirmation dialog title for enabling repeat mode
           public static let title = L10n.tr("Settings", "radio.repeatMode.confirm.title", fallback: "Enable Repeat Mode?")
         }
+      }
+    }
+    public enum RadioSetUp {
+      /// Set-up question - explanation; %@ is the radio's current node name, like 480A1F8A
+      public static func body(_ p1: Any) -> String {
+        return L10n.tr("Settings", "radioSetUp.body", String(describing: p1), fallback: "This radio is a new node, %@, with no history in this app. You can set it up as one of your nodes instead: it takes that node's key, and your chats, contacts and channels come with it.")
+      }
+      /// Set-up failed footer
+      public static let failedFooter = L10n.tr("Settings", "radioSetUp.failedFooter", fallback: "Nothing else was changed. You can try again the next time this radio connects.")
+      /// Set-up progress; %@ is the saved node name
+      public static func settingUp(_ p1: Any) -> String {
+        return L10n.tr("Settings", "radioSetUp.settingUp", String(describing: p1), fallback: "Setting up as %@…")
+      }
+      /// Set-up progress footer
+      public static let settingUpFooter = L10n.tr("Settings", "radioSetUp.settingUpFooter", fallback: "Writing the key, then reconnecting.")
+      /// Set-up question - button; %@ is one of the user's saved node names
+      public static func setUpAs(_ p1: Any) -> String {
+        return L10n.tr("Settings", "radioSetUp.setUpAs", String(describing: p1), fallback: "Set Up as %@")
+      }
+      /// Set-up question - footer under the set-up buttons
+      public static let setUpFooter = L10n.tr("Settings", "radioSetUp.setUpFooter", fallback: "The key comes from this iPhone, so your other radio doesn't need to be on. Next, you'll see what else will be copied before anything is written.")
+      /// Set-up question for a blank radio - sheet title
+      public static let title = L10n.tr("Settings", "radioSetUp.title", fallback: "New Radio")
+      /// Set-up question - button keeping the radio as its own new node
+      public static let useAsNewNode = L10n.tr("Settings", "radioSetUp.useAsNewNode", fallback: "Use as a New Node")
+      /// Set-up question - footer under Use as a New Node
+      public static let useAsNewNodeFooter = L10n.tr("Settings", "radioSetUp.useAsNewNodeFooter", fallback: "Keep this radio as the node it is now. You won't be asked again for this radio.")
+      public enum Confirm {
+        /// Set-up confirmation - confirm button
+        public static let button = L10n.tr("Settings", "radioSetUp.confirm.button", fallback: "Set Up")
+        /// Set-up confirmation - message; %1$@ is the radio's current node, %2$@ the saved node
+        public static func message(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Settings", "radioSetUp.confirm.message", String(describing: p1), String(describing: p2), fallback: "This replaces the radio's own key, so the node %1$@ goes away. Keep your other %2$@ radio switched off while you use this one.")
+        }
+        /// Set-up confirmation - title; %@ is the saved node name
+        public static func title(_ p1: Any) -> String {
+          return L10n.tr("Settings", "radioSetUp.confirm.title", String(describing: p1), fallback: "Set Up as %@?")
+        }
+      }
+      public enum Error {
+        /// Set-up error - the saved key is gone
+        public static let keyNotSaved = L10n.tr("Settings", "radioSetUp.error.keyNotSaved", fallback: "This iPhone no longer has that node's key.")
+        /// Set-up error - the radio did not take the key
+        public static let radioKeptItsKey = L10n.tr("Settings", "radioSetUp.error.radioKeptItsKey", fallback: "The radio didn't take the key. Its firmware may not support key import.")
       }
     }
     public enum RegenerateIdentity {

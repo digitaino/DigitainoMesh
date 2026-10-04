@@ -2329,3 +2329,53 @@
 
 /* Support the Developer screen - where questions about the fork go */
 "Support.Fork.Footer" = "Fragen zu diesem Fork bitte an mesh@digitaino.com, nicht an Avi0n.";
+
+/* MARK: Set up a blank radio as a saved node (docs/RADIO_SWAP.md flow B, R5) */
+
+/* Set-up question for a blank radio - sheet title */
+"radioSetUp.title" = "Neues Funkgerät";
+
+/* Set-up question - explanation; %@ is the radio's current node name, like 480A1F8A */
+"radioSetUp.body" = "Dieses Funkgerät ist ein neuer Knoten, %@, ohne Verlauf in dieser App. Du kannst es stattdessen als einen deiner Knoten einrichten: Es übernimmt den Schlüssel dieses Knotens, und deine Chats, Kontakte und Kanäle kommen mit.";
+
+/* Set-up question - button; %@ is one of the user's saved node names */
+"radioSetUp.setUpAs" = "Als %@ einrichten";
+
+/* Set-up question - footer under the set-up buttons */
+"radioSetUp.setUpFooter" = "Der Schlüssel kommt von diesem iPhone, dein anderes Funkgerät muss also nicht eingeschaltet sein. Als Nächstes siehst du, was sonst noch kopiert wird, bevor etwas geschrieben wird.";
+
+/* Set-up question - button keeping the radio as its own new node */
+"radioSetUp.useAsNewNode" = "Als neuen Knoten verwenden";
+
+/* Set-up question - footer under Use as a New Node */
+"radioSetUp.useAsNewNodeFooter" = "Behalte dieses Funkgerät als den Knoten, der es jetzt ist. Für dieses Funkgerät wirst du nicht erneut gefragt.";
+
+/* Set-up confirmation - title; %@ is the saved node name */
+"radioSetUp.confirm.title" = "Als %@ einrichten?";
+
+/* Set-up confirmation - message; %1$@ is the radio's current node, %2$@ the saved node */
+"radioSetUp.confirm.message" = "Dadurch wird der eigene Schlüssel des Funkgeräts ersetzt, und der Knoten %1$@ verschwindet. Lass dein anderes Funkgerät %2$@ ausgeschaltet, solange du dieses verwendest.";
+
+/* Set-up confirmation - confirm button */
+"radioSetUp.confirm.button" = "Einrichten";
+
+/* Set-up progress; %@ is the saved node name */
+"radioSetUp.settingUp" = "Wird als %@ eingerichtet…";
+
+/* Set-up progress footer */
+"radioSetUp.settingUpFooter" = "Der Schlüssel wird geschrieben, dann wird neu verbunden.";
+
+/* Set-up failed footer */
+"radioSetUp.failedFooter" = "Sonst wurde nichts geändert. Du kannst es beim nächsten Verbinden dieses Funkgeräts erneut versuchen.";
+
+/* Set-up error - the saved key is gone */
+"radioSetUp.error.keyNotSaved" = "Dieses iPhone hat den Schlüssel dieses Knotens nicht mehr.";
+
+/* Set-up error - the radio did not take the key */
+"radioSetUp.error.radioKeptItsKey" = "Das Funkgerät hat den Schlüssel nicht übernommen. Seine Firmware unterstützt den Schlüsselimport möglicherweise nicht.";
+
+/* Advanced > Identity - toggle keeping node keys in the iPhone Keychain */
+"nodeKeys.keep" = "Knotenschlüssel auf diesem iPhone behalten";
+
+/* Advanced > Identity - footer explaining kept node keys */
+"nodeKeys.footer" = "Damit kann die App ein neues oder neu geflashtes Funkgerät als einen deiner Knoten einrichten, auch wenn dein anderes Funkgerät nicht dabei ist. Die Schlüssel bleiben nur auf diesem iPhone: nie in iCloud oder in App-Backups, und sie werden nie angezeigt. Ausschalten löscht alle gespeicherten Schlüssel.";

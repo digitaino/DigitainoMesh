@@ -410,6 +410,19 @@ extension SyncCoordinator {
         let privateKey = try await dependencies.exportPrivateKey()
         await dependencies.rxLogService.updatePrivateKey(privateKey)
         logger.debug("Device private key exported for direct message decryption")
+        // Keep a copy, so a new or reflashed radio can later be set up as this node.
+        if IdentityKeyVault.isEnabled(),
+           let device = try? await dependencies.dataStore.fetchDevice(radioID: radioID) {
+          do {
+            try await IdentityKeyVault.shared.save(
+              privateKey: privateKey,
+              publicKey: device.publicKey,
+              nodeName: device.nodeName
+            )
+          } catch {
+            logger.warning("Could not keep the node key on this iPhone: \(error.localizedDescription)")
+          }
+        }
       } catch {
         logger.warning("Failed to export private key: \(error.localizedDescription)")
       }
