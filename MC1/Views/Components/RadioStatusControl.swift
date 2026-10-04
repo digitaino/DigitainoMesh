@@ -277,7 +277,10 @@ struct RadioStatusControl: View {
       pendingMovementHintsPrompt = false
       appState.requestMovementHintsIfNeeded()
     }
-    .sheet(isPresented: $showingDeviceSelection) {
+    // The sheet's Scan and Set Up only queue the request; it runs once the sheet is gone.
+    .sheet(isPresented: $showingDeviceSelection, onDismiss: {
+      appState.handleDeviceSelectionSheetDismissed()
+    }) {
       DeviceSelectionSheet()
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
