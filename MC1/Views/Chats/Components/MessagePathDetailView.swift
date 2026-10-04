@@ -8,6 +8,10 @@ import SwiftUI
 /// you do after seeing it, so the action lives where the route is shown, not
 /// beside its entry point in the actions sheet.
 ///
+/// A flood message often arrives more than once, by different paths; each later copy is
+/// stored as a repeat row (upstream's extra incoming paths). With more than one arrival,
+/// capsules over the map pick which path the map, hop list and Reply with Route show.
+///
 /// Presented as a cover rather than a sheet (see `ActionsDetailsSection`): this
 /// is a screen, not a card, and a downward drag over a map should pan the map
 /// rather than throw the route away.
@@ -24,6 +28,8 @@ struct MessagePathDetailView: View {
 
   let message: MessageDTO
   let pathViewModel: MessagePathViewModel
+  /// The message's repeat rows: for an incoming message, its extra arrival paths.
+  var repeats: [MessageRepeatDTO] = []
   /// Hands the composed route text back to the presenter, which dismisses this
   /// screen and dispatches the reply from its `onDismiss` — the dispatch also
   /// dismisses the actions sheet, and tearing down the parent under a
@@ -38,6 +44,8 @@ struct MessagePathDetailView: View {
   /// in the space left above the panel rather than behind it.
   @State private var panelHeight: CGFloat = 0
   @State private var copyHapticTrigger = 0
+  @State private var selectedArrivalID: UUID?
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     NavigationStack {
@@ -48,7 +56,7 @@ struct MessagePathDetailView: View {
           if !locatedNodes.isEmpty {
             ToolbarItem(placement: .principal) {
               PathDistanceBanner(
-                hopCount: message.pathHops.count,
+                hopCount: displayedMessage.pathHops.count,
                 totalPathDistance: locatedNodes.map(\.coordinate).totalDistance()
               )
             }
@@ -84,6 +92,9 @@ struct MessagePathDetailView: View {
           guard message.userFixCoordinate == nil else { return }
           locatedNodes = buildLocatedNodes()
         }
+        .onChange(of: selectedArrivalID) { _, _ in
+          locatedNodes = buildLocatedNodes()
+        }
     }
   }
 
@@ -97,6 +108,11 @@ struct MessagePathDetailView: View {
       // can, so it simply becomes the whole screen rather than sitting under
       // an unavailable placard.
       VStack(spacing: 0) {
+        if arrivals.count > 1 {
+          arrivalPicker(chrome: .plain)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+        }
         panelHeader
         Divider()
         hopList(maxHeight: nil)
@@ -107,10 +123,49 @@ struct MessagePathDetailView: View {
           locatedNodes: locatedNodes,
           cameraBottomSheetFraction: panelHeight / max(proxy.size.height, 1)
         )
+        .safeAreaInset(edge: .top, spacing: 0) {
+          if arrivals.count > 1 {
+            arrivalPicker(chrome: .glass)
+              .padding(.horizontal, Self.panelMargin)
+              .padding(.top, 8)
+          }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
           floatingPanel(maxListHeight: proxy.size.height * Self.panelMaxHeightFraction)
         }
       }
+    }
+  }
+
+  private func arrivalPicker(chrome: MessagePathArrivalCapsules.Chrome) -> some View {
+    MessagePathArrivalCapsules(
+      arrivals: arrivals,
+      selectedID: $selectedArrivalID,
+      reduceMotion: reduceMotion,
+      chrome: chrome
+    )
+  }
+
+  /// The message's own path, then each later copy in the order it was heard.
+  private var arrivals: [MessagePathArrival] {
+    MessagePathArrivals.assemble(message: message, repeats: repeats)
+  }
+
+  private var selectedArrival: MessagePathArrival {
+    let id = MessagePathArrivals.resolvedSelection(preferred: selectedArrivalID, arrivals: arrivals)
+    return arrivals.first { $0.id == id } ?? canonicalArrival
+  }
+
+  /// The message as it came in by the selected path. Everything that draws or shares a
+  /// path reads this, so the map, the hop list and Reply with Route always agree; the
+  /// receiver pin still comes from the message's own receive-time fix.
+  private var displayedMessage: MessageDTO {
+    let arrival = selectedArrival
+    guard arrival.id != message.id else { return message }
+    return message.copy {
+      $0.pathNodes = arrival.pathNodes
+      $0.pathLength = arrival.pathLength
+      $0.snr = arrival.snr
     }
   }
 
@@ -136,17 +191,17 @@ struct MessagePathDetailView: View {
   /// map for the bottom of the screen.
   private var panelHeader: some View {
     HStack(spacing: 8) {
-      if !message.pathHops.isEmpty {
+      if !displayedMessage.pathHops.isEmpty {
         Button(L10n.Chats.Chats.Path.copyButton, systemImage: "doc.on.doc") {
           copyHapticTrigger += 1
-          UIPasteboard.general.string = message.pathStringForClipboard
+          UIPasteboard.general.string = displayedMessage.pathStringForClipboard
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .accessibilityLabel(L10n.Chats.Chats.Path.copyAccessibility)
         .accessibilityHint(L10n.Chats.Chats.Path.copyHint)
 
-        Text(message.pathString)
+        Text(displayedMessage.pathString)
           .font(.caption.monospaced())
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -179,7 +234,7 @@ struct MessagePathDetailView: View {
       VStack(alignment: .leading, spacing: 0) {
         MessagePathContent(
           message: message,
-          arrival: canonicalArrival,
+          arrival: selectedArrival,
           viewModel: pathViewModel,
           receiverName: appState.connectedDevice?.nodeName ?? L10n.Chats.Chats.Path.Receiver.you,
           userLocation: hopReferenceLocation
@@ -210,9 +265,9 @@ struct MessagePathDetailView: View {
   /// it is a wire format other clients parse back into a shared-route card
   /// (`SharedRouteParser`), so the shape must stay stable across locales.
   private var routeInfoText: String? {
-    let hopCount = message.hopCount
+    let hopCount = displayedMessage.hopCount
     guard hopCount > 0 else { return nil }
-    let pathHex = message.pathNodesHex.joined(separator: ",")
+    let pathHex = displayedMessage.pathNodesHex.joined(separator: ",")
     guard !pathHex.isEmpty else { return nil }
     let hopWord = hopCount == 1 ? "hop" : "hops"
     let distancePart = routeDistanceText.map { " \($0)" } ?? ""
@@ -227,7 +282,7 @@ struct MessagePathDetailView: View {
     let formatted = Measurement(value: distance, unit: UnitLength.meters)
       .formatted(.measurement(width: .abbreviated, usage: .road))
     let locatedHops = locatedNodes.count(where: { $0.point.pinStyle == .repeaterHop })
-    return locatedHops < message.hopCount ? "≥ \(formatted)" : formatted
+    return locatedHops < displayedMessage.hopCount ? "≥ \(formatted)" : formatted
   }
 
   /// Reference for disambiguating hop hashes in the list — the same rule the
@@ -253,7 +308,7 @@ struct MessagePathDetailView: View {
 
   private func buildLocatedNodes() -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
     SharedRouteMapView.locatedNodes(
-      for: .message(message),
+      for: .message(displayedMessage),
       contacts: pathViewModel.contacts,
       repeaters: pathViewModel.repeaters,
       discoveredRepeaters: pathViewModel.discoveredRepeaters,

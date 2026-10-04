@@ -39,7 +39,9 @@ struct ActionsDetailsSection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      if availability.canViewPath {
+      // Also when the first copy came direct but later copies took other paths: the path
+      // screen lists every arrival (`showsPathDetail` is that wider gate for incoming).
+      if !message.isOutgoing, availability.showsPathDetail {
         viewPathButton
       }
 
@@ -102,6 +104,7 @@ struct ActionsDetailsSection: View {
       MessagePathDetailView(
         message: message,
         pathViewModel: pathViewModel,
+        repeats: repeats ?? [],
         onReplyWithRoute: onSelectAction == nil ? nil : { routeInfo in
           pendingRouteInfo = routeInfo
           showPathDetail = false
