@@ -69,8 +69,8 @@ public enum AppStorageKey: String {
   /// room for, rather than its three. A standing preference rather than per-hexagon state:
   /// a rider who wants the long list wants it in the next hexagon too (Rafael, 2026-09-05).
   case signalMapperCardExpanded
-  /// Whether incoming messages in a language other than the device's may offer an
-  /// in-bubble Translate control.
+  /// Retired 2026-10-04 for upstream's `translationOffersEnabled`; read once by
+  /// `TranslationSwitchMigration`.
   case messageTranslationEnabled
   case hasSeenRepeaterDragHint
   /// Whether the Network View's "tap an observer, then a route" hint has been
@@ -156,6 +156,4 @@ public enum AppStorageKey: String {
   /// Collapsed: the card sits on the map that is also being read, so the taller list is
   /// something the rider asks for rather than something they arrive at.
   public static let defaultSignalMapperCardExpanded: Bool = false
-  /// On: the feature arrived from upstream always-on, and turning it off is the opt-out.
-  public static let defaultMessageTranslationEnabled: Bool = true
 }

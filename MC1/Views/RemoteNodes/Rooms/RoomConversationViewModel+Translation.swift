@@ -142,7 +142,7 @@ extension RoomConversationViewModel {
     seedDetectedLanguages()
     var translations: [UUID: MessageTranslationChrome] = [:]
     for message in messages {
-      guard !message.isFromSelf, MessageTranslationPreference.isEnabled else { continue }
+      guard !message.isFromSelf else { continue }
       if let chrome = MessageTranslationChrome.resolved(
         detected: detectedLanguages[message.id],
         phase: translationPhases[message.id],
@@ -155,7 +155,6 @@ extension RoomConversationViewModel {
   }
 
   private func seedDetectedLanguages() {
-    guard MessageTranslationPreference.isEnabled else { return }
     for message in messages {
       guard !message.isFromSelf else { continue }
       guard detectedLanguages[message.id] == nil else { continue }

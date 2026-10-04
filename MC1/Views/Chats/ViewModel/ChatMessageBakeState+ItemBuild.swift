@@ -216,7 +216,7 @@ extension ChatMessageBakeState {
       isDuplicateRunExpanded: duplicatePlan.leaderIDByMemberID[message.id]
         .map { expandedDuplicateRuns.contains($0) } ?? false,
       incomingAvatar: incomingAvatar,
-      translation: message.isOutgoing || !envInputs.translationOffersEnabled || !MessageTranslationPreference.isEnabled
+      translation: message.isOutgoing || !envInputs.translationOffersEnabled
         ? nil
         : MessageTranslationChrome.resolved(
           detected: detectedLanguages[message.id],
@@ -231,7 +231,6 @@ extension ChatMessageBakeState {
   /// change does not re-run the recognizer.
   func seedDetectedLanguageIfNeeded(for message: MessageDTO) {
     guard !message.isOutgoing else { return }
-    guard MessageTranslationPreference.isEnabled else { return }
     guard detectedLanguages[message.id] == nil else { return }
     detectedLanguages[message.id] = MessageLanguageDetector.dominantLanguage(for: message.text)
   }

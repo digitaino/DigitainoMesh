@@ -180,6 +180,7 @@ struct MC1App: App {
         // Build 40 user who never reconnects still deserves the silence they chose.
         // Self-latching, so this is a single defaults read on every later launch.
         LegacyNotificationSwitchMigration.run()
+        TranslationSwitchMigration.run()
 
         // The weather alert evaluator runs in the service layer, which has no string tables and
         // no navigation: this hands it both (docs/MESHWX_UI.md §16).
