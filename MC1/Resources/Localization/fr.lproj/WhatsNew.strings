@@ -17,9 +17,9 @@
 "whatsNew.fullReleaseNotes" = "Voir tous les nouveaux changements";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "Détails du chemin";
+"whatsNew.pathDetails.title" = "Tous les chemins d'un message";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "La Carte du trajet a été déplacée dans Détails du chemin, qui liste chaque chemin supplémentaire entrant. Détails des répétitions, sur les messages envoyés, liste chaque chemin de répétition entendu par votre radio.";
+"whatsNew.pathDetails.description" = "Voir le chemin affiche désormais chaque chemin par lequel un message vous est parvenu. S'il est arrivé plusieurs fois, les onglets au-dessus de la carte passent d'un chemin à l'autre.";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "Qui a réagi";

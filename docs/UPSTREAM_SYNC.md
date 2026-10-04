@@ -273,3 +273,10 @@ Owner said "go" to all four recommendations. Branch `upstream-sync-1.5`, cut fro
   Portuguese backlog.
 - Strings only upstream's removed path views used are orphaned (harmless).
 - `feature/meshwx` not yet fast-forwarded; nothing pushed.
+
+**Version bump (owner, 2026-10-04):** MARKETING_VERSION 1.3.0 → 1.5.2 so upstream's 1.5
+What's New presents (it keys on major.minor above the stored baseline). The path item is
+reworded in all 12 locales to describe the fork's View Path with arrival tabs; the "See
+all new changes" link still opens upstream's v1.5.0 release notes. This lifts the
+a19145f7 hold: the next `fastlane beta` upload is a new App Store Connect version, which
+needs Beta App Review before external testers get it (internal testers do not).

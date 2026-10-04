@@ -17,9 +17,9 @@
 "whatsNew.fullReleaseNotes" = "Alle neuen Änderungen anzeigen";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "Pfaddetails";
+"whatsNew.pathDetails.title" = "Jeder Weg einer Nachricht";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "Die Pfadkarte ist jetzt Teil von Pfaddetails, wo jeder zusätzliche eingehende Pfad aufgelistet wird. Bei gesendeten Nachrichten wird in Wiederholungsdetails jeder Wiederholungspfad aufgelistet, den dein Funkgerät gehört hat.";
+"whatsNew.pathDetails.description" = "„Pfad anzeigen“ zeigt jetzt jeden Weg, auf dem dich eine Nachricht erreicht hat. Kam sie mehrmals an, wechselst du mit den Tabs über der Karte zwischen den Pfaden.";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "Wer reagiert hat";

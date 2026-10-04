@@ -17,9 +17,9 @@
 "whatsNew.fullReleaseNotes" = "查看全部新变化";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "链路详情";
+"whatsNew.pathDetails.title" = "消息的每条链路";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "路径地图已移入链路详情，其中会列出每条额外入站链路。已发送消息上的转发详情会列出电台听到的每条转发路径。";
+"whatsNew.pathDetails.description" = "“查看链路”现在会显示消息到达你的每条路径。如果消息多次到达，可用地图上方的标签在各条路径之间切换。";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "谁做出了反应";

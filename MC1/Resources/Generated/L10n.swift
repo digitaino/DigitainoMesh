@@ -9474,9 +9474,9 @@ public enum L10n {
       }
       public enum PathDetails {
         /// What's New v1.5 - Path Details feature, description
-        public static let description = L10n.tr("WhatsNew", "whatsNew.pathDetails.description", fallback: "Path Map has moved into Path Details, which lists every extra incoming path. And Repeat Details on sent messages lists every repeat path your radio heard.")
+        public static let description = L10n.tr("WhatsNew", "whatsNew.pathDetails.description", fallback: "View Path now shows every way a message reached you. When it arrived more than once, tabs above the map switch between the paths.")
         /// What's New v1.5 - Path Details feature, title
-        public static let title = L10n.tr("WhatsNew", "whatsNew.pathDetails.title", fallback: "Path Details")
+        public static let title = L10n.tr("WhatsNew", "whatsNew.pathDetails.title", fallback: "Every path a message took")
       }
       public enum WhoReacted {
         /// What's New v1.5 - Tap a reaction to see who added it, description

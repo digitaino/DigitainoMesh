@@ -16,9 +16,9 @@
 "whatsNew.fullReleaseNotes" = "Ver todas as novas alterações";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "Detalhes da rota";
+"whatsNew.pathDetails.title" = "Todas as rotas de uma mensagem";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "O Mapa da rota passou para os Detalhes da rota, que listam todas as rotas extra recebidas. Os Detalhes da retransmissão nas mensagens enviadas listam todas as rotas de retransmissão que o rádio recebeu.";
+"whatsNew.pathDetails.description" = "Ver rota mostra agora todos os caminhos pelos quais uma mensagem chegou até si. Se chegou mais do que uma vez, os separadores acima do mapa alternam entre as rotas.";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "Quem reagiu";

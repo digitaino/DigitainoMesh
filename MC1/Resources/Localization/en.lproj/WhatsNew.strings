@@ -17,9 +17,9 @@
 "whatsNew.fullReleaseNotes" = "See all new changes";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "Path Details";
+"whatsNew.pathDetails.title" = "Every path a message took";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "Path Map has moved into Path Details, which lists every extra incoming path. And Repeat Details on sent messages lists every repeat path your radio heard.";
+"whatsNew.pathDetails.description" = "View Path now shows every way a message reached you. When it arrived more than once, tabs above the map switch between the paths.";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "Who reacted";

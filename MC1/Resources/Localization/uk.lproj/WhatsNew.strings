@@ -17,9 +17,9 @@
 "whatsNew.fullReleaseNotes" = "Переглянути всі нові зміни";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "Деталі шляху";
+"whatsNew.pathDetails.title" = "Усі шляхи повідомлення";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "«Карту шляху» перенесено до «Деталей шляху», де перелічено кожен додатковий вхідний шлях. А «Деталі повторів» на надісланих повідомленнях показують кожен шлях повтору, який почуло ваше радіо.";
+"whatsNew.pathDetails.description" = "«Переглянути шлях» тепер показує кожен шлях, яким до вас дійшло повідомлення. Якщо воно надійшло кілька разів, вкладки над картою перемикають шляхи.";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "Хто відреагував";

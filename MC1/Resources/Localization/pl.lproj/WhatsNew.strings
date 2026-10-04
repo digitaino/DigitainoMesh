@@ -17,9 +17,9 @@
 "whatsNew.fullReleaseNotes" = "Zobacz wszystkie nowe zmiany";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "Szczegóły ścieżki";
+"whatsNew.pathDetails.title" = "Każda ścieżka wiadomości";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "Mapa trasy została przeniesiona do Szczegółów ścieżki, które pokazują każdą dodatkową przychodzącą ścieżkę. Szczegóły powtórzeń w wysłanych wiadomościach pokazują każdą ścieżkę powtórzenia, którą odebrało Twoje radio.";
+"whatsNew.pathDetails.description" = "Zobacz ścieżkę pokazuje teraz każdą drogę, którą dotarła do Ciebie wiadomość. Jeśli dotarła więcej niż raz, karty nad mapą przełączają między ścieżkami.";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "Kto zareagował";

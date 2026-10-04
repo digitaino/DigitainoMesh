@@ -17,9 +17,9 @@
 "whatsNew.fullReleaseNotes" = "Bekijk alle nieuwe wijzigingen";
 
 /* What's New v1.5 - Path Details feature, title */
-"whatsNew.pathDetails.title" = "Padgegevens";
+"whatsNew.pathDetails.title" = "Elk pad van een bericht";
 /* What's New v1.5 - Path Details feature, description */
-"whatsNew.pathDetails.description" = "Padkaart zit nu in Padgegevens, waar elk extra inkomend pad wordt weergegeven. Herhalingsdetails bij verzonden berichten toont elk herhalingspad dat je radio heeft gehoord.";
+"whatsNew.pathDetails.description" = "Pad bekijken toont nu elke route waarlangs een bericht je bereikte. Kwam het meer dan eens binnen, dan wissel je met de tabs boven de kaart tussen de paden.";
 
 /* What's New v1.5 - Tap a reaction to see who added it, title */
 "whatsNew.whoReacted.title" = "Wie heeft gereageerd";
