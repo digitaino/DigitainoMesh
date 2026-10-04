@@ -30,3 +30,33 @@
 "whatsNew.fasterChatLoading.title" = "Швидше завантаження чатів";
 /* What's New v1.5 - Faster chat loading, description */
 "whatsNew.fasterChatLoading.description" = "Відкриття чату тепер до 90%% швидше.";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "Змінюйте радіо, зберігаючи все";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "Використовуйте свій вузол на кількох радіо. Виберіть радіо у списку, і чати, контакти та канали перейдуть разом з вами; першого разу один дотик копіює канали й налаштування.";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "Радар у русі";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "У розділі «Погода» запросіть радар за останню годину й відтворіть його по колу.";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "Реакції знову доходять";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "Ваші реакції знову показуються як tapback в актуальних застосунках MeshCore One. Торкніться реакції, щоб побачити, хто її додав.";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "Створено на основі MeshCore One";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "DigitainoMesh — неофіційний форк MeshCore One, який поширюється через TestFlight серед невеликої групи. Застосунок — робота Avi0n; цей форк лише додає кілька експериментів. Якщо він вам корисний, підтримайте Avi0n.";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "Що нового в MeshCore One 1.5";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "Підтримати Avi0n";

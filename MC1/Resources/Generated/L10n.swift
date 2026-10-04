@@ -3640,7 +3640,7 @@ public enum L10n {
       public static let title = L10n.tr("Onboarding", "welcome.title", fallback: "DigitainoMesh")
       public enum Fork {
         /// Location: WelcomeView.swift - Attribution line naming the upstream project
-        public static let attribution = L10n.tr("Onboarding", "welcome.fork.attribution", fallback: "A fork of PocketMesh")
+        public static let attribution = L10n.tr("Onboarding", "welcome.fork.attribution", fallback: "An unofficial fork of MeshCore One by Avi0n")
         /// Location: WelcomeView.swift - Feedback hint shown outside TestFlight
         public static let feedbackEmail = L10n.tr("Onboarding", "welcome.fork.feedbackEmail", fallback: "Feedback: mesh@digitaino.com")
         /// Location: WelcomeView.swift - Feedback hint shown in TestFlight beta builds
@@ -4489,21 +4489,21 @@ public enum L10n {
       /// MARK: Feedback screen
       public static let title = L10n.tr("Settings", "Feedback.Title", fallback: "Feedback")
       public enum Email {
-        /// Email the developer
-        public static let link = L10n.tr("Settings", "Feedback.Email.Link", fallback: "Email the developer")
+        /// Email about this fork
+        public static let link = L10n.tr("Settings", "Feedback.Email.Link", fallback: "Email about this fork")
       }
       public enum GitHub {
-        /// Open a GitHub Issue
-        public static let link = L10n.tr("Settings", "Feedback.GitHub.Link", fallback: "Open a GitHub Issue")
+        /// Open an issue on GitHub
+        public static let link = L10n.tr("Settings", "Feedback.GitHub.Link", fallback: "Open an issue on GitHub")
       }
       public enum Header {
-        /// GitHub Issues is the preferred method, but email works too.
-        public static let body = L10n.tr("Settings", "Feedback.Header.Body", fallback: "GitHub Issues is the preferred method, but email works too.")
+        /// Send feedback through TestFlight or by email. Please report problems with this fork here, not to MeshCore One.
+        public static let body = L10n.tr("Settings", "Feedback.Header.Body", fallback: "Send feedback through TestFlight or by email. Please report problems with this fork here, not to MeshCore One.")
       }
     }
     public enum Support {
       /// MARK: Support (purchase) screen
-      public static let title = L10n.tr("Settings", "Support.Title", fallback: "Support Development")
+      public static let title = L10n.tr("Settings", "Support.Title", fallback: "Support the Developer")
       public enum Accessibility {
         /// Thank you for your tip.
         public static let tipConfirmAnnouncement = L10n.tr("Settings", "Support.Accessibility.TipConfirmAnnouncement", fallback: "Thank you for your tip.")
@@ -4581,6 +4581,16 @@ public enum L10n {
         public static let unsupported = L10n.tr("Settings", "Support.Error.Unsupported", fallback: "In-app purchases aren't supported on this device.")
         /// Could not verify your purchase.
         public static let verificationFailed = L10n.tr("Settings", "Support.Error.VerificationFailed", fallback: "Could not verify your purchase.")
+      }
+      public enum Fork {
+        /// Support the Developer screen - explains the fork and asks people to support Avi0n
+        public static let body = L10n.tr("Settings", "Support.Fork.Body", fallback: "DigitainoMesh is an unofficial fork of MeshCore One, shared on TestFlight with a small group. The app is Avi0n's work; this fork only adds a few experiments on top. If you find it useful, please support Avi0n directly.")
+        /// Support the Developer screen - where questions about the fork go
+        public static let footer = L10n.tr("Settings", "Support.Fork.Footer", fallback: "Questions about this fork go to mesh@digitaino.com, not to Avi0n.")
+        /// Support the Developer screen - link to Avi0n's GitHub Sponsors page
+        public static let sponsor = L10n.tr("Settings", "Support.Fork.Sponsor", fallback: "Sponsor Avi0n on GitHub")
+        /// Support the Developer screen - link to the MeshCore One repository
+        public static let upstream = L10n.tr("Settings", "Support.Fork.Upstream", fallback: "MeshCore One on GitHub")
       }
       public enum Header {
         /// If you love MC1, here are some ways to support its development! Everything here is optional, just a few tips and some extra themes.
@@ -9464,8 +9474,18 @@ public enum L10n {
       public static let continueButton = L10n.tr("WhatsNew", "whatsNew.continueButton", fallback: "Continue")
       /// Link on the What's New sheet to the full GitHub release notes
       public static let fullReleaseNotes = L10n.tr("WhatsNew", "whatsNew.fullReleaseNotes", fallback: "See all new changes")
+      /// What's New - button opening Avi0n's GitHub Sponsors page
+      public static let supportButton = L10n.tr("WhatsNew", "whatsNew.supportButton", fallback: "Support Avi0n")
       /// Title of the What's New sheet shown once after an app update
       public static let title = L10n.tr("WhatsNew", "whatsNew.title", fallback: "What's New")
+      public enum Credit {
+        /// What's New - credit to Avi0n, who wrote MeshCore One
+        public static let body = L10n.tr("WhatsNew", "whatsNew.credit.body", fallback: "DigitainoMesh is an unofficial fork of MeshCore One, shared on TestFlight with a small group. The app is Avi0n's work; this fork only adds a few experiments. If it's useful to you, please support Avi0n.")
+        /// What's New - heading of the credit to the app this fork is built on
+        public static let title = L10n.tr("WhatsNew", "whatsNew.credit.title", fallback: "Built on MeshCore One")
+        /// What's New - link to MeshCore One's own release notes for this version
+        public static let upstreamNotes = L10n.tr("WhatsNew", "whatsNew.credit.upstreamNotes", fallback: "What's new in MeshCore One 1.5")
+      }
       public enum FasterChatLoading {
         /// What's New v1.5 - Faster chat loading, description
         public static let description = L10n.tr("WhatsNew", "whatsNew.fasterChatLoading.description", fallback: "Opening a chat is up to 90%% faster.")
@@ -9477,6 +9497,24 @@ public enum L10n {
         public static let description = L10n.tr("WhatsNew", "whatsNew.pathDetails.description", fallback: "View Path now shows every way a message reached you. When it arrived more than once, tabs above the map switch between the paths.")
         /// What's New v1.5 - Path Details feature, title
         public static let title = L10n.tr("WhatsNew", "whatsNew.pathDetails.title", fallback: "Every path a message took")
+      }
+      public enum RadarLoops {
+        /// What's New v1.5 (fork) - weather radar loops, description
+        public static let description = L10n.tr("WhatsNew", "whatsNew.radarLoops.description", fallback: "In Weather, ask for the last hour of radar and play it as a loop.")
+        /// What's New v1.5 (fork) - weather radar loops, title
+        public static let title = L10n.tr("WhatsNew", "whatsNew.radarLoops.title", fallback: "Radar loops")
+      }
+      public enum RadioSwap {
+        /// What's New v1.5 (fork) - one node on several radios, description
+        public static let description = L10n.tr("WhatsNew", "whatsNew.radioSwap.description", fallback: "Use your node on more than one radio. Pick one from the radio list and your chats, contacts and channels come along; the first time, one tap copies your channels and settings across.")
+        /// What's New v1.5 (fork) - one node on several radios, title
+        public static let title = L10n.tr("WhatsNew", "whatsNew.radioSwap.title", fallback: "Switch radios, keep everything")
+      }
+      public enum Reactions {
+        /// What's New v1.5 (fork) - reactions as tapbacks and who reacted, description
+        public static let description = L10n.tr("WhatsNew", "whatsNew.reactions.description", fallback: "Your reactions show as tapbacks on current MeshCore One apps again. Tap a reaction to see who added it.")
+        /// What's New v1.5 (fork) - reactions as tapbacks and who reacted, title
+        public static let title = L10n.tr("WhatsNew", "whatsNew.reactions.title", fallback: "Reactions that land")
       }
       public enum WhoReacted {
         /// What's New v1.5 - Tap a reaction to see who added it, description

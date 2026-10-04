@@ -30,3 +30,33 @@
 "whatsNew.fasterChatLoading.title" = "Chargement plus rapide des messages";
 /* What's New v1.5 - Faster chat loading, description */
 "whatsNew.fasterChatLoading.description" = "L'ouverture d'une conversation est jusqu'à 90%% plus rapide.";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "Changez de radio, gardez tout";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "Utilisez votre nœud sur plusieurs radios. Choisissez-en une dans la liste des radios : vos discussions, contacts et canaux suivent ; la première fois, un geste copie vos canaux et réglages.";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "Radar en boucle";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "Dans Météo, demandez la dernière heure de radar et lisez-la en boucle.";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "Des réactions qui arrivent";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "Vos réactions s'affichent de nouveau comme des tapbacks dans les apps MeshCore One à jour. Touchez une réaction pour voir qui l'a ajoutée.";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "Basée sur MeshCore One";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "DigitainoMesh est un fork non officiel de MeshCore One, partagé via TestFlight avec un petit groupe. L'app est le travail d'Avi0n ; ce fork ajoute seulement quelques expériences. Si elle vous est utile, soutenez Avi0n.";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "Nouveautés de MeshCore One 1.5";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "Soutenir Avi0n";

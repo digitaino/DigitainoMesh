@@ -30,3 +30,33 @@
 "whatsNew.fasterChatLoading.title" = "Faster chat loading";
 /* What's New v1.5 - Faster chat loading, description */
 "whatsNew.fasterChatLoading.description" = "Opening a chat is up to 90%% faster.";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "Switch radios, keep everything";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "Use your node on more than one radio. Pick one from the radio list and your chats, contacts and channels come along; the first time, one tap copies your channels and settings across.";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "Radar loops";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "In Weather, ask for the last hour of radar and play it as a loop.";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "Reactions that land";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "Your reactions show as tapbacks on current MeshCore One apps again. Tap a reaction to see who added it.";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "Built on MeshCore One";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "DigitainoMesh is an unofficial fork of MeshCore One, shared on TestFlight with a small group. The app is Avi0n's work; this fork only adds a few experiments. If it's useful to you, please support Avi0n.";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "What's new in MeshCore One 1.5";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "Support Avi0n";

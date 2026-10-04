@@ -2139,7 +2139,7 @@
 "Appearance.Accessibility.ThemeReverted" = "Тему повернено на стандартну.";
 
 /* MARK: Support (purchase) screen */
-"Support.Title" = "Підтримати розробку";
+"Support.Title" = "Підтримати розробника";
 "Support.Header.Body" = "Якщо вам подобається MC1, ось кілька способів підтримати його розробку! Усе тут необов’язкове, лише кілька чайових і кілька додаткових тем.";
 "Support.Themes.Title" = "Теми";
 "Support.Themes.Owned" = "Придбано";
@@ -2163,9 +2163,9 @@
 /* MARK: Feedback screen */
 /* AI-translated - please verify with native speakers. */
 "Feedback.Title" = "Зворотний зв’язок";
-"Feedback.Header.Body" = "Бажаний спосіб — GitHub Issues, але можна й електронною поштою.";
-"Feedback.GitHub.Link" = "Відкрити issue на GitHub";
-"Feedback.Email.Link" = "Написати розробнику";
+"Feedback.Header.Body" = "Надсилайте відгуки через TestFlight або поштою. Про проблеми цього форку повідомляйте тут, а не в MeshCore One.";
+"Feedback.GitHub.Link" = "Створити issue на GitHub";
+"Feedback.Email.Link" = "Написати про цей форк";
 
 /* MARK: Theme display names */
 "Support.Theme.Default" = "Стандартна";
@@ -2317,3 +2317,15 @@
 "signalMapperData.delete.confirmMessage" = "Цього не скасувати. Спершу експортуйте їх, якщо хочете зберегти.";
 /* Location: SignalMapperDataView.swift - Destructive confirmation button */
 "signalMapperData.delete.confirm" = "Видалити";
+
+/* Support the Developer screen - explains the fork and asks people to support Avi0n */
+"Support.Fork.Body" = "DigitainoMesh — неофіційний форк MeshCore One, який поширюється через TestFlight серед невеликої групи. Застосунок — робота Avi0n; цей форк лише додає кілька експериментів. Якщо він вам корисний, підтримайте Avi0n напряму.";
+
+/* Support the Developer screen - link to Avi0n's GitHub Sponsors page */
+"Support.Fork.Sponsor" = "Спонсорувати Avi0n на GitHub";
+
+/* Support the Developer screen - link to the MeshCore One repository */
+"Support.Fork.Upstream" = "MeshCore One на GitHub";
+
+/* Support the Developer screen - where questions about the fork go */
+"Support.Fork.Footer" = "Питання про цей форк надсилайте на mesh@digitaino.com, а не Avi0n.";

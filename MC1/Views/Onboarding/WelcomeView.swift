@@ -49,7 +49,7 @@ struct WelcomeView: View {
         .multilineTextAlignment(.center)
 
         if !isTestFlightBuild {
-          Link(destination: URL(string: "https://github.com/digitaino/PocketMesh")!) {
+          Link(destination: ForkCredit.forkRepositoryURL) {
             Label(
               L10n.Onboarding.Welcome.Fork.github,
               systemImage: "chevron.left.forwardslash.chevron.right"

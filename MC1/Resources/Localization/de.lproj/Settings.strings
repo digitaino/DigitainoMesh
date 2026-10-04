@@ -2139,7 +2139,7 @@
 "Appearance.Accessibility.ThemeReverted" = "Design auf den Standard zurückgesetzt.";
 
 /* MARK: Support (purchase) screen */
-"Support.Title" = "Entwicklung unterstützen";
+"Support.Title" = "Den Entwickler unterstützen";
 "Support.Header.Body" = "Wenn du MC1 liebst, gibt es hier einige Möglichkeiten, die Entwicklung zu unterstützen! Alles hier ist optional, nur ein paar Trinkgelder und einige zusätzliche Designs.";
 "Support.Themes.Title" = "Designs";
 "Support.Themes.Owned" = "Im Besitz";
@@ -2163,9 +2163,9 @@
 /* MARK: Feedback screen */
 /* AI-translated - please verify with native speakers. */
 "Feedback.Title" = "Feedback";
-"Feedback.Header.Body" = "Am liebsten über GitHub Issues, aber E-Mail ist auch willkommen.";
-"Feedback.GitHub.Link" = "GitHub Issue eröffnen";
-"Feedback.Email.Link" = "E-Mail an den Entwickler";
+"Feedback.Header.Body" = "Sende Feedback über TestFlight oder per E-Mail. Probleme mit diesem Fork bitte hier melden, nicht bei MeshCore One.";
+"Feedback.GitHub.Link" = "Issue auf GitHub eröffnen";
+"Feedback.Email.Link" = "E-Mail zu diesem Fork";
 
 /* MARK: Theme display names */
 "Support.Theme.Default" = "Standard";
@@ -2317,3 +2317,15 @@
 "signalMapperData.delete.confirmMessage" = "Das lässt sich nicht rückgängig machen. Exportiere sie vorher, wenn du sie behalten willst.";
 /* Location: SignalMapperDataView.swift - Destructive confirmation button */
 "signalMapperData.delete.confirm" = "Löschen";
+
+/* Support the Developer screen - explains the fork and asks people to support Avi0n */
+"Support.Fork.Body" = "DigitainoMesh ist ein inoffizieller Fork von MeshCore One, der über TestFlight mit einer kleinen Gruppe geteilt wird. Die App ist das Werk von Avi0n; dieser Fork ergänzt nur ein paar Experimente. Wenn sie dir nützt, unterstütze bitte Avi0n direkt.";
+
+/* Support the Developer screen - link to Avi0n's GitHub Sponsors page */
+"Support.Fork.Sponsor" = "Avi0n auf GitHub sponsern";
+
+/* Support the Developer screen - link to the MeshCore One repository */
+"Support.Fork.Upstream" = "MeshCore One auf GitHub";
+
+/* Support the Developer screen - where questions about the fork go */
+"Support.Fork.Footer" = "Fragen zu diesem Fork bitte an mesh@digitaino.com, nicht an Avi0n.";

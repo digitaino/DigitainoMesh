@@ -23,23 +23,12 @@ struct AppearanceView: View {
       : [GridItem(.adaptive(minimum: ThemeCardMetrics.gridItemMinimum), spacing: ThemeCardMetrics.gridSpacing)]
   }
 
-  /// "Purchase More Themes" is shown only when at least one registry theme is unavailable.
-  static func shouldShowBrowseMore(available: [Theme]) -> Bool {
-    available.count < ThemeRegistry.allThemes.count
-  }
-
   var body: some View {
     List {
       schemeSection
+      // No "Purchase More Themes": the paid themes are Avi0n's to sell, and this fork sells
+      // nothing, so only the themes a tester already has are listed.
       themesSection
-      if Self.shouldShowBrowseMore(available: availableThemes) {
-        Section {
-          NavigationLink(L10n.Settings.Appearance.MoreThemes.link) {
-            SupportDevelopmentView()
-          }
-        }
-        .themedRowBackground(activeTheme)
-      }
     }
     .themedCanvas(activeTheme)
     .navigationTitle(L10n.Settings.Appearance.title)

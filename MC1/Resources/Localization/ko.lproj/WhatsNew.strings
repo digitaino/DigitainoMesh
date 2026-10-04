@@ -29,3 +29,33 @@
 "whatsNew.fasterChatLoading.title" = "더 빨라진 채팅 불러오기";
 /* What's New v1.5 - Faster chat loading, description */
 "whatsNew.fasterChatLoading.description" = "채팅을 여는 속도가 최대 90%% 빨라졌습니다.";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "무선 기기를 바꿔도 모두 그대로";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "하나의 노드를 여러 무선 기기에서 사용하십시오. 무선 기기 목록에서 하나를 고르면 채팅, 연락처, 채널이 함께 옮겨 갑니다. 처음 한 번은 탭 한 번으로 채널과 설정을 복사합니다.";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "레이더 반복 재생";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "날씨에서 최근 1시간 레이더를 요청해 반복 재생하십시오.";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "제대로 전달되는 반응";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "이제 최신 MeshCore One 앱에서 내 반응이 다시 탭백으로 표시됩니다. 반응을 탭하면 누가 추가했는지 볼 수 있습니다.";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "MeshCore One 기반";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "DigitainoMesh는 MeshCore One의 비공식 포크로, TestFlight를 통해 소수의 사람들과 공유됩니다. 앱은 Avi0n의 작품이며, 이 포크는 몇 가지 실험 기능만 더합니다. 유용하다면 Avi0n을 후원해 주십시오.";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "MeshCore One 1.5의 새로운 기능";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "Avi0n 후원하기";

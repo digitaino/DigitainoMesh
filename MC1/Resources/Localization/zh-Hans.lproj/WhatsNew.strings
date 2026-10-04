@@ -30,3 +30,33 @@
 "whatsNew.fasterChatLoading.title" = "聊天加载更快";
 /* What's New v1.5 - Faster chat loading, description */
 "whatsNew.fasterChatLoading.description" = "打开聊天速度最高可提升 90%%。";
+
+/* What's New v1.5 (fork) - one node on several radios, title */
+"whatsNew.radioSwap.title" = "切换电台，保留一切";
+
+/* What's New v1.5 (fork) - one node on several radios, description */
+"whatsNew.radioSwap.description" = "在多台电台上使用同一节点。在电台列表中选一台，你的聊天、联系人和频道都会随之而来；第一次只需轻点一下即可复制频道和设置。";
+
+/* What's New v1.5 (fork) - weather radar loops, title */
+"whatsNew.radarLoops.title" = "雷达动画";
+
+/* What's New v1.5 (fork) - weather radar loops, description */
+"whatsNew.radarLoops.description" = "在“天气”中请求最近一小时的雷达图并循环播放。";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, title */
+"whatsNew.reactions.title" = "反应能送达了";
+
+/* What's New v1.5 (fork) - reactions as tapbacks and who reacted, description */
+"whatsNew.reactions.description" = "你的反应在最新版 MeshCore One 应用中会再次显示为点按回应。轻点某个反应即可查看是谁添加的。";
+
+/* What's New - heading of the credit to the app this fork is built on */
+"whatsNew.credit.title" = "基于 MeshCore One";
+
+/* What's New - credit to Avi0n, who wrote MeshCore One */
+"whatsNew.credit.body" = "DigitainoMesh 是 MeshCore One 的非官方分支，通过 TestFlight 与一小群人分享。应用本身是 Avi0n 的作品；此分支只加了一些实验功能。如果它对你有用，请支持 Avi0n。";
+
+/* What's New - link to MeshCore One's own release notes for this version */
+"whatsNew.credit.upstreamNotes" = "MeshCore One 1.5 新功能";
+
+/* What's New - button opening Avi0n's GitHub Sponsors page */
+"whatsNew.supportButton" = "支持 Avi0n";

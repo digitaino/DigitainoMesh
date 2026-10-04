@@ -1977,7 +1977,7 @@
 "Appearance.Accessibility.ThemeReverted" = "Tema reposto para o predefinido.";
 
 /* MARK: Support (purchase) screen */
-"Support.Title" = "Apoiar o desenvolvimento";
+"Support.Title" = "Apoiar o programador";
 "Support.Header.Body" = "Se gosta do MC1, eis algumas formas de apoiar o desenvolvimento. Tudo aqui é opcional: alguns donativos e alguns temas extra.";
 "Support.Themes.Title" = "Temas";
 "Support.Themes.Owned" = "Adquirido";
@@ -2000,9 +2000,9 @@
 
 /* MARK: Feedback screen */
 "Feedback.Title" = "Feedback";
-"Feedback.Header.Body" = "GitHub Issues é o método preferido, mas o e-mail também serve.";
-"Feedback.GitHub.Link" = "Abrir um GitHub Issue";
-"Feedback.Email.Link" = "Enviar e-mail ao programador";
+"Feedback.Header.Body" = "Envie comentários pelo TestFlight ou por e-mail. Comunique aqui os problemas deste fork, não ao MeshCore One.";
+"Feedback.GitHub.Link" = "Abrir um problema no GitHub";
+"Feedback.Email.Link" = "Escrever sobre este fork";
 
 /* MARK: Theme display names */
 "Support.Theme.Default" = "Predefinido";
@@ -2143,3 +2143,15 @@
 "signalMapperData.delete.confirmMessage" = "Isto não pode ser anulado. Exporte-as primeiro se as quiser manter.";
 /* Location: SignalMapperDataView.swift - Destructive confirmation button */
 "signalMapperData.delete.confirm" = "Apagar";
+
+/* Support the Developer screen - explains the fork and asks people to support Avi0n */
+"Support.Fork.Body" = "O DigitainoMesh é um fork não oficial do MeshCore One, partilhado pelo TestFlight com um pequeno grupo. A app é obra de Avi0n; este fork só acrescenta algumas experiências. Se lhe for útil, apoie Avi0n diretamente.";
+
+/* Support the Developer screen - link to Avi0n's GitHub Sponsors page */
+"Support.Fork.Sponsor" = "Patrocinar Avi0n no GitHub";
+
+/* Support the Developer screen - link to the MeshCore One repository */
+"Support.Fork.Upstream" = "MeshCore One no GitHub";
+
+/* Support the Developer screen - where questions about the fork go */
+"Support.Fork.Footer" = "As perguntas sobre este fork vão para mesh@digitaino.com, não para Avi0n.";

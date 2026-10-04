@@ -319,3 +319,6 @@
 /* Location: DeviceScannerSheet.swift - Guidance shown when the app is not authorized to use Bluetooth */
 "deviceScanner.bluetoothUnauthorized.message" = "주변 기기를 검색하려면 설정에서 Bluetooth 접근을 허용하십시오.";
 
+
+/* Welcome screen - credit line under the subtitle */
+"welcome.fork.attribution" = "Avi0n의 MeshCore One 비공식 포크";

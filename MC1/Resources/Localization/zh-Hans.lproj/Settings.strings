@@ -2139,7 +2139,7 @@
 "Appearance.Accessibility.ThemeReverted" = "主题已恢复为默认。";
 
 /* MARK: Support (purchase) screen */
-"Support.Title" = "支持开发";
+"Support.Title" = "支持开发者";
 "Support.Header.Body" = "如果你喜欢 MC1，这里有几种支持其开发的方式！这里的一切都是可选的，只有一些打赏和一些额外的主题。";
 "Support.Themes.Title" = "主题";
 "Support.Themes.Owned" = "已拥有";
@@ -2163,9 +2163,9 @@
 /* MARK: Feedback screen */
 /* AI-translated - please verify with native speakers. */
 "Feedback.Title" = "反馈";
-"Feedback.Header.Body" = "更推荐通过 GitHub Issues，也可以发邮件。";
-"Feedback.GitHub.Link" = "打开 GitHub Issue";
-"Feedback.Email.Link" = "给开发者发邮件";
+"Feedback.Header.Body" = "请通过 TestFlight 或电子邮件发送反馈。此分支的问题请在这里报告，不要报告给 MeshCore One。";
+"Feedback.GitHub.Link" = "在 GitHub 上提交问题";
+"Feedback.Email.Link" = "就此分支发邮件";
 
 /* MARK: Theme display names */
 "Support.Theme.Default" = "默认";
@@ -2317,3 +2317,15 @@
 "signalMapperData.delete.confirmMessage" = "此操作无法撤销。想保留的话请先导出。";
 /* Location: SignalMapperDataView.swift - Destructive confirmation button */
 "signalMapperData.delete.confirm" = "删除";
+
+/* Support the Developer screen - explains the fork and asks people to support Avi0n */
+"Support.Fork.Body" = "DigitainoMesh 是 MeshCore One 的非官方分支，通过 TestFlight 与一小群人分享。应用本身是 Avi0n 的作品；此分支只加了一些实验功能。如果它对你有用，请直接支持 Avi0n。";
+
+/* Support the Developer screen - link to Avi0n's GitHub Sponsors page */
+"Support.Fork.Sponsor" = "在 GitHub 上赞助 Avi0n";
+
+/* Support the Developer screen - link to the MeshCore One repository */
+"Support.Fork.Upstream" = "GitHub 上的 MeshCore One";
+
+/* Support the Developer screen - where questions about the fork go */
+"Support.Fork.Footer" = "关于此分支的问题请发送至 mesh@digitaino.com，而不是 Avi0n。";

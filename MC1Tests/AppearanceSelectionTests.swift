@@ -30,7 +30,6 @@ final class AppearanceSelectionTests {
     let theme = ThemeService(store: store, defaults: freshDefaults())
 
     #expect(theme.availableToCurrentUser().map(\.id) == [Theme.default.id])
-    #expect(AppearanceView.shouldShowBrowseMore(available: theme.availableToCurrentUser()))
   }
 
   @Test
@@ -57,6 +56,5 @@ final class AppearanceSelectionTests {
     let theme = ThemeService(store: store, defaults: freshDefaults())
 
     #expect(theme.availableToCurrentUser().count == ThemeRegistry.allThemes.count)
-    #expect(!AppearanceView.shouldShowBrowseMore(available: theme.availableToCurrentUser()))
   }
 }

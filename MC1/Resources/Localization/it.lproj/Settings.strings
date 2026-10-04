@@ -2137,7 +2137,7 @@
 "Appearance.Accessibility.ThemeReverted" = "Tema ripristinato a quello predefinito.";
 
 /* MARK: Support (purchase) screen */
-"Support.Title" = "Supporta lo sviluppo";
+"Support.Title" = "Sostieni lo sviluppatore";
 "Support.Header.Body" = "Se ti piace MC1, ecco alcuni modi per supportarne lo sviluppo! Tutto qui è facoltativo: qualche mancia e alcuni temi extra.";
 "Support.Themes.Title" = "Temi";
 "Support.Themes.Owned" = "Posseduto";
@@ -2161,9 +2161,9 @@
 /* MARK: Feedback screen */
 /* AI-translated - please verify with native speakers. */
 "Feedback.Title" = "Feedback";
-"Feedback.Header.Body" = "GitHub Issues è il metodo preferito, ma va bene anche l’e-mail.";
-"Feedback.GitHub.Link" = "Apri una issue su GitHub";
-"Feedback.Email.Link" = "Scrivi allo sviluppatore";
+"Feedback.Header.Body" = "Invia feedback tramite TestFlight o per email. Segnala qui i problemi di questo fork, non a MeshCore One.";
+"Feedback.GitHub.Link" = "Apri una segnalazione su GitHub";
+"Feedback.Email.Link" = "Scrivi su questo fork";
 
 /* MARK: Theme display names */
 "Support.Theme.Default" = "Predefinito";
@@ -2315,3 +2315,15 @@
 "signalMapperData.delete.confirmMessage" = "Non si può annullare. Esportale prima se vuoi tenerle.";
 /* Location: SignalMapperDataView.swift - Destructive confirmation button */
 "signalMapperData.delete.confirm" = "Elimina";
+
+/* Support the Developer screen - explains the fork and asks people to support Avi0n */
+"Support.Fork.Body" = "DigitainoMesh è un fork non ufficiale di MeshCore One, condiviso su TestFlight con un piccolo gruppo. L'app è opera di Avi0n; questo fork aggiunge solo qualche esperimento. Se ti è utile, sostieni direttamente Avi0n.";
+
+/* Support the Developer screen - link to Avi0n's GitHub Sponsors page */
+"Support.Fork.Sponsor" = "Sponsorizza Avi0n su GitHub";
+
+/* Support the Developer screen - link to the MeshCore One repository */
+"Support.Fork.Upstream" = "MeshCore One su GitHub";
+
+/* Support the Developer screen - where questions about the fork go */
+"Support.Fork.Footer" = "Le domande su questo fork vanno a mesh@digitaino.com, non ad Avi0n.";

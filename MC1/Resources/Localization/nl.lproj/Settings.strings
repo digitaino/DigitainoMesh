@@ -2139,7 +2139,7 @@
 "Appearance.Accessibility.ThemeReverted" = "Thema teruggezet naar het standaardthema.";
 
 /* MARK: Support (purchase) screen */
-"Support.Title" = "Ontwikkeling steunen";
+"Support.Title" = "Steun de ontwikkelaar";
 "Support.Header.Body" = "Als je MC1 leuk vindt, zijn hier enkele manieren om de ontwikkeling te steunen! Alles hier is optioneel, gewoon een paar fooien en wat extra thema's.";
 "Support.Themes.Title" = "Thema's";
 "Support.Themes.Owned" = "In bezit";
@@ -2163,9 +2163,9 @@
 /* MARK: Feedback screen */
 /* AI-translated - please verify with native speakers. */
 "Feedback.Title" = "Feedback";
-"Feedback.Header.Body" = "GitHub Issues heeft de voorkeur, maar e-mail werkt ook.";
-"Feedback.GitHub.Link" = "Open een GitHub Issue";
-"Feedback.Email.Link" = "Stuur de ontwikkelaar een e-mail";
+"Feedback.Header.Body" = "Stuur feedback via TestFlight of per e-mail. Meld problemen met deze fork hier, niet bij MeshCore One.";
+"Feedback.GitHub.Link" = "Open een issue op GitHub";
+"Feedback.Email.Link" = "Mail over deze fork";
 
 /* MARK: Theme display names */
 "Support.Theme.Default" = "Standaard";
@@ -2317,3 +2317,15 @@
 "signalMapperData.delete.confirmMessage" = "Dit kan niet ongedaan worden gemaakt. Exporteer ze eerst als je ze wilt houden.";
 /* Location: SignalMapperDataView.swift - Destructive confirmation button */
 "signalMapperData.delete.confirm" = "Verwijderen";
+
+/* Support the Developer screen - explains the fork and asks people to support Avi0n */
+"Support.Fork.Body" = "DigitainoMesh is een onofficiële fork van MeshCore One, via TestFlight gedeeld met een kleine groep. De app is het werk van Avi0n; deze fork voegt alleen wat experimenten toe. Heb je er iets aan, steun Avi0n dan rechtstreeks.";
+
+/* Support the Developer screen - link to Avi0n's GitHub Sponsors page */
+"Support.Fork.Sponsor" = "Sponsor Avi0n op GitHub";
+
+/* Support the Developer screen - link to the MeshCore One repository */
+"Support.Fork.Upstream" = "MeshCore One op GitHub";
+
+/* Support the Developer screen - where questions about the fork go */
+"Support.Fork.Footer" = "Vragen over deze fork gaan naar mesh@digitaino.com, niet naar Avi0n.";

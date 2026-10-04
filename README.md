@@ -1,9 +1,11 @@
 # DigitainoMesh
 
-**DigitainoMesh is an unofficial fork of [PocketMesh](https://github.com/Avi0n/PocketMesh) by [Avi0n](https://github.com/Avi0n).**
-Fork repository: <https://github.com/digitaino/PocketMesh>
+**DigitainoMesh is an unofficial fork of [MeshCore One](https://github.com/Avi0n/MeshCoreOne) (formerly PocketMesh) by [Avi0n](https://github.com/Avi0n).**
+Fork repository: <https://github.com/digitaino/DigitainoMesh>
 
-It is not affiliated with or endorsed by the upstream project. All credit for the app itself belongs upstream; this fork exists to try out ideas that are experimental, hardware-specific, or otherwise a poor fit for the main project.
+It is not affiliated with or endorsed by the upstream project. The app is Avi0n's work; this fork only adds a few experiments on top, and is shared through TestFlight with a small group. It is not sold and takes no money.
+
+**If you find it useful, please support Avi0n: <https://github.com/sponsors/Avi0n>.** The app itself is on the App Store as [MeshCore One](https://apps.apple.com/app/meshcore-one/id6757419477).
 
 Everything in the upstream README below applies here too. The fork adds branding, its own bundle identity, and the features listed next.
 
@@ -24,7 +26,7 @@ Signal Survey, weather, and route sharing from the previous fork line are **drop
 
 ## Beta and feedback
 
-Fork builds are distributed through TestFlight. Send feedback through TestFlight directly, or email <mesh@digitaino.com>. Bugs in upstream behaviour are better reported to [the upstream project](https://github.com/Avi0n/PocketMesh/issues); please report fork-specific issues here.
+Fork builds are distributed through TestFlight. Send feedback through TestFlight directly, or email <mesh@digitaino.com>. Please report problems with this fork here, not to the upstream project: the fork's bugs are not Avi0n's to field.
 
 ---
 

@@ -1,17 +1,13 @@
 import SwiftUI
 
 /// The "What's New" sheet. Non-safety chrome, so glass on the footer buttons is
-/// allowed; Continue, Support Development, and swipe-to-dismiss share one dismiss path that
-/// persists the baseline.
+/// allowed; Continue, Support Avi0n, and swipe-to-dismiss share one dismiss path that
+/// persists the baseline. Below the items, the credit: this app is a fork of Avi0n's
+/// MeshCore One, and support goes to Avi0n's GitHub Sponsors (``ForkCredit``).
 struct WhatsNewSheet: View {
   let release: WhatsNewRelease
 
-  #if SIDELOAD
-    @Environment(\.openURL) private var openURL
-    private static let sideloadSponsorsURL = URL(string: "https://github.com/sponsors/Avi0n")!
-  #else
-    @Environment(\.appState) private var appState
-  #endif
+  @Environment(\.openURL) private var openURL
   @Environment(\.dismiss) private var dismiss
 
   fileprivate enum Metrics {
@@ -40,9 +36,7 @@ struct WhatsNewSheet: View {
           }
         }
 
-        Link(L10n.WhatsNew.WhatsNew.fullReleaseNotes, destination: release.releaseNotesURL)
-          .font(.subheadline)
-          .frame(maxWidth: .infinity, alignment: .center)
+        credit
       }
       .padding()
     }
@@ -51,7 +45,7 @@ struct WhatsNewSheet: View {
         Button {
           supportMeTapped()
         } label: {
-          Label(L10n.Settings.Support.title, systemImage: "heart")
+          Label(L10n.WhatsNew.WhatsNew.supportButton, systemImage: "heart")
             .font(.headline)
             .frame(maxWidth: .infinity)
             .padding()
@@ -73,18 +67,23 @@ struct WhatsNewSheet: View {
     .presentationDragIndicator(.hidden)
   }
 
+  private var credit: some View {
+    VStack(alignment: .leading, spacing: Metrics.titleToBodySpacing) {
+      Text(L10n.WhatsNew.WhatsNew.Credit.title)
+        .font(.headline)
+      Text(L10n.WhatsNew.WhatsNew.Credit.body)
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+      Link(L10n.WhatsNew.WhatsNew.Credit.upstreamNotes, destination: release.releaseNotesURL)
+        .font(.subheadline)
+        .padding(.top, Metrics.titleToBodySpacing)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
   private func supportMeTapped() {
-    #if SIDELOAD
-      openURL(Self.sideloadSponsorsURL)
-      dismiss()
-    #else
-      appState.navigation.navigateToSetting(.support)
-      // Let Settings mount and apply the path before the sheet dismisses.
-      Task { @MainActor in
-        await Task.yield()
-        dismiss()
-      }
-    #endif
+    openURL(ForkCredit.sponsorsURL)
+    dismiss()
   }
 }
 

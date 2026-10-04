@@ -5,10 +5,10 @@ struct FeedbackView: View {
   @Environment(\.appTheme) private var theme
   @State private var exportedLogFile: ExportedLogFile?
 
+  /// The fork's own tracker and address: problems in this build are not Avi0n's to field.
   private enum FeedbackContact {
-    static let issuesURL = URL(string: "https://github.com/Avi0n/MeshCoreOne/issues")!
-    static let email = "info@meshcoreone.com"
-    static let mailtoURL = URL(string: "mailto:\(email)")!
+    static let issuesURL = ForkCredit.forkIssuesURL
+    static let mailtoURL = ForkCredit.forkMailtoURL
   }
 
   var body: some View {

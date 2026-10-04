@@ -318,3 +318,6 @@
 
 /* Location: DeviceScannerSheet.swift - Guidance shown when the app is not authorized to use Bluetooth */
 "deviceScanner.bluetoothUnauthorized.message" = "Permita o acesso ao Bluetooth em Definições para procurar dispositivos próximos.";
+
+/* Welcome screen - credit line under the subtitle */
+"welcome.fork.attribution" = "Um fork não oficial do MeshCore One de Avi0n";

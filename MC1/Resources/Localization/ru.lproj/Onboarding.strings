@@ -19,7 +19,7 @@
 "welcome.getStarted" = "Начать";
 
 /* Location: WelcomeView.swift - Attribution line naming the upstream project */
-"welcome.fork.attribution" = "A fork of PocketMesh";
+"welcome.fork.attribution" = "Неофициальный форк MeshCore One от Avi0n";
 
 /* Location: WelcomeView.swift - Feedback hint shown in TestFlight beta builds */
 "welcome.fork.feedbackTestFlight" = "Send feedback via TestFlight or email mesh@digitaino.com";

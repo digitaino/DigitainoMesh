@@ -1928,7 +1928,7 @@
 "Appearance.Accessibility.ThemeReverted" = "테마가 기본값으로 되돌아갔습니다.";
 
 /* MARK: Support (purchase) screen */
-"Support.Title" = "개발 지원";
+"Support.Title" = "개발자 후원";
 "Support.Header.Body" = "MC1이 마음에 드신다면 다음과 같은 방법으로 개발을 지원할 수 있습니다! 모두 선택 사항이며, 약간의 팁과 추가 테마가 있습니다.";
 "Support.Themes.Title" = "테마";
 "Support.Themes.Owned" = "소유함";
@@ -1951,9 +1951,9 @@
 
 /* MARK: Feedback screen */
 "Feedback.Title" = "피드백";
-"Feedback.Header.Body" = "GitHub Issues를 권장하지만 이메일도 괜찮습니다.";
-"Feedback.GitHub.Link" = "GitHub 이슈 열기";
-"Feedback.Email.Link" = "개발자에게 이메일 보내기";
+"Feedback.Header.Body" = "TestFlight나 이메일로 피드백을 보내 주십시오. 이 포크의 문제는 MeshCore One이 아니라 여기에서 알려 주십시오.";
+"Feedback.GitHub.Link" = "GitHub에 이슈 등록";
+"Feedback.Email.Link" = "이 포크에 관해 이메일 보내기";
 
 /* MARK: Theme display names */
 "Support.Theme.Default" = "기본";
@@ -1999,3 +1999,15 @@
 "Appearance.Accessibility.ThemeCard.SelectedLabel" = "테마 %@, 현재 선택됨";
 "Appearance.Accessibility.Swatch.DualMode" = "%@, 라이트 및 다크 버전";
 "Appearance.Accessibility.Swatch.DarkOnly" = "%@, 다크 전용";
+
+/* Support the Developer screen - explains the fork and asks people to support Avi0n */
+"Support.Fork.Body" = "DigitainoMesh는 MeshCore One의 비공식 포크로, TestFlight를 통해 소수의 사람들과 공유됩니다. 앱은 Avi0n의 작품이며, 이 포크는 몇 가지 실험 기능만 더합니다. 유용하다면 Avi0n을 직접 후원해 주십시오.";
+
+/* Support the Developer screen - link to Avi0n's GitHub Sponsors page */
+"Support.Fork.Sponsor" = "GitHub에서 Avi0n 후원하기";
+
+/* Support the Developer screen - link to the MeshCore One repository */
+"Support.Fork.Upstream" = "GitHub의 MeshCore One";
+
+/* Support the Developer screen - where questions about the fork go */
+"Support.Fork.Footer" = "이 포크에 관한 질문은 Avi0n이 아니라 mesh@digitaino.com으로 보내 주십시오.";
