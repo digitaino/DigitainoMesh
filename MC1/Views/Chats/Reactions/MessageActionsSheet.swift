@@ -109,7 +109,8 @@ struct MessageActionsSheet: View {
         dataStore: appState.offlineDataStore,
         radioID: message.radioID
       )
-      if availability.canShowRepeatDetails {
+      // Incoming messages read their rows too: extra arrival paths are stored as repeats.
+      if availability.canShowRepeatDetails || availability.showsPathDetail {
         // Repeats, contacts and discovered nodes share no data, so they run
         // concurrently. The store is the durable home of the repeat rows —
         // `refreshRepeats` only ever re-read them — so reading it directly drops

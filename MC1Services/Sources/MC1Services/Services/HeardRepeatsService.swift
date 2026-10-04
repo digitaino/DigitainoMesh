@@ -2,8 +2,8 @@ import Foundation
 import MeshCore
 import OSLog
 
-/// Service for correlating RX log entries to sent channel messages
-/// and tracking "heard repeats" - evidence of message propagation through the mesh.
+/// Service for correlating RX log entries to known messages
+/// and tracking extra flood paths plus sent-echo repeats.
 public actor HeardRepeatsService {
   private let dataStore: any HeardRepeatPersisting
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "HeardRepeatsService")
@@ -68,9 +68,9 @@ public actor HeardRepeatsService {
     guard let senderTimestamp = entry.senderTimestamp else { return nil }
     guard let radioID else { return nil }
 
-    // Body after the first colon is the stored outgoing text. Sender name
-    // is not a join key: findSentChannelMessage already scopes to this radio.
-    guard let (_, messageText) = ChannelMessageFormat.parse(decodedText) else {
+    // Body after the first colon is the stored outgoing text. Sender name is a
+    // join key only for incoming extras (`DeduplicationKey`), not sent echoes.
+    guard let (senderName, messageText) = ChannelMessageFormat.parse(decodedText) else {
       // The text itself is deliberately absent: this is decrypted message content, and
       // `PersistentLogger` formats eagerly into OSLog *and* into the exportable in-app
       // debug log, with no `privacy:` annotation available to redact it. The length is
@@ -85,71 +85,192 @@ public actor HeardRepeatsService {
       return nil
     }
 
-    // Find matching sent message
     do {
-      guard let message = try await dataStore.findSentChannelMessage(
+      if let message = try await dataStore.findSentChannelMessage(
         radioID: radioID,
         channelIndex: channelIndex,
         timestamp: senderTimestamp,
         text: messageText
+      ) {
+        return try await recordSentEcho(
+          message: message,
+          entry: entry
+        )
+      }
+
+      let key = DeduplicationKey.contentBased(
+        contactID: nil,
+        channelIndex: channelIndex,
+        senderNodeName: senderName,
+        timestamp: senderTimestamp,
+        content: messageText
+      )
+      guard let message = try await dataStore.fetchMessage(
+        deduplicationKey: key,
+        radioID: radioID
       ) else {
         return nil
       }
-
-      // Create repeat entry
-      let repeatDTO = MessageRepeatDTO(
-        messageID: message.id,
-        receivedAt: entry.receivedAt,
+      return await recordDistinctPathIfNeeded(
+        message: message,
         pathNodes: entry.pathNodes,
         pathLength: entry.pathLength,
         snr: entry.snr,
         rssi: entry.rssi,
+        receivedAt: entry.receivedAt,
         rxLogEntryID: entry.id
       )
+    } catch {
+      logger.error("Failed to process repeat: \(error.localizedDescription)")
+      return nil
+    }
+  }
 
-      try await dataStore.saveMessageRepeat(repeatDTO)
+  /// Records every sent-channel echo, including identical hop lists.
+  private func recordSentEcho(message: MessageDTO, entry: RxLogEntryDTO) async throws -> Int {
+    let repeatDTO = MessageRepeatDTO(
+      messageID: message.id,
+      receivedAt: entry.receivedAt,
+      pathNodes: entry.pathNodes,
+      pathLength: entry.pathLength,
+      snr: entry.snr,
+      rssi: entry.rssi,
+      rxLogEntryID: entry.id
+    )
 
-      // The echo is the one place an *outgoing* message's wire identity ever
-      // surfaces — the phone never sees its own on-air bytes, but a repeater's
-      // rebroadcast is byte-identical after path stripping, so the echo's content
-      // hash IS the sent packet's. Stamp it while the RxLog row still exists.
-      //
-      // Its own do/catch on purpose: this is a new, optional, opt-in-only write
-      // sitting between a committed MessageRepeat row and the heardRepeats
-      // increment. Letting it throw into the outer catch would leave the repeat
-      // saved but never counted and no event yielded — and unrecoverably so,
-      // since isDuplicateRepeat rejects the next echo of the same RX entry. A
-      // failure here must cost the Network View, never the repeat counter.
+    try await dataStore.saveMessageRepeat(repeatDTO)
+
+    // The echo is the one place an *outgoing* message's wire identity ever
+    // surfaces — the phone never sees its own on-air bytes, but a repeater's
+    // rebroadcast is byte-identical after path stripping, so the echo's content
+    // hash IS the sent packet's. Stamp it while the RxLog row still exists.
+    //
+    // Its own do/catch on purpose: this is a new, optional, opt-in-only write
+    // sitting between a committed MessageRepeat row and the heardRepeats
+    // increment. Letting it throw would leave the repeat saved but never counted
+    // and no event yielded — and unrecoverably so, since isDuplicateRepeat rejects
+    // the next echo of the same RX entry. A failure here must cost the Network
+    // View, never the repeat counter.
+    do {
+      // nil for a pre-migration RxLog row whose payload-type nibble is lost;
+      // no hash beats a wrong one on a column that lives for years.
+      if let contentHash = entry.contentHash {
+        try await dataStore.setMessagePacketContentHashIfMissing(
+          id: message.id,
+          contentHash: contentHash
+        )
+      }
+    } catch {
+      logger.warning("Could not stamp packet content hash: \(error.localizedDescription)")
+    }
+
+    let newCount = try await dataStore.incrementMessageHeardRepeats(id: message.id)
+    logger.info("Recorded repeat #\(newCount) for message \(message.id)")
+    eventBroadcaster.yield(HeardRepeatEvent(
+      messageID: message.id,
+      count: newCount,
+      detail: repeatDTO,
+      isFlood: entry.isFlood,
+      isSentEcho: true
+    ))
+    return newCount
+  }
+
+  /// Records a distinct extra incoming path. A nil canonical is unknown, not a
+  /// 0-hop, so the first match is adopted onto the message instead of stored as an extra.
+  @discardableResult
+  func recordDistinctPathIfNeeded(
+    message: MessageDTO,
+    pathNodes: Data,
+    pathLength: UInt8,
+    snr: Double?,
+    rssi: Int?,
+    receivedAt: Date,
+    rxLogEntryID: UUID?
+  ) async -> Int? {
+    guard let canonicalPath = message.pathNodes else {
       do {
-        // nil for a pre-migration RxLog row whose payload-type nibble is lost;
-        // no hash beats a wrong one on a column that lives for years.
-        if let contentHash = entry.contentHash {
-          try await dataStore.setMessagePacketContentHashIfMissing(
-            id: message.id,
-            contentHash: contentHash
-          )
-        }
+        _ = try await dataStore.adoptIncomingPathIfUnknown(
+          id: message.id,
+          pathNodes: pathNodes,
+          pathLength: pathLength
+        )
       } catch {
-        logger.warning("Could not stamp packet content hash: \(error.localizedDescription)")
+        logger.error("Failed to adopt incoming path: \(error.localizedDescription)")
+      }
+      return nil
+    }
+    if pathNodes == canonicalPath {
+      return nil
+    }
+
+    do {
+      if let rxLogEntryID, try await dataStore.messageRepeatExists(rxLogEntryID: rxLogEntryID) {
+        return nil
       }
 
-      // Increment and return new count
+      let existing = try await dataStore.fetchMessageRepeats(messageID: message.id)
+      if existing.contains(where: { $0.pathNodes == pathNodes }) {
+        return nil
+      }
+
+      let repeatDTO = MessageRepeatDTO(
+        messageID: message.id,
+        receivedAt: receivedAt,
+        pathNodes: pathNodes,
+        pathLength: pathLength,
+        snr: snr,
+        rssi: rssi,
+        rxLogEntryID: rxLogEntryID
+      )
+      try await dataStore.saveMessageRepeat(repeatDTO)
       let newCount = try await dataStore.incrementMessageHeardRepeats(id: message.id)
-
-      logger.info("Recorded repeat #\(newCount) for message \(message.id)")
-
+      logger.info("Recorded extra path #\(newCount) for message \(message.id)")
+      // Extra incoming paths are flood copies by definition: a direct packet has one path.
       eventBroadcaster.yield(HeardRepeatEvent(
         messageID: message.id,
         count: newCount,
         detail: repeatDTO,
-        isFlood: entry.isFlood
+        isFlood: true,
+        isSentEcho: false
       ))
-
       return newCount
-
     } catch {
-      logger.error("Failed to process repeat: \(error.localizedDescription)")
+      logger.error("Failed to record extra path: \(error.localizedDescription)")
       return nil
+    }
+  }
+
+  /// Adopts an unknown canonical from the earliest `ChannelRXCorrelation` match,
+  /// then records later distinct paths as extras.
+  func harvestIncomingPaths(
+    for message: MessageDTO,
+    decodedCandidates: [RxLogEntryDTO]
+  ) async {
+    guard !message.isOutgoing, message.channelIndex != nil else { return }
+    let matching = ChannelRXCorrelation.matching(
+      decodedCandidates,
+      deduplicationKey: message.deduplicationKey
+    )
+    var current = message
+    for entry in matching {
+      let wasUnknown = current.pathNodes == nil
+      _ = await recordDistinctPathIfNeeded(
+        message: current,
+        pathNodes: entry.pathNodes,
+        pathLength: entry.pathLength,
+        snr: entry.snr,
+        rssi: entry.rssi,
+        receivedAt: entry.receivedAt,
+        rxLogEntryID: entry.id
+      )
+      if wasUnknown, let key = current.deduplicationKey,
+         let refreshed = try? await dataStore.fetchMessage(
+           deduplicationKey: key,
+           radioID: current.radioID
+         ) {
+        current = refreshed
+      }
     }
   }
 

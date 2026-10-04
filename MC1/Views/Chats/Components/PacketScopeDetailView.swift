@@ -1875,7 +1875,7 @@ struct PacketScopeDetailView: View {
   /// stamp when the message carries one, else the live best guess. Read live so
   /// a fresh fix moves the unstamped origin, as on the repeats map.
   private var originReference: CLLocation? {
-    MessagePathMapView.receiverReference(
+    SharedRouteMapView.receiverReference(
       for: .message(message),
       userLocation: appState.bestAvailableLocation
     )

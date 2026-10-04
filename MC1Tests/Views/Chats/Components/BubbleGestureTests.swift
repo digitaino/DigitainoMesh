@@ -55,6 +55,64 @@ struct BubbleGestureTests {
     }
   }
 
+  // MARK: - Mac secondary-click overlay hit policy
+
+  @Test
+  func `secondary-click overlay lets primary clicks through and claims the rest`() {
+    #expect(SecondaryClickCatcherView.shouldClaimHit(buttonMask: .primary) == false)
+    #expect(SecondaryClickCatcherView.shouldClaimHit(buttonMask: .secondary) == true)
+    #expect(SecondaryClickCatcherView.shouldClaimHit(buttonMask: []) == true)
+    #expect(SecondaryClickCatcherView.shouldClaimHit(buttonMask: [.primary, .secondary]) == true)
+    #expect(SecondaryClickCatcherView.shouldClaimHit(event: nil) == true)
+  }
+
+  @Test
+  func `secondary-click overlay claims a control-click on the primary button`() {
+    #expect(
+      SecondaryClickCatcherView.shouldClaimHit(buttonMask: .primary, modifierFlags: .control)
+        == true
+    )
+    #expect(
+      SecondaryClickCatcherView.shouldClaimHit(buttonMask: .primary, modifierFlags: [])
+        == false
+    )
+    #expect(
+      SecondaryClickCatcherView.shouldClaimHit(buttonMask: .primary, modifierFlags: .command)
+        == false
+    )
+  }
+
+  @Test
+  func `button-click tap fires for secondary or control-primary, not plain primary`() {
+    #expect(
+      SecondaryClickCatcherView.shouldReceiveButtonClick(buttonMask: .secondary, modifierFlags: [])
+        == true
+    )
+    #expect(
+      SecondaryClickCatcherView.shouldReceiveButtonClick(
+        buttonMask: .primary,
+        modifierFlags: .control
+      ) == true
+    )
+    #expect(
+      SecondaryClickCatcherView.shouldReceiveButtonClick(buttonMask: .primary, modifierFlags: [])
+        == false
+    )
+    #expect(
+      SecondaryClickCatcherView.shouldReceiveButtonClick(
+        buttonMask: .primary,
+        modifierFlags: .command
+      ) == false
+    )
+  }
+
+  @Test
+  func `secondary-click overlay claims nil-event hits inside bounds only`() {
+    let view = SecondaryClickCatcherView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+    #expect(view.hitTest(CGPoint(x: 50, y: 50), with: nil) === view)
+    #expect(view.hitTest(CGPoint(x: -1, y: -1), with: nil) == nil)
+  }
+
   // MARK: - Sibling long-press coverage
 
   @Test

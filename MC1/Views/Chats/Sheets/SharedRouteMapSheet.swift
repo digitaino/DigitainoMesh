@@ -13,7 +13,7 @@ struct SharedRouteMapContext: Identifiable {
   var id: String { route.id }
 }
 
-/// Hosts `MessagePathMapView` for a route embedded in a message's text, and
+/// Hosts `SharedRouteMapView` for a route embedded in a message's text, and
 /// owns the path view model the map resolves hops against. The actions-sheet
 /// path map gets its view model preloaded by `MessageActionsSheet`; the card
 /// tap arrives with nothing loaded, so this wrapper does the load itself.
@@ -24,7 +24,7 @@ struct SharedRouteMapSheet: View {
   @State private var pathViewModel = MessagePathViewModel()
 
   var body: some View {
-    MessagePathMapView(source: .sharedRoute(context.route), pathViewModel: pathViewModel)
+    SharedRouteMapView(source: .sharedRoute(context.route), pathViewModel: pathViewModel)
       .task {
         await pathViewModel.loadContacts(
           dataStore: appState.offlineDataStore,

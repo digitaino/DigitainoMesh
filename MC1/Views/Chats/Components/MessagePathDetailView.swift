@@ -179,6 +179,7 @@ struct MessagePathDetailView: View {
       VStack(alignment: .leading, spacing: 0) {
         MessagePathContent(
           message: message,
+          arrival: canonicalArrival,
           viewModel: pathViewModel,
           receiverName: appState.connectedDevice?.nodeName ?? L10n.Chats.Chats.Path.Receiver.you,
           userLocation: hopReferenceLocation
@@ -190,6 +191,19 @@ struct MessagePathDetailView: View {
     }
     .scrollBounceBehavior(.basedOnSize)
     .frame(height: maxHeight.map { min(hopListHeight, $0) })
+  }
+
+  /// The message's own path as an arrival, the shape `MessagePathContent` draws.
+  private var canonicalArrival: MessagePathArrival {
+    MessagePathArrival(
+      id: message.id,
+      pathNodes: message.pathNodes ?? Data(),
+      pathLength: message.pathLength,
+      snr: message.snr,
+      rssi: nil,
+      receivedAt: message.createdAt,
+      isFirst: true
+    )
   }
 
   /// The "RX via ..." line a route reply carries. Deliberately not localized:
@@ -217,10 +231,10 @@ struct MessagePathDetailView: View {
   }
 
   /// Reference for disambiguating hop hashes in the list — the same rule the
-  /// map builder resolves against (`MessagePathMapView.receiverReference`), so
+  /// map builder resolves against (`SharedRouteMapView.receiverReference`), so
   /// an ambiguous hop is never named differently here than it is pinned there.
   private var hopReferenceLocation: CLLocation? {
-    MessagePathMapView.receiverReference(
+    SharedRouteMapView.receiverReference(
       for: .message(message),
       userLocation: appState.bestAvailableLocation
     )
@@ -238,7 +252,7 @@ struct MessagePathDetailView: View {
   }
 
   private func buildLocatedNodes() -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
-    MessagePathMapView.locatedNodes(
+    SharedRouteMapView.locatedNodes(
       for: .message(message),
       contacts: pathViewModel.contacts,
       repeaters: pathViewModel.repeaters,

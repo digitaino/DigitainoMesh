@@ -3,6 +3,7 @@ import MapKit
 import MapperRawLog
 import MC1Services
 import MeshCore
+import MessagingUI
 import OSLog
 import SwiftData
 import SwiftUI
@@ -157,6 +158,10 @@ final class AppState {
   /// would strand a bound view model via `bindCoordinator`'s guard.
   private(set) var chatCoordinatorRegistry: ChatCoordinatorRegistry?
 
+  /// Bumped per channel slot when its occupant changes so an open
+  /// `ChatConversationView` can leave and drop its composer.
+  private(set) var channelSlotGenerations: [ChatConversationID: Int] = [:]
+
   /// Re-primes warm chat coordinators when messages arrive for closed
   /// conversations, so a reopen renders the fresh tail on the first frame.
   /// Built lazily by `ensureChatPrewarmRefresher()`.
@@ -171,6 +176,11 @@ final class AppState {
   /// identity is not load-bearing: durable preview state lives in the DB tier
   /// and the shared decoded caches, same as the `\.linkPreviewCache` default.
   @ObservationIgnored lazy var backgroundLinkPreviewCache: any LinkPreviewCaching = LinkPreviewCache()
+
+  /// Measured chat message heights, kept across conversation views so a
+  /// reopen skips measuring unchanged messages. Message IDs are unique
+  /// across conversations, so one cache serves them all.
+  @ObservationIgnored let chatSizeCache = TiledSizeCache<MessageItem>()
 
   /// Radio ID for data access - returns connected device's radio ID or last-connected radio ID for offline browsing
   var currentRadioID: UUID? {
@@ -248,6 +258,13 @@ final class AppState {
 
   /// Connection UI state (status pills, sync activity, alerts, pairing)
   let connectionUI = ConnectionUIState()
+
+  /// True while `confirmSystemPairingSetup` is in flight so sheet `onDismiss` does not cancel the flow.
+  var isConfirmingSystemPairingSetup = false
+
+  /// True while the foreground retry of `completeFreshPairing` is running, so a
+  /// second `pickerUnavailable` is presented instead of rescheduled.
+  var isFreshPairingForegroundRetry = false
 
   /// Battery monitoring (polling, thresholds, low-battery notifications)
   let batteryMonitor = BatteryMonitor()
@@ -424,14 +441,17 @@ final class AppState {
   init(
     modelContainer: ModelContainer,
     isPlaceholder: Bool = false,
-    defaults: UserDefaults = .standard
+    defaults: UserDefaults = .standard,
+    injectedConnectionManager: ConnectionManager? = nil
   ) {
     let store = StoreService()
     let theme = ThemeService(store: store)
     storeState = StoreState(service: store)
     themeService = theme
 
-    connectionManager = ConnectionManager(modelContainer: modelContainer, defaults: defaults)
+    connectionManager = injectedConnectionManager
+      ?? ConnectionManager(modelContainer: modelContainer, defaults: defaults)
+    connectionUI.hasSystemPairingRegistry = connectionManager.hasSystemPairingRegistry
 
     let bootstrapBuffer = DebugLogBuffer(dataStore: connectionManager.persistenceStore)
     bootstrapDebugLogBuffer = bootstrapBuffer
@@ -605,6 +625,23 @@ final class AppState {
     connectionUI.presentPairingFailure(.connectionFailed(deviceID: deviceID, underlying: BLEError.authenticationFailed))
   }
 
+  /// Drops per-slot drafts, cached `ChatCoordinator`s, and the selected route.
+  /// Coordinators outlive the connection, so without eviction the next occupant renders the prior timeline.
+  func handleChannelSlotOccupantChanged(radioID: UUID, indices: Set<UInt8>) {
+    draftStore.clearChannelDrafts(radioID: radioID, indices: indices)
+    for channelIndex in indices {
+      let id = ChatConversationID.channel(radioID: radioID, channelIndex: channelIndex)
+      chatCoordinatorRegistry?.remove(for: id)
+      channelSlotGenerations[id, default: 0] += 1
+    }
+    if case let .channel(selected) = navigation.chatsSelectedRoute,
+       selected.radioID == radioID,
+       indices.contains(selected.index) {
+      navigation.chatsSelectedRoute = nil
+    }
+    refreshConversations()
+  }
+
   /// Wire services-dependent callbacks after a successful connection.
   func wireServicesIfConnected() async {
     guard let services else {
@@ -668,12 +705,8 @@ final class AppState {
     wireMessageEvents(services: services)
     await wireLiveActivityCallbacks(services: services)
 
-    // Drop drafts for channel slots vacated by a delete or sync prune so a
-    // reused slot can't surface the prior channel's draft.
-    await services.channelService.setDraftClearHandler { [weak self] radioID, indices in
-      await MainActor.run {
-        self?.draftStore.clearChannelDrafts(radioID: radioID, indices: indices)
-      }
+    await services.channelService.setSlotOccupantChangedHandler { [weak self] radioID, indices in
+      await self?.handleChannelSlotOccupantChanged(radioID: radioID, indices: indices)
     }
 
     // Bump the version (which drives `.task(id:)` reloads in chat, tools, and
@@ -800,8 +833,8 @@ final class AppState {
 extension AppState {
   /// Creates an AppState for previews using an in-memory container
   @MainActor
-  convenience init() {
-    self.init(modelContainer: Self.makeInMemoryContainer())
+  convenience init(defaults: UserDefaults = .standard) {
+    self.init(modelContainer: Self.makeInMemoryContainer(), defaults: defaults)
   }
 
   /// In-memory container over the canonical `PersistenceStore.schema`, shared by preview and

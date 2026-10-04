@@ -36,6 +36,8 @@ struct SettingsDetailView: View {
       AppearanceView()
     case .maps:
       MapsSettingsView()
+    case .language:
+      LanguageSettingsView()
     case .backup:
       BackupRestoreView(
         connectionManager: appState.connectionManager,

@@ -23,7 +23,6 @@ struct BubbleActions {
   let onResendSamePower: (MessageDTO) -> Void
   /// No-repeats retry card: escalate one power rung, then resend.
   let onResendAtNextPower: (MessageDTO) -> Void
-  let onReaction: (String, MessageDTO) -> Void
   let onLongPress: (MessageDTO) -> Void
   /// Swipe-right-to-reply. Routes to the same handler as the actions sheet's Reply,
   /// so the swipe is a shortcut to that action rather than a second implementation.

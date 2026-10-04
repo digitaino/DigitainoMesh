@@ -9,6 +9,8 @@ struct MessagesSettingsSection: View {
   @AppStorage(AppStorageKey.showIncomingRegion.rawValue) private var showIncomingRegion = false
   @AppStorage(AppStorageKey.messageTranslationEnabled.rawValue)
   private var messageTranslationEnabled = AppStorageKey.defaultMessageTranslationEnabled
+  @AppStorage(AppStorageKey.showIncomingHeardCount.rawValue)
+  private var showIncomingHeardCount = AppStorageKey.defaultShowIncomingHeardCount
 
   var body: some View {
     Section {
@@ -16,6 +18,7 @@ struct MessagesSettingsSection: View {
       Toggle(L10n.Settings.Messages.showIncomingHopCount, isOn: $showIncomingHopCount)
       Toggle(L10n.Settings.Messages.showIncomingRegion, isOn: $showIncomingRegion)
       Toggle(L10n.Settings.Messages.translation, isOn: $messageTranslationEnabled)
+      Toggle(L10n.Settings.Messages.showIncomingHeardCount, isOn: $showIncomingHeardCount)
     } header: {
       Text(L10n.Settings.Messages.header)
     } footer: {

@@ -7,6 +7,7 @@ import Testing
 // MARK: - Test Helpers
 
 private func createContact(
+  id: UUID = UUID(),
   radioID: UUID = UUID(),
   name: String = "TestContact",
   type: ContactType = .chat,
@@ -17,12 +18,12 @@ private func createContact(
   longitude: Double = 0,
   lastModified: UInt32 = 0,
   outPathLength: UInt8 = 0,
-  publicKey: Data = Data((0..<ProtocolLimits.publicKeySize).map { _ in UInt8.random(in: 0...255) })
+  publicKey: Data? = nil
 ) -> ContactDTO {
   ContactDTO(
-    id: UUID(),
+    id: id,
     radioID: radioID,
-    publicKey: publicKey,
+    publicKey: publicKey ?? Data((0..<ProtocolLimits.publicKeySize).map { _ in UInt8.random(in: 0...255) }),
     name: name,
     typeRawValue: type.rawValue,
     flags: 0,
@@ -496,5 +497,93 @@ struct ContactsViewModelTests {
 
     // The flood node interleaves by its inbound count; only the unknown flood node sorts last.
     #expect(result.map(\.name) == ["OneHop", "FloodTwoInbound", "ThreeHop", "FloodUnknown"])
+  }
+
+  // MARK: - Upsert
+
+  @Test
+  func `upsert appends a contact that is not already in the list`() {
+    let viewModel = ContactsViewModel()
+    let existing = createContact(name: "Alex")
+    let added = createContact(name: "Sam")
+    viewModel.contacts = [existing]
+    viewModel.pendingRemovalIDs = [added.id]
+
+    viewModel.upsert(added)
+
+    #expect(viewModel.contacts.map(\.id) == [existing.id, added.id])
+    #expect(!viewModel.pendingRemovalIDs.contains(added.id))
+  }
+
+  @Test
+  func `upsert replaces an existing contact with the same id`() {
+    let viewModel = ContactsViewModel()
+    let original = createContact(name: "Alex")
+    let updated = createContact(
+      id: original.id,
+      radioID: original.radioID,
+      name: "Alex Updated",
+      publicKey: original.publicKey
+    )
+    viewModel.contacts = [original]
+
+    viewModel.upsert(updated)
+
+    #expect(viewModel.contacts.count == 1)
+    #expect(viewModel.contacts.first?.name == "Alex Updated")
+    #expect(viewModel.contacts.first?.id == original.id)
+  }
+
+  @Test
+  func `upsert replaces an existing contact with the same public key and radio`() {
+    let viewModel = ContactsViewModel()
+    let radioID = UUID()
+    let publicKey = Data((0..<ProtocolLimits.publicKeySize).map { _ in UInt8.random(in: 0...255) })
+    let original = createContact(radioID: radioID, name: "Alex", publicKey: publicKey)
+    let updated = createContact(
+      id: UUID(),
+      radioID: radioID,
+      name: "Sam",
+      publicKey: publicKey
+    )
+    viewModel.contacts = [original]
+
+    viewModel.upsert(updated)
+
+    #expect(viewModel.contacts.count == 1)
+    #expect(viewModel.contacts.first?.id == updated.id)
+    #expect(viewModel.contacts.first?.name == "Sam")
+  }
+
+  @Test
+  func `loadContacts keeps an upserted contact until the fetch includes it`() async throws {
+    let radioID = UUID()
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let store = PersistenceStore(modelContainer: container)
+    let existing = createContact(radioID: radioID, name: "Alex")
+    let added = createContact(radioID: radioID, name: "Sam")
+    try await store.saveContact(existing)
+
+    let viewModel = ContactsViewModel()
+    viewModel.configure(
+      dataStore: { store },
+      contactService: { nil },
+      advertisementService: { nil }
+    )
+    await viewModel.loadContacts(radioID: radioID)
+    viewModel.upsert(added)
+
+    await viewModel.loadContacts(radioID: radioID)
+    let visible = viewModel.filteredContacts(
+      searchText: "",
+      segment: .contacts,
+      sortOrder: .name,
+      userLocation: nil
+    )
+    #expect(Set(visible.map(\.id)) == Set([existing.id, added.id]))
+
+    try await store.saveContact(added)
+    await viewModel.loadContacts(radioID: radioID)
+    #expect(viewModel.contacts.filter { $0.id == added.id }.count == 1)
   }
 }

@@ -99,7 +99,8 @@ public struct ParsedDMReaction: Sendable, Equatable {
 ///   - channel: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
 ///   - DM: `{emoji} reacted to: "{snippet}" ({hash})`
 /// - v1 (legacy — accepted on receive; emitted by stock upstream MC1):
-///   - channel: `{emoji}@[{sender}]\n{hash}`
+///   - channel: `{emoji}@[{sender}]\n{hash}`, or mention-first `@[{sender}]{emoji}\n{hash}`
+///     (stock 1.4.1+ emits mention-first and accepts either order)
 ///   - DM: `{emoji}\n{hash}`
 ///
 /// Parsing tries v3, then v2, then v1. The `{snippet}` is a cosmetic echo of the
@@ -280,8 +281,8 @@ public enum ReactionParser {
 
   // MARK: - Legacy Format (v1)
 
-  /// Parses the legacy channel reaction format.
-  /// Format: `{emoji}@[{sender}]\n{hash}`
+  /// Parses the legacy channel reaction format, in either order.
+  /// Format: `{emoji}@[{sender}]\n{hash}` or `@[{sender}]{emoji}\n{hash}`
   private static func parseLegacy(_ text: String) -> ParsedReaction? {
     // Step 1: Split on last newline to get hash
     guard let newlineIndex = text.lastIndex(of: "\n") else {
@@ -294,29 +295,36 @@ public enum ReactionParser {
     }
     let messageHash = normalizeCrockfordBase32(rawHash)
 
-    // Remove hash suffix (everything before the newline)
     let withoutHash = String(text[..<newlineIndex])
 
-    // Step 2: Find `@[` to locate sender start
     guard let atBracketIndex = withoutHash.range(of: "@[") else {
       return nil
     }
 
-    let emoji = String(withoutHash[..<atBracketIndex.lowerBound])
+    // Emoji-first puts the emoji before `@[`; mention-first (stock 1.4.1+) after `]`.
+    let beforeMention = String(withoutHash[..<atBracketIndex.lowerBound])
+    let afterAtBracket = withoutHash[atBracketIndex.upperBound...]
+
+    let emoji: String
+    let sender: String
+
+    if beforeMention.isEmpty {
+      guard let closeBracket = afterAtBracket.firstIndex(of: "]") else {
+        return nil
+      }
+      sender = String(afterAtBracket[..<closeBracket])
+      emoji = String(afterAtBracket[afterAtBracket.index(after: closeBracket)...])
+    } else {
+      emoji = beforeMention
+      guard afterAtBracket.hasSuffix("]") else {
+        return nil
+      }
+      sender = String(afterAtBracket.dropLast())
+    }
 
     guard isValidReactionEmoji(emoji) else {
       return nil
     }
-
-    let afterAtBracket = withoutHash[atBracketIndex.upperBound...]
-
-    // Step 3: Extract sender (everything up to closing bracket)
-    guard afterAtBracket.hasSuffix("]") else {
-      return nil
-    }
-
-    let sender = String(afterAtBracket.dropLast())
-
     guard !sender.isEmpty else {
       return nil
     }

@@ -826,7 +826,7 @@ struct PacketScopeCoverageBuilderTests {
   func `A partial draw of an arc cuts inside the arc rather than dropping it`() {
     let a = CLLocationCoordinate2D(latitude: 30.0, longitude: -97.0)
     let b = CLLocationCoordinate2D(latitude: 30.0, longitude: -97.1)
-    let arc = MessagePathMapView.legArcCoordinates(from: a, to: b, offsetStep: 1)
+    let arc = SharedRouteMapView.legArcCoordinates(from: a, to: b, offsetStep: 1)
     let segments = [MapLine(id: "rx", coordinates: arc, style: .traceGood, opacity: 1.0)]
     let half = PacketScopeCoverageBuilder.truncated(segments, toFraction: 0.5)
     #expect(half.count == 1)

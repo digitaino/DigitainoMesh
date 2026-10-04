@@ -14,19 +14,19 @@
 "whatsNew.continueButton" = "Continua";
 
 /* Link on the What's New sheet to the full GitHub release notes */
-"whatsNew.fullReleaseNotes" = "Note di rilascio complete";
+"whatsNew.fullReleaseNotes" = "Vedi tutte le nuove modifiche";
 
-/* What's New v1.3 - Improved chats feature, title */
-"whatsNew.fasterChats.title" = "Chat migliorate";
-/* What's New v1.3 - Improved chats feature, description */
-"whatsNew.fasterChats.description" = "Aprendo una chat arrivi ai nuovi messaggi invece che in fondo. L'ora compare su ogni bolla, e cronologia e anteprime dei link si caricano più in fretta.";
+/* What's New v1.5 - Path Details feature, title */
+"whatsNew.pathDetails.title" = "Dettagli percorso";
+/* What's New v1.5 - Path Details feature, description */
+"whatsNew.pathDetails.description" = "La Mappa del percorso è stata spostata in Dettagli percorso, che elenca ogni percorso extra in arrivo. Dettagli ripetizioni sui messaggi inviati elenca ogni percorso di ripetizione che la radio ha ricevuto.";
 
-/* What's New v1.3 - Contact photos feature, title */
-"whatsNew.contactPhotos.title" = "Foto dei contatti";
-/* What's New v1.3 - Contact photos feature, description */
-"whatsNew.contactPhotos.description" = "Imposta un avatar su qualsiasi contatto per riconoscere le persone più facilmente in elenchi e conversazioni.";
+/* What's New v1.5 - Tap a reaction to see who added it, title */
+"whatsNew.whoReacted.title" = "Chi ha reagito";
+/* What's New v1.5 - Tap a reaction to see who added it, description */
+"whatsNew.whoReacted.description" = "Tocca una reazione su un messaggio per vedere chi ha reagito, invece di inviare la reazione.";
 
-/* What's New v1.3 - Map filters feature, title */
-"whatsNew.mapFilters.title" = "Filtri mappa";
-/* What's New v1.3 - Map filters feature, description */
-"whatsNew.mapFilters.description" = "Filtra i pin per preferiti, nodi scoperti e tipo di nodo.";
+/* What's New v1.5 - Faster chat loading, title */
+"whatsNew.fasterChatLoading.title" = "Caricamento chat più veloce";
+/* What's New v1.5 - Faster chat loading, description */
+"whatsNew.fasterChatLoading.description" = "Aprire una chat è fino al 90%% più veloce.";

@@ -147,7 +147,8 @@ func mapperHeardRepeat(
   rssi: Int? = -75,
   hashSize: Int = 1,
   pathNodes: [UInt8] = [0x42],
-  isFlood: Bool = true
+  isFlood: Bool = true,
+  isSentEcho: Bool = true
 ) -> HeardRepeatEvent {
   HeardRepeatEvent(
     messageID: messageID,
@@ -161,7 +162,8 @@ func mapperHeardRepeat(
       rssi: rssi,
       rxLogEntryID: UUID()
     ),
-    isFlood: isFlood
+    isFlood: isFlood,
+    isSentEcho: isSentEcho
   )
 }
 

@@ -44,6 +44,24 @@ enum MapSourceID {
   static let topoTiles = "topo-tiles"
 }
 
+enum MapPointClustering {
+  static func partition(
+    _ points: [MapPoint],
+    clusteringEnabled: Bool
+  ) -> (clusterable: [MapPoint], fixed: [MapPoint]) {
+    var clusterable: [MapPoint] = []
+    var fixed: [MapPoint] = []
+    for point in points {
+      if point.isClusterable, clusteringEnabled {
+        clusterable.append(point)
+      } else {
+        fixed.append(point)
+      }
+    }
+    return (clusterable, fixed)
+  }
+}
+
 extension MC1MapView.Coordinator {
   // MARK: - Update point source data
 
@@ -54,19 +72,17 @@ extension MC1MapView.Coordinator {
   func updatePointSource(mapView: MLNMapView) {
     guard let style = mapView.style else { return }
 
-    var clusterablePoints: [MapPoint] = []
-    var fixedPoints: [MapPoint] = []
-    for point in currentPoints {
-      if point.isClusterable {
-        clusterablePoints.append(point)
-      } else {
-        fixedPoints.append(point)
-      }
-    }
+    let partitioned = MapPointClustering.partition(
+      currentPoints,
+      clusteringEnabled: currentClusteringEnabled
+    )
+    let clusterablePoints = partitioned.clusterable
+    let fixedPoints = partitioned.fixed
 
     // Clustered (contact) source — rebuild only when the clusterable subset changed,
     // so toggling a fixed pin (the chat-dropped pin) does not re-cluster all contacts.
     if clusterablePoints != lastAppliedClusterablePoints {
+      registerSprites(for: clusterablePoints, style: style)
       if let source = clusterSource {
         source.shape = MLNShapeCollectionFeature(
           shapes: clusterablePoints.map { pointFeature(for: $0) }
@@ -91,6 +107,7 @@ extension MC1MapView.Coordinator {
 
     // Fixed source — rebuild only when the fixed subset changed.
     if fixedPoints != lastAppliedFixedPoints {
+      registerSprites(for: fixedPoints, style: style)
       if let source = fixedSource {
         source.shape = MLNShapeCollectionFeature(
           shapes: fixedPoints.map { pointFeature(for: $0) }
@@ -425,12 +442,13 @@ extension MC1MapView.Coordinator {
 
   // MARK: - Shared layer configuration
 
-  private func configureNameLabelLayer(_ layer: MLNSymbolStyleLayer) {
+  func configureNameLabelLayer(_ layer: MLNSymbolStyleLayer) {
     layer.iconImageName = NSExpression(forKeyPath: "labelSpriteName")
     layer.iconAnchor = NSExpression(forConstantValue: "bottom")
     layer.iconOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: -46)))
     layer.iconOpacity = NSExpression(forKeyPath: "pinOpacity")
     applyLabelPlacement(currentLabelPlacement, to: layer)
+    layer.isVisible = currentShowLabels
   }
 
   /// `.overlap` is byte-for-byte the behaviour every screen has always had:
@@ -472,9 +490,24 @@ extension MC1MapView.Coordinator {
 
   // MARK: - Private helpers
 
+  /// Register pin and name-label sprites before replacing the source so the
+  /// first layout already has images and `didFailToLoadImage` does not fire.
+  private func registerSprites(for points: [MapPoint], style: MLNStyle) {
+    for point in points {
+      _ = PinSpriteRenderer.renderOnDemand(name: spriteName(for: point), into: style)
+      if let label = point.label {
+        _ = PinSpriteRenderer.renderOnDemand(
+          name: PinSpriteRenderer.labelSpritePrefix + label,
+          into: style
+        )
+      }
+    }
+  }
+
   private func pointFeature(for point: MapPoint) -> MLNPointFeature {
     let feature = MLNPointFeature()
     feature.coordinate = point.coordinate
+    feature.identifier = point.id.uuidString
     var attributes: [String: Any] = [
       "pointId": point.id.uuidString,
       "spriteName": spriteName(for: point),

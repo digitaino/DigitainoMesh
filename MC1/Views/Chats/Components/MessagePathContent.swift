@@ -1,4 +1,3 @@
-// MC1/Views/Chats/Components/MessagePathContent.swift
 import CoreLocation
 import MC1Services
 import SwiftUI
@@ -9,6 +8,7 @@ import SwiftUI
 /// the hop rows stay a single uninterrupted list.
 struct MessagePathContent: View {
   let message: MessageDTO
+  let arrival: MessagePathArrival
   let viewModel: MessagePathViewModel
   let receiverName: String
   let userLocation: CLLocation?
@@ -18,17 +18,16 @@ struct MessagePathContent: View {
       ProgressView()
         .frame(maxWidth: .infinity, alignment: .center)
         .padding()
-    } else if message.pathNodes == nil {
+    } else if arrival.isPathUnavailable {
       ContentUnavailableView(
         L10n.Chats.Chats.Path.Unavailable.title,
         systemImage: "point.topleft.down.to.point.bottomright.curvepath",
         description: Text(L10n.Chats.Chats.Path.Unavailable.description)
       )
     } else {
-      let senderResolution = viewModel.senderResolution(for: message)
-      let pathHops = message.pathHops
+      let senderResolution = viewModel.senderResolution(for: message, localDeviceName: receiverName)
+      let pathHops = arrival.pathHops
 
-      // Sender
       PathHopRowView(
         hopType: .sender,
         nodeName: senderResolution.displayName,
@@ -37,7 +36,6 @@ struct MessagePathContent: View {
         matchKind: senderResolution.matchKind
       )
 
-      // Intermediate hops
       ForEach(Array(pathHops.enumerated()), id: \.offset) { index, hop in
         let repeaterResolution = viewModel.repeaterResolution(
           for: hop.data,
@@ -52,12 +50,11 @@ struct MessagePathContent: View {
         )
       }
 
-      // Receiver
       PathHopRowView(
         hopType: .receiver,
         nodeName: receiverName,
         nodeID: nil,
-        snr: message.snr
+        snr: arrival.snr
       )
     }
   }

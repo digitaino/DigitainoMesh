@@ -44,6 +44,8 @@ struct ChatConversationMessagesContent: View {
   /// Swipe-right-to-reply on a bubble; the same handler the actions sheet's Reply uses.
   let onReply: (MessageDTO) -> Void
 
+  let onTranslationAction: (UUID) -> Void
+
   /// Scroll-driven find-in-conversation events (reveal on scrolling up from the bottom,
   /// settle on returning). Defaulted so the previews (and any future consumer without the
   /// affordance) need not supply it.
@@ -55,6 +57,7 @@ struct ChatConversationMessagesContent: View {
   /// Shared offset for the timestamp reveal, scoped to this conversation's list.
   @State private var timestampReveal = ChatTimestampRevealState()
 
+  @Environment(\.appState) private var appState
   @Environment(\.appTheme) private var theme
   @Environment(\.openURL) private var openURL
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -108,7 +111,8 @@ struct ChatConversationMessagesContent: View {
       onLoadOlder: { await viewModel.loadOlderMessages() },
       onInitialTargetConsumed: onDividerTargetConsumed,
       onSearchRevealEvent: onSearchRevealEvent,
-      isSearchBarActive: isSearchActive
+      isSearchBarActive: isSearchActive,
+      sizeCache: appState.chatSizeCache
     )
     .overlay {
       incomingAvatarFlight.overlay()
@@ -158,10 +162,6 @@ struct ChatConversationMessagesContent: View {
         onResendAtNextPower: { message in
           Task { await viewModel.resendAtNextPower(message) }
         },
-        onReaction: { emoji, message in
-          recentEmojisStore.recordUsage(emoji)
-          Task { await viewModel.sendReaction(emoji: emoji, to: message) }
-        },
         onLongPress: { message in selectedMessageForActions = message },
         onReply: onReply,
         onImageTap: { message in
@@ -202,7 +202,7 @@ struct ChatConversationMessagesContent: View {
         requestSnapshot: { MapSnapshotStore.shared.request($0) },
         retrySnapshot: { MapSnapshotStore.shared.retry($0) },
         onTranslationAction: { messageID in
-          viewModel.performTranslationAction(for: messageID)
+          onTranslationAction(messageID)
         }
       ),
       timestampReveal: timestampReveal
@@ -319,7 +319,8 @@ private struct ChannelEmptyMessagesView: View {
       imageViewerData: .constant(nil),
       sharedRouteForMap: .constant(nil),
       onRetryMessage: { _ in },
-      onReply: { _ in }
+      onReply: { _ in },
+      onTranslationAction: { _ in }
     )
   }
   .environment(\.appState, AppState())
@@ -348,7 +349,8 @@ private struct ChannelEmptyMessagesView: View {
       imageViewerData: .constant(nil),
       sharedRouteForMap: .constant(nil),
       onRetryMessage: { _ in },
-      onReply: { _ in }
+      onReply: { _ in },
+      onTranslationAction: { _ in }
     )
   }
   .environment(\.appState, AppState())

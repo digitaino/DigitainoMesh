@@ -14,19 +14,19 @@
 "whatsNew.continueButton" = "Continue";
 
 /* Link on the What's New sheet to the full GitHub release notes */
-"whatsNew.fullReleaseNotes" = "Full release notes";
+"whatsNew.fullReleaseNotes" = "See all new changes";
 
-/* What's New v1.3 - Improved chats feature, title */
-"whatsNew.fasterChats.title" = "Improved chats";
-/* What's New v1.3 - Improved chats feature, description */
-"whatsNew.fasterChats.description" = "Opening a chat lands you at new messages instead of the bottom. Times show on every bubble, and history and link previews load faster.";
+/* What's New v1.5 - Path Details feature, title */
+"whatsNew.pathDetails.title" = "Path Details";
+/* What's New v1.5 - Path Details feature, description */
+"whatsNew.pathDetails.description" = "Path Map has moved into Path Details, which lists every extra incoming path. And Repeat Details on sent messages lists every repeat path your radio heard.";
 
-/* What's New v1.3 - Contact photos feature, title */
-"whatsNew.contactPhotos.title" = "Contact photos";
-/* What's New v1.3 - Contact photos feature, description */
-"whatsNew.contactPhotos.description" = "Set an avatar on any contact so people are easier to spot in lists and conversations.";
+/* What's New v1.5 - Tap a reaction to see who added it, title */
+"whatsNew.whoReacted.title" = "Who reacted";
+/* What's New v1.5 - Tap a reaction to see who added it, description */
+"whatsNew.whoReacted.description" = "Tap a reaction on a message to see who added it, instead of sending the reaction.";
 
-/* What's New v1.3 - Map filters feature, title */
-"whatsNew.mapFilters.title" = "Map filters";
-/* What's New v1.3 - Map filters feature, description */
-"whatsNew.mapFilters.description" = "Filter pins by favorites, discovered nodes, and node type.";
+/* What's New v1.5 - Faster chat loading, title */
+"whatsNew.fasterChatLoading.title" = "Faster chat loading";
+/* What's New v1.5 - Faster chat loading, description */
+"whatsNew.fasterChatLoading.description" = "Opening a chat is up to 90%% faster.";

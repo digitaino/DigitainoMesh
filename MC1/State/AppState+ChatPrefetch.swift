@@ -86,12 +86,15 @@ extension AppState {
 
     let showMapPreviews = bool(.showMapPreviewThumbnails, AppStorageKey.defaultShowMapPreviewThumbnails)
       && !(conversation?.suppressesMapPreviews ?? false)
+    let translationTarget = defaults.string(forKey: AppStorageKey.translationTargetLanguage.rawValue)
+      ?? AppStorageKey.defaultTranslationTargetLanguage
 
     return EnvInputs(
       autoPlayGIFs: bool(.autoPlayGIFs, AppStorageKey.defaultAutoPlayGIFs),
       showIncomingPath: bool(.showIncomingPath, AppStorageKey.defaultShowIncomingPath),
       showIncomingHopCount: bool(.showIncomingHopCount, AppStorageKey.defaultShowIncomingHopCount),
       showIncomingRegion: bool(.showIncomingRegion, AppStorageKey.defaultShowIncomingRegion),
+      showIncomingHeardCount: bool(.showIncomingHeardCount, AppStorageKey.defaultShowIncomingHeardCount),
       showIncomingSendTime: bool(.showIncomingSendTime, AppStorageKey.defaultShowIncomingSendTime),
       previewsEnabled: bool(.linkPreviewsEnabled, AppStorageKey.defaultLinkPreviewsEnabled),
       isHighContrast: isHighContrast,
@@ -101,11 +104,13 @@ extension AppState {
       currentUserName: localNodeName,
       themeID: themeID,
       contentSizeCategory: contentSizeCategory,
-      preferredLanguageCode: EnvInputs.preferredLanguageCode(from: Locale.current),
+      preferredLanguageCode: TranslationTargetPreference(rawValue: translationTarget)
+        .resolvedLanguageCode(appLocale: Locale.current),
       // ANDed, never read apart: the master opt-in is what authorises a hash to
       // leave the phone, and the second switch only chooses whether the count shows.
       showsObserverCounts: bool(.packetScopeEnabled, AppStorageKey.defaultPacketScopeEnabled)
-        && bool(.packetScopeObserverCountsEnabled, AppStorageKey.defaultPacketScopeObserverCountsEnabled)
+        && bool(.packetScopeObserverCountsEnabled, AppStorageKey.defaultPacketScopeObserverCountsEnabled),
+      translationOffersEnabled: bool(.translationOffersEnabled, AppStorageKey.defaultTranslationOffersEnabled)
     )
   }
 

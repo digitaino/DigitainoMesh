@@ -113,7 +113,9 @@ extension ChatMessageBakeState {
     senderTables: ChatSenderTables
   ) -> MessageBuildInputs {
     seedPreviewStateIfNeeded(for: message, envInputs: envInputs)
-    seedDetectedLanguageIfNeeded(for: message)
+    if envInputs.translationOffersEnabled {
+      seedDetectedLanguageIfNeeded(for: message)
+    }
     let flags = Self.computeDisplayFlags(for: message, previous: previous, next: next)
     let cachedURL = cachedURLs[message.id].flatMap(\.self)
     // Extension-based image classification, minus URLs the fetch path has
@@ -214,7 +216,7 @@ extension ChatMessageBakeState {
       isDuplicateRunExpanded: duplicatePlan.leaderIDByMemberID[message.id]
         .map { expandedDuplicateRuns.contains($0) } ?? false,
       incomingAvatar: incomingAvatar,
-      translation: message.isOutgoing || !MessageTranslationPreference.isEnabled
+      translation: message.isOutgoing || !envInputs.translationOffersEnabled || !MessageTranslationPreference.isEnabled
         ? nil
         : MessageTranslationChrome.resolved(
           detected: detectedLanguages[message.id],

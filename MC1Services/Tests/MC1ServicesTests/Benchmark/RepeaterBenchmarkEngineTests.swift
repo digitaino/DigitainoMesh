@@ -13,7 +13,7 @@ struct RepeaterBenchmarkEngineTests {
     session: MockBenchmarkSession,
     sleeper: GatedSleeper,
     tags: TagSequence,
-    clock: TestClock,
+    clock: SignalBarsTestClock,
     traceHashSize: Int = 1,
     traceFlags: UInt8 = 0,
     makeTag: (@Sendable () -> UInt32)? = nil
@@ -39,7 +39,7 @@ struct RepeaterBenchmarkEngineTests {
       session: MockBenchmarkSession(),
       sleeper: GatedSleeper(),
       tags: TagSequence(),
-      clock: TestClock()
+      clock: SignalBarsTestClock()
     )
 
     await engine.setTargets([ridge, barn])
@@ -58,7 +58,7 @@ struct RepeaterBenchmarkEngineTests {
       session: MockBenchmarkSession(),
       sleeper: GatedSleeper(),
       tags: TagSequence(),
-      clock: TestClock()
+      clock: SignalBarsTestClock()
     )
 
     await engine.setTracesPerTarget(7)
@@ -75,7 +75,7 @@ struct RepeaterBenchmarkEngineTests {
       session: session,
       sleeper: GatedSleeper(),
       tags: TagSequence(),
-      clock: TestClock()
+      clock: SignalBarsTestClock()
     )
 
     await engine.setTestRepeater(tower)
@@ -94,7 +94,7 @@ struct RepeaterBenchmarkEngineTests {
       session: session,
       sleeper: sleeper,
       tags: TagSequence(),
-      clock: TestClock()
+      clock: SignalBarsTestClock()
     )
 
     await engine.setTestRepeater(tower)
@@ -138,7 +138,7 @@ struct RepeaterBenchmarkEngineTests {
       session: session,
       sleeper: sleeper,
       tags: TagSequence(),
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       traceHashSize: 2,
       traceFlags: 1
     )
@@ -168,7 +168,7 @@ struct RepeaterBenchmarkEngineTests {
   func `A reply is correlated by tag and becomes a measured outcome`() async throws {
     let session = MockBenchmarkSession()
     let sleeper = GatedSleeper()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: clock)
 
     await engine.setTestRepeater(tower)
@@ -206,7 +206,7 @@ struct RepeaterBenchmarkEngineTests {
   func `A reply that lands before the sender waits for it is not lost`() async throws {
     let session = MockBenchmarkSession()
     let sleeper = GatedSleeper()
-    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: SignalBarsTestClock())
 
     // Answered while the send is still in flight, so the reply is buffered before the probe
     // installs its waiter — the case `earlyReplies` exists for.
@@ -235,7 +235,7 @@ struct RepeaterBenchmarkEngineTests {
   func `A reply buffered between runs cannot answer the next run's probe`() async throws {
     let session = MockBenchmarkSession()
     let sleeper = GatedSleeper()
-    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: SignalBarsTestClock())
 
     await engine.setTestRepeater(tower)
     await engine.setTargets([ridge])
@@ -271,7 +271,7 @@ struct RepeaterBenchmarkEngineTests {
       session: session,
       sleeper: sleeper,
       tags: TagSequence(),
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       makeTag: { 7 }
     )
 
@@ -305,7 +305,7 @@ struct RepeaterBenchmarkEngineTests {
     let session = MockBenchmarkSession()
     await session.setTraceError(BenchmarkTestError())
     let sleeper = GatedSleeper()
-    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: SignalBarsTestClock())
 
     await engine.setTestRepeater(tower)
     await engine.setTargets([ridge])
@@ -328,7 +328,7 @@ struct RepeaterBenchmarkEngineTests {
   func `Cancelling stops after the probe in flight and keeps what was measured`() async throws {
     let session = MockBenchmarkSession()
     let sleeper = GatedSleeper()
-    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: SignalBarsTestClock())
 
     await engine.setTestRepeater(tower)
     await engine.setTargets([ridge, barn])
@@ -357,7 +357,7 @@ struct RepeaterBenchmarkEngineTests {
   func `Cancelling resolves the targets the run never reached`() async throws {
     let session = MockBenchmarkSession()
     let sleeper = GatedSleeper()
-    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: SignalBarsTestClock())
 
     await engine.setTestRepeater(tower)
     await engine.setTargets([ridge, barn])
@@ -387,7 +387,7 @@ struct RepeaterBenchmarkEngineTests {
   func `Changing the target set drops the previous run's results`() async throws {
     let session = MockBenchmarkSession()
     let sleeper = GatedSleeper()
-    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: TestClock())
+    let engine = makeEngine(session: session, sleeper: sleeper, tags: TagSequence(), clock: SignalBarsTestClock())
 
     await engine.setTestRepeater(tower)
     await engine.setTargets([ridge])

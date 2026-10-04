@@ -1,3 +1,4 @@
+import AppIntents
 import Foundation
 @testable import MC1
 @testable import MC1Services
@@ -143,10 +144,8 @@ struct SendMessageIntentTests {
   }
 
   @Test func `channel message fitting total but exceeding node name budget rejected`() throws {
-    // The firmware prepends "<NodeName>: " to channel broadcasts, so the
-    // usable text is the total length minus the node name and separator. A
-    // message that fits the 147-byte total but not the adjusted budget would
-    // be silently truncated on the air, so the intent must reject it.
+    // Firmware prepends `"name: "`, so user text must fit the name-adjusted cap
+    // even when it still fits `maxChannelMessageTotalLength`.
     let nodeName = "Base Camp"
     let nodeNameByteCount = nodeName.utf8.count
     let adjustedMax = ProtocolLimits.maxChannelMessageLength(nodeNameByteCount: nodeNameByteCount)
@@ -163,9 +162,8 @@ struct SendMessageIntentTests {
 
   // MARK: - Error rewrap
 
-  /// `IntentError` carries a non-Equatable `MeshCoreError`, so cases are matched
-  /// structurally; the surfaced `errorDescription` (what Siri speaks) pins the
-  /// localized mapping.
+  /// `IntentError` is not Equatable (`MeshCoreError` isn't); match cases
+  /// structurally and pin the localized `errorDescription`.
   private func isCase(_ error: IntentError, _ expected: IntentError) -> Bool {
     switch (error, expected) {
     case (.notConnected, .notConnected),
@@ -439,5 +437,13 @@ struct SendMessageIntentTests {
       message: "nope", recipient: .contact(Self.makeContact()), in: appState
     )
     #expect(outcome == .mustForeground)
+  }
+
+  // MARK: - Execution modes (iOS 26)
+
+  @Test func `supported modes is background and dynamic foreground`() {
+    if #available(iOS 26, *) {
+      #expect(SendMessageIntent.supportedModes == [.background, .foreground(.dynamic)])
+    }
   }
 }

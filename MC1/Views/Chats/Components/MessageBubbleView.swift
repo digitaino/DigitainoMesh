@@ -33,7 +33,6 @@ struct MessageBubbleView: View, Equatable {
           onRetry: { actions.onRetryMessage(message) },
           onResendSamePower: { actions.onResendSamePower(message) },
           onResendAtNextPower: { actions.onResendAtNextPower(message) },
-          onReaction: { emoji in actions.onReaction(emoji, message) },
           onLongPress: { actions.onLongPress(message) },
           onReply: { actions.onReply(message) },
           onImageTap: { actions.onImageTap(message) },

@@ -39,10 +39,25 @@ extension ChatViewModel {
     }
   }
 
-  /// Toggles between muted and all (for swipe action)
+  /// Live row for `id` from the fetch buffers.
+  /// Swipe chrome keeps the value from first reveal, so toggles must not use that snapshot.
+  func liveConversation(id: UUID) -> Conversation? {
+    if let contact = conversations.first(where: { $0.id == id }) {
+      return .direct(contact)
+    }
+    if let channel = channels.first(where: { $0.id == id }) {
+      return .channel(channel)
+    }
+    if let session = roomSessions.first(where: { $0.id == id }) {
+      return .room(session)
+    }
+    return nil
+  }
+
   func toggleMute(_ conversation: Conversation) async {
-    let newLevel: NotificationLevel = conversation.isMuted ? .all : .muted
-    await setNotificationLevel(conversation, level: newLevel)
+    guard let current = liveConversation(id: conversation.id) else { return }
+    let newLevel: NotificationLevel = current.isMuted ? .all : .muted
+    await setNotificationLevel(current, level: newLevel)
   }
 
   /// Pushes the updated rule set to Digitaino custom firmware so on-device alerts
@@ -75,10 +90,11 @@ extension ChatViewModel {
   /// Sets favorite state for a conversation with optimistic UI update
   func setFavorite(_ conversation: Conversation, isFavorite: Bool) async {
     guard connectionStateProvider() == .ready else { return }
-    guard conversation.isFavorite != isFavorite else { return }
+    guard let current = liveConversation(id: conversation.id) else { return }
+    guard current.isFavorite != isFavorite else { return }
 
     // Reuse existing toggle logic
-    await toggleFavorite(conversation)
+    await toggleFavorite(current)
   }
 
   /// Toggles favorite state for a conversation.
@@ -93,10 +109,11 @@ extension ChatViewModel {
   ///     conflicts with swipe action dismissal animations
   func toggleFavorite(_ conversation: Conversation, disableAnimation: Bool = false) async {
     guard connectionStateProvider() == .ready else { return }
-    let originalState = conversation.isFavorite
+    guard let current = liveConversation(id: conversation.id) else { return }
+    let originalState = current.isFavorite
     let newState = !originalState
 
-    switch conversation {
+    switch current {
     case let .direct(contact):
       // Contacts sync with device - wait for confirmation
       togglingFavoriteID = contact.id
@@ -105,32 +122,32 @@ extension ChatViewModel {
       do {
         try await contactService?.setContactFavorite(contact.id, isFavorite: newState)
         // Device confirmed - update local UI
-        applyFavoriteUpdate(conversation, isFavorite: newState, disableAnimation: disableAnimation)
+        applyFavoriteUpdate(current, isFavorite: newState, disableAnimation: disableAnimation)
       } catch {
         logger.error("Failed to toggle contact favorite: \(error)")
       }
 
     case let .channel(channel):
       // Channels are app-only - optimistic update
-      applyFavoriteUpdate(conversation, isFavorite: newState, disableAnimation: disableAnimation)
+      applyFavoriteUpdate(current, isFavorite: newState, disableAnimation: disableAnimation)
 
       do {
         try await dataStore?.setChannelFavorite(channel.id, isFavorite: newState)
       } catch {
         // Rollback on failure
-        applyFavoriteUpdate(conversation, isFavorite: originalState, disableAnimation: disableAnimation)
+        applyFavoriteUpdate(current, isFavorite: originalState, disableAnimation: disableAnimation)
         logger.error("Failed to toggle channel favorite: \(error)")
       }
 
     case let .room(session):
       // Rooms are app-only - optimistic update
-      applyFavoriteUpdate(conversation, isFavorite: newState, disableAnimation: disableAnimation)
+      applyFavoriteUpdate(current, isFavorite: newState, disableAnimation: disableAnimation)
 
       do {
         try await dataStore?.setSessionFavorite(session.id, isFavorite: newState)
       } catch {
         // Rollback on failure
-        applyFavoriteUpdate(conversation, isFavorite: originalState, disableAnimation: disableAnimation)
+        applyFavoriteUpdate(current, isFavorite: originalState, disableAnimation: disableAnimation)
         logger.error("Failed to toggle room favorite: \(error)")
       }
     }

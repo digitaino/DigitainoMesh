@@ -31,6 +31,7 @@ struct MC1MapView: UIViewRepresentable {
   let showLabels: Bool
   /// Whether name pills force-draw or collide. Defaults to today's behaviour.
   var labelPlacement: MapLabelPlacement = .overlap
+  var clusteringEnabled: Bool = true
   let showsUserLocation: Bool
   let isInteractive: Bool
   let showsScale: Bool
@@ -46,6 +47,8 @@ struct MC1MapView: UIViewRepresentable {
   let cameraRegionVersion: Int
   var cameraEdgePadding: UIEdgeInsets = .zero
   var cameraBottomSheetFraction: CGFloat?
+  /// When set, the MapLibre logo and attribution sit this far above the safe-area bottom so overlay chrome does not cover them.
+  var legalOrnamentBottomMargin: CGFloat?
 
   // Programmatic selection: the id of the point to select, plus a version
   // counter bumped to (re)fire it, mirroring the camera region + version idiom.
@@ -83,9 +86,9 @@ struct MC1MapView: UIViewRepresentable {
 
     mapView.showsUserLocation = showsUserLocation
     mapView.compassViewPosition = .topRight
-    mapView.compassViewMargins = CGPoint(x: 8, y: 8)
+    mapView.compassViewMargins = OrnamentLayout.compassMargins
     mapView.attributionButtonPosition = .bottomLeft
-    mapView.attributionButtonMargins = CGPoint(x: 4, y: 30)
+    Self.applyOrnamentMargins(to: mapView, bottomClearance: legalOrnamentBottomMargin)
 
     if showsScale {
       mapView.showsScale = true
@@ -152,6 +155,7 @@ struct MC1MapView: UIViewRepresentable {
     // Likewise before the style loads: the name-pill layers are created from
     // `updatePointSource` inside `didFinishLoading`, and read this then.
     coordinator.currentLabelPlacement = labelPlacement
+    coordinator.currentClusteringEnabled = clusteringEnabled
 
     // Style URL change — compare against our tracked value, not mapView.styleURL
     // which MapLibre may transiently nil during layout/rotation.
@@ -184,9 +188,12 @@ struct MC1MapView: UIViewRepresentable {
         coordinator.updateRasterLayerVisibility(mapView: mapView)
         coordinator.lastAppliedMapStyle = mapStyle
       }
-      if coordinator.lastAppliedPoints != points {
+      if coordinator.lastAppliedPoints != points
+        || coordinator.lastAppliedClusteringEnabled != clusteringEnabled {
+        coordinator.currentClusteringEnabled = clusteringEnabled
         coordinator.updatePointSource(mapView: mapView)
         coordinator.lastAppliedPoints = points
+        coordinator.lastAppliedClusteringEnabled = clusteringEnabled
       }
       if coordinator.lastAppliedLines != lines {
         coordinator.updateLineSource(mapView: mapView)
@@ -205,6 +212,8 @@ struct MC1MapView: UIViewRepresentable {
         coordinator.updateLabelPlacement(mapView: mapView, placement: labelPlacement)
       }
     }
+
+    Self.applyOrnamentMargins(to: mapView, bottomClearance: legalOrnamentBottomMargin)
 
     // Camera region (version-number pattern)
     updateCameraRegion(in: mapView, coordinator: coordinator)
@@ -334,6 +343,49 @@ struct MC1MapView: UIViewRepresentable {
       )
     }
   }
+
+  enum OrnamentLayout {
+    static let compassMargins = CGPoint(x: 8, y: 8)
+    static let defaultLogoMargins = CGPoint(x: 8, y: 8)
+    static let defaultAttributionMargins = CGPoint(x: 4, y: 30)
+    static let clusterSpacing: CGFloat = 8
+
+    static func logoMargins(bottomClearance: CGFloat?) -> CGPoint {
+      guard let bottomClearance else { return defaultLogoMargins }
+      return CGPoint(x: defaultLogoMargins.x, y: max(defaultLogoMargins.y, bottomClearance))
+    }
+
+    static func attributionMargins(bottomClearance: CGFloat?, logoWidth: CGFloat) -> CGPoint {
+      guard let bottomClearance else { return defaultAttributionMargins }
+      let y = max(defaultLogoMargins.y, bottomClearance)
+      if logoWidth > 0 {
+        return CGPoint(
+          x: defaultLogoMargins.x + logoWidth + clusterSpacing,
+          y: y
+        )
+      }
+      let lift = max(0, y - defaultLogoMargins.y)
+      return CGPoint(
+        x: defaultAttributionMargins.x,
+        y: defaultAttributionMargins.y + lift
+      )
+    }
+  }
+
+  private static func applyOrnamentMargins(to mapView: MLNMapView, bottomClearance: CGFloat?) {
+    let logoWidth = mapView.logoView.image?.size.width ?? 0
+    let logo = OrnamentLayout.logoMargins(bottomClearance: bottomClearance)
+    let attribution = OrnamentLayout.attributionMargins(
+      bottomClearance: bottomClearance,
+      logoWidth: logoWidth
+    )
+    if mapView.logoViewMargins != logo {
+      mapView.logoViewMargins = logo
+    }
+    if mapView.attributionButtonMargins != attribution {
+      mapView.attributionButtonMargins = attribution
+    }
+  }
 }
 
 // MARK: - Coordinator
@@ -366,6 +418,8 @@ extension MC1MapView {
     /// created; `lastApplied` mirrors `currentShowLabels`' idiom for live changes.
     var currentLabelPlacement: MapLabelPlacement = .overlap
     var lastAppliedLabelPlacement: MapLabelPlacement = .overlap
+    var currentClusteringEnabled = true
+    var lastAppliedClusteringEnabled: Bool?
     /// The basemap theme in force, mirrored from the view so `renderAll` can pick the
     /// location-dot recency palette at style-load time. Kept current by `updateUIView`.
     var currentIsDarkMode = false
@@ -403,11 +457,13 @@ extension MC1MapView {
       lastAppliedFixedPoints = []
       lastAppliedLines = []
       lastAppliedMapStyle = nil
+      lastAppliedClusteringEnabled = nil
       currentShowLabels = true
       lastAppliedLabelPlacement = .overlap
       resetOverlayState()
 
       PinSpriteRenderer.renderAll(into: style, isDarkMode: currentIsDarkMode)
+      style.performsPlacementTransitions = false
       setupRasterSources(style: style, mapView: mapView)
       setupLineLayers(style: style)
 
@@ -419,12 +475,15 @@ extension MC1MapView {
     }
 
     func mapView(_ mapView: MLNMapView, didFailToLoadImage imageName: String) -> UIImage? {
-      if let style = mapView.style,
-         let image = PinSpriteRenderer.renderOnDemand(name: imageName, into: style) {
+      if let image = PinSpriteRenderer.image(named: imageName) {
         return image
       }
       logger.error("didFailToLoadImage: \(imageName)")
       return nil
+    }
+
+    func mapView(_ mapView: MLNMapView, shouldRemoveStyleImage imageName: String) -> Bool {
+      !PinSpriteRenderer.shouldRetainStyleImage(imageName)
     }
 
     // MARK: - Region changes

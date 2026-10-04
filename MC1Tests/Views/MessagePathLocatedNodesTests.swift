@@ -4,7 +4,7 @@ import Foundation
 @testable import MC1Services
 import Testing
 
-/// The receiver ("B") pin rule of `MessagePathMapView.locatedNodes`: a fix
+/// The receiver ("B") pin rule of `SharedRouteMapView.locatedNodes`: a fix
 /// stamped at receive time anchors the pin; only unstamped messages fall back
 /// to the live user location.
 @Suite("MessagePath located nodes")
@@ -42,7 +42,7 @@ struct MessagePathLocatedNodesTests {
     for message: MessageDTO,
     userLocation: CLLocation?
   ) -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
-    MessagePathMapView.locatedNodes(
+    SharedRouteMapView.locatedNodes(
       for: .message(message),
       contacts: [],
       repeaters: [],
@@ -200,7 +200,7 @@ struct HeardRepeatNodesTests {
       message.userLatitude = nil
       message.userLongitude = nil
     }
-    return MessagePathMapView.heardRepeatNodes(
+    return SharedRouteMapView.heardRepeatNodes(
       message: message,
       repeats: repeats,
       repeaters: repeaters,
@@ -303,9 +303,9 @@ struct HeardRepeatNodesTests {
 
   @Test
   func `Arc offsets fan symmetrically and a lone leg stays straight`() {
-    #expect(MessagePathMapView.arcOffsetStep(rank: 0, of: 1) == 0)
-    #expect((0..<4).map { MessagePathMapView.arcOffsetStep(rank: $0, of: 4) } == [1, -1, 2, -2])
-    let straight = MessagePathMapView.legArcCoordinates(
+    #expect(SharedRouteMapView.arcOffsetStep(rank: 0, of: 1) == 0)
+    #expect((0..<4).map { SharedRouteMapView.arcOffsetStep(rank: $0, of: 4) } == [1, -1, 2, -2])
+    let straight = SharedRouteMapView.legArcCoordinates(
       from: origin,
       to: CLLocationCoordinate2D(latitude: 30.1, longitude: -97.1),
       offsetStep: 0
@@ -381,7 +381,7 @@ struct HeardRepeatNodesTests {
     var message = makeStampedMessage()
     message.userLatitude = origin.latitude
     message.userLongitude = origin.longitude
-    let built = MessagePathMapView.heardRepeatNodes(
+    let built = SharedRouteMapView.heardRepeatNodes(
       message: message,
       repeats: [makeRepeat(pathBytes: [0xAA])],
       repeaters: [contact],
@@ -531,7 +531,7 @@ struct PlottableRepeaterResolutionTests {
       longitude: -97.73008
     )
 
-    let resolved = MessagePathMapView.resolvePlottableRepeater(
+    let resolved = SharedRouteMapView.resolvePlottableRepeater(
       hashBytes: Data([0xAB, 0xBA]),
       repeaters: [living],
       discoveredRepeaters: [deadTwin],
@@ -560,7 +560,7 @@ struct PlottableRepeaterResolutionTests {
       longitude: -97.9
     )
 
-    let resolved = MessagePathMapView.resolvePlottableRepeater(
+    let resolved = SharedRouteMapView.resolvePlottableRepeater(
       hashBytes: Data([0xAB, 0xBA]),
       repeaters: [living],
       discoveredRepeaters: [liveRival],
@@ -586,7 +586,7 @@ struct PlottableRepeaterResolutionTests {
       longitude: -97.7525
     )
 
-    let resolved = MessagePathMapView.resolvePlottableRepeater(
+    let resolved = SharedRouteMapView.resolvePlottableRepeater(
       hashBytes: Data([0xA2, 0x00]),
       repeaters: [unlocatedContact],
       discoveredRepeaters: [locatedTwin],
@@ -609,7 +609,7 @@ struct PlottableRepeaterResolutionTests {
       longitude: -97.93
     )
 
-    let resolved = MessagePathMapView.resolvePlottableRepeater(
+    let resolved = SharedRouteMapView.resolvePlottableRepeater(
       hashBytes: Data([0x81, 0xBB]),
       repeaters: [],
       discoveredRepeaters: [quiet],

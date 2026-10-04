@@ -119,7 +119,11 @@
 
 /* Location: ConnectionUIState.presentPairingFailure(_:) - Pairing failure alert messages */
 "deviceScan.error.authenticationFailed" = "L'associazione salvata con questa radio non funziona più. Tocca Rimuovi e riprova per riassociarla nell'app; la radio potrebbe mostrare un nuovo codice di associazione.";
+/* Location: ConnectionUIState.presentPairingFailure(_:) - macOS copy; app cannot forget the OS Bluetooth bond */
+"deviceScan.error.authenticationFailedMac" = "L'associazione salvata con questa radio non funziona più. Nelle Impostazioni di sistema, dimentica questa radio in Bluetooth, poi tocca Rimuovi e riprova.";
 "deviceScan.error.pinRejected" = "Il PIN non è stato accettato. Controlla il PIN mostrato sul dispositivo, poi riprova. iOS ti chiederà prima di confermare la rimozione dell'associazione non riuscita.";
+/* Location: ConnectionUIState.presentFreshPairingFailure(_:) - macOS copy; app cannot forget the OS Bluetooth bond */
+"deviceScan.error.pinRejectedMac" = "Il PIN non è stato accettato. Nelle Impostazioni di sistema, dimentica questa radio in Bluetooth, poi riprova.";
 "deviceScan.error.connectionFailed" = "Impossibile connettersi al dispositivo. Riprova, oppure rimuovilo se il problema continua.";
 
 // MARK: - Troubleshooting Sheet
@@ -208,8 +212,8 @@
 /* Location: PresetStepView.swift - Title */
 "preset.title" = "Scegli un preset";
 
-/* Location: PresetStepView.swift - Subtitle when recommendation exists */
-"preset.subtitle.recommended" = "Consigliato per %@";
+/* Location: PresetStepView.swift - Subtitle listing presets for the selected place */
+"preset.subtitle.recommended" = "Preset per %@";
 
 /* Location: PresetStepView.swift - Subtitle for empty-region fallback */
 "preset.subtitle.locale" = "Scegli un preset per la tua radio.";
@@ -219,18 +223,6 @@
 
 /* Location: PresetStepView.swift - Apply CTA "Use %@" */
 "preset.use" = "Usa %@";
-
-/* Location: PresetStepView.swift - Already-configured title */
-"preset.alreadyConfigured.title" = "Già configurato";
-
-/* Location: PresetStepView.swift - Already-configured subtitle */
-"preset.alreadyConfigured.subtitle" = "La tua radio è già su %@, il preset consigliato per %@.";
-
-/* Location: PresetStepView.swift - Already-configured primary CTA */
-"preset.alreadyConfigured.done" = "Fine";
-
-/* Location: PresetStepView.swift - Already-configured secondary link */
-"preset.alreadyConfigured.choose" = "Scegli un preset diverso";
 
 /* Location: PresetStepView.apply(id:) - Error shown when user taps Apply before services finished wiring */
 "preset.error.notConnected" = "Connettiti al dispositivo per applicare questo preset.";
@@ -279,8 +271,11 @@
 /* Location: RegionPickerView.swift - Country picker label */
 "region.country" = "Paese";
 
-/* Location: RegionPickerView.swift - State/Province picker label */
-"region.administrativeArea" = "Stato / Provincia";
+/* Location: RegionPickerView.swift - State picker label (US, AU) */
+"region.state" = "Stato";
+
+/* Location: RegionPickerView.swift - Province picker label (Canada) */
+"region.province" = "Provincia";
 
 /* Location: RegionPickerView.swift - Continue CTA in manual picker */
 "region.continue" = "Continua";

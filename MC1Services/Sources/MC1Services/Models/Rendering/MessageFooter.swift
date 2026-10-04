@@ -38,6 +38,9 @@ public struct MessageFooter: Sendable, Hashable {
   /// `.sent` stays terminal success. Render-only, never persisted.
   public let isChannelMessage: Bool
   public let heardRepeats: Int
+  /// Incoming extra-arrival ear chip. Outgoing repeats use `heardRepeats` with
+  /// `showStatusRow` and ignore this flag.
+  public let showHeardCount: Bool
   public let retryAttempt: Int
   public let maxRetryAttempts: Int
   public let sendCount: Int
@@ -72,6 +75,7 @@ public struct MessageFooter: Sendable, Hashable {
     status: MessageStatus,
     isChannelMessage: Bool,
     heardRepeats: Int,
+    showHeardCount: Bool = false,
     retryAttempt: Int,
     maxRetryAttempts: Int,
     sendCount: Int,
@@ -90,6 +94,7 @@ public struct MessageFooter: Sendable, Hashable {
     self.status = status
     self.isChannelMessage = isChannelMessage
     self.heardRepeats = heardRepeats
+    self.showHeardCount = showHeardCount
     self.retryAttempt = retryAttempt
     self.maxRetryAttempts = maxRetryAttempts
     self.sendCount = sendCount
@@ -113,6 +118,7 @@ public struct MessageFooter: Sendable, Hashable {
       status: status,
       isChannelMessage: isChannelMessage,
       heardRepeats: heardRepeats,
+      showHeardCount: showHeardCount,
       retryAttempt: retryAttempt,
       maxRetryAttempts: maxRetryAttempts,
       sendCount: sendCount,

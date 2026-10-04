@@ -16,6 +16,18 @@ struct ActionsDetailsSection: View {
   /// dismisses like any other action row. Defaulted for previews.
   var onSelectAction: ((MessageAction) -> Void)?
 
+  private var arrivals: [MessagePathArrival] {
+    MessagePathArrivals.assemble(message: message, repeats: repeats ?? [])
+  }
+
+  private var incomingArrivalCount: Int {
+    if repeats == nil {
+      max(arrivals.count, MessagePathArrivals.arrivalCount(for: message))
+    } else {
+      arrivals.count
+    }
+  }
+
   @State private var showPathDetail = false
   @State private var showRepeatsMap = false
   @State private var showPacketScope = false
@@ -55,7 +67,7 @@ struct ActionsDetailsSection: View {
           discoveredNodes: discoveredNodes,
           // The stamp-first reference the repeats map resolves against, so an
           // ambiguous repeater isn't named one thing here and another there.
-          userLocation: MessagePathMapView.receiverReference(
+          userLocation: SharedRouteMapView.receiverReference(
             for: .message(message),
             userLocation: appState.bestAvailableLocation
           ),
@@ -73,7 +85,10 @@ struct ActionsDetailsSection: View {
       if message.isOutgoing {
         ActionsOutgoingDetailsRows(message: message)
       } else {
-        ActionsIncomingDetailsRows(message: message)
+        ActionsIncomingDetailsRows(
+          message: message,
+          arrivalCount: incomingArrivalCount
+        )
       }
     }
     // A cover, not a sheet: the path screen is a full-bleed map, and a sheet's
@@ -111,7 +126,7 @@ struct ActionsDetailsSection: View {
         pathViewModel: pathViewModel,
         // Same stamp-first reference the repeats map resolves against, so a
         // repeater is not named one thing there and another here.
-        userLocation: MessagePathMapView.receiverReference(
+        userLocation: SharedRouteMapView.receiverReference(
           for: .message(message),
           userLocation: appState.bestAvailableLocation
         )
@@ -270,9 +285,6 @@ private struct ActionsExpandableDetailRow: View {
           discoveredNodes: discoveredNodes,
           userLocation: userLocation
         )
-        .padding(.horizontal)
-        .padding(.bottom)
-        .id("expandedContent")
       }
     }
   }
@@ -301,10 +313,14 @@ private struct ActionsOutgoingDetailsRows: View {
 
 private struct ActionsIncomingDetailsRows: View {
   let message: MessageDTO
+  let arrivalCount: Int
 
   var body: some View {
+    let hopsText = L10n.Chats.Chats.Message.Info.hops(hopCountFormatted(message))
     ActionInfoRow(
-      text: L10n.Chats.Chats.Message.Info.hops(hopCountFormatted(message)),
+      text: arrivalCount > 1
+        ? "\(hopsText) · \(L10n.Chats.Chats.Path.Arrival.first)"
+        : hopsText,
       icon: "arrowshape.bounce.right"
     )
 
@@ -347,7 +363,12 @@ private struct ActionsIncomingDetailsRows: View {
     ))
 
     if let snr = message.snr {
-      ActionInfoRow(text: L10n.Chats.Chats.Message.Info.snr(snrFormatted(snr)))
+      let snrText = L10n.Chats.Chats.Message.Info.snr(snrFormatted(snr))
+      ActionInfoRow(
+        text: arrivalCount > 1
+          ? "\(snrText) · \(L10n.Chats.Chats.Path.Arrival.first)"
+          : snrText
+      )
     }
   }
 

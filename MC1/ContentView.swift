@@ -94,6 +94,15 @@ struct ContentView: View {
         DeviceScannerSheet(picker: scanPicker)
       }
     }
+    .sheet(item: $connectionUI.pendingSystemPairingSetup, onDismiss: {
+      appState.handleSystemPairingSetupSheetDismissed()
+    }) { prompt in
+      SystemPairingSetupSheet(
+        prompt: prompt,
+        onForget: { appState.confirmSystemPairingSetup() },
+        onCancel: { appState.cancelSystemPairingSetup() }
+      )
+    }
     // SwiftUI does not reliably co-present a sheet and an alert from the same host,
     // so the binding yields a release only while the connection UI above is quiescent;
     // `pendingRelease` stays set and re-presents on the next render once any alert clears.
@@ -148,6 +157,7 @@ struct ContentView: View {
   private var connectionUIQuiescent: Bool {
     !appState.connectionUI.showingConnectionFailedAlert
       && appState.connectionUI.otherAppWarningDeviceID == nil
+      && appState.connectionUI.pendingSystemPairingSetup == nil
       && !(appState.connectionManager.bluetoothScanPicker?.isPresenting ?? false)
   }
 
@@ -238,9 +248,11 @@ struct MainTabView: View {
         }
       }
     }
-    .sheet(isPresented: $showingDeviceSelection) {
+    .sheet(isPresented: $showingDeviceSelection, onDismiss: {
+      appState.handleDeviceSelectionSheetDismissed()
+    }) {
       DeviceSelectionSheet()
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
   }

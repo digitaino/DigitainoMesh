@@ -1,8 +1,7 @@
 import Foundation
 import MC1Services
 
-/// Determines which message actions are available based on message state.
-/// Extracted for testability and reuse across UI components.
+/// Which actions the message sheet offers for a given `MessageDTO`.
 struct MessageActionAvailability {
   let canReply: Bool
   let canCopy: Bool
@@ -16,6 +15,8 @@ struct MessageActionAvailability {
   /// an echo for outgoing; a message with neither has nothing to look up).
   let canViewPacketScope: Bool
   let canDelete: Bool
+  /// True when the actions sheet shows the path disclosure.
+  let showsPathDetail: Bool
 
   init(
     message: MessageDTO,
@@ -35,5 +36,6 @@ struct MessageActionAvailability {
       && !(message.pathNodes?.isEmpty ?? true)
     canViewPacketScope = packetScopeEnabled && message.packetContentHash != nil
     canDelete = true
+    showsPathDetail = canViewPath || canShowRepeatDetails || (!message.isOutgoing && message.heardRepeats > 0)
   }
 }

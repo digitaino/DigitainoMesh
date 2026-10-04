@@ -49,6 +49,10 @@ struct ChatConversationView: View {
   /// cancelled-then-flushed synchronously on view teardown and app suspension.
   @State private var draftSaveTask: Task<Void, Never>?
 
+  /// `AppState.channelSlotGenerations` value for this channel slot when the view
+  /// appeared; a higher value later means a different channel now owns the slot.
+  @State private var slotGenerationOnAppear: Int?
+
   // MARK: - Sheet State
 
   @State private var showingInfo = false
@@ -77,6 +81,8 @@ struct ChatConversationView: View {
   @AppStorage(AppStorageKey.showIncomingPath.rawValue) private var showIncomingPath = AppStorageKey.defaultShowIncomingPath
   @AppStorage(AppStorageKey.showIncomingHopCount.rawValue) private var showIncomingHopCount = AppStorageKey.defaultShowIncomingHopCount
   @AppStorage(AppStorageKey.showIncomingRegion.rawValue) private var showIncomingRegion = AppStorageKey.defaultShowIncomingRegion
+  @AppStorage(AppStorageKey.showIncomingHeardCount.rawValue)
+  private var showIncomingHeardCount = AppStorageKey.defaultShowIncomingHeardCount
   @AppStorage(AppStorageKey.showIncomingSendTime.rawValue) private var showIncomingSendTime = AppStorageKey.defaultShowIncomingSendTime
   @AppStorage(AppStorageKey.linkPreviewsEnabled.rawValue) private var previewsEnabled = AppStorageKey.defaultLinkPreviewsEnabled
   @AppStorage(AppStorageKey.replyWithQuote.rawValue) private var replyWithQuote = AppStorageKey.defaultReplyWithQuote
@@ -84,6 +90,12 @@ struct ChatConversationView: View {
   @AppStorage(AppStorageKey.packetScopeEnabled.rawValue) private var packetScopeEnabled = AppStorageKey.defaultPacketScopeEnabled
   @AppStorage(AppStorageKey.packetScopeObserverCountsEnabled.rawValue)
   private var packetScopeObserverCounts = AppStorageKey.defaultPacketScopeObserverCountsEnabled
+  @AppStorage(AppStorageKey.translationTargetLanguage.rawValue)
+  private var translationTargetLanguage = AppStorageKey.defaultTranslationTargetLanguage
+  @AppStorage(AppStorageKey.useDefaultTranslationApp.rawValue)
+  private var useDefaultTranslationApp = AppStorageKey.defaultUseDefaultTranslationApp
+  @AppStorage(AppStorageKey.translationOffersEnabled.rawValue)
+  private var translationOffersEnabled = AppStorageKey.defaultTranslationOffersEnabled
 
   // MARK: - Environment
 
@@ -106,6 +118,7 @@ struct ChatConversationView: View {
       showIncomingPath: showIncomingPath,
       showIncomingHopCount: showIncomingHopCount,
       showIncomingRegion: showIncomingRegion,
+      showIncomingHeardCount: showIncomingHeardCount,
       showIncomingSendTime: showIncomingSendTime,
       previewsEnabled: previewsEnabled,
       isHighContrast: colorSchemeContrast == .increased,
@@ -115,10 +128,12 @@ struct ChatConversationView: View {
       currentUserName: appState.localNodeName,
       themeID: theme.id,
       contentSizeCategory: AppearanceToken.contentSizeCategoryToken(dynamicTypeSize),
-      preferredLanguageCode: EnvInputs.preferredLanguageCode(from: locale),
+      preferredLanguageCode: TranslationTargetPreference(rawValue: translationTargetLanguage)
+        .resolvedLanguageCode(appLocale: locale),
       // ANDed, never read apart: the master opt-in is what authorises a hash to
       // leave the phone, and the second switch only chooses whether the count shows.
-      showsObserverCounts: packetScopeEnabled && packetScopeObserverCounts
+      showsObserverCounts: packetScopeEnabled && packetScopeObserverCounts,
+      translationOffersEnabled: translationOffersEnabled
     )
   }
 
@@ -179,6 +194,7 @@ struct ChatConversationView: View {
       sharedRouteForMap: $sharedRouteForMap,
       onRetryMessage: { retryMessage($0) },
       onReply: { dispatch(.reply, for: $0) },
+      onTranslationAction: { handleInBubbleTranslation(for: $0) },
       onSearchRevealEvent: { handleSearchRevealEvent($0) },
       isSearchActive: messageSearch.isActive
     )
@@ -385,6 +401,14 @@ struct ChatConversationView: View {
     .onChange(of: chatViewModel.composingText) { _, _ in
       scheduleDraftSave()
     }
+    .onAppear {
+      if slotGenerationOnAppear == nil {
+        slotGenerationOnAppear = currentSlotGeneration
+      }
+    }
+    .onChange(of: currentSlotGeneration) { _, _ in
+      leaveIfSlotReassigned()
+    }
     .onChange(of: scenePhase) { _, newPhase in
       // Notifications usually arrive while the app is backgrounded with this
       // chat already on screen, so re-clear the tray when we return to the
@@ -567,7 +591,35 @@ struct ChatConversationView: View {
   private func flushDraft() {
     draftSaveTask?.cancel()
     draftSaveTask = nil
+    // The slot's draft was already cleared for the next occupant; persisting the old
+    // composer here would hand it to the new channel.
+    if slotWasReassigned {
+      chatViewModel.composingText = ""
+    }
     chatViewModel.saveDraft(to: appState.draftStore, id: conversationType.draftConversationID)
+  }
+
+  // MARK: - Slot Reassignment
+
+  private var currentSlotGeneration: Int? {
+    guard case .channel = conversationType else { return nil }
+    return appState.channelSlotGenerations[conversationType.coordinatorID] ?? 0
+  }
+
+  private var slotWasReassigned: Bool {
+    guard let seen = slotGenerationOnAppear, let current = currentSlotGeneration else { return false }
+    return current > seen
+  }
+
+  /// Closes the chat when another channel took over its slot. Drop the composer
+  /// first so `flushDraft` cannot restore the old text; `AppState` cannot pop this view-owned stack.
+  private func leaveIfSlotReassigned() {
+    guard slotWasReassigned, case let .channel(channel) = conversationType else { return }
+    chatViewModel.composingText = ""
+    if case let .channel(selected) = appState.navigation.chatsSelectedRoute, selected.id == channel.id {
+      appState.navigation.chatsSelectedRoute = nil
+    }
+    dismiss()
   }
 
   // MARK: - Cleanup (.onDisappear)
@@ -833,6 +885,24 @@ struct ChatConversationView: View {
       try? await Task.sleep(for: MessageActionsPresentation.dismissalDelay)
       showSystemTranslation = true
     }
+  }
+
+  private func handleInBubbleTranslation(for messageID: UUID) {
+    if let chrome = chatViewModel.translation(for: messageID),
+       case .showing = chrome.phase {
+      chatViewModel.performTranslationAction(for: messageID)
+      return
+    }
+    if TranslationTargetPreference.usesSystemOverlay(
+      languageRawValue: translationTargetLanguage,
+      useDefaultTranslationApp: useDefaultTranslationApp
+    ) {
+      guard let text = chatViewModel.messagesByID[messageID]?.text else { return }
+      systemTranslationText = text
+      showSystemTranslation = true
+      return
+    }
+    chatViewModel.performTranslationAction(for: messageID)
   }
 
   private func handleSendAgain(for message: MessageDTO) {

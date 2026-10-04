@@ -73,7 +73,7 @@ struct MotionHintServiceTests {
 
   @Test
   func `a moving level is re-pushed once the keepalive interval elapses`() async {
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let session = MockSyncRegistrySession()
     let probe = await makeCapableProbe(session)
     let service = MotionHintService(
@@ -94,7 +94,7 @@ struct MotionHintServiceTests {
 
   @Test
   func `a stationary level is never re-pushed by the keepalive`() async {
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let session = MockSyncRegistrySession()
     let probe = await makeCapableProbe(session)
     let service = MotionHintService(

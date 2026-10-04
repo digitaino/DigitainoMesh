@@ -4,7 +4,7 @@ import SwiftUI
 /// The conversation list rendered as a `ScrollView` + `LazyVStack` rather than a `List`.
 /// `List` is backed by `UpdateCoalescingCollectionView`, whose batch-consistency assertion
 /// is violated when the selected row is deleted; a `LazyVStack` has no collection view, so
-/// that crash cannot occur. Row actions live in a `.contextMenu`.
+/// that crash cannot occur.
 struct ConversationListContent: View {
   enum ListMode {
     case selection(Binding<ChatRoute?>)
@@ -157,8 +157,8 @@ struct ConversationListContent: View {
 
   private var loadingBody: some View {
     ScrollView {
-      LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-        Section {} header: { pinnedFilterHeader }
+      LazyVStack(spacing: 0) {
+        Section {} header: { filterHeader }
       }
     }
     .overlay { ProgressView() }
@@ -166,7 +166,7 @@ struct ConversationListContent: View {
 
   private func loadedBody(referenceDate: Date) -> some View {
     ScrollView {
-      LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+      LazyVStack(spacing: 0) {
         Section {
           // While searching, an empty conversation list is not an empty screen: the
           // message results below may well be what the user was after.
@@ -182,19 +182,20 @@ struct ConversationListContent: View {
             onOpen: openMessageResult
           )
         } header: {
-          pinnedFilterHeader
+          filterHeader
         }
       }
     }
+    .swipeActionsContainerIfAvailable()
   }
 
   private var isSearching: Bool {
     !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
-  /// Filter bar as the pinned section header; `pinnedFilterHeaderBackground` documents the
-  /// per-OS backing.
-  private var pinnedFilterHeader: some View {
+  /// Filter bar as the section header; it scrolls away with the list (upstream 0a762556).
+  /// `pinnedFilterHeaderBackground` documents the per-OS backing.
+  private var filterHeader: some View {
     ChatFilterPicker(selection: $selectedFilter)
       .frame(maxWidth: .infinity)
       .pinnedFilterHeaderBackground(theme)
@@ -339,6 +340,7 @@ private struct ConversationSelectionRow: View {
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .deletingRowOverlay(isDeleting: isDeleting)
     .conversationContextMenu(conversation: conversation, viewModel: viewModel, onDelete: onDelete)
+    .conversationSwipeActions(conversation: conversation, viewModel: viewModel, onDelete: onDelete)
   }
 }
 
@@ -361,6 +363,7 @@ private struct ConversationNavigationRow: View {
     .buttonStyle(.plain)
     .deletingRowOverlay(isDeleting: isDeleting)
     .conversationContextMenu(conversation: conversation, viewModel: viewModel, onDelete: onDelete)
+    .conversationSwipeActions(conversation: conversation, viewModel: viewModel, onDelete: onDelete)
   }
 
   private func tap() {

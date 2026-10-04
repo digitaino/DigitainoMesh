@@ -144,12 +144,12 @@ struct HeardRepeatsMapView: View {
 
   /// The "where were we" reference for name disambiguation in the rows — the
   /// send-time stamp when the message carries one, else the live best guess
-  /// (`MessagePathMapView.receiverReference`, the same reference the map
+  /// (`SharedRouteMapView.receiverReference`, the same reference the map
   /// resolves against). Note the rules differ by design even with the shared
   /// reference: rows *name* ambiguous repeaters by proximity best-match,
   /// while the map only *pins* unambiguous ones.
   private var originReference: CLLocation? {
-    MessagePathMapView.receiverReference(
+    SharedRouteMapView.receiverReference(
       for: .message(message),
       userLocation: appState.bestAvailableLocation
     )
@@ -167,7 +167,7 @@ struct HeardRepeatsMapView: View {
   }
 
   private func rebuildNodes() {
-    let built = MessagePathMapView.heardRepeatNodes(
+    let built = SharedRouteMapView.heardRepeatNodes(
       message: message,
       repeats: repeats,
       repeaters: pathViewModel.repeaters,

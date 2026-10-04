@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.meshcoreone
   deploymentTarget:
     iOS: "18.0"
-  xcodeVersion: "26.0"
+  xcodeVersion: "27.0"
   generateEmptyDirectories: true
 
 # dev.yml is gitignored and supplies DEVELOPMENT_TEAM for local signing.
@@ -39,7 +39,7 @@ packages:
     # generated .xcodeproj is), so branch tracking resolves to whatever each
     # machine last fetched and different developers silently build different
     # library code. Bump this hash deliberately when the fork advances.
-    revision: 192fcb4925607d1aa678792c22825f35edb724ad
+    revision: 663d6ce9ee9ba459ef9fe3a1848a05c4acffaef8
 
 targets:
   MC1:
@@ -136,22 +136,6 @@ targets:
           - Bluetooth
         NSAccessorySetupBluetoothServices:
           - "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-        NSAccessorySetupBluetoothNames:
-          - "MeshCore-"
-          - "Whisper-"
-          - "WisCore"
-          - "XIAO"
-          - "elecrow"
-          - "HT-n5262"
-          - "Seeed"
-          - "BQ"
-          - "ProMicro"
-          - "Keepteen"
-          - "Meshtiny"
-          - "T1000-E-BOOT"
-          - "me25ls01-BOOT"
-          - "NRF52 DK"
-          - "T-Impulse"
       configs:
         Debug:
           INFOPLIST_FILE: MC1/Info-Debug.plist
@@ -228,6 +212,8 @@ schemes:
       config: Debug
     test:
       config: Debug
+      language: en
+      region: US
       targets:
         - MC1Tests
     profile:

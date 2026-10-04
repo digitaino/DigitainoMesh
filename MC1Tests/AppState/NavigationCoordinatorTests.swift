@@ -494,6 +494,15 @@ struct NavigationCoordinatorPendingLinkTests {
 
     #expect(coordinator.selectedSetting == .appearance)
   }
+
+  @Test
+  func `language settings page is device-independent`() {
+    let coordinator = NavigationCoordinator()
+    coordinator.selectedSetting = .language
+    #expect(coordinator.selectedSetting?.requiresDevice == false)
+    coordinator.clearPerDeviceSelection()
+    #expect(coordinator.selectedSetting == .language)
+  }
 }
 
 @Suite("NavigationCoordinator Ride-Guarded Clear Tests")

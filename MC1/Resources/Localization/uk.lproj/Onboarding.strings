@@ -119,7 +119,11 @@
 
 /* Location: ConnectionUIState.presentPairingFailure(_:) - Pairing failure alert messages */
 "deviceScan.error.authenticationFailed" = "Збережене спарування з цією рацією перестало працювати. Натисніть «Видалити та спробувати знову», щоб спарувати її заново в застосунку; рація може показати новий код спарування.";
+/* Location: ConnectionUIState.presentPairingFailure(_:) - macOS copy; app cannot forget the OS Bluetooth bond */
+"deviceScan.error.authenticationFailedMac" = "Збережене спарування з цією рацією перестало працювати. У Системних налаштуваннях забудьте цю рацію в Bluetooth, а потім натисніть «Видалити та спробувати знову».";
 "deviceScan.error.pinRejected" = "PIN-код не прийнято. Перевірте PIN-код, показаний на пристрої, і спробуйте ще раз. Спочатку iOS попросить підтвердити видалення невдалого спарювання.";
+/* Location: ConnectionUIState.presentFreshPairingFailure(_:) - macOS copy; app cannot forget the OS Bluetooth bond */
+"deviceScan.error.pinRejectedMac" = "PIN-код не прийнято. У Системних налаштуваннях забудьте цю рацію в Bluetooth, а потім спробуйте ще раз.";
 "deviceScan.error.connectionFailed" = "Не вдалося підключитися до пристрою. Спробуйте знову або видаліть пристрій, якщо проблема не зникає.";
 
 // MARK: - Troubleshooting Sheet
@@ -206,8 +210,8 @@
 /* Location: PresetStepView.swift - Title */
 "preset.title" = "Виберіть пресет";
 
-/* Location: PresetStepView.swift - Subtitle when recommendation exists */
-"preset.subtitle.recommended" = "Рекомендовано для %@";
+/* Location: PresetStepView.swift - Subtitle listing presets for the selected place */
+"preset.subtitle.recommended" = "Пресети для %@";
 
 /* Location: PresetStepView.swift - Subtitle for empty-region fallback */
 "preset.subtitle.locale" = "Виберіть пресет для вашого радіо.";
@@ -217,18 +221,6 @@
 
 /* Location: PresetStepView.swift - Apply CTA "Use %@" */
 "preset.use" = "Використати %@";
-
-/* Location: PresetStepView.swift - Already-configured title */
-"preset.alreadyConfigured.title" = "Вже налаштовано";
-
-/* Location: PresetStepView.swift - Already-configured subtitle */
-"preset.alreadyConfigured.subtitle" = "Ваше радіо вже налаштовано на %@, рекомендований пресет для %@.";
-
-/* Location: PresetStepView.swift - Already-configured primary CTA */
-"preset.alreadyConfigured.done" = "Готово";
-
-/* Location: PresetStepView.swift - Already-configured secondary link */
-"preset.alreadyConfigured.choose" = "Вибрати інший пресет";
 
 /* Location: PresetStepView.apply(id:) - Error shown when user taps Apply before services finished wiring */
 "preset.error.notConnected" = "Підключіться до пристрою, щоб застосувати цей пресет.";
@@ -277,8 +269,11 @@
 /* Location: RegionPickerView.swift - Country picker label */
 "region.country" = "Країна";
 
-/* Location: RegionPickerView.swift - State/Province picker label */
-"region.administrativeArea" = "Область / Провінція";
+/* Location: RegionPickerView.swift - State picker label (US, AU) */
+"region.state" = "Штат";
+
+/* Location: RegionPickerView.swift - Province picker label (Canada) */
+"region.province" = "Провінція";
 
 /* Location: RegionPickerView.swift - Continue CTA in manual picker */
 "region.continue" = "Продовжити";

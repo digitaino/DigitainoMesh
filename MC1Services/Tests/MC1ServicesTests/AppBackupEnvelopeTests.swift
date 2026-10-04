@@ -293,6 +293,7 @@ struct AppBackupEnvelopeTests {
     prefs.notifyContactMessages = false
     prefs.linkPreviewsEnabled = true
     prefs.showIncomingRegion = true
+    prefs.showIncomingHeardCount = true
     prefs.showIncomingSendTime = true
     prefs.showInlineImages = false
 
@@ -301,6 +302,7 @@ struct AppBackupEnvelopeTests {
 
     #expect(decoded == prefs)
     #expect(decoded.showIncomingRegion == true)
+    #expect(decoded.showIncomingHeardCount == true)
     #expect(decoded.showIncomingSendTime == true)
     #expect(decoded.showInlineImages == false)
   }
@@ -326,6 +328,24 @@ struct AppBackupEnvelopeTests {
   }
 
   @Test
+  func `Legacy envelope without showIncomingHeardCount decodes to nil and restore skips it`() throws {
+    let legacyJSON = "{\"hasCompletedOnboarding\":true}"
+    let data = Data(legacyJSON.utf8)
+
+    let decoded = try JSONDecoder().decode(BackupUserDefaults.self, from: data)
+    #expect(decoded.showIncomingHeardCount == nil)
+
+    let suiteName = "test.showIncomingHeardCount.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let key = AppStorageKey.showIncomingHeardCount.rawValue
+    let setKeys = decoded.restore(to: defaults)
+    #expect(!setKeys.contains(key))
+    #expect(defaults.object(forKey: key) == nil)
+  }
+
+  @Test
   func `Legacy envelope without map preference keys decodes to nil and restore skips them`() throws {
     let legacyJSON = "{\"hasCompletedOnboarding\":true}"
     let data = Data(legacyJSON.utf8)
@@ -333,6 +353,7 @@ struct AppBackupEnvelopeTests {
     let decoded = try JSONDecoder().decode(BackupUserDefaults.self, from: data)
     #expect(decoded.showDiscoveredNodesOnMap == nil)
     #expect(decoded.mapColorSchemePreference == nil)
+    #expect(decoded.mapClusteringEnabled == nil)
 
     let suiteName = "test.mapPrefs.legacy.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -340,15 +361,19 @@ struct AppBackupEnvelopeTests {
 
     let showKey = AppStorageKey.showDiscoveredNodesOnMap.rawValue
     let schemeKey = AppStorageKey.mapColorSchemePreference.rawValue
+    let clusteringKey = AppStorageKey.mapClusteringEnabled.rawValue
     // Pre-seed local prefs: write-if-missing must leave them untouched.
     defaults.set(false, forKey: showKey)
     defaults.set("light", forKey: schemeKey)
+    defaults.set(false, forKey: clusteringKey)
 
     let setKeys = decoded.restore(to: defaults)
     #expect(!setKeys.contains(showKey))
     #expect(!setKeys.contains(schemeKey))
+    #expect(!setKeys.contains(clusteringKey))
     #expect(defaults.bool(forKey: showKey) == false)
     #expect(defaults.string(forKey: schemeKey) == "light")
+    #expect(defaults.bool(forKey: clusteringKey) == false)
   }
 
   @Test
@@ -356,11 +381,13 @@ struct AppBackupEnvelopeTests {
     var prefs = BackupUserDefaults()
     prefs.showDiscoveredNodesOnMap = true
     prefs.mapColorSchemePreference = "dark"
+    prefs.mapClusteringEnabled = false
 
     let data = try JSONEncoder().encode(prefs)
     let decoded = try JSONDecoder().decode(BackupUserDefaults.self, from: data)
     #expect(decoded.showDiscoveredNodesOnMap == true)
     #expect(decoded.mapColorSchemePreference == "dark")
+    #expect(decoded.mapClusteringEnabled == false)
 
     let suiteName = "test.mapPrefs.roundTrip.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -368,11 +395,14 @@ struct AppBackupEnvelopeTests {
 
     let showKey = AppStorageKey.showDiscoveredNodesOnMap.rawValue
     let schemeKey = AppStorageKey.mapColorSchemePreference.rawValue
+    let clusteringKey = AppStorageKey.mapClusteringEnabled.rawValue
     let setKeys = decoded.restore(to: defaults)
     #expect(setKeys.contains(showKey))
     #expect(setKeys.contains(schemeKey))
+    #expect(setKeys.contains(clusteringKey))
     #expect(defaults.bool(forKey: showKey) == true)
     #expect(defaults.string(forKey: schemeKey) == "dark")
+    #expect(defaults.bool(forKey: clusteringKey) == false)
   }
 
   @Test

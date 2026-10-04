@@ -13,7 +13,7 @@ struct SignalBarsEngineTests {
 
   private func makeEngine(
     session: MockSignalBarsSession,
-    clock: TestClock,
+    clock: SignalBarsTestClock,
     mode: SignalBarsMode = .engine,
     pathHashMode: UInt8 = 0,
     directory: (any SignalBarsNodeDirectory)? = nil,
@@ -40,7 +40,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Viewer mode reads the device's table on the initial fetch`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     await session.setSignalBarsBlobs([SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x0C, 0x13], rxSnrX4: 24, txSnrX4: 12, hasTx: true, isBest: true),
       SignalBarsFixtures.entry(hash: [0xAA], rxSnrX4: 4)
@@ -60,7 +60,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Viewer mode applies pushed sync values without asking`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
 
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x0C])
@@ -73,7 +73,7 @@ struct SignalBarsEngineTests {
   @Test
   func `An unchanged device table publishes nothing, so polling does not make the UI flash`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
     let blob = SignalBarsFixtures.blob([SignalBarsFixtures.entry(hash: [0x0C])])
 
     await engine.ingest(.syncValue(.signalBars, blob))
@@ -89,7 +89,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A table the radio heard again is a fresh sighting`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock, mode: .viewer)
 
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
@@ -109,7 +109,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A silent repeater aging between polls is not a fresh sighting`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock, mode: .viewer)
     try await engine.watchRepeater(hexID("0C"))
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
@@ -134,7 +134,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A repeater whose age dropped since the last poll was heard again`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock, mode: .viewer)
     try await engine.watchRepeater(hexID("0C"))
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
@@ -155,7 +155,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A watched leg the device has no measurement for keeps the last reading`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock, mode: .viewer)
     try await engine.watchRepeater(hexID("0C"))
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
@@ -177,7 +177,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A watched repeater with no measurement at all reads as no data, not zero`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
     try await engine.watchRepeater(hexID("0C"))
 
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
@@ -193,7 +193,7 @@ struct SignalBarsEngineTests {
   @Test
   func `An undecodable blob is ignored rather than clearing the table`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x0C])
     ])))
@@ -206,7 +206,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Viewer mode mirrors the device and ignores sightings it could derive itself`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
 
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C])
@@ -227,7 +227,7 @@ struct SignalBarsEngineTests {
     await session.setSignalBarsBlobs([SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x0C, 0x13])
     ])])
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
 
     try await engine.requestRefresh(target: hexID("0C13"))
 
@@ -241,7 +241,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Refreshing everything writes the refresh-all trigger`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
 
     await engine.refreshAll()
 
@@ -252,7 +252,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A viewer-mode probe asks the device to run its discovery scan`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
 
     await engine.startProbe()
 
@@ -268,7 +268,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A discover response adds a probeable repeater with both legs measured`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), pathHashMode: 1)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), pathHashMode: 1)
     let key = SignalBarsFixtures.publicKey([0x0C, 0x13, 0xAB])
 
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
@@ -288,7 +288,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A relayed packet refreshes the RX leg only`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock())
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock())
 
     await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0xAA, 0x0C], snr: 3)))
 
@@ -302,7 +302,7 @@ struct SignalBarsEngineTests {
   @Test
   func `The path hash mode can change at runtime`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), pathHashMode: 0)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), pathHashMode: 0)
     await engine.setPathHashMode(2)
 
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
@@ -317,7 +317,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A probe cycle discovers, transmits a trace at the configured hash width, and marks TX measuring`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock, pathHashMode: 1)
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13, 0xAB])
@@ -336,7 +336,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A trace reply is correlated by tag and records TX SNR and round-trip time`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C]),
@@ -361,7 +361,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A reply for an unknown tag changes nothing`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock())
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock())
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C]),
       snrIn: 5
@@ -376,7 +376,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A probe that never answers times out on the clock and counts as a failure`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     await session.setTraceResult(
       MessageSentInfo(route: 0, expectedAck: Data(), suggestedTimeoutMs: 3000)
     )
@@ -400,7 +400,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A late reply after a timeout is ignored`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C])
@@ -420,7 +420,7 @@ struct SignalBarsEngineTests {
     struct SendFailure: Error {}
     let session = MockSignalBarsSession()
     await session.setTraceError(SendFailure())
-    let engine = makeEngine(session: session, clock: TestClock())
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock())
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C])
     )))
@@ -435,7 +435,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A probe timeout leaves a measurement that arrived while it was in flight alone`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C]),
@@ -461,7 +461,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Best-link flapping cannot probe faster than the cadence allows`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     for byte in [UInt8(0x01), 0x02] {
       await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
@@ -500,7 +500,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A promoted best link still waits out its failure backoff`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     // One probeable repeater and one the app can only hear, so the failed link can still
     // reach the head of the table.
@@ -532,7 +532,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Discover probes are re-broadcast on their own interval, not every cycle`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
 
     await engine.runCycle()
@@ -547,7 +547,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A manual refresh discovers, probes every keyed repeater, and writes off the silent ones`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     for byte in [UInt8(0x01), 0x02] {
       await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
@@ -568,7 +568,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Refreshing one repeater in engine mode probes just that one`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock())
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock())
     for byte in [UInt8(0x01), 0x02] {
       await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
         publicKey: SignalBarsFixtures.publicKey([byte])
@@ -588,7 +588,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A watch matches the same node at any hash width`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     try await engine.watchRepeater(hexID("0C"))
 
@@ -606,7 +606,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Hearing another repeater leaves the watch alone`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock())
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock())
     try await engine.watchRepeater(hexID("0C"))
 
     await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0xAA])))
@@ -617,7 +617,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A watch keeps working in viewer mode, where the device does the hearing`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
     try await engine.watchRepeater(hexID("0C"))
 
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
@@ -633,7 +633,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A probe reply counts as hearing the watched repeater`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     await engine.ingest(.discoverResponse(SignalBarsFixtures.discoverResponse(
       publicKey: SignalBarsFixtures.publicKey([0x0C])
@@ -652,7 +652,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Clearing the watch drops its state`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock())
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock())
     try await engine.watchRepeater(hexID("0C"))
     await engine.watchRepeater(nil)
 
@@ -664,7 +664,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A dismissed repeater reappears when the radio hears it again`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x0C])))
 
@@ -683,7 +683,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Stale rows are hidden and can be cleared in one action`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock, mode: .viewer)
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x01], ageSeconds: 1000),
@@ -703,7 +703,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Turning off auto-hide shows stale rows again`() async {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
     await engine.ingest(.syncValue(.signalBars, SignalBarsFixtures.blob([
       SignalBarsFixtures.entry(hash: [0x01], ageSeconds: 1000)
     ])))
@@ -717,7 +717,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Engine mode drops repeaters it has not heard in five minutes`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = makeEngine(session: session, clock: clock)
     await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x0C])))
 
@@ -744,7 +744,7 @@ struct SignalBarsEngineTests {
     ])
     let engine = makeEngine(
       session: session,
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       pathHashMode: 1,
       directory: directory
     )
@@ -774,7 +774,7 @@ struct SignalBarsEngineTests {
     ])
     let engine = makeEngine(
       session: session,
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       pathHashMode: 0,
       directory: directory
     )
@@ -789,7 +789,7 @@ struct SignalBarsEngineTests {
   @Test
   func `A discover response corrects a wrong 1-byte hash guess`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let directory = StubNodeDirectory(nodes: [
       AnyResolvableNode(StubResolvableNode(
         publicKey: SignalBarsFixtures.publicKey([0x0C, 0x99]),
@@ -825,7 +825,7 @@ struct SignalBarsEngineTests {
   @Test
   func `nodePoolDidChange re-resolves already-named rows`() async {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let directory = MutableNodeDirectory(nodes: [
       AnyResolvableNode(StubResolvableNode(
         publicKey: SignalBarsFixtures.publicKey([0x0C, 0x13]),
@@ -867,7 +867,7 @@ struct SignalBarsEngineTests {
     ])
     let engine = makeEngine(
       session: MockSignalBarsSession(),
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       directory: directory,
       referenceLocation: FixedReferenceLocationProvider(
         ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
@@ -899,7 +899,7 @@ struct SignalBarsEngineTests {
     ])
     let engine = makeEngine(
       session: MockSignalBarsSession(),
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       directory: directory,
       referenceLocation: FixedReferenceLocationProvider(
         ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
@@ -927,7 +927,7 @@ struct SignalBarsEngineTests {
     ])
     let engine = makeEngine(
       session: MockSignalBarsSession(),
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       directory: directory,
       referenceLocation: FixedReferenceLocationProvider(
         ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
@@ -958,7 +958,7 @@ struct SignalBarsEngineTests {
     ])
     let engine = makeEngine(
       session: MockSignalBarsSession(),
-      clock: TestClock(),
+      clock: SignalBarsTestClock(),
       directory: directory,
       referenceLocation: FixedReferenceLocationProvider(
         ReferenceCoordinate(latitude: 30.27, longitude: -97.74)
@@ -972,7 +972,7 @@ struct SignalBarsEngineTests {
 
   @Test
   func `referenceLocationDidChange re-resolves a collision with the new fix`() async {
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let relay = ReferenceLocationRelay()
     let directory = StubNodeDirectory(nodes: [
       AnyResolvableNode(StubResolvableNode(
@@ -1014,7 +1014,7 @@ struct SignalBarsEngineTests {
         resolvableName: "Somewhere Else"
       ))
     ])
-    let engine = makeEngine(session: session, clock: TestClock(), directory: directory)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), directory: directory)
 
     await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x0C])))
 
@@ -1026,7 +1026,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Subscribers receive a snapshot whenever the table changes`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock())
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock())
     var stream = engine.snapshots().makeAsyncIterator()
 
     await engine.ingest(.rxLogData(SignalBarsFixtures.relayedPacket(path: [0x0C])))
@@ -1038,7 +1038,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Starting subscribes to the radio and folds its events into the table`() async throws {
     let session = MockSignalBarsSession()
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let engine = SignalBarsEngine(
       session: session,
       configuration: SignalBarsEngine.Configuration(mode: .engine),
@@ -1063,7 +1063,7 @@ struct SignalBarsEngineTests {
   @Test
   func `Stopping unsubscribes from the radio`() async throws {
     let session = MockSignalBarsSession()
-    let engine = makeEngine(session: session, clock: TestClock(), mode: .viewer)
+    let engine = makeEngine(session: session, clock: SignalBarsTestClock(), mode: .viewer)
 
     await engine.start()
     try await waitForCondition("engine never subscribed") { await session.subscriberCount == 1 }

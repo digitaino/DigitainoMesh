@@ -130,7 +130,7 @@ struct SignalBarsNodeDirectoryTests {
 
   @Test
   func `a repeat lookup inside the cache window does not re-read the store`() async throws {
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let store = MockPersistenceStore()
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
@@ -160,7 +160,7 @@ struct SignalBarsNodeDirectoryTests {
 
   @Test
   func `the store is re-read once the cache window elapses`() async throws {
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let store = MockPersistenceStore()
     try await store.saveContact(.testContact(
       radioID: Self.radioID,
@@ -190,7 +190,7 @@ struct SignalBarsNodeDirectoryTests {
 
   @Test
   func `invalidate forces the next lookup to re-read`() async throws {
-    let clock = TestClock()
+    let clock = SignalBarsTestClock()
     let store = MockPersistenceStore()
     try await store.saveContact(.testContact(
       radioID: Self.radioID,

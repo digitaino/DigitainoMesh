@@ -58,7 +58,7 @@ import SwiftData
 ///   `AppState` and `NavigationCoordinator` when notification handling is
 ///   configured. The action closures are cleared in `tearDown()` because they
 ///   capture `NotificationActionHandler`, which strong-holds the service back.
-/// - `ChannelService.setDraftClearHandler` and
+/// - `ChannelService.setSlotOccupantChangedHandler` and
 ///   `DeviceService.setDeviceUpdateCallback`: installed by
 ///   `AppState.wireServicesIfConnected` per connection.
 /// - `NodeConfigService.setOnPostIdentityImport`: installed by
@@ -317,7 +317,8 @@ public final class ServiceContainer {
       dataStore: dataStore,
       syncCoordinator: syncCoordinator,
       notificationService: notificationService,
-      remoteNodeService: remoteNodeService
+      remoteNodeService: remoteNodeService,
+      radioID: radioID
     )
     contactService = ContactService(
       session: session,
@@ -338,7 +339,11 @@ public final class ServiceContainer {
     )
     settingsService = SettingsService(session: session)
     deviceService = DeviceService(dataStore: dataStore)
-    advertisementService = AdvertisementService(session: session, dataStore: dataStore)
+    advertisementService = AdvertisementService(
+      session: session,
+      dataStore: dataStore,
+      appStateProvider: appStateProvider
+    )
     let messagePollingService = MessagePollingService(session: session, dataStore: dataStore)
     self.messagePollingService = messagePollingService
     binaryProtocolService = BinaryProtocolService(session: session, dataStore: dataStore)
@@ -443,7 +448,8 @@ public final class ServiceContainer {
     roomServerService = RoomServerService(
       session: session,
       remoteNodeService: remoteNodeService,
-      dataStore: dataStore
+      dataStore: dataStore,
+      radioID: radioID
     )
 
     chatSendQueueService = ChatSendQueueService(
@@ -543,6 +549,7 @@ public final class ServiceContainer {
 
     await advertisementService.stopEventMonitoring()
     await rxLogService.stopEventMonitoring()
+    try? await dataStore.flushPendingRxLogEntries()
     await weatherAlertNotifier.stop()
     await weatherService.stopEventMonitoring()
     await messageService.stopEventMonitoring()

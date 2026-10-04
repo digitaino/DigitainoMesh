@@ -39,7 +39,7 @@ struct SignalMapperCaptureEngineTests {
     acks: ScriptedAckSource? = nil,
     store: PersistenceStore,
     fixes: StubMapperFixProvider,
-    clock: TestClock,
+    clock: SignalBarsTestClock,
     tuning: MapperTuning
   ) -> SignalMapperCaptureEngine {
     SignalMapperCaptureEngine(
@@ -60,7 +60,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `An entry with a usable fix lands in the res-9 cell and UTC day of that fix`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000)) // 2025-07-20 UTC
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000)) // 2025-07-20 UTC
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -93,7 +93,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `Two entries a few meters apart fold into one cell, a distant one opens a second`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -125,7 +125,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `Repeater sightings carry the packet's SNR on the hop we heard directly`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -159,7 +159,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A heard repeat folds as a txHeard observation, not as an rx one`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let repeats = ScriptedTxHeardSource()
@@ -186,7 +186,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A heard repeat's SNR is the repeater's rxSnr, never its txSnr`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let repeats = ScriptedTxHeardSource()
@@ -220,7 +220,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A heard repeat with no usable fix is dropped like any other observation`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let repeats = ScriptedTxHeardSource()
@@ -243,7 +243,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `An RX packet and a heard repeat in one cell-day keep their directions apart`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let repeats = ScriptedTxHeardSource()
@@ -273,7 +273,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A delivered ACK folds with its round-trip time and no packet`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let acks = ScriptedAckSource()
@@ -303,7 +303,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A delivered ACK without a round-trip time still counts as coverage`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let acks = ScriptedAckSource()
@@ -326,7 +326,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `Only delivered resolutions are ACKs; sent, failed and the rest are ignored`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let acks = ScriptedAckSource()
@@ -357,7 +357,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `An ACK with no usable fix is dropped rather than placed on a guess`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let acks = ScriptedAckSource()
@@ -381,7 +381,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `An ACK is tagged where the phone stands when it resolves, not where the send left`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let acks = ScriptedAckSource()
@@ -407,7 +407,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `No fix at all drops the observation`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let engine = makeEngine(
@@ -428,7 +428,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A fix older than fixMaxAge drops the observation`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let stale = mapperFix(at: clock.now.addingTimeInterval(-121))
@@ -449,7 +449,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A fix worse than fixMaxAccuracy drops the observation`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let vague = mapperFix(accuracy: 150, at: clock.now)
@@ -470,7 +470,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A negative accuracy is treated as no fix, not as perfect accuracy`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let invalid = mapperFix(accuracy: -1, at: clock.now)
@@ -489,7 +489,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A fix going stale mid-session stops capture without disturbing what was captured`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -519,7 +519,7 @@ struct SignalMapperCaptureEngineTests {
   func `Packets either side of UTC midnight split into two rows for the same cell`() async throws {
     // 2025-07-20 23:59:00 UTC.
     let beforeMidnight = Date(timeIntervalSince1970: 1_753_055_940)
-    let clock = TestClock(beforeMidnight)
+    let clock = SignalBarsTestClock(beforeMidnight)
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -549,7 +549,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A second flush of the same cell-day adds to the stored row instead of duplicating it`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -579,7 +579,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `Buffered entries reach the store when the count threshold trips, without a manual flush`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -602,7 +602,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `stop() writes out the tail of a session`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -621,7 +621,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `The same packetHash is folded once per session`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -646,7 +646,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A restarted session re-counts a packet the previous one had seen`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -677,7 +677,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `deleteAll empties the store`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -700,7 +700,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `An engine that was never started ignores entries`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -719,7 +719,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `Trace packets do not fold on the passive path`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -746,7 +746,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A probe result folds as an active rx sample with the TX leg attached`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -781,7 +781,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A probe result is gated by the fix policy like any packet`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(nil)
@@ -813,7 +813,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A probe attempt books probesSent into the current cell and returns the placement`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -834,7 +834,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `A probe result folds into its send-time placement, not the current fix`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -876,7 +876,7 @@ struct SignalMapperCaptureEngineTests {
   /// 2026-08-30). `probesAnswered` counts answered transmissions instead.
   @Test
   func `Six replies to one probe count as one answered probe, not six`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -913,7 +913,7 @@ struct SignalMapperCaptureEngineTests {
   /// round the lie up to 100%.
   @Test
   func `Replies straddling a flush still count as one answered probe`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -942,7 +942,7 @@ struct SignalMapperCaptureEngineTests {
 
   @Test
   func `The raw recorder hears a dropped sample with its reason while aggregates stay clean`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     // An accuracy the gate refuses: the aggregate path drops it, the raw log keeps it.
@@ -976,7 +976,7 @@ struct SignalMapperCaptureEngineTests {
   /// is defined against it.
   @Test
   func `A flood packet credits its last hop with our reading of it`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -1016,7 +1016,7 @@ struct SignalMapperCaptureEngineTests {
   /// names nobody.
   @Test
   func `A direct-routed packet credits nobody, and its raw row still keeps the path`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -1051,7 +1051,7 @@ struct SignalMapperCaptureEngineTests {
   /// says who the sender is, at offset 0 of its own body.
   @Test
   func `A zero-hop advert credits the advertiser at the packet's hash width`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -1080,7 +1080,7 @@ struct SignalMapperCaptureEngineTests {
   /// business and nothing in it names the transmitter.
   @Test
   func `A zero-hop packet that is not an advert credits nobody`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -1107,7 +1107,7 @@ struct SignalMapperCaptureEngineTests {
   /// about crediting *somebody else's* packet to a node we did not hear.
   @Test
   func `An echo keeps its whole path even when the echo arrived direct-routed`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let repeats = ScriptedTxHeardSource()
@@ -1148,7 +1148,7 @@ struct SignalMapperCaptureEngineTests {
   /// wired rather than only while one is running.
   @Test
   func `Raw rows carry the packet bytes and the route, with no ride involved`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let acks = ScriptedAckSource()

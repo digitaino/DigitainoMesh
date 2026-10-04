@@ -1,9 +1,13 @@
 import Foundation
 
-/// Store operations for correlating sent channel messages with heard repeats.
+/// Store operations for correlating RX observations with a known message.
 public protocol HeardRepeatPersisting: Actor {
   /// Find a sent channel message by exact channel, sender timestamp, and text on the sending radio
   func findSentChannelMessage(radioID: UUID, channelIndex: UInt8, timestamp: UInt32, text: String) async throws -> MessageDTO?
+
+  /// Same radio scope as `MessagePersisting.fetchMessage(deduplicationKey:radioID:)`.
+  /// Incoming extras join on the content-based key, not `Message.timestamp`.
+  func fetchMessage(deduplicationKey: String, radioID: UUID) async throws -> MessageDTO?
 
   /// Save a message repeat entry
   func saveMessageRepeat(_ dto: MessageRepeatDTO) async throws
@@ -42,6 +46,14 @@ public protocol HeardRepeatPersisting: Actor {
   /// forever (Rafael, 2026-09-05: "when we resend a message the eye/network view
   /// does not update"). Clearing all three lets the next echo stamp the new hash.
   func clearMessagePacketScope(id: UUID) async throws
+
+  /// Writes path columns only when they are still nil. Fetch by id; `#Predicate` cannot match `Data`.
+  /// Leaves snr and heardRepeats unchanged.
+  func adoptIncomingPathIfUnknown(
+    id: UUID,
+    pathNodes: Data,
+    pathLength: UInt8
+  ) async throws -> Bool
 
   /// Increment send count and return new count
   func incrementMessageSendCount(id: UUID) async throws -> Int

@@ -23,7 +23,7 @@ struct SignalMapperFixGateTests {
     store: PersistenceStore,
     fixes: StubMapperFixProvider,
     movementHints: (any MovementHintProvider)? = nil,
-    clock: TestClock,
+    clock: SignalBarsTestClock,
     tuning: MapperTuning
   ) -> SignalMapperCaptureEngine {
     SignalMapperCaptureEngine(
@@ -73,7 +73,7 @@ struct SignalMapperFixGateTests {
   /// with why it is doubtful; the aggregate side is untouched.
   @Test
   func `A fix that fails only on accuracy still places its raw row, and still folds nothing`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(accuracy: 500, at: clock.now))
@@ -101,7 +101,7 @@ struct SignalMapperFixGateTests {
   /// The other doubtful case: fresh enough for the flat budget, too old for its own speed.
   @Test
   func `A fix stale only against its own speed still places its raw row`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     // 30 s old at 20 m/s: inside the flat 120 s, well past the 150 m displacement budget.
@@ -129,7 +129,7 @@ struct SignalMapperFixGateTests {
   /// worse than a missing cell, because it looks like data.
   @Test
   func `No fix and a moved-away fix still place nothing`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(nil)
@@ -165,7 +165,7 @@ struct SignalMapperFixGateTests {
   /// what the strip's fix-health chip is watching.
   @Test
   func `A negative accuracy is CoreLocation's no-fix sentinel and places nothing`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(
@@ -229,7 +229,7 @@ struct SignalMapperFixGateTests {
 
   @Test
   func `A fresh, accurate fix the phone has moved away from is dropped`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     // One second old and accurate to 10 m — it passes every test the gate had before.
@@ -255,7 +255,7 @@ struct SignalMapperFixGateTests {
   @Test
   func `The same fix without the mark is folded`() async throws {
     // The control for the test above: nothing but `movedSinceCapture` differs.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(mapperFix(accuracy: 10, at: clock.now.addingTimeInterval(-1)))
@@ -297,7 +297,7 @@ struct SignalMapperFixGateTests {
   func `A 119-second fix at driving speed is dropped where a parked one is kept`() async throws {
     // The auditor's case, end to end: at 15 m/s that fix points about 1.8 km back down the
     // road — roughly five res-9 cells — and used to pass the gate untouched.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(
@@ -327,7 +327,7 @@ struct SignalMapperFixGateTests {
   func `The displacement budget still binds with motion permission declined`() async throws {
     // No movement hints wired at all — the state a user who said no to Motion & Fitness is
     // in — and the fix is therefore never marked moved. Speed alone has to carry it.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let fixes = StubMapperFixProvider(
@@ -351,7 +351,7 @@ struct SignalMapperFixGateTests {
 
   @Test
   func `Observations captured while stationary are counted as dwell`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let hints = StubMovementHintProvider(.stationary)
@@ -384,7 +384,7 @@ struct SignalMapperFixGateTests {
     // Nil is "we don't know", not "standing still". If it were treated as stationary, a
     // user who declined Motion & Fitness would have every cell they visit for five days —
     // their whole commute — declared an anchor.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let engine = makeEngine(
@@ -411,7 +411,7 @@ struct SignalMapperFixGateTests {
 
   @Test
   func `Observations inside an anchor's disc are dropped before they fold`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let home = try #require(MapperFixtureLocation.cell(MapperFixtureLocation.plaza))
@@ -456,7 +456,7 @@ struct SignalMapperFixGateTests {
 
   @Test
   func `A cell outside every disc keeps capturing normally`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let home = try #require(MapperFixtureLocation.cell(MapperFixtureLocation.plaza))
@@ -498,7 +498,7 @@ struct SignalMapperFixGateTests {
   func `Recomputing anchors purges the buffered cells too`() async throws {
     // A cell can cross the threshold while its own observations are still in the in-memory
     // aggregate. Flushing them after raising the disc would put back what was just deleted.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()
     let source = ScriptedRxEntrySource()
     let home = try #require(MapperFixtureLocation.cell(MapperFixtureLocation.plaza))

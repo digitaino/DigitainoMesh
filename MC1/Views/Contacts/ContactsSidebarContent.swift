@@ -5,6 +5,11 @@ import SwiftUI
 private let sidebarLogger = Logger(subsystem: "com.mc1", category: "NodesListView")
 
 struct ContactsSidebarContent: View {
+  private struct LoadID: Equatable {
+    let servicesVersion: Int
+    let contactsVersion: Int
+  }
+
   @Environment(\.appState) private var appState
 
   @Bindable var viewModel: ContactsViewModel
@@ -37,7 +42,8 @@ struct ContactsSidebarContent: View {
       searchText: searchText,
       filteredContacts: filteredContacts,
       hasLoadedOnce: viewModel.hasLoadedOnce,
-      viewModel: viewModel
+      viewModel: viewModel,
+      onRefresh: refreshNodes
     )
     .navigationTitle(L10n.Contacts.Contacts.List.title)
     .navigationDestination(for: ContactRoute.self) { route in
@@ -56,7 +62,13 @@ struct ContactsSidebarContent: View {
       // the list's own toolbar (below) no longer applies.
       .radioStatusToolbar()
     }
-    .searchable(text: $searchText, prompt: searchPrompt)
+    // Always-visible drawer keeps search below the large title. Default toolbar
+    // placement on iOS 26 draws both in the same slot.
+    .searchable(
+      text: $searchText,
+      placement: .navigationBarDrawer(displayMode: .always),
+      prompt: searchPrompt
+    )
     .toolbar {
       radioStatusToolbarItems(placement: .topBarLeading)
 
@@ -128,17 +140,6 @@ struct ContactsSidebarContent: View {
         }
       }
     }
-    .refreshable {
-      if appState.connectionState != .ready {
-        showOfflineRefreshAlert = true
-      } else {
-        // SwiftUI cancels a ScrollView's `.refreshable` task when observed state mutates
-        // mid-refresh (syncContacts sets `isSyncing`, re-evaluating this view), aborting the
-        // sync within a frame. Running it in a detached task shields it from that cancellation;
-        // awaiting the value keeps the refresh spinner up until the sync finishes.
-        await Task { await onSyncContacts() }.value
-      }
-    }
     .alert(L10n.Contacts.Contacts.List.cannotRefresh, isPresented: $showOfflineRefreshAlert) {
       Button(L10n.Contacts.Contacts.Common.ok, role: .cancel) {}
     } message: {
@@ -152,14 +153,19 @@ struct ContactsSidebarContent: View {
         contactService: { [appState] in appState.services?.contactService },
         advertisementService: { [appState] in appState.services?.advertisementService }
       )
-      await onLoadContacts()
-      sidebarLogger.info("NodesListView: loaded, contacts=\(viewModel.contacts.count)")
       onAnnounceOfflineStateIfNeeded()
 
       // Request location for distance display (only if already authorized)
       if appState.locationService.isAuthorized {
         appState.locationService.requestLocation()
       }
+    }
+    .task(id: LoadID(
+      servicesVersion: appState.servicesVersion,
+      contactsVersion: appState.contactsVersion
+    )) {
+      await onLoadContacts()
+      sidebarLogger.info("NodesListView: loaded, contacts=\(viewModel.contacts.count)")
     }
     .task(id: sortOrder) {
       if sortOrder == .distance {
@@ -170,16 +176,6 @@ struct ContactsSidebarContent: View {
         } else {
           appState.locationService.requestPermissionIfNeeded()
         }
-      }
-    }
-    .onChange(of: appState.servicesVersion) { _, _ in
-      Task {
-        await onLoadContacts()
-      }
-    }
-    .onChange(of: appState.contactsVersion) { _, _ in
-      Task {
-        await onLoadContacts()
       }
     }
     .onChange(of: viewModel.hasLoadedOnce) { _, loaded in
@@ -198,6 +194,8 @@ struct ContactsSidebarContent: View {
     }
     .onChange(of: appState.navigation.pendingContactDetail, initial: true) { _, contact in
       guard let contact else { return }
+
+      viewModel.upsert(contact)
 
       if shouldUseSplitView {
         selectedContact = contact
@@ -243,5 +241,15 @@ struct ContactsSidebarContent: View {
       Text(L10n.Contacts.Contacts.List.distanceRequiresLocation)
     }
     .errorAlert($viewModel.errorMessage, title: L10n.Contacts.Contacts.Common.error)
+  }
+
+  /// SwiftUI cancels a ScrollView's `.refreshable` task when observed state mutates
+  /// mid-refresh (`isSyncing`). The detached task shields the sync from that cancellation.
+  private func refreshNodes() async {
+    if appState.connectionState != .ready {
+      showOfflineRefreshAlert = true
+    } else {
+      await Task { await onSyncContacts() }.value
+    }
   }
 }

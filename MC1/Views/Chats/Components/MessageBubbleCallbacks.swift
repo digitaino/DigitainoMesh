@@ -14,7 +14,6 @@ struct MessageBubbleCallbacks {
   var onResendSamePower: (() -> Void)?
   /// No-repeats retry card: escalate TX power one rung, then resend.
   var onResendAtNextPower: (() -> Void)?
-  var onReaction: ((String) -> Void)?
   var onLongPress: (() -> Void)?
   /// Reply to this message. Backs the swipe-right gesture's VoiceOver equivalent; the
   /// gesture itself is applied outside the bubble by `ChatCellContentFactory`.

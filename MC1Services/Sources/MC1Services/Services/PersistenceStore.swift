@@ -32,13 +32,72 @@ extension PersistenceStoreError: LocalizedError {
 
 // MARK: - PersistenceStore Actor
 
+/// `DefaultSerialModelExecutor` runs jobs on the caller's thread, so a
+/// main-actor caller would run SwiftData work on the main thread.  This runs
+/// the actor and owns its `ModelContext` on a dedicated queue instead.
+private final class StoreExecutor: SerialModelExecutor, @unchecked Sendable {
+  let modelContext: ModelContext
+  private let queue: DispatchSerialQueue
+
+  init(container: ModelContainer) {
+    let queue = DispatchSerialQueue(label: "PersistenceStore")
+    modelContext = queue.sync { ModelContext(container) }
+    self.queue = queue
+  }
+
+  func enqueue(_ job: consuming ExecutorJob) {
+    queue.enqueue(job)
+  }
+
+  func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+    queue.asUnownedSerialExecutor()
+  }
+}
+
 /// ModelActor for background SwiftData operations.
 /// Provides per-device data isolation and thread-safe access.
-@ModelActor
-public actor PersistenceStore: PersistenceStoreProtocol {
+public actor PersistenceStore: ModelActor, PersistenceStoreProtocol {
+  public nonisolated let modelExecutor: any ModelExecutor
+  public nonisolated let modelContainer: ModelContainer
+
+  public init(modelContainer: ModelContainer) {
+    modelExecutor = StoreExecutor(container: modelContainer)
+    self.modelContainer = modelContainer
+  }
+
   var rxLogEntryCountsByDevice: [UUID: Int] = [:]
+  var unsavedRxLogInsertCount = 0
+  var rxLogFlushTask: Task<Void, Never>?
+
+  func commitPendingRxLogEntries() throws {
+    rxLogFlushTask?.cancel()
+    rxLogFlushTask = nil
+    guard unsavedRxLogInsertCount > 0 else { return }
+    try modelContext.save()
+    #if DEBUG
+      rxLogInitiatedSaveCount += 1
+    #endif
+    unsavedRxLogInsertCount = 0
+    for radioID in Array(rxLogEntryCountsByDevice.keys) {
+      try pruneRxLogEntries(radioID: radioID)
+    }
+  }
 
   #if DEBUG
+    /// Inserts since the last RxLog-initiated `modelContext.save()`. Does not
+    /// count piggyback saves from other store APIs.
+    var rxLogInitiatedSaveCount = 0
+
+    /// Test-only hook fired immediately before `modelContext.save()` in `batchSaveChannels`.
+    var batchSaveChannelsFaultInjection: (@Sendable () throws -> Void)?
+
+    /// Test-only hook fired immediately before `modelContext.save()` in
+    /// `deleteMessagesForChannel`.
+    var deleteMessagesForChannelFaultInjection: (@Sendable () throws -> Void)?
+
+    /// Test-only hook fired immediately before `modelContext.save()` in `deleteContacts`.
+    var deleteContactsFaultInjection: (@Sendable () throws -> Void)?
+
     /// Test-only fault-injection hook fired immediately before `modelContext.save()`
     /// in `importBackupDatabase`. Debug-only so the production API stays clean.
     /// SwiftData upserts on unique-constraint conflicts, so there is no reliable
@@ -56,6 +115,13 @@ public actor PersistenceStore: PersistenceStoreProtocol {
     /// closures — a real SwiftData save failure here is otherwise hard to
     /// provoke from a well-formed row.
     var incrementPendingSendAttemptCountFaultInjection: (@Sendable () throws -> Void)?
+
+    /// Test-only hook at the top of `fetchDevice(id:)`. The pairing query skips that id on throw.
+    var fetchDeviceByIDFaultInjection: (@Sendable () throws -> Void)?
+
+    func setDeleteContactsFaultInjection(_ hook: (@Sendable () throws -> Void)?) {
+      deleteContactsFaultInjection = hook
+    }
   #endif
 
   /// Shared schema for DigitainoMesh models

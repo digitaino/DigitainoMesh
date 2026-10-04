@@ -20,7 +20,7 @@ func nodeID(_ hex: String) -> NodeHexID {
 
 /// A clock the test moves by hand, so probe timeouts and staleness are produced by
 /// arithmetic rather than by waiting.
-final class TestClock: Sendable {
+final class SignalBarsTestClock: Sendable {
   private let state: OSAllocatedUnfairLock<Date>
 
   init(_ start: Date = Date(timeIntervalSince1970: 1_700_000_000)) {

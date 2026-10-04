@@ -1,689 +1,32 @@
 import CoreLocation
+import CryptoKit
 import MapKit
 import MapLibre
 import MC1Services
 import SwiftUI
 
-/// Which path `MessagePathMapView` draws: the path recorded on a message
-/// itself, or a route another user embedded in message text via Reply with
-/// Route. The endpoints differ with the source: a message's own path runs
-/// sender → hops → this device, while a shared route describes a reception at
-/// the *sender's* device, so only its hops are plottable — pinning our
-/// location or the sender's as an endpoint would assert geography the text
-/// never claimed.
-enum MessagePathMapSource {
-  case message(MessageDTO)
-  case sharedRoute(SharedRoute)
-
-  /// Per-hop hash bytes to resolve against known repeaters. A message's own
-  /// path is a flat blob chunked by its hash size; a shared route already
-  /// carries per-hop bytes (sizes may vary hop to hop).
-  var hopHashes: [Data] {
-    switch self {
-    case let .message(message):
-      guard let pathNodes = message.pathNodes else { return [] }
-      let size = message.pathHashSize
-      return stride(from: 0, to: pathNodes.count, by: size).map { start -> Data in
-        Data(pathNodes[start..<min(start + size, pathNodes.count)])
-      }
-    case let .sharedRoute(route):
-      return route.hashBytesPerHop
-    }
-  }
-
-  /// Total intermediate-hop count, including hops too ambiguous to plot. For a
-  /// message's own path a `nil` `pathNodes` yields 0, which is indistinguishable
-  /// between a genuine direct message and firmware that omits path data. For a
-  /// shared route this is the sender's stated count, matching the card.
-  var totalHopCount: Int {
-    switch self {
-    case let .message(message): message.pathHops.count
-    case let .sharedRoute(route): route.hopCount
-    }
-  }
-}
-
-/// The full-screen path map: `MessagePathMapCanvas` under its own navigation
-/// chrome. This is the whole path experience for a shared route, whose hops
-/// are all the text claims; a message's own path gets the combined
-/// `MessagePathDetailView` instead, where this canvas fills the screen under a
-/// floating hop panel.
 struct MessagePathMapView: View {
-  @Environment(\.appState) private var appState
-  @Environment(\.dismiss) private var dismiss
-
-  let source: MessagePathMapSource
-  let pathViewModel: MessagePathViewModel
-
-  @State private var locatedNodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)] = []
-
-  /// Why the map is empty. A message with no path data and a shared route whose
-  /// repeaters this device doesn't know are different failures — the second one
-  /// invites fixing (get the repeaters' adverts) rather than shrugging.
-  private var emptyStateDescription: String {
-    switch source {
-    case .message: L10n.Chats.Chats.Path.Unavailable.description
-    case .sharedRoute: L10n.Chats.Chats.SharedRoute.Unavailable.description
-    }
-  }
-
-  var body: some View {
-    NavigationStack {
-      Group {
-        if pathViewModel.isLoading {
-          ProgressView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if locatedNodes.isEmpty {
-          ContentUnavailableView(
-            L10n.Chats.Chats.Path.Unavailable.title,
-            systemImage: "map",
-            description: Text(emptyStateDescription)
-          )
-        } else {
-          MessagePathMapCanvas(locatedNodes: locatedNodes)
-        }
-      }
-      .toolbar {
-        if !locatedNodes.isEmpty {
-          ToolbarItem(placement: .principal) {
-            PathDistanceBanner(
-              hopCount: source.totalHopCount,
-              totalPathDistance: locatedNodes.map(\.coordinate).totalDistance()
-            )
-          }
-        }
-        ToolbarItem(placement: .confirmationAction) {
-          Button(L10n.Localizable.Common.done) { dismiss() }
-        }
-      }
-      .navigationBarTitleDisplayMode(.inline)
-      .onAppear {
-        // Only a message's own path with no recorded fix plots anything from
-        // the live location (the fallback receiver pin) — a stamped message is
-        // anchored to its stamp and a shared route plots no endpoints — so
-        // that's the one case worth waking GPS for. The cached fix can predate
-        // a suspend; the sample onChange below moves the pin when a live one
-        // lands.
-        if needsLiveLocationFallback {
-          appState.requestPhoneFixIfStale()
-        }
-        locatedNodes = buildLocatedNodes()
-      }
-      // The shared-route card presents this with the contacts fetch still in
-      // flight — the `onAppear` build then runs against an empty pool and would
-      // stick on the empty state forever. Rebuild when the load lands.
-      .onChange(of: pathViewModel.isLoading) { _, isLoading in
-        guard !isLoading else { return }
-        locatedNodes = buildLocatedNodes()
-      }
-      // A fresh fix landed: an unstamped message path pins the receiver at it,
-      // so rebuild. Inert for stamped messages (anchored to their recorded
-      // fix) and shared routes (no endpoints), so those skip the churn.
-      .onChange(of: locationSample) { _, _ in
-        guard needsLiveLocationFallback else { return }
-        locatedNodes = buildLocatedNodes()
-      }
-    }
-  }
-
-  /// Whether anything on this screen is actually derived from the live phone
-  /// location: only a message's own path whose receiver pin lacks a recorded
-  /// receive-time fix.
-  private var needsLiveLocationFallback: Bool {
-    if case let .message(message) = source { return message.userFixCoordinate == nil }
-    return false
-  }
-
-  /// Value-typed projection of `bestAvailableLocation`, so `onChange` compares
-  /// coordinates, not `CLLocation` identity (the radio-GPS fallback allocates a
-  /// fresh object on every read).
-  private var locationSample: LocationSample? {
-    guard let location = appState.bestAvailableLocation else { return nil }
-    return LocationSample(
-      latitude: location.coordinate.latitude,
-      longitude: location.coordinate.longitude
-    )
-  }
-
-  private func buildLocatedNodes() -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
-    Self.locatedNodes(
-      for: source,
-      contacts: pathViewModel.contacts,
-      repeaters: pathViewModel.repeaters,
-      discoveredRepeaters: pathViewModel.discoveredRepeaters,
-      userLocation: appState.bestAvailableLocation,
-      receiverName: appState.connectedDevice?.nodeName
-    )
-  }
-
-  /// The one "where was the receiver" reference: the fix stamped onto the
-  /// message at live receive time when it has one, else the caller's live
-  /// location. Shared by the map builder below and the hop list's
-  /// disambiguation (`MessagePathDetailView`) so an ambiguous hop can never be
-  /// named differently in the list than it is pinned on the map.
-  static func receiverReference(
-    for source: MessagePathMapSource,
-    userLocation: CLLocation?
-  ) -> CLLocation? {
-    if case let .message(message) = source, let coord = message.userFixCoordinate {
-      return CLLocation(latitude: coord.latitude, longitude: coord.longitude)
-    }
-    return userLocation
-  }
-
-  /// Builds the plottable nodes for a path source. Static with injected inputs
-  /// so the map and the Reply-with-Route composer share one resolution rule —
-  /// exact-match only, deduped, endpoints only for a message's own path — and
-  /// a shared distance can never disagree with the drawn polyline.
-  static func locatedNodes(
-    for source: MessagePathMapSource,
-    contacts: [ContactDTO],
-    repeaters: [ContactDTO],
-    discoveredRepeaters: [DiscoveredNodeDTO],
-    userLocation: CLLocation?,
-    receiverName: String?
-  ) -> [(point: MapPoint, coordinate: CLLocationCoordinate2D)] {
-    var nodes: [(MapPoint, CLLocationCoordinate2D)] = []
-
-    // Where the receiver *was*: everything receiver-relative — the B pin and
-    // the proximity reference for ambiguous hop hashes — uses the reception's
-    // own geography when the message carries it, not wherever the user
-    // happens to be standing when they open this screen later. Unstamped rows
-    // (backlog drains, no fresh fix at receive, legacy) fall back to the live
-    // `userLocation`.
-    let stampedFix: CLLocationCoordinate2D? = if case let .message(message) = source {
-      message.userFixCoordinate
-    } else {
-      nil
-    }
-    let referenceLocation = receiverReference(for: source, userLocation: userLocation)
-
-    // Sender. Only a message's own path has endpoints (see MessagePathMapSource).
-    // Resolution is the shared rule: key prefix for DMs, unique sender name for
-    // channel rows. The name branch is a weaker identity than a key prefix, and it
-    // reaches the wire: `MessagePathDetailView.routeInfoText` derives its distance
-    // from these nodes, and other clients parse that string back through
-    // `SharedRouteParser`. Kept deliberately (decided 2026-08-29) so one rule serves
-    // the map, the hop list, and the shared route alike — the invariant this builder
-    // exists to hold is that a shared distance never disagrees with the drawn
-    // polyline. `locatedSender` only accepts a name when exactly one contact matches,
-    // which is the same never-guess-when-ambiguous discipline the hop resolution uses.
-    if case let .message(message) = source,
-       let sender = MessagePathViewModel.locatedSender(for: message, contacts: contacts) {
-      let coord = CLLocationCoordinate2D(latitude: sender.latitude, longitude: sender.longitude)
-      nodes.append((MapPoint(
-        id: sender.id,
-        coordinate: coord,
-        pinStyle: .pointA,
-        label: sender.displayName,
-        isClusterable: false,
-        hopIndex: nil,
-        badgeText: nil
-      ), coord))
-    }
-
-    // Repeater hops. Exact-match only (see `resolvePlottableRepeater`);
-    // deduped so a repeater appearing in several positions pins once.
-    var seenKeys = Set<Data>()
-    for (index, hashBytes) in source.hopHashes.enumerated() {
-      guard let r = resolvePlottableRepeater(
-        hashBytes: hashBytes,
-        repeaters: repeaters,
-        discoveredRepeaters: discoveredRepeaters,
-        referenceLocation: referenceLocation
-      ) else { continue }
-      if seenKeys.insert(r.publicKey).inserted {
-        let coord = CLLocationCoordinate2D(latitude: r.latitude, longitude: r.longitude)
-        nodes.append((MapPoint(
-          id: UUID(),
-          coordinate: coord,
-          pinStyle: .repeaterHop,
-          label: r.resolvableName,
-          isClusterable: false,
-          hopIndex: index + 1,
-          badgeText: nil
-        ), coord))
-      }
-    }
-
-    // Receiver (this device). First choice is the fix stamped at receive time —
-    // the pin claims "where this message arrived", and only the stamp actually
-    // knows that. The fallback for unstamped rows is `bestAvailableLocation`:
-    // it prefers phone GPS and only falls back to the radio's stored
-    // coordinates — the radio is physically at the user's side, while its
-    // *configured* location is a manually-set advert value that can be
-    // arbitrarily stale. The fallback phone fix can itself be aged (cached
-    // from before a suspend, blocks away), so hosts request a fresh one on
-    // appear and rebuild these nodes when it lands.
-    if case .message = source, let coord = stampedFix ?? userLocation?.coordinate {
-      nodes.append((MapPoint(
-        id: UUID(),
-        coordinate: coord,
-        pinStyle: .pointB,
-        label: receiverName,
-        isClusterable: false,
-        hopIndex: nil,
-        badgeText: nil
-      ), coord))
-    }
-
-    return nodes
-  }
-
-  /// The one hop-hash resolution rule every path-shaped map shares: a hop is
-  /// plottable only when it resolves to a single, unambiguous repeater with a
-  /// location (exact match). A 1-byte path hash can't tell apart repeaters
-  /// sharing a first key byte, so ambiguous hops — where several known
-  /// repeaters share the hash — are skipped rather than guessed at by
-  /// proximity, which is what produced the criss-crossing pile-ups.
-  static func resolvePlottableRepeater(
-    hashBytes: Data,
-    repeaters: [ContactDTO],
-    discoveredRepeaters: [DiscoveredNodeDTO],
-    referenceLocation: CLLocation?
-  ) -> (any RepeaterResolvable)? {
-    // `RepeaterResolver` judges ambiguity within one table at a time, so a
-    // contact and a discovered node sharing the hash but holding different
-    // full keys would each read `.exact` in isolation. A short hash matching
-    // more than one distinct key across BOTH tables is just as ambiguous as
-    // within one (`NeighborNameResolver` applies the same refinement for
-    // names); 6+ bytes of hash is a full prefix and can't collide. Ambiguity
-    // is judged among the candidates that could still BE the hop: an expired
-    // advert row — the old identity a re-keyed repeater left behind, a node
-    // that moved away — must not veto its own living successor, but when
-    // every candidate is stale they all stay in play (the pruning is
-    // relative, shared with `RepeaterResolver.resolve`).
-    let (matchedContacts, matchedNodes) = RepeaterResolver.pruneExpiredRivals(
-      contacts: repeaters.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes },
-      discoveredNodes: discoveredRepeaters.filter { $0.publicKey.prefix(hashBytes.count) == hashBytes }
-    )
-    if hashBytes.count < 6 {
-      let matchingKeys = Set(matchedContacts.map(\.publicKey) + matchedNodes.map(\.publicKey))
-      guard matchingKeys.count <= 1 else { return nil }
-    }
-    let resolvedContact = RepeaterResolver.resolve(for: hashBytes, in: matchedContacts, userLocation: referenceLocation)
-    let resolvedNode = RepeaterResolver.resolve(for: hashBytes, in: matchedNodes, userLocation: referenceLocation)
-    // Both tables describe one node per key, so pick the first candidate
-    // that can actually be plotted, contact first: a contact row that never
-    // recorded a fix must not shadow the located discovered row behind the
-    // same key. Discovered rows get the full `isValidFix` check — their
-    // `hasLocation` skips the coordinate-range validation contacts do.
-    let candidates: [(node: any RepeaterResolvable, matchKind: NodeNameMatchKind)] = [
-      resolvedContact.map { ($0.node as any RepeaterResolvable, $0.matchKind) },
-      resolvedNode.map { ($0.node as any RepeaterResolvable, $0.matchKind) },
-    ].compactMap(\.self)
-    return candidates.first {
-      $0.matchKind == .exact
-        && CLLocationCoordinate2D(latitude: $0.node.latitude, longitude: $0.node.longitude).isValidFix
-    }?.node
-  }
-
-  /// Builds the plottable pins and per-repeat polylines for an outgoing
-  /// message's heard repeats. Same construction rules as `locatedNodes` — the
-  /// shared exact-match hop resolution, pins deduped by public key — plus the
-  /// echo geometry: each repeat traces origin → its resolved hops in path
-  /// order → back to origin, the "we heard ourselves again" round trip. A hop
-  /// that can't be plotted is skipped (the drawn loop is then a lower bound,
-  /// like the path screen's polyline); a repeat with no plottable hops draws
-  /// nothing.
-  ///
-  /// Pins carry their 1-based path position as the hop number; a repeater that
-  /// sits at *different* positions in different echoes keeps the plain pin —
-  /// one number would be a lie.
-  ///
-  /// The closing leg — the repeater we actually heard the echo from, back to
-  /// us — is where the row's SNR was measured, so it is drawn with the same
-  /// SNR treatment the trace and neighbor maps use: an `forSNR`-styled line
-  /// and a midpoint "distance · SNR dB" badge. That treatment only applies
-  /// when the plotted tail sits at the path's final position; if the true
-  /// tail could not be resolved, the loop closes neutrally, because the drawn
-  /// leg is then not the leg the radio measured. Echoes sharing a tail are
-  /// repeated measurements of the same link on coincident geometry — they fan
-  /// into shallow arcs bowing to alternating sides (latest innermost, badges
-  /// riding each arc's apex) so every measurement stays visible. A measured
-  /// leg with no SNR value stays neutral rather than borrowing the trace
-  /// map's "never measured" dashes.
-  ///
-  /// The origin is the send-time stamp when the message carries one, else the
-  /// caller's live location. With no origin at all, resolved repeaters still
-  /// pin — there is just no round trip to trace, only hop-to-hop segments.
-  static func heardRepeatNodes(
-    message: MessageDTO,
-    repeats: [MessageRepeatDTO],
-    repeaters: [ContactDTO],
-    discoveredRepeaters: [DiscoveredNodeDTO],
-    userLocation: CLLocation?,
-    originName: String?
-  ) -> (nodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)], lines: [MapLine]) {
-    var nodes: [(MapPoint, CLLocationCoordinate2D)] = []
-    var lines: [MapLine] = []
-
-    let originCoord = message.userFixCoordinate ?? userLocation?.coordinate
-    let referenceLocation: CLLocation? = originCoord.map {
-      CLLocation(latitude: $0.latitude, longitude: $0.longitude)
-    }
-
-    if let originCoord {
-      nodes.append((MapPoint(
-        id: UUID(),
-        coordinate: originCoord,
-        pinStyle: .pointB,
-        label: originName,
-        isClusterable: false,
-        hopIndex: nil,
-        badgeText: nil
-      ), originCoord))
-    }
-
-    // Pass 1: resolve every hop of every repeat, remembering each repeater's
-    // path position(s) so the pins built afterwards can number themselves.
-    struct PlottedHop {
-      let key: Data
-      let coordinate: CLLocationCoordinate2D
-      /// 1-based position within its repeat's full path (unplottable hops
-      /// still count — the number states where in the path this repeater sat).
-      let position: Int
-    }
-    var plottedByRepeat: [[PlottedHop]] = []
-    var pinOrder: [Data] = []
-    var pinInfo: [Data: (name: String, coordinate: CLLocationCoordinate2D, positions: Set<Int>)] = [:]
-
-    for repeatEntry in repeats {
-      let hashes = repeatEntry.hopHashes
-      var plotted: [PlottedHop] = []
-      for (index, hashBytes) in hashes.enumerated() {
-        guard let r = resolvePlottableRepeater(
-          hashBytes: hashBytes,
-          repeaters: repeaters,
-          discoveredRepeaters: discoveredRepeaters,
-          referenceLocation: referenceLocation
-        ) else { continue }
-        let coord = CLLocationCoordinate2D(latitude: r.latitude, longitude: r.longitude)
-        let position = index + 1
-        plotted.append(PlottedHop(key: r.publicKey, coordinate: coord, position: position))
-        if var info = pinInfo[r.publicKey] {
-          info.positions.insert(position)
-          pinInfo[r.publicKey] = info
-        } else {
-          pinOrder.append(r.publicKey)
-          pinInfo[r.publicKey] = (r.resolvableName, coord, [position])
-        }
-      }
-      plottedByRepeat.append(plotted)
-    }
-
-    for key in pinOrder {
-      guard let info = pinInfo[key] else { continue }
-      nodes.append((MapPoint(
-        id: UUID(),
-        coordinate: info.coordinate,
-        pinStyle: .repeaterHop,
-        label: info.name,
-        isClusterable: false,
-        hopIndex: info.positions.count == 1 ? info.positions.first : nil,
-        badgeText: nil
-      ), info.coordinate))
-    }
-
-    // Pass 2: lines. The reception leg gets the SNR treatment only when the
-    // plotted tail sits at the path's final position — otherwise the drawn
-    // closing leg is not the leg the radio measured. Several echoes ending at
-    // the same repeater are repeated measurements of the same tail→us link on
-    // coincident geometry, so they fan into arcs bowing to alternating sides
-    // (latest measurement innermost) — drawn straight they'd overdraw, and
-    // layer order rather than data would pick which SNR color survives.
-    struct ReceptionLeg {
-      let coordinate: CLLocationCoordinate2D
-      let snr: Double?
-      let receivedAt: Date
-    }
-    var legOrder: [Data] = []
-    var legsByTail: [Data: [ReceptionLeg]] = [:]
-
-    for (index, repeatEntry) in repeats.enumerated() {
-      let plotted = plottedByRepeat[index]
-      guard let lastPlotted = plotted.last else { continue }
-      let hopCoords = plotted.map(\.coordinate)
-      let tailIsPlotted = lastPlotted.position == repeatEntry.hopHashes.count
-
-      guard let originCoord else {
-        // No origin: no round trip and no reception leg — just the surviving
-        // hop-to-hop segments.
-        if hopCoords.count >= 2 {
-          lines.append(MapLine(
-            id: "repeat-\(index)-body",
-            coordinates: hopCoords,
-            style: .messagePath,
-            opacity: 1.0
-          ))
-        }
-        continue
-      }
-
-      if tailIsPlotted {
-        // Outbound body up to the tail; the reception leg home is emitted
-        // after the loop, merged per tail. A one-hop echo IS its reception
-        // leg — no body to draw under it.
-        if hopCoords.count >= 2 {
-          lines.append(MapLine(
-            id: "repeat-\(index)-body",
-            coordinates: [originCoord] + hopCoords,
-            style: .messagePath,
-            opacity: 1.0
-          ))
-        }
-        if legsByTail[lastPlotted.key] == nil {
-          legOrder.append(lastPlotted.key)
-        }
-        legsByTail[lastPlotted.key, default: []].append(ReceptionLeg(
-          coordinate: lastPlotted.coordinate,
-          snr: repeatEntry.snr,
-          receivedAt: repeatEntry.receivedAt
-        ))
-      } else {
-        // The measured leg's repeater is unplottable — close neutrally.
-        lines.append(MapLine(
-          id: "repeat-\(index)-body",
-          coordinates: [originCoord] + hopCoords + [originCoord],
-          style: .messagePath,
-          opacity: 1.0
-        ))
-      }
-    }
-
-    if let originCoord {
-      for key in legOrder {
-        guard let legs = legsByTail[key] else { continue }
-        let tailID = key.prefix(4).map { String(format: "%02x", $0) }.joined()
-        // Latest measurement first so it takes the innermost arc; ties keep
-        // collection order (Swift's sort is not guaranteed stable).
-        let ranked = legs.enumerated().sorted {
-          if $0.element.receivedAt != $1.element.receivedAt {
-            return $0.element.receivedAt > $1.element.receivedAt
-          }
-          return $0.offset < $1.offset
-        }.map(\.element)
-        for (rank, leg) in ranked.enumerated() {
-          let arc = Self.legArcCoordinates(
-            from: leg.coordinate,
-            to: originCoord,
-            offsetStep: Self.arcOffsetStep(rank: rank, of: ranked.count)
-          )
-          // A measured-but-SNR-less echo keeps the neutral style: the trace
-          // map's dashed-gray "untraced" reads as *never measured*, which
-          // this leg was — it just carries no number to color by (no badge).
-          lines.append(MapLine(
-            id: "rx-\(tailID)-\(rank)",
-            coordinates: arc,
-            style: leg.snr != nil ? .forSNR(leg.snr) : .messagePath,
-            opacity: 1.0
-          ))
-          if let snr = leg.snr {
-            let badge: MapPoint
-            if arc.count == 2 {
-              // Straight leg: the house chord-midpoint badge. (Its "apex"
-              // would be arc[1] — the origin pin itself.)
-              badge = MapLine.snrBadge(id: UUID(), from: leg.coordinate, to: originCoord, snr: snr)
-            } else {
-              // Fanned leg: the badge rides its own arc's apex, so coincident
-              // legs spread their readouts apart instead of stacking them.
-              // Distance stays the straight link distance, not arc length.
-              let distance = CLLocation(latitude: leg.coordinate.latitude, longitude: leg.coordinate.longitude)
-                .distance(from: CLLocation(latitude: originCoord.latitude, longitude: originCoord.longitude))
-              let apex = arc[arc.count / 2]
-              badge = MapPoint(
-                id: UUID(),
-                coordinate: apex,
-                pinStyle: .badge,
-                label: nil,
-                isClusterable: false,
-                hopIndex: nil,
-                badgeText: MapLine.snrBadgeText(distance: distance, snr: snr)
-              )
-            }
-            nodes.append((badge, badge.coordinate))
-          }
-        }
-      }
-    }
-
-    return (nodes, lines)
-  }
-
-  /// Which side and how far the `rank`-th coincident reception leg bows:
-  /// 0 for a lone leg (straight), else +1, -1, +2, -2… — symmetric pairs
-  /// fanning outward, the latest measurement hugging the true line closest.
-  static func arcOffsetStep(rank: Int, of count: Int) -> Int {
-    guard count > 1 else { return 0 }
-    let magnitude = rank / 2 + 1
-    return rank.isMultiple(of: 2) ? magnitude : -magnitude
-  }
-
-  /// Samples a shallow quadratic arc between two coordinates, bowing
-  /// perpendicular to the chord by `offsetStep` steps of a fraction of its
-  /// length. Step 0 is the straight two-point segment. Computed on a local
-  /// equirectangular plane — these are city-scale mesh links, not
-  /// transoceanic routes, so no antimeridian handling.
-  static func legArcCoordinates(
-    from: CLLocationCoordinate2D,
-    to: CLLocationCoordinate2D,
-    offsetStep: Int,
-    samples: Int = 20
-  ) -> [CLLocationCoordinate2D] {
-    guard offsetStep != 0 else { return [from, to] }
-
-    let cosLat = cos((from.latitude + to.latitude) / 2 * .pi / 180)
-    // Local plane: x in cos(lat)-scaled longitude degrees, y in latitude degrees.
-    let p0 = (x: from.longitude * cosLat, y: from.latitude)
-    let p2 = (x: to.longitude * cosLat, y: to.latitude)
-    let dx = p2.x - p0.x
-    let dy = p2.y - p0.y
-    let length = (dx * dx + dy * dy).squareRoot()
-    guard length > 0 else { return [from, to] }
-
-    // Control-point offset of 8% of the chord per step; the rendered apex
-    // deviates half that (~4% per step) — enough to read a two-leg lens
-    // without flinging outer arcs of a deep stack across the map.
-    let bulge = length * 0.08 * Double(offsetStep)
-    let control = (
-      x: (p0.x + p2.x) / 2 + (-dy / length) * bulge,
-      y: (p0.y + p2.y) / 2 + (dx / length) * bulge
-    )
-
-    return (0...samples).map { i in
-      let t = Double(i) / Double(samples)
-      let mt = 1 - t
-      let x = mt * mt * p0.x + 2 * mt * t * control.x + t * t * p2.x
-      let y = mt * mt * p0.y + 2 * mt * t * control.y + t * t * p2.y
-      return CLLocationCoordinate2D(latitude: y, longitude: x / cosLat)
-    }
-  }
-}
-
-private struct LocationSample: Equatable {
-  let latitude: Double
-  let longitude: Double
-}
-
-/// The path map itself — pins, polyline, camera and map controls — with no
-/// navigation chrome, so it embeds identically full-screen (shared routes) and
-/// above the hop list on `MessagePathDetailView`. The caller owns building
-/// `locatedNodes` and keeping the array's identity stable across body
-/// evaluations; the canvas re-fits its camera when the node count changes.
-struct MessagePathMapCanvas: View {
   /// Span used when the path resolves to a single node, with no bounding box to fit.
   private static let singleNodeSpanDelta: CLLocationDegrees = 0.05
-  /// A small breathing margin around the multi-node bounding box. With no host
-  /// panel the fit passes `cameraBottomSheetFraction: 0`, so
-  /// `setVisibleCoordinateBounds` already insets by the safe-area padding that
-  /// clears the nav bar and controls;
-  /// anything much above 1 double-margins that and leaves the path filling a
-  /// fraction of the screen (matching `NodeLocationMapView`'s rationale).
-  private static let pathBoundingPaddingMultiplier: Double = 1.3
-  /// How long after the style loads before the one settle re-fit. A fit issued
-  /// while the sheet is still animating in measures inflated map bounds and
-  /// frames far too wide; by now the presentation has settled.
-  private static let settleRefitDelay: Duration = .milliseconds(600)
+  /// Padding around the multi-node bounding region, wider than `boundingRegion`'s
+  /// 1.5 default to keep the path clear of the floating map-controls toolbar.
+  private static let pathBoundingPaddingMultiplier: Double = 2.5
+  /// Stable annotation identity for the receiver pin across canvas rebuilds.
+  private static let receiverPointID = pointID(namespace: "message-path-receiver", bytes: Data())
+  private static let capsuleHorizontalPadding: CGFloat = 16
+  private static let capsuleBottomPadding: CGFloat = 8
+  /// Space above the capsules so the MapLibre logo and attribution stay visible.
+  private static let legalOrnamentGap: CGFloat = 18
 
   @Environment(\.appState) private var appState
+  @Environment(\.dismiss) private var dismiss
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  let locatedNodes: [(point: MapPoint, coordinate: CLLocationCoordinate2D)]
-  /// Explicit, pre-styled polylines to draw instead of the default single
-  /// line threading `locatedNodes` in order. The heard-repeats screen passes
-  /// its per-echo loops (with SNR-styled reception legs); the path screens
-  /// leave it nil. Every coordinate should be one of `locatedNodes`' — the
-  /// camera fit frames the pins only.
-  var linesOverride: [MapLine]?
-  /// Weighted data layers drawn beneath the pins and lines (the map's overlay
-  /// API, §2.3). The coverage map puts its link substrate here; the path
-  /// screens leave it empty.
-  var overlays: [MapOverlay] = []
-  /// Share of the screen a panel covers at the bottom, so a camera fit frames
-  /// the path in the space left above it. The map ignores the safe area, so its
-  /// own `safeAreaInsets` can't report a SwiftUI inset — the host states it.
-  /// 0 (the default) is a canvas with nothing on top of it.
-  var cameraBottomSheetFraction: CGFloat = 0
-  /// The coordinates the camera frames and re-fits on. Defaults to every node
-  /// in `locatedNodes`; a host whose nodes include decoration that must not
-  /// drive the camera — a badge revealed on selection — passes its pins here.
-  var cameraCoordinates: [CLLocationCoordinate2D]?
-  /// A tap on one of `locatedNodes`' pins. Nil leaves pins inert.
-  var onPointTap: ((MapPoint) -> Void)?
-  /// A tap on the map away from any pin. Nil leaves it inert.
-  var onMapTap: (() -> Void)?
-
-  /// An explicit request to frame a subset of the map. A new `id` re-fits;
-  /// nil returns the camera to `framedCoordinates`. Deliberately not gated on
-  /// `isCenteredOnUser` or on the user having panned — a selection is a user
-  /// action, exactly like the locate tap. While non-nil it also suppresses
-  /// the automatic fits, so a poll that adds pins cannot throw the framing
-  /// away.
-  struct CameraFocus: Equatable {
-    let id: String
-    let coordinates: [CLLocationCoordinate2D]
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-      lhs.id == rhs.id && lhs.coordinates.count == rhs.coordinates.count
-        && zip(lhs.coordinates, rhs.coordinates).allSatisfy {
-          $0.latitude == $1.latitude && $0.longitude == $1.longitude
-        }
-    }
-  }
-
-  var cameraFocus: CameraFocus?
-  var labelPlacement: MapLabelPlacement = .overlap
-  /// A tap on a badge pill. Nil leaves badge taps counting as map taps.
-  var onBadgeTap: ((MapPoint) -> Void)?
-  /// One sentence describing what the map is showing, read by VoiceOver in
-  /// place of a map it cannot otherwise describe. Nil leaves the map silent.
-  var accessibilitySummary: String?
-
-  /// How long after a focus fit the host's panel has finished resizing. The
-  /// fit reads `cameraBottomSheetFraction` as it was when the version bumped,
-  /// and a panel that changes height on selection reports it only after
-  /// layout — the same reason the style-load fit needs its settle re-fit.
-  private static let focusSettleDelay: Duration = .milliseconds(350)
+  let message: MessageDTO
+  let arrivals: [MessagePathArrival]
+  @Binding var selectedID: UUID?
+  let pathViewModel: MessagePathViewModel
 
   @State private var cameraRegion: MKCoordinateRegion?
   @State private var cameraRegionVersion = 0
@@ -693,71 +36,131 @@ struct MessagePathMapCanvas: View {
   @State private var isStyleLoaded = false
   @State private var isCenteredOnUser = false
   @State private var hasInitiallyFit = false
-  /// The user has panned or zoomed. An automatic re-fit after that would take
-  /// the map away from where they put it; only an explicit fit clears it.
-  @State private var hasUserMovedCamera = false
-  /// Bumped by every camera fit. A settle re-fit captures it before sleeping
-  /// and gives up if any other fit landed meanwhile — a focus taken during the
-  /// style-load window, or a second route tapped within a settle delay. Read
-  /// through `@State` because a plain struct property is frozen inside the
-  /// escaping task; `cameraFocus` itself must never be read after an `await`.
-  @State private var cameraFitToken = 0
+  @State private var capsuleBarHeight: CGFloat = 0
+  @State private var bottomSafeArea: CGFloat = 0
 
-  private var mapPoints: [MapPoint] {
-    locatedNodes.map(\.point)
-  }
+  struct CanvasModel {
+    let points: [MapPoint]
+    let lines: [MapLine]
+    let cameraRegion: MKCoordinateRegion?
+    let locatedCount: Int
+    let selectedCoordinates: [CLLocationCoordinate2D]
+    let hopCount: Int
+    let isDistanceIncomplete: Bool
 
-  private var mapLines: [MapLine] {
-    if let linesOverride {
-      return linesOverride
+    /// Endpoint pins alone are not a path. A single hop pin with skipped hops is a shortcut, not the path.
+    var showsPathMap: Bool {
+      if hopCount == 0 { return locatedCount >= 1 }
+      let placedHopCount = points.filter { $0.pinStyle == .repeaterHop }.count
+      if placedHopCount == 0 { return false }
+      if placedHopCount == 1, isDistanceIncomplete { return false }
+      return true
     }
-    let coords = locatedNodes.map(\.coordinate)
-    guard coords.count >= 2 else { return [] }
-    return [MapLine(id: "message-path", coordinates: coords, style: .messagePath, opacity: 1.0)]
   }
 
-  private var framedCoordinates: [CLLocationCoordinate2D] {
-    cameraCoordinates ?? locatedNodes.map(\.coordinate)
-  }
-
-  /// Value key over the framed coordinates, for the re-fit `onChange`.
-  private var pathSignature: [Double] {
-    framedCoordinates.flatMap { [$0.latitude, $0.longitude] }
+  private var canvas: CanvasModel {
+    Self.canvasModel(
+      message: message,
+      arrivals: arrivals,
+      selectedID: selectedID,
+      pathViewModel: pathViewModel,
+      connectedDevice: appState.connectedDevice,
+      userLocation: appState.bestAvailableLocation
+    )
   }
 
   var body: some View {
-    ZStack(alignment: .bottomTrailing) {
-      described(MC1MapView(
-        points: mapPoints,
-        lines: mapLines,
-        overlays: overlays,
+    NavigationStack {
+      Group {
+        if pathViewModel.isLoading {
+          ProgressView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if !canvas.showsPathMap {
+          ContentUnavailableView(
+            pathMapUnavailableTitle,
+            systemImage: "map",
+            description: Text(pathMapUnavailableDescription)
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+          mapCanvas
+        }
+      }
+      .toolbar {
+        if canvas.showsPathMap {
+          ToolbarItem(placement: .principal) {
+            PathDistanceBanner(
+              hopCount: canvas.hopCount,
+              totalPathDistance: canvas.selectedCoordinates.totalDistance(),
+              isDistanceIncomplete: canvas.isDistanceIncomplete
+            )
+          }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button(L10n.Localizable.Common.done) { dismiss() }
+        }
+      }
+      .navigationBarTitleDisplayMode(.inline)
+      .onChange(of: pathViewModel.isLoading) { _, isLoading in
+        guard !isLoading else { return }
+        completeInitialFitIfNeeded()
+      }
+      .onChange(of: isStyleLoaded) { _, loaded in
+        guard loaded else { return }
+        completeInitialFitIfNeeded()
+      }
+      .onChange(of: canvas.selectedCoordinates.count) { _, _ in
+        completeInitialFitIfNeeded()
+      }
+      .onChange(of: capsuleBarHeight) { _, _ in
+        completeInitialFitIfNeeded()
+      }
+      .onChange(of: bottomSafeArea) { _, _ in
+        completeInitialFitIfNeeded()
+      }
+    }
+  }
+
+  private var pathMapUnavailableTitle: String {
+    canvas.hopCount == 0
+      ? L10n.Chats.Chats.Path.Unavailable.title
+      : L10n.Chats.Chats.Path.Unplaceable.title
+  }
+
+  private var pathMapUnavailableDescription: String {
+    canvas.hopCount == 0
+      ? L10n.Chats.Chats.Path.Unavailable.description
+      : L10n.Chats.Chats.Path.Unplaceable.description
+  }
+
+  private var mapCanvas: some View {
+    ZStack(alignment: .bottom) {
+      MC1MapView(
+        points: canvas.points,
+        lines: canvas.lines,
         mapStyle: mapStyle,
         isDarkMode: colorScheme == .dark,
         showLabels: showLabels,
-        labelPlacement: labelPlacement,
-        // Gated on existing authorization: MapLibre prompts for permission itself
-        // when the puck is enabled while status is undetermined, and opening a
-        // message's path hasn't earned a system dialog. The explicit locate tap
-        // below is where prompting belongs; a grant there flips this on.
-        showsUserLocation: appState.locationService.isAuthorized,
+        clusteringEnabled: false,
+        showsUserLocation: false,
         isInteractive: true,
         showsScale: true,
         isNorthLocked: isNorthLocked,
         cameraRegion: $cameraRegion,
         cameraRegionVersion: cameraRegionVersion,
-        cameraBottomSheetFraction: cameraBottomSheetFraction,
-        onPointTap: onPointTap.map { handler in { point, _ in handler(point) } },
-        onMapTap: onMapTap.map { handler in { _ in handler() } },
+        cameraEdgePadding: pathCameraEdgePadding,
+        legalOrnamentBottomMargin: pathLegalOrnamentBottomMargin,
+        onPointTap: nil,
+        onMapTap: nil,
         onCameraRegionChange: { cameraRegion = $0 },
-        onBadgeTap: onBadgeTap,
-        onUserCameraMove: { hasUserMovedCamera = true },
         isStyleLoaded: $isStyleLoaded,
         isCenteredOnUser: $isCenteredOnUser
-      ))
+      )
+      // Path swaps must not run inside the capsule selection animation.
+      .transaction { $0.animation = nil }
       .ignoresSafeArea()
 
-      VStack {
-        Spacer()
+      VStack(spacing: 0) {
         HStack {
           Spacer()
           MapControlsToolbar(
@@ -768,101 +171,98 @@ struct MessagePathMapCanvas: View {
             mapStyleSelection: $mapStyle,
             viewportBounds: cameraRegion?.toMLNCoordinateBounds()
           ) {
-            if !locatedNodes.isEmpty {
+            if canvas.showsPathMap {
               Button(L10n.Chats.Chats.Path.centerOnPath, systemImage: "arrow.up.left.and.arrow.down.right") {
                 isCenteredOnUser = false
-                fitCameraToPath()
+                fitCameraToSelectedPath()
               }
               .mapControlButton(tint: .primary)
             }
           }
         }
-      }
-    }
-    // The nodes changed under a live map — the contacts load landed after
-    // presentation, or a fresh phone fix moved the receiver pin. Keyed on the
-    // coordinates rather than the count, because the fix landing *moves* a pin
-    // without adding one. Re-fit unless the user has taken the camera somewhere.
-    .onChange(of: pathSignature) {
-      // A focus owns the camera while it exists, and a user who has taken the
-      // camera somewhere keeps it there.
-      guard isStyleLoaded, cameraFocus == nil, !isCenteredOnUser, !hasUserMovedCamera else { return }
-      fitCameraToPath()
-    }
-    .onChange(of: isStyleLoaded) { _, loaded in
-      guard loaded, !hasInitiallyFit else { return }
-      hasInitiallyFit = true
-      // A locate tap can resolve before a slow style load; don't wipe it out.
-      guard !isCenteredOnUser else { return }
-      // A focus taken while the style was still loading is honoured now: its
-      // own handler had nothing to fit yet.
-      let target = cameraFocus?.coordinates
-      if let target {
-        fitCamera(to: target)
-      } else {
-        fitCameraToPath()
-      }
-      // One settle re-fit: the style can finish loading while the presentation
-      // is still inflating the map's bounds, and a fit measured then frames far
-      // wider than the path. Skipped if the user has already taken the camera
-      // somewhere themselves, or if any other fit landed meanwhile.
-      let token = cameraFitToken
-      Task {
-        try? await Task.sleep(for: Self.settleRefitDelay)
-        guard !isCenteredOnUser, cameraFitToken == token else { return }
-        if let target {
-          fitCamera(to: target)
-        } else {
-          fitCameraToPath()
+        if showsArrivalCapsules {
+          MessagePathArrivalCapsules(
+            arrivals: arrivals,
+            selectedID: $selectedID,
+            reduceMotion: reduceMotion,
+            chrome: .glass
+          )
+          .padding(.horizontal, Self.capsuleHorizontalPadding)
+          .padding(.bottom, Self.capsuleBottomPadding)
+          .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+          } action: { height in
+            guard height > 0, height != capsuleBarHeight else { return }
+            capsuleBarHeight = height
+          }
         }
       }
+      .safeAreaPadding(.bottom)
     }
-    .onChange(of: cameraFocus?.id) {
-      // Before the style loads there is nothing to fit; the style-load
-      // handler picks the focus up.
-      guard isStyleLoaded else { return }
-      let coords = cameraFocus?.coordinates ?? framedCoordinates
-      // Never a fake single-node zoom for a selection.
-      guard coords.count >= 2 else { return }
-      // An explicit selection outranks the locate state, but deliberately does
-      // not clear `hasUserMovedCamera`: a user who panned before focusing must
-      // not be re-subscribed to automatic re-fits once the focus clears.
-      isCenteredOnUser = false
-      fitCamera(to: coords)
-      let token = cameraFitToken
-      Task {
-        try? await Task.sleep(for: Self.focusSettleDelay)
-        // Another focus (or a clear) fitted meanwhile: this one is stale.
-        guard cameraFitToken == token else { return }
-        fitCamera(to: coords)
-      }
+    .onGeometryChange(for: CGFloat.self) { proxy in
+      proxy.safeAreaInsets.bottom
+    } action: { bottom in
+      guard bottom != bottomSafeArea else { return }
+      bottomSafeArea = bottom
     }
   }
 
-  /// The map, described for VoiceOver when the host has a sentence for it.
-  /// Applied to the map alone so the controls beside it stay reachable.
-  @ViewBuilder
-  private func described(_ map: MC1MapView) -> some View {
-    if let accessibilitySummary {
-      map
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilitySummary)
-        .accessibilityAddTraits(.updatesFrequently)
-    } else {
-      map
-    }
+  private var showsArrivalCapsules: Bool {
+    arrivals.count > 1
   }
 
-  /// An explicit fit to every framed pin: the initial fit, the settle re-fits,
-  /// and the "Center on path" control. Explicit, so it also releases a camera
-  /// the user had moved.
-  private func fitCameraToPath() {
-    hasUserMovedCamera = false
-    fitCamera(to: framedCoordinates)
+  private var capsuleOverlayHeight: CGFloat {
+    capsuleBarHeight > 0 ? capsuleBarHeight : Self.estimatedCapsuleBarHeight
   }
 
-  private func fitCamera(to coords: [CLLocationCoordinate2D]) {
-    cameraFitToken += 1
+  private var pathLegalOrnamentBottomMargin: CGFloat? {
+    guard showsArrivalCapsules else { return nil }
+    return Self.legalOrnamentBottomMargin(capsuleBarHeight: capsuleOverlayHeight)
+  }
+
+  private var pathCameraEdgePadding: UIEdgeInsets {
+    guard showsArrivalCapsules else { return .zero }
+    return UIEdgeInsets(
+      top: 0,
+      left: 0,
+      bottom: Self.pathCameraBottomInset(
+        safeAreaBottom: bottomSafeArea,
+        capsuleBarHeight: capsuleOverlayHeight
+      ),
+      right: 0
+    )
+  }
+
+  private static var estimatedCapsuleBarHeight: CGFloat {
+    let title = UIFont.preferredFont(forTextStyle: .caption1).lineHeight
+    let subtitle = UIFont.preferredFont(forTextStyle: .caption2).lineHeight
+    return MessagePathArrivalCapsules.pillVerticalPadding * 2
+      + title
+      + subtitle
+      + MessagePathArrivalCapsules.subtitleSpacing
+      + capsuleBottomPadding
+  }
+
+  private static func legalOrnamentBottomMargin(capsuleBarHeight: CGFloat) -> CGFloat {
+    capsuleBarHeight + legalOrnamentGap
+  }
+
+  private static func pathCameraBottomInset(safeAreaBottom: CGFloat, capsuleBarHeight: CGFloat) -> CGFloat {
+    safeAreaBottom + capsuleBarHeight
+  }
+
+  /// Frames the selected path once after style load. Later path taps leave the camera.
+  private func completeInitialFitIfNeeded() {
+    guard !hasInitiallyFit, isStyleLoaded else { return }
+    guard !canvas.selectedCoordinates.isEmpty else { return }
+    // Camera edge padding uses the measured capsule bar; fitting first puts the path under the pills.
+    if showsArrivalCapsules, capsuleBarHeight == 0 { return }
+    hasInitiallyFit = true
+    fitCameraToSelectedPath()
+  }
+
+  private func fitCameraToSelectedPath() {
+    let coords = canvas.selectedCoordinates
     if coords.count == 1 {
       cameraRegion = MKCoordinateRegion(
         center: coords[0],
@@ -873,28 +273,231 @@ struct MessagePathMapCanvas: View {
       )
     } else if let region = coords.boundingRegion(paddingMultiplier: Self.pathBoundingPaddingMultiplier) {
       cameraRegion = region
+    } else {
+      return
     }
     cameraRegionVersion += 1
   }
 
   private func centerOnUserLocation() {
-    Task {
-      // A locate tap means "where am I *now*": fetch a live fix (prompting for
-      // permission if undetermined) rather than centering on whatever fix is
-      // cached — that one can predate a suspend and sit blocks away. Centers
-      // only on success (the Line-of-Sight pattern): any fallback here could be
-      // the very stale spot the tap is trying to escape, and jumping there
-      // while claiming "centered on user" restores the original bug.
-      guard let location = try? await appState.locationService.requestCurrentLocation() else { return }
-      isCenteredOnUser = true
-      cameraRegion = MKCoordinateRegion(
-        center: location.coordinate,
+    guard let location = appState.bestAvailableLocation else {
+      appState.locationService.requestLocation()
+      return
+    }
+    isCenteredOnUser = true
+    cameraRegion = MKCoordinateRegion(
+      center: location.coordinate,
+      span: MKCoordinateSpan(
+        latitudeDelta: Self.singleNodeSpanDelta,
+        longitudeDelta: Self.singleNodeSpanDelta
+      )
+    )
+    cameraRegionVersion += 1
+  }
+
+  static func canvasModel(
+    message: MessageDTO,
+    arrivals: [MessagePathArrival],
+    selectedID: UUID?,
+    pathViewModel: MessagePathViewModel,
+    connectedDevice: DeviceDTO?,
+    userLocation: CLLocation?
+  ) -> CanvasModel {
+    let selected = MessagePathArrivals.resolvedSelection(preferred: selectedID, arrivals: arrivals)
+    let sender = pathViewModel.locatedSender(for: message)
+    let receiverLocation: CLLocation? = if let device = connectedDevice, device.hasLocation {
+      CLLocation(latitude: device.latitude, longitude: device.longitude)
+    } else {
+      userLocation
+    }
+
+    var points: [MapPoint] = []
+    var seenKeys = Set<Data>()
+    let start: CLLocationCoordinate2D?
+    if message.isOutgoing, let device = connectedDevice, device.hasLocation {
+      let coord = CLLocationCoordinate2D(latitude: device.latitude, longitude: device.longitude)
+      start = coord
+      points.append(MapPoint(
+        id: device.id,
+        coordinate: coord,
+        pinStyle: .pointA,
+        label: device.nodeName,
+        isClusterable: false,
+        hopIndex: nil,
+        badgeText: nil
+      ))
+      seenKeys.insert(device.publicKey)
+    } else if let sender {
+      let coord = CLLocationCoordinate2D(latitude: sender.latitude, longitude: sender.longitude)
+      start = coord
+      points.append(MapPoint(
+        id: sender.id,
+        coordinate: coord,
+        pinStyle: .pointA,
+        label: sender.displayName,
+        isClusterable: false,
+        hopIndex: nil,
+        badgeText: nil
+      ))
+      seenKeys.insert(sender.publicKey)
+    } else {
+      start = nil
+    }
+
+    var lines: [MapLine] = []
+    var selectedCoordinates: [CLLocationCoordinate2D] = []
+    var selectedHopCount = 0
+    var isDistanceIncomplete = false
+
+    if let selectedArrival = arrivals.first(where: { $0.id == selected }) {
+      let path = locatedPath(
+        arrival: selectedArrival,
+        start: start,
+        pathViewModel: pathViewModel,
+        receiverLocation: receiverLocation,
+        userLocation: userLocation
+      )
+      selectedCoordinates = path.coordinates
+      selectedHopCount = selectedArrival.hopCount
+      isDistanceIncomplete = path.isDistanceIncomplete
+      if path.coordinates.count >= 2 {
+        lines.append(MapLine(
+          id: "message-path-\(selectedArrival.id)",
+          coordinates: path.coordinates,
+          style: .messagePath,
+          opacity: 1.0
+        ))
+      }
+      for point in path.hopPoints where seenKeys.insert(point.key).inserted {
+        points.append(point.point)
+      }
+    }
+
+    if let loc = receiverLocation {
+      let coord = loc.coordinate
+      points.append(MapPoint(
+        id: receiverPointID,
+        coordinate: coord,
+        pinStyle: .pointB,
+        label: connectedDevice?.nodeName,
+        isClusterable: false,
+        hopIndex: nil,
+        badgeText: nil
+      ))
+    }
+
+    let camera: MKCoordinateRegion? = if selectedCoordinates.count == 1 {
+      MKCoordinateRegion(
+        center: selectedCoordinates[0],
         span: MKCoordinateSpan(
-          latitudeDelta: Self.singleNodeSpanDelta,
-          longitudeDelta: Self.singleNodeSpanDelta
+          latitudeDelta: singleNodeSpanDelta,
+          longitudeDelta: singleNodeSpanDelta
         )
       )
-      cameraRegionVersion += 1
+    } else {
+      selectedCoordinates.boundingRegion(paddingMultiplier: pathBoundingPaddingMultiplier)
     }
+
+    return CanvasModel(
+      points: points,
+      lines: lines,
+      cameraRegion: camera,
+      locatedCount: points.count,
+      selectedCoordinates: selectedCoordinates,
+      hopCount: selectedHopCount,
+      isDistanceIncomplete: isDistanceIncomplete
+    )
+  }
+
+  private struct LocatedPath {
+    let coordinates: [CLLocationCoordinate2D]
+    let hopPoints: [(key: Data, point: MapPoint)]
+    let isDistanceIncomplete: Bool
+  }
+
+  private static func locatedPath(
+    arrival: MessagePathArrival,
+    start: CLLocationCoordinate2D?,
+    pathViewModel: MessagePathViewModel,
+    receiverLocation: CLLocation?,
+    userLocation: CLLocation?
+  ) -> LocatedPath {
+    var coordinates: [CLLocationCoordinate2D] = []
+    var hopPoints: [(key: Data, point: MapPoint)] = []
+
+    if let start {
+      coordinates.append(start)
+    }
+
+    var seenKeys = Set<Data>()
+    var isDistanceIncomplete = false
+    for (index, hop) in arrival.pathHops.enumerated() {
+      let hopNumber = index + 1
+      // Same match as PathHopRowView: a fallback hop is never a pin.
+      guard pathViewModel.repeaterResolution(for: hop.data, userLocation: userLocation).matchKind == .exact else {
+        isDistanceIncomplete = true
+        continue
+      }
+      let resolvedContact = RepeaterResolver.resolve(
+        for: hop.data,
+        in: pathViewModel.repeaters,
+        userLocation: userLocation
+      )
+      let resolvedNode = RepeaterResolver.resolve(
+        for: hop.data,
+        in: pathViewModel.discoveredRepeaters,
+        userLocation: userLocation
+      )
+      let resolved: (node: any RepeaterResolvable, matchKind: NodeNameMatchKind)? =
+        resolvedContact.map { ($0.node, $0.matchKind) } ?? resolvedNode.map { ($0.node, $0.matchKind) }
+      guard let resolved, resolved.matchKind == .exact, resolved.node.hasLocation else {
+        isDistanceIncomplete = true
+        continue
+      }
+      let r = resolved.node
+      if seenKeys.insert(r.publicKey).inserted {
+        let coord = CLLocationCoordinate2D(latitude: r.latitude, longitude: r.longitude)
+        coordinates.append(coord)
+        hopPoints.append((r.publicKey, MapPoint(
+          id: hopPointID(publicKey: r.publicKey),
+          coordinate: coord,
+          pinStyle: .repeaterHop,
+          label: r.resolvableName,
+          isClusterable: false,
+          hopIndex: hopNumber,
+          badgeText: nil
+        )))
+      }
+    }
+
+    if let loc = receiverLocation {
+      let coord = loc.coordinate
+      let differsFromLast = coordinates.last.map {
+        $0.latitude != coord.latitude || $0.longitude != coord.longitude
+      } ?? true
+      if differsFromLast {
+        coordinates.append(coord)
+      }
+    }
+
+    return LocatedPath(
+      coordinates: coordinates,
+      hopPoints: hopPoints,
+      isDistanceIncomplete: isDistanceIncomplete
+    )
+  }
+
+  private static func hopPointID(publicKey: Data) -> UUID {
+    pointID(namespace: "message-path-hop", bytes: publicKey)
+  }
+
+  private static func pointID(namespace: String, bytes: Data) -> UUID {
+    let digest = Array(SHA256.hash(data: Data(namespace.utf8) + bytes))
+    return UUID(uuid: (
+      digest[0], digest[1], digest[2], digest[3],
+      digest[4], digest[5], digest[6], digest[7],
+      digest[8], digest[9], digest[10], digest[11],
+      digest[12], digest[13], digest[14], digest[15]
+    ))
   }
 }

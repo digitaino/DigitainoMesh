@@ -41,7 +41,7 @@ final class CLICompletionEngine {
   private static let repeaterCommands = [
     "ver", "board", "clock", "clkreboot",
     "neighbors", "get", "set", "sensor", "password",
-    "log", "reboot", "advert", "advert.zerohop", "setperm", "tempradio", "neighbor.remove",
+    "log", "reboot", "room.post", "advert", "advert.zerohop", "setperm", "tempradio", "neighbor.remove",
     "region", "gps", "powersaving", "clear", "discover.neighbors",
     "start"
   ]
@@ -58,7 +58,7 @@ final class CLICompletionEngine {
 
   /// Per MeshCore CLI Reference - region subcommands
   private static let regionSubcommands = [
-    "load", "get", "put", "remove", "allowf", "denyf", "home", "default", "save", "list"
+    "load", "get", "put", "remove", "allowf", "denyf", "home", "default", "save", "list", "def"
   ]
 
   /// Per MeshCore CLI Reference - gps subcommands
@@ -88,7 +88,7 @@ final class CLICompletionEngine {
     "bridge.baud", "bridge.secret", "bridge.type",
     "adc.multiplier", "public.key", "prv.key", "role", "freq",
     "path.hash.mode", "loop.detect", "bootloader.ver",
-    "owner.info", "radio.rxgain", "bridge.channel",
+    "owner.info", "radio.rxgain", "radio.fem.rxgain", "cad", "extra.sf", "bridge.channel",
     "pwrmgt.support", "pwrmgt.source", "pwrmgt.bootreason", "pwrmgt.bootmv"
   ]
 
@@ -151,10 +151,8 @@ final class CLICompletionEngine {
     endsWithSpace: Bool,
     isLocal: Bool
   ) -> [String] {
-    // Determine which argument position we're completing
-    // parts.count includes command, so parts.count - 1 = number of args started
-    // If endsWithSpace, we're starting a NEW argument (position = parts.count)
-    // If !endsWithSpace, we're still typing the CURRENT argument (position = parts.count - 1)
+    // parts.count includes the command, so parts.count - 1 is how many args have been started.
+    // A trailing space starts the next argument (position = parts.count); otherwise we are still typing the current one.
     let argPosition = endsWithSpace ? parts.count : parts.count - 1
 
     switch command {
@@ -271,7 +269,8 @@ final class CLICompletionEngine {
       Self.pathHashModeValues.filter { $0.hasPrefix(prefix) }.sorted()
     case "loop.detect":
       Self.loopDetectValues.filter { $0.hasPrefix(prefix) }.sorted()
-    case "repeat", "allow.read.only", "bridge.enabled", "radio.rxgain":
+    case "repeat", "allow.read.only", "bridge.enabled",
+         "radio.rxgain", "radio.fem.rxgain", "cad":
       Self.onOffValues.filter { $0.hasPrefix(prefix) }.sorted()
     case "multi.acks":
       Self.multiAcksValues.filter { $0.hasPrefix(prefix) }.sorted()

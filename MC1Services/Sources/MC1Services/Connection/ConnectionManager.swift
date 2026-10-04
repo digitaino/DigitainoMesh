@@ -119,11 +119,16 @@ public final class ConnectionManager {
   /// BLE state machine's single in-flight connect slot.
   var isPairingInProgress = false
 
+  /// True from scan/setup enqueue until cancel or `pairNewDevice` finishes,
+  /// and while `deleteDevice` of the live or in-flight radio waits on iOS Remove Accessory.
+  /// Distinct from `isPairingInProgress` so setup confirmation is not treated as a live picker.
+  public var isPairingFlowActive = false
+
   /// Single source of truth for "stand down, an explicit connect flow is running."
   /// Opportunistic reconnect call sites consult this; or new conditions in here
   /// when the next contention class shows up, so every site picks them up.
-  var shouldDeferOpportunisticReconnect: Bool {
-    isPairingInProgress
+  public var shouldDeferOpportunisticReconnect: Bool {
+    isPairingInProgress || isPairingFlowActive
   }
 
   /// Single chokepoint for opportunistic reconnect attempts. Consults the defer
@@ -339,6 +344,13 @@ public final class ConnectionManager {
   static let defaultConnectAttempts = 4
   static let unverifiedConnectAttempts = 2
 
+  static let pairingAdoptionSettlePollInterval: Duration = .milliseconds(50)
+  /// Pairing bound: rebuild can remain `.connected` after reconnect UI timeout stands down.
+  static let pairingAdoptionSettleTimeout: Duration = .seconds(15)
+  static let pairingAdoptionFailedDetail = "adoption failed"
+  static let pairingAdoptionMissingSessionDetail = "adoption rebuilt no session"
+  static let pairingAdoptionTimedOutDetail = "adoption timed out"
+
   /// Consecutive entries into `handleReconnectionFailure` while intent still wants a
   /// connection that are allowed to preserve a live link (not radio handshakes — on the
   /// auto-reconnect path the coordinator's first failed rebuild retries once before
@@ -469,6 +481,14 @@ public final class ConnectionManager {
     typealias OtherAppWaitStrategy = @Sendable (UUID) async -> Bool
 
     var otherAppWaitStrategyOverride: OtherAppWaitStrategy?
+
+    /// Pairing leftover-GATT tests settle adoption without `rebuildSession`.
+    /// Invoked only after adoption started.
+    typealias PairingAdoptionSettleStrategy = @MainActor () async throws -> Void
+
+    var pairingAdoptionSettleStrategyOverride: PairingAdoptionSettleStrategy?
+
+    var testPairingAdoptionSettleTimeout: Duration?
 
     typealias HealthCheckSessionRebuildOverride = @MainActor (UUID) async throws -> Void
 
@@ -1308,6 +1328,7 @@ public final class ConnectionManager {
       isActive: true,
       ocvPreset: existingDevice?.ocvPreset
         ?? OCVPreset.preset(forManufacturer: capabilities.model)?.rawValue,
+      appliedRadioPresetID: existingDevice?.appliedRadioPresetID,
       customOCVArrayString: existingDevice?.customOCVArrayString,
       connectionMethods: mergedMethods,
       knownRegions: existingDevice?.knownRegions ?? []
@@ -1428,6 +1449,7 @@ public final class ConnectionManager {
       connectingDeviceID: UUID?? = nil,
       sessionRebuildDeviceID: UUID?? = nil,
       isPairingInProgress: Bool? = nil,
+      isPairingFlowActive: Bool? = nil,
       detectedPlatform: DevicePlatform? = nil,
       lastCleanChannelSync: (radioID: UUID, completedAt: Date)?? = nil,
       lastAttemptedChannelSync: (radioID: UUID, attemptedAt: Date)?? = nil
@@ -1461,6 +1483,9 @@ public final class ConnectionManager {
       }
       if let pairing = isPairingInProgress {
         self.isPairingInProgress = pairing
+      }
+      if let pairingFlow = isPairingFlowActive {
+        self.isPairingFlowActive = pairingFlow
       }
       if let platform = detectedPlatform {
         self.detectedPlatform = platform

@@ -183,7 +183,7 @@ struct MapperPrivacyInvariantTests {
     //
     // Names alone would not catch it, and a hand-built fixture would not either — the value
     // has to have gone *through* the engine to prove the engine did not keep it.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let container = try PersistenceStore.createContainer(inMemory: true)
     let store = PersistenceStore(modelContainer: container)
     let source = ScriptedRxEntrySource()
@@ -244,7 +244,7 @@ struct MapperPrivacyInvariantTests {
     // correlate the echo — and the row it produces is a claim about radio coverage that must
     // not identify which message proved it. Currently true by discipline; this is the test
     // that keeps it true.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let container = try PersistenceStore.createContainer(inMemory: true)
     let store = PersistenceStore(modelContainer: container)
     let source = ScriptedRxEntrySource()
@@ -294,7 +294,7 @@ struct MapperPrivacyInvariantTests {
     // known"; the mapper only ever writes the short prefix a packet's path carries, and a
     // 64-char identity in a cell observation would be a precise claim about which node was
     // near a person.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let container = try PersistenceStore.createContainer(inMemory: true)
     let store = PersistenceStore(modelContainer: container)
     let source = ScriptedRxEntrySource()

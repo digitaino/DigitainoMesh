@@ -1,15 +1,13 @@
 import Foundation
 
-/// Environment-derived inputs that influence `MessageItem` content. Sourced
-/// from `@AppStorage` (seven toggles), `@Environment(\.colorSchemeContrast)`,
-/// and the parent view's `deviceName`. `ChatConversationView` constructs one
-/// and pushes it to `ChatViewModel.applyEnvInputs(_:)`; the view model
-/// rebuilds `MessageItem`s when the value changes.
+/// Environment-derived inputs that influence `MessageItem` content, from
+/// `@AppStorage`, contrast, and the parent view's `deviceName`.
 public struct EnvInputs: Sendable, Hashable {
   public let autoPlayGIFs: Bool
   public let showIncomingPath: Bool
   public let showIncomingHopCount: Bool
   public let showIncomingRegion: Bool
+  public let showIncomingHeardCount: Bool
   public let showIncomingSendTime: Bool
   public let previewsEnabled: Bool
   public let isHighContrast: Bool
@@ -36,6 +34,9 @@ public struct EnvInputs: Sendable, Hashable {
   /// App-locale language code (`"en"`, `"de"`, `"zh"`), never a region qualifier.
   /// A change forces a full `buildItems()` so Translation chrome re-evaluates.
   public let preferredLanguageCode: String
+  /// User toggle for in-bubble Translate offers. When false, the bake skips
+  /// language detection and builds no Translation chrome.
+  public let translationOffersEnabled: Bool
 
   /// Dynamic Type size fingerprint. A `Sendable, Hashable` token (a `DynamicTypeSize` case
   /// name string supplied by the MC1 side, never the SwiftUI type itself) so a Dynamic Type
@@ -55,6 +56,7 @@ public struct EnvInputs: Sendable, Hashable {
     showIncomingPath: Bool,
     showIncomingHopCount: Bool,
     showIncomingRegion: Bool,
+    showIncomingHeardCount: Bool,
     showIncomingSendTime: Bool,
     previewsEnabled: Bool,
     isHighContrast: Bool,
@@ -65,12 +67,14 @@ public struct EnvInputs: Sendable, Hashable {
     themeID: String,
     contentSizeCategory: String,
     preferredLanguageCode: String,
-    showsObserverCounts: Bool = false
+    showsObserverCounts: Bool = false,
+    translationOffersEnabled: Bool = AppStorageKey.defaultTranslationOffersEnabled
   ) {
     self.autoPlayGIFs = autoPlayGIFs
     self.showIncomingPath = showIncomingPath
     self.showIncomingHopCount = showIncomingHopCount
     self.showIncomingRegion = showIncomingRegion
+    self.showIncomingHeardCount = showIncomingHeardCount
     self.showIncomingSendTime = showIncomingSendTime
     self.previewsEnabled = previewsEnabled
     self.isHighContrast = isHighContrast
@@ -82,6 +86,7 @@ public struct EnvInputs: Sendable, Hashable {
     self.contentSizeCategory = contentSizeCategory
     self.preferredLanguageCode = preferredLanguageCode
     self.showsObserverCounts = showsObserverCounts
+    self.translationOffersEnabled = translationOffersEnabled
   }
 
   /// Identifier of the built-in default theme. Shared so `EnvInputs.default` and `Theme.default.id`
@@ -106,6 +111,7 @@ public struct EnvInputs: Sendable, Hashable {
     showIncomingPath: AppStorageKey.defaultShowIncomingPath,
     showIncomingHopCount: AppStorageKey.defaultShowIncomingHopCount,
     showIncomingRegion: AppStorageKey.defaultShowIncomingRegion,
+    showIncomingHeardCount: AppStorageKey.defaultShowIncomingHeardCount,
     showIncomingSendTime: AppStorageKey.defaultShowIncomingSendTime,
     previewsEnabled: AppStorageKey.defaultLinkPreviewsEnabled,
     isHighContrast: false,

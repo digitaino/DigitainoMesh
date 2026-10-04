@@ -12,14 +12,20 @@ enum SettingsSubpage: Hashable {
   case blockedContacts
   case trustedContacts
   case deviceNotificationRules
+  case translateIntoLanguage
+  case presetLocation
 }
 
 extension View {
   /// Registers the `SettingsSubpage` destinations on the enclosing navigation stack. Each
   /// hosting page applies this to its own `List` so the pushes resolve in every stack that
   /// hosts the page (the compact Settings stack and the iPad detail column).
+  /// Destination content is a stack sibling of the host, so it does not inherit the host's
+  /// environment.
   @MainActor
-  func settingsSubpageDestinations() -> some View {
+  func settingsSubpageDestinations(
+    presetLocationSession: PresetLocationSession? = nil
+  ) -> some View {
     navigationDestination(for: SettingsSubpage.self) { subpage in
       Group {
         switch subpage {
@@ -39,6 +45,13 @@ extension View {
           TrustedContactsPickerView()
         case .deviceNotificationRules:
           DeviceNotificationRulesView()
+        case .translateIntoLanguage:
+          TranslateIntoLanguageView()
+        case .presetLocation:
+          if let presetLocationSession {
+            PresetLocationView()
+              .environment(presetLocationSession)
+          }
         }
       }
       // Applied at the chokepoint so every subpage inherits the radio status pair; none of

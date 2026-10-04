@@ -651,6 +651,9 @@ actor ParkingContactStore: PersistenceStoreProtocol {
   func setMessagePacketContentHashIfMissing(id _: UUID, contentHash _: String) async throws {}
   func setMessageObserverCount(id _: UUID, count _: Int, checkedAt _: Date) async throws {}
   func clearMessagePacketScope(id _: UUID) async throws {}
+  func adoptIncomingPathIfUnknown(id: UUID, pathNodes: Data, pathLength: UInt8) async throws -> Bool {
+    false
+  }
 
   func deleteMessageRepeats(messageID: UUID) async throws {}
   func incrementMessageSendCount(id: UUID) async throws -> Int {
@@ -682,6 +685,14 @@ actor ParkingContactStore: PersistenceStoreProtocol {
     nil
   }
 
+  func fetchRxLogEntries(
+    radioID: UUID,
+    channelIndex: UInt8,
+    senderTimestamp: UInt32
+  ) async throws -> [RxLogEntryDTO] {
+    []
+  }
+
   func findRxLogEntryBySenderPrefix(radioID: UUID, senderPrefixByte: UInt8, receivedSince: Date) async throws -> RxLogEntryDTO? {
     nil
   }
@@ -697,6 +708,10 @@ actor ParkingContactStore: PersistenceStoreProtocol {
 
   func isDuplicateMessage(deduplicationKey: String, radioID: UUID) async throws -> Bool {
     false
+  }
+
+  func fetchMessage(deduplicationKey: String, radioID: UUID) async throws -> MessageDTO? {
+    nil
   }
 
   func isDuplicateRoomMessage(sessionID: UUID, deduplicationKey: String) async throws -> Bool {

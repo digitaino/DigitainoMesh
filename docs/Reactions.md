@@ -74,8 +74,13 @@ v2 reads best on clients with no reaction support, but stock upstream MC1 does n
 **Channel:**
 ```
 {emoji}@[{targetSenderName}]\n{hash}
+@[{targetSenderName}]{emoji}\n{hash}
 ```
-Example: `👍@[AlphaNode]\nb45pc4ek`
+Example: `@[AlphaNode]👍\nb45pc4ek`
+
+The `{emoji}` field is a single extended grapheme cluster. A remainder that merely starts with an emoji is ordinary chat, not a reaction. Queue unmatched bodies that do match this format; do not persist them as chat.
+
+Until 1.4.1, channel reactions put the emoji first: `{emoji}@[{targetSenderName}]\n{hash}`. Accept both orders for now so older clients still match. We'll drop the old one once enough apps have been updated.
 
 **DM:**
 ```

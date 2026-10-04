@@ -18,6 +18,7 @@ public enum AppStorageKey: String {
   case showIncomingPath
   case showIncomingHopCount
   case showIncomingRegion
+  case showIncomingHeardCount
   case showIncomingSendTime
   case linkPreviewsEnabled
   case linkPreviewsAutoResolveDM
@@ -52,6 +53,7 @@ public enum AppStorageKey: String {
   case tracePathViewMode
   case mapStyleSelection
   case mapShowLabels
+  case mapClusteringEnabled
   case mapNorthLocked
   case showDiscoveredNodesOnMap
   /// Per-host map filter JSON (`MapFilterState.storageString`).
@@ -80,6 +82,15 @@ public enum AppStorageKey: String {
   /// default, and the observer-major one answers "which paths reached each
   /// observer".
   case packetScopeGrouping
+  /// In-bubble Translate target. `"app"` follows the app locale; `"overlay"` is
+  /// the system Translate sheet; any other value is a language subtag (`da`, `zh`).
+  case translationTargetLanguage
+  /// When true, tap-Translate opens the system Translate sheet. Separate from
+  /// `translationTargetLanguage` so the language subtag is not overwritten.
+  case useDefaultTranslationApp
+  /// When false, incoming messages skip language detection and show no
+  /// in-bubble Translate button.
+  case translationOffersEnabled
   case autoDeleteStaleNodesDays
   case lastStaleCleanupDate
   case frequentEmojis
@@ -108,6 +119,7 @@ public enum AppStorageKey: String {
   public static let defaultShowIncomingPath: Bool = false
   public static let defaultShowIncomingHopCount: Bool = false
   public static let defaultShowIncomingRegion: Bool = false
+  public static let defaultShowIncomingHeardCount: Bool = false
   public static let defaultShowIncomingSendTime: Bool = false
   public static let defaultLinkPreviewsEnabled: Bool = false
   public static let defaultPacketScopeEnabled: Bool = false
@@ -119,6 +131,7 @@ public enum AppStorageKey: String {
   public static let defaultReplyWithQuote: Bool = false
   public static let defaultShowMapPreviewThumbnails: Bool = true
   public static let defaultMapShowLabels: Bool = true
+  public static let defaultMapClusteringEnabled: Bool = true
   public static let defaultMapNorthLocked: Bool = false
   public static let defaultShowDiscoveredNodesOnMap: Bool = false
   /// Raw value of `AppColorSchemePreference.system` — basemap only, not app chrome.
@@ -127,6 +140,10 @@ public enum AppStorageKey: String {
   public static let defaultHasSeenPacketScopeFocusHint: Bool = false
   /// Raw value of `PacketScopeGrouping.path`.
   public static let defaultPacketScopeGrouping: String = "path"
+  /// Sentinel: in-bubble Translate follows the app locale.
+  public static let defaultTranslationTargetLanguage: String = "app"
+  public static let defaultUseDefaultTranslationApp: Bool = false
+  public static let defaultTranslationOffersEnabled: Bool = true
   public static let defaultLiveActivityEnabled: Bool = true
   /// Days before a non-favorite node is auto-deleted; 0 disables cleanup.
   public static let defaultAutoDeleteStaleNodesDays: Int = 0

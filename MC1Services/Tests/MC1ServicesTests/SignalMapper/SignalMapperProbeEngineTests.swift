@@ -74,7 +74,7 @@ struct SignalMapperProbeEngineTests {
     warmTargets: [MapperProbeTarget] = [],
     store: PersistenceStore? = nil,
     fixes: StubMapperFixProvider,
-    clock: TestClock,
+    clock: SignalBarsTestClock,
     tuning: MapperTuning
   ) -> SignalMapperProbeEngine {
     SignalMapperProbeEngine(
@@ -93,7 +93,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A probe cycle sends a zero-hop discover and a directed trace to a known target`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget()
@@ -126,7 +126,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `Without a target the cycle still discovers, and never traces blind`() async {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -144,7 +144,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A tick with no usable fix transmits nothing`() async {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let engine = makeEngine(
@@ -165,7 +165,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A discover response folds both link legs and becomes a traceable target`() async {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -200,7 +200,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A trace reply is claimed by tag and folds with the repeater's reading of us`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget()
@@ -242,7 +242,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A reply that never comes is written off as lost, not left outstanding`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget()
@@ -267,7 +267,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `The token bucket refuses a cycle once the burst is spent`() async {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -296,7 +296,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A probed cell does not probe again, and the spot check may spend the reserve`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget()
@@ -330,7 +330,7 @@ struct SignalMapperProbeEngineTests {
   /// the same manual gate a spot check does, so neither is a way around the budget.
   @Test
   func `A manual discover transmits only a discover, and a manual trace only a trace`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget()
@@ -363,7 +363,7 @@ struct SignalMapperProbeEngineTests {
   /// there is nothing to attribute a reply to, so nothing goes out.
   @Test
   func `A manual probe with no usable fix transmits nothing`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget()
@@ -384,7 +384,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `Fresh local coverage is skipped instead of probed`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -448,7 +448,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `Stopping a session writes off outstanding probes and freezes the counters`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget()
@@ -482,7 +482,7 @@ struct SignalMapperProbeEngineTests {
     // The C1 regression: focus probes routed through the policy reset `lastProbeAt`
     // and hold the novelty gate closed forever. With the separate focus scheduler,
     // one tick fires both — the focus trace AND the full novelty cycle.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let focusTarget = try makeTarget(prefix: [0xAA])
@@ -509,7 +509,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A lost focus probe raises the loss streak and a reply resets it`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let focusTarget = try makeTarget(prefix: [0xAA])
@@ -559,7 +559,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A passive sighting refreshes a focus target's downlink state`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let focusTarget = try makeTarget(prefix: [0xAA])
@@ -583,7 +583,7 @@ struct SignalMapperProbeEngineTests {
   func `A discover responder appears in heardStates without being locked on`() async {
     // The unconfigured ride surface shows who is being heard (v1's rule): every
     // responder's live state is tracked, focus or not.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
@@ -609,7 +609,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `Both halves of a trace reply fold once, with the trace's uplink authoritative`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget(prefix: [0xAB])
@@ -648,7 +648,7 @@ struct SignalMapperProbeEngineTests {
   func `A trace event alone still folds a complete result`() async throws {
     // The robustness leg: a radio that never pushes an RX log still measures both legs
     // (review M9 — `.traceData` is the ordinary trace reply, the RX log is optional).
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let target = try makeTarget(prefix: [0xAB])
@@ -680,7 +680,7 @@ struct SignalMapperProbeEngineTests {
   func `The RX-log uplink byte is trusted only at one-byte hash width`() async throws {
     // Review M9: `pathNodes.last` is one byte regardless of hash mode. At mode 1 the
     // trace path packs two-byte hops, so the byte is not an SNR and must be ignored.
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let sink = RecordingSink()
     let key = SignalBarsFixtures.publicKey([0xAB, 0xCD])
@@ -729,7 +729,7 @@ struct SignalMapperProbeEngineTests {
 
   @Test
   func `A probe planned on a doubtful fix still writes rows that carry a cell`() async throws {
-    let clock = TestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let session = MockSignalBarsSession()
     let store = try PersistenceStore(modelContainer: PersistenceStore.createContainer(inMemory: true))
     // 500 m of accuracy: a real position the strict gate refuses, which is exactly the

@@ -11,6 +11,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
   public var selectedThemeID: String?
   public var appColorSchemePreference: String?
   public var mapShowLabels: Bool?
+  public var mapClusteringEnabled: Bool?
   public var mapNorthLocked: Bool?
   public var showDiscoveredNodesOnMap: Bool?
   public var mapFilterMainMap: String?
@@ -23,6 +24,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
   public var showIncomingPath: Bool?
   public var showIncomingHopCount: Bool?
   public var showIncomingRegion: Bool?
+  public var showIncomingHeardCount: Bool?
   public var showIncomingSendTime: Bool?
   public var autoDeleteStaleNodesDays: Int?
   public var discoverySortOrder: String?
@@ -40,6 +42,9 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
   public var hasSeenRepeaterDragHint: Bool?
   public var hasSeenPacketScopeFocusHint: Bool?
   public var signalMapperCardExpanded: Bool?
+  public var translationTargetLanguage: String?
+  public var useDefaultTranslationApp: Bool?
+  public var translationOffersEnabled: Bool?
   public var regionSelection: RegionSelection?
 
   // MARK: - Notification preferences
@@ -110,6 +115,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.hasCompletedOnboarding, AppStorageKey.hasCompletedOnboarding.rawValue),
     (\.liveActivityEnabled, AppStorageKey.liveActivityEnabled.rawValue),
     (\.mapShowLabels, AppStorageKey.mapShowLabels.rawValue),
+    (\.mapClusteringEnabled, AppStorageKey.mapClusteringEnabled.rawValue),
     (\.mapNorthLocked, AppStorageKey.mapNorthLocked.rawValue),
     (\.showDiscoveredNodesOnMap, AppStorageKey.showDiscoveredNodesOnMap.rawValue),
     (\.replyWithQuote, AppStorageKey.replyWithQuote.rawValue),
@@ -118,6 +124,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.showIncomingPath, AppStorageKey.showIncomingPath.rawValue),
     (\.showIncomingHopCount, AppStorageKey.showIncomingHopCount.rawValue),
     (\.showIncomingRegion, AppStorageKey.showIncomingRegion.rawValue),
+    (\.showIncomingHeardCount, AppStorageKey.showIncomingHeardCount.rawValue),
     (\.showIncomingSendTime, AppStorageKey.showIncomingSendTime.rawValue),
     (\.linkPreviewsEnabled, AppStorageKey.linkPreviewsEnabled.rawValue),
     (\.linkPreviewsAutoResolveDM, AppStorageKey.linkPreviewsAutoResolveDM.rawValue),
@@ -128,6 +135,8 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.hasSeenRepeaterDragHint, AppStorageKey.hasSeenRepeaterDragHint.rawValue),
     (\.hasSeenPacketScopeFocusHint, AppStorageKey.hasSeenPacketScopeFocusHint.rawValue),
     (\.signalMapperCardExpanded, AppStorageKey.signalMapperCardExpanded.rawValue),
+    (\.useDefaultTranslationApp, AppStorageKey.useDefaultTranslationApp.rawValue),
+    (\.translationOffersEnabled, AppStorageKey.translationOffersEnabled.rawValue),
     (\.notifyContactMessages, AppStorageKey.notifyContactMessages.rawValue),
     (\.notifyChannelMessages, AppStorageKey.notifyChannelMessages.rawValue),
     (\.notifyRoomMessages, AppStorageKey.notifyRoomMessages.rawValue),
@@ -158,6 +167,7 @@ public struct BackupUserDefaults: Codable, Sendable, Equatable {
     (\.nodesSortOrder, AppStorageKey.nodesSortOrder.rawValue),
     (\.tracePathViewMode, AppStorageKey.tracePathViewMode.rawValue),
     (\.packetScopeGrouping, AppStorageKey.packetScopeGrouping.rawValue),
+    (\.translationTargetLanguage, AppStorageKey.translationTargetLanguage.rawValue),
     (\.selectedThemeID, PersistenceKeys.selectedThemeID),
     (\.appColorSchemePreference, PersistenceKeys.appColorSchemePreference),
   ]

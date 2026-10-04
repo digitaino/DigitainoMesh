@@ -140,7 +140,7 @@ struct PacketScopeCoverageMap {
 /// through, every located observer, the links between them weighted by how
 /// many routes used each, and each observer's strongest measured leg.
 ///
-/// Same placement rules as the heard-repeats map (`MessagePathMapView.
+/// Same placement rules as the heard-repeats map (`SharedRouteMapView.
 /// heardRepeatNodes`): a hop pins only when it resolves to one unambiguous
 /// located repeater, pins dedupe by key, and the SNR treatment goes only on the
 /// leg the observer actually measured — the final hop into the observer.
@@ -424,10 +424,10 @@ enum PacketScopeCoverageBuilder {
       let ranked = legs.sorted { Self.outranks(plans[$0.planIndex], plans[$1.planIndex]) }
       for (rank, leg) in ranked.enumerated() {
         let plan = plans[leg.planIndex]
-        let arc = MessagePathMapView.legArcCoordinates(
+        let arc = SharedRouteMapView.legArcCoordinates(
           from: leg.from,
           to: leg.to,
-          offsetStep: MessagePathMapView.arcOffsetStep(rank: rank, of: ranked.count)
+          offsetStep: SharedRouteMapView.arcOffsetStep(rank: rank, of: ranked.count)
         )
         // A measured leg with no SNR value stays neutral — the trace map's
         // dashed "untraced" reads as never measured, which this was; it just
@@ -609,7 +609,7 @@ enum PacketScopeCoverageBuilder {
       }
     }
     guard let hashBytes = Data(hexString: shortHash), !hashBytes.isEmpty else { return nil }
-    return MessagePathMapView.resolvePlottableRepeater(
+    return SharedRouteMapView.resolvePlottableRepeater(
       hashBytes: hashBytes,
       repeaters: repeaters,
       discoveredRepeaters: discoveredRepeaters,

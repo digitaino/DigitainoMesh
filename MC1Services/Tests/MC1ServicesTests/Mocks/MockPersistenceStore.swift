@@ -56,10 +56,18 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     stubbedTouchContactHeardError = error
   }
 
+  public func setStubbedDeleteContactError(_ error: Error?) {
+    stubbedDeleteContactError = error
+  }
+
   // MARK: - Message Operations
 
   public func isDuplicateMessage(deduplicationKey: String, radioID: UUID) async throws -> Bool {
     messages.values.contains { $0.deduplicationKey == deduplicationKey && $0.radioID == radioID }
+  }
+
+  public func fetchMessage(deduplicationKey: String, radioID: UUID) async throws -> MessageDTO? {
+    messages.values.first { $0.deduplicationKey == deduplicationKey && $0.radioID == radioID }
   }
 
   public func saveMessage(_ dto: MessageDTO) async throws {
@@ -738,6 +746,55 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     contacts.removeValue(forKey: id)
   }
 
+  /// When true, the next `deleteContacts` suspends until `releaseDeleteContacts()`.
+  private var deleteContactsHoldRequested = false
+  private var deleteContactsHoldContinuation: CheckedContinuation<Void, Never>?
+  public private(set) var deleteContactsCallCount = 0
+
+  public func holdNextDeleteContacts() {
+    deleteContactsHoldRequested = true
+  }
+
+  public func releaseDeleteContacts() {
+    if let continuation = deleteContactsHoldContinuation {
+      deleteContactsHoldContinuation = nil
+      continuation.resume()
+    }
+    deleteContactsHoldRequested = false
+  }
+
+  public var isDeleteContactsHeld: Bool {
+    deleteContactsHoldContinuation != nil
+  }
+
+  public func deleteContacts(
+    radioID: UUID,
+    publicKeys: Set<Data>,
+    skippingPublicKeys: @Sendable () -> Set<Data>
+  ) async throws -> [UUID] {
+    deleteContactsCallCount += 1
+    if deleteContactsHoldRequested {
+      deleteContactsHoldRequested = false
+      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        deleteContactsHoldContinuation = continuation
+      }
+    }
+    if let error = stubbedDeleteContactError {
+      throw error
+    }
+    var ids: [UUID] = []
+    for key in publicKeys {
+      if skippingPublicKeys().contains(key) { continue }
+      guard let contact = contacts.values.first(
+        where: { $0.radioID == radioID && $0.publicKey == key }
+      ) else { continue }
+      if skippingPublicKeys().contains(key) { continue }
+      try await deleteContact(id: contact.id)
+      ids.append(contact.id)
+    }
+    return ids
+  }
+
   public func deleteContactIfUnreferenced(id: UUID) async throws {
     // Same actor region as the message map: probe and delete with no suspension between.
     if messages.values.contains(where: { $0.contactID == id }) {
@@ -1349,6 +1406,20 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     }
   }
 
+  public func fetchRxLogEntries(
+    radioID: UUID,
+    channelIndex: UInt8,
+    senderTimestamp: UInt32
+  ) throws -> [RxLogEntryDTO] {
+    mockRxLogEntries
+      .filter { entry in
+        entry.radioID == radioID &&
+          entry.channelIndex == channelIndex &&
+          entry.senderTimestamp == senderTimestamp
+      }
+      .sorted { $0.receivedAt < $1.receivedAt }
+  }
+
   public func findRxLogEntryBySenderPrefix(
     radioID: UUID,
     senderPrefixByte: UInt8,
@@ -1549,6 +1620,15 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     message.packetObserverCount = nil
     message.packetObserversCheckedAt = nil
     messages[id] = message
+  }
+
+  public func adoptIncomingPathIfUnknown(id: UUID, pathNodes: Data, pathLength: UInt8) async throws -> Bool {
+    guard var message = messages[id] else { return false }
+    if message.pathNodes != nil { return false }
+    message.pathNodes = pathNodes
+    message.pathLength = pathLength
+    messages[id] = message
+    return true
   }
 
   public func incrementMessageSendCount(id: UUID) async throws -> Int {
@@ -1756,8 +1836,9 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
   }
 
   public func cleanupDuplicateRemoteNodeSessions(publicKey: Data, keepID: UUID) async throws {
+    guard let kept = remoteNodeSessions[keepID] else { return }
     let duplicateIDs = remoteNodeSessions.values
-      .filter { $0.publicKey == publicKey && $0.id != keepID }
+      .filter { $0.publicKey == publicKey && $0.id != keepID && $0.radioID == kept.radioID }
       .map(\.id)
     for id in duplicateIDs {
       remoteNodeSessions.removeValue(forKey: id)
