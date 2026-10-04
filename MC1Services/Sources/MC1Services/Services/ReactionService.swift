@@ -92,35 +92,31 @@ public actor ReactionService {
     return matched
   }
 
-  /// Builds channel reaction wire format text for sending.
-  /// Format: `{emoji} reacted to "{snippet}" @[{sender}]\n{hash}` (v3 piggyback)
-  ///
-  /// `localNodeName` is a safety floor only: the snippet budget is sized against the
-  /// protocol's worst-case node name so every reactor emits byte-identical text
-  /// (upstream MC1 groups badge counts by the full phrase).
+  /// Builds channel reaction wire text for sending: emoji-first v1,
+  /// `{emoji}@[{sender}]\n{hash}`, the one form every stock release shows as a tapback
+  /// (docs/Reactions.md). `localNodeName` is unused; the signature matches upstream's.
   public nonisolated func buildReactionText(
     emoji: String,
     targetSender: String,
     targetText: String,
     targetTimestamp: UInt32,
-    localNodeName: String
+    localNodeName _: String
   ) -> String {
-    ReactionParser.buildChannelReactionText(
+    ReactionParser.buildTapbackChannelReactionText(
       emoji: emoji,
       targetSender: targetSender,
       targetText: targetText,
-      targetTimestamp: targetTimestamp,
-      localNodeNameByteCount: localNodeName.utf8.count
+      targetTimestamp: targetTimestamp
     )
   }
 
-  /// Builds DM reaction wire format (no sender — two-party is unambiguous)
+  /// Builds DM reaction wire text (no sender — two-party is unambiguous): `{emoji}\n{hash}`.
   public nonisolated func buildDMReactionText(
     emoji: String,
     targetText: String,
     targetTimestamp: UInt32
   ) -> String {
-    ReactionParser.buildDMReactionText(
+    ReactionParser.buildTapbackDMReactionText(
       emoji: emoji,
       targetText: targetText,
       targetTimestamp: targetTimestamp

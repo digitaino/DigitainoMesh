@@ -87,7 +87,8 @@ public struct ParsedDMReaction: Sendable, Equatable {
 ///
 /// Three formats are on the wire; see `docs/Reactions.md` for the interoperability spec.
 ///
-/// - v3 (piggyback, canonical — always emitted):
+/// - v3 (piggyback — accepted on receive; emitted by fork builds until 2026-10-04, when stock
+///   1.4.1+ turned it into plain chat by demanding exactly one emoji):
 ///   - channel: `{emoji} reacted to "{snippet}" @[{sender}]\n{hash}`
 ///   - DM: `{emoji} reacted to "{snippet}"\n{hash}`
 ///   Structurally a v1 reaction whose emoji field carries a readable phrase: stock
@@ -98,7 +99,7 @@ public struct ParsedDMReaction: Sendable, Equatable {
 /// - v2 (human-readable — accepted on receive; emitted by fork Builds 19–40):
 ///   - channel: `{emoji} reacted to [{sender}]: "{snippet}" ({hash})`
 ///   - DM: `{emoji} reacted to: "{snippet}" ({hash})`
-/// - v1 (legacy — accepted on receive; emitted by stock upstream MC1):
+/// - v1 (emitted, emoji-first; also emitted by stock upstream MC1):
 ///   - channel: `{emoji}@[{sender}]\n{hash}`, or mention-first `@[{sender}]{emoji}\n{hash}`
 ///     (stock 1.4.1+ emits mention-first and accepts either order)
 ///   - DM: `{emoji}\n{hash}`
@@ -393,7 +394,31 @@ public enum ReactionParser {
     return result
   }
 
-  /// Builds piggyback channel reaction text.
+  /// Builds the emoji-first channel reaction this app sends. Every stock release reads it as
+  /// a tapback: 1.3.0 to 1.4.0 accept only this order, 1.4.1 and later accept it beside
+  /// mention-first. v3 piggyback shows as chat on 1.4.1+, which demand exactly one emoji.
+  /// Format: `{emoji}@[{sender}]\n{hash}`
+  static func buildTapbackChannelReactionText(
+    emoji: String,
+    targetSender: String,
+    targetText: String,
+    targetTimestamp: UInt32
+  ) -> String {
+    let hash = generateMessageHash(text: targetText, timestamp: targetTimestamp)
+    return "\(emoji)@[\(targetSender)]\n\(hash)"
+  }
+
+  /// Builds the DM reaction this app sends. Format: `{emoji}\n{hash}`
+  static func buildTapbackDMReactionText(
+    emoji: String,
+    targetText: String,
+    targetTimestamp: UInt32
+  ) -> String {
+    "\(emoji)\n\(generateMessageHash(text: targetText, timestamp: targetTimestamp))"
+  }
+
+  /// Builds piggyback channel reaction text. Received, no longer sent (see
+  /// ``buildTapbackChannelReactionText(emoji:targetSender:targetText:targetTimestamp:)``).
   /// Format: `{emoji} reacted to "{snippet}" @[{sender}]\n{hash}`
   ///
   /// The budget is computed against the protocol's worst-case node name
@@ -427,7 +452,7 @@ public enum ReactionParser {
     return "\(prefix)\(snippet)\(suffix)"
   }
 
-  /// Builds piggyback DM reaction text.
+  /// Builds piggyback DM reaction text. Received, no longer sent.
   /// Format: `{emoji} reacted to "{snippet}"\n{hash}`
   ///
   /// Capped at `ProtocolLimits.maxDirectMessageLength` minus `reactionByteMargin`;

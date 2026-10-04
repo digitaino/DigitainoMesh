@@ -17,13 +17,35 @@ struct ReactionServiceTests {
       localNodeName: "Me"
     )
 
-    // Verify piggyback format: {emoji} reacted to "{snippet}" @[{sender}]\n{hash}
-    #expect(text.hasPrefix("👍 reacted to \""))
-    #expect(text.contains("\" @[AlphaNode]\n"))
+    // Emoji-first v1: {emoji}@[{sender}]\n{hash}
+    #expect(text.hasPrefix("👍@[AlphaNode]\n"))
 
     // Verify 8-char Crockford Base32 identifier is present (lowercase) at end
     let idPattern = #/\n([0-9a-hj-km-np-tv-z]{8})$/#
     #expect(text.firstMatch(of: idPattern) != nil)
+  }
+
+  /// Stock 1.4.1 and later accept a reaction only when the emoji field is exactly one emoji;
+  /// 1.3.0 to 1.4.0 accept only emoji-first. What we send must satisfy both.
+  @Test
+  func `A sent reaction is exactly one emoji before the mention, so every stock release shows a tapback`() throws {
+    let service = ReactionService()
+    let text = service.buildReactionText(
+      emoji: "👍🏽",
+      targetSender: "Node",
+      targetText: "see you at the meetup",
+      targetTimestamp: 1_704_067_200,
+      localNodeName: "Me"
+    )
+
+    let emojiField = try #require(text.components(separatedBy: "@[").first)
+    #expect(emojiField == "👍🏽")
+    #expect(emojiField.count == 1)
+    let parsed = try #require(ReactionParser.parse(text))
+    #expect(parsed.emoji == "👍🏽")
+    #expect(parsed.messageHash == ReactionParser.generateMessageHash(
+      text: "see you at the meetup", timestamp: 1_704_067_200
+    ))
   }
 
   @Test
@@ -39,7 +61,8 @@ struct ReactionServiceTests {
       localNodeName: "Me"
     )
 
-    #expect(text.hasPrefix("❤️ reacted to \"ok\" @[Node]\n"))
+    #expect(text.hasPrefix("❤️@[Node]\n"))
+    #expect(ReactionParser.parse(text)?.targetSender == "Node")
   }
 
   @Test
@@ -399,7 +422,7 @@ struct ReactionServiceTests {
       targetText: "Hello world",
       targetTimestamp: 1_704_067_200
     )
-    #expect(text.hasPrefix("👍 reacted to \"Hello world\"\n"))
+    #expect(text.hasPrefix("👍\n"))
     #expect(!text.contains("@[")) // the DM form must never carry the channel's sender field
   }
 

@@ -24,34 +24,42 @@ Crockford Base32 maps 5 bytes to exactly 8 characters using only alphanumerics �
 
 ## Wire Format
 
-Reactions are sent as regular mesh messages with a specific text format. There are three formats: **v3 (piggyback)** is what current clients emit; **v2 (human-readable)** and **v1 (legacy)** are still accepted on receive for back-compat with older clients.
+Reactions are sent as regular mesh messages with a specific text format. This app **emits v1 emoji-first** and **accepts v1 in either order, v2 and v3** on receive.
 
-### v3 — piggyback (canonical, emit this)
+Why v1 emoji-first (decided 2026-10-04): it is the one form every stock MeshCore One release shows as a tapback. 1.3.0 to 1.4.0 accept only emoji-first; 1.4.1 and later (upstream 5d63d5fc) accept either order but require the emoji field to be **exactly one emoji**, which turned v3 — the fork's emit until then — into a chat line with a mention ping on every current stock app. v1 has no readable snippet; clients with no reaction support show the bare carrier.
+
+### v1 — emit this
 
 **Channel** (includes target sender to disambiguate identical messages from different users):
 ```
-{emoji} reacted to "{snippet}" @[{targetSenderName}]\n{hash}
+{emoji}@[{targetSenderName}]\n{hash}
 ```
-Example: `👍 reacted to "see you at the meetup" @[AlphaNode]` + newline + `b45pc4ek`
+Example: `👍@[AlphaNode]` + newline + `b45pc4ek`
+
+Also accepted on receive: mention-first `@[{targetSenderName}]{emoji}\n{hash}`, which stock 1.4.1+ emits.
 
 **DM** (two-party, sender is unambiguous):
 ```
+{emoji}\n{hash}
+```
+Example: `👍` + newline + `b45pc4ek`
+
+The `{emoji}` field is a single extended grapheme cluster. A remainder that merely starts with an emoji is ordinary chat, not a reaction. Queue unmatched bodies that do match this format; do not persist them as chat.
+
+Even a long ZWJ emoji (a family is 25 bytes) and a 31-byte target sender come to under 70 bytes with the brackets, newline and hash, inside any channel budget, so nothing is truncated.
+
+### v3 — piggyback (accept on receive, do not emit; emitted by fork builds until 2026-10-04)
+
+**Channel:**
+```
+{emoji} reacted to "{snippet}" @[{targetSenderName}]\n{hash}
+```
+**DM:**
+```
 {emoji} reacted to "{snippet}"\n{hash}
 ```
-Example: `👍 reacted to "see you at the meetup"` + newline + `b45pc4ek`
 
-**Why this shape:** v3 is structurally a **v1 reaction whose emoji field carries a readable phrase**. Stock upstream MC1 (v1.3.0, which parses only the v1 grammar) accepts it: the hash sits after the last newline, the first `@[` starts the sender field, and its emoji check only requires the field to *start* with an emoji. Upstream therefore attaches the reaction to the correct message and hides the carrier — rendering the whole phrase in its badge — while clients with no reaction support display a readable sentence. Upstream's badge-tap "react back" echoes the stored phrase, which reproduces the v3 string byte-for-byte, so echoes parse as clean tapbacks here too.
-
-The `{snippet}` is a human-readable echo of the target message text. It is **cosmetic only** — receivers MUST NOT parse it or compare it to anything. Only the `{hash}` carries identity. Snippets may be truncated with a trailing `...`.
-
-**Snippet sanitization (mandatory for emitters):** the phrase (everything before `@[` on channels / before the newline in DMs) lands verbatim in upstream MC1's persisted `{emoji}:{count}` summary cache, whose delimiters are `:` and `,`. Emitters MUST therefore replace `:`, `,`, and line breaks in the snippet with spaces (collapsing runs), and MUST split an echoed `@[` with a no-break space (`@ [`, U+00A0) so the structural `@[` stays the first occurrence.
-
-#### Length limits
-
-All limits are in **UTF-8 bytes** (the firmware enforces a byte budget, not characters). When the full text would exceed the budget, shorten the **snippet** and append `...`. The hash line must always be preserved; a target sender long enough to crowd out the hash is truncated inside the brackets too, before the snippet is dropped entirely.
-
-- **Channel reactions** must fit so that the firmware-prepended `"{NodeName}: "` plus the reaction stays within a total of **147 bytes** (`ProtocolLimits.maxChannelMessageTotalLength`). Unlike v2, the budget is computed against the protocol's **worst-case 31-byte node name** (budget = `147 - 31 - 2` = 114 bytes), *not* the actual local name: upstream MC1 groups badge counts by the full phrase string, so two reactors sending the same emoji to the same message must emit byte-identical text regardless of their own name lengths.
-- **DM reactions** are capped at **150 UTF-8 bytes total**. No firmware prefix is prepended.
+Structurally a v1 reaction whose emoji field carries a readable phrase. Stock 1.3.0 to 1.4.0 (emoji field only had to *start* with an emoji) showed it as a tapback with the phrase in the badge; stock 1.4.1+ shows it as chat. The `{snippet}` is cosmetic only — receivers never parse or compare it; only `{hash}` carries identity. The phrase never contains `:`, `,`, a line break or a second `@[` (they would corrupt upstream's `{emoji}:{count}` summary cache or the sender field).
 
 ### v2 — human-readable (accept on receive, do not emit; emitted by fork Builds 19–40)
 
@@ -59,40 +67,16 @@ All limits are in **UTF-8 bytes** (the firmware enforces a byte budget, not char
 ```
 {emoji} reacted to [{targetSenderName}]: "{snippet}" ({hash})
 ```
-Example: `👍 reacted to [AlphaNode]: "see you at the meetup" (b45pc4ek)`
-
 **DM:**
 ```
 {emoji} reacted to: "{snippet}" ({hash})
 ```
-Example: `👍 reacted to: "see you at the meetup" (b45pc4ek)`
 
-v2 reads best on clients with no reaction support, but stock upstream MC1 does not parse it — there it degrades to a plain-text message instead of a tapback, which is why v3 replaced it. Where the echoed text itself contains ` reacted to [` or ` reacted to: `, v2 senders replace that leading space with a no-break space (U+00A0); the v2 budget is computed against the **actual** local node name (`147 - nodeNameBytes - 2` for channels, 150 for DMs).
-
-### v1 — legacy (accept on receive, do not emit)
-
-**Channel:**
-```
-{emoji}@[{targetSenderName}]\n{hash}
-@[{targetSenderName}]{emoji}\n{hash}
-```
-Example: `@[AlphaNode]👍\nb45pc4ek`
-
-The `{emoji}` field is a single extended grapheme cluster. A remainder that merely starts with an emoji is ordinary chat, not a reaction. Queue unmatched bodies that do match this format; do not persist them as chat.
-
-Until 1.4.1, channel reactions put the emoji first: `{emoji}@[{targetSenderName}]\n{hash}`. Accept both orders for now so older clients still match. We'll drop the old one once enough apps have been updated.
-
-**DM:**
-```
-{emoji}\n{hash}
-```
-Example: `👍\nb45pc4ek`
-
-Implementations should parse v1 to remain compatible with pre-v2 clients but should always emit v2.
+Stock MeshCore One never parsed v2; there it is a plain-text message.
 
 ## Receiving Reactions
 
-When you receive a message, check if it matches a reaction format (v2 or v1) before treating it as a regular message.
+When you receive a message, check if it matches a reaction format (v3, v2 or v1) before treating it as a regular message.
 
 **If it's a reaction:** look up the target message by hash. If the target hasn't arrived yet (out-of-order delivery is common on mesh), queue the reaction and match it when the target appears.
 
@@ -100,11 +84,13 @@ When you receive a message, check if it matches a reaction format (v2 or v1) bef
 
 ### Parsing order
 
-Try v2 first, then fall back to v1. The reference implementation distinguishes them as follows:
+Try v3, then v2, then v1. The reference implementation distinguishes them as follows:
 
+- **v3 channel:** the phrase before the first `@[` is `{emoji} reacted to "…" ` and the line after the last `\n` is an 8-char Crockford Base32 hash.
+- **v3 DM:** no `@[`; the phrase before the last `\n` is `{emoji} reacted to "…"`.
 - **v2 channel:** ends with `)`, contains ` reacted to [`, and the trailing 8 chars before `)` are valid Crockford Base32 preceded by ` (`.
 - **v2 DM:** same as channel but with ` reacted to: ` (no `[`).
-- **v1 channel:** contains `@[` and a final `\n` before an 8-char Crockford Base32 hash.
+- **v1 channel:** contains `@[` and a final `\n` before an 8-char Crockford Base32 hash; exactly one emoji either before the `@[` or after the `]`.
 - **v1 DM:** no `@[`, final `\n` before an 8-char Crockford Base32 hash.
 
 ### Deduplication
