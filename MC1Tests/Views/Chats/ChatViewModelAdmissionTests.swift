@@ -707,6 +707,8 @@ private actor AdmissionStubDataStore: PersistenceStoreProtocol {
   func fetchSwapGuard(radioID: UUID) async throws -> SwapGuard { [] }
   func releaseSwapGuard(radioID: UUID, _ parts: SwapGuard) async throws {}
   func fetchSwapProfile(radioID: UUID) async throws -> IdentityProfile? { nil }
+  func recordIdentityDeletion(radioID: UUID, kind: IdentityDeletionKind, key: Data) async throws {}
+  func fetchIdentityDeletions(radioID: UUID, kind: IdentityDeletionKind) async throws -> [Data: Date] { [:] }
   func fetchRemoteNodeSession(id: UUID) async throws -> RemoteNodeSessionDTO? {
     nil
   }

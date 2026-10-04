@@ -1,6 +1,6 @@
 # Radio swap: one identity, any radio
 
-Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1, P2 and P4 built the same day (§4.1–§4.3); P3 and P5 not built; deletions do not yet carry across radios (§4.3). Code references were read from source on that date.
+Branch: `feature/meshwx`. Status: owner decisions taken 2026-10-03 (§5); P1, P2 and P4 built the same day (§4.1–§4.3), and deletions now carry across radios (§4.4); P3 and P5 not built. Checked on Rafael's Wio Tracker L1 the same evening (§4.3). Code references were read from source on that date.
 
 Rafael's brief: *"I would be using the same key on both radios. so I want everything to transfer over. can we design a better process to do this? I would like to be able to swap radios easily and keep all the same contacts and conversations etc."*
 
@@ -246,10 +246,15 @@ P1 is worth building before your next swap even if nothing else is. P1 to P3 cov
 - **Contact detail Delete** falls back to deleting only the phone's row when the connected radio does not hold the contact.
 - **Device picker:** "Cannot show device picker" (`4b328e9b`). The picker now waits for the app to be active, since a removal confirmation shown just before leaves it inactive, and retries once.
 
-**Not built: deletions do not carry across radios.**
-- A contact or channel deleted while on radio A is still on radio B. Switching to B brings it back, and the top-up then writes it to A again.
-- Fixing this needs deletion records (tombstones), compared against each radio's copy: a radio's record older than the deletion is removed from that radio.
-- Not done yet; it is the next step.
+**Deletions across radios** were left for a follow-up and are now built (§4.4).
+
+**On-radio check, 2026-10-03 21:46, Rafael's phone (iOS 27.2) and Seeed Wio Tracker L1:**
+1. The picker opened once the Bluetooth manager was released (`6f7b6da4`).
+2. The radio adopted the ghost onto the history partition `ADFB…`, and the guard armed.
+3. The full sync held 93 contacts the radio does not list, and kept the channel rows at the empty slots 28–32.
+4. The copy offer appeared, and Apply worked.
+
+His "auto-remove stale nodes" setting then removed about 70 nodes it found older than 30 days, as that setting does after every connect. One of them came from his history; it had no messages.
 
 **Verification.**
 - 1,102 services tests pass across the sync, contact, channel, persistence, device, import, advertisement and swap suites, plus every connection-manager suite run one by one. The two notification-sync timeouts that appear only under parallel load pass on their own.
@@ -262,6 +267,29 @@ P1 is worth building before your next swap even if nothing else is. P1 to P3 cov
   - eviction keeping a messaged contact.
 - The app's swap, import, error-coverage, location-prompt and radio-list suites pass.
 - Not tested: the connect ceremony end to end and `topUpFromRecords` against a live session. The simulator's mock radio does not answer reads, so the on-radio check is outstanding.
+
+### 4.4 Deletions across radios
+
+**The problem.** A deletion reaches only the radio connected at the time. The identity's other radios keep their copy, and syncing one of them would bring the deleted item back. The quiet top-up would then write it onto the first radio again.
+
+**Deletion records.**
+- `IdentityDeletion` is a new SwiftData model: radioID, kind (contact or channel), key (public key or secret), and the deletion date.
+- It is recorded when the user deletes:
+  - a contact, through `ContactService.removeContact` or `removeLocalContact`. These cover the Delete actions, Remove Non-Favorite Nodes and the stale-node cleanup;
+  - a channel, through `ChannelService.clearChannel`.
+- It is not recorded when the radio or the app removes something on its own: the full-sync prune, an overwrite-oldest eviction (0x8F), or `vacateSlot`.
+
+**Applying them.**
+- **Contacts:** `ContactService.syncContacts` checks each radio copy of a deleted contact.
+  - A copy whose `lastModified` is on or before the deletion is stale. It is removed from that radio (best effort) and not stored.
+  - A copy written after the deletion is the radio re-adding a node it heard again. It is stored.
+  - Radio clocks are set from the phone on connect, so the dates are comparable. When they are not, the cost is one node removed or kept once more, never a conversation.
+- **Channels:** a channel slot carries no date. So a deleted channel's secret found on a radio is always stale: the slot is emptied on the radio and not stored. Any local row at that slot is left for the copy to fill.
+- **Undoing a deletion:** storing the item again clears its record. That covers the user re-adding it, an import, a live add from a radio, and a sync accepting a newer copy (`stageClearingIdentityDeletions` in `saveContact(radioID:from:)`, `batchSaveContacts`, `saveChannel(radioID:from:)` and `batchSaveChannels`).
+- **The swap profile:** `fetchSwapProfile` leaves out channels deleted since the profile was captured, so the copy does not write them back, and the channel guard does not wait for them.
+- Records are kept until undone. They are tiny, and a radio can come back after any length of time.
+
+**Tests:** `IdentityDeletionTests`, covering the store, recording a deletion, and both the stale and the re-added contact. A channel test in `ChannelServiceSwapGuardTests` covers the emptied slot. 1,138 services tests pass, apart from the two known parallel-load notification timeouts.
 
 ## 5. Owner decisions (taken 2026-10-03)
 

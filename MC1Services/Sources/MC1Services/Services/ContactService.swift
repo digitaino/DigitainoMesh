@@ -141,9 +141,22 @@ public actor ContactService {
       // Build set of public keys from device for cleanup
       let devicePublicKeys = Set(meshContacts.map(\.publicKey))
 
+      // A contact the user deleted while another radio carrying this identity was connected
+      // is still on this one. Its copy predates the deletion: take it off this radio and do
+      // not bring it back (docs/RADIO_SWAP.md 4.4). A copy written after the deletion is the
+      // radio re-adding a node it heard again, and stays.
+      let deletions = (try? await dataStore.fetchIdentityDeletions(radioID: radioID, kind: .contact)) ?? [:]
+      let staleCopies = meshContacts.filter {
+        IdentityDeletion.isStaleContactCopy(lastModified: $0.lastModified, deletedAt: deletions[$0.publicKey])
+      }
+      if !staleCopies.isEmpty {
+        await removeStaleCopiesFromRadio(staleCopies)
+      }
+      let staleKeys = Set(staleCopies.map(\.publicKey))
+
       // Persist every received contact in a single transaction rather than one
       // commit per contact; the per-item save was redundant overhead on every sync.
-      let frames = meshContacts.map { $0.toContactFrame() }
+      let frames = meshContacts.filter { !staleKeys.contains($0.publicKey) }.map { $0.toContactFrame() }
       let receivedCount = try await dataStore.batchSaveContacts(radioID: radioID, from: frames)
 
       let lastTimestamp = meshContacts
@@ -164,6 +177,19 @@ public actor ContactService {
       )
     } catch let error as MeshCoreError {
       throw ContactServiceError.sessionError(error)
+    }
+  }
+
+  /// Removes from the radio the copies of contacts the user deleted while another radio carried
+  /// the identity. Best effort: a copy that survives is filtered out again on the next sync.
+  private func removeStaleCopiesFromRadio(_ copies: [MeshContact]) async {
+    for copy in copies {
+      do {
+        try await session.removeContact(publicKey: copy.publicKey)
+        logger.notice("Removed '\(copy.advertisedName)' from this radio: deleted on another radio carrying this node")
+      } catch {
+        logger.warning("Could not remove deleted contact '\(copy.advertisedName)' from this radio: \(error.localizedDescription)")
+      }
     }
   }
 
@@ -355,6 +381,9 @@ public actor ContactService {
         let contactID = contact.id
 
         try await dataStore.deleteContact(id: contactID)
+        // Other radios carrying this identity still hold it; the record takes it off them
+        // when they next sync.
+        try? await dataStore.recordIdentityDeletion(radioID: radioID, kind: .contact, key: publicKey)
 
         // Trigger cleanup (notifications, badge, session)
         await cleanupCoordinator?.handleCleanup(contactID: contactID, reason: .deleted, publicKey: publicKey)
@@ -384,7 +413,11 @@ public actor ContactService {
       return
     }
 
+    let radioID = try? await dataStore.fetchContact(id: contactID)?.radioID
     try await dataStore.deleteContact(id: contactID)
+    if let radioID {
+      try? await dataStore.recordIdentityDeletion(radioID: radioID, kind: .contact, key: publicKey)
+    }
     await cleanupCoordinator?.handleCleanup(contactID: contactID, reason: .deleted, publicKey: publicKey)
     eventBroadcaster.yield(.nodeDeleted)
     await syncCoordinator?.notifyContactsChanged()

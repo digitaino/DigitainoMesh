@@ -1682,6 +1682,17 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     swapProfiles[radioID]
   }
 
+  /// Deletion records by radioID, kind and key.
+  public var identityDeletions: [UUID: [UInt8: [Data: Date]]] = [:]
+
+  public func recordIdentityDeletion(radioID: UUID, kind: IdentityDeletionKind, key: Data) async throws {
+    identityDeletions[radioID, default: [:]][kind.rawValue, default: [:]][key] = Date()
+  }
+
+  public func fetchIdentityDeletions(radioID: UUID, kind: IdentityDeletionKind) async throws -> [Data: Date] {
+    identityDeletions[radioID]?[kind.rawValue] ?? [:]
+  }
+
   // MARK: - Room Session State
 
   public var remoteNodeSessions: [UUID: RemoteNodeSessionDTO] = [:]

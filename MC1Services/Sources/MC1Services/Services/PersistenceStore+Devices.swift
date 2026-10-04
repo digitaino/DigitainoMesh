@@ -168,9 +168,13 @@ public extension PersistenceStore {
     try modelContext.save()
   }
 
+  /// The stored profile without any channel the user has deleted since it was captured.
   func fetchSwapProfile(radioID: UUID) throws -> IdentityProfile? {
-    guard let data = try primaryDeviceModel(radioID: radioID)?.swapProfile else { return nil }
-    return try? JSONDecoder().decode(IdentityProfile.self, from: data)
+    guard let data = try primaryDeviceModel(radioID: radioID)?.swapProfile,
+          var profile = try? JSONDecoder().decode(IdentityProfile.self, from: data) else { return nil }
+    let deleted = try fetchIdentityDeletions(radioID: radioID, kind: .channel)
+    profile.channels.removeAll { deleted[$0.secret] != nil }
+    return profile
   }
 
   /// The profile a radio taking over from `previous` should carry: `previous`'s own stored

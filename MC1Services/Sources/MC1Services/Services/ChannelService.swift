@@ -113,7 +113,7 @@ public actor ChannelService {
   // MARK: - Properties
 
   private let session: any MeshCoreSessionProtocol
-  private let dataStore: any ChannelPersisting & DevicePersisting
+  private let dataStore: any ChannelPersisting & DevicePersisting & IdentityDeletionPersisting
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "ChannelService")
 
   /// Decryption cache consumer: channel writes and syncs forward the fresh
@@ -134,7 +134,7 @@ public actor ChannelService {
 
   init(
     session: any MeshCoreSessionProtocol,
-    dataStore: any ChannelPersisting & DevicePersisting,
+    dataStore: any ChannelPersisting & DevicePersisting & IdentityDeletionPersisting,
     rxLogService: RxLogService?
   ) {
     self.session = session
@@ -402,6 +402,7 @@ public actor ChannelService {
     pipelined: Bool
   ) async -> ChannelSyncResult {
     var syncErrors = syncErrors
+    let configured = await droppingDeletedChannels(configured, radioID: radioID)
 
     // Snapshot occupied slots before the persist so vacated slots (unconfigured on the
     // radio, or beyond capacity) can be diffed from the survivors and have their drafts
@@ -545,6 +546,8 @@ public actor ChannelService {
         syncErrors.append(syncError)
       }
     }
+
+    configured = await droppingDeletedChannels(configured, radioID: radioID)
 
     // Nothing recovered: skip the persist round-trip and the handler notification.
     guard !configured.isEmpty else {
@@ -730,6 +733,9 @@ public actor ChannelService {
     // Delete channel from local database using the ID we captured earlier
     if let channel = channelToDelete {
       try await dataStore.deleteChannel(id: channel.id)
+      // Other radios carrying this identity still hold it; the record takes it off them when
+      // they next sync (docs/RADIO_SWAP.md 4.4).
+      try? await dataStore.recordIdentityDeletion(radioID: radioID, kind: .channel, key: channel.secret)
     }
 
     // Drop any draft keyed to the freed slot so a channel later created at the
@@ -739,6 +745,30 @@ public actor ChannelService {
     // Refresh the decryption cache with the updated channel list
     let channels = try await dataStore.fetchChannels(radioID: radioID)
     await rxLogService?.updateChannels(from: channels)
+  }
+
+  /// Leaves out the channels the user deleted while another radio carrying this identity was
+  /// connected, and empties their slots on this radio: its copy is stale. The slot's local row,
+  /// if any, is left alone (it may be the identity's own channel waiting to be copied back).
+  /// Unlike a contact, a channel slot carries no date, so a deleted channel only comes back
+  /// when the app writes it again, which clears the record. docs/RADIO_SWAP.md 4.4.
+  private func droppingDeletedChannels(_ configured: [ChannelInfo], radioID: UUID) async -> [ChannelInfo] {
+    let deleted = (try? await dataStore.fetchIdentityDeletions(radioID: radioID, kind: .channel)) ?? [:]
+    guard !deleted.isEmpty else { return configured }
+    let stale = configured.filter { deleted[$0.secret] != nil }
+    for info in stale {
+      do {
+        try await session.setChannel(
+          index: info.index,
+          name: "",
+          secret: Data(repeating: 0, count: ProtocolLimits.channelSecretSize)
+        )
+        logger.notice("Emptied slot \(info.index) ('\(info.name)'): deleted on another radio carrying this node")
+      } catch {
+        logger.warning("Could not empty deleted channel '\(info.name)' at slot \(info.index): \(error.localizedDescription)")
+      }
+    }
+    return configured.filter { deleted[$0.secret] == nil }
   }
 
   /// Empties a slot on the radio and drops its local row, leaving any messages filed under the

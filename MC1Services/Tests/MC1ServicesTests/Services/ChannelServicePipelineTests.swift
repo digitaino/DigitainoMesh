@@ -395,6 +395,44 @@ struct ChannelServiceSwapGuardTests {
   }
 
   @Test
+  func `a channel deleted on another radio is emptied from this one and not brought back`() async throws {
+    let radioID = UUID()
+    let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)
+    try await dataStore.recordIdentityDeletion(radioID: radioID, kind: .channel, key: Data(repeating: 0xCD, count: 16))
+
+    let transport = MockTransport()
+    let session = try await startedSession(transport)
+    defer { Task { await session.stop() } }
+    let service = ChannelService(session: session, dataStore: dataStore, rxLogService: nil)
+
+    let syncTask = Task {
+      try await service.syncChannels(radioID: radioID, maxChannels: 2, usePipelinedRead: false)
+    }
+    try await waitUntil("first serial read should be sent") {
+      await transport.sentData.count == 2
+    }
+    await transport.simulateReceive(
+      makeChannelInfoPacket(index: 0, name: "ch0", secret: Data(repeating: 0xAB, count: 16))
+    )
+    try await waitUntil("second serial read should be sent after the first responds") {
+      await transport.sentData.count == 3
+    }
+    await transport.simulateReceive(
+      makeChannelInfoPacket(index: 1, name: "Deleted", secret: Data(repeating: 0xCD, count: 16))
+    )
+    try await waitUntil("the stale slot should be emptied on the radio") {
+      await transport.sentData.count == 4
+    }
+    await transport.simulateOK()
+    _ = try await syncTask.value
+
+    let emptied = try #require(await transport.sentData.last)
+    #expect(emptied.first == CommandCode.setChannel.rawValue)
+    #expect(emptied.dropFirst().first == 1)
+    #expect(try await dataStore.fetchChannels(radioID: radioID).map(\.index) == [0])
+  }
+
+  @Test
   func `without the guard an empty slot still deletes its row`() async throws {
     let radioID = UUID()
     let dataStore = try await PersistenceStore.createTestDataStore(radioID: radioID, maxChannels: 2)

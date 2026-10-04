@@ -107,6 +107,8 @@ public extension PersistenceStore {
       isNew = true
     }
 
+    // Stored again, so no longer deleted (docs/RADIO_SWAP.md 4.4).
+    try stageClearingIdentityDeletions(radioID: radioID, kind: .contact, keys: [frame.publicKey])
     try modelContext.save()
     return (id: contact.id, isNew: isNew)
   }
@@ -136,6 +138,9 @@ public extension PersistenceStore {
       }
     }
 
+    // The sync filters stale copies of deleted contacts out first, so whatever arrives here
+    // is current and no longer deleted (docs/RADIO_SWAP.md 4.4).
+    try stageClearingIdentityDeletions(radioID: radioID, kind: .contact, keys: frames.map(\.publicKey))
     try modelContext.save()
     return frames.count
   }

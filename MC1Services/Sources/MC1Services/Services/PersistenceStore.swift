@@ -78,6 +78,7 @@ public actor PersistenceStore: PersistenceStoreProtocol {
     BlockedChannelSender.self,
     PendingSend.self,
     MapperCellObservation.self,
+    IdentityDeletion.self,
     // Dormant, data-preservation only — no UI, no services, no queries. Build 40
     // stores carry these tables; omitting them from the schema would let lightweight
     // migration drop the rows on the in-place update. See the model doc comments.

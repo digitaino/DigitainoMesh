@@ -169,6 +169,8 @@ public extension PersistenceStore {
       modelContext.insert(channel)
     }
 
+    // Written again, so no longer deleted (docs/RADIO_SWAP.md 4.4).
+    try stageClearingIdentityDeletions(radioID: radioID, kind: .channel, keys: [info.secret])
     try modelContext.save()
     return channel.id
   }
@@ -215,6 +217,9 @@ public extension PersistenceStore {
         byIndex[index] = nil
       }
     }
+
+    // The sync filters stale copies of deleted channels out first (docs/RADIO_SWAP.md 4.4).
+    try stageClearingIdentityDeletions(radioID: radioID, kind: .channel, keys: configured.map(\.secret))
 
     do {
       try modelContext.save()

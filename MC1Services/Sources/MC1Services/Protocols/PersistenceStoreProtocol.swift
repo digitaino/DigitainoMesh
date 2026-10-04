@@ -33,4 +33,5 @@ public protocol PersistenceStoreProtocol:
   RoomPersisting,
   DiscoveredNodePersisting,
   ReactionPersisting,
-  NodeSnapshotPersisting {}
+  NodeSnapshotPersisting,
+  IdentityDeletionPersisting {}
