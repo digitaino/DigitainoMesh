@@ -2737,6 +2737,60 @@ struct AdvertisementServiceTests {
   }
 
   @Test
+  func `A queued background 0x8F keeps favourites and contacts with messages when it flushes`() async throws {
+    let store = try await makeStore()
+    let session = MockMeshCoreSession()
+    let scene = MockAppStateProvider(isInForeground: false)
+    let service = makeService(session: session, store: store, appStateProvider: scene)
+
+    let favouriteKey = makePublicKey(seed: 0xB1)
+    let messagedKey = makePublicKey(seed: 0xB2)
+    let strangerKey = makePublicKey(seed: 0xB3)
+    _ = try await store.saveContact(radioID: radioID, from: ContactFrame(
+      publicKey: favouriteKey, type: .chat, flags: 0x01, outPathLength: 0, outPath: Data(),
+      name: "Favourite", lastAdvertTimestamp: 1_700_000_000, latitude: 0, longitude: 0,
+      lastModified: 1_700_000_100
+    ))
+    let messaged = try await store.saveContact(
+      radioID: radioID, from: makeContactFrame(publicKey: messagedKey, name: "Friend")
+    )
+    try await store.saveMessage(.testDirectMessage(radioID: radioID, contactID: messaged.id, text: "keep me"))
+    let stranger = try await store.saveContact(
+      radioID: radioID, from: makeContactFrame(publicKey: strangerKey, name: "Stranger")
+    )
+    let counter = EventCounter()
+    let events = service.events()
+    let listener = Task {
+      for await event in events {
+        await counter.note(event)
+      }
+    }
+
+    await startMonitoring(service, session: session)
+    for key in [favouriteKey, messagedKey, strangerKey] {
+      await session.yieldEvent(.contactDeleted(publicKey: key))
+    }
+    let queued = await waitUntil { await service.pendingDeletedKeys.count == 3 }
+    #expect(queued)
+
+    await scene.setIsInForeground(true)
+    await service.handleReturnToForeground()
+
+    let strangerGone = await waitUntil {
+      await (try? store.fetchContact(radioID: radioID, publicKey: strangerKey)) == nil
+    }
+    #expect(strangerGone)
+    #expect(await Set(counter.contactDeletedCleanupIDs) == [stranger.id])
+    #expect(try await store.fetchContact(radioID: radioID, publicKey: favouriteKey) != nil)
+    #expect(try await store.fetchContact(radioID: radioID, publicKey: messagedKey) != nil)
+    #expect(try await store.fetchMessages(contactID: messaged.id, limit: 10, offset: 0).count == 1)
+
+    await service.stopEventMonitoring()
+    service.finishEvents()
+    _ = await listener.result
+  }
+
+  @Test
   func `re-advert after background 0x8F clears pendingDeletedKeys`() async throws {
     let store = try await makeStore()
     let session = MockMeshCoreSession()
@@ -3007,11 +3061,9 @@ struct AdvertisementServiceTests {
     let service = makeService(session: session, store: store, appStateProvider: scene)
 
     let key = makePublicKey(seed: 0xA6)
+    // No messages: a 0x8F never takes a contact with history (fork rule of 2026-09-01).
     let saved = try await store.saveContact(
       radioID: radioID, from: makeContactFrame(publicKey: key, name: "LastEvent")
-    )
-    try await store.saveMessage(
-      MessageDTO.testDirectMessage(radioID: radioID, contactID: saved.id, text: "gone")
     )
     let counter = EventCounter()
     let events = service.events()
@@ -3159,10 +3211,9 @@ struct AdvertisementServiceTests {
     let firstKey = makePublicKey(seed: 0xE5)
     let nextKey = makePublicKey(seed: 0xE6)
     let first = try await store.saveContact(radioID: radioID, from: makeContactFrame(publicKey: firstKey))
+    // No messages: a 0x8F never takes a contact with history (fork rule of 2026-09-01), and
+    // this test is about the drain, so `next` must be deletable unless revived.
     let next = try await store.saveContact(radioID: radioID, from: makeContactFrame(publicKey: nextKey))
-    try await store.saveMessage(
-      MessageDTO.testDirectMessage(radioID: radioID, contactID: next.id, text: "keep if revived")
-    )
     await service.setDeltaSyncHandler { _ in .synced }
     let counter = EventCounter()
     let events = service.events()
@@ -3208,7 +3259,6 @@ struct AdvertisementServiceTests {
     #expect(await Set(counter.contactDeletedCleanupIDs) == expectedIDs)
     if nextRevived {
       #expect(try await store.fetchContact(radioID: radioID, publicKey: nextKey)?.id == next.id)
-      #expect(try await store.fetchMessages(contactID: next.id, limit: 10, offset: 0).count == 1)
     }
     #expect(await service.pendingDeletedKeys.isEmpty)
     #expect(await store.deleteContactsCallCount == 2)

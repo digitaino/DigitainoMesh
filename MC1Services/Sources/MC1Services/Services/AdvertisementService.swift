@@ -260,9 +260,17 @@ public actor AdvertisementService {
         let keys = pendingDeletedKeys
         pendingDeletedKeys.removeAll()
         do {
+          // Same rule as the foreground path: the radio ran out of room and the user deleted
+          // nothing, so a favourite or a contact with messages stays on the phone.
+          let kept = try await keysKeepingHistory(keys, radioID: radioID)
+          if !kept.isEmpty {
+            logger.notice("Overwrite oldest: keeping \(kept.count) contact(s) with history on the phone")
+            eventBroadcaster.yield(.nodeStorageFullChanged(isFull: false))
+            eventBroadcaster.yield(.contactUpdated)
+          }
           let deletedIDs = try await dataStore.deleteContacts(
             radioID: radioID,
-            publicKeys: keys,
+            publicKeys: keys.subtracting(kept),
             skippingPublicKeys: { revivedDuringDeleteFlush.withLock { $0 } }
           )
           guard !deletedIDs.isEmpty else { continue }
@@ -282,6 +290,21 @@ public actor AdvertisementService {
     }
     deletionFlushTask = task
     await task.value
+  }
+
+  /// The keys of queued 0x8F deletions whose contact must stay: favourites and contacts with
+  /// messages (rule of 2026-09-01, docs/guides/Sync.md).
+  private func keysKeepingHistory(_ keys: Set<Data>, radioID: UUID) async throws -> Set<Data> {
+    var kept: Set<Data> = []
+    for key in keys {
+      guard let contact = try await dataStore.fetchContact(radioID: radioID, publicKey: key) else { continue }
+      if contact.isFavorite {
+        kept.insert(key)
+      } else if try await !dataStore.fetchMessages(contactID: contact.id, limit: 1, offset: 0).isEmpty {
+        kept.insert(key)
+      }
+    }
+    return kept
   }
 
   /// Records a 0x80 key for the next delta sync.
