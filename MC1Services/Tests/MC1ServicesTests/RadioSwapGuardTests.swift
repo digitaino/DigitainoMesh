@@ -200,6 +200,66 @@ struct RadioSwapGuardTests {
     [.bluetooth(peripheralUUID: id, displayName: nil)]
   }
 
+  /// Rafael, 2026-10-04: a radio that had carried the node was erased and reflashed (new key),
+  /// paired again as a new node, then given the node's key back. It must join the history the
+  /// other radio carries and be offered the copy, not stay in its own empty partition.
+  @Test
+  func `A known radio given another radio's key joins that radio's history and is offered the copy`() async throws {
+    let store = try await createStore()
+    let historyRadioID = UUID()
+    let wio = DeviceDTO.testDevice(radioID: historyRadioID, publicKey: Self.identityKey, nodeName: "Digitaino")
+    try await store.saveDevice(wio.copy {
+      $0.connectionMethods = Self.bluetooth(wio.id)
+      $0.lastConnected = Date(timeIntervalSinceReferenceDate: 1000)
+    })
+    _ = try await store.saveChannel(
+      radioID: historyRadioID, from: ChannelInfo(index: 9, name: "Survey", secret: Data(repeating: 0x09, count: 16))
+    )
+    let reflashed = DeviceDTO.testDevice(
+      radioID: UUID(),
+      publicKey: Data(repeating: 0x48, count: 32),
+      nodeName: "480A1F8A",
+      lastContactSync: 1_700_000_000
+    )
+    try await store.saveDevice(reflashed.copy {
+      $0.connectionMethods = Self.bluetooth(reflashed.id)
+      $0.lastConnected = Date(timeIntervalSinceReferenceDate: 2000)
+    })
+
+    #expect(try await store.fetchSiblingRadio(publicKey: Self.identityKey, excluding: reflashed.id)?.id == wio.id)
+    let joined = try await store.joinSiblingIdentity(currentDeviceID: reflashed.id, newPublicKey: Self.identityKey)
+
+    #expect(joined == historyRadioID)
+    let row = try #require(try await store.fetchDevice(id: reflashed.id))
+    #expect(row.radioID == historyRadioID)
+    #expect(row.publicKey == Self.identityKey)
+    #expect(row.lastContactSync == 0)
+    #expect(try await store.fetchDevice(id: wio.id)?.radioID == historyRadioID)
+    #expect(try await store.fetchDevices(radioID: historyRadioID).count == 2)
+    #expect(try await store.fetchSwapGuard(radioID: historyRadioID) == .all)
+    let profile = try #require(try await store.fetchSwapProfile(radioID: historyRadioID))
+    #expect(profile.nodeName == "Digitaino")
+    #expect(profile.channels.map(\.name) == ["Survey"])
+  }
+
+  @Test
+  func `A radio already in the key's history, or with no other radio carrying the key, is left alone`() async throws {
+    let store = try await createStore()
+    let radioID = UUID()
+    let first = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+    let second = DeviceDTO.testDevice(radioID: radioID, publicKey: Self.identityKey)
+    try await store.saveDevice(first.copy { $0.connectionMethods = Self.bluetooth(first.id) })
+    try await store.saveDevice(second.copy { $0.connectionMethods = Self.bluetooth(second.id) })
+    let loner = DeviceDTO.testDevice(radioID: UUID(), publicKey: Data(repeating: 0x05, count: 32))
+    try await store.saveDevice(loner.copy { $0.connectionMethods = Self.bluetooth(loner.id) })
+
+    #expect(try await store.joinSiblingIdentity(currentDeviceID: second.id, newPublicKey: Self.identityKey) == nil)
+    #expect(try await store.joinSiblingIdentity(
+      currentDeviceID: loner.id, newPublicKey: Data(repeating: 0x06, count: 32)
+    ) == nil)
+    #expect(try await store.fetchDevice(id: loner.id)?.radioID == loner.radioID)
+  }
+
   @Test
   func `Reads by identity go to the radio that connected most recently`() async throws {
     let store = try await createStore()

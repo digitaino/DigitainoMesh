@@ -325,6 +325,46 @@ public extension PersistenceStore {
       .map { DeviceDTO(from: $0) }
   }
 
+  /// The most recently connected other radio that carries `publicKey` and can still connect:
+  /// the radio whose history a radio newly given that key should join.
+  func fetchSiblingRadio(publicKey: Data, excluding id: UUID) throws -> DeviceDTO? {
+    let targetKey = publicKey
+    let excludedID = id
+    let predicate = #Predicate<Device> { device in
+      device.publicKey == targetKey && device.id != excludedID
+    }
+    let descriptor = FetchDescriptor(
+      predicate: predicate,
+      sortBy: [SortDescriptor(\Device.lastConnected, order: .reverse)]
+    )
+    return try modelContext.fetch(descriptor)
+      .first { !$0.connectionMethods.isEmpty }
+      .map { DeviceDTO(from: $0) }
+  }
+
+  /// Moves a radio this phone already knows onto another saved radio's history, after the key
+  /// that radio carries was put on it (a reflashed radio given the node's key back). The other
+  /// radio keeps its row: both now carry the identity (docs/RADIO_SWAP.md, R1). Like a ghost
+  /// rejoin, this radio's tables were never synced against that history, so its deletions are
+  /// held and it takes the other radio's settings and channel layout for "Copy to This Radio".
+  /// The partition it leaves is left as it was.
+  /// - Returns: the joined radioID, or nil when no other radio carries the key or this radio
+  ///   is already in its history.
+  func joinSiblingIdentity(currentDeviceID: UUID, newPublicKey: Data) throws -> UUID? {
+    guard let sibling = try fetchSiblingRadio(publicKey: newPublicKey, excluding: currentDeviceID),
+          let current = try fetchDeviceModel(id: currentDeviceID),
+          current.radioID != sibling.radioID,
+          let siblingModel = try fetchDeviceModel(id: sibling.id) else { return nil }
+
+    current.radioID = sibling.radioID
+    current.publicKey = newPublicKey
+    current.swapProfile = try swapProfileData(inheritingFrom: siblingModel)
+    current.swapGuard = SwapGuard.all.rawValue
+    current.lastContactSync = 0
+    try modelContext.save()
+    return sibling.radioID
+  }
+
   /// Removes one radio's row while keeping its history. With another radio still carrying
   /// the identity, the history stays with that radio and the row simply goes. Otherwise the
   /// row becomes a ghost, keeping the key-to-history bridge for a later re-pair.

@@ -934,6 +934,21 @@ public final class ConnectionManager {
       rejoinedGhost = true
     }
 
+    // A radio this phone already knows can also be given a key another saved radio carries
+    // (erased and reflashed, then handed the node's key back, in the app or with another tool).
+    // It belongs with that radio's history, not the partition its old key had.
+    var joinedSibling: DeviceDTO?
+    if !rejoinedGhost, let existingDevice,
+       let sibling = try? await persistenceStore.fetchSiblingRadio(
+         publicKey: selfInfo.publicKey,
+         excluding: deviceID
+       ),
+       sibling.radioID != existingDevice.radioID {
+      logger.info("Radio \(deviceID.uuidString.prefix(8)) now carries the key of \(sibling.id.uuidString.prefix(8)); joining radioID \(sibling.radioID)")
+      resolvedRadioID = sibling.radioID
+      joinedSibling = sibling
+    }
+
     // This radio is taking on history it has never been synced against: a known key on
     // a radio this phone has no row for, a ghost rejoin, or a key that changed on a known
     // radio. Its contact table and channel slots say nothing about that history yet, so
@@ -945,6 +960,7 @@ public final class ConnectionManager {
     let lastRadioForIdentity = try? await persistenceStore.fetchDevice(radioID: resolvedRadioID)
     let switchedFromRadio = lastRadioForIdentity.flatMap { $0.id == deviceID ? nil : $0 }
     let tookOnIdentity = rejoinedGhost
+      || joinedSibling != nil
       || deviceByPublicKey != nil
       || switchedFromRadio != nil
       || (existingDevice.map { $0.publicKey != selfInfo.publicKey } ?? false)
@@ -989,7 +1005,7 @@ public final class ConnectionManager {
     // Arm before any sync runs. A failure fails the connect rather than letting the
     // first full sync prune against a table that never held this history.
     if tookOnIdentity {
-      let previousID = rejoinedGhost ? nil : (switchedFromRadio ?? deviceByPublicKey)?.id
+      let previousID = rejoinedGhost ? nil : (switchedFromRadio ?? joinedSibling ?? deviceByPublicKey)?.id
       try await newServices.dataStore.armSwapGuard(id: deviceID, previousDeviceID: previousID)
       logger.notice("Radio swap guard armed: radio \(deviceID.uuidString.prefix(8)) took on radioID \(resolvedRadioID)")
     }
@@ -1146,10 +1162,19 @@ public final class ConnectionManager {
 
     let newRadioID: UUID?
     do {
-      newRadioID = try await expectedServices.dataStore.reconcileGhostIdentity(
+      // A ghost holds the key's history first; failing that, another saved radio may carry it.
+      let ghostRadioID = try await expectedServices.dataStore.reconcileGhostIdentity(
         currentDeviceID: deviceID,
         newPublicKey: selfInfo.publicKey
       )
+      newRadioID = if let ghostRadioID {
+        ghostRadioID
+      } else {
+        try await expectedServices.dataStore.joinSiblingIdentity(
+          currentDeviceID: deviceID,
+          newPublicKey: selfInfo.publicKey
+        )
+      }
     } catch {
       logger.warning("reconcileIdentity: reconcileGhostIdentity failed: \(error.localizedDescription)")
       return nil
@@ -1168,7 +1193,7 @@ public final class ConnectionManager {
     }
 
     guard let newRadioID else {
-      logger.info("reconcileIdentity: publicKey changed but no ghost matched")
+      logger.info("reconcileIdentity: publicKey changed but no ghost or other radio carries it")
       return nil
     }
 
@@ -1190,7 +1215,7 @@ public final class ConnectionManager {
       )
     }
 
-    logger.info("Reconciled identity to ghost radioID after key import: \(newRadioID)")
+    logger.info("Reconciled identity to radioID \(newRadioID) after key import")
     return newRadioID
   }
 
