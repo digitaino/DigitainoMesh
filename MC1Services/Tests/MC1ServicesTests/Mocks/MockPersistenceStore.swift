@@ -1284,6 +1284,15 @@ public actor MockPersistenceStore: PersistenceStoreProtocol {
     channels.removeValue(forKey: id)
   }
 
+  public private(set) var vacatedChannelSlots: [(radioID: UUID, index: UInt8)] = []
+
+  public func vacateChannelSlot(radioID: UUID, index: UInt8) async throws {
+    vacatedChannelSlots.append((radioID, index))
+    if let channel = channels.values.first(where: { $0.radioID == radioID && $0.index == index }) {
+      channels.removeValue(forKey: channel.id)
+    }
+  }
+
   public func deleteMessagesForChannel(radioID: UUID, channelIndex: UInt8) async throws {
     deletedMessagesForChannelCalls.append((radioID: radioID, channelIndex: channelIndex))
     messages = messages.filter { $0.value.radioID != radioID || $0.value.channelIndex != channelIndex }

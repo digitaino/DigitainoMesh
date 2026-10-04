@@ -37,6 +37,10 @@ public protocol ChannelPersisting: Actor {
   /// Delete a channel
   func deleteChannel(id: UUID) async throws
 
+  /// Removes the row at a slot "Copy to This Radio" emptied because the same channel now
+  /// sits in its own slot, moving that slot's messages to it rather than wiping them.
+  func vacateChannelSlot(radioID: UUID, index: UInt8) async throws
+
   /// Delete all messages for a channel
   func deleteMessagesForChannel(radioID: UUID, channelIndex: UInt8) async throws
 

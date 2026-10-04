@@ -404,6 +404,7 @@ private actor StubDataStore: PersistenceStoreProtocol {
 
   func saveChannel(_ dto: ChannelDTO) async throws {}
   func deleteChannel(id: UUID) async throws {}
+  func vacateChannelSlot(radioID: UUID, index: UInt8) async throws {}
   func updateChannelLastMessage(channelID: UUID, date: Date?) async throws {}
   func incrementChannelUnreadCount(channelID: UUID) async throws {}
   func clearChannelUnreadCount(channelID: UUID) async throws {}

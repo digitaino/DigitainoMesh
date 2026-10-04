@@ -10,6 +10,14 @@ enum DeduplicationKey {
   static let outgoingIdentityPrefix = "out-"
   static let unknownContactPlaceholder = "unknown"
 
+  /// The same channel key filed under another slot. Keys embed the slot, so messages moved
+  /// between slots carry rewritten keys or a later copy at the new slot would not dedup.
+  static func movingChannel(_ key: String, from oldIndex: UInt8, to newIndex: UInt8) -> String {
+    let oldPrefix = "\(channelPrefix)\(oldIndex)-"
+    guard key.hasPrefix(oldPrefix) else { return key }
+    return "\(channelPrefix)\(newIndex)-" + key.dropFirst(oldPrefix.count)
+  }
+
   static func contentBased(
     contactID: UUID?,
     channelIndex: UInt8?,

@@ -151,7 +151,8 @@ public extension PersistenceStore {
   }
 
   /// Save or update a channel from ChannelInfo. A changed secret is a different
-  /// channel occupying the slot, so the previous occupant's history is wiped.
+  /// channel occupying the slot, so the previous occupant's history is wiped, except
+  /// while a radio swap is settling (``channelHistoryIsHeld(radioID:)``).
   func saveChannel(radioID: UUID, from info: ChannelInfo) throws -> UUID {
     // Commit batched RxLog inserts first so a failed save/rollback cannot discard them.
     try commitPendingRxLogEntries()
@@ -166,7 +167,7 @@ public extension PersistenceStore {
     do {
       let channel: Channel
       if let existing = try modelContext.fetch(descriptor).first {
-        try applyRadioChannelInfo(info, to: existing)
+        try applyRadioChannelInfo(info, to: existing, keepingHistory: channelHistoryIsHeld(radioID: radioID))
         channel = existing
       } else {
         channel = Channel(radioID: radioID, from: info)
@@ -203,11 +204,12 @@ public extension PersistenceStore {
     }
     let existing = try modelContext.fetch(FetchDescriptor(predicate: predicate))
     var byIndex = Dictionary(existing.map { ($0.index, $0) }, uniquingKeysWith: { current, _ in current })
+    let keepHistory = channelHistoryIsHeld(radioID: radioID)
 
     do {
       for info in configured {
         if let row = byIndex[info.index] {
-          try applyRadioChannelInfo(info, to: row)
+          try applyRadioChannelInfo(info, to: row, keepingHistory: keepHistory)
         } else {
           let channel = Channel(radioID: radioID, from: info)
           modelContext.insert(channel)
@@ -287,6 +289,51 @@ public extension PersistenceStore {
     }
   }
 
+  /// Removes the channel row at a slot "Copy to This Radio" has just emptied because the same
+  /// channel now sits in its own slot. Unlike ``deleteChannel(id:)`` the slot's messages are not
+  /// wiped: they are that channel's, filed under the wrong slot while the radio held it there,
+  /// so they move to the slot now carrying the same secret. With no such slot they stay put.
+  func vacateChannelSlot(radioID: UUID, index: UInt8) throws {
+    // Commit batched RxLog inserts first so a failed save/rollback cannot discard them.
+    try commitPendingRxLogEntries()
+    let targetRadioID = radioID
+    let rows = try modelContext.fetch(FetchDescriptor(predicate: #Predicate<Channel> { channel in
+      channel.radioID == targetRadioID
+    }))
+    guard let row = rows.first(where: { $0.index == index }) else { return }
+    let home = rows.first { $0.index != index && $0.secret == row.secret }
+    do {
+      if let home {
+        try _moveMessagesWithoutSaving(radioID: radioID, from: index, to: home.index)
+        if let moved = row.lastMessageDate, moved > (home.lastMessageDate ?? .distantPast) {
+          home.lastMessageDate = moved
+        }
+        home.unreadCount += row.unreadCount
+        home.unreadMentionCount += row.unreadMentionCount
+      }
+      modelContext.delete(row)
+      try modelContext.save()
+    } catch {
+      modelContext.rollback()
+      throw error
+    }
+  }
+
+  /// Refiles a slot's messages under another slot, rewriting their dedup keys to match.
+  private func _moveMessagesWithoutSaving(radioID: UUID, from oldIndex: UInt8, to newIndex: UInt8) throws {
+    let targetRadioID = radioID
+    let targetChannelIndex: UInt8? = oldIndex
+    let messages = try modelContext.fetch(FetchDescriptor(predicate: #Predicate<Message> { message in
+      message.radioID == targetRadioID && message.channelIndex == targetChannelIndex
+    }))
+    for message in messages {
+      message.channelIndex = newIndex
+      if let key = message.deduplicationKey {
+        message.deduplicationKey = DeduplicationKey.movingChannel(key, from: oldIndex, to: newIndex)
+      }
+    }
+  }
+
   /// Delete all messages for a channel, cascading PendingSend, MessageRepeat, and
   /// Reaction rows. A failed save rolls back so a later save cannot flush the staged deletes.
   func deleteMessagesForChannel(radioID: UUID, channelIndex: UInt8) throws {
@@ -334,10 +381,20 @@ public extension PersistenceStore {
     }
   }
 
+  /// Whether a slot change must keep the slot's messages. A radio that has just taken on this
+  /// identity reports its own slots, not this history's: a different secret at a slot is that
+  /// radio's channel sitting where the identity's will be copied back, and wiping would delete
+  /// the identity's history before the copy is even offered (docs/RADIO_SWAP.md). Held until
+  /// the channel swap guard releases; a failed read holds too.
+  private func channelHistoryIsHeld(radioID: UUID) -> Bool {
+    ((try? fetchSwapGuard(radioID: radioID)) ?? .all).contains(.channels)
+  }
+
   /// Applies a radio-reported `ChannelInfo` to an existing row. A different secret
-  /// means a different occupant, so prior messages and derived counters are wiped first.
-  private func applyRadioChannelInfo(_ info: ChannelInfo, to row: Channel) throws {
-    if row.secret != info.secret {
+  /// means a different occupant, so prior messages and derived counters are wiped first,
+  /// unless `keepingHistory` (a radio swap is settling; the slot is only relabelled).
+  private func applyRadioChannelInfo(_ info: ChannelInfo, to row: Channel, keepingHistory: Bool) throws {
+    if row.secret != info.secret, !keepingHistory {
       try _deleteMessagesForChannelWithoutSaving(radioID: row.radioID, channelIndex: row.index)
       row.lastMessageDate = nil
       row.unreadCount = 0

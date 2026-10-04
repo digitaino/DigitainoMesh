@@ -769,10 +769,11 @@ public actor ChannelService {
     return configured.filter { deleted[$0.secret] == nil }
   }
 
-  /// Empties a slot on the radio and drops its local row, leaving any messages filed under the
-  /// slot where they are, as a sync of an emptied slot does. Used when "Copy to This Radio" has
-  /// written a channel into its own slot and the slot it sat in must not keep a second copy:
-  /// firmware files an incoming message under the first slot whose secret matches.
+  /// Empties a slot on the radio and drops its local row, moving any messages filed under the
+  /// slot to the slot that now holds the same channel (``ChannelPersisting/vacateChannelSlot(radioID:index:)``).
+  /// Used when "Copy to This Radio" has written a channel into its own slot and the slot it sat
+  /// in must not keep a second copy: firmware files an incoming message under the first slot
+  /// whose secret matches.
   public func vacateSlot(radioID: UUID, index: UInt8) async throws {
     let row = try await dataStore.fetchChannel(radioID: radioID, index: index)
 
@@ -786,8 +787,8 @@ public actor ChannelService {
       throw ChannelServiceError.sessionError(error)
     }
 
-    if let row {
-      try await dataStore.deleteChannel(id: row.id)
+    if row != nil {
+      try await dataStore.vacateChannelSlot(radioID: radioID, index: index)
     }
     await slotOccupantChangedHandler?(radioID, [index])
 
