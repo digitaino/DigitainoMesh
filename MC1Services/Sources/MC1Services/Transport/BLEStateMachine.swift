@@ -269,6 +269,28 @@ actor BLEStateMachine: BLEStateMachineProtocol {
     initializeCentralManager()
   }
 
+  /// Releases the CBCentralManager while nothing is connected, so AccessorySetupKit will
+  /// present its picker. iOS 27 refuses the picker while the app holds any CBManager under the
+  /// app-wide Bluetooth permission ("CBManagers active with global permissions", surfaced as
+  /// `pickerRestricted` and shown as "Cannot show device picker"), and this app has that
+  /// permission for the radio list's signal scan. Stopping the scan is not enough; the manager
+  /// itself has to go. The next call that needs it (connect, scan and the system-connection
+  /// checks all start with `activate()`) creates a fresh one. Rafael, iOS 27.2, 2026-10-03.
+  @discardableResult
+  func releaseCentralManagerForAccessoryPicker() -> Bool {
+    stopScanning()
+    guard isActivated else { return true }
+    guard case .idle = phase else {
+      logger.warning("[BLE] Central manager kept for the accessory picker - phase: \(phase.name)")
+      return false
+    }
+    logger.info("[BLE] Releasing central manager for the accessory picker, instance: \(instanceID)")
+    centralManager.delegate = nil
+    centralManager = nil
+    isActivated = false
+    return true
+  }
+
   private let centralQueue = DispatchQueue(label: "com.pocketmesh.ble.central")
 
   private func initializeCentralManager() {

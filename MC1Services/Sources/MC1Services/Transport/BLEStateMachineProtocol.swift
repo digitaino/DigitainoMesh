@@ -48,6 +48,11 @@ public protocol BLEStateMachineProtocol: Actor {
   /// Activates the central manager if needed.
   func activate()
 
+  /// Releases the central manager while nothing is connected, so AccessorySetupKit will
+  /// present its picker. Returns whether it was released.
+  @discardableResult
+  func releaseCentralManagerForAccessoryPicker() -> Bool
+
   /// Sets a handler for auto-reconnecting events.
   /// Called when device disconnects but iOS is attempting automatic reconnection.
   /// - Parameters:

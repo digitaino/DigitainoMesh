@@ -89,6 +89,14 @@ public actor MockBLEStateMachine: BLEStateMachineProtocol {
     activateCallCount += 1
   }
 
+  public private(set) var releaseCentralCallCount = 0
+
+  @discardableResult
+  public func releaseCentralManagerForAccessoryPicker() -> Bool {
+    releaseCentralCallCount += 1
+    return true
+  }
+
   public func setAutoReconnectingHandler(_ handler: @escaping @Sendable (UUID, String) -> Void) {
     autoReconnectingHandler = handler
   }

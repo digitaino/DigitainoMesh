@@ -55,6 +55,13 @@ public extension ConnectionManager {
     try await pairing.activate()
     await removeStrandedAssociations()
 
+    // iOS 27 refuses the picker while this app holds a CBManager under its app-wide Bluetooth
+    // permission; nothing is connected here, so release it and give CoreBluetooth a moment to
+    // let go. Connecting the chosen radio creates a fresh one.
+    if await stateMachine.releaseCentralManagerForAccessoryPicker() {
+      try await Task.sleep(for: .milliseconds(300))
+    }
+
     let deviceID = try await pairing.discoverDevice()
 
     if await waitForOtherAppReconnection(deviceID) {
