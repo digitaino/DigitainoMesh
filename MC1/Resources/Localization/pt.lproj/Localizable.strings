@@ -448,7 +448,7 @@
 "error.channelService.circuitBreakerOpen" = "Sincronização de canais suspensa após %lld falhas consecutivas.";
 
 /* Location: IntentError.swift - No radio is connected, so retrying alone will not help until one is connected */
-"error.intent.notConnected" = "Nenhum rádio está ligado. Ligue o rádio em MeshCore One e tente novamente.";
+"error.intent.notConnected" = "Nenhum rádio está ligado. Ligue o rádio em DigitainoMesh e tente novamente.";
 
 /* Location: IntentError.swift - No single valid recipient was chosen (none, both, or a recipient that cannot receive messages) */
 "error.intent.invalidRecipient" = "Escolha um único destinatário: um contacto ou um canal que possa receber mensagens.";
@@ -460,7 +460,7 @@
 "error.intent.sendFailed" = "A mensagem não pôde ser colocada na fila de envio. Tente novamente.";
 
 /* Title of the radio-status Control Center control that opens the app; resolved in the app process */
-"Open MeshCore One" = "Abrir MeshCore One";
+"Open DigitainoMesh" = "Abrir DigitainoMesh";
 
 /* Location: ChatSendQueueServiceError+UserFacingMessage.swift - Queueing a message for send failed - %@ is the underlying error message */
 "error.chatSendQueue.persistFailed" = "Falha ao colocar a mensagem na fila de envio: %@";

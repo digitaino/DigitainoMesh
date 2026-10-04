@@ -179,11 +179,11 @@
 
 /* Sheet body when one device is paired with iPhone */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupMessage" = "Este dispositivo está emparelhado com o iPhone. Terá de o esquecer antes de o adicionar ao MeshCore One.";
+"deviceSelection.setupMessage" = "Este dispositivo está emparelhado com o iPhone. Terá de o esquecer antes de o adicionar ao DigitainoMesh.";
 
 /* Sheet body when several devices are paired with iPhone */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupMessagePlural" = "Estes dispositivos estão emparelhados com o iPhone. Terá de os esquecer antes de adicionar um rádio ao MeshCore One.";
+"deviceSelection.setupMessagePlural" = "Estes dispositivos estão emparelhados com o iPhone. Terá de os esquecer antes de adicionar um rádio ao DigitainoMesh.";
 
 /* Reassurance that forgetting the iPhone pairing does not delete conversations */
 /* AI-translated - please verify with native speakers. */
@@ -199,11 +199,11 @@
 
 /* Footer under Previously Paired when one needs-setup row is present */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupFooter" = "Esquecer este dispositivo para o adicionar ao MeshCore One.";
+"deviceSelection.setupFooter" = "Esquecer este dispositivo para o adicionar ao DigitainoMesh.";
 
 /* Footer under Previously Paired when several needs-setup rows are present */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupFooterPlural" = "Esquecer estes dispositivos para os adicionar ao MeshCore One.";
+"deviceSelection.setupFooterPlural" = "Esquecer estes dispositivos para os adicionar ao DigitainoMesh.";
 
 /* VoiceOver label for a needs-setup row. %@ is the accessory name */
 /* AI-translated - please verify with native speakers. */
@@ -2048,12 +2048,6 @@
 "Appearance.Accessibility.ThemeCard.SelectedLabel" = "Tema %@, selecionado neste momento";
 "Appearance.Accessibility.Swatch.DualMode" = "%@, variantes clara e escura";
 "Appearance.Accessibility.Swatch.DarkOnly" = "%@, apenas escuro";
-
-/* Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control */
-"messages.translation" = "Oferecer tradução";
-
-/* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
-"messages.translationFooter" = "Mostra um botão «Traduzir» nas mensagens recebidas escritas noutro idioma. A tradução é feita neste dispositivo e nunca altera a mensagem guardada.";
 
 /* Packet Scope (opt-in CoreScope observer lookup) */
 "packetScope.header" = "Packet Scope";

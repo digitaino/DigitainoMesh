@@ -5455,13 +5455,13 @@ public enum L10n {
       /// Reassurance that forgetting the iPhone pairing does not delete conversations
       public static let setupConversations = L10n.tr("Settings", "deviceSelection.setupConversations", fallback: "This will not delete your conversations.")
       /// Footer under Previously Paired when one needs-setup row is present
-      public static let setupFooter = L10n.tr("Settings", "deviceSelection.setupFooter", fallback: "Forget this device to add it to MeshCore One.")
+      public static let setupFooter = L10n.tr("Settings", "deviceSelection.setupFooter", fallback: "Forget this device to add it to DigitainoMesh.")
       /// Footer under Previously Paired when several needs-setup rows are present
-      public static let setupFooterPlural = L10n.tr("Settings", "deviceSelection.setupFooterPlural", fallback: "Forget these devices to add them to MeshCore One.")
+      public static let setupFooterPlural = L10n.tr("Settings", "deviceSelection.setupFooterPlural", fallback: "Forget these devices to add them to DigitainoMesh.")
       /// Sheet body when one device is paired with iPhone
-      public static let setupMessage = L10n.tr("Settings", "deviceSelection.setupMessage", fallback: "This device is paired with iPhone. You'll need to forget it before adding it to MeshCore One.")
+      public static let setupMessage = L10n.tr("Settings", "deviceSelection.setupMessage", fallback: "This device is paired with iPhone. You'll need to forget it before adding it to DigitainoMesh.")
       /// Sheet body when several devices are paired with iPhone
-      public static let setupMessagePlural = L10n.tr("Settings", "deviceSelection.setupMessagePlural", fallback: "These devices are paired with iPhone. You'll need to forget them before adding a radio to MeshCore One.")
+      public static let setupMessagePlural = L10n.tr("Settings", "deviceSelection.setupMessagePlural", fallback: "These devices are paired with iPhone. You'll need to forget them before adding a radio to DigitainoMesh.")
       /// Sheet title when one device needs setup. %@ is the accessory name
       public static func setupTitle(_ p1: Any) -> String {
         return L10n.tr("Settings", "deviceSelection.setupTitle", String(describing: p1), fallback: "Set Up %@")
@@ -5708,10 +5708,6 @@ public enum L10n {
       public static let showIncomingPath = L10n.tr("Settings", "messages.showIncomingPath", fallback: "Incoming Path")
       /// Toggle label for showing the radio region an incoming message was flooded under
       public static let showIncomingRegion = L10n.tr("Settings", "messages.showIncomingRegion", fallback: "Incoming Region")
-      /// Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control
-      public static let translation = L10n.tr("Settings", "messages.translation", fallback: "Offer Translation")
-      /// Location: MessagesSettingsSection.swift - Explains what the translation toggle does
-      public static let translationFooter = L10n.tr("Settings", "messages.translationFooter", fallback: "Show a Translate control on incoming messages written in another language. Translation runs on this device and never changes the stored message.")
     }
     public enum MyDevice {
       /// Section header for device-specific settings

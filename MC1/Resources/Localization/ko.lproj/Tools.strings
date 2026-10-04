@@ -696,7 +696,7 @@
 "tools.cli.channelEmpty" = "비어 있음";
 
 /* Location: CLIToolViewModel.swift - Welcome banner line 1 */
-"tools.cli.welcomeLine1" = "MeshCore One CLI";
+"tools.cli.welcomeLine1" = "DigitainoMesh CLI";
 
 /* Location: CLIToolViewModel.swift - Welcome banner line 2 */
 "tools.cli.welcomeConnected" = "%@에 연결됨";
@@ -789,7 +789,7 @@
 "intent.status.description" = "연결된 무선 기기의 이름, 연결 상태 및 마지막으로 확인된 배터리 잔량을 알려 줍니다.";
 
 /* Location: StatusQueryIntent.swift - Spoken when the app is still launching and has no state to read yet */
-"intent.status.dialog.notReady" = "MeshCore One이 아직 시작 중입니다. 잠시 후 다시 시도하십시오.";
+"intent.status.dialog.notReady" = "DigitainoMesh가 아직 시작 중입니다. 잠시 후 다시 시도하십시오.";
 
 /* Location: StatusQueryIntent.swift - Spoken when connected; %1$@ is the radio name, %2$lld is the cached battery percent */
 "intent.status.dialog.connectedWithBattery" = "%1$@이(가) 연결되어 있습니다. 마지막 측정 기준 배터리는 약 %2$lld%%입니다.";
@@ -828,7 +828,7 @@
 "intent.send.confirm" = "이 메시지를 %@에게 보내겠습니까?";
 
 /* Location: SendMessageIntent.swift - Spoken when the app must come to the foreground to send (still connecting or reconnecting) */
-"intent.send.foreground" = "이 메시지 전송을 완료하려면 MeshCore One을 여십시오.";
+"intent.send.foreground" = "이 메시지 전송을 완료하려면 DigitainoMesh를 여십시오.";
 
 /* Location: SendMessageIntent.swift - App Intents parameter summary shown in the shortcut editor; ${message} and ${target} are framework parameter tokens */
 "Send ${message} to ${target}" = "${target}에게 ${message} 보내기";

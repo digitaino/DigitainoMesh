@@ -179,11 +179,11 @@
 
 /* Sheet body when one device is paired with iPhone */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupMessage" = "Cet appareil est appairé avec iPhone. Vous devrez l'oublier avant de l'ajouter à MeshCore One.";
+"deviceSelection.setupMessage" = "Cet appareil est appairé avec iPhone. Vous devrez l'oublier avant de l'ajouter à DigitainoMesh.";
 
 /* Sheet body when several devices are paired with iPhone */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupMessagePlural" = "Ces appareils sont appairés avec iPhone. Vous devrez les oublier avant d'ajouter une radio à MeshCore One.";
+"deviceSelection.setupMessagePlural" = "Ces appareils sont appairés avec iPhone. Vous devrez les oublier avant d'ajouter une radio à DigitainoMesh.";
 
 /* Reassurance that forgetting the iPhone pairing does not delete conversations */
 /* AI-translated - please verify with native speakers. */
@@ -199,11 +199,11 @@
 
 /* Footer under Previously Paired when one needs-setup row is present */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupFooter" = "Oubliez cet appareil pour l'ajouter à MeshCore One.";
+"deviceSelection.setupFooter" = "Oubliez cet appareil pour l'ajouter à DigitainoMesh.";
 
 /* Footer under Previously Paired when several needs-setup rows are present */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupFooterPlural" = "Oubliez ces appareils pour les ajouter à MeshCore One.";
+"deviceSelection.setupFooterPlural" = "Oubliez ces appareils pour les ajouter à DigitainoMesh.";
 
 /* VoiceOver label for a needs-setup row. %@ is the accessory name */
 /* AI-translated - please verify with native speakers. */
@@ -2222,12 +2222,6 @@
 
 /* Footer explaining what repeater signal tracking does and costs */
 "signalBars.footer" = "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.";
-
-/* Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control */
-"messages.translation" = "Proposer la traduction";
-
-/* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
-"messages.translationFooter" = "Afficher un bouton Traduire sur les messages entrants rédigés dans une autre langue. La traduction s’effectue sur cet appareil et ne modifie jamais le message enregistré.";
 
 /* Packet Scope (opt-in CoreScope observer lookup) */
 "packetScope.header" = "Packet Scope";

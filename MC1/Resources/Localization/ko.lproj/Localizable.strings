@@ -445,7 +445,7 @@
 "error.channelService.circuitBreakerOpen" = "%lld회 연속 실패하여 채널 동기화가 일시 중단되었습니다.";
 
 /* Location: IntentError.swift - No radio is connected, so retrying alone will not help until one is connected */
-"error.intent.notConnected" = "연결된 무선 기기가 없습니다. MeshCore One에서 무선 기기를 연결한 후 다시 시도하십시오.";
+"error.intent.notConnected" = "연결된 무선 기기가 없습니다. DigitainoMesh에서 무선 기기를 연결한 후 다시 시도하십시오.";
 
 /* Location: IntentError.swift - No single valid recipient was chosen (none, both, or a recipient that cannot receive messages) */
 "error.intent.invalidRecipient" = "메시지를 받을 수 있는 연락처 또는 채널 중 수신자 하나를 선택하십시오.";
@@ -457,7 +457,7 @@
 "error.intent.sendFailed" = "메시지를 전송 대기열에 추가할 수 없습니다. 다시 시도하십시오.";
 
 /* Title of the radio-status Control Center control that opens the app; resolved in the app process */
-"Open MeshCore One" = "MeshCore One 열기";
+"Open DigitainoMesh" = "DigitainoMesh 열기";
 
 /* Location: ChatSendQueueServiceError+UserFacingMessage.swift - Queueing a message for send failed - %@ is the underlying error message */
 "error.chatSendQueue.persistFailed" = "메시지를 전송 대기열에 추가하지 못했습니다: %@";

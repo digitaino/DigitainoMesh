@@ -175,10 +175,10 @@
 "deviceSelection.setupTitleGeneric" = "설정";
 
 /* Sheet body when one device is paired with iPhone */
-"deviceSelection.setupMessage" = "이 기기는 iPhone과 페어링되어 있습니다. MeshCore One에 추가하려면 먼저 이 기기를 지워야 합니다.";
+"deviceSelection.setupMessage" = "이 기기는 iPhone과 페어링되어 있습니다. DigitainoMesh에 추가하려면 먼저 이 기기를 지워야 합니다.";
 
 /* Sheet body when several devices are paired with iPhone */
-"deviceSelection.setupMessagePlural" = "이 기기들은 iPhone과 페어링되어 있습니다. MeshCore One에 무선 기기를 추가하려면 먼저 이 기기들을 지워야 합니다.";
+"deviceSelection.setupMessagePlural" = "이 기기들은 iPhone과 페어링되어 있습니다. DigitainoMesh에 무선 기기를 추가하려면 먼저 이 기기들을 지워야 합니다.";
 
 /* Reassurance that forgetting the iPhone pairing does not delete conversations */
 "deviceSelection.setupConversations" = "대화는 삭제되지 않습니다.";
@@ -190,10 +190,10 @@
 "deviceSelection.forgetTheseDevices" = "이 기기들 지우기";
 
 /* Footer under Previously Paired when one needs-setup row is present */
-"deviceSelection.setupFooter" = "MeshCore One에 추가하려면 이 기기를 지우십시오.";
+"deviceSelection.setupFooter" = "DigitainoMesh에 추가하려면 이 기기를 지우십시오.";
 
 /* Footer under Previously Paired when several needs-setup rows are present */
-"deviceSelection.setupFooterPlural" = "MeshCore One에 추가하려면 이 기기들을 지우십시오.";
+"deviceSelection.setupFooterPlural" = "DigitainoMesh에 추가하려면 이 기기들을 지우십시오.";
 
 /* VoiceOver label for a needs-setup row. %@ is the accessory name */
 "deviceSelection.accessibility.setupLabel" = "%@, iPhone과 페어링됨";

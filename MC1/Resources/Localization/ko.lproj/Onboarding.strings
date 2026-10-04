@@ -10,7 +10,7 @@
 // MARK: - Welcome View
 
 /* Location: WelcomeView.swift - App title displayed on welcome screen */
-"welcome.title" = "MeshCore One";
+"welcome.title" = "DigitainoMesh";
 
 /* Location: WelcomeView.swift - Subtitle describing the app */
 "welcome.subtitle" = "인터넷이 없어도 커뮤니티가 만든 네트워크로 메시지를 보내세요.";

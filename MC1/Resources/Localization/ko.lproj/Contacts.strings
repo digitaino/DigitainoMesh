@@ -533,7 +533,7 @@
 "contacts.qr.title" = "연락처 공유";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Share subject */
-"contacts.qr.shareSubject" = "MeshCore One 연락처";
+"contacts.qr.shareSubject" = "DigitainoMesh 연락처";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Copy button when not copied */
 "contacts.qr.copy" = "복사";
@@ -545,7 +545,7 @@
 "contacts.qr.share" = "공유";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Contact label in share text, %@ is contact name */
-"contacts.share.contactLabel" = "MeshCore One 연락처: %@";
+"contacts.share.contactLabel" = "DigitainoMesh 연락처: %@";
 
 /* Location: ContactQRShareSheet.swift - Purpose: Key label in share text, %@ is hex public key */
 "contacts.share.keyLabel" = "키: %@";

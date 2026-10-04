@@ -175,10 +175,10 @@
 "deviceSelection.setupTitleGeneric" = "Set Up";
 
 /* Sheet body when one device is paired with iPhone */
-"deviceSelection.setupMessage" = "This device is paired with iPhone. You'll need to forget it before adding it to MeshCore One.";
+"deviceSelection.setupMessage" = "This device is paired with iPhone. You'll need to forget it before adding it to DigitainoMesh.";
 
 /* Sheet body when several devices are paired with iPhone */
-"deviceSelection.setupMessagePlural" = "These devices are paired with iPhone. You'll need to forget them before adding a radio to MeshCore One.";
+"deviceSelection.setupMessagePlural" = "These devices are paired with iPhone. You'll need to forget them before adding a radio to DigitainoMesh.";
 
 /* Reassurance that forgetting the iPhone pairing does not delete conversations */
 "deviceSelection.setupConversations" = "This will not delete your conversations.";
@@ -190,10 +190,10 @@
 "deviceSelection.forgetTheseDevices" = "Forget These Devices";
 
 /* Footer under Previously Paired when one needs-setup row is present */
-"deviceSelection.setupFooter" = "Forget this device to add it to MeshCore One.";
+"deviceSelection.setupFooter" = "Forget this device to add it to DigitainoMesh.";
 
 /* Footer under Previously Paired when several needs-setup rows are present */
-"deviceSelection.setupFooterPlural" = "Forget these devices to add them to MeshCore One.";
+"deviceSelection.setupFooterPlural" = "Forget these devices to add them to DigitainoMesh.";
 
 /* VoiceOver label for a needs-setup row. %@ is the accessory name */
 "deviceSelection.accessibility.setupLabel" = "%@, paired with iPhone";
@@ -1174,12 +1174,6 @@
 
 /* Footer explaining what the message display options show */
 "messages.footer" = "Display routing and timing information inside incoming message bubbles.";
-
-/* Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control */
-"messages.translation" = "Offer Translation";
-
-/* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
-"messages.translationFooter" = "Show a Translate control on incoming messages written in another language. Translation runs on this device and never changes the stored message.";
 
 // MARK: - Direct Messages Settings Section
 

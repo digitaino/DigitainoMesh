@@ -179,11 +179,11 @@
 
 /* Sheet body when one device is paired with iPhone */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupMessage" = "此设备已与 iPhone 配对。您需要先忘记该设备，才能将其添加到 MeshCore One。";
+"deviceSelection.setupMessage" = "此设备已与 iPhone 配对。您需要先忘记该设备，才能将其添加到 DigitainoMesh。";
 
 /* Sheet body when several devices are paired with iPhone */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupMessagePlural" = "这些设备已与 iPhone 配对。您需要先忘记这些设备，才能将无线电添加到 MeshCore One。";
+"deviceSelection.setupMessagePlural" = "这些设备已与 iPhone 配对。您需要先忘记这些设备，才能将无线电添加到 DigitainoMesh。";
 
 /* Reassurance that forgetting the iPhone pairing does not delete conversations */
 /* AI-translated - please verify with native speakers. */
@@ -199,11 +199,11 @@
 
 /* Footer under Previously Paired when one needs-setup row is present */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupFooter" = "忘记此设备以将其添加到 MeshCore One。";
+"deviceSelection.setupFooter" = "忘记此设备以将其添加到 DigitainoMesh。";
 
 /* Footer under Previously Paired when several needs-setup rows are present */
 /* AI-translated - please verify with native speakers. */
-"deviceSelection.setupFooterPlural" = "忘记这些设备以将它们添加到 MeshCore One。";
+"deviceSelection.setupFooterPlural" = "忘记这些设备以将它们添加到 DigitainoMesh。";
 
 /* VoiceOver label for a needs-setup row. %@ is the accessory name */
 /* AI-translated - please verify with native speakers. */
@@ -2222,12 +2222,6 @@
 
 /* Footer explaining what repeater signal tracking does and costs */
 "signalBars.footer" = "Measures how well nearby repeaters and this radio hear each other, and shows the best link in the toolbar. On stock firmware the app does the measuring, which transmits a discovery request and occasional probes.";
-
-/* Location: MessagesSettingsSection.swift - Toggle for the in-bubble Translate control */
-"messages.translation" = "提供翻译";
-
-/* Location: MessagesSettingsSection.swift - Explains what the translation toggle does */
-"messages.translationFooter" = "在以其他语言写成的传入消息上显示翻译按钮。翻译在此设备上进行，绝不会更改已存储的消息。";
 
 /* Packet Scope (opt-in CoreScope observer lookup) */
 "packetScope.header" = "Packet Scope";
