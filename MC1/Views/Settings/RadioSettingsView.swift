@@ -26,6 +26,8 @@ struct RadioSettingsView: View {
         PathHashModeSection()
       }
       AdvancedRadioSection(radioWriteInFlight: $radioWriteInFlight)
+      // Beside TX power, the setting it drives (decision of 2026-10-04).
+      AdaptivePowerSection()
     }
     .themedCanvas(theme)
     .environment(session)

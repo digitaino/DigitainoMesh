@@ -14,9 +14,6 @@ struct AdvancedSettingsView: View {
 
   var body: some View {
     List {
-      // Adaptive TX Power
-      AdaptivePowerSection()
-
       // Repeater Signal Tracking
       SignalBarsSection()
 
