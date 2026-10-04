@@ -185,6 +185,31 @@ struct SignalMapperCaptureEngineTests {
   }
 
   @Test
+  func `An extra incoming path of someone else's message is never taken as a repeater hearing us`() async throws {
+    let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
+    let store = try makeStore()
+    let source = ScriptedRxEntrySource()
+    let repeats = ScriptedTxHeardSource()
+    let fixes = StubMapperFixProvider(mapperFix(at: clock.now))
+    let engine = makeEngine(
+      source: source, txHeard: repeats, store: store, fixes: fixes, clock: clock, tuning: makeTuning()
+    )
+
+    await engine.start()
+    repeats.send(mapperHeardRepeat(receivedAt: clock.now, snr: 3, pathNodes: [0x77], isSentEcho: false))
+    repeats.send(mapperHeardRepeat(receivedAt: clock.now, snr: 7, rssi: -75))
+    #expect(await waitForMapperAccounted(engine, count: 1))
+    await engine.flushNow()
+    await engine.stop()
+
+    let row = try #require(try await store.fetchMapperCellObservations().first)
+    #expect(row.txHeardCount == 1)
+    #expect(row.snrSum == 7)
+    #expect(row.repeaters["77"] == nil)
+    #expect(await engine.snapshot().txHeardSampleCount == 1)
+  }
+
+  @Test
   func `A heard repeat's SNR is the repeater's rxSnr, never its txSnr`() async throws {
     let clock = SignalBarsTestClock(Date(timeIntervalSince1970: 1_753_000_000))
     let store = try makeStore()

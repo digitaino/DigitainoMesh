@@ -456,6 +456,8 @@ public actor SignalMapperCaptureEngine {
   /// distinct echo.
   private func ingestHeardRepeat(_ event: HeardRepeatEvent) async {
     guard state.isRunning else { return }
+    // An extra incoming path of someone else's message says nothing about who heard us.
+    guard event.isSentEcho else { return }
     let gate = await qualityGate()
     let detail = event.detail
     let echoHops = Self.sightings(
