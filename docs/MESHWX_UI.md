@@ -164,8 +164,8 @@ walkthrough found and what was changed.
 | # | Finding | Decision |
 |---|---|---|
 | U-1 | Four saved places became one, renamed to an airport's town and moved to its coordinates, after the app was killed mid-swipe | **Adopted.** A save-before-load race: `WeatherToolModel.savedPlaces` is empty until `start` reads the store, and a pick in that window persisted a one-place list over everything saved. Every change is now a `WeatherSavedPlaces.Edit` value applied by `WeatherSavedPlacesStore.apply` **to the list the store holds**; the model never writes a list it did not first load, and a write that would drop a place nobody asked to drop is refused outright. Only `.remove` may take a row out, and only the ceiling may shorten a list that just grew |
-| U-2 | A Places row read "86° Partly cloudy · 3 h old" for a place whose own page said "No current conditions" | **Adopted.** One rule for both: `WeatherConditions.isGood(kilometres:isStale:)` — within `goodReadingKilometres` and not stale — decides the page's temperature *and* the row's. The row's separate 80 km reach is gone; with no good reading it shows "—". This narrows §3.2 Q9's "dimmed with 3 h when stale": a row is a hint, but a hint that contradicts the page it opens is worse than no hint |
-| U-2a | 2026-09-18, field report: Wimberley, TX asked for conditions, the batch came back carrying San Marcos (KHYI) at 06:56, and the page still showed no temperature. KHYI is the nearest station there is, **25.5 km** off — half a kilometre past the cliff — so no answer could ever be shown. Worse, the page offered to ask about KHYI while Update, holding a fresh KHYI reading, called everything current: the page and the plan each worked the rule out on their own and had drifted | **Owner decision: label it.** From 25 to **`labelledReadingKilometres` = 40 km** a fresh reading is shown, attributed: "Nearest report: San Marcos, 26 km away" above the number, and the foot line keeps only "As of 6:56 AM" (`WeatherConditions.nearby`). 25 km and under is still the weather *here*, shown bare. Beyond 40 km the page says no station is near enough and **asks for nothing**, since an answer from there would be refused again. A Places row follows (`isShowable`), naming the station: "79° Cloudy · San Marcos". `WeatherUpdatePlan` now reads its readings step off `WeatherConditions.make` itself, keeping only its own 70-minute refresh age, so the page and the packet cannot disagree again |
+| U-2 | A Places row read "86° Partly cloudy · 3 h old" for a place whose own page said "No current conditions" | **Adopted.** One rule for both: `WeatherConditions.isGood(kilometres:isTooOld:)` — within `goodReadingKilometres` and not too old to show, a stale reading shown with its age (U-62; until 2026-10-17 `isStale:`, and stale was not shown) — decides the page's temperature *and* the row's. The row's separate 80 km reach is gone; with no good reading it shows "—". This narrowed §3.2 Q9's "dimmed with 3 h when stale": a row is a hint, but a hint that contradicts the page it opens is worse than no hint. Since U-62 the row is dimmed with its age again up to 12 hours, because the page now shows the same reading with the same age |
+| U-2a | 2026-09-18, field report: Wimberley, TX asked for conditions, the batch came back carrying San Marcos (KHYI) at 06:56, and the page still showed no temperature. KHYI is the nearest station there is, **25.5 km** off — half a kilometre past the cliff — so no answer could ever be shown. Worse, the page offered to ask about KHYI while Update, holding a fresh KHYI reading, called everything current: the page and the plan each worked the rule out on their own and had drifted | **Owner decision: label it.** From 25 to **`labelledReadingKilometres` = 40 km** a fresh reading (since U-62, any reading up to 12 hours old, a stale one with its age) is shown, attributed: "Nearest report: San Marcos, 26 km away" above the number, and the foot line keeps only "As of 6:56 AM" (`WeatherConditions.nearby`). 25 km and under is still the weather *here*, shown bare. Beyond 40 km the page says no station is near enough and **asks for nothing**, since an answer from there would be refused again. A Places row follows (`isShowable`), naming the station: "79° Cloudy · San Marcos". `WeatherUpdatePlan` now reads its readings step off `WeatherConditions.make` itself, keeping only its own 70-minute refresh age, so the page and the packet cannot disagree again |
 | U-3 | Picking KAUS pushed the station **and** saved a place called "Austin, TX", so a second Austin page appeared; TJSJ made a page called "Eleanor Roosevelt" | **Adopted.** An airport code opens the station screen and nothing else (`WeatherPlacePickerAction.station`). No page, no saved place, no move of the pager. The `WeatherPlace` that used to be built from a station is deleted |
 | U-4 | Edit mode offered only drag handles, a swipe on a row opened the place, and picking a place moved it to the front over a manual order | **Adopted.** Swipe-to-delete is a `swipeActions` destructive button on the row itself; drag-to-reorder is `onMove` with no Edit mode; the Edit capsule is gone. `WeatherSavedPlaces.remember` puts a **new** place at the front and leaves a place already on the list exactly where it is — picking is "show me this", not "reorder these". A drag is written back by id, not by index, so it can be applied to a list that has grown since |
 | U-5 | Every station screen printed the blocking reason twice, one line apart | **Adopted.** `WeatherUpdateControl.caption` already returns the reason when there is one, so the separate `requestBlocked` view was the same sentence twice. The reason is the caption |
@@ -255,6 +255,13 @@ client are built to; these rows are the screen half, and §18 is the screens.
 | U-60 | A tile has a history now. Revision 11 kept one picture per square and threw the older one away, which is exactly what a loop is made of | **Adopted.** State holds **frames**, one per square and minute, forty at most per radio (three hours behind the radio's newest picture, as before). A coarse frame still never replaces a fine one of the same minute. **Cached** keeps one row per square, its newest time, and "5 pictures" when it holds more than one; **Channel traffic** and the radio page's history list every frame as the packet it was, with its own time; a loop logs as "Radar, last hour · 30.267,-97.743". One pairing rule follows: an **older** frame off somebody's loop is not "the newest picture the radio has", so it never counts as an answer for the five-minute rule, and a single-picture ask after it still goes out |
 | U-61 | 2026-10-03, the owner, after trying both on the phone: *the loop worked but im not sure I like the detail implementation. let's get rid of that.* | **Removed, before any release**, from the bot and both clients: the Detail width, tap-to-pick and the outlined square, the Local fallback and its line, the `z-1` ask and message type 12, which is free again. The loop stays exactly as U-58 has it, on Local, Regional and Wide. A state saved by the build that had it may hold a zoom −1 tile; such a tile is dropped when the state is read, and every other picture is kept. What was measured for it stays in `docs/MESHWX_REV13.md` for whoever looks at it again |
 
+U-62 is conditions again: the rule U-2 and U-2a set, changed by the owner during NOAA's EMWIN
+backlog of 16 October.
+
+| # | Finding | Decision |
+|---|---|---|
+| U-62 | 2026-10-16: NOAA's EMWIN uplink replayed a backlog for hours, and every product reached the bot five to ten hours late, on the dish and over the internet alike. The Austin page said **"No current conditions for Austin, TX. Pull down to ask WX-AUS for KATT."** while the phone held Camp Mabry's reading from a few hours before, and the pull could not help: the bot answered `>o` only with a report under two hours old. The two-hour rule of U-2 hid the only weather anybody had, and the page told the reader less than the phone knew | **Owner decision: show it, with its age.** A reading **2 to 12 hours old** is the weather as last seen. It is shown where a fresh one would be — as the town's within 25 km, under its station to 40 km — and the foot line ends with its age, in the orange the stations list uses for stale: "Camp Mabry · 6 km · as of 2:24 PM · 5 h old" (`WeatherCopy.conditionsSource(isStale:)`). The clock time alone reads as recent at a glance; the age cannot. A Places row follows, dimmed with its age: "86° Cloudy · 5 h old". Past **12 hours** (`MeshWXPresentation.observationShownForMinutes` = 720, `isTooOld`) the page asks, as it used to past two. `WeatherConditions.isGood` and `isShowable` take `isTooOld:` where they took `isStale:`; the 25 and 40 km of U-2 and U-2a are unchanged. `WeatherPrimaryStation.pick` takes a stale reading young enough to show before a nearer one too old to, so a station silent for a day does not hide one a little further off that reported five hours ago. The bot, when nothing within 40 km of the station asked for is under two hours old, now answers `>o <ICAO>` with the newest report up to 12 hours old, dated by the report's own time (meshwx spec §6, 2026-10-17). Forecast staleness, Update's 70-minute refresh, alerts and the radar's 120 minutes (U-45, a different question) are unchanged. Web the same (meshwx `d4a00e4`) |
+
 ### 3.1.2 Visual pass against the Human Interface Guidelines, 16 September (afternoon)
 
 Rafael, on the build that closed §3.1.1: *"there is a ton of dead black space not being used… the
@@ -296,9 +303,9 @@ written down rather than argued again.
 | Q6 | How is it refreshed? | **Pull-to-refresh and an Update button**, the same planner either way. The pull names what it asks for; with nothing needed it sends nothing and says "Everything is current · WX-AUS 4:25 PM" | §3.1 O-4's "No pull-to-refresh: a button can say what it will ask for, a gesture cannot". A caption above the list says it for the gesture |
 | Q7 | A severe warning covering the place? | **A banner, always the same size**: one strip naming the warning and its end time, opening the alert (or, with others covering the place, the alerts list: §3.1 U-50). No big card, ever | §7.3's card, §3 A10's two-rows-plus-more fold, and §3.1 I-B2's never-fold rule for storm warnings — the strip is one row whatever the weather |
 | Q8 | What else lives on the page? | **Below the forecast, only text reports.** Nearby stations, alerts in the wider area and radio and coverage information move to the radio page | §8's stations footer, §7.3's "N elsewhere" footer, and §10's ⓘ |
-| Q9 | What does a Places row show? | **Temperature and condition, greyed when old**: "San Juan · 86° Cloudy", dimmed with "3 h" when stale, "—" when nothing is held. The bell stays | §3.1 O-2's "88° · 12 min old", which led with an age rather than with the weather |
+| Q9 | What does a Places row show? | **Temperature and condition, greyed when old**: "San Juan · 86° Cloudy", dimmed with "3 h" when stale, "—" when nothing is held (§3.1 U-2 narrowed this to the page's rule; since U-62 a stale reading up to 12 hours old is dimmed with its age, "86° Cloudy · 5 h old"). The bell stays | §3.1 O-2's "88° · 12 min old", which led with an age rather than with the weather |
 | Q10 | How is the radio page reached? | **A row at the bottom of the place page**: "WX-AUS · heard 2 min ago · alerts as of 8:02 PM ›", **orange when the alert list is old or messages were missed**. That row is the only place on the page that mentions the alert list | §10's ⓘ, and §7.4's status line, whose eleven cases all lived on the alerts card |
-| Q11 | No good reading? | **No temperature at all**, only the ask: "No current conditions for Llano. Pull down to ask WX-AUS for KAQO." Good = the nearest held reading within 25 km and not stale | §8's 80 km primary station and its "stale (3 h old)" small-type row, and §3.1 O-1's 80 km nearest-bundled-station wording |
+| Q11 | No good reading? | **No temperature at all**, only the ask: "No current conditions for Llano. Pull down to ask WX-AUS for KAQO." Good = the nearest held reading within 25 km and not stale (since §3.1 U-62, not too old to show: up to 12 hours, a stale one with its age) | §8's 80 km primary station and its "stale (3 h old)" small-type row, and §3.1 O-1's 80 km nearest-bundled-station wording |
 | Q12 | How are places switched? | **Swiping sideways with dots.** My location first; the Places list is for adding, removing and reordering | §3.1 O-3's single Places control as the *only* way to change the place, and §5's "newest choice first" ordering, which would move pages under a swiping finger |
 | Q13 | What is said on a quiet day? | **Nothing.** No green check, no "no alerts" line, no status line | §3 A1's green check, §7.4's `.clear` and `.noneHere` rows, and part of §2 principle 2 — the honesty is now in Q10's row and on the radio page, not on the page |
 | Q14 | Outside the push area? | **The page looks the same.** Refreshing also pulls alerts by zone and county; a warning that comes back is the same banner; and one quiet line under the temperature reads "Warnings aren't pushed here — pull to check." The app never says "no alerts for <place>" | §3 A9's "WX-AUS doesn't report on Dallas, so alerts there are unknown" as a *status line*, and §3.1 O-5's per-card version of it |
@@ -545,11 +552,20 @@ A temperature on the page is a claim about the weather *here*, so it is shown on
 good enough to make it. **Good** is:
 
 > the nearest reading the phone holds is within **`WeatherConditions.goodReadingKilometres`
-> = 25 km** of the place, and is not stale.
+> = 25 km** of the place, and is not too old to show: no more than
+> **`MeshWXPresentation.observationShownForMinutes` = 12 hours**.
 
-From 25 km out to **`WeatherConditions.labelledReadingKilometres` = 40 km** a fresh reading is
-still shown, **attributed to its station** — "Nearest report: San Marcos, 26 km away" above the
-number — and never as the town's own (§3.1 U-2a). Past 40 km nothing is shown and nothing asked.
+A reading over two hours old is **stale** and is still shown, with its age (§3.1 U-62, owner
+decision 2026-10-16): "No current conditions" while the phone held a reading from five hours ago
+told the reader less than the phone knew. Past 12 hours it is too old (`isTooOld`) and the page
+asks instead. The reading weighed is `WeatherPrimaryStation.pick`'s, which takes a fresh one
+first and then a stale one young enough to show before a nearer one too old to, so a station
+silent for a day does not hide one a little further off that reported five hours ago.
+
+From 25 km out to **`WeatherConditions.labelledReadingKilometres` = 40 km** a reading no more
+than 12 hours old is still shown, **attributed to its station** — "Nearest report: San Marcos,
+26 km away" above the number — and never as the town's own (§3.1 U-2a). Past 40 km nothing is
+shown and nothing asked.
 
 **This is the tunable** (§3.2 Q11). Readings still reach 80 km
 (`WeatherPrimaryStation.maxDistanceKilometres`) for the **stations list**. Twenty-five kilometres
@@ -557,26 +573,28 @@ is the distance at which the app is willing to print one number and call it the 
 Lowering it shows the ask more often; raising it back to 80 puts the 14 September screen's
 "Nearest report · 40 km NW" behaviour back.
 
-**A Places row obeys the same rule** (`WeatherConditions.isShowable(kilometres:isStale:)`, §3.1 U-2
-and U-2a), and names the station when the page does: "79° Cloudy · San Marcos".
+**A Places row obeys the same rule** (`WeatherConditions.isShowable(kilometres:isTooOld:)`, §3.1
+U-2, U-2a and U-62), and names the station when the page does: "79° Cloudy · San Marcos".
 The row used to reach 80 km and show whatever it found, stale or not, so Places read "86° Partly
 cloudy · 3 h old" beside a page that said "No current conditions" — the list and the page
 contradicting each other about the same town, one tap apart. A row with no good reading shows "—".
-This narrows §3.2 Q9's "dimmed with 3 h when stale": a row is a hint, but a hint that contradicts
-the page it opens is worse than no hint.
+This narrowed §3.2 Q9's "dimmed with 3 h when stale": a row is a hint, but a hint that contradicts
+the page it opens is worse than no hint. Since U-62 a stale reading up to 12 hours old is shown on
+both, the row dimmed with its age ("86° Cloudy · 5 h old") and the page with its age on the foot
+line, so the two agree again; past 12 hours both give it up together.
 
 `WeatherConditions.make` decides, from the primary station and the nearest bundled station:
 
 | Case | The page |
 |---|---|
-| A good reading | A hero on the canvas, centred, no card (§3.1.2 V-1): the temperature at 80 pt thin, then the sky icon (night variant after sunset hours) and condition word, then today's "High 92° · Low 71°" from the forecast held, then "Feels like 91° · Wind SSE 12 · Humidity 59%" in footnote. All observation fields from that one station |
-| Fresh, 25 to 40 km | The same hero, led by "Nearest report: San Marcos, 26 km away" in subheadline above the number; the foot line says "As of 6:56 AM ›" only. When a nearer bundled station exists, Update asks for it by code while the page keeps what it holds |
-| Held, but stale, or beyond 40 km with a nearer station to ask | **No temperature at all**: the block is the statement "No current conditions for Llano. Pull down to ask WX-AUS for KAQO." |
+| A good reading | A hero on the canvas, centred, no card (§3.1.2 V-1): the temperature at 80 pt thin, then the sky icon (night variant after sunset hours) and condition word, then today's "High 92° · Low 71°" from the forecast held, then "Feels like 91° · Wind SSE 12 · Humidity 59%" in footnote. All observation fields from that one station. A stale reading (2 to 12 hours old) is the same hero, its foot line ending with its age in orange (§3.1 U-62) |
+| 25 to 40 km, no more than 12 hours old | The same hero, led by "Nearest report: San Marcos, 26 km away" in subheadline above the number; the foot line says "As of 6:56 AM ›" only, or "As of 6:56 AM · 5 h old ›" in orange when stale. When a nearer bundled station exists, Update asks for it by code while the page keeps what it holds |
+| Held, but over 12 hours old, or beyond 40 km with a nearer station to ask | **No temperature at all**: the block is the statement "No current conditions for Llano. Pull down to ask WX-AUS for KAQO." |
 | Nothing in reach, a bundled station within 40 km | The same ask, naming that station |
 | Nothing within 40 km worth asking | "No weather station near Dallas. Nearest: Temple, 190 km." Update asks for no reading |
 | Nothing ever received | "No current conditions yet. WX-AUS broadcasts them every hour." |
 
-The station the ask names is **the station Update would send for**, always: near-but-stale asks
+The station the ask names is **the station Update would send for**, always: near-but-too-old asks
 about that same station, too-far asks about the nearest bundled one — and `WeatherUpdatePlan`
 makes the same choice (§11.1), so the sentence on the page and the packet on the air can never
 name different stations. With a `requestBlock` the sentence **stops offering the pull** and names
@@ -594,8 +612,12 @@ decides.
 **The one line under it** (§3.2 Q5): "Camp Mabry · 6 km · as of 8:24 PM" — the station, how far it
 is, the reading's own time on the bot's clock. Tapping it opens the station's screen. Since the
 bot's revision 5 each reading carries when *that station* reported (the batch's `ts` less the
-station's age), so "as of" is per station and true of the number above it. Nothing else about
-provenance is on the page: which radio carried it is said once, by the radio row.
+station's age), so "as of" is per station and true of the number above it. A stale reading's line
+ends with its age, in the orange the stations list uses for stale: "Camp Mabry · 6 km · as of
+2:24 PM · 5 h old" (§3.1 U-62). The clock time alone reads as recent at a glance; the age cannot.
+A stale answer to `>o` from the bot is a batch of one dated by the report's own time, so its age
+is exact. Nothing else about provenance is on the page: which radio carried it is said once, by
+the radio row.
 
 **The out-of-area line** (§3.2 Q14): on a verdict of `.outside` (§6), one quiet line under the
 block — "Warnings aren't pushed here — pull to check." The app never says "no alerts for Dallas",
@@ -703,7 +725,7 @@ will ask for, a gesture cannot" (§3.1 O-4); the caption is how the gesture says
 |---|---|---|
 | alerts | no list is held; the list was built more than 3 h 15 min ago; or a gap, a warning the list named that never arrived, or an unfinished upgrade is outstanding | `>d`, or the missed-messages request of §7.4 (`>w <identity>` by priority, `>w <county>` under an upgrade) |
 | alerts outside the bot's area | the evidence puts the place **outside** — a complete statement, or a footprint from a bot that has stated none (§6). `.unknown` never fires it | `>w <zone>` then `>w <county>` for the place's own codes — the bot serves place-named requests nationwide |
-| readings | read off `WeatherConditions` (§8, §3.1 U-2a): a nearer station than the one shown or held, within 40 km; or the reading was read more than 70 minutes ago (an hourly batch plus ten); or none is held. Nothing when no station within 40 km could answer with something the page would show | `>o <ICAO>` for the station the page named — and since spec revision 8, when that station has nothing fresh, the bot answers with the nearest one within 40 km that does, which settles the request (Dayton: Wright-Patterson never reports, Dayton International does); bare `>o` when a stale station is in the bot's **newest** batch; bare `>o` when nothing at all is held, which brings the whole batch for one packet |
+| readings | read off `WeatherConditions` (§8, §3.1 U-2a): a nearer station than the one shown or held, within 40 km; or the reading was read more than 70 minutes ago (an hourly batch plus ten); or none is held. Nothing when no station within 40 km could answer with something the page would show | `>o <ICAO>` for the station the page named — and since spec revision 8, when that station has nothing fresh, the bot answers with the nearest one within 40 km that does, which settles the request (Dayton: Wright-Patterson never reports, Dayton International does), and since 2026-10-17, with nothing fresh within 40 km, the newest report up to 12 hours old, which the page shows with its age (§3.1 U-62); bare `>o` when a stale station is in the bot's **newest** batch; bare `>o` when nothing at all is held, which brings the whole batch for one packet |
 | forecast | none is held for the place's point, or it was issued more than 12 h ago | `>f <point>` |
 | what it covers | the bot has been heard, has stated no coverage, and has not been asked on this visit | `>cov`, sent last |
 
