@@ -19,15 +19,19 @@ public struct WeatherNearbyStation: Sendable, Hashable {
 ///
 /// A temperature on the page is a claim about the weather *here*. The owner's threshold decides
 /// when that claim can be made: the reading the phone holds must be within
-/// ``goodReadingKilometres`` of the place and not stale.
+/// ``goodReadingKilometres`` of the place and no more than twelve hours old. One over two hours
+/// old (`isStale`) is still shown, labelled with its age: "No current conditions" while the phone
+/// held a reading from five hours ago told the reader less than the phone knew (owner decision
+/// 2026-10-16).
 ///
 /// Past that, up to ``labelledReadingKilometres``, a fresh reading is still shown, **attributed to
 /// its station** — "Nearest report: San Marcos, 26 km away" — rather than passed off as the town's
 /// (owner decision 2026-09-18, docs/MESHWX_UI.md §3.1 U-2a). Wimberley's nearest station is 25.5 km
 /// off: under a hard 25 km cliff its page asked, the answer arrived, and the page threw it away.
-/// Further than that, or three hours old, a reading answers a different question and the page
-/// shows the ask instead, naming the station a refresh would spend airtime on — or, when no
-/// station is close enough for its answer to be shown, says so and asks for nothing.
+/// Further than that, or over twelve hours old (`isTooOld`), a reading answers a different
+/// question and the page shows the ask instead, naming the station a refresh would spend airtime
+/// on — or, when no station is close enough for its answer to be shown, says so and asks for
+/// nothing.
 ///
 /// ``WeatherUpdatePlan`` reads its readings step **off this verdict**, so the sentence on the page
 /// and the packet on the air are always the same station. They used to be worked out twice, and
@@ -69,21 +73,22 @@ public enum WeatherConditions: Sendable, Hashable {
   }
 
   /// **The one rule**, for the page and for a Places row alike (docs/MESHWX_UI.md §3.1 U-2): a
-  /// reading speaks for a place when it is within ``goodReadingKilometres`` of it and is not
-  /// stale.
+  /// reading speaks for a place when it is within ``goodReadingKilometres`` of it and is not too
+  /// old to show (``MeshWXPresentation/observationShownForMinutes``). A stale one is shown with its
+  /// age, on the page and in the row alike.
   ///
   /// The row used to reach 80 km and show anything it found, so Places read "86° Partly cloudy ·
   /// 3 h old" for a place whose own page said "No current conditions" — the list and the page
   /// contradicting each other about the same town, one tap apart.
-  public static func isGood(kilometres: Double?, isStale: Bool) -> Bool {
-    guard let kilometres, !isStale else { return false }
+  public static func isGood(kilometres: Double?, isTooOld: Bool) -> Bool {
+    guard let kilometres, !isTooOld else { return false }
     return kilometres <= goodReadingKilometres
   }
 
-  /// A reading the page will show at all: good, or fresh and within ``labelledReadingKilometres``
-  /// to be shown under its station's name. The same rule for a Places row.
-  public static func isShowable(kilometres: Double?, isStale: Bool) -> Bool {
-    guard let kilometres, !isStale else { return false }
+  /// A reading the page will show at all: good, or within ``labelledReadingKilometres`` to be
+  /// shown under its station's name. Not too old either way. The same rule for a Places row.
+  public static func isShowable(kilometres: Double?, isTooOld: Bool) -> Bool {
+    guard let kilometres, !isTooOld else { return false }
     return kilometres <= labelledReadingKilometres
   }
 
@@ -94,19 +99,19 @@ public enum WeatherConditions: Sendable, Hashable {
     switch primary {
     case let .reading(reading):
       let kilometres = reading.distanceKilometres ?? .infinity
-      if isGood(kilometres: reading.distanceKilometres, isStale: reading.isStale) { return .reading(reading) }
+      if isGood(kilometres: reading.distanceKilometres, isTooOld: reading.isTooOld) { return .reading(reading) }
       // Too far to speak for the place: asking that same station again would not bring it closer,
       // so a nearer bundled station is the one worth a packet — while its answer could be shown.
       let nearer = nearbyStation.flatMap { station in
         station.icao != reading.station.icao && kilometres > goodReadingKilometres
           && station.kilometres <= labelledReadingKilometres ? station : nil
       }
-      // Fresh and near enough to show: shown under its own name, never as the town's.
-      if isShowable(kilometres: reading.distanceKilometres, isStale: reading.isStale) {
+      // Near enough to show, and young enough: shown under its own name, never as the town's.
+      if isShowable(kilometres: reading.distanceKilometres, isTooOld: reading.isTooOld) {
         return .nearby(reading, nearer: nearer)
       }
       if let nearer { return .ask(icao: nearer.icao, kilometres: nearer.kilometres) }
-      // Near enough to show once it is fresh: the station itself is the one to ask about again.
+      // Near enough to show once it reports again: the station itself is the one to ask about.
       if kilometres <= labelledReadingKilometres {
         return .ask(icao: reading.station.icao, kilometres: reading.distanceKilometres)
       }
@@ -128,7 +133,7 @@ public enum WeatherConditions: Sendable, Hashable {
 /// What a Places row shows for its place (docs/MESHWX_UI.md §12): the reading the place's own
 /// page would lead with, and "—" when that page would lead with nothing.
 ///
-/// It is **the same rule as the page's** (``WeatherConditions/isGood(kilometres:isStale:)``).
+/// It is **the same rule as the page's** (``WeatherConditions/isGood(kilometres:isTooOld:)``).
 /// The row used to reach 80 km and show whatever it found, stale or not, so the list and the page
 /// said different things about the same town one tap apart (docs/MESHWX_UI.md §3.1 U-2). A row is
 /// a hint, but a hint that contradicts the page it opens is worse than no hint.
@@ -164,7 +169,7 @@ public struct WeatherPlaceRowReading: Sendable, Hashable {
   ) -> WeatherPlaceRowReading {
     guard let near = WeatherStations.nearestReading(
       in: readings, to: coordinate, within: WeatherConditions.labelledReadingKilometres),
-      WeatherConditions.isShowable(kilometres: near.kilometres, isStale: near.reading.stored.isStale(at: now))
+      WeatherConditions.isShowable(kilometres: near.kilometres, isTooOld: near.reading.stored.isTooOld(at: now))
     else {
       return WeatherPlaceRowReading()
     }

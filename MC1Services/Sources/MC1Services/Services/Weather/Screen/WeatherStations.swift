@@ -10,7 +10,10 @@ public struct WeatherStationReading: Sendable, Hashable, Identifiable {
   public var distanceKilometres: Double?
   /// From the place towards the station.
   public var direction: MeshWXCompass?
+  /// Over two hours old: shown, with its age.
   public var isStale: Bool
+  /// Over twelve hours old: not shown at all (``MeshWXPresentation/observationShownForMinutes``).
+  public var isTooOld: Bool = false
   /// The station has been in one of a bot's scheduled batches in the last day: it is in that
   /// bot's area, whoever's request delivered the reading held now.
   public var isInFootprint: Bool
@@ -56,6 +59,7 @@ public enum WeatherStations {
         distanceKilometres: place.map { WeatherGeo.kilometres($0.coordinate, coordinate) },
         direction: place.map { WeatherGeo.direction(from: $0.coordinate, to: coordinate) },
         isStale: entry.stored.isStale(at: now),
+        isTooOld: entry.stored.isTooOld(at: now),
         isInFootprint: footprint.contains(index),
         isInLatestBatch: entry.stored.lastBatchMinutes != nil
           && entry.stored.lastBatchMinutes == latestBatch[entry.botID]
@@ -129,14 +133,18 @@ public enum WeatherPrimaryStation: Sendable, Hashable {
     }
   }
 
-  /// Fresh with a temperature, then fresh, then stale with a temperature, then stale — each
-  /// the nearest within 80 km. All fields come from the one station chosen.
+  /// Fresh with a temperature, then fresh, then stale but young enough to show with its age (with
+  /// a temperature, then without), then anything — each the nearest within 80 km. All fields come
+  /// from the one station chosen. A nearby station silent for a day must not hide one a little
+  /// further off that reported five hours ago: the page would ask instead of showing it.
   public static func pick(readings: [WeatherStationReading], place: WeatherPlace?) -> WeatherPrimaryStation {
     guard !readings.isEmpty else { return .noObservations }
     guard place != nil else { return .noPlace }
     let inReach = readings.filter { ($0.distanceKilometres ?? .infinity) <= maxDistanceKilometres }
     let choice = inReach.first { !$0.isStale && $0.stored.observation.tempF != nil }
       ?? inReach.first { !$0.isStale }
+      ?? inReach.first { !$0.isTooOld && $0.stored.observation.tempF != nil }
+      ?? inReach.first { !$0.isTooOld }
       ?? inReach.first { $0.stored.observation.tempF != nil }
       ?? inReach.first
     if let choice { return .reading(choice) }

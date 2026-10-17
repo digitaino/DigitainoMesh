@@ -383,8 +383,13 @@ public enum MeshWXPresentation {
 
   // MARK: - Staleness (spec §10.3, §5)
 
-  /// Observations older than this are stale.
+  /// Observations older than this are stale: still shown, but with their age.
   public static let observationStaleAfterMinutes: UInt32 = 120
+  /// **Tunable**: observations older than this are not shown at all. Between the two a reading is
+  /// the weather as last seen, labelled "5 h old", rather than "No current conditions" (owner
+  /// decision 2026-10-16). The bot answers `>o` with reports up to the same twelve hours
+  /// (`OBS_STALE_MAX_AGE_MIN` in meshcore_weather/protocol/v5_builders.py).
+  public static let observationShownForMinutes: UInt32 = 720
   /// Forecasts older than this are stale.
   public static let forecastStaleAfterMinutes: UInt32 = 720
   /// `feed_health` above this (4-minute units, so ~4 hours) means the bot's silence
@@ -402,6 +407,10 @@ public enum MeshWXPresentation {
 
   public static func isObservationStale(timestampMinutes: UInt32, now: UInt32) -> Bool {
     now > timestampMinutes &+ observationStaleAfterMinutes
+  }
+
+  public static func isObservationTooOld(timestampMinutes: UInt32, now: UInt32) -> Bool {
+    now > timestampMinutes &+ observationShownForMinutes
   }
 
   public static func isForecastStale(issuedMinutes: UInt32, now: UInt32) -> Bool {

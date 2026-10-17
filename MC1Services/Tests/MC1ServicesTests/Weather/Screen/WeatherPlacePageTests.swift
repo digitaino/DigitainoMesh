@@ -86,7 +86,8 @@ struct WeatherPlacePageTests {
       index: MeshWXTables.shared.stationIndex(forICAO: icao)!,
       station: station, stored: stored, botID: P.botID,
       distanceKilometres: kilometres, direction: nil,
-      isStale: stored.isStale(at: now), isInFootprint: true, isInLatestBatch: true)
+      isStale: stored.isStale(at: now), isTooOld: stored.isTooOld(at: now),
+      isInFootprint: true, isInLatestBatch: true)
   }
 
   private let nearby = WeatherNearbyStation(icao: "KAQO", name: "Llano Municipal Airport", kilometres: 4)
@@ -139,11 +140,22 @@ struct WeatherPlacePageTests {
     #expect(WeatherConditions.make(primary: .reading(off), nearbyStation: tooFar) == .nearby(off, nearer: nil))
   }
 
-  /// Stale in the band: the station itself is asked about again, as it would be at 6 km.
+  /// Stale in the band: up to twelve hours old a reading is the weather as last seen, not "No
+  /// current conditions" (owner decision 2026-10-16), so it is shown under its station.
   @Test
-  func `a stale reading between 25 and 40 km asks about its own station`() {
+  func `a stale reading between 25 and 40 km is shown under its station, with its age`() {
     let stale = reading(kilometres: 30, icao: "KATT", minutesAgo: 8 * 60)
-    #expect(WeatherConditions.make(primary: .reading(stale), nearbyStation: nil)
+    #expect(stale.isStale && !stale.isTooOld)
+    #expect(WeatherConditions.make(primary: .reading(stale), nearbyStation: nil) == .nearby(stale, nearer: nil))
+  }
+
+  /// Over twelve hours old in the band: the station itself is asked about again, as it would be
+  /// at 6 km.
+  @Test
+  func `a reading between 25 and 40 km over twelve hours old asks about its own station`() {
+    let old = reading(kilometres: 30, icao: "KATT", minutesAgo: 13 * 60)
+    #expect(old.isTooOld)
+    #expect(WeatherConditions.make(primary: .reading(old), nearbyStation: nil)
       == .ask(icao: "KATT", kilometres: 30))
   }
 
@@ -157,13 +169,39 @@ struct WeatherPlacePageTests {
       == .noStation(nearest: far))
   }
 
-  /// Near enough but stale: that station is the right one to ask about again.
+  /// 2026-10-16: the page said "No current conditions for Austin, TX" while the phone held Camp
+  /// Mabry from five hours before. It now shows that reading, and its foot line says how old it is.
   @Test
-  func `a stale reading near the place asks about its own station`() {
-    let stale = reading(kilometres: 6, icao: "KATT", minutesAgo: 8 * 60)
-    #expect(stale.isStale)
-    #expect(WeatherConditions.make(primary: .reading(stale), nearbyStation: nearby)
-      == .ask(icao: stale.station.icao, kilometres: 6))
+  func `a stale reading near the place is still the weather here, up to twelve hours`() {
+    let stale = reading(kilometres: 6, icao: "KATT", minutesAgo: 5 * 60)
+    #expect(stale.isStale && !stale.isTooOld)
+    #expect(WeatherConditions.make(primary: .reading(stale), nearbyStation: nearby) == .reading(stale))
+    // The edge is inside.
+    let edge = reading(kilometres: 6, icao: "KATT", minutesAgo: 12 * 60)
+    #expect(!edge.isTooOld)
+    #expect(WeatherConditions.make(primary: .reading(edge), nearbyStation: nearby) == .reading(edge))
+  }
+
+  /// Near enough but over twelve hours old: that station is the right one to ask about again.
+  @Test
+  func `a reading near the place over twelve hours old asks about its own station`() {
+    let old = reading(kilometres: 6, icao: "KATT", minutesAgo: 13 * 60)
+    #expect(old.isTooOld)
+    #expect(WeatherConditions.make(primary: .reading(old), nearbyStation: nearby)
+      == .ask(icao: old.station.icao, kilometres: 6))
+  }
+
+  /// A stale reading young enough to show beats a nearer one too old to: the page would otherwise
+  /// ask instead of showing what it holds.
+  @Test
+  func `a nearer station silent for a day does not hide one that reported five hours ago`() {
+    let silent = reading(kilometres: 4, icao: "KATT", minutesAgo: 25 * 60)
+    let stale = reading(kilometres: 11, icao: "KAUS", minutesAgo: 5 * 60)
+    let place = P.place(P.austin)
+    #expect(WeatherPrimaryStation.pick(readings: [silent, stale], place: place) == .reading(stale))
+    // Fresh still beats stale, wherever it is in reach.
+    let fresh = reading(kilometres: 20, icao: "KEDC", minutesAgo: 20)
+    #expect(WeatherPrimaryStation.pick(readings: [silent, stale, fresh], place: place) == .reading(fresh))
   }
 
   @Test
@@ -297,14 +335,24 @@ struct WeatherPlacePageTests {
     #expect(row.observedAt != nil)
   }
 
-  /// **One rule for the row and the page** (docs/MESHWX_UI.md §3.1 U-2). A stale reading is not
-  /// the weather here, so the page shows no temperature for it — and the row that opens that page
-  /// must not show one either. Places read "86° Partly cloudy · 3 h old" beside a page that said
-  /// "No current conditions", one tap apart.
+  /// **One rule for the row and the page** (docs/MESHWX_UI.md §3.1 U-2). Places once read "86°
+  /// Partly cloudy · 3 h old" beside a page that said "No current conditions", one tap apart; now
+  /// both show a reading up to twelve hours old, and both say how old it is.
   @Test
-  func `a stale reading is no good for the row, exactly as it is no good for the page`() {
+  func `a stale reading is shown in the row with its age, exactly as the page shows it`() {
     let readings = WeatherStations.readings(
       states: [P.botID: P.state(observationsAgo: 8 * 3600)], coverage: WeatherCoverage(stations: []),
+      place: nil, tables: .shared, now: now)
+    let row = WeatherPlaceRowReading.make(readings: readings, at: P.austin, now: now)
+    #expect(row.isEmpty == false)
+    #expect(row.tempF != nil)
+    #expect(row.isStale)
+  }
+
+  @Test
+  func `a reading over twelve hours old is no good for the row, exactly as it is no good for the page`() {
+    let readings = WeatherStations.readings(
+      states: [P.botID: P.state(observationsAgo: 13 * 3600)], coverage: WeatherCoverage(stations: []),
       place: nil, tables: .shared, now: now)
     let row = WeatherPlaceRowReading.make(readings: readings, at: P.austin, now: now)
     #expect(row.isEmpty)

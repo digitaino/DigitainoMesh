@@ -212,6 +212,14 @@ public struct WeatherStoredObservation: Sendable, Hashable, Codable {
       now: MeshWXPresentation.unixMinutes(for: now)
     )
   }
+
+  /// Past ``MeshWXPresentation/observationShownForMinutes``: too old to show even with its age.
+  public func isTooOld(at now: Date) -> Bool {
+    MeshWXPresentation.isObservationTooOld(
+      timestampMinutes: timestampMinutes,
+      now: MeshWXPresentation.unixMinutes(for: now)
+    )
+  }
 }
 
 public struct WeatherStoredForecast: Sendable, Hashable, Codable {

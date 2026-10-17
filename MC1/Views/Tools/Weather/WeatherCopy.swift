@@ -491,19 +491,26 @@ enum WeatherCopy {
   ///
   /// With no station name — a reading the block already attributes above its number (§3.1 U-2a)
   /// — it is the time alone: "As of 6:56 AM".
+  ///
+  /// A stale reading — over two hours old, shown until twelve rather than replaced by "No current
+  /// conditions" (owner decision 2026-10-16) — ends with its age: "Camp Mabry · 6 km · as of
+  /// 2:24 PM · 5 h old". The clock time alone reads as recent at a glance; the age cannot.
   static func conditionsSource(
     stationName: String?,
     kilometres: Double?,
     observedAt: Date,
     now: Date,
     calendar: Calendar,
-    locale: Locale
+    locale: Locale,
+    isStale: Bool = false
   ) -> String {
     let asOf = L10n.Weather.Weather.Stations.asOf(
       WeatherFormatting.clockTime(observedAt, now: now, calendar: calendar, locale: locale))
-    guard let stationName else { return WeatherFormatting.sentenceStart(asOf) }
-    guard let kilometres else { return "\(stationName) · \(asOf)" }
-    return "\(stationName) · \(WeatherFormatting.kilometres(kilometres)) · \(asOf)"
+    var parts = [asOf]
+    if isStale { parts.append(WeatherFormatting.age(observedAt, now: now)) }
+    guard let stationName else { return WeatherFormatting.sentenceStart(parts.joined(separator: " · ")) }
+    if let kilometres { parts.insert(WeatherFormatting.kilometres(kilometres), at: 0) }
+    return ([stationName] + parts).joined(separator: " · ")
   }
 
   /// A fresh reading too far off to be the weather here, shown anyway under its station: "Nearest

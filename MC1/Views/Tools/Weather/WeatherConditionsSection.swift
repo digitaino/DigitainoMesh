@@ -14,11 +14,13 @@ import SwiftUI
 ///     Everything is current · WX-AUS 4:25 PM  ← what Update and the pull would ask for (§11.1)
 ///
 /// A temperature here is a claim about the weather *here*, so it is only shown bare for a reading
-/// good enough to make it (`WeatherConditions`). A fresh one from 25 to 40 km off is shown under
-/// the station it came from, named above the number — "Nearest report: San Marcos, 26 km away" —
-/// and the line at the foot then says only when (§3.1 U-2a). Otherwise the block is the sentence that says
-/// what to do about it, set as the page's statement rather than as a footnote: the same sections
-/// follow whatever the phone holds, which is how the shape can be learned (§3.2 Q3).
+/// good enough to make it (`WeatherConditions`). One over two hours old (up to twelve) is shown
+/// with its age on the foot line: "Camp Mabry · 6 km · as of 2:24 PM · 5 h old". A fresh one from
+/// 25 to 40 km off is shown under the station it came from, named above the number — "Nearest
+/// report: San Marcos, 26 km away" — and the line at the foot then says only when (§3.1 U-2a).
+/// Otherwise the block is the sentence that says what to do about it, set as the page's statement
+/// rather than as a footnote: the same sections follow whatever the phone holds, which is how the
+/// shape can be learned (§3.2 Q3).
 struct WeatherConditionsSection: View {
   @Environment(\.appTheme) private var theme
   @ScaledMetric(relativeTo: .largeTitle) private var temperatureSize: CGFloat = 80
@@ -221,6 +223,8 @@ struct WeatherConditionsSection: View {
 
   /// The one honesty line, and the way to the station behind it.
   /// With `attributed`, the station and distance already lead the block, so this says when only.
+  /// A stale reading's line ends with its age, in the orange the stations list uses for the same
+  /// thing.
   private func sourceLine(_ reading: WeatherStationReading, attributed: Bool) -> some View {
     Button {
       // This page's, so the station screen measures and names its distance from this place.
@@ -233,13 +237,14 @@ struct WeatherConditionsSection: View {
           observedAt: reading.stored.observedAt,
           now: screen.now,
           calendar: .autoupdatingCurrent,
-          locale: .autoupdatingCurrent))
+          locale: .autoupdatingCurrent,
+          isStale: reading.isStale))
         Image(systemName: "chevron.right")
           .font(.caption2.weight(.semibold))
           .accessibilityHidden(true)
       }
       .font(.footnote)
-      .foregroundStyle(.secondary)
+      .foregroundStyle(reading.isStale ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
       .padding(.top, 2)
       // A footnote-high line is a 16 pt target. The hit area is grown to the system's 44 pt and
       // the padding taken back out of the layout, so the hero keeps its spacing.

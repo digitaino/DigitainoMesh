@@ -528,6 +528,28 @@ struct WeatherStationTests {
     #expect(reading.isStale)
   }
 
+  /// 2026-10-16: "No current conditions for Austin, TX" while the phone held Camp Mabry from five
+  /// hours before. Up to twelve hours the page shows it, marked stale; past that it asks.
+  @Test
+  func `a reading five hours old is still the weather here, and over twelve it is not`() {
+    let stale = primary(P.state(observationsAgo: 5 * 3600), at: P.place(P.austin))
+    guard case let .reading(reading) = stale else {
+      Issue.record("expected a reading")
+      return
+    }
+    #expect(reading.isStale && !reading.isTooOld)
+    #expect(WeatherConditions.make(primary: stale, nearbyStation: nil) == .reading(reading))
+
+    let old = primary(P.state(observationsAgo: 13 * 3600), at: P.place(P.austin))
+    guard case let .reading(oldReading) = old else {
+      Issue.record("expected a reading")
+      return
+    }
+    #expect(oldReading.isTooOld)
+    #expect(WeatherConditions.make(primary: old, nearbyStation: nil)
+      == .ask(icao: oldReading.station.icao, kilometres: oldReading.distanceKilometres))
+  }
+
   @Test
   func `Dallas gets the nearest station named, not a reading`() {
     guard case let .noneNearby(nearest) = primary(P.state(), at: P.place(P.dallas)) else {

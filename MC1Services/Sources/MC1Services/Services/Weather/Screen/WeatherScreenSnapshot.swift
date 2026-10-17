@@ -552,8 +552,9 @@ public struct WeatherUpdatePlan: Sendable, Hashable {
     // worked out twice and drifted — a Wimberley page asked about San Marcos while Update, holding
     // a fresh San Marcos reading, called everything current (docs/MESHWX_UI.md §3.1 U-2a).
     //
-    // Two ages, on purpose: the page stops showing a reading after two hours (`isStale`), but one
-    // over ``readingFreshFor`` has missed an hourly batch and is already worth a packet.
+    // Two ages, on purpose: the page marks a reading stale after two hours (`isStale`) and stops
+    // showing it after twelve (`isTooOld`), but one over ``readingFreshFor`` has missed an hourly
+    // batch and is already worth a packet.
     func refresh(_ held: WeatherStationReading) {
       if now.timeIntervalSince(held.stored.observedAt) <= readingFreshFor {
         currentTimes.append(held.stored.observedAt)

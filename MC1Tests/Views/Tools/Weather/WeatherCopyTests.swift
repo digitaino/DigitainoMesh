@@ -287,6 +287,22 @@ struct WeatherCopyTests {
       now: Self.now, calendar: F.calendar, locale: F.locale)) == "As of 11:18 PM")
   }
 
+  /// Owner decision 2026-10-16: a reading two to twelve hours old is shown rather than replaced by
+  /// "No current conditions", and the foot line ends with its age so it never passes for current.
+  @Test
+  func `a stale reading says how old it is at the end of the line under the temperature`() {
+    let observedAt = Self.now.addingTimeInterval(-(5 * 60 + 2) * 60)
+    func line(_ stationName: String?, _ kilometres: Double?, isStale: Bool = false) -> String {
+      F.plain(WeatherCopy.conditionsSource(
+        stationName: stationName, kilometres: kilometres, observedAt: observedAt,
+        now: Self.now, calendar: F.calendar, locale: F.locale, isStale: isStale))
+    }
+    #expect(line("Austin-Camp Mabry", 6.2, isStale: true) == "Austin-Camp Mabry · 6 km · as of 6:18 PM · 5 h old")
+    #expect(line(nil, nil, isStale: true) == "As of 6:18 PM · 5 h old")
+    // A current reading's line is unchanged.
+    #expect(line("Austin-Camp Mabry", 6.2) == "Austin-Camp Mabry · 6 km · as of 6:18 PM")
+  }
+
   /// No good reading means no temperature at all — only the ask, and the code it would spend
   /// airtime on (answer 11).
   @Test
