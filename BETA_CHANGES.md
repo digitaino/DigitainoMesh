@@ -1,3 +1,29 @@
+Beta Changes -- v1.5.2
+
+Weather When the Feed Runs Late, One Node on Several Radios, and MeshCore One 1.5
+
+What is different from 1.3.0 build 3 of 3 October.
+
+Conditions when the feed runs late. A reading more than two hours old used to be replaced by "No current conditions", even when the phone held one from a few hours before. On 16 October NOAA's weather text ran 5 to 10 hours behind, and that sentence was all the page said all day. Now a reading up to 12 hours old stays on the page with its age in orange: "Austin-Camp Mabry · 6 km · as of 6:18 PM · 5 h old". Past 12 hours the page asks, as before. A nearer station that has been silent for a day no longer hides one a little further off that reported this morning, and Places rows follow the same rule. WX-AUS now answers a conditions request with its newest report up to 12 hours old instead of "Not available".
+
+Radar loops. Under each radar width, Local, Regional and Wide, a loop row asks for the last hour, and Play steps through the frames held for the square on screen, each with its own time. It needs a bot on revision 13, as WX-AUS is.
+
+One node on several radios. Your node can live on more than one radio, and you can switch between them while the history stays the node's. Copy to This Radio puts this phone's contacts and channels on a radio, each channel in its own slot. A contact or channel you delete is deleted from the node's other radios when they next sync. A radio that was erased and reflashed can be set up as your node again: the phone keeps each node's key in the Keychain (this device only, never synced or backed up; Settings > Advanced > Identity), and after the first sync a blank radio asks Set Up as your node or Use as a New Node. Switching radios no longer deletes a channel's history, and a radio running out of room no longer deletes favourites or contacts you have messages with.
+
+From MeshCore One 1.5. This build carries upstream's releases 1.4.1 to 1.5.2. Every way a message arrived is on the one path screen, as tabs over the map. Korean is new. Chats get iOS 27 swipe actions, switch channels faster and scroll more smoothly. TX power and the other radio settings are on Settings > Radio, with Adaptive Power beside TX power. A contact's QR code is shown for review before it is added, and there are new radio presets. What's New shows the 1.5 notes.
+
+Reactions. Reactions go out emoji first, so every MeshCore One release shows them as a tapback instead of a chat line that also pinged the person.
+
+Pairing. Scan and Set Up work from the radio pill again.
+
+Support. Settings > Support the Developer now says this is an unofficial fork of Avi0n's MeshCore One and links to Avi0n's GitHub Sponsors. The tip jar and theme store are gone. Feedback goes to mesh@digitaino.com.
+
+What to try. Next time the weather feed runs late, look at a place's conditions: the line under the temperature turns orange and gives the age. Switch between two radios that carry your node and check contacts, channels and their history. Delete a contact with one radio connected, then connect the other. If you have a spare radio, erase it and set it up as your node. Send a reaction to someone on stock MeshCore One. Play a radar loop.
+
+Unchanged: MeshCore companion firmware 1.15 or newer, #meshwx on the radio, one request per tap, nothing about you leaves the phone. New text is in all 12 languages.
+
+---
+
 Beta Changes -- v1.3.0 (Build 3)
 
 Weather: Ask From the Bottom Bar, and Watches That Say When They Start
