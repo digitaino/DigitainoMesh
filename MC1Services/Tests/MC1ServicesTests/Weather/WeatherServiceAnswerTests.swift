@@ -94,7 +94,7 @@ struct WeatherServiceAnswerTests {
     let h = makeHarness()
     let settled = collectSettlements(h.events)
     _ = await h.service.ingest(F.observations(seq: 1, timestampMinutes: F.t0Minutes - 7, stations: [(202, 88), (860, 84)]))
-    _ = await h.service.ingest(F.forecast(seq: 2, point: 102, issuedMinutes: F.t0Minutes - 30, bot: 0x0102))
+    _ = await h.service.ingest(F.forecast(seq: 2, point: 102, issuedMinutes: F.t0Minutes - 30))
     _ = await h.service.ingest(F.digest(seq: 3, nowMinutes: F.t0Minutes - 2, entries: []))
     h.clock.advance(by: 60)
 
@@ -155,10 +155,26 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.warning(identity: "SV.W.EWX.42"), to: F.bot) != nil)
   }
 
+  /// Phase 2 (18 October 2026): every slot is the sending bot's. A slot any bot could fill let one
+  /// datagram under a random id hold off the request to the bot in use for five minutes.
   @Test
-  func `a warning from any bot answers a request for that warning`() async throws {
+  func `an answer from another bot never stands in for asking this one`() async throws {
     let h = makeHarness()
-    _ = await h.service.ingest(F.warning(seq: 1, identity: F.svw42, bot: 0x0102))
+    _ = await h.service.ingest(F.forecast(seq: 1, point: 102, bot: 0x0102))
+    _ = await h.service.ingest(F.observations(seq: 2, stations: [(202, 88), (860, 84)], bot: 0x0102))
+    _ = await h.service.ingest(F.warning(seq: 3, identity: F.svw42, bot: 0x0102))
+    #expect(try await h.service.send(.forecast(point: 102), to: F.bot) != nil)
+    h.clock.advance(by: 6)
+    #expect(try await h.service.send(.observation(station: "KAUS"), to: F.bot) != nil)
+    h.clock.advance(by: 6)
+    #expect(try await h.service.send(.warning(identity: "SV.W.EWX.42"), to: F.bot) != nil)
+    #expect(await h.transport.sent.count == 3)
+  }
+
+  @Test
+  func `a warning from the bot asked answers a request for that warning`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.warning(seq: 1, identity: F.svw42))
     #expect(try await h.service.send(.warning(identity: "SV.W.EWX.42"), to: F.bot) == nil)
     #expect(try await h.service.send(.warning(identity: "sv.w.ewx.42"), to: F.bot) == nil)
     #expect(try await h.service.send(.warning(identity: "SV.W.EWX.43"), to: F.bot) != nil)
@@ -285,9 +301,9 @@ struct WeatherServiceAnswerTests {
   }
 
   @Test
-  func `clearing a bot forgets the answers any bot gave`() async throws {
+  func `clearing a bot forgets the answers it gave`() async throws {
     let h = makeHarness()
-    _ = await h.service.ingest(F.forecast(seq: 1, point: 102, bot: 0x0102))
+    _ = await h.service.ingest(F.forecast(seq: 1, point: 102))
     #expect(try await h.service.send(.forecast(point: 102), to: F.bot) == nil)
     await h.service.clearState(for: F.botID)
     #expect(try await h.service.send(.forecast(point: 102), to: F.bot) != nil)
@@ -707,8 +723,9 @@ struct WeatherServiceRevisionTenTests {
     #expect(await h.traffic.entries.isEmpty)
   }
 
-  /// The resend of a Request datagram is its own row: the same bytes went on the air twice, and a
-  /// screen about airtime has to show both.
+  /// The resend of a Request datagram is its own row: a second transmission went on the air, and
+  /// a screen about airtime has to show both. Since phase 2 it is not the same bytes (spec §10.8):
+  /// the same `ts` and text under the next `seq`, so repeaters do not drop it as already carried.
   @Test
   func `the resend of a request is a second row`() async throws {
     let transport = FakeWeatherTransport(channelRequestsSupported: true)
@@ -722,7 +739,8 @@ struct WeatherServiceRevisionTenTests {
     #expect(await weatherWaitUntil { await service.trafficLog().count == 2 })
     let log = await service.trafficLog()
     #expect(log.allSatisfy { $0.direction == .sent })
-    #expect(log[0].hex == log[1].hex, "the same bytes, which is what makes it a copy to the bot")
+    #expect(log[0].hex != log[1].hex, "not the bytes repeaters already dropped")
+    #expect(log[0].hex.dropFirst(2) == log[1].hex.dropFirst(2), "only the seq byte differs")
   }
 
   /// A datagram on another channel is not the weather channel's traffic and never reaches the log.

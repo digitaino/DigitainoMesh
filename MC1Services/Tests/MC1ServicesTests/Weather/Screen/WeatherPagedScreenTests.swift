@@ -26,7 +26,7 @@ struct WeatherPagedScreenTests {
   ) -> WeatherScreenSnapshot {
     WeatherScreenSnapshot.make(
       WeatherScreenSnapshot.Inputs(
-        states: [P.botID: state], bots: [wxAus], preferredBotID: nil, place: place, pageID: pageID,
+        states: [P.botID: state], bots: [wxAus], pick: nil, place: place, pageID: pageID,
         isRadioConnected: true, firmwareSupportsWeather: true, firmwareVersion: "v1.15.0",
         hasWeatherChannel: true, session: WeatherSessionInfo(startedAt: now.addingTimeInterval(-3600)),
         now: now, calendar: P.calendar),

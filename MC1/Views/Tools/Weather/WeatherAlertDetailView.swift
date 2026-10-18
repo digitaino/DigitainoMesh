@@ -173,8 +173,9 @@ struct WeatherAlertDetailView: View {
           beginsAt: item.beginsAt, expiresAt: item.expiresAt, now: screen.now, calendar: .autoupdatingCurrent,
           locale: .autoupdatingCurrent))
         .font(.subheadline)
-      case .upgradedAwaitingReplacement, .expiredRecently:
-        if let qualifier = WeatherCopy.alertQualifier(item, placeName: nil, now: screen.now) {
+      case .upgradedAwaitingReplacement, .expiredRecently, .ended:
+        if let qualifier = WeatherCopy.alertQualifier(
+          item, placeName: nil, now: screen.now, botName: { [model = screen.model] in model.botLabel($0) }) {
           Text(qualifier)
             .font(.subheadline)
             .foregroundStyle(.orange)
@@ -189,6 +190,13 @@ struct WeatherAlertDetailView: View {
         .foregroundStyle(.secondary)
       if let office = tables.officeCode(item.warning.office) {
         Text(L10n.Weather.Weather.AlertDetail.issuedBy(WeatherReferenceNames.officeName(office)))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      // Which weather radios hold it, each with its four hex digits (phase 2): "from WX-AUS 1D04".
+      // The copy shown first; a name alone is self-asserted.
+      if let from = fromLine(item) {
+        Text(from)
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
@@ -207,6 +215,14 @@ struct WeatherAlertDetailView: View {
   /// "issued 1:29 PM" when the wire carried the issue time, "received 1:28 AM" when it did not.
   /// The two are different claims: one is when the Weather Service said it, the other is when
   /// this radio happened to be in range — and only the first is the warning's own age.
+  /// "from WX-AUS 1D04, WX-SAT 2B11": the shown copy's bot first, then every other bot holding one.
+  private func fromLine(_ item: WeatherAlertItem) -> String? {
+    let shown = item.botID.map { [$0] } ?? []
+    let botIDs = shown + item.botIDs.filter { $0 != item.botID }
+    guard !botIDs.isEmpty else { return nil }
+    return L10n.Weather.Weather.AlertDetail.from(botIDs.map { screen.model.botLabel($0) }.joined(separator: ", "))
+  }
+
   private func timeLine(_ item: WeatherAlertItem) -> String {
     func time(_ date: Date) -> String {
       WeatherFormatting.clockTime(date, now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)

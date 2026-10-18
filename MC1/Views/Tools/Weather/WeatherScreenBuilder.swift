@@ -33,7 +33,10 @@ struct WeatherBuildRequest: Sendable {
   var contactService: ContactService?
   var dataStore: PersistenceStore?
   var radioID: UUID?
-  var preferredBotID: UInt16?
+  /// The user's `WeatherBotPick`, or nil (phase 2).
+  var pick: WeatherBotPick?
+  /// When a request to each bot last went unanswered this visit.
+  var unansweredAt: [UInt16: Date] = [:]
   /// The page this build answers for, stamped into the snapshot and the context it produces
   /// (docs/MESHWX_UI.md §13). A build is asked for one page and belongs to that page for good:
   /// the pager can be swiped while it runs, and the result must not land under another name.
@@ -58,6 +61,10 @@ struct WeatherBuildRequest: Sendable {
 }
 
 /// One weather radio as the About sheet lists it.
+///
+/// One row per **radio**, not per id (phase 2): two adverts whose keys begin with the same two
+/// bytes are two rows with one `botID`, told apart by the bot's key. `conflict` is
+/// `WeatherBot.conflicts`' entry for the id — "two radios use WX-AUS" — or nil.
 struct WeatherBotRow: Sendable, Hashable, Identifiable {
   var botID: UInt16
   var bot: WeatherBot?
@@ -66,8 +73,12 @@ struct WeatherBotRow: Sendable, Hashable, Identifiable {
   var lastLiveHeardAt: Date?
   /// What the bot's last alert list said about its home Weather Service office; nil before one.
   var feed: MeshWXFeedHealth?
+  var conflict: WeatherBot.Conflict?
 
-  var id: UInt16 { botID }
+  var id: String {
+    guard let key = bot?.publicKey, key.count == 32 else { return String(botID) }
+    return "\(botID)-\(key.map { String(format: "%02x", $0) }.joined())"
+  }
 }
 
 /// A county or zone by code and display name.
@@ -98,6 +109,9 @@ struct WeatherScreenContext: Sendable {
   /// The source bot's state: its missed-messages and missing-warnings requests are chosen from it
   /// alone (`WeatherAlertRequests`).
   var sourceState: WeatherBotState?
+  /// The state of the bot whose missed messages the alert status names, when that is not the
+  /// source (phase 2): what its Ask is built from.
+  var gapState: WeatherBotState?
   /// Every bot's radar tiles in one list (spec revision 11, §7D). Not the source bot's alone: the
   /// lattice is shared, so a tile of this square from the radio next door is a picture of the same
   /// storm, and the radar screen's width control has to see all of them to say what is held for a
@@ -199,7 +213,8 @@ enum WeatherScreenBuilder {
     let inputs = WeatherScreenSnapshot.Inputs(
       states: states,
       bots: bots,
-      preferredBotID: request.preferredBotID,
+      pick: request.pick,
+      unansweredAt: request.unansweredAt,
       place: place,
       pageID: request.pageID,
       isRadioConnected: request.isRadioConnected,
@@ -219,14 +234,18 @@ enum WeatherScreenBuilder {
     context.channelSlot = channelSlot
     context.session = session
     context.isGeometryLoaded = geometry.isLoaded
-    context.botRows = snapshot.knownBotIDs.map { botID in
+    context.botRows = snapshot.knownBotIDs.flatMap { botID -> [WeatherBotRow] in
       let digest = states[botID]?.digest
-      return WeatherBotRow(
-        botID: botID,
-        bot: bots.first { $0.botID == botID },
-        lastHeardAt: states[botID]?.lastHeardAt,
-        lastLiveHeardAt: states[botID]?.lastLiveHeardAt,
-        feed: digest?.feed)
+      let radios = bots.filter { $0.botID == botID }
+      return (radios.isEmpty ? [nil] : radios.map(Optional.some)).map { bot in
+        WeatherBotRow(
+          botID: botID,
+          bot: bot,
+          lastHeardAt: states[botID]?.lastHeardAt,
+          lastLiveHeardAt: states[botID]?.lastLiveHeardAt,
+          feed: digest?.feed,
+          conflict: snapshot.conflicts[botID])
+      }
     }
 
     switch snapshot.forecast {
@@ -257,6 +276,9 @@ enum WeatherScreenBuilder {
     }
 
     context.sourceState = snapshot.source.flatMap { states[$0.botID] }
+    if case let .missedMessages(gapBotID) = snapshot.alertStatus, gapBotID != snapshot.source?.botID {
+      context.gapState = states[gapBotID]
+    }
     context.radarTiles = WeatherRadarCard.tiles(in: states)
 
     if !geometry.isLoaded {

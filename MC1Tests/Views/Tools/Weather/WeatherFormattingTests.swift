@@ -258,7 +258,16 @@ struct WeatherFormattingTests {
 
   @Test
   func `a radio heard without an advert is named by its hex id`() {
-    #expect(WeatherFormatting.botName(botID: 0x041D, bot: nil) == "Weather radio 041D")
+    // Phase 2: the four digits are the key's first two bytes in key order, as every MeshCore app
+    // prints a key — WX-AUS's key starts 1D 04, its `bot` field is 0x041D — and the same digits
+    // stand beside a name wherever a bot is identified.
+    #expect(WeatherFormatting.botName(botID: 0x041D, bot: nil) == "Weather radio 1D04")
+    let bot = WeatherBot(
+      publicKey: Data([0x1D, 0x04]) + Data(repeating: 0x55, count: 30), name: "WX-AUS", latitude: 0,
+      longitude: 0, lastAdvert: nil)
+    #expect(WeatherFormatting.botName(botID: 0x041D, bot: bot) == "WX-AUS")
+    #expect(WeatherFormatting.botLabel(botID: 0x041D, bot: bot) == "WX-AUS 1D04")
+    #expect(WeatherFormatting.botLabel(botID: 0x041D, bot: nil) == "Weather radio 1D04")
   }
 
   @Test
@@ -318,6 +327,9 @@ struct WeatherFormattingTests {
     #expect(WeatherReferenceNames.officeName("FWD") == "NWS Fort Worth")
     #expect(WeatherReferenceNames.officeName("ZZZ") == "NWS ZZZ")
     #expect(WeatherReferenceNames.officeName("WNS") == "Storm Prediction Center")
+    // index.json version 3: the tsunami warning centres.
+    #expect(WeatherReferenceNames.officeName("AAQ") == "National Tsunami Warning Center")
+    #expect(WeatherReferenceNames.officeName("HEB") == "Pacific Tsunami Warning Center")
     #expect(WeatherReferenceNames.officeName("NHC") == "National Hurricane Center")
     #expect(WeatherReferenceNames.stateName("TX") == "Texas")
   }

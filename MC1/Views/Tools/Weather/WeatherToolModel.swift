@@ -109,6 +109,20 @@ struct WeatherPageScreen {
     model.alertsRequest(for: status, in: context)
   }
 
+  /// The bot "Ask for alerts" goes to: the bot whose missed messages the status names when that
+  /// is not the page's source (phase 2), else nil for the source.
+  func alertsBotID(for status: WeatherAlertStatus) -> UInt16? {
+    guard case let .missedMessages(botID) = status, botID != snapshot.source?.botID,
+      context.gapState != nil else { return nil }
+    return botID
+  }
+
+  /// "WX-SAT 2B11" for the bot whose cancel ended an `.ended` alert (phase 2), else nil.
+  func endedByLabel(_ item: WeatherAlertItem) -> String? {
+    guard case let .ended(_, botID) = item.kind else { return nil }
+    return model.botLabel(botID)
+  }
+
   var missingWarnings: [MeshWXWarningIdentity] { context.sourceState?.missingFromDigest ?? [] }
   var missingWarningsRequest: WeatherRequest? { model.missingWarningsRequest(in: context) }
   var missingNotAvailable: Set<MeshWXWarningIdentity> { model.missingNotAvailable(in: context) }
@@ -206,7 +220,22 @@ final class WeatherToolModel {
   private(set) var requestLog: [WeatherRequestLogEntry] = []
   /// The request refused inside the five-second spacing, while its notice shows.
   private(set) var rateLimitedRequest: WeatherRequest?
-  private(set) var preferredBotID: UInt16?
+  /// The user's choice of weather radio, scoped to where it was made and lapsing six hours
+  /// unheard (`WeatherBotPick`, phase 2). Nil: the app chooses.
+  private(set) var botPick: WeatherBotPick?
+  /// When a request to each bot last went unanswered this visit. A bot silent since then is not
+  /// counted as in range (`WeatherBotChoice.isLive`), so a page asking a bot across a bridge that
+  /// dropped moves on to the bot it can still hear.
+  @ObservationIgnored private var unansweredAt: [UInt16: Date] = [:]
+  /// The pending ids of requests sent again to another bot after going unanswered.
+  @ObservationIgnored private var reaskIDs: Set<UUID> = []
+
+  /// The bot the user's pick chose for the page the pager is on, or nil when the app is choosing
+  /// there — no pick, a pick made elsewhere, or one whose bot has gone six hours unheard.
+  var preferredBotID: UInt16? {
+    guard let source = snapshot?.source, source.isPicked else { return nil }
+    return source.botID
+  }
   /// The link the weather transport provides of its own, when it has one. Only the DEBUG bridge
   /// to a real bot does (`WeatherTransportLink`): it is a live connection to that one bot with
   /// no radio in it at all, so while it is there the radio reads as connected and the bot it
@@ -328,8 +357,20 @@ final class WeatherToolModel {
   /// The name of the bot something actually came from: an item carries its own `botID`, and a
   /// screen that shows somebody's item names that bot rather than the one this page would ask.
   func botName(_ botID: UInt16) -> String {
-    let bots = builds[selectedPageID]?.context.bots ?? builds.values.first?.context.bots ?? []
-    return WeatherFormatting.botName(botID: botID, bot: bots.first { $0.botID == botID })
+    WeatherFormatting.botName(botID: botID, bot: knownBots.first { $0.botID == botID })
+  }
+
+  /// "WX-AUS 1D04": a bot identified rather than spoken of (phase 2). `publicKey` picks one of two
+  /// radios answering to one id.
+  func botLabel(_ botID: UInt16, publicKey: Data? = nil) -> String {
+    let bot = publicKey.flatMap { key in knownBots.first { $0.publicKey == key } }
+      ?? knownBots.first { $0.botID == botID }
+    return WeatherFormatting.botLabel(botID: botID, bot: bot)
+  }
+
+  /// The bots the pages know, from the page on screen or any build held.
+  private var knownBots: [WeatherBot] {
+    builds[selectedPageID]?.context.bots ?? builds.values.first?.context.bots ?? []
   }
 
   /// The place's short name, "Austin", for the page the pager is on.
@@ -435,7 +476,7 @@ final class WeatherToolModel {
     self.appState = appState
     guard holder == nil else { return }
     holder = WeatherTaskHolder()
-    preferredBotID = WeatherPreferenceStore().selectedBotID
+    botPick = WeatherPreferenceStore().botPick
     adopt(savedPlacesStore.places)
     subscriptions = DefaultsWeatherAlertWatchStore().subscriptions
     requestLog = WeatherRequestLogStore().entries
@@ -539,6 +580,18 @@ final class WeatherToolModel {
       pending.removeAll { $0.id == request.id }
       outcomes[request.request] = WeatherSettledOutcome(outcome: outcome, at: now)
       settleRequestLog(id: request.id, outcome: outcome)
+      // Phase 2: an unanswered bot is not counted as in range until it is heard again, and the
+      // request goes once to another bot heard live that covers the place.
+      let wasReask = reaskIDs.remove(request.id) != nil
+      switch outcome {
+      case .timedOut:
+        unansweredAt[request.botID] = now
+        if !wasReask { reaskElsewhere(request, states: await service.allStates()) }
+      case .answered:
+        unansweredAt[request.botID] = nil
+      default:
+        break
+      }
       if case .answered = outcome, let before = fingerprints.removeValue(forKey: request.request) {
         let after = Self.fingerprint(request.request, sourceBotID: request.botID, states: await service.allStates())
         answerNotes[request.request] = after?.value == before.value ? .unchanged(before.kind) : .changed
@@ -547,6 +600,24 @@ final class WeatherToolModel {
       announce(request.request)
       scheduleRebuild()
     }
+  }
+
+  /// After a request to a page's source went unanswered: the same request, once, to another bot
+  /// heard live in the last two hours whose area covers the place (`WeatherBotChoice.fallback`,
+  /// phase 2). A phone hearing WX-SAT over a bridge that has just dropped gets its answer from the
+  /// WX-AUS it can still hear, instead of an "unanswered" and a page still pointed at WX-SAT.
+  /// Never a third bot: the second request settles however it settles.
+  private func reaskElsewhere(_ request: WeatherPendingRequest, states: [UInt16: WeatherBotState]) {
+    let candidates = [builds[selectedPageID]].compactMap { $0 } + Array(builds.values)
+    guard let build = candidates.first(where: { $0.snapshot.source?.botID == request.botID }),
+      let to = WeatherBotChoice.fallback(
+        from: request.botID, states: states, bots: build.context.bots, place: build.snapshot.place,
+        coverage: build.snapshot.coverage, conflicts: build.snapshot.conflicts, unansweredAt: unansweredAt,
+        now: Date())
+    else { return }
+    holder?.replace("reask", with: Task { [weak self] in
+      await self?.sendPlanned(request.request, to: to, reask: true)
+    })
   }
 
   private func announce(_ request: WeatherRequest) {
@@ -644,7 +715,8 @@ final class WeatherToolModel {
       contactService: services?.contactService,
       dataStore: services?.dataStore ?? appState.offlineDataStore,
       radioID: radioID,
-      preferredBotID: preferredBotID,
+      pick: botPick,
+      unansweredAt: unansweredAt,
       pageID: pageID,
       place: placeInput(for: pageID),
       isRadioConnected: services != nil,
@@ -679,6 +751,21 @@ final class WeatherToolModel {
   private func apply(_ result: WeatherBuildResult, for request: WeatherBuildRequest, isSelected: Bool) {
     builds[request.pageID] = result.page
     evictDistantBuilds()
+    // A pick whose bot has gone six hours unheard has lapsed for good (phase 2): forgotten, so the
+    // next time that bot is heard it is the app's choice again, not the user's of yesterday.
+    if let pick = botPick {
+      let heard = result.page.context.botRows.first { $0.botID == pick.botID }?.lastLiveHeardAt
+      if pick.isLapsed(lastLiveHeardAt: heard, now: result.page.snapshot.now) {
+        botPick = nil
+        WeatherPreferenceStore().botPick = nil
+        scheduleRebuild()
+      }
+    }
+    // The bots the pages ask, which the service's cap on states never evicts (phase 2).
+    if let service = request.weatherService {
+      let sources = Set(builds.values.compactMap(\.snapshot.source?.botID))
+      Task { await service.useSources(sources) }
+    }
     if isSelected { now = result.page.snapshot.now }
     if request.radioID == cachedRadioID {
       cachedContacts = result.contacts
@@ -1090,11 +1177,22 @@ final class WeatherToolModel {
   /// - Parameter queued: part of an Update run. The one-at-a-time rule is for buttons a user
   ///   taps; a planned run keeps its own five-second spacing and would otherwise refuse every
   ///   step after the first while the first is still on the air.
-  func send(_ request: WeatherRequest, queued: Bool = false) async {
-    guard let service = appState?.services?.weatherService, let source = snapshot?.source else { return }
+  ///   - to: a bot id when the request goes to another bot than the page's source: the bot whose
+  ///     missed messages the alert status names, or the one an unanswered request is asked again
+  ///     of (phase 2).
+  ///   - reask: this is the one ask of another bot after a request went unanswered.
+  func send(_ request: WeatherRequest, queued: Bool = false, to: UInt16? = nil, reask: Bool = false) async {
+    guard let service = appState?.services?.weatherService else { return }
     // The announced bot, or a stand-in carrying the two bytes a Request datagram names it by, for
     // one only ever heard on the channel (`WeatherBot.heardOnly`).
-    let bot = source.requestBot
+    let bot: WeatherBot
+    if let to, to != snapshot?.source?.botID {
+      bot = knownBots.first { $0.botID == to } ?? .heardOnly(botID: to)
+    } else if let source = snapshot?.source {
+      bot = source.requestBot
+    } else {
+      return
+    }
     switch status(for: request) {
     case .idle, .settled: break
     case .waitingForOther where queued: break
@@ -1107,6 +1205,7 @@ final class WeatherToolModel {
     }
     do {
       if let entry = try await service.send(request, to: bot) {
+        if reask { reaskIDs.insert(entry.id) }
         if !pending.contains(where: { $0.id == entry.id }) { pending.append(entry) }
         recordRequest(id: entry.id, request: request, botID: bot.botID, at: entry.sentAt)
       } else {
@@ -1269,12 +1368,14 @@ final class WeatherToolModel {
 
   // MARK: - Request arguments (derived from the place, never from held data)
 
-  /// "Ask for alerts" for the status the card shows, chosen from the source bot's own state.
+  /// "Ask for alerts" for the status the card shows, chosen from the state of the bot it is about:
+  /// the source's, or — for missed messages that are another bot's (phase 2) — that bot's
+  /// (`context.gapState`), which is also the bot the ask goes to (`WeatherPageScreen.alertsBotID`).
   ///
   /// Every one of these takes the page's own context: a `>w <county>` for the county the *page*
   /// is in, never for the county of whatever page the pager last built.
   func alertsRequest(for status: WeatherAlertStatus, in context: WeatherScreenContext) -> WeatherRequest {
-    guard case .missedMessages = status, let source = context.sourceState else { return .digest }
+    guard case .missedMessages = status, let source = context.gapState ?? context.sourceState else { return .digest }
     return WeatherAlertRequests.missedMessages(
       source: source, placeCountyUGC: context.placeCounty?.ugc, placeOffice: context.placeOffice,
       notAvailable: missingNotAvailable(in: context), tables: .shared)
@@ -1415,12 +1516,12 @@ final class WeatherToolModel {
 
   /// A step refused inside the spacing waits it out once rather than being dropped: another
   /// request of the user's own can land between two steps.
-  private func sendPlanned(_ request: WeatherRequest) async {
-    await send(request, queued: true)
+  private func sendPlanned(_ request: WeatherRequest, to: UInt16? = nil, reask: Bool = false) async {
+    await send(request, queued: true, to: to, reask: reask)
     guard rateLimitedRequest == request else { return }
     try? await Task.sleep(for: .seconds(WeatherService.requestSpacing))
     guard !Task.isCancelled, rateLimitedRequest == request else { return }
-    await send(request, queued: true)
+    await send(request, queued: true, to: to, reask: reask)
   }
 
   /// The state storm reports and rainfall ask for on one page: the page's own state, or the one
@@ -1532,9 +1633,17 @@ final class WeatherToolModel {
 
   // MARK: - Bots
 
-  func selectBot(_ botID: UInt16?) {
-    preferredBotID = botID
-    WeatherPreferenceStore().selectedBotID = botID
+  /// The user's pick of weather radio, or nil to let the app choose (`WeatherBotPick`). It holds
+  /// near the place on screen when it was made, and lapses once the bot goes six hours unheard.
+  /// `publicKey`: the radio's whole key, when two radios answer to one id.
+  func selectBot(_ botID: UInt16?, publicKey: Data? = nil) {
+    botPick = botID.map { botID in
+      let coordinate = snapshot?.place?.coordinate
+      return WeatherBotPick(
+        botID: botID, publicKey: publicKey, latitude: coordinate?.latitude, longitude: coordinate?.longitude,
+        pickedAt: Date())
+    }
+    WeatherPreferenceStore().botPick = botPick
     scheduleRebuild()
   }
 

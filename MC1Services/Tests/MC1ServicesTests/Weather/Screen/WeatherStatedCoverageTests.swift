@@ -78,15 +78,20 @@ struct WeatherStatedCoverageTests {
     #expect(status(listening(P.statement), place: sanSaba) == listAsOf)
   }
 
-  /// `n` = 0 and `k` = 0: no area filter at all, so no place is outside it.
+  /// Phase 2 (18 October 2026, spec §10.8): `n` = 0 and `k` = 0 is no area filter at all. Spec
+  /// §7A reads it as "no place is outside it", but it is also the cheapest statement to forge, and
+  /// read as covering every place it made a chattering spoof every phone's bot. It places nothing:
+  /// unknown, never inside — and never outside either.
   @Test
-  func `a bot that states no area filter carries everywhere its feed does`() {
+  func `a bot that states no area filter is evidence of no place`() {
     let everything = MeshWXCoverage(
       latitude: 0, longitude: 0, radiusKilometres: 0, stationCap: 14, officeIndices: [], areas: [])
     #expect(everything.hasNoAreaFilter)
     let coverage = coverage([P.botID: P.stating(everything)])
-    #expect(coverage.verdict(for: place(P.dallas, "Dallas, TX")) == .inside)
-    #expect(coverage.verdict(for: place(P.austin, "Austin, TX")) == .inside)
+    #expect(coverage.verdict(for: place(P.dallas, "Dallas, TX")) == .unknown)
+    #expect(coverage.verdict(for: place(P.austin, "Austin, TX")) == .unknown)
+    #expect(coverage.botIDs(covering: place(P.austin, "Austin, TX")).isEmpty)
+    #expect(status(listening(everything), place: place(P.dallas, "Dallas, TX")) == .coverageUnknown)
   }
 
   /// The whole point of the message: a list the bot had to cut means "not listed", never "not

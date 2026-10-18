@@ -322,10 +322,12 @@ public final class MeshWXTables: Sendable {
   }
 
   /// Issuers in the `offices` list that are national centres rather than forecast offices:
-  /// `NHC` (the National Hurricane Center, index 125) and `WNS` (the Storm Prediction Center,
-  /// 126, which issues tornado and severe thunderstorm watches). Their products cover many
-  /// forecast offices' areas, so they say nothing about which office a bot carries.
-  public static let nationalCentreCodes: Set<String> = ["NHC", "WNS"]
+  /// `NHC` (the National Hurricane Center, index 125), `WNS` (the Storm Prediction Center, 126,
+  /// which issues tornado and severe thunderstorm watches), and since `index.json` version 3 the
+  /// two tsunami warning centres, `AAQ` (the National Tsunami Warning Center) and `HEB` (the
+  /// Pacific Tsunami Warning Center). Their products cover many forecast offices' areas, so they
+  /// say nothing about which office a bot carries.
+  public static let nationalCentreCodes: Set<String> = ["NHC", "WNS", "AAQ", "HEB"]
 
   /// Whether an office byte names a national centre: one of ``nationalCentreCodes``, or an
   /// office whose `wfos.json` row lists no states. False for an index the bundle does not know.

@@ -15,6 +15,9 @@ import SwiftUI
 struct WeatherBarAsk: Equatable {
   var title: String
   var request: WeatherRequest
+  /// A bot id when the ask is for another bot than the page's source: the bot whose missed
+  /// messages the alert status names (phase 2). Nil asks the source.
+  var botID: UInt16?
 }
 
 /// Whether the row a screen's answer lands in is on screen. Written by the row itself
@@ -133,7 +136,7 @@ private struct WeatherAskBarModifier: ViewModifier {
     guard let ask else { return }
     told = ask.request
     settledAt = nil
-    Task { await model.send(ask.request) }
+    Task { await model.send(ask.request, to: ask.botID) }
   }
 
   private func capsule(_ request: WeatherRequest, proxy: ScrollViewProxy) -> some View {

@@ -91,8 +91,13 @@ struct WeatherCopyTests {
 
   @Test
   func `missed messages and an old list ask for alerts`() {
-    #expect(status(.missedMessages)?.text == "This phone missed messages from WX-AUS. Some alerts may be missing.")
-    #expect(status(.missedMessages)?.action == .askForAlerts)
+    #expect(status(.missedMessages(botID: 0x041D))?.text == "This phone missed messages from WX-AUS. Some alerts may be missing.")
+    #expect(status(.missedMessages(botID: 0x041D))?.action == .askForAlerts)
+    // Phase 2: the gap is one bot's, and the line names that bot, not the page's source.
+    let other = WeatherCopy.alertStatus(
+      .missedMessages(botID: 0x112B), source: "WX-AUS", place: Self.austin, areaName: nil,
+      botName: { $0 == 0x112B ? "WX-SAT" : nil }, now: Self.now, calendar: F.calendar, locale: F.locale)
+    #expect(other.map { F.plain($0.text) } == "This phone missed messages from WX-SAT. Some alerts may be missing.")
     #expect(status(.listOld(asOf: Self.eightOhTwo))?.text == "Last alert list as of 8:02 PM.")
     #expect(status(.listOld(asOf: Self.eightOhTwo))?.action == .askForAlerts)
   }

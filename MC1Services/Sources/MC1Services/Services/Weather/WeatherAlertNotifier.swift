@@ -12,6 +12,18 @@ import MeshWX
 /// Nothing is watched until a bell is turned on, so the common case is the first two lines of
 /// ``apply(botID:changes:isBacklog:)``: no warning in the message, or nothing watched, and the
 /// evaluator reads no state at all.
+///
+/// ## Several bots (phase 2, 18 October 2026, spec §10.8)
+///
+/// The copy a warning is judged by is the one the alerts list shows
+/// (``WeatherCrossBot/preferred(_:in:areaCentre:now:excluding:)``): in force over not, a bot in
+/// range over one that is not, then the later expiry — never one from a suspended id
+/// (`suspendedBotIDs`: ids two radios answer to that the user has not picked). A copy another
+/// bot's trusted cancel ended is over, and takes its notification down. A list or a cancel takes
+/// a notification down only once no bot holds a copy still in force. And a notification taken
+/// down is remembered (``WeatherAlertPost/withdrawnAt``), so that a copy arriving since — another
+/// bot's, its feed hours behind — never sounds it again: it can come back only as an escalation,
+/// the rule a dismissed notification already follows.
 public actor WeatherAlertNotifier {
   private let states: @Sendable () async -> [UInt16: WeatherBotState]
   private let events: @Sendable () -> AsyncStream<WeatherEvent>
@@ -21,8 +33,11 @@ public actor WeatherAlertNotifier {
   private let geometry: any WeatherAreaGeometry
   private let loadGeometry: @Sendable () async -> Void
   private let botName: @Sendable (UInt16) async -> String?
+  private let suspendedBotIDs: @Sendable () async -> Set<UInt16>
   private let tables: MeshWXTables
   private let now: @Sendable () -> Date
+  /// The bundle's centre of a county or zone, for whether a bot's area takes in a warning.
+  private let areaCentre: WeatherAreaCentre
 
   /// What this phone has posted, by request identifier. Loaded once, written on every change.
   private var posts: [String: WeatherAlertPost] = [:]
@@ -47,6 +62,8 @@ public actor WeatherAlertNotifier {
   ///   - geometry: the bundled county and zone outlines, for a warning with no polygon.
   ///   - loadGeometry: parses them when one needs them and they are not loaded yet.
   ///   - botName: the bot's advertised name, for the source line.
+  ///   - suspendedBotIDs: the ids whose copies notify nothing (phase 2): ids two radios answer to
+  ///     (``WeatherBot/conflicts(among:)``) that the user has not picked.
   public init(
     states: @escaping @Sendable () async -> [UInt16: WeatherBotState],
     events: @escaping @Sendable () -> AsyncStream<WeatherEvent>,
@@ -56,6 +73,7 @@ public actor WeatherAlertNotifier {
     geometry: any WeatherAreaGeometry = MeshWXGeometry.shared,
     loadGeometry: @escaping @Sendable () async -> Void = { await MeshWXGeometry.shared.preload() },
     botName: @escaping @Sendable (UInt16) async -> String? = { _ in nil },
+    suspendedBotIDs: @escaping @Sendable () async -> Set<UInt16> = { [] },
     tables: MeshWXTables = .shared,
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
@@ -67,8 +85,10 @@ public actor WeatherAlertNotifier {
     self.geometry = geometry
     self.loadGeometry = loadGeometry
     self.botName = botName
+    self.suspendedBotIDs = suspendedBotIDs
     self.tables = tables
     self.now = now
+    areaCentre = WeatherService.areaCentres(tables)
   }
 
   // MARK: - Lifecycle
@@ -108,7 +128,7 @@ public actor WeatherAlertNotifier {
       case let .warningStored(identity, _):
         stored.append(identity)
       case let .warningRemoved(identity, _):
-        ended.append(identity)
+        unlisted.append(identity)
       case let .digestApplied(_, removed):
         // A warning the list no longer carries has ended; one it never named was never received
         // and has no geometry, so it stays the dashboard's row and notifies nothing.
@@ -118,14 +138,17 @@ public actor WeatherAlertNotifier {
         break
       }
     }
-    guard !stored.isEmpty || !ended.isEmpty || listArrived else { return }
+    guard !stored.isEmpty || !unlisted.isEmpty || listArrived else { return }
     loadIfNeeded()
     if !unlisted.isEmpty {
-      // One bot's list speaks for that bot's copy (spec §5): a warning another bot still holds is
-      // still that bot's to end, by its own list, its cancel or the expiry.
+      // One bot's list or cancel speaks for that bot's copy (spec §5): a warning another bot still
+      // holds in force is still that bot's to end, by its own list, its cancel or the expiry. A
+      // cancel from a bot in range that carries the warning's ground has ended the others' copies
+      // too (`WeatherCrossBot`), so after one of those nothing is in force.
       let states = await states()
+      let now = now()
       ended.append(contentsOf: unlisted.filter { identity in
-        !states.values.contains { $0.warnings[identity] != nil }
+        !WeatherCrossBot.isInForce(identity, in: states, areaCentre: areaCentre, now: now)
       })
     }
     if !ended.isEmpty { await withdraw(ended) }
@@ -144,11 +167,13 @@ public actor WeatherAlertNotifier {
     guard !places.isEmpty else { return }
     let states = await states()
     let delivered = await poster.deliveredIdentifiers()
+    let suspended = await suspendedBotIDs()
     var changed = false
     for identity in identities.sorted(by: WeatherStateReducer.identityOrder) {
       changed = await evaluate(
         identity, preferredBotID: botID, states: states, places: places,
-        subscriptions: watch.subscriptions, isBacklog: isBacklog, delivered: delivered, now: now) || changed
+        subscriptions: watch.subscriptions, isBacklog: isBacklog, delivered: delivered,
+        suspended: suspended, now: now) || changed
     }
     if changed { persist() }
   }
@@ -163,9 +188,16 @@ public actor WeatherAlertNotifier {
     subscriptions: WeatherAlertSubscriptions,
     isBacklog: Bool,
     delivered: Set<String>,
+    suspended: Set<UInt16>,
     now: Date
   ) async -> Bool {
-    guard let held = held(identity, preferredBotID: preferredBotID, in: states) else { return false }
+    guard let held = WeatherCrossBot.preferred(
+      identity, in: states, areaCentre: areaCentre, now: now, excluding: suspended) else { return false }
+    if held.ending != nil {
+      // Every copy left is one another bot's trusted cancel ended (`WeatherCrossBot`): the
+      // warning is over, whoever is still repeating it.
+      return await withdraw([identity])
+    }
     let warning = held.stored.warning
     let rank = WeatherAlertPriority.rank(warning, tables: tables)
     var changed = false
@@ -201,6 +233,7 @@ public actor WeatherAlertNotifier {
           placeLabel: place.place.label,
           placement: placement,
           botName: await name(of: held.botID),
+          botID: held.botID,
           isLate: isLate,
           now: now,
           // The copy's own start, else another bot's, as the alerts list reads it
@@ -238,27 +271,24 @@ public actor WeatherAlertNotifier {
   /// Takes down what these warnings had posted. A cancellation removes the notification; nothing
   /// takes its place, because "the warning ended" and "the weather is fine" are not the same
   /// sentence and this phone can only know the first.
-  private func withdraw(_ identities: [MeshWXWarningIdentity]) async {
+  ///
+  /// The post is kept, marked ``WeatherAlertPost/withdrawnAt`` (phase 2): a copy of the same
+  /// warning arriving later — another bot's, its feed hours behind — finds it, and is a repeat of
+  /// something the user has already been told is over (`WeatherAlertNotificationRules.decide`),
+  /// not a new warning to sound for. It goes with the ledger's usual pruning. Returns whether
+  /// anything was taken down.
+  @discardableResult
+  private func withdraw(_ identities: [MeshWXWarningIdentity]) async -> Bool {
     let ended = Set(identities)
-    let identifiers = posts.values.filter { ended.contains($0.identity) }.map(\.identifier)
-    guard !identifiers.isEmpty else { return }
+    let identifiers = posts.values
+      .filter { $0.withdrawnAt == nil && ended.contains($0.identity) }
+      .map(\.identifier)
+    guard !identifiers.isEmpty else { return false }
     await poster.remove(identifiers: identifiers)
-    for identifier in identifiers { posts.removeValue(forKey: identifier) }
+    let now = now()
+    for identifier in identifiers { posts[identifier]?.withdrawnAt = now }
     persist()
-  }
-
-  /// The copy of a warning to judge: the bot the message came from, else whichever bot holds one.
-  /// Bots are read in a fixed order so two holding the same identity give the same answer twice.
-  private func held(
-    _ identity: MeshWXWarningIdentity,
-    preferredBotID: UInt16,
-    in states: [UInt16: WeatherBotState]
-  ) -> (botID: UInt16, stored: WeatherStoredWarning)? {
-    if let stored = states[preferredBotID]?.warnings[identity] { return (preferredBotID, stored) }
-    for botID in states.keys.sorted() {
-      if let stored = states[botID]?.warnings[identity] { return (botID, stored) }
-    }
-    return nil
+    return true
   }
 
   // MARK: - Places
@@ -305,11 +335,13 @@ public actor WeatherAlertNotifier {
     guard !places.isEmpty else { return }
     let states = await states()
     let delivered = await poster.deliveredIdentifiers()
+    let suspended = await suspendedBotIDs()
     var changed = false
     for item in pending {
       changed = await evaluate(
         item.identity, preferredBotID: item.botID, states: states, places: places,
-        subscriptions: watch.subscriptions, isBacklog: item.isBacklog, delivered: delivered, now: now) || changed
+        subscriptions: watch.subscriptions, isBacklog: item.isBacklog, delivered: delivered,
+        suspended: suspended, now: now) || changed
     }
     if changed { persist() }
   }

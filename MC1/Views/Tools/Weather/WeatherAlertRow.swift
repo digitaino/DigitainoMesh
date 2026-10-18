@@ -14,17 +14,20 @@ struct WeatherAlertRow: View, Equatable {
   let item: WeatherAlertItem
   let placeName: String?
   let now: Date
+  /// "WX-SAT 2B11", the bot whose cancel ended an `.ended` alert (phase 2).
+  var endedBy: String?
   /// "Llano County · 105 km W", for rows away from the place.
   var location: String?
 
   nonisolated static func == (lhs: WeatherAlertRow, rhs: WeatherAlertRow) -> Bool {
     lhs.item == rhs.item && lhs.placeName == rhs.placeName && lhs.now == rhs.now && lhs.location == rhs.location
+      && lhs.endedBy == rhs.endedBy
   }
 
   var body: some View {
     let tables = MeshWXTables.shared
     let tint = WeatherFormatting.color(for: WeatherFormatting.tint(for: item.warning.event, tables: tables))
-    let qualifier = WeatherCopy.alertQualifier(item, placeName: placeName, now: now)
+    let qualifier = WeatherCopy.alertQualifier(item, placeName: placeName, now: now, botName: { [endedBy] _ in endedBy })
     let tags = WeatherFormatting.tagLine(for: item.warning)
 
     HStack(alignment: .top, spacing: 10) {

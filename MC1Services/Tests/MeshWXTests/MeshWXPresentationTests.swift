@@ -77,7 +77,11 @@ struct MeshWXPresentationTests {
     #expect(MeshWXSeverity(vtec: "SV.A") == .watch)
     #expect(MeshWXSeverity(vtec: "HT.Y") == .advisory)
     #expect(MeshWXSeverity(vtec: "SPS") == .statement)
-    #expect(MeshWXSeverity(vtec: "garbage") == nil)
+    // A code with no dot names a product without VTEC, a statement: SPS, and since protocol 18
+    // AQA, the air quality alert. A significance letter the spec does not know is nothing.
+    #expect(MeshWXSeverity(vtec: "AQA") == .statement)
+    #expect(MeshWXSeverity(vtec: "SV.X") == nil)
+    #expect(MeshWXSeverity(vtec: "") == nil)
     #expect(MeshWXSeverity.warning > MeshWXSeverity.watch)
     #expect(MeshWXSeverity.advisory > MeshWXSeverity.statement)
   }

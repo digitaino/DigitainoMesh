@@ -213,7 +213,7 @@ struct MeshWXTablesTests {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("meshwx-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
-    try Data(#"{"offices": ["ABQ", "EWX", "NHC", "WNS", "XYZ"], "stations": [], "states": []}"#.utf8)
+    try Data(#"{"offices": ["ABQ", "EWX", "NHC", "WNS", "XYZ", "AAQ", "HEB"], "stations": [], "states": []}"#.utf8)
       .write(to: directory.appendingPathComponent("index.json"))
     // The bot's rows: a centre adds a name and lists no states; `zone_count` is not read.
     try Data(#"""
@@ -228,6 +228,7 @@ struct MeshWXTablesTests {
     #expect(tables.isNationalCentre(3), "by code, with no wfos row")
     #expect(tables.isNationalCentre(4), "by its row listing no states")
     #expect(!tables.isNationalCentre(200), "an index the bundle does not know")
+    #expect(tables.isNationalCentre(5) && tables.isNationalCentre(6), "the tsunami centres, by code")
     #expect(tables.office("EWX")?.states == ["TX"])
     #expect(tables.office("EWX")?.name == nil)
     #expect(tables.office("NHC")?.name == "National Hurricane Center")

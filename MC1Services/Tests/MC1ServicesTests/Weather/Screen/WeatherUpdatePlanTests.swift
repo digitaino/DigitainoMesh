@@ -15,7 +15,7 @@ struct WeatherUpdatePlanTests {
   func snapshot(_ state: WeatherBotState, place: WeatherPlace?, now: Date) -> WeatherScreenSnapshot {
     WeatherScreenSnapshot.make(
       WeatherScreenSnapshot.Inputs(
-        states: [P.botID: state], bots: [wxAus], preferredBotID: nil, place: place,
+        states: [P.botID: state], bots: [wxAus], pick: nil, place: place,
         isRadioConnected: true, firmwareSupportsWeather: true, firmwareVersion: "v1.15.0",
         hasWeatherChannel: true, session: WeatherSessionInfo(startedAt: now.addingTimeInterval(-3600)),
         now: now, calendar: P.calendar),
@@ -577,7 +577,7 @@ struct WeatherUpdatePlanCoverageTests {
     let place = P.place(P.dallas, label: "Dallas, TX")
     let snapshot = WeatherScreenSnapshot.make(
       WeatherScreenSnapshot.Inputs(
-        states: [P.botID: state], bots: [wxAus], preferredBotID: nil, place: place,
+        states: [P.botID: state], bots: [wxAus], pick: nil, place: place,
         isRadioConnected: true, firmwareSupportsWeather: true, firmwareVersion: "v1.15.0",
         hasWeatherChannel: true, session: WeatherSessionInfo(startedAt: P.now.addingTimeInterval(-3600)),
         now: P.now, calendar: P.calendar),
@@ -635,7 +635,7 @@ struct WeatherForecastAtTests {
         bots: [WeatherBot(
           publicKey: Data([0x1D, 0x04]) + Data(repeating: 0x55, count: 30),
           name: "WX-AUS", latitude: 0, longitude: 0, lastAdvert: nil)],
-        preferredBotID: nil, place: place, isRadioConnected: true, firmwareSupportsWeather: true,
+        pick: nil, place: place, isRadioConnected: true, firmwareSupportsWeather: true,
         firmwareVersion: "v1.15.0", hasWeatherChannel: true,
         session: WeatherSessionInfo(startedAt: P.now.addingTimeInterval(-3600)),
         now: P.now, calendar: P.calendar),

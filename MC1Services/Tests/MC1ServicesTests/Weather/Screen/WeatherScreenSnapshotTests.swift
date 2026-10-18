@@ -23,7 +23,7 @@ struct WeatherScreenSnapshotTests {
     session: WeatherSessionInfo = WeatherSessionInfo(startedAt: WeatherPhoneFixture.now.addingTimeInterval(-3600))
   ) -> WeatherScreenSnapshot.Inputs {
     WeatherScreenSnapshot.Inputs(
-      states: states ?? [P.botID: P.state()], bots: bots ?? [wxAus], preferredBotID: nil, place: place,
+      states: states ?? [P.botID: P.state()], bots: bots ?? [wxAus], pick: nil, place: place,
       isRadioConnected: connected, transportLink: link, firmwareSupportsWeather: firmware,
       firmwareVersion: "v1.14.0",
       hasWeatherChannel: channel, session: session, now: P.now, calendar: P.calendar)

@@ -51,6 +51,9 @@
 /* Location: WeatherCopy.swift - Banner when no weather radio is known */
 "weather.banner.noBot" = "尚未听到任何气象电台。它们显示为名称类似 WX-AUS 的节点。";
 
+
+/* Location: WeatherToolView.swift - Banner when every weather radio there is to ask shares its name or id with another radio (phase 2). %@ is the name, or the four hex digits */
+"weather.banner.botConflict" = "两台电台都使用 %@。请在“气象电台”中选择一台以询问天气。";
 /* Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio */
 "weather.channel.alert.title" = "将 #meshwx 添加到你的电台？";
 
@@ -123,6 +126,9 @@
 /* Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min" */
 "weather.alerts.expired" = "%@前已过期 · 未收到更新";
 
+
+/* Location: WeatherCopy.swift - Row line for an alert here that another weather radio cancelled, though a radio still sends it (phase 2). %1$@ is a duration like "3 h", %2$@ the radio that cancelled it, "WX-SAT 2B11" */
+"weather.alerts.ended" = "%2$@ 已于%1$@前取消";
 /* Location: WeatherCopy.swift - Row line while area outlines load */
 "weather.alerts.checking" = "正在确认位置…";
 
@@ -251,6 +257,9 @@
 /* Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio" */
 "weather.alertDetail.issuedBy" = "发布方：%@";
 
+
+/* Location: WeatherAlertDetailView.swift - Which weather radios hold the alert (phase 2). %@ is a list like "WX-AUS 1D04, WX-SAT 2B11" */
+"weather.alertDetail.from" = "来自 %@";
 /* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
 "weather.alertDetail.received" = "收到于 %@";
 
@@ -720,6 +729,9 @@
 /* Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert */
 "weather.request.blocked.notAnnounced" = "它发送广播通告前无法询问";
 
+
+/* Location: WeatherAskControl.swift - In place of a request button while two radios share the only weather radio's name or id (phase 2) */
+"weather.request.blocked.botConflict" = "请选择一台气象电台再询问";
 /* Location: WeatherCopy.swift - The radio has no data, %@ is its name */
 "weather.request.notAvailable.noData" = "%@ 暂无该数据";
 
@@ -860,7 +872,7 @@
 
 // MARK: - About
 
-/* Location: WeatherRadioView.swift - Section header above the four lines that say how asking works */
+/* Location: WeatherRadioView.swift - Section header above the five lines that say how asking works */
 "weather.about.howItWorks" = "工作方式";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
@@ -875,6 +887,9 @@
 /* Location: WeatherRadioView.swift - How it works, fourth line */
 "weather.about.line4" = "请求会占用大家共用的空中时间。";
 
+
+/* Location: WeatherRadioView.swift - How it works, fifth line: what a request carries about the asker (phase 2) */
+"weather.about.line5" = "请求还会附带你电台公钥的开头部分；对于“我的位置”，还会附带所询问的坐标。";
 /* Location: WeatherRadioView.swift - Section of weather radios */
 "weather.about.radios" = "气象电台";
 
@@ -908,6 +923,12 @@
 /* Location: WeatherRadioView.swift - The weather radio requests go to */
 "weather.about.inUse" = "使用中";
 
+
+/* Location: WeatherRadioView.swift - Detail on a weather radio row when two radios share its name or its four hex digits (phase 2). %@ is the name, or the digits */
+"weather.about.conflict" = "两台电台都使用 %@";
+
+/* Location: WeatherRadioView.swift - Footer under the weather radios while two radios share a name or an id (phase 2). %@ is the name, or the four hex digits */
+"weather.about.conflictFooter" = "两台电台都使用 %@。在你选择其中一台之前，应用不会使用任何一台，也不会通知它们的预警。";
 /* Location: WeatherRadioView.swift - Channel slot label */
 "weather.about.channelSlot" = "频道槽位";
 

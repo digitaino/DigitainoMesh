@@ -424,7 +424,7 @@ struct WeatherRadarScreenTests {
       WeatherScreenSnapshot.Inputs(
         states: [WeatherPhoneFixture.botID: state],
         bots: [],
-        preferredBotID: nil,
+        pick: nil,
         place: Self.place(),
         isRadioConnected: true,
         firmwareSupportsWeather: true,
@@ -442,7 +442,7 @@ struct WeatherRadarScreenTests {
       WeatherScreenSnapshot.Inputs(
         states: [WeatherPhoneFixture.botID: state],
         bots: [],
-        preferredBotID: nil,
+        pick: nil,
         place: nil,
         isRadioConnected: true,
         firmwareSupportsWeather: true,

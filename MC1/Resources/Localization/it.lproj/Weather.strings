@@ -51,6 +51,9 @@
 /* Location: WeatherCopy.swift - Banner when no weather radio is known */
 "weather.banner.noBot" = "Nessuna radio meteo ancora sentita. Compaiono come nodi con nomi come WX-AUS.";
 
+
+/* Location: WeatherToolView.swift - Banner when every weather radio there is to ask shares its name or id with another radio (phase 2). %@ is the name, or the four hex digits */
+"weather.banner.botConflict" = "Due radio usano %@. Scegline una in Radio meteo per chiedere il meteo.";
 /* Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio */
 "weather.channel.alert.title" = "Aggiungere #meshwx alla tua radio?";
 
@@ -123,6 +126,9 @@
 /* Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min" */
 "weather.alerts.expired" = "Scaduto %@ fa · nessun aggiornamento ricevuto";
 
+
+/* Location: WeatherCopy.swift - Row line for an alert here that another weather radio cancelled, though a radio still sends it (phase 2). %1$@ is a duration like "3 h", %2$@ the radio that cancelled it, "WX-SAT 2B11" */
+"weather.alerts.ended" = "Annullato %1$@ fa da %2$@";
 /* Location: WeatherCopy.swift - Row line while area outlines load */
 "weather.alerts.checking" = "Verifica della zona…";
 
@@ -251,6 +257,9 @@
 /* Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio" */
 "weather.alertDetail.issuedBy" = "Emesso da %@";
 
+
+/* Location: WeatherAlertDetailView.swift - Which weather radios hold the alert (phase 2). %@ is a list like "WX-AUS 1D04, WX-SAT 2B11" */
+"weather.alertDetail.from" = "da %@";
 /* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
 "weather.alertDetail.received" = "ricevuto %@";
 
@@ -720,6 +729,9 @@
 /* Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert */
 "weather.request.blocked.notAnnounced" = "Impossibile chiedere finché non si annuncia";
 
+
+/* Location: WeatherAskControl.swift - In place of a request button while two radios share the only weather radio's name or id (phase 2) */
+"weather.request.blocked.botConflict" = "Scegli una radio meteo per chiedere";
 /* Location: WeatherCopy.swift - The radio has no data, %@ is its name */
 "weather.request.notAvailable.noData" = "%@ non ha ancora dati per questo";
 
@@ -860,7 +872,7 @@
 
 // MARK: - About
 
-/* Location: WeatherRadioView.swift - Section header above the four lines that say how asking works */
+/* Location: WeatherRadioView.swift - Section header above the five lines that say how asking works */
 "weather.about.howItWorks" = "Come funziona";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
@@ -875,6 +887,9 @@
 /* Location: WeatherRadioView.swift - How it works, fourth line */
 "weather.about.line4" = "Chiedere consuma tempo di trasmissione che tutti condividono.";
 
+
+/* Location: WeatherRadioView.swift - How it works, fifth line: what a request carries about the asker (phase 2) */
+"weather.about.line5" = "Una richiesta porta anche l'inizio della chiave pubblica della tua radio e, per La mia posizione, le coordinate richieste.";
 /* Location: WeatherRadioView.swift - Section of weather radios */
 "weather.about.radios" = "Radio meteo";
 
@@ -908,6 +923,12 @@
 /* Location: WeatherRadioView.swift - The weather radio requests go to */
 "weather.about.inUse" = "in uso";
 
+
+/* Location: WeatherRadioView.swift - Detail on a weather radio row when two radios share its name or its four hex digits (phase 2). %@ is the name, or the digits */
+"weather.about.conflict" = "due radio usano %@";
+
+/* Location: WeatherRadioView.swift - Footer under the weather radios while two radios share a name or an id (phase 2). %@ is the name, or the four hex digits */
+"weather.about.conflictFooter" = "Due radio usano %@. L'app non ne usa nessuna e non ti avvisa dei loro allarmi finché non ne scegli una.";
 /* Location: WeatherRadioView.swift - Channel slot label */
 "weather.about.channelSlot" = "Slot del canale";
 

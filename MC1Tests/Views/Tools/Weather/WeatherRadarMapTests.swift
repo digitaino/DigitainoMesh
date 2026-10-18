@@ -249,7 +249,7 @@ struct WeatherRadarRequestTests {
   static func snapshot(withTile: Bool) -> WeatherScreenSnapshot {
     WeatherScreenSnapshot.make(
       WeatherScreenSnapshot.Inputs(
-        states: [botID: state(withTile: withTile)], bots: [bot], preferredBotID: nil,
+        states: [botID: state(withTile: withTile)], bots: [bot], pick: nil,
         place: austin, isRadioConnected: true, firmwareSupportsWeather: true,
         firmwareVersion: "v1.15.0", hasWeatherChannel: true,
         session: WeatherSessionInfo(startedAt: F.now), now: F.now, calendar: F.calendar),
@@ -285,7 +285,7 @@ struct WeatherRadarRequestTests {
   func `a place with no coordinate has no radar section`() {
     let empty = WeatherScreenSnapshot.make(
       WeatherScreenSnapshot.Inputs(
-        states: [:], bots: [Self.bot], preferredBotID: nil, place: nil, isRadioConnected: true,
+        states: [:], bots: [Self.bot], pick: nil, place: nil, isRadioConnected: true,
         firmwareSupportsWeather: true, firmwareVersion: "v1.15.0", hasWeatherChannel: true,
         session: WeatherSessionInfo(startedAt: F.now), now: F.now, calendar: F.calendar),
       geometry: MeshWXGeometry.shared, tables: .shared)

@@ -152,9 +152,21 @@ enum WeatherFormatting {
 
   // MARK: - Names
 
-  /// "WX-AUS", or "Weather radio 041D" for a bot heard without an advert.
+  /// "WX-AUS", or "Weather radio 1D04" for a bot heard without an advert: the name a sentence
+  /// uses. The four hex digits are the key's first two bytes in key order
+  /// (`WeatherBot.idText`), as every MeshCore app prints a key — the same digits `botLabel` puts
+  /// beside a name, so a bot heard first and announced later keeps them.
   static func botName(botID: UInt16, bot: WeatherBot?) -> String {
-    bot?.name ?? L10n.Weather.Weather.Bot.heardOnly(String(format: "%04X", botID))
+    bot?.name ?? L10n.Weather.Weather.Bot.heardOnly(WeatherBot.idText(botID))
+  }
+
+  /// "WX-AUS 1D04": the name with the four hex digits beside it, wherever a bot is identified
+  /// rather than spoken of (phase 2) — a bot's row, a notification's source line, an alert's
+  /// "from". A name is self-asserted and two radios can share one; the digits are the one thing on
+  /// screen that tells them apart. A heard-only bot's name already carries them.
+  static func botLabel(botID: UInt16, bot: WeatherBot?) -> String {
+    guard let bot else { return botName(botID: botID, bot: nil) }
+    return "\(bot.name) \(WeatherBot.idText(botID))"
   }
 
   /// A name at the start of a sentence: "the weather radio" becomes "The weather radio".

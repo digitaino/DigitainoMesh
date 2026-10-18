@@ -23,7 +23,13 @@ public struct WeatherWarningBanner: Sendable, Hashable {
   }
 
   public static func make(_ items: [WeatherAlertItem]) -> WeatherWarningBanner? {
-    let here = items.filter { $0.placement == .here }
+    // Not an alert another bot's cancel ended (phase 2): it is over, whoever is still repeating
+    // it, and its row says so.
+    let here = items.filter { item in
+      guard item.placement == .here else { return false }
+      if case .ended = item.kind { return false }
+      return true
+    }
     guard let first = here.min(by: isBefore) else { return nil }
     return WeatherWarningBanner(item: first, more: here.count - 1)
   }

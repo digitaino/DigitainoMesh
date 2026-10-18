@@ -29,6 +29,11 @@ public struct WeatherAlertPost: Sendable, Hashable, Codable, Identifiable {
   /// once it is 20 minutes past this, and only against the time the user was actually told.
   public var alertedAt: Date
   public var alertedExpiresMinutes: UInt32
+  /// When the warning ended and the notification was taken down, or nil (phase 2). The record
+  /// outlives the notification so that a later copy — another bot's, hours behind — is a repeat
+  /// of something over rather than a new warning: it never sounds, and never comes back unless it
+  /// escalated. Nil in a ledger written before it, which is what that ledger knew.
+  public var withdrawnAt: Date?
 
   public var id: String { identifier }
 
@@ -43,7 +48,8 @@ public struct WeatherAlertPost: Sendable, Hashable, Codable, Identifiable {
     coversPlace: Bool,
     postedAt: Date,
     alertedAt: Date,
-    alertedExpiresMinutes: UInt32
+    alertedExpiresMinutes: UInt32,
+    withdrawnAt: Date? = nil
   ) {
     self.identifier = identifier
     self.identity = identity
@@ -56,6 +62,7 @@ public struct WeatherAlertPost: Sendable, Hashable, Codable, Identifiable {
     self.postedAt = postedAt
     self.alertedAt = alertedAt
     self.alertedExpiresMinutes = alertedExpiresMinutes
+    self.withdrawnAt = withdrawnAt
   }
 
   public var expiresAt: Date { Date(unixMinutes: expiresMinutes) }
@@ -142,9 +149,15 @@ public enum WeatherAlertNotificationRules {
     case .here, .near, .elsewhere: break
     }
     let coversPlace = placement == .here
+    // A post whose warning ended (phase 2) is treated like a dismissed one: a copy arriving since
+    // — from any bot — is a repeat, which brings nothing back and sounds nothing, and only an
+    // escalation posts again. Its notification is already gone, so there is nothing for a closed
+    // gate to remove either. Every path that would otherwise sound a warning twice because a
+    // second bot sent it goes through here.
+    let isWithdrawn = posted?.withdrawnAt != nil
     // The gate closed on a warning already posted — the update no longer covers this place, or
     // the user turned the toggle off — so what stands is no longer true for it.
-    guard let delivery else { return posted == nil ? .none : .remove }
+    guard let delivery else { return posted == nil || isWithdrawn ? .none : .remove }
     if isBacklog, rank > WeatherAlertGate.stormWarningRank { return .none }
 
     guard let posted else {
@@ -154,8 +167,8 @@ public enum WeatherAlertNotificationRules {
       return .post(sound: delivery == .sound, isLate: isBacklog)
     }
     // A repeat or an update replaces what is on screen, silently. One the user has already
-    // dismissed or opened is not brought back for that.
-    guard isDelivered else { return .none }
+    // dismissed or opened, or one whose warning ended, is not brought back for that.
+    guard !isWithdrawn, isDelivered else { return .none }
     return .post(sound: false, isLate: isBacklog)
   }
 

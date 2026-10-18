@@ -10,13 +10,15 @@ public enum MeshWXSeverity: String, Sendable, Hashable, Codable, CaseIterable, C
   case advisory
   case statement
 
-  /// `"SV.W"` → ``warning``. `"SPS"` has no significance letter and is a statement.
+  /// `"SV.W"` → ``warning``. A code with no dot has no significance letter and is a statement:
+  /// `"SPS"`, and since protocol 18 `"AQA"` (an air quality alert, 18 October 2026) — any product
+  /// the table names without VTEC.
   public init?(vtec: String) {
     let code = vtec.uppercased()
     let letter: Character
     if let dot = code.lastIndex(of: "."), code.index(after: dot) < code.endIndex {
       letter = code[code.index(after: dot)]
-    } else if code == "SPS" {
+    } else if !code.isEmpty, !code.contains(".") {
       letter = "S"
     } else {
       return nil

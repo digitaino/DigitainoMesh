@@ -39,6 +39,8 @@ enum WeatherCopy {
       L10n.Weather.Weather.Banner.channelMissing
     case .noBotHeard:
       L10n.Weather.Weather.Banner.noBot
+    case let .botConflict(label):
+      L10n.Weather.Weather.Banner.botConflict(label)
     }
   }
 
@@ -56,11 +58,15 @@ enum WeatherCopy {
     var caption: String?
   }
 
+  /// - Parameter botName: names a bot other than the source, for the one line that can be about
+  ///   another bot: missed messages are the gap of a particular bot (phase 2), which need not be
+  ///   the page's source. Left out, or naming nothing, the source stands in.
   static func alertStatus(
     _ status: WeatherAlertStatus,
     source: String,
     place: WeatherPlace?,
     areaName: String?,
+    botName: (UInt16) -> String? = { _ in nil },
     now: Date,
     calendar: Calendar,
     locale: Locale
@@ -84,8 +90,9 @@ enum WeatherCopy {
       return AlertStatusLine(
         text: L10n.Weather.Weather.AlertStatus.radioOffline(time(listAsOf)),
         caption: requestBlocked(.radioOffline, source: source))
-    case .missedMessages:
-      return AlertStatusLine(text: L10n.Weather.Weather.AlertStatus.missedMessages(source), action: .askForAlerts)
+    case let .missedMessages(botID):
+      return AlertStatusLine(
+        text: L10n.Weather.Weather.AlertStatus.missedMessages(botName(botID) ?? source), action: .askForAlerts)
     case let .listOld(asOf):
       return AlertStatusLine(text: L10n.Weather.Weather.AlertStatus.listOld(time(asOf)), action: .askForAlerts)
     case let .locationOld(since):
@@ -113,17 +120,23 @@ enum WeatherCopy {
 
   // MARK: - Alert rows (§7.3)
 
-  /// The one line under an alert's name that says where it is or what became of it.
+  /// The one line under an alert's name that says where it is or what became of it. `botName`
+  /// names the bot whose cancel ended an `.ended` one (phase 2); left out, "the weather radio".
   static func alertQualifier(
     _ item: WeatherAlertItem,
     placeName: String?,
-    now: Date
+    now: Date,
+    botName: (UInt16) -> String? = { _ in nil }
   ) -> String? {
     switch item.kind {
     case .upgradedAwaitingReplacement:
       return L10n.Weather.Weather.Alerts.upgraded
     case .expiredRecently:
       return L10n.Weather.Weather.Alerts.expired(WeatherFormatting.duration(seconds: now.timeIntervalSince(item.expiresAt)))
+    case let .ended(endedAt, botID):
+      return L10n.Weather.Weather.Alerts.ended(
+        WeatherFormatting.duration(seconds: max(0, now.timeIntervalSince(endedAt))),
+        botName(botID) ?? L10n.Weather.Weather.Bot.generic)
     case .active:
       break
     }
@@ -204,6 +217,7 @@ enum WeatherCopy {
     case .channelMissing: L10n.Weather.Weather.Request.Blocked.channel
     case .noBot: L10n.Weather.Weather.Request.Blocked.noBot
     case .botNotAnnounced: L10n.Weather.Weather.Request.Blocked.notAnnounced
+    case .botConflict: L10n.Weather.Weather.Request.Blocked.botConflict
     }
   }
 

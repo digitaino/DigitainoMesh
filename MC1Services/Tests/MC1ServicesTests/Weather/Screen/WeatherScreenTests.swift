@@ -331,7 +331,10 @@ struct WeatherAlertStatusTests {
     _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, feedHealth: 75), to: &quiet, receivedAt: P.now)
     #expect(status([P.botID: quiet], place: P.place(P.austin)) == .feedQuiet(minutesSinceProduct: 300))
 
-    #expect(status(listening { $0.needsDigest = true }, place: P.place(P.austin)) == .missedMessages)
+    // Phase 2: a gap counts only from a bot heard live in the last three hours.
+    #expect(status(listening { $0.needsDigest = true }, place: P.place(P.austin)) != .missedMessages(botID: P.botID))
+    #expect(status(listening { $0.needsDigest = true; $0.lastLiveHeardAt = P.now.addingTimeInterval(-420) },
+      place: P.place(P.austin)) == .missedMessages(botID: P.botID))
 
     var old = P.state()
     _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 200), to: &old, receivedAt: P.now.addingTimeInterval(-12_000))
@@ -345,7 +348,8 @@ struct WeatherAlertStatusTests {
     var quiet = P.state()
     _ = WeatherStateReducer.apply(digestMessage(seq: 234, builtMinutes: P.nowMinutes - 20, feedHealth: 75), to: &quiet, receivedAt: P.now)
     quiet.needsDigest = true
-    #expect(status([P.botID: quiet], place: P.place(P.austin)) == .missedMessages)
+    quiet.lastLiveHeardAt = P.now
+    #expect(status([P.botID: quiet], place: P.place(P.austin)) == .missedMessages(botID: P.botID))
     #expect(status([P.botID: quiet], place: P.place(P.austin), connected: false) == .radioOffline(listAsOf: Date(unixMinutes: P.nowMinutes - 20)))
 
     var never = P.state()

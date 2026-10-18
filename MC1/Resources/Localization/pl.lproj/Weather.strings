@@ -51,6 +51,9 @@
 /* Location: WeatherCopy.swift - Banner when no weather radio is known */
 "weather.banner.noBot" = "Nie usłyszano jeszcze żadnego radia pogodowego. Pojawiają się jako węzły o nazwach typu WX-AUS.";
 
+
+/* Location: WeatherToolView.swift - Banner when every weather radio there is to ask shares its name or id with another radio (phase 2). %@ is the name, or the four hex digits */
+"weather.banner.botConflict" = "Dwa radia używają %@. Wybierz jedno w sekcji Radia pogodowe, aby pytać o pogodę.";
 /* Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio */
 "weather.channel.alert.title" = "Dodać #meshwx do Twojego radia?";
 
@@ -123,6 +126,9 @@
 /* Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min" */
 "weather.alerts.expired" = "Wygasło %@ temu · nie odebrano aktualizacji";
 
+
+/* Location: WeatherCopy.swift - Row line for an alert here that another weather radio cancelled, though a radio still sends it (phase 2). %1$@ is a duration like "3 h", %2$@ the radio that cancelled it, "WX-SAT 2B11" */
+"weather.alerts.ended" = "Odwołane %1$@ temu przez %2$@";
 /* Location: WeatherCopy.swift - Row line while area outlines load */
 "weather.alerts.checking" = "Sprawdzanie, gdzie to jest…";
 
@@ -251,6 +257,9 @@
 /* Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio" */
 "weather.alertDetail.issuedBy" = "Wydane przez %@";
 
+
+/* Location: WeatherAlertDetailView.swift - Which weather radios hold the alert (phase 2). %@ is a list like "WX-AUS 1D04, WX-SAT 2B11" */
+"weather.alertDetail.from" = "od %@";
 /* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
 "weather.alertDetail.received" = "odebrano %@";
 
@@ -720,6 +729,9 @@
 /* Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert */
 "weather.request.blocked.notAnnounced" = "Nie można zapytać przed jego ogłoszeniem";
 
+
+/* Location: WeatherAskControl.swift - In place of a request button while two radios share the only weather radio's name or id (phase 2) */
+"weather.request.blocked.botConflict" = "Wybierz radio pogodowe, aby zapytać";
 /* Location: WeatherCopy.swift - The radio has no data, %@ is its name */
 "weather.request.notAvailable.noData" = "%@ nie ma jeszcze danych na ten temat";
 
@@ -860,7 +872,7 @@
 
 // MARK: - About
 
-/* Location: WeatherRadioView.swift - Section header above the four lines that say how asking works */
+/* Location: WeatherRadioView.swift - Section header above the five lines that say how asking works */
 "weather.about.howItWorks" = "Jak to działa";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
@@ -875,6 +887,9 @@
 /* Location: WeatherRadioView.swift - How it works, fourth line */
 "weather.about.line4" = "Pytanie zużywa czas antenowy, który dzielą wszyscy.";
 
+
+/* Location: WeatherRadioView.swift - How it works, fifth line: what a request carries about the asker (phase 2) */
+"weather.about.line5" = "Zapytanie zawiera też początek klucza publicznego twojego radia, a dla Mojej lokalizacji — współrzędne, o które pyta.";
 /* Location: WeatherRadioView.swift - Section of weather radios */
 "weather.about.radios" = "Radia pogodowe";
 
@@ -908,6 +923,12 @@
 /* Location: WeatherRadioView.swift - The weather radio requests go to */
 "weather.about.inUse" = "w użyciu";
 
+
+/* Location: WeatherRadioView.swift - Detail on a weather radio row when two radios share its name or its four hex digits (phase 2). %@ is the name, or the digits */
+"weather.about.conflict" = "dwa radia używają %@";
+
+/* Location: WeatherRadioView.swift - Footer under the weather radios while two radios share a name or an id (phase 2). %@ is the name, or the four hex digits */
+"weather.about.conflictFooter" = "Dwa radia używają %@. Aplikacja nie użyje żadnego z nich ani nie powiadomi o ich ostrzeżeniach, dopóki nie wybierzesz jednego.";
 /* Location: WeatherRadioView.swift - Channel slot label */
 "weather.about.channelSlot" = "Slot kanału";
 

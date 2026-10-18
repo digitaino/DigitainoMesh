@@ -272,8 +272,9 @@ public actor WeatherService {
   /// Spec §8.2: wait up to 15 s before retrying, once.
   public static let answerTimeout: Duration = .seconds(15)
   /// Spec §7B / §13: a Request datagram is waited on for 10 s, then sent once more — the same
-  /// bytes, same `ts`, same `seq` — and never a third time. Shorter than the DM's 15 s because
-  /// a flood needs no route: an answer that is coming arrives in one to three seconds.
+  /// `ts` and text under the next `seq` (spec §10.8) — and never a third time. Shorter than the
+  /// DM's 15 s because a flood needs no route: an answer that is coming arrives in one to three
+  /// seconds.
   public static let channelAnswerTimeout: Duration = .seconds(10)
   /// The attempt that goes out by flood after a route reset, and the last one: attempts 0 and 1
   /// ride the stored route, attempt 2 rides every repeater. Three sends, 45 s, then the request
@@ -310,6 +311,11 @@ public actor WeatherService {
   static let expiredWarningRetention: TimeInterval = 60 * 60
   /// Upgrade markers older than this are forgotten.
   static let pendingUpgradeRetention: TimeInterval = 6 * 60 * 60
+  /// At most this many bots' states are kept (phase 2, 18 October 2026). A bot is two
+  /// self-asserted bytes on the wire, so every random id anyone sends under would otherwise become
+  /// a state written to storage for good. Sixteen is more weather radios than one phone will ever
+  /// hear; past it the bot heard live least recently goes, never one ``protectedBotIDs`` names.
+  public static let maxBotStates = 16
 
   private let transport: any WeatherTransport
   private let store: any WeatherStateStore
@@ -323,6 +329,13 @@ public actor WeatherService {
   private let tables: MeshWXTables
   /// The bundle's centre of a county or zone, for what a digest speaks for (spec §5).
   private let areaCentre: WeatherAreaCentre
+  /// The bots whose state the cap may never evict (phase 2): the bot the user picked and any
+  /// holding an active warning for a watched place. Supplied by the container, which can read
+  /// both; the service knows neither.
+  private let protectedBotIDs: @Sendable ([UInt16: WeatherBotState], Date) -> Set<UInt16>
+  /// The bots the tool's pages are asking, as the model last said (``useSources(_:)``): protected
+  /// from the cap like the rest.
+  private var sourceBotIDs: Set<UInt16> = []
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "WeatherService")
 
   private nonisolated let eventBroadcaster = EventBroadcaster<WeatherEvent>()
@@ -355,9 +368,10 @@ public actor WeatherService {
 
   private var pending: [UUID: PendingEntry] = [:]
   private var lastSendAt: Date?
-  /// This phone's own request counter (spec §7B): one more for every **new** channel request,
-  /// repeated on its resend, and wrapping 255 to 0. Informational to the bot, which keys copies
-  /// on the timestamp; it is how a listener on the channel could tell two requests apart.
+  /// This phone's own request counter (spec §7B): one more for every channel datagram this phone
+  /// sends — a resend takes the next one too, so it is not the same bytes as the first send
+  /// (spec §10.8) — wrapping 255 to 0. Informational to the bot, which keys copies on the
+  /// timestamp and the text.
   private var nextRequestSeq: UInt8 = 0
 
   /// An answer anyone on the channel has already received, for the five-minute rule. Filled
@@ -378,7 +392,7 @@ public actor WeatherService {
     /// one that answered this phone's own ask. The bot's list answers it too, through
     /// ``digest``, but only for an area the list speaks for (spec §5, 17 October 2026).
     case warningsTouching(String)
-    /// `>w <identity>`: that warning, from any bot.
+    /// `>w <identity>`: that warning, from the bot asked.
     case warning(MeshWXWarningIdentity)
     /// A text request, by subject and argument: only a complete reply this phone owns.
     case text(WeatherRequest)
@@ -396,19 +410,20 @@ public actor WeatherService {
     /// Texas says nothing about Oklahoma, and refusing an Oklahoma tap because somebody asked
     /// about Texas two minutes ago would leave a map with a hole in it and no way to fill it.
     case areaSweep(states: [String])
-    /// `>radar`: the tile for a square of earth (spec revision 11, §7D).
-    ///
-    /// Keyed by the tile and not by the bot, because the lattice is shared: a tile of that square
-    /// from any bot on the channel is the same picture of the same storm, and asking a second bot
-    /// for it a minute later would spend a packet on a picture the phone already has. The bot's
-    /// own rule is the mirror of this one — it refuses the same tile of the same picture for five
-    /// minutes, reason 4.
+    /// `>radar`: the tile for a square of earth (spec revision 11, §7D). Keyed by the tile, so two
+    /// places on one square share the slot — one answer for a town, not one per phone — and the
+    /// bot's own rule is the mirror of this one: it refuses the same tile of the same picture for
+    /// five minutes, reason 4.
     case radar(tile: MeshWXRadarTile)
   }
 
+  /// Every slot is the sending bot's own (phase 2, 18 October 2026): an answer from one bot never
+  /// stands in for asking another. A slot any bot could fill let one forged datagram under a random
+  /// id hold off, for five minutes, the request to the bot the user is actually using. The screen
+  /// still draws the bot next door's radar picture of a square (`WeatherRadarPick`); it never stops
+  /// this phone asking its own bot.
   struct AnswerSlot: Hashable {
-    /// Nil for answers that are the same whichever bot sends them.
-    let botID: UInt16?
+    let botID: UInt16
     let key: AnswerKey
   }
 
@@ -439,6 +454,8 @@ public actor WeatherService {
   ///   - stationIndex: ICAO → wire station index, for matching a one-station answer to
   ///     its request. Defaults to the bundled tables.
   ///   - tables: For reading warning identities and text replies against requests.
+  ///   - protectedBotIDs: the bots whose state the cap on states never evicts, given every
+  ///     bot's state and the time (phase 2). None by default.
   public init(
     transport: any WeatherTransport,
     store: any WeatherStateStore,
@@ -447,7 +464,8 @@ public actor WeatherService {
     answerTimeout: Duration = WeatherService.answerTimeout,
     channelAnswerTimeout: Duration = WeatherService.channelAnswerTimeout,
     stationIndex: @escaping @Sendable (String) -> UInt16? = { MeshWXTables.shared.stationIndex(forICAO: $0) },
-    tables: MeshWXTables = .shared
+    tables: MeshWXTables = .shared,
+    protectedBotIDs: @escaping @Sendable ([UInt16: WeatherBotState], Date) -> Set<UInt16> = { _, _ in [] }
   ) {
     self.transport = transport
     self.store = store
@@ -457,7 +475,14 @@ public actor WeatherService {
     self.channelAnswerTimeout = channelAnswerTimeout
     self.stationIndex = stationIndex
     self.tables = tables
+    self.protectedBotIDs = protectedBotIDs
     areaCentre = Self.areaCentres(tables)
+  }
+
+  /// The bots the tool's pages are asking now, which the cap on states never evicts (phase 2).
+  /// The model says so after each build; a later call replaces the set.
+  public func useSources(_ botIDs: Set<UInt16>) {
+    sourceBotIDs = botIDs
   }
 
   /// The bundle's centre of one county or zone, from the fields an area run carries; nil for an
@@ -563,6 +588,9 @@ public actor WeatherService {
         // ahead of the clock would otherwise go on refusing every real one as older.
         WeatherStateReducer.dropFutureTimes(&states[botID]!, now: now)
       }
+      // Saved before the cap (phase 2): a store that already holds a spoofer's hundred ids is
+      // brought back under it at once.
+      capStates(now: now)
     } catch {
       logger.error("Weather state load failed: \(error.localizedDescription)")
       states = [:]
@@ -644,14 +672,41 @@ public actor WeatherService {
     await transport.linkState()
   }
 
-  /// Forgets everything held for one bot, with every answer it gave and every answer any bot
-  /// gave: a forecast or warning slot filled by another bot would otherwise still answer for
-  /// data the user just cleared.
+  /// Forgets everything held for one bot, with every answer it gave.
   public func clearState(for botID: UInt16) async {
     await loadIfNeeded()
     states.removeValue(forKey: botID)
-    lastAnswers = lastAnswers.filter { slot, _ in slot.botID != nil && slot.botID != botID }
+    lastAnswers = lastAnswers.filter { slot, _ in slot.botID != botID }
     await persist()
+  }
+
+  /// Keeps at most ``maxBotStates`` bots' states (phase 2): past the cap, the bots heard live
+  /// least recently go — never one ``protectedBotIDs`` or the pages' sources name — with every
+  /// answer slot they filled. Returns the ids evicted.
+  @discardableResult
+  private func capStates(now: Date) -> [UInt16] {
+    guard states.count > Self.maxBotStates else { return [] }
+    let kept = protectedBotIDs(states, now).union(sourceBotIDs)
+    var candidates = states.keys.filter { !kept.contains($0) }.sorted { lhs, rhs in
+      let leftLive = states[lhs]?.lastLiveHeardAt ?? .distantPast
+      let rightLive = states[rhs]?.lastLiveHeardAt ?? .distantPast
+      if leftLive != rightLive { return leftLive < rightLive }
+      let leftHeard = states[lhs]?.lastHeardAt ?? .distantPast
+      let rightHeard = states[rhs]?.lastHeardAt ?? .distantPast
+      if leftHeard != rightHeard { return leftHeard < rightHeard }
+      return lhs > rhs
+    }
+    var evicted: [UInt16] = []
+    while states.count > Self.maxBotStates, !candidates.isEmpty {
+      let botID = candidates.removeFirst()
+      states.removeValue(forKey: botID)
+      evicted.append(botID)
+    }
+    if !evicted.isEmpty {
+      let gone = Set(evicted)
+      lastAnswers = lastAnswers.filter { slot, _ in !gone.contains(slot.botID) }
+    }
+    return evicted
   }
 
   // MARK: Ingest
@@ -756,10 +811,19 @@ public actor WeatherService {
       if case .duplicate = change { return true }
       return false
     }
+    // A cancel heard while its bot was in range may end other bots' copies of the warning too
+    // (`WeatherCrossBot`, spec §10.8); judged against the bot's state *before* this message, so a
+    // cancel drained from the radio's queue does not vouch for itself.
+    if !isDuplicate, case let .cancel(cancel) = message.payload,
+      WeatherCrossBot.isLiveCancel(isBacklog: isBacklog, lastLiveHeardAt: state.lastLiveHeardAt, at: receivedAt) {
+      WeatherCrossBot.recordEnding(cancel.identity, at: receivedAt, in: &state)
+    }
     if !isDuplicate, !isBacklog {
       state.lastLiveHeardAt = max(state.lastLiveHeardAt ?? receivedAt, receivedAt)
     }
+    let isNewBot = states[botID] == nil
     states[botID] = state
+    if isNewBot { capStates(now: receivedAt) }
     if isDuplicate {
       // A duplicate changes nothing and settles nothing.
       eventBroadcaster.yield(.received(botID: botID, message: message, changes: changes, isBacklog: isBacklog))
@@ -785,7 +849,7 @@ public actor WeatherService {
     from botID: UInt16,
     at receivedAt: Date
   ) {
-    func fill(_ slotBotID: UInt16?, _ key: AnswerKey, asOf contentAsOf: Date? = nil) {
+    func fill(_ slotBotID: UInt16, _ key: AnswerKey, asOf contentAsOf: Date? = nil) {
       lastAnswers[AnswerSlot(botID: slotBotID, key: key)] = AnswerRecord(receivedAt: receivedAt, contentAsOf: contentAsOf)
     }
     for change in changes {
@@ -804,7 +868,7 @@ public actor WeatherService {
         var codes = Set(tables.namedAreas(for: warning).map { $0.ugc.uppercased() })
         for case let .warningsTouching(ugc) in settled { codes.insert(ugc.uppercased()) }
         for ugc in codes { fill(botID, .warningsTouching(ugc)) }
-        fill(nil, .warning(identity))
+        fill(botID, .warning(identity))
       case let (.observationsStored(stored), .observations(batch)) where !stored.isEmpty:
         let observedAt = Date(unixMinutes: batch.timestampMinutes)
         // A single station is usually somebody's `>o KJFK`, but the answer to this phone's own
@@ -817,10 +881,10 @@ public actor WeatherService {
         for station in stored {
           let reported = batch.stations.first { $0.stationIndex == station }
             .map { batch.reportMinutes(for: $0) } ?? batch.timestampMinutes
-          fill(nil, .station(station), asOf: Date(unixMinutes: reported))
+          fill(botID, .station(station), asOf: Date(unixMinutes: reported))
         }
       case let (.forecastStored(point), .forecast(forecast)) where !forecast.isUnbundledPoint:
-        fill(nil, .forecast(point), asOf: Date(unixMinutes: forecast.issuedMinutes))
+        fill(botID, .forecast(point), asOf: Date(unixMinutes: forecast.issuedMinutes))
       case let (.areaSweepStored, .areaSweep(sweep)):
         // Filled on the *first* packet, not on the last: the seven that follow are already on
         // the air, and a second phone tapping between them must not add eight more.
@@ -834,16 +898,14 @@ public actor WeatherService {
           fill(botID, .areaSweep(states: states), asOf: Date(unixMinutes: sweep.builtMinutes))
         }
       case let (.radarStored(tile, takenMinutes), .radar):
-        // Filled for every bot's tile of that square, not only the addressed bot's: the answer is
-        // the picture, and the picture is the same one wherever it came from (spec revision 11,
-        // §7D). `contentAsOf` is the time printed on the radar image, which is what the screen
-        // then says the picture is from.
+        // The sending bot's slot (phase 2), keyed by the square. `contentAsOf` is the time printed
+        // on the radar image, which is what the screen then says the picture is from.
         //
         // Only by the **newest** frame held of that square (revision 13, §7D.4): an older frame
         // off somebody's loop is not "the newest picture the bot has", which is what a `>radar`
         // asks for, and filling the slot with it would answer the next ask with an hour-old map.
-        guard isNewestRadarFrame(tile: tile, takenMinutes: takenMinutes) else { break }
-        fill(nil, .radar(tile: tile), asOf: Date(unixMinutes: takenMinutes))
+        guard isNewestRadarFrame(tile: tile, takenMinutes: takenMinutes, of: botID) else { break }
+        fill(botID, .radar(tile: tile), asOf: Date(unixMinutes: takenMinutes))
       case (.coverageStored, .coverage):
         // No content time: the statement describes the bot, not an hour (spec §7A), so the
         // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
@@ -859,10 +921,11 @@ public actor WeatherService {
     }
   }
 
-  /// Whether a frame is the newest held of its square across every bot: the one a `>radar` for
-  /// that square would be answered with.
-  private func isNewestRadarFrame(tile: MeshWXRadarTile, takenMinutes: UInt32) -> Bool {
-    let newest = states.values.lazy.flatMap(\.radarTiles).filter { $0.tile == tile }
+  /// Whether a frame is the newest the sending bot holds of its square: the one a `>radar` to
+  /// that bot for that square would be answered with. The bot's own frames only, as its slot is
+  /// its own (phase 2).
+  private func isNewestRadarFrame(tile: MeshWXRadarTile, takenMinutes: UInt32, of botID: UInt16) -> Bool {
+    let newest = (states[botID]?.radarTiles ?? []).lazy.filter { $0.tile == tile }
       .map(\.takenMinutes).max()
     return newest.map { takenMinutes >= $0 } ?? true
   }
@@ -924,8 +987,9 @@ public actor WeatherService {
     // while this request is still going out.
     lastSendAt = sentAt
 
-    // One wire timestamp and one seq for the request's life: the resend repeats both
-    // (`handleTimeout`), which is what makes it a copy rather than a second request.
+    // One wire timestamp and one text for the request's life: the resend repeats both
+    // (`handleTimeout`), which is what makes it a copy rather than a second request (the bot keys
+    // copies on sender, `ts` and text). The resend takes the next `seq` (spec §10.8).
     let seq = nextRequestSeq
     do {
       let sent = try await transport.sendChannelRequest(
@@ -1000,22 +1064,22 @@ public actor WeatherService {
     switch request {
     case .digest: AnswerSlot(botID: botID, key: .digest)
     case .observations: AnswerSlot(botID: botID, key: .coverageObservations)
-    case let .observation(station): stationIndex(station).map { AnswerSlot(botID: nil, key: .station($0)) }
-    case let .forecast(point): AnswerSlot(botID: nil, key: .forecast(point))
+    case let .observation(station): stationIndex(station).map { AnswerSlot(botID: botID, key: .station($0)) }
+    case let .forecast(point): AnswerSlot(botID: botID, key: .forecast(point))
     case .activeWarnings: AnswerSlot(botID: botID, key: .activeWarnings)
     case let .warningsTouching(ugc): AnswerSlot(botID: botID, key: .warningsTouching(ugc.uppercased()))
     case let .warning(identity):
-      WeatherAlertRequests.identity(from: identity, tables: tables).map { AnswerSlot(botID: nil, key: .warning($0)) }
+      WeatherAlertRequests.identity(from: identity, tables: tables).map { AnswerSlot(botID: botID, key: .warning($0)) }
     case .warningText, .forecastDiscussion, .spaceWeather, .stormReports, .rainfall, .metar, .taf, .hazardousOutlook:
       AnswerSlot(botID: botID, key: .text(request))
     case .coverage: AnswerSlot(botID: botID, key: .coverage)
     case let .areaSweep(_, states):
       AnswerSlot(botID: botID, key: .areaSweep(states: WeatherRequest.sweepStates(states)))
-    // By the tile, from any bot (spec revision 11, §7D). Pictures are made about every fifteen
-    // minutes, so five minutes after one arrived there is nothing newer to fetch — and the bot
-    // would refuse the ask anyway, reason 4, spending a packet on the refusal.
+    // By the tile, from the bot asked (spec revision 11, §7D; phase 2). Pictures are made about
+    // every fifteen minutes, so five minutes after one arrived there is nothing newer to fetch —
+    // and the bot would refuse the ask anyway, reason 4, spending a packet on the refusal.
     case let .radar(latitude, longitude, zoom):
-      AnswerSlot(botID: nil, key: .radar(tile: MeshWXRadarTile.containing(
+      AnswerSlot(botID: botID, key: .radar(tile: MeshWXRadarTile.containing(
         latitude: latitude, longitude: longitude, zoom: zoom)))
     // A loop asks for the pictures this phone does **not** hold (spec revision 13, §7D.4), so a
     // tile received a minute ago says nothing about whether it is answered. The bot keeps its own
@@ -1156,13 +1220,17 @@ public actor WeatherService {
     armTimer(for: id)
   }
 
-  /// The datagram's etiquette (spec §7B, §13): send once, send the same bytes once more after
-  /// 10 s, never a third time.
+  /// The datagram's etiquette (spec §7B, §13, §10.8): send once, send it once more after 10 s,
+  /// never a third time.
   ///
-  /// The resend repeats the first send's `ts`, `seq` and text exactly, so to the bot it is a
-  /// copy of one request and not a second one — answered again only once its last answer is 12 s
-  /// gone, so a resend can never double the airtime of an answer. Nothing here waits on a
-  /// confirmation: a datagram has none, which is why `botRadioReceived` is always false for one.
+  /// The resend repeats the first send's `ts` and text, so to the bot it is a copy of one request
+  /// and not a second one — the bot keys copies on sender, `ts` and text, never on `seq` — and it
+  /// is answered again only once its last answer is 12 s gone, so a resend can never double the
+  /// airtime of an answer. It goes out under the **next `seq`** (phase 2, 18 October 2026): the
+  /// same bytes again have the same packet hash, and every repeater that carried the first send
+  /// drops the second as already seen, so the retry that was meant to get through a lost hop never
+  /// left the first repeater. Nothing here waits on a confirmation: a datagram has none, which is
+  /// why `botRadioReceived` is always false for one.
   private func handleChannelTimeout(id: UUID, entry: PendingEntry, botWasHeard: Bool) async {
     guard entry.request.attempt == 0 else {
       settle(id: id, outcome: .timedOut(botWasHeard: botWasHeard, botRadioReceived: false))
@@ -1171,14 +1239,16 @@ public actor WeatherService {
     var entry = entry
     entry.request.attempt = 1
     entry.request.sentAt = now()
+    entry.request.seq = nextRequestSeq
+    nextRequestSeq &+= 1
     pending[id] = entry
     do {
       lastSendAt = entry.request.sentAt
       let sent = try await transport.sendChannelRequest(
         text: entry.request.request.wireText, botID: entry.request.botID,
         timestamp: entry.request.timestamp, seq: entry.request.seq)
-      // The resend is its own row: the same bytes went on the air a second time, and a screen
-      // about airtime must show both.
+      // The resend is its own row: a second transmission went on the air, and a screen about
+      // airtime must show both.
       await recordSent(sent, botID: entry.request.botID)
     } catch {
       settle(id: id, outcome: .failed(error.localizedDescription))
@@ -1479,6 +1549,9 @@ public actor WeatherService {
       WeatherStateReducer.pruneExpired(&states[botID]!, expiredBefore: now.addingTimeInterval(-Self.expiredWarningRetention))
       WeatherStateReducer.prunePendingUpgrades(&states[botID]!, olderThan: now.addingTimeInterval(-Self.pendingUpgradeRetention))
       trim(&states[botID]!, now: now)
+      if !states[botID]!.endings.isEmpty {
+        states[botID]!.endings = WeatherCrossBot.prunedEndings(states[botID]!.endings, now: now)
+      }
     }
     do {
       try await store.save(states)

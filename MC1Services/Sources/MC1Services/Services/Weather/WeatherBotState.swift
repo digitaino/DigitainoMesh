@@ -592,6 +592,14 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// Identities cancelled in the last hour, and when. A warning for one of them arriving out of
   /// order was sent before its cancel, and is not stored again.
   public var recentCancels: [MeshWXWarningIdentity: Date]
+  /// The identities this bot cancelled while it was in range — heard live within
+  /// ``WeatherCrossBot/liveWindow`` of the cancel — and when the phone heard each cancel (phase 2,
+  /// 18 October 2026). What lets one bot's cancel end another bot's copy of the same warning:
+  /// ``WeatherCrossBot/ending(of:in:areaCentre:)`` reads it, and only for a copy inside this bot's
+  /// own complete statement of its area. Kept for ``WeatherCrossBot/endingRetention``, at most
+  /// ``WeatherCrossBot/maxEndings``, newest kept: a bot whose feed runs hours behind can repeat a
+  /// warning long after the hour `recentCancels` remembers.
+  public var endings: [MeshWXWarningIdentity: Date]
   public var digest: WeatherStoredDigest?
   /// Identities the last digest listed that the app does not hold: each is one
   /// `>w <identity>` away (spec §5).
@@ -666,6 +674,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     warnings = [:]
     pendingUpgrades = [:]
     recentCancels = [:]
+    endings = [:]
     digest = nil
     missingFromDigest = []
     observations = [:]
@@ -679,7 +688,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
 
   private enum CodingKeys: String, CodingKey {
     case botID, lastSeq, recentMessages, lastHeardAt, lastLiveHeardAt, needsDigest, gapDetectedAt, warnings,
-      pendingUpgrades, recentCancels, digest, missingFromDigest, observations, forecasts,
+      pendingUpgrades, recentCancels, endings, digest, missingFromDigest, observations, forecasts,
       unbundledForecasts, texts, coverage, areaSweeps, radarTiles
   }
 
@@ -711,6 +720,8 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     pendingUpgrades = try container.decodeIfPresent(
       [MeshWXWarningIdentity: WeatherPendingUpgrade].self, forKey: .pendingUpgrades) ?? [:]
     recentCancels = try container.decodeIfPresent([MeshWXWarningIdentity: Date].self, forKey: .recentCancels) ?? [:]
+    // Phase 2 (18 October 2026). A file from before it held no endings, which is what it knew.
+    endings = try container.decodeIfPresent([MeshWXWarningIdentity: Date].self, forKey: .endings) ?? [:]
     digest = try container.decodeIfPresent(WeatherStoredDigest.self, forKey: .digest)
     missingFromDigest = try container.decode([MeshWXWarningIdentity].self, forKey: .missingFromDigest)
     observations = try container.decode([UInt16: WeatherStoredObservation].self, forKey: .observations)

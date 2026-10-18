@@ -45,7 +45,10 @@ struct WeatherAlertNotificationCopyImpl: WeatherAlertNotificationCopy {
     }
     return WeatherAlertNotificationContent(
       title: WeatherFormatting.eventName(subject.warning.event, tables: tables),
-      subtitle: subject.botName.map { L10n.Weather.Weather.Alerts.source($0) }
+      // "via WX-AUS 1D04": the four hex digits beside the name (phase 2), and "Weather radio 1D04"
+      // for a bot the phone has no name for.
+      subtitle: (subject.botLabel ?? subject.botID.map { WeatherFormatting.botLabel(botID: $0, bot: nil) })
+        .map { L10n.Weather.Weather.Alerts.source($0) }
         ?? L10n.Weather.Weather.Alerts.sourceGeneric,
       body: body)
   }

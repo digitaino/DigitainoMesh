@@ -51,6 +51,9 @@
 /* Location: WeatherCopy.swift - Banner when no weather radio is known */
 "weather.banner.noBot" = "Aún no se ha oído ninguna radio meteorológica. Aparecen como nodos con nombres como WX-AUS.";
 
+
+/* Location: WeatherToolView.swift - Banner when every weather radio there is to ask shares its name or id with another radio (phase 2). %@ is the name, or the four hex digits */
+"weather.banner.botConflict" = "Dos radios usan %@. Elige una en Radios meteorológicas para pedir el tiempo.";
 /* Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio */
 "weather.channel.alert.title" = "¿Añadir #meshwx a tu radio?";
 
@@ -123,6 +126,9 @@
 /* Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min" */
 "weather.alerts.expired" = "Caducó hace %@ · no se recibió actualización";
 
+
+/* Location: WeatherCopy.swift - Row line for an alert here that another weather radio cancelled, though a radio still sends it (phase 2). %1$@ is a duration like "3 h", %2$@ the radio that cancelled it, "WX-SAT 2B11" */
+"weather.alerts.ended" = "Cancelado hace %1$@ por %2$@";
 /* Location: WeatherCopy.swift - Row line while area outlines load */
 "weather.alerts.checking" = "Comprobando dónde está…";
 
@@ -251,6 +257,9 @@
 /* Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio" */
 "weather.alertDetail.issuedBy" = "Emitido por %@";
 
+
+/* Location: WeatherAlertDetailView.swift - Which weather radios hold the alert (phase 2). %@ is a list like "WX-AUS 1D04, WX-SAT 2B11" */
+"weather.alertDetail.from" = "de %@";
 /* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
 "weather.alertDetail.received" = "recibido %@";
 
@@ -720,6 +729,9 @@
 /* Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert */
 "weather.request.blocked.notAnnounced" = "No se puede preguntar hasta que se anuncie";
 
+
+/* Location: WeatherAskControl.swift - In place of a request button while two radios share the only weather radio's name or id (phase 2) */
+"weather.request.blocked.botConflict" = "Elige una radio meteorológica para preguntar";
 /* Location: WeatherCopy.swift - The radio has no data, %@ is its name */
 "weather.request.notAvailable.noData" = "%@ aún no tiene datos para eso";
 
@@ -860,7 +872,7 @@
 
 // MARK: - About
 
-/* Location: WeatherRadioView.swift - Section header above the four lines that say how asking works */
+/* Location: WeatherRadioView.swift - Section header above the five lines that say how asking works */
 "weather.about.howItWorks" = "Cómo funciona";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
@@ -875,6 +887,9 @@
 /* Location: WeatherRadioView.swift - How it works, fourth line */
 "weather.about.line4" = "Preguntar consume tiempo de emisión que todos comparten.";
 
+
+/* Location: WeatherRadioView.swift - How it works, fifth line: what a request carries about the asker (phase 2) */
+"weather.about.line5" = "Una solicitud también lleva el principio de la clave pública de tu radio y, para Mi ubicación, las coordenadas por las que pregunta.";
 /* Location: WeatherRadioView.swift - Section of weather radios */
 "weather.about.radios" = "Radios meteorológicas";
 
@@ -908,6 +923,12 @@
 /* Location: WeatherRadioView.swift - The weather radio requests go to */
 "weather.about.inUse" = "en uso";
 
+
+/* Location: WeatherRadioView.swift - Detail on a weather radio row when two radios share its name or its four hex digits (phase 2). %@ is the name, or the digits */
+"weather.about.conflict" = "dos radios usan %@";
+
+/* Location: WeatherRadioView.swift - Footer under the weather radios while two radios share a name or an id (phase 2). %@ is the name, or the four hex digits */
+"weather.about.conflictFooter" = "Dos radios usan %@. La app no usará ninguna ni te avisará de sus alertas hasta que elijas una.";
 /* Location: WeatherRadioView.swift - Channel slot label */
 "weather.about.channelSlot" = "Ranura del canal";
 

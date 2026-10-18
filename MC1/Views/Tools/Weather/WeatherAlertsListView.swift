@@ -69,7 +69,9 @@ struct WeatherAlertsListView: View {
     let snapshot = screen.snapshot
     if statusLine(snapshot)?.action == .askForAlerts {
       let request = screen.alertsRequest(for: snapshot.alertStatus)
-      return WeatherBarAsk(title: WeatherCopy.askAlertsTitle(for: request, tables: .shared), request: request)
+      return WeatherBarAsk(
+        title: WeatherCopy.askAlertsTitle(for: request, tables: .shared), request: request,
+        botID: screen.alertsBotID(for: snapshot.alertStatus))
     }
     if !screen.missingWarnings.isEmpty, let request = screen.missingWarningsRequest {
       return WeatherBarAsk(title: WeatherCopy.askAlertsTitle(for: request, tables: .shared), request: request)
@@ -82,8 +84,8 @@ struct WeatherAlertsListView: View {
   private func statusLine(_ snapshot: WeatherScreenSnapshot) -> WeatherCopy.AlertStatusLine? {
     WeatherCopy.alertStatus(
       snapshot.alertStatus, source: screen.sourceName, place: snapshot.place,
-      areaName: screen.context.placeCounty?.name, now: screen.now, calendar: .autoupdatingCurrent,
-      locale: .autoupdatingCurrent)
+      areaName: screen.context.placeCounty?.name, botName: { [model = screen.model] in model.botName($0) },
+      now: screen.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
   }
 
   /// When the held sweep was built, or that nobody has asked for one — which is the usual answer,
@@ -221,7 +223,7 @@ struct WeatherAlertsListView: View {
             WeatherAlertDetailView(screen: screen, identity: item.identity)
           } label: {
             WeatherAlertRow(
-              item: item, placeName: screen.placeName, now: screen.now,
+              item: item, placeName: screen.placeName, now: screen.now, endedBy: screen.endedByLabel(item),
               location: showsLocation
                 ? WeatherCopy.alertLocation(item.warning, place: screen.place, tables: .shared)
                 : nil)

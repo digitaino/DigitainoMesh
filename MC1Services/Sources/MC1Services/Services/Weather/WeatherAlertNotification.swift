@@ -91,6 +91,9 @@ public struct WeatherAlertNotificationSubject: Sendable, Hashable {
   public var placement: WeatherAlertPlacement
   /// The bot's advertised name where the phone knows it: "WX-AUS".
   public var botName: String?
+  /// The bot whose copy this is, or nil. The source line puts its four hex digits beside the
+  /// name, "WX-AUS 1D04" (phase 2): a name is self-asserted, and two radios can share one.
+  public var botID: UInt16?
   /// The message was drained from the radio's queue at connect, so the warning was sent while
   /// the radio was out of range.
   public var isLate: Bool
@@ -105,6 +108,7 @@ public struct WeatherAlertNotificationSubject: Sendable, Hashable {
     placeLabel: String,
     placement: WeatherAlertPlacement,
     botName: String?,
+    botID: UInt16? = nil,
     isLate: Bool,
     now: Date,
     beginsAt: Date? = nil
@@ -113,12 +117,21 @@ public struct WeatherAlertNotificationSubject: Sendable, Hashable {
     self.placeLabel = placeLabel
     self.placement = placement
     self.botName = botName
+    self.botID = botID
     self.isLate = isLate
     self.now = now
     self.beginsAt = beginsAt
   }
 
   public var expiresAt: Date { Date(unixMinutes: warning.expiresMinutes) }
+
+  /// "WX-AUS 1D04", the name with the four hex digits beside it; the digits alone, or nil, for a
+  /// bot the phone has no name for.
+  public var botLabel: String? {
+    guard let botID else { return botName }
+    let id = WeatherBot.idText(botID)
+    return botName.map { "\($0) \(id)" }
+  }
 }
 
 /// Where a notification's words come from. The app target implements it over `Weather.strings`;
@@ -142,7 +155,8 @@ public struct WeatherAlertDefaultCopy: WeatherAlertNotificationCopy {
     tables: MeshWXTables
   ) -> WeatherAlertNotificationContent {
     let event = tables.eventLabel(for: subject.warning.event)
-    let source = subject.botName.map { "National Weather Service via \($0)" }
+    let source = (subject.botLabel ?? subject.botID.map { "weather radio \(WeatherBot.idText($0))" })
+      .map { "National Weather Service via \($0)" }
       ?? "National Weather Service via the weather radio"
     var parts: [String] = []
     let place = Self.shortName(subject.placeLabel)

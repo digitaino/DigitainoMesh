@@ -70,7 +70,7 @@ struct WeatherToolModelTests {
     func snapshot(connected: Bool) -> WeatherScreenSnapshot {
       WeatherScreenSnapshot.make(
         WeatherScreenSnapshot.Inputs(
-          states: [:], bots: [bot], preferredBotID: nil, place: nil, isRadioConnected: connected,
+          states: [:], bots: [bot], pick: nil, place: nil, isRadioConnected: connected,
           firmwareSupportsWeather: true, firmwareVersion: "v1.15.0", hasWeatherChannel: true,
           session: WeatherSessionInfo(startedAt: now), now: now, calendar: WeatherFormattingTests.calendar),
         geometry: MeshWXGeometry.shared, tables: .shared)
@@ -89,7 +89,7 @@ struct WeatherToolModelTests {
   /// Until 2026-09-21 a bot heard on the channel with no contact for it blocked every ask. A
   /// request is a datagram that names the bot by the two bytes its own packets carry, so `send`
   /// asks a stand-in (`WeatherBot.heardOnly`) — while the screen goes on calling it
-  /// "Weather radio 041D", the advert being what a name needs and a DM needs.
+  /// "Weather radio 1D04", the advert being what a name needs and a DM needs.
   @Test
   func `a bot heard with no advert is asked as itself, and stays unnamed`() throws {
     let now = WeatherFormattingTests.now
@@ -97,7 +97,7 @@ struct WeatherToolModelTests {
     state.lastHeardAt = now.addingTimeInterval(-120)
     let screen = WeatherScreenSnapshot.make(
       WeatherScreenSnapshot.Inputs(
-        states: [Self.botID: state], bots: [], preferredBotID: nil, place: nil, isRadioConnected: true,
+        states: [Self.botID: state], bots: [], pick: nil, place: nil, isRadioConnected: true,
         firmwareSupportsWeather: true, firmwareVersion: "v1.15.0", hasWeatherChannel: true,
         session: WeatherSessionInfo(startedAt: now), now: now, calendar: WeatherFormattingTests.calendar),
       geometry: MeshWXGeometry.shared, tables: .shared)
@@ -105,7 +105,7 @@ struct WeatherToolModelTests {
     #expect(source.bot == nil)
     #expect(source.requestBot.botID == Self.botID)
     #expect(!source.requestBot.isAnnounced)
-    #expect(WeatherFormatting.botName(botID: source.botID, bot: source.bot) == "Weather radio 041D")
+    #expect(WeatherFormatting.botName(botID: source.botID, bot: source.bot) == "Weather radio 1D04")
     #expect(WeatherToolModel.status(
       for: .digest, snapshot: screen, pending: [], inFlight: [], outcomes: [:], now: now) == .idle)
   }

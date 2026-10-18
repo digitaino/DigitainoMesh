@@ -7865,6 +7865,14 @@ public enum L10n {
         public static func clearFooter(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.about.clearFooter", String(describing: p1), fallback: "Removes everything received from %@ from this phone.")
         }
+        /// Location: WeatherRadioView.swift - Detail on a weather radio row when two radios share its name or its four hex digits (phase 2). %@ is the name, or the digits
+        public static func conflict(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.about.conflict", String(describing: p1), fallback: "two radios use %@")
+        }
+        /// Location: WeatherRadioView.swift - Footer under the weather radios while two radios share a name or an id (phase 2). %@ is the name, or the four hex digits
+        public static func conflictFooter(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.about.conflictFooter", String(describing: p1), fallback: "Two radios use %@. The app won't use either one, or notify you of their alerts, until you pick one.")
+        }
         /// Location: WeatherRadioView.swift - The weather radio has never received anything from the Weather Service
         public static let feedNone = L10n.tr("Weather", "weather.about.feedNone", fallback: "no Weather Service data received")
         /// Location: WeatherRadioView.swift - The weather radio's Weather Service feed is healthy
@@ -7877,7 +7885,7 @@ public enum L10n {
         public static func heard(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.about.heard", String(describing: p1), fallback: "heard %@")
         }
-        /// Location: WeatherRadioView.swift - Section header above the four lines that say how asking works
+        /// Location: WeatherRadioView.swift - Section header above the five lines that say how asking works
         public static let howItWorks = L10n.tr("Weather", "weather.about.howItWorks", fallback: "How it works")
         /// Location: WeatherRadioView.swift - The weather radio requests go to
         public static let inUse = L10n.tr("Weather", "weather.about.inUse", fallback: "in use")
@@ -7891,6 +7899,8 @@ public enum L10n {
         public static let line3 = L10n.tr("Weather", "weather.about.line3", fallback: "Every phone listening keeps it, including the answers to other people's requests.")
         /// Location: WeatherRadioView.swift - How it works, fourth line
         public static let line4 = L10n.tr("Weather", "weather.about.line4", fallback: "Asking costs airtime everyone on the channel shares.")
+        /// Location: WeatherRadioView.swift - How it works, fifth line: what a request carries about the asker (phase 2)
+        public static let line5 = L10n.tr("Weather", "weather.about.line5", fallback: "A request also carries the start of your radio's public key, and for My location, the coordinates it asks about.")
         /// Location: WeatherRadioView.swift - A weather radio heard without an advert
         public static let noAdvert = L10n.tr("Weather", "weather.about.noAdvert", fallback: "hasn't announced itself yet")
         /// Location: WeatherRadioView.swift - No weather message received
@@ -7929,6 +7939,10 @@ public enum L10n {
         public static let county = L10n.tr("Weather", "weather.alertDetail.county", fallback: "County")
         /// Location: WeatherAlertDetailView.swift - Section of the alert's tags
         public static let details = L10n.tr("Weather", "weather.alertDetail.details", fallback: "Details")
+        /// Location: WeatherAlertDetailView.swift - Which weather radios hold the alert (phase 2). %@ is a list like "WX-AUS 1D04, WX-SAT 2B11"
+        public static func from(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.alertDetail.from", String(describing: p1), fallback: "from %@")
+        }
         /// Location: WeatherAlertDetailView.swift - Section with the warning's narrative
         public static let fullText = L10n.tr("Weather", "weather.alertDetail.fullText", fallback: "Full text")
         /// Location: WeatherAlertDetailView.swift - Shown when the alert is no longer held; no reason is claimed
@@ -8003,6 +8017,10 @@ public enum L10n {
         }
         /// Location: WeatherCopy.swift - Row line while area outlines load
         public static let checking = L10n.tr("Weather", "weather.alerts.checking", fallback: "Checking where this is…")
+        /// Location: WeatherCopy.swift - Row line for an alert here that another weather radio cancelled, though a radio still sends it (phase 2). %1$@ is a duration like "3 h", %2$@ the radio that cancelled it, "WX-SAT 2B11"
+        public static func ended(_ p1: Any, _ p2: Any) -> String {
+          return L10n.tr("Weather", "weather.alerts.ended", String(describing: p1), String(describing: p2), fallback: "Cancelled %1$@ ago by %2$@")
+        }
         /// Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min"
         public static func expired(_ p1: Any) -> String {
           return L10n.tr("Weather", "weather.alerts.expired", String(describing: p1), fallback: "Expired %@ ago · no update received")
@@ -8233,6 +8251,10 @@ public enum L10n {
       public enum Banner {
         /// Location: WeatherPlacePageView.swift - Banner button that offers to add #meshwx
         public static let addChannel = L10n.tr("Weather", "weather.banner.addChannel", fallback: "Add channel")
+        /// Location: WeatherToolView.swift - Banner when every weather radio there is to ask shares its name or id with another radio (phase 2). %@ is the name, or the four hex digits
+        public static func botConflict(_ p1: Any) -> String {
+          return L10n.tr("Weather", "weather.banner.botConflict", String(describing: p1), fallback: "Two radios use %@. Pick one under Weather radios to ask for weather.")
+        }
         /// Location: WeatherCopy.swift - Banner when no channel slot holds #meshwx
         public static let channelMissing = L10n.tr("Weather", "weather.banner.channelMissing", fallback: "#meshwx isn't set up on your radio.")
         /// Location: WeatherCopy.swift - Banner when your radio's firmware cannot deliver weather, %@ is the version like "1.14"
@@ -9002,6 +9024,8 @@ public enum L10n {
         /// Location: WeatherCopy.swift - Another request is on the air
         public static let waiting = L10n.tr("Weather", "weather.request.waiting", fallback: "Waiting for another answer…")
         public enum Blocked {
+          /// Location: WeatherAskControl.swift - In place of a request button while two radios share the only weather radio's name or id (phase 2)
+          public static let botConflict = L10n.tr("Weather", "weather.request.blocked.botConflict", fallback: "Pick a weather radio to ask")
           /// Location: WeatherCopy.swift - In place of a request button without #meshwx
           public static let channel = L10n.tr("Weather", "weather.request.blocked.channel", fallback: "Add #meshwx to your radio to ask")
           /// Location: WeatherCopy.swift - In place of a request button on old firmware

@@ -709,18 +709,19 @@ struct WeatherServiceTests {
   }
 
   @Test
-  func `no answer means one resend of the same bytes, then timed out`() async throws {
+  func `no answer means one resend under the next seq, then timed out`() async throws {
     #expect(WeatherService.channelAnswerTimeout == .seconds(10))
     let h = makeHarness(channelRequests: true, channelAnswerTimeout: .milliseconds(40))
     let settled = collectSettlements(h.events)
     let first = try #require(try await h.service.send(.spaceWeather, to: F.bot))
     #expect(await weatherWaitUntil { await h.transport.channelSent.count == 2 })
     let flooded = await h.transport.channelSent
-    // The same bytes: same text, same `ts`, same `seq`, which is what makes the resend a copy
-    // of one request to the bot rather than a second request.
+    // Spec §10.8 (phase 2, 18 October 2026): the same text and `ts`, which is what makes the
+    // resend a copy of one request to the bot (it keys copies on sender, `ts` and text), under the
+    // next `seq`, so it is not the same bytes every repeater already carried and drops by hash.
     #expect(flooded.map(\.text) == [">space", ">space"])
     #expect(flooded.map(\.timestamp) == [first.timestamp, first.timestamp])
-    #expect(flooded.map(\.seq) == [first.seq, first.seq])
+    #expect(flooded.map(\.seq) == [first.seq, first.seq &+ 1])
     #expect(await weatherWaitUntil { settled.value.count == 1 })
     #expect(settled.value.first?.1 == .timedOut(botWasHeard: false, botRadioReceived: false))
     #expect(settled.value.first?.0.attempt == 1)

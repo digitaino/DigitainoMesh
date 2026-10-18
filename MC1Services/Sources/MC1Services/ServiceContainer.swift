@@ -1,5 +1,6 @@
 import Foundation
 import MeshCore
+import MeshWX
 import SwiftData
 
 /// Dependency injection container for MC1Services.
@@ -397,7 +398,16 @@ public final class ServiceContainer {
       // The channel traffic screen's log (docs/MESHWX_UI.md §12): a ring of 300 datagrams beside
       // the weather state, shared across connections because the channel is the channel whichever
       // radio is listening to it.
-      trafficLogStore: FileWeatherTrafficLogStore.default()
+      trafficLogStore: FileWeatherTrafficLogStore.default(),
+      // What the cap on bot states never evicts (phase 2): the bot the user picked and any holding
+      // a warning in force near a watched place. The pages' own sources the tool's model adds
+      // (`WeatherService.useSources`).
+      protectedBotIDs: { states, now in
+        WeatherBotRetention.protectedBotIDs(
+          states: states, pickedBotID: WeatherBotPickStore().pick?.botID,
+          watch: DefaultsWeatherAlertWatchStore().watch(), geometry: MeshWXGeometry.shared, tables: .shared,
+          now: now)
+      }
     )
     let weatherService = weatherService
     weatherAlertNotifier = WeatherAlertNotifier(
@@ -408,6 +418,14 @@ public final class ServiceContainer {
       botName: { [dataStore] botID in
         let contacts = try? await dataStore.fetchContacts(radioID: radioID)
         return contacts?.lazy.compactMap(WeatherBot.init(contact:)).first { $0.botID == botID }?.name
+      },
+      // Phase 2: an id two radios answer to — two adverts with one name, or two keys sharing the
+      // two bytes the wire carries — notifies nothing until the user picks it.
+      suspendedBotIDs: { [dataStore] in
+        let contacts = (try? await dataStore.fetchContacts(radioID: radioID)) ?? []
+        var suspended = Set(WeatherBot.conflicts(among: contacts.compactMap(WeatherBot.init(contact:))).keys)
+        if let picked = WeatherBotPickStore().pick?.botID { suspended.remove(picked) }
+        return suspended
       }
     )
 

@@ -12,6 +12,9 @@ public enum WeatherRequestBlock: Sendable, Hashable {
   /// have to ask by DM: a DM needs the bot's whole key, and two bytes of it are all the bot's own
   /// packets carry. A radio that can flood a Request datagram is not blocked by this at all.
   case botNotAnnounced
+  /// Every bot that could be asked is one two radios answer to (phase 2): the app chooses neither,
+  /// and the user picks under Weather radios.
+  case botConflict
 }
 
 /// A request's state as any button for it shows it (docs/MESHWX_UI.md §11).
@@ -92,6 +95,8 @@ public struct WeatherScreenSnapshot: Sendable {
     case firmwareTooOld(version: String)
     case channelMissing
     case noBotHeard
+    /// Two radios answer to the only bot there is to ask; `label` names it (phase 2).
+    case botConflict(label: String)
   }
 
   /// The bot requests go to and the screen names.
@@ -102,18 +107,24 @@ public struct WeatherScreenSnapshot: Sendable {
     public var lastHeardAt: Date?
     /// The last message heard live, not drained from the radio's queue (`WeatherBotState`).
     public var lastLiveHeardAt: Date?
+    /// The user's pick chose it (``WeatherBotPick/applies(to:lastLiveHeardAt:now:)``) rather than
+    /// the app.
+    public var isPicked = false
 
     /// Who a request goes to: the announced bot, or, for one only ever heard on the channel, a
     /// stand-in carrying the two bytes a Request datagram needs
     /// (``WeatherBot/heardOnly(botID:)``). ``bot`` stays nil for such a source, so it is still
-    /// *named* "Weather radio 041D" everywhere.
+    /// *named* "Weather radio 1D04" everywhere.
     public var requestBot: WeatherBot { bot ?? .heardOnly(botID: botID) }
   }
 
   public struct Inputs: Sendable {
     public var states: [UInt16: WeatherBotState]
     public var bots: [WeatherBot]
-    public var preferredBotID: UInt16?
+    /// The user's ``WeatherBotPick``, or nil (phase 2).
+    public var pick: WeatherBotPick?
+    /// When a request to each bot last went unanswered this visit (``WeatherBotChoice/isLive``).
+    public var unansweredAt: [UInt16: Date]
     public var place: WeatherPlace?
     /// The page this build answers for. Stamped into the snapshot, so nothing downstream has to
     /// be told separately which place it is looking at.
@@ -135,7 +146,8 @@ public struct WeatherScreenSnapshot: Sendable {
     public init(
       states: [UInt16: WeatherBotState],
       bots: [WeatherBot],
-      preferredBotID: UInt16?,
+      pick: WeatherBotPick?,
+      unansweredAt: [UInt16: Date] = [:],
       place: WeatherPlace?,
       pageID: String = WeatherPage.myLocationID,
       isRadioConnected: Bool,
@@ -149,7 +161,8 @@ public struct WeatherScreenSnapshot: Sendable {
     ) {
       self.states = states
       self.bots = bots
-      self.preferredBotID = preferredBotID
+      self.pick = pick
+      self.unansweredAt = unansweredAt
       self.place = place
       self.pageID = pageID
       self.isRadioConnected = isRadioConnected
@@ -172,6 +185,8 @@ public struct WeatherScreenSnapshot: Sendable {
   public var source: Source?
   /// Every bot the screen knows of, for the About sheet: advertised ones and heard-only ids.
   public var knownBotIDs: [UInt16]
+  /// ``WeatherBot/conflicts(among:)`` of the bots listed: the ids two radios answer to.
+  public var conflicts: [UInt16: WeatherBot.Conflict] = [:]
   public var coverage: WeatherCoverage
   public var alerts: [WeatherAlertItem]
   public var alertStatus: WeatherAlertStatus
@@ -218,13 +233,18 @@ public struct WeatherScreenSnapshot: Sendable {
     }
     let now = inputs.now
     let coverage = WeatherCoverage.make(states: inputs.states, tables: tables, now: now)
-    let source = pickSource(inputs, coverage: coverage)
+    let conflicts = WeatherBot.conflicts(among: inputs.bots)
+    let source = pickSource(inputs, coverage: coverage, conflicts: conflicts)
+    // Nothing to ask because every bot there is answers to two radios: say that, not "no bot".
+    let conflict = source == nil ? conflicts.values.min { $0.botID < $1.botID } : nil
 
     let banner: Banner?
     if inputs.firmwareSupportsWeather == false {
       banner = .firmwareTooOld(version: inputs.firmwareVersion)
     } else if inputs.isRadioConnected, !inputs.hasWeatherChannel, inputs.session.lastChannelDatagramAt == nil {
       banner = .channelMissing
+    } else if let conflict {
+      banner = .botConflict(label: conflict.label)
     } else if source == nil {
       banner = .noBotHeard
     } else {
@@ -244,6 +264,8 @@ public struct WeatherScreenSnapshot: Sendable {
       // needs the DM, and only the DM needs the whole key an advert brings — so while the
       // firmware claim is unknown the ask could still fall to a DM, and the block stays.
       requestBlock = source.bot == nil && inputs.firmwareSupportsWeather != true ? .botNotAnnounced : nil
+    } else if conflict != nil {
+      requestBlock = .botConflict
     } else {
       requestBlock = .noBot
     }
@@ -274,12 +296,13 @@ public struct WeatherScreenSnapshot: Sendable {
       banner: banner,
       source: source,
       knownBotIDs: known.sorted(),
+      conflicts: conflicts,
       coverage: coverage,
       alerts: alerts,
       alertStatus: WeatherAlertStatus.evaluate(
         place: inputs.place, coverage: coverage, states: inputs.states, items: alerts,
         isRadioConnected: inputs.isRadioConnected, sessionStartedAt: inputs.session.startedAt,
-        tables: tables, now: now),
+        tables: tables, now: now, sourceBotID: source?.botID),
       // The station the Now card names leads the list its own link opens.
       readings: WeatherStations.ordered(readings, leading: primaryStation.index),
       primaryStation: primaryStation,
@@ -301,36 +324,36 @@ public struct WeatherScreenSnapshot: Sendable {
     )
   }
 
-  /// The user's pick; else an advertised bot that covers the place; else the advertised bot
-  /// heard most recently; else any advertised bot; else the heard-only bot heard most recently.
-  static func pickSource(_ inputs: Inputs, coverage: WeatherCoverage) -> Source? {
-    func source(_ botID: UInt16) -> Source {
-      Source(
+  /// The user's pick, where it applies (``WeatherBotPick``: made near this place, its bot heard
+  /// live in the last six hours); else the app's choice (``WeatherBotChoice/ranked``): heard live
+  /// in the last two hours first, then covering the place. A bot two radios answer to is chosen
+  /// only by a pick (`conflicts`).
+  static func pickSource(
+    _ inputs: Inputs, coverage: WeatherCoverage, conflicts: [UInt16: WeatherBot.Conflict]? = nil
+  ) -> Source? {
+    func source(_ botID: UInt16, isPicked: Bool = false, publicKey: Data? = nil) -> Source {
+      // Of two radios answering to one id, the one the user picked is the one named.
+      let bot = publicKey.flatMap { key in inputs.bots.first { $0.publicKey == key } }
+        ?? inputs.bots.first { $0.botID == botID }
+      return Source(
         botID: botID,
-        bot: inputs.bots.first { $0.botID == botID },
+        bot: bot,
         lastHeardAt: inputs.states[botID]?.lastHeardAt,
-        lastLiveHeardAt: inputs.states[botID]?.lastLiveHeardAt)
+        lastLiveHeardAt: inputs.states[botID]?.lastLiveHeardAt,
+        isPicked: isPicked)
     }
-    let advertised = Set(inputs.bots.map(\.botID))
-    let heard = inputs.states.keys
-
-    if let preferred = inputs.preferredBotID, advertised.contains(preferred) || inputs.states[preferred] != nil {
-      return source(preferred)
+    if let pick = inputs.pick {
+      let known = inputs.bots.contains { $0.botID == pick.botID } || inputs.states[pick.botID] != nil
+      let applies = pick.applies(
+        to: inputs.place, lastLiveHeardAt: inputs.states[pick.botID]?.lastLiveHeardAt, now: inputs.now)
+      if known, applies { return source(pick.botID, isPicked: true, publicKey: pick.publicKey) }
     }
-    if let place = inputs.place {
-      let covering = coverage.botIDs(covering: place.coordinate).intersection(advertised)
-      if let best = covering.max(by: { lastHeard($0, inputs) < lastHeard($1, inputs) }) { return source(best) }
-    }
-    if let best = advertised.filter({ inputs.states[$0] != nil }).max(by: { lastHeard($0, inputs) < lastHeard($1, inputs) }) {
-      return source(best)
-    }
-    if let first = inputs.bots.first { return source(first.botID) }
-    if let best = heard.max(by: { lastHeard($0, inputs) < lastHeard($1, inputs) }) { return source(best) }
-    return nil
-  }
-
-  private static func lastHeard(_ botID: UInt16, _ inputs: Inputs) -> Date {
-    inputs.states[botID]?.lastHeardAt ?? .distantPast
+    let best = WeatherBotChoice.ranked(
+      states: inputs.states, bots: inputs.bots, place: inputs.place, coverage: coverage,
+      conflicts: conflicts ?? WeatherBot.conflicts(among: inputs.bots),
+      unansweredAt: inputs.unansweredAt, now: inputs.now
+    ).first
+    return best.map { source($0) }
   }
 }
 

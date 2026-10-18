@@ -16,7 +16,8 @@ enum WeatherReferenceNames {
   /// The national centres in the bot's office list (`MeshWXTables.nationalCentreCodes`), which are
   /// not forecast offices and have no city.
   static let nationalCentres: [String: String] = [
-    "NHC": "National Hurricane Center", "WNS": "Storm Prediction Center"
+    "NHC": "National Hurricane Center", "WNS": "Storm Prediction Center",
+    "AAQ": "National Tsunami Warning Center", "HEB": "Pacific Tsunami Warning Center",
   ]
 
   /// "TX" → "Texas".

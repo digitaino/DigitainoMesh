@@ -210,15 +210,21 @@ public struct WeatherCoverage: Sendable, Hashable {
 
   /// What one statement says about a point (spec §7A).
   ///
-  /// Inside on the stated circle, on a stated run, or on a statement with no area filter at all
-  /// (`n` = 0 and `k` = 0: the bot carries everything its feed does). Outside only when both
-  /// lists are whole, the bot listed zones to test against, and the place resolved to UGCs that
-  /// none of the runs covers. Everything else is unknown: a cut list says "not listed", and a
-  /// place the outlines cannot place is not a place outside the area.
+  /// Inside on the stated circle or on a stated run. Outside only when both lists are whole, the
+  /// bot listed zones to test against, and the place resolved to UGCs that none of the runs
+  /// covers. Everything else is unknown: a cut list says "not listed", and a place the outlines
+  /// cannot place is not a place outside the area.
+  ///
+  /// So is a statement with **no area filter at all** (`n` = 0, `k` = 0). Spec §7A reads that as
+  /// "no place is outside it", and an honest bot that sends it does carry everything; but it is
+  /// also the cheapest statement there is to forge (wire revision 13 signs nothing), and read as
+  /// covering every place it made a chattering spoof every phone's choice of bot (phase 2,
+  /// 18 October 2026, spec §10.8). It says nothing about any one place, so it is evidence of
+  /// nothing.
   func verdict(
     _ statement: MeshWXCoverage, covering point: MeshWXCoordinate, withinKilometres radius: Double
   ) -> WeatherCoverageVerdict {
-    if statement.hasNoAreaFilter { return .inside }
+    if statement.hasNoAreaFilter { return .unknown }
     if statement.circleContains(point) { return .inside }
     let codes = areaCodes(near: point, withinKilometres: radius)
     if codes.contains(where: { statement.covers(ugc: $0, states: tables.states) }) { return .inside }

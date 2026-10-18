@@ -145,6 +145,12 @@ public struct WeatherAlertItem: Sendable, Hashable, Identifiable {
     /// Covered the place and passed its expiry in the last 15 minutes with no update: kept,
     /// because a phone clock ahead of the bot's would otherwise end it early.
     case expiredRecently
+    /// A copy another bot's cancel ended (`WeatherCrossBot.ending`, phase 2): the cancelling bot
+    /// was in range and carries the warning's ground, and the copy was issued before the cancel.
+    /// Not in force, whoever is still sending it — WX-AUS's feed five hours behind repeats what
+    /// WX-SAT cancelled at noon — so it is a note about what ended, like an expired one, and it
+    /// never notifies. `botID` is the bot whose cancel ended it.
+    case ended(endedAt: Date, botID: UInt16)
   }
 
   public var identity: MeshWXWarningIdentity
@@ -152,6 +158,8 @@ public struct WeatherAlertItem: Sendable, Hashable, Identifiable {
   public var kind: Kind
   public var placement: WeatherAlertPlacement
   public var rank: Int
+  /// Every bot holding a copy; the alert's detail names them all, each with its four hex digits
+  /// (phase 2), because a name alone is self-asserted.
   public var botIDs: [UInt16]
   public var receivedAt: Date
   /// When it takes effect (spec §3, revision 12), from the stored copy rather than recomputed from
@@ -160,9 +168,21 @@ public struct WeatherAlertItem: Sendable, Hashable, Identifiable {
   /// alert read "from Wed 19:00 until Fri 19:00" instead of counting down to an end that has not
   /// begun; it changes nothing about where the alert sorts or whether it covers the place.
   public var beginsAt: Date?
+  /// The bot whose copy is shown (phase 2); nil reads as the first of ``botIDs``.
+  public var shownBotID: UInt16?
 
   public var id: MeshWXWarningIdentity { identity }
   public var expiresAt: Date { Date(unixMinutes: warning.expiresMinutes) }
+  /// The bot whose copy is shown.
+  public var botID: UInt16? { shownBotID ?? botIDs.first }
+
+  /// A note about what ended rather than something to act on: expired, or ended by a cancel.
+  public var isEnded: Bool {
+    switch kind {
+    case .expiredRecently, .ended: true
+    default: false
+    }
+  }
 }
 
 public enum WeatherAlertItems {
@@ -170,10 +190,14 @@ public enum WeatherAlertItems {
 
   /// Every alert held by any bot, one item per identity, placed against the place and sorted.
   ///
-  /// Two bots can hold different copies of one warning (spec §12). The copy shown is the one
-  /// still active over one that has expired — a bot that heard the extension beats one that
-  /// did not — then the one with the later expiry. An upgrade marker stands in only when no bot
-  /// holds a copy of the warning at all.
+  /// Two bots can hold different copies of one warning (spec §12). Which one is shown is
+  /// ``WeatherCrossBot/prefers(_:over:)`` (phase 2, spec §10.8): one still in force — not expired,
+  /// and not ended by another bot's trusted cancel — over one that is not; then a copy from a bot
+  /// heard live in the last two hours over a later expiry from one that has not been; then the
+  /// later expiry, which is how a bot that heard the extension beats one that did not. A copy
+  /// another bot's cancel ended is `.ended`: kept as a row where the place is, like a warning that
+  /// just expired, and never as active. An upgrade marker stands in only when no bot holds a copy
+  /// of the warning at all.
   ///
   /// Order: anything *here* first, then by priority whatever the placement — a Tornado Warning
   /// 20 km away above a Heat Advisory whose outlines are still loading — then checking/unplaced
@@ -192,6 +216,9 @@ public enum WeatherAlertItems {
     struct Candidate {
       var stored: WeatherStoredWarning
       var kind: WeatherAlertItem.Kind
+      var botID: UInt16
+      var isLive = false
+      var liveHeardAt: Date?
       var botIDs: Set<UInt16>
       /// The start from the first bot, in bot order, whose copy states one: the shown copy's own
       /// wins below, and this stands in when that copy came from a bot that said nothing.
@@ -200,28 +227,43 @@ public enum WeatherAlertItems {
     var candidates: [MeshWXWarningIdentity: Candidate] = [:]
     // Bot order fixed, so which copy wins a full tie does not depend on dictionary order.
     let botIDs = states.keys.sorted()
+    let areaCentre = WeatherService.areaCentres(tables)
 
     for botID in botIDs {
       guard let state = states[botID] else { continue }
+      let isLive = WeatherCrossBot.isLive(state, now: now)
       for stored in state.warnings.values {
+        let isExpired = stored.isExpired(at: now)
+        let withinHold = now.timeIntervalSince(stored.expiresAt) <= expiredHold
+        let ending = WeatherCrossBot.ending(of: stored, in: states, areaCentre: areaCentre)
         let kind: WeatherAlertItem.Kind
-        if !stored.isExpired(at: now) {
+        if let ending {
+          guard !isExpired || withinHold else { continue }
+          kind = .ended(endedAt: ending.endedAt, botID: ending.botID)
+        } else if !isExpired {
           kind = .active
-        } else if now.timeIntervalSince(stored.expiresAt) <= expiredHold {
+        } else if withinHold {
           kind = .expiredRecently
         } else {
           continue
         }
+        let copy = Candidate(
+          stored: stored, kind: kind, botID: botID, isLive: isLive, liveHeardAt: state.lastLiveHeardAt,
+          botIDs: [botID], anyBeginsAt: stored.beginsAt)
         guard var held = candidates[stored.identity] else {
-          candidates[stored.identity] = Candidate(
-            stored: stored, kind: kind, botIDs: [botID], anyBeginsAt: stored.beginsAt)
+          candidates[stored.identity] = copy
           continue
         }
         held.botIDs.insert(botID)
         held.anyBeginsAt = held.anyBeginsAt ?? stored.beginsAt
-        if prefers(stored, kind, over: held.stored, held.kind) {
+        if WeatherCrossBot.prefers(
+          (kind == .active, isLive, state.lastLiveHeardAt, stored),
+          over: (held.kind == .active, held.isLive, held.liveHeardAt, held.stored)) {
           held.stored = stored
           held.kind = kind
+          held.botID = botID
+          held.isLive = isLive
+          held.liveHeardAt = state.lastLiveHeardAt
         }
         candidates[stored.identity] = held
       }
@@ -236,13 +278,14 @@ public enum WeatherAlertItems {
           beginsAt: pending.warning.beginsMinutes.map { Date(unixMinutes: $0) })
         let kind = WeatherAlertItem.Kind.upgradedAwaitingReplacement(cancelledAt: pending.cancelledAt)
         guard var held = markers[identity] else {
-          markers[identity] = Candidate(stored: stored, kind: kind, botIDs: [botID])
+          markers[identity] = Candidate(stored: stored, kind: kind, botID: botID, botIDs: [botID])
           continue
         }
         held.botIDs.insert(botID)
         if pending.cancelledAt > held.stored.receivedAt {
           held.stored = stored
           held.kind = kind
+          held.botID = botID
         }
         markers[identity] = held
       }
@@ -253,8 +296,11 @@ public enum WeatherAlertItems {
       let placement = place.map {
         WeatherAlertPlacement.place(candidate.stored.warning, at: $0, geometry: geometry, tables: tables)
       } ?? .elsewhere
-      // An expired alert is only worth a row where it mattered.
-      if candidate.kind == .expiredRecently, placement != .here { return nil }
+      // An expired or cancelled alert is only worth a row where it mattered.
+      switch candidate.kind {
+      case .expiredRecently, .ended: if placement != .here { return nil }
+      default: break
+      }
       return WeatherAlertItem(
         identity: candidate.stored.identity,
         warning: candidate.stored.warning,
@@ -265,12 +311,13 @@ public enum WeatherAlertItems {
         receivedAt: candidate.stored.receivedAt,
         // The shown copy's start, else another bot's: a start is a fact about the product, and a
         // copy from a bot older than revision 12 saying nothing is not a copy saying it began.
-        beginsAt: candidate.stored.beginsAt ?? candidate.anyBeginsAt
+        beginsAt: candidate.stored.beginsAt ?? candidate.anyBeginsAt,
+        shownBotID: candidate.botID
       )
     }
     return items.sorted { lhs, rhs in
-      let lhsExpired = lhs.kind == .expiredRecently
-      let rhsExpired = rhs.kind == .expiredRecently
+      let lhsExpired = lhs.isEnded
+      let rhsExpired = rhs.isEnded
       if lhsExpired != rhsExpired { return rhsExpired }
       let lhsHere = lhs.placement == .here
       let rhsHere = rhs.placement == .here
@@ -281,21 +328,6 @@ public enum WeatherAlertItems {
       if lhs.identity.etn != rhs.identity.etn { return lhs.identity.etn < rhs.identity.etn }
       return WeatherStateReducer.identityOrder(lhs.identity, rhs.identity)
     }
-  }
-
-  /// Whether one bot's copy of a warning should be shown over another's: active over expired,
-  /// then the later expiry, then the later message.
-  private static func prefers(
-    _ stored: WeatherStoredWarning, _ kind: WeatherAlertItem.Kind,
-    over held: WeatherStoredWarning, _ heldKind: WeatherAlertItem.Kind
-  ) -> Bool {
-    let isActive = kind == .active
-    let heldIsActive = heldKind == .active
-    if isActive != heldIsActive { return isActive }
-    if stored.warning.expiresMinutes != held.warning.expiresMinutes {
-      return stored.warning.expiresMinutes > held.warning.expiresMinutes
-    }
-    return stored.receivedAt > held.receivedAt
   }
 }
 
@@ -344,7 +376,11 @@ public enum WeatherAlertStatus: Sendable, Hashable {
   /// may not reach it at all.
   case feedNeverReceived
   case radioOffline(listAsOf: Date)
-  case missedMessages
+  /// A bot covering the place, heard live in the last ``gapWindow``, missed messages: a gap, a
+  /// warning its list named that never arrived, or an upgrade whose replacement never came.
+  /// `botID` is that bot, which the line names and its Ask asks (phase 2) — the page's source when
+  /// it is one of them.
+  case missedMessages(botID: UInt16)
   case listOld(asOf: Date)
   case locationOld(since: Date)
   /// No bot's evidence places this place: none has stated its coverage or sent a multi-station
@@ -367,6 +403,10 @@ public enum WeatherAlertStatus: Sendable, Hashable {
 
   /// Three hours between scheduled lists, plus a quarter of an hour for a late broadcast.
   public static let listFreshFor: TimeInterval = 3 * 60 * 60 + 15 * 60
+  /// A bot's missed messages count only while it was heard live this recently (phase 2): a gap in
+  /// the stream of a bot that has been out of range for days is no news about the alerts here,
+  /// and nothing this phone asks will reach it.
+  public static let gapWindow: TimeInterval = 3 * 60 * 60
 
   public static func evaluate(
     place: WeatherPlace?,
@@ -376,7 +416,8 @@ public enum WeatherAlertStatus: Sendable, Hashable {
     isRadioConnected: Bool,
     sessionStartedAt: Date?,
     tables: MeshWXTables,
-    now: Date
+    now: Date,
+    sourceBotID: UInt16? = nil
   ) -> WeatherAlertStatus {
     guard let place else { return .noPlace }
     // Only a bot's own complete statement (spec §7A), or its station footprint where it has
@@ -388,14 +429,15 @@ public enum WeatherAlertStatus: Sendable, Hashable {
     // Where no bot's area is known to cover the place, every bot's list is considered, which is
     // enough to say what is wrong with the list — but never enough for calm (`coverageUnknown`).
     let covering = coverage.botIDs(covering: place)
-    let relevant = states.filter { covering.isEmpty || covering.contains($0.key) }.map(\.value)
+    let relevantIDs = states.keys.filter { covering.isEmpty || covering.contains($0) }.sorted()
+    let relevant = relevantIDs.compactMap { states[$0] }
     let withDigest = relevant.compactMap { state in state.digest.map { (state, $0) } }
     guard let (_, digest) = withDigest.max(by: { $0.1.builtAt < $1.1.builtAt }) else { return .notChecked }
 
     if digest.feed == .neverReceived { return .feedNeverReceived }
     if !isRadioConnected { return .radioOffline(listAsOf: digest.builtAt) }
-    if relevant.contains(where: { $0.needsDigest || !$0.missingFromDigest.isEmpty || !$0.pendingUpgrades.isEmpty }) {
-      return .missedMessages
+    if let gapBotID = gapBot(among: relevantIDs, states: states, sourceBotID: sourceBotID, now: now) {
+      return .missedMessages(botID: gapBotID)
     }
     let listedBeforeSession = sessionStartedAt.map { digest.receivedAt < $0 } ?? true
     if now.timeIntervalSince(digest.builtAt) > listFreshFor || listedBeforeSession {
@@ -418,6 +460,28 @@ public enum WeatherAlertStatus: Sendable, Hashable {
     let elsewhere = items.filter { $0.placement == .elsewhere }.count
     if elsewhere > 0 { return .noneHere(elsewhere: elsewhere, asOf: digest.builtAt) }
     return .clear(asOf: digest.builtAt)
+  }
+
+  /// Whether a bot's state has something outstanding: a gap, a warning its list named that never
+  /// arrived, or an upgrade whose replacement never came.
+  public static func hasMissedMessages(_ state: WeatherBotState) -> Bool {
+    state.needsDigest || !state.missingFromDigest.isEmpty || !state.pendingUpgrades.isEmpty
+  }
+
+  /// The bot whose missed messages the line is about (phase 2): among `botIDs`, those heard live
+  /// in the last ``gapWindow`` with something outstanding — the source first when it is one of
+  /// them, else the one heard live most recently. Nil when none.
+  public static func gapBot(
+    among botIDs: [UInt16], states: [UInt16: WeatherBotState], sourceBotID: UInt16?, now: Date
+  ) -> UInt16? {
+    let gapped = botIDs.filter { botID in
+      guard let state = states[botID], let heard = state.lastLiveHeardAt else { return false }
+      return now.timeIntervalSince(heard) <= gapWindow && hasMissedMessages(state)
+    }
+    if let sourceBotID, gapped.contains(sourceBotID) { return sourceBotID }
+    return gapped.max { lhs, rhs in
+      (states[lhs]?.lastLiveHeardAt ?? .distantPast) < (states[rhs]?.lastLiveHeardAt ?? .distantPast)
+    }
   }
 
   /// Whether a warning shows that the bot carries its issuer's forecast office. A national

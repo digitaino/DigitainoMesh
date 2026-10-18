@@ -30,9 +30,10 @@ public struct WeatherPendingRequest: Sendable, Hashable, Identifiable {
   /// retry is one message sent again to the bot's radio, and the same request to the bot. A
   /// Request datagram carries it as its `ts`, which is exactly what makes a resend a copy.
   public let timestamp: Date
-  /// The sender's own sequence number, on a channel request only (spec §7B), repeated on the
-  /// resend. 0 and meaningless for a DM.
-  public let seq: UInt8
+  /// The sender's own sequence number, on a channel request only (spec §7B): the latest
+  /// transmission's, since a resend goes under the next one (spec §10.8, phase 2). 0 and
+  /// meaningless for a DM.
+  public var seq: UInt8
   /// The ACK code the radio expects back for each transmission. Empty for a channel request:
   /// a datagram has no acknowledgement.
   public var ackCodes: Set<Data>

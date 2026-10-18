@@ -111,7 +111,8 @@ struct WeatherRadioView: View {
 
   // MARK: - How it works
 
-  /// Four lines: where the request goes, where the answer goes, who keeps it, and what it costs.
+  /// Five lines: where the request goes, where the answer goes, who keeps it, what it costs, and
+  /// (since phase 2) what it carries about the asker.
   private var howItWorksSection: some View {
     Section {
       WeatherCardLabel(title: L10n.Weather.Weather.About.howItWorks, systemImage: "questionmark.circle")
@@ -120,6 +121,7 @@ struct WeatherRadioView: View {
         Text(L10n.Weather.Weather.About.line2)
         Text(L10n.Weather.Weather.About.line3)
         Text(L10n.Weather.Weather.About.line4)
+        Text(L10n.Weather.Weather.About.line5)
       }
       .font(.subheadline)
       .padding(.vertical, 4)
@@ -352,31 +354,48 @@ struct WeatherRadioView: View {
         } label: {
           checkRow(
             title: L10n.Weather.Weather.About.automatic,
-            detail: screen.snapshot.source.map { L10n.Weather.Weather.About.automaticDetail(model.botName($0.botID)) },
+            detail: screen.snapshot.source.map {
+              L10n.Weather.Weather.About.automaticDetail(model.botLabel($0.botID, publicKey: $0.bot?.publicKey))
+            },
             isSelected: model.preferredBotID == nil)
         }
         .buttonStyle(.plain)
       }
+      // One row per radio, named with its four hex digits (phase 2): "WX-AUS 1D04".
       ForEach(screen.context.botRows) { row in
+        let title = model.botLabel(row.botID, publicKey: row.bot?.publicKey)
         if screen.context.botRows.count >= 2 {
           Button {
-            model.selectBot(row.botID)
+            model.selectBot(row.botID, publicKey: row.bot?.isAnnounced == true ? row.bot?.publicKey : nil)
           } label: {
-            checkRow(
-              title: model.botName(row.botID), detail: detail(row),
-              isSelected: model.preferredBotID == row.botID)
+            checkRow(title: title, detail: detail(row), isSelected: isPicked(row))
           }
           .buttonStyle(.plain)
         } else {
           // One radio is a fact, not a choice: a row, not a disabled button, which greyed out the
           // one radio there is and its status with it.
-          checkRow(title: model.botName(row.botID), detail: detail(row), isSelected: false)
+          checkRow(title: title, detail: detail(row), isSelected: false)
         }
       }
     } footer: {
-      Text(L10n.Weather.Weather.About.radiosFooter)
+      // Phase 2: with two radios under one name or id, the footer says why neither is used.
+      Text(([L10n.Weather.Weather.About.radiosFooter] + conflictLabels.map(L10n.Weather.Weather.About.conflictFooter))
+        .joined(separator: " "))
     }
     .themedRowBackground(theme)
+  }
+
+  /// The names and ids two radios share, once each, in the order the rows list them.
+  private var conflictLabels: [String] {
+    var seen = Set<String>()
+    return screen.context.botRows.compactMap(\.conflict?.label).filter { seen.insert($0).inserted }
+  }
+
+  /// The row of the radio the user's pick chose: its id, and its key when the pick named one.
+  private func isPicked(_ row: WeatherBotRow) -> Bool {
+    guard model.preferredBotID == row.botID else { return false }
+    guard let key = model.botPick?.publicKey, let rowKey = row.bot?.publicKey else { return true }
+    return key == rowKey
   }
 
   private func detail(_ row: WeatherBotRow) -> String {
@@ -396,6 +415,11 @@ struct WeatherRadioView: View {
     }
     if row.bot == nil {
       parts.append(L10n.Weather.Weather.About.noAdvert)
+    }
+    // Phase 2: two radios answer to this id or share this name. Said on the row itself, so the
+    // user sees which two before picking one.
+    if let conflict = row.conflict {
+      parts.append(L10n.Weather.Weather.About.conflict(conflict.label))
     }
     if screen.snapshot.source?.botID == row.botID {
       parts.append(L10n.Weather.Weather.About.inUse)

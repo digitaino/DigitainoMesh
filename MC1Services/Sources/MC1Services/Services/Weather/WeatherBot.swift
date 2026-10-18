@@ -29,9 +29,14 @@ public struct WeatherBot: Sendable, Hashable, Identifiable {
     self.lastAdvert = lastAdvert
   }
 
-  /// A contact is a bot when its advertised name carries the prefix and a city after it.
+  /// A contact is a bot when its advertised name carries the prefix and a city after it, **and it
+  /// advertised as a chat node** (``isChatAdvert(_:)``).
+  ///
+  /// Only a chat advert counts (phase 2, 18 October 2026): a repeater or a room server renamed
+  /// WX-AUS is not a weather radio, and with any contact type counting, one rename was enough to
+  /// put a second "WX-AUS" in the list.
   public init?(contact: ContactDTO) {
-    guard Self.isBotName(contact.name) else { return nil }
+    guard Self.isBotName(contact.name), Self.isChatAdvert(contact) else { return nil }
     self.init(
       publicKey: contact.publicKey,
       name: contact.name,
@@ -60,6 +65,69 @@ public struct WeatherBot: Sendable, Hashable, Identifiable {
   /// The `bot` field every v5 message carries: the first two bytes of the public key as a
   /// little-endian u16 (spec §2.2).
   public var botID: UInt16 { Self.botID(for: publicKey) }
+
+  /// Whether a contact advertised as a chat node: what a weather bot runs as (spec §12).
+  public static func isChatAdvert(_ contact: ContactDTO) -> Bool {
+    contact.typeRawValue == ContactType.chat.rawValue
+  }
+
+  /// The four hex digits a bot is told apart by on screen, "1D04": the first two bytes of its
+  /// public key **in key order**, the way every MeshCore app prints a key. The `bot` field is the
+  /// same two bytes read little-endian (0x041D), which is why this is not `String(botID, radix:)`.
+  public static func idText(_ botID: UInt16) -> String {
+    String(format: "%02X%02X", botID & 0xFF, botID >> 8)
+  }
+
+  /// What ``conflicts(among:)`` found for one id: the label the screen says it by, and why.
+  public struct Conflict: Sendable, Hashable {
+    public enum Kind: Sendable, Hashable {
+      /// Two adverts with one name and two different keys. `label` is the name.
+      case name
+      /// Two whole keys that begin with the same two bytes. `label` is the four hex digits.
+      case id
+    }
+
+    public let botID: UInt16
+    public let label: String
+    public let kind: Kind
+
+    public init(botID: UInt16, label: String, kind: Kind) {
+      self.botID = botID
+      self.label = label
+      self.kind = kind
+    }
+  }
+
+  /// The bot ids two radios answer to (phase 2, 18 October 2026): two adverts with one name, or
+  /// two whole keys that share the two bytes the wire names a bot by (spec §2.2), whose messages
+  /// cannot then be told apart at all. For a shared name both ids are listed: nothing on the wire
+  /// says which WX-AUS is the city's.
+  ///
+  /// Until signing (wire revision 14) the bytes are self-asserted, so this is the one thing the
+  /// app can see of a second radio speaking under a name: it chooses neither of them
+  /// automatically and notifies nothing from them until the user has picked one.
+  public static func conflicts(among bots: [WeatherBot]) -> [UInt16: Conflict] {
+    var byName: [String: [Data: WeatherBot]] = [:]
+    var byID: [UInt16: Set<Data>] = [:]
+    var nameOrder: [String] = []
+    for bot in bots where bot.isAnnounced {
+      let name = bot.name.uppercased()
+      if byName[name] == nil { nameOrder.append(name) }
+      byName[name, default: [:]][bot.publicKey] = bot
+      byID[bot.botID, default: []].insert(bot.publicKey)
+    }
+    var out: [UInt16: Conflict] = [:]
+    for (botID, keys) in byID where keys.count >= 2 {
+      out[botID] = Conflict(botID: botID, label: idText(botID), kind: .id)
+    }
+    for name in nameOrder {
+      guard let keys = byName[name], keys.count >= 2 else { continue }
+      for bot in keys.values.sorted(by: { $0.botID < $1.botID }) where out[bot.botID] == nil {
+        out[bot.botID] = Conflict(botID: bot.botID, label: bot.name, kind: .name)
+      }
+    }
+    return out
+  }
 
   /// Whether the bot's whole key is known, from an advert or a link: what a DM needs.
   public var isAnnounced: Bool { publicKey.count == 32 }

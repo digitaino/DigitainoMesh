@@ -590,7 +590,7 @@ struct WeatherAreaDetailView: View {
           NavigationLink {
             WeatherAlertDetailView(screen: screen, identity: item.identity)
           } label: {
-            WeatherAlertRow(item: item, placeName: screen.placeName, now: screen.now)
+            WeatherAlertRow(item: item, placeName: screen.placeName, now: screen.now, endedBy: screen.endedByLabel(item))
               .equatable()
           }
         }

@@ -125,7 +125,8 @@ struct WeatherAlertNotifierTests {
   private func makeHarness(
     watch: WeatherAlertWatch,
     geometryLoaded: LockedValue<Bool> = LockedValue(true),
-    loadGeometry: @escaping @Sendable () async -> Void = {}
+    loadGeometry: @escaping @Sendable () async -> Void = {},
+    suspended: Set<UInt16> = []
   ) -> Harness {
     let poster = FakePoster()
     let watchBox = LockedValue(watch)
@@ -142,6 +143,7 @@ struct WeatherAlertNotifierTests {
       geometry: StubGeometry(loaded: loaded),
       loadGeometry: loadGeometry,
       botName: { _ in "WX-AUS" },
+      suspendedBotIDs: { suspended },
       now: { clock.now })
     return Harness(
       notifier: notifier, poster: poster, watch: watchBox, ledger: ledgerBox, states: states,
@@ -258,7 +260,8 @@ struct WeatherAlertNotifierTests {
     let posted = try #require(await harness.poster.last)
     #expect(posted.sound)
     #expect(posted.content.title == "Tornado Warning")
-    #expect(posted.content.subtitle == "National Weather Service via WX-AUS")
+    // Phase 2: the four hex digits beside the name.
+    #expect(posted.content.subtitle == "National Weather Service via WX-AUS 7A4C")
     #expect(posted.content.body.hasPrefix("Austin · until "))
     #expect(posted.content.body.hasSuffix("· radar indicated"))
     #expect(posted.identifier.hasPrefix("wx-4C7A-TO.W.EWX.42@"))
@@ -489,7 +492,50 @@ struct WeatherAlertNotifierTests {
 
     #expect(await harness.poster.removed == [identifier])
     #expect(await harness.poster.posted.count == 1)
-    #expect(harness.ledger.value.isEmpty)
+    // Phase 2: the post is remembered as taken down, so a later copy of the warning is a repeat.
+    #expect(Array(harness.ledger.value.keys) == [identifier])
+    #expect(harness.ledger.value[identifier]?.withdrawnAt == harness.clock.now)
+  }
+
+  /// Phase 2 (spec §10.8): a copy arriving after the notification was taken down — another bot's,
+  /// its feed hours behind — is a repeat of something over. It never sounds and never comes back.
+  @Test("a second bot's copy after the warning ended neither posts nor sounds")
+  func secondBotCopyAfterEnd() async {
+    let harness = makeHarness(watch: WeatherAlertWatch(places: [Self.here()]))
+    let warning = Self.warning("SV.W")
+    await deliver(warning, to: harness)
+    await cancel(warning, in: harness)
+    #expect(await harness.poster.posted.count == 1)
+    await deliver(warning, to: harness, botID: 0x0201)
+    #expect(await harness.poster.posted.count == 1, "no second post for the same warning")
+    #expect(await harness.poster.removed.count == 1)
+  }
+
+  /// A cancel speaks for its own bot's copy: while another bot still holds the warning in force,
+  /// and the cancelling bot is not known to carry its ground, the notification stays.
+  @Test("one bot's cancel leaves standing a notification another bot's copy still holds in force")
+  func oneBotsCancelLeavesAnother() async {
+    let harness = makeHarness(watch: WeatherAlertWatch(places: [Self.here()]))
+    let warning = Self.warning("SV.W")
+    await deliver(warning, to: harness)
+    await deliver(warning, to: harness, botID: 0x0201)
+    await cancel(warning, in: harness, botID: 0x0201)
+    #expect(await harness.poster.removed.isEmpty)
+    await cancel(warning, in: harness)
+    #expect(await harness.poster.removed.count == 1)
+  }
+
+  /// Phase 2: an id two radios answer to notifies nothing until the user picks one; another bot's
+  /// copy of the same warning still does.
+  @Test("a copy from an id two radios answer to notifies nothing")
+  func suspendedIDNotifiesNothing() async {
+    let harness = makeHarness(watch: WeatherAlertWatch(places: [Self.here()]), suspended: [F.botID])
+    let warning = Self.warning("TO.W")
+    await deliver(warning, to: harness)
+    #expect(await harness.poster.posted.isEmpty)
+    await deliver(warning, to: harness, botID: 0x0201)
+    #expect(await harness.poster.posted.count == 1)
+    #expect(await harness.poster.posted.first?.identifier.hasPrefix("wx-0201-") == true)
   }
 
   @Test("a warning a list drops is removed too")

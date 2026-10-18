@@ -51,6 +51,9 @@
 /* Location: WeatherCopy.swift - Banner when no weather radio is known */
 "weather.banner.noBot" = "Aucune radio météo entendue pour l'instant. Elles apparaissent comme des nœuds nommés par exemple WX-AUS.";
 
+
+/* Location: WeatherToolView.swift - Banner when every weather radio there is to ask shares its name or id with another radio (phase 2). %@ is the name, or the four hex digits */
+"weather.banner.botConflict" = "Deux radios utilisent %@. Choisissez-en une dans Radios météo pour demander la météo.";
 /* Location: WeatherToolView.swift - Alert title before writing #meshwx to your radio */
 "weather.channel.alert.title" = "Ajouter #meshwx à votre radio ?";
 
@@ -123,6 +126,9 @@
 /* Location: WeatherCopy.swift - Row line for an alert here that just expired, %@ is a duration like "3 min" */
 "weather.alerts.expired" = "Expirée il y a %@ · aucune mise à jour reçue";
 
+
+/* Location: WeatherCopy.swift - Row line for an alert here that another weather radio cancelled, though a radio still sends it (phase 2). %1$@ is a duration like "3 h", %2$@ the radio that cancelled it, "WX-SAT 2B11" */
+"weather.alerts.ended" = "Annulée il y a %1$@ par %2$@";
 /* Location: WeatherCopy.swift - Row line while area outlines load */
 "weather.alerts.checking" = "Vérification de la zone…";
 
@@ -251,6 +257,9 @@
 /* Location: WeatherAlertDetailView.swift - Issuing office, %@ is like "NWS Austin/San Antonio" */
 "weather.alertDetail.issuedBy" = "Émise par %@";
 
+
+/* Location: WeatherAlertDetailView.swift - Which weather radios hold the alert (phase 2). %@ is a list like "WX-AUS 1D04, WX-SAT 2B11" */
+"weather.alertDetail.from" = "de %@";
 /* Location: WeatherAlertDetailView.swift - When this phone received the warning, %@ is a time */
 "weather.alertDetail.received" = "reçue %@";
 
@@ -720,6 +729,9 @@
 /* Location: WeatherCopy.swift - In place of a request button for a weather radio heard without an advert */
 "weather.request.blocked.notAnnounced" = "Impossible de demander avant son annonce";
 
+
+/* Location: WeatherAskControl.swift - In place of a request button while two radios share the only weather radio's name or id (phase 2) */
+"weather.request.blocked.botConflict" = "Choisissez une radio météo pour demander";
 /* Location: WeatherCopy.swift - The radio has no data, %@ is its name */
 "weather.request.notAvailable.noData" = "%@ n'a pas encore de données pour cela";
 
@@ -860,7 +872,7 @@
 
 // MARK: - About
 
-/* Location: WeatherRadioView.swift - Section header above the four lines that say how asking works */
+/* Location: WeatherRadioView.swift - Section header above the five lines that say how asking works */
 "weather.about.howItWorks" = "Comment ça marche";
 
 /* Location: WeatherRadioView.swift - How it works, first line */
@@ -875,6 +887,9 @@
 /* Location: WeatherRadioView.swift - How it works, fourth line */
 "weather.about.line4" = "Demander consomme du temps d'antenne partagé par tous.";
 
+
+/* Location: WeatherRadioView.swift - How it works, fifth line: what a request carries about the asker (phase 2) */
+"weather.about.line5" = "Une demande transmet aussi le début de la clé publique de votre radio et, pour Ma position, les coordonnées demandées.";
 /* Location: WeatherRadioView.swift - Section of weather radios */
 "weather.about.radios" = "Radios météo";
 
@@ -908,6 +923,12 @@
 /* Location: WeatherRadioView.swift - The weather radio requests go to */
 "weather.about.inUse" = "utilisée";
 
+
+/* Location: WeatherRadioView.swift - Detail on a weather radio row when two radios share its name or its four hex digits (phase 2). %@ is the name, or the digits */
+"weather.about.conflict" = "deux radios utilisent %@";
+
+/* Location: WeatherRadioView.swift - Footer under the weather radios while two radios share a name or an id (phase 2). %@ is the name, or the four hex digits */
+"weather.about.conflictFooter" = "Deux radios utilisent %@. L'app n'utilise aucune des deux et ne vous notifie pas de leurs alertes tant que vous n'en avez pas choisi une.";
 /* Location: WeatherRadioView.swift - Channel slot label */
 "weather.about.channelSlot" = "Emplacement du canal";
 
