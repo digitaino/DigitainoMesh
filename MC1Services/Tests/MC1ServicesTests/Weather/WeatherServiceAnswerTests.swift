@@ -174,6 +174,48 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.activeWarnings, to: other) != nil, "another bot's list is not this one's")
   }
 
+  /// `>w <area>` is keyed by the code asked (spec §8.2): one county's answer is not another's.
+  @Test
+  func `a warning answers a request for the areas it names, and not for any other`() async throws {
+    let h = makeHarness()
+    // The suite's warning names Travis County, TXC453.
+    _ = await h.service.ingest(F.warning(seq: 1, identity: F.svw42))
+    #expect(try await h.service.send(.warningsTouching(ugc: "TXC453"), to: F.bot) == nil)
+    #expect(try await h.service.send(.warningsTouching(ugc: "txc453"), to: F.bot) == nil)
+    #expect(
+      try await h.service.send(.warningsTouching(ugc: "TXC201"), to: F.bot) != nil,
+      "a warning for Travis County says nothing about Harris County's")
+  }
+
+  /// The bot may cut a warning's area list to fit it in a packet (spec §3), so the answer to this
+  /// phone's own `>w <area>` need not name the area; it still answers it.
+  @Test
+  func `the answer to this phone's own area request fills that area, whatever its list names`() async throws {
+    let h = makeHarness()
+    let settled = collectSettlements(h.events)
+    _ = try await h.service.send(.warningsTouching(ugc: "TXC209"), to: F.bot)
+    h.clock.advance(by: 2)
+    _ = await h.service.ingest(F.warning(seq: 1, identity: F.svw43, areas: []))
+    #expect(await weatherWaitUntil { settled.value.count == 1 })
+    h.clock.advance(by: 30)
+    #expect(try await h.service.send(.warningsTouching(ugc: "TXC209"), to: F.bot) == nil)
+  }
+
+  /// Spec §5, 17 October 2026: the list speaks for the bot's own area, and with the bot's complete
+  /// statement held that is the area its answer to `>w <area>` stands for.
+  @Test
+  func `with the bot's area stated, its list answers area requests inside it and not outside`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.coverage(seq: 1))
+    _ = await h.service.ingest(F.digest(seq: 2, entries: []))
+    for ugc in ["TXZ192", "TXC453"] {
+      #expect(try await h.service.send(.warningsTouching(ugc: ugc), to: F.bot) == nil, "\(ugc)")
+    }
+    #expect(
+      try await h.service.send(.warningsTouching(ugc: "TXC201"), to: F.bot) != nil,
+      "Houston is not in WX-AUS's area, so WX-AUS's list is no answer about it")
+  }
+
   /// The list itself is what shows a warning never arrived; asking again is the repair, and the
   /// rebuilt answer may carry exactly the packet that was lost.
   @Test

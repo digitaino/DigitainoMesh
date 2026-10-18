@@ -505,6 +505,58 @@ struct WeatherAlertNotifierTests {
     #expect(await harness.poster.removed.count == 1)
   }
 
+  /// Spec §5, 17 October 2026, end to end through the reducer: WX-AUS answered somebody's
+  /// `>w TXC201` for a watched Houston place, and its next digest — which lists only its own area —
+  /// used to end the warning and take the notification down with it.
+  @Test("a list from a bot whose area does not reach the warning leaves its notification standing")
+  func digestOutsideCoverageLeavesNotification() async {
+    let houston = WeatherSavedPlace(
+      label: "Houston, TX", latitude: 29.76, longitude: -95.37, chosenAt: F.t0, isWatched: true)
+    let harness = makeHarness(watch: WeatherAlertWatch(places: [houston]))
+    let square = [
+      MeshWXCoordinate(latitude: 29.81, longitude: -95.42),
+      MeshWXCoordinate(latitude: 29.81, longitude: -95.32),
+      MeshWXCoordinate(latitude: 29.71, longitude: -95.32),
+      MeshWXCoordinate(latitude: 29.71, longitude: -95.42)
+    ]
+    var warning = Self.warning("SV.W", polygon: square)
+    warning.identity = MeshWXWarningIdentity(event: warning.event, office: 51, etn: warning.etn)
+    var state = WeatherBotState(botID: F.botID)
+    _ = WeatherStateReducer.apply(F.coverage(seq: 1), to: &state, receivedAt: harness.clock.now)
+    _ = WeatherStateReducer.apply(
+      MeshWXMessage(header: F.header(seq: 2, type: .warning), payload: .warning(warning)), to: &state,
+      receivedAt: harness.clock.now)
+    harness.states.value[F.botID] = state
+    await harness.notifier.apply(
+      botID: F.botID, changes: [.warningStored(warning.identity, replacedExisting: false)], isBacklog: false)
+    #expect(await harness.poster.posted.count == 1)
+
+    harness.clock.advance(by: 10 * 60)
+    let changes = WeatherStateReducer.apply(
+      F.digest(seq: 3, nowMinutes: F.t0Minutes + 10, entries: []), to: &state, receivedAt: harness.clock.now)
+    harness.states.value[F.botID] = state
+    await harness.notifier.apply(botID: F.botID, changes: changes, isBacklog: false)
+    #expect(await harness.poster.removed.isEmpty)
+  }
+
+  @Test("one bot's list leaves a notification another bot's copy still holds")
+  func digestLeavesAnotherBotsCopy() async {
+    let otherBot: UInt16 = 0x1234
+    let harness = makeHarness(watch: WeatherAlertWatch(places: [Self.here()]))
+    let warning = Self.warning("SV.W")
+    await deliver(warning, to: harness)
+    await deliver(warning, to: harness, botID: otherBot)
+    func dropped(by botID: UInt16) async {
+      harness.states.value[botID]?.warnings.removeValue(forKey: warning.identity)
+      await harness.notifier.apply(
+        botID: botID, changes: [.digestApplied(missing: [], removed: [warning.identity])], isBacklog: false)
+    }
+    await dropped(by: F.botID)
+    #expect(await harness.poster.removed.isEmpty, "the other bot still holds it")
+    await dropped(by: otherBot)
+    #expect(await harness.poster.removed.count == 1, "no bot holds it now")
+  }
+
   @Test("a warning only listed in the digest, never received, notifies nothing")
   func digestOnlyNeverNotifies() async {
     let harness = makeHarness(watch: WeatherAlertWatch(places: [Self.here()]))

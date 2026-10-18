@@ -32,6 +32,15 @@ enum WeatherFixture {
     source.rawValue << 2
   }
 
+  /// The suite's storm polygon, north-west of Austin, inside WX-AUS's circle.
+  static let austinPolygon = [
+    MeshWXCoordinate(latitude: 30.52, longitude: -97.98),
+    MeshWXCoordinate(latitude: 30.61, longitude: -97.62),
+    MeshWXCoordinate(latitude: 30.38, longitude: -97.41)
+  ]
+  /// Travis County, TXC453.
+  static let travisCounty = MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)
+
   /// `issuedMinutes` puts the warning into the revision 5 form (spec §3): flags nibble bit 1 and
   /// the two trailing bytes, which the wire carries as the gap back from `expiresMinutes`.
   static func warning(
@@ -43,6 +52,8 @@ enum WeatherFixture {
     issuedMinutes: UInt32? = nil,
     beginsMinutes: UInt32? = nil,
     source: MeshWXDataSource = .unstated,
+    polygon: [MeshWXCoordinate]? = austinPolygon,
+    areas: [MeshWXAreaRun]? = [travisCounty],
     bot: UInt16 = botID
   ) -> MeshWXMessage {
     // Flags nibble: bit 0 update, bit 1 the issue time follows, bits 3-2 where the data came
@@ -57,12 +68,8 @@ enum WeatherFixture {
         hailQuarterInches: 4,
         windMph: windMph,
         isUpdate: isUpdate,
-        polygon: [
-          MeshWXCoordinate(latitude: 30.52, longitude: -97.98),
-          MeshWXCoordinate(latitude: 30.61, longitude: -97.62),
-          MeshWXCoordinate(latitude: 30.38, longitude: -97.41)
-        ],
-        areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 453, run: 1)],
+        polygon: polygon,
+        areas: areas,
         issuedBeforeMinutes: issuedMinutes.map { UInt16(expiresMinutes - $0) },
         // Revision 12: found by length, so no flag bit. Set as the decoder would leave it.
         beginsBeforeMinutes: beginsMinutes.map { UInt16(expiresMinutes - $0) }

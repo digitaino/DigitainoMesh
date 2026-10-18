@@ -148,6 +148,32 @@ struct WeatherServiceTests {
     #expect(Set(loaded.warnings.keys) == [F.svw43])
   }
 
+  /// Spec §10.7: a digest stamped ahead of the clock is refused, and one saved before the phone
+  /// refused them is dropped when the state is read back, or it would turn every real one away.
+  @Test
+  func `a digest from the future is neither applied nor saved, and a saved one is dropped on load`() async throws {
+    let h = makeHarness()
+    _ = await h.service.ingest(F.warning(seq: 1, identity: F.svw42))
+    let changes = await h.service.ingest(F.digest(seq: 2, nowMinutes: 0xFFFF_FF00, entries: []))
+    #expect(changes == [.futureTimeRejected(minutes: 0xFFFF_FF00)])
+    var saved = try #require(await h.store.states[F.botID])
+    #expect(saved.digest == nil)
+    #expect(saved.warnings.count == 1)
+
+    guard case let .digest(forged) = F.digest(seq: 2, nowMinutes: 0xFFFF_FF00, entries: []).payload else {
+      Issue.record("not a digest")
+      return
+    }
+    saved.digest = WeatherStoredDigest(digest: forged, receivedAt: F.t0)
+    let clock = WeatherTestClock()
+    let service = WeatherService(
+      transport: FakeWeatherTransport(), store: InMemoryWeatherStateStore(states: [F.botID: saved]),
+      now: { clock.now })
+    #expect(try #require(await service.state(for: F.botID)).digest == nil)
+    let real = await service.ingest(F.digest(seq: 3, entries: [(F.svw42, 45)]))
+    #expect(real == [.digestApplied(missing: [], removed: [])])
+  }
+
   @Test
   func `session info records when monitoring started and clears on stop`() async throws {
     let h = makeHarness()
@@ -973,7 +999,8 @@ struct WeatherServiceTests {
     _ = await h.service.ingest(F.observations(seq: 1, stations: [(202, 88), (860, 84)]))
     for offset in 0..<70 {
       _ = await h.service.ingest(F.observations(
-        seq: UInt8(2 + offset), timestampMinutes: F.t0Minutes + UInt32(offset),
+        // Each an hour or so old, so none of them is ahead of the phone's clock (spec §10.7).
+        seq: UInt8(2 + offset), timestampMinutes: F.t0Minutes - 70 + UInt32(offset),
         stations: [(UInt16(1000 + offset), 70)]))
     }
     let state = try #require(await h.service.state(for: F.botID))

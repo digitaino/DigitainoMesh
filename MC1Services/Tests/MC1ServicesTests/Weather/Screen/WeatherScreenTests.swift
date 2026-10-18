@@ -480,7 +480,7 @@ struct WeatherStationTests {
       MeshWXMessage(header: P.header(241, .observations), payload: .observations(MeshWXObservations(
         timestampMinutes: P.nowMinutes + 58,
         stations: P.stations.dropFirst().map { MeshWXStationObservation(stationIndex: $0.0, tempF: $0.1, sky: .few) }))),
-      to: &state, receivedAt: P.now)
+      to: &state, receivedAt: P.now.addingTimeInterval(58 * 60))
 
     let held = readings(state, at: P.place(P.austin))
     func reading(_ index: UInt16) throws -> WeatherStationReading {

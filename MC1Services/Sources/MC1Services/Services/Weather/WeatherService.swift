@@ -321,6 +321,8 @@ public actor WeatherService {
   private let channelAnswerTimeout: Duration
   private let stationIndex: @Sendable (String) -> UInt16?
   private let tables: MeshWXTables
+  /// The bundle's centre of a county or zone, for what a digest speaks for (spec §5).
+  private let areaCentre: WeatherAreaCentre
   private let logger = PersistentLogger(subsystem: "com.mc1", category: "WeatherService")
 
   private nonisolated let eventBroadcaster = EventBroadcaster<WeatherEvent>()
@@ -372,8 +374,10 @@ public actor WeatherService {
     case forecast(UInt16)
     /// `>w`: any warning or alert list from the bot.
     case activeWarnings
-    /// `>w <county or zone>`: the same.
-    case warningsTouching
+    /// `>w <county or zone>`, by the code asked, upper case: a warning that names the area, or the
+    /// one that answered this phone's own ask. The bot's list answers it too, through
+    /// ``digest``, but only for an area the list speaks for (spec §5, 17 October 2026).
+    case warningsTouching(String)
     /// `>w <identity>`: that warning, from any bot.
     case warning(MeshWXWarningIdentity)
     /// A text request, by subject and argument: only a complete reply this phone owns.
@@ -453,6 +457,21 @@ public actor WeatherService {
     self.channelAnswerTimeout = channelAnswerTimeout
     self.stationIndex = stationIndex
     self.tables = tables
+    areaCentre = Self.areaCentres(tables)
+  }
+
+  /// The bundle's centre of one county or zone, from the fields an area run carries; nil for an
+  /// area the bundle does not know. What the reducer judges a county against a bot's stated
+  /// circle with (spec §5).
+  static func areaCentres(_ tables: MeshWXTables) -> WeatherAreaCentre {
+    { stateIndex, isCounty, number in
+      let run = MeshWXAreaRun(stateIndex: stateIndex, isCounty: isCounty, start: number, run: 1)
+      guard let ugc = run.ugcCodes(states: tables.states).first else { return nil }
+      if isCounty {
+        return tables.county(ugc).map { MeshWXCoordinate(latitude: $0.lat, longitude: $0.lon) }
+      }
+      return tables.zone(ugc).map { MeshWXCoordinate(latitude: $0.lat, longitude: $0.lon) }
+    }
   }
 
   // MARK: Events
@@ -540,6 +559,9 @@ public actor WeatherService {
       for botID in states.keys {
         WeatherStateReducer.pruneExpired(&states[botID]!, expiredBefore: now.addingTimeInterval(-Self.expiredWarningRetention))
         WeatherStateReducer.prunePendingUpgrades(&states[botID]!, olderThan: now.addingTimeInterval(-Self.pendingUpgradeRetention))
+        // Saved before the phone turned away times from the future (spec §10.7): a digest stamped
+        // ahead of the clock would otherwise go on refusing every real one as older.
+        WeatherStateReducer.dropFutureTimes(&states[botID]!, now: now)
       }
     } catch {
       logger.error("Weather state load failed: \(error.localizedDescription)")
@@ -723,7 +745,12 @@ public actor WeatherService {
     let botID = message.header.bot
     let receivedAt = now()
     var state = states[botID] ?? WeatherBotState(botID: botID)
-    let changes = WeatherStateReducer.apply(message, to: &state, receivedAt: receivedAt)
+    let changes = WeatherStateReducer.apply(
+      message, to: &state, receivedAt: receivedAt, areaCentre: areaCentre)
+    for case let .futureTimeRejected(minutes) in changes {
+      logger.warning(
+        "Refused a time from bot \(botID) stamped at Unix minute \(minutes), more than 15 minutes ahead of this phone's clock")
+    }
 
     let isDuplicate = changes.contains { change in
       if case .duplicate = change { return true }
@@ -764,13 +791,19 @@ public actor WeatherService {
     for change in changes {
       switch (change, payload) {
       case let (.digestApplied, .digest(digest)):
+        // `>w <area>` reads the list's slot itself, and only for an area the list speaks for
+        // (`answerSlots`): a list says nothing about a county outside the bot's area.
         let builtAt = Date(unixMinutes: digest.nowMinutes)
         fill(botID, .digest, asOf: builtAt)
         fill(botID, .activeWarnings, asOf: builtAt)
-        fill(botID, .warningsTouching, asOf: builtAt)
-      case let (.warningStored(identity, _), .warning):
+      case let (.warningStored(identity, _), .warning(warning)):
         fill(botID, .activeWarnings)
-        fill(botID, .warningsTouching)
+        // `>w <area>` by the area asked: a warning for one county is no answer about another.
+        // Every code the warning names, and the code this phone asked about when the warning
+        // settled its request — the bot may have cut the list that would have named it.
+        var codes = Set(tables.namedAreas(for: warning).map { $0.ugc.uppercased() })
+        for case let .warningsTouching(ugc) in settled { codes.insert(ugc.uppercased()) }
+        for ugc in codes { fill(botID, .warningsTouching(ugc)) }
         fill(nil, .warning(identity))
       case let (.observationsStored(stored), .observations(batch)) where !stored.isEmpty:
         let observedAt = Date(unixMinutes: batch.timestampMinutes)
@@ -866,8 +899,10 @@ public actor WeatherService {
     await loadIfNeeded()
     let sentAt = now()
 
-    if let slot = answerSlot(for: request, botID: bot.botID),
-       let answer = lastAnswers[slot],
+    // The newest of the slots that would answer this: one for everything but `>w <area>`, which
+    // the bot's list can answer as well as the area's own slot.
+    if let answer = answerSlots(for: request, botID: bot.botID).compactMap({ lastAnswers[$0] })
+      .max(by: { $0.receivedAt < $1.receivedAt }),
        sentAt.timeIntervalSince(answer.receivedAt) < Self.recentAnswerWindow,
        !answerLeavesSomethingOutstanding(request, answer: answer, botID: bot.botID, now: sentAt) {
       let served = WeatherPendingRequest(
@@ -938,6 +973,29 @@ public actor WeatherService {
     return pending[entry.id]?.request ?? entry
   }
 
+  /// Every slot that would answer a request. `>w <area>` has the area's own and, where the bot's
+  /// list speaks for the area — no complete statement of the bot's coverage held, or an area
+  /// inside it (spec §5) — the list's.
+  private func answerSlots(for request: WeatherRequest, botID: UInt16) -> [AnswerSlot] {
+    guard let slot = answerSlot(for: request, botID: botID) else { return [] }
+    if case let .warningsTouching(ugc) = request, digestSpeaksFor(ugc: ugc, botID: botID) {
+      return [slot, AnswerSlot(botID: botID, key: .digest)]
+    }
+    return [slot]
+  }
+
+  /// Whether the bot's digest speaks for one county or zone
+  /// (`WeatherStateReducer.digestSpeaksFor`). A code the bundle cannot read is one nothing can say
+  /// it speaks for.
+  private func digestSpeaksFor(ugc: String, botID: UInt16) -> Bool {
+    guard let key = MeshWXAreaRun.key(forUGC: ugc, states: tables.states) else { return false }
+    let area = MeshWXWarning(
+      identity: MeshWXWarningIdentity(event: 0, office: 0, etn: 0), expiresMinutes: 0,
+      areas: [MeshWXAreaRun(stateIndex: key.stateIndex, isCounty: key.isCounty, start: key.number, run: 1)])
+    return WeatherStateReducer.digestSpeaksFor(
+      area, coverage: states[botID]?.coverage?.coverage, areaCentre: areaCentre)
+  }
+
   private func answerSlot(for request: WeatherRequest, botID: UInt16) -> AnswerSlot? {
     switch request {
     case .digest: AnswerSlot(botID: botID, key: .digest)
@@ -945,7 +1003,7 @@ public actor WeatherService {
     case let .observation(station): stationIndex(station).map { AnswerSlot(botID: nil, key: .station($0)) }
     case let .forecast(point): AnswerSlot(botID: nil, key: .forecast(point))
     case .activeWarnings: AnswerSlot(botID: botID, key: .activeWarnings)
-    case .warningsTouching: AnswerSlot(botID: botID, key: .warningsTouching)
+    case let .warningsTouching(ugc): AnswerSlot(botID: botID, key: .warningsTouching(ugc.uppercased()))
     case let .warning(identity):
       WeatherAlertRequests.identity(from: identity, tables: tables).map { AnswerSlot(botID: nil, key: .warning($0)) }
     case .warningText, .forecastDiscussion, .spaceWeather, .stormReports, .rainfall, .metar, .taf, .hazardousOutlook:

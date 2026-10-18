@@ -101,6 +101,7 @@ public actor WeatherAlertNotifier {
   func apply(botID: UInt16, changes: [WeatherStateChange], isBacklog: Bool) async {
     var stored: [MeshWXWarningIdentity] = []
     var ended: [MeshWXWarningIdentity] = []
+    var unlisted: [MeshWXWarningIdentity] = []
     var listArrived = false
     for change in changes {
       switch change {
@@ -111,7 +112,7 @@ public actor WeatherAlertNotifier {
       case let .digestApplied(_, removed):
         // A warning the list no longer carries has ended; one it never named was never received
         // and has no geometry, so it stays the dashboard's row and notifies nothing.
-        ended.append(contentsOf: removed)
+        unlisted.append(contentsOf: removed)
         listArrived = true
       default:
         break
@@ -119,6 +120,14 @@ public actor WeatherAlertNotifier {
     }
     guard !stored.isEmpty || !ended.isEmpty || listArrived else { return }
     loadIfNeeded()
+    if !unlisted.isEmpty {
+      // One bot's list speaks for that bot's copy (spec §5): a warning another bot still holds is
+      // still that bot's to end, by its own list, its cancel or the expiry.
+      let states = await states()
+      ended.append(contentsOf: unlisted.filter { identity in
+        !states.values.contains { $0.warnings[identity] != nil }
+      })
+    }
     if !ended.isEmpty { await withdraw(ended) }
 
     let watch = watchStore.watch()

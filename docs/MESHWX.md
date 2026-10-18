@@ -115,8 +115,13 @@ One `WeatherBotState` per bot (`bot` = first two public-key bytes, LE), reduced 
   identities it does not list, but never a warning received after the digest was
   built (2 min margin), nor, when it is full (25 entries, soonest expiry first), one expiring
   at or after its last entry; it only extends expiries of newer ones; an older digest is
-  ignored, in order or not. Identities it lists that the app does not hold are recorded
-  (`>w <identity>` is one tap away). Expiry is evaluated at read time, and the issue time, when
+  ignored, in order or not. With the bot's last **complete** Coverage statement held, it removes
+  only identities whose area touches that statement (spec §5, 17 October 2026: a zone it lists,
+  a storm polygon against its circle, a county watch by the county's centre), because a bot
+  answers `>w <area>` nationwide and its digest lists only its own area: a Houston warning fetched
+  from WX-AUS ends by its expiry, its cancel or a fresh answer, never by WX-AUS's list. With no
+  complete statement the digest speaks for everything, as before. Identities it lists that the
+  app does not hold are recorded (`>w <identity>` is one tap away). Expiry is evaluated at read time, and the issue time, when
   the message carries one, is kept on `issuedAt` (Times, below); a replacement that carries none
   leaves it alone, since an identity's issuance never moves.
 - `lastHeardAt` counts every message; `lastLiveHeardAt` excludes backlog and drives
@@ -182,6 +187,16 @@ Two words carry the honesty of the whole tool, and neither is ever when the pack
   arrival into `WeatherStoredWarning.issuedAt`, because a digest may later extend the expiry the
   wire measured it against and the instant a warning was issued does not move with it.
 
+**Nothing from the future** (spec §10.7, 17 October 2026). Every bot is two self-asserted bytes,
+so anyone on the channel can speak for one. A digest's `now`, a batch's `ts`, a forecast's issue,
+a sweep's build or a picture's `taken` more than 15 minutes ahead of the phone's clock is refused
+whole (`WeatherStateChange.futureTimeRejected`, logged): one forged digest stamped `0xFFFFFF00`
+used to end every warning held and then turn every real digest away as older. A warning with
+an issue time that far ahead is kept without it (and its start). An expiry is believed at most
+14 days past receipt — never past issuance, or an until-further-notice flood warning, re-sent
+with an invented 12-hour expiry under its original issue time, would end while still in force.
+State saved before the rule is cleaned on load (`WeatherStateReducer.dropFutureTimes`).
+
 Both are trailing blocks announced by a flag bit, after everything revision 4 reads, and the
 decoder treats a length as a lower bound — so the old bytes and the new bytes both decode, and an
 app that missed the flags would simply never learn the two times. Both fields are optional
@@ -240,7 +255,9 @@ are filled on ingest, whoever asked, but only by a message the reducer applied a
 that was not backlog; they carry the content's own time. `>w` is not served from a
 slot while the bot still has a missing identity or an unfinished upgrade, and no alert request
 is while a gap newer than the held answer is outstanding (or, once a list built now could
-clear a gap the held list was built too soon to clear).
+clear a gap the held list was built too soon to clear). `>w <area>` is keyed by the code asked:
+a warning fills the slot of every area it names, and of the area this phone asked about when it
+settled the ask; the bot's list answers it only for an area the list speaks for (spec §5).
 
 **The channel first** (spec §7B, revision 6; the owner's decision of 17 September,
 docs/MESHWX_UI.md §3.1.2 V-7). A request goes out as a **Request datagram** — type 9, the
@@ -309,8 +326,8 @@ plus My location against `WeatherLastPosition`) with the same `WeatherAlertPlace
 `WeatherAlertPriority` the card uses. Storm warnings covering a watched place notify with sound;
 rank 6 is a silent opt-in toggle; watches and advisories never notify. What it has posted is
 remembered (`WeatherAlertPost`) so a repeat replaces the notification silently and only a real
-escalation sounds again, a cancel removes it, and a warning drained from the radio's queue says
-it arrived late. It is not on the tool's model: that lives for one visit, and the point is a
+escalation sounds again, a cancel removes it, a list that drops it removes it once no bot holds
+it any more, and a warning drained from the radio's queue says it arrived late. It is not on the tool's model: that lives for one visit, and the point is a
 notification with the tool closed.
 
 ### Bots

@@ -15,8 +15,11 @@ struct WeatherAlertMapTests {
   private func held(_ packets: [MeshWXMessage]) -> [WeatherAreaSweepAssembly] {
     var state = WeatherBotState(botID: F.botID)
     for (step, packet) in packets.enumerated() {
-      _ = WeatherStateReducer.apply(
-        packet, to: &state, receivedAt: F.t0.addingTimeInterval(Double(step)))
+      // Heard no earlier than it was built: a sweep built more than 15 minutes ahead of the
+      // phone's clock is refused (spec §10.7).
+      var heardAt = F.t0
+      if case let .areaSweep(sweep) = packet.payload { heardAt = max(heardAt, Date(unixMinutes: sweep.builtMinutes)) }
+      _ = WeatherStateReducer.apply(packet, to: &state, receivedAt: heardAt.addingTimeInterval(Double(step)))
     }
     return state.areaSweeps
   }

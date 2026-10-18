@@ -331,10 +331,10 @@ struct WeatherStateReducerTests {
       F.observations(seq: 1, timestampMinutes: F.t0Minutes, stations: [(202, 88), (860, 84)]),
       to: &state, receivedAt: F.t0
     )
-    // A single-station answer for KAUS from a newer batch.
+    // A single-station answer for KAUS from a newer batch, heard when it was made.
     var changes = WeatherStateReducer.apply(
       F.observations(seq: 2, timestampMinutes: F.t0Minutes + 30, stations: [(202, 90)]),
-      to: &state, receivedAt: F.t0
+      to: &state, receivedAt: F.t0.addingTimeInterval(30 * 60)
     )
     #expect(changes == [.observationsStored(stations: [202])])
     #expect(state.observations[202]?.observation.tempF == 90)
@@ -343,7 +343,7 @@ struct WeatherStateReducerTests {
     // A cached re-send of the first batch, older than what is held for 202.
     changes = WeatherStateReducer.apply(
       F.observations(seq: 3, timestampMinutes: F.t0Minutes, stations: [(202, 88), (976, 70)]),
-      to: &state, receivedAt: F.t0
+      to: &state, receivedAt: F.t0.addingTimeInterval(31 * 60)
     )
     #expect(changes == [.observationsStored(stations: [976])])
     #expect(state.observations[202]?.observation.tempF == 90)
@@ -1636,5 +1636,414 @@ struct WeatherStateReducerUnbundledForecastTests {
     #expect(state.unbundledForecasts.count == WeatherBotState.unbundledForecastLimit)
     #expect(state.unbundledForecasts["14.000,-100.000"] != nil)
     #expect(state.unbundledForecasts["2.000,-100.000"] == nil)
+  }
+}
+
+// MARK: - Times ahead of the phone's clock (spec §10.7, 17 October 2026)
+//
+// Every bot is two self-asserted bytes on the wire (spec §2.2), so anyone on the channel can send
+// a message in a bot's name. A time ahead of the phone's clock is never one a bot sends honestly,
+// and kept it would stand as the newest of its kind over everything real.
+
+@Suite("WeatherStateReducer: times ahead of the clock")
+struct WeatherFutureTimeTests {
+  private typealias F = WeatherFixture
+
+  private let horizonMinutes = UInt32(WeatherStateReducer.warningHorizon / 60)
+
+  private func fresh() -> WeatherBotState { WeatherBotState(botID: F.botID) }
+  private func minutes(_ value: Double) -> TimeInterval { value * 60 }
+
+  private func warning(_ message: MeshWXMessage) -> MeshWXWarning {
+    guard case let .warning(warning) = message.payload else { fatalError("not a warning") }
+    return warning
+  }
+
+  private func digest(_ message: MeshWXMessage) -> MeshWXDigest {
+    guard case let .digest(digest) = message.payload else { fatalError("not a digest") }
+    return digest
+  }
+
+  private func forecast(_ message: MeshWXMessage) -> MeshWXForecast {
+    guard case let .forecast(forecast) = message.payload else { fatalError("not a forecast") }
+    return forecast
+  }
+
+  private func radar(_ message: MeshWXMessage) -> MeshWXRadar {
+    guard case let .radar(radar) = message.payload else { fatalError("not a radar tile") }
+    return radar
+  }
+
+  /// The adversarial review's reproduction: one forged digest stamped `0xFFFFFF00` with no entries
+  /// ended every warning held and turned every later digest away as older.
+  @Test
+  func `a digest built in the future is refused, ends nothing and wedges nothing`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, identity: F.svw42), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 2, identity: F.wsw7, expiresMinutes: F.t0Minutes + 600), to: &state, receivedAt: F.t0)
+    let forged = WeatherStateReducer.apply(
+      F.digest(seq: 3, nowMinutes: 0xFFFF_FF00, entries: []), to: &state,
+      receivedAt: F.t0.addingTimeInterval(minutes(1)))
+    #expect(forged == [.futureTimeRejected(minutes: 0xFFFF_FF00)])
+    #expect(state.warnings.count == 2, "nothing ended")
+    #expect(state.digest == nil, "not held as the newest list")
+
+    let real = WeatherStateReducer.apply(
+      F.digest(seq: 4, nowMinutes: F.t0Minutes + 5, entries: [(F.svw42, 40), (F.svw43, 30)]), to: &state,
+      receivedAt: F.t0.addingTimeInterval(minutes(5)))
+    #expect(real == [.digestApplied(missing: [F.svw43], removed: [F.wsw7])])
+    #expect(state.digest?.digest.nowMinutes == F.t0Minutes + 5)
+  }
+
+  @Test
+  func `a digest up to fifteen minutes ahead is a clock that runs fast, and still a digest`() {
+    var state = fresh()
+    var changes = WeatherStateReducer.apply(
+      F.digest(seq: 1, nowMinutes: F.t0Minutes + 15, entries: []), to: &state, receivedAt: F.t0)
+    #expect(changes == [.digestApplied(missing: [], removed: [])])
+    changes = WeatherStateReducer.apply(
+      F.digest(seq: 2, nowMinutes: F.t0Minutes + 31, entries: []), to: &state,
+      receivedAt: F.t0.addingTimeInterval(minutes(15)))
+    #expect(changes == [.futureTimeRejected(minutes: F.t0Minutes + 31)])
+    #expect(state.digest?.digest.nowMinutes == F.t0Minutes + 15)
+  }
+
+  @Test
+  func `a batch from the future is refused and never stands over the real readings`() {
+    var state = fresh()
+    var changes = WeatherStateReducer.apply(
+      F.observations(seq: 1, timestampMinutes: F.t0Minutes + 600, stations: [(202, 120), (860, 120)]),
+      to: &state, receivedAt: F.t0)
+    #expect(changes == [.futureTimeRejected(minutes: F.t0Minutes + 600)])
+    #expect(state.observations.isEmpty)
+
+    changes = WeatherStateReducer.apply(
+      F.observations(seq: 2, timestampMinutes: F.t0Minutes, stations: [(202, 88), (860, 84)]),
+      to: &state, receivedAt: F.t0)
+    #expect(changes == [.observationsStored(stations: [202, 860])])
+    #expect(state.observations[202]?.observation.tempF == 88)
+    #expect(state.observations[202]?.lastBatchMinutes == F.t0Minutes)
+  }
+
+  @Test
+  func `a forecast issued in the future is refused, and the real one is kept`() {
+    var state = fresh()
+    var changes = WeatherStateReducer.apply(
+      F.forecast(seq: 1, point: 102, issuedMinutes: F.t0Minutes + 600), to: &state, receivedAt: F.t0)
+    #expect(changes == [.futureTimeRejected(minutes: F.t0Minutes + 600)])
+    #expect(state.forecasts.isEmpty)
+    changes = WeatherStateReducer.apply(
+      F.forecast(seq: 2, point: 102, issuedMinutes: F.t0Minutes - 30), to: &state, receivedAt: F.t0)
+    #expect(changes == [.forecastStored(point: 102)])
+  }
+
+  @Test
+  func `a sweep built in the future is refused, so it cannot retire the real one`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(
+      F.areaSweep(seq: 1, group: 1, index: 0, total: 1, entries: [F.texasSweepEntry]), to: &state,
+      receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(
+      F.areaSweep(seq: 2, builtMinutes: F.t0Minutes + 600, group: 2, index: 0, total: 1, entries: []),
+      to: &state, receivedAt: F.t0)
+    #expect(changes == [.futureTimeRejected(minutes: F.t0Minutes + 600)])
+    #expect(state.areaSweeps.map(\.group) == [1])
+  }
+
+  /// `retainedRadarTiles` reads the bot's clock off the newest picture held, so one picture from
+  /// the future would have dropped every real one as more than three hours behind it.
+  @Test
+  func `a radar picture taken in the future is refused, and the real pictures stay`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.radar(seq: 1, takenMinutes: F.t0Minutes - 10), to: &state, receivedAt: F.t0)
+    let changes = WeatherStateReducer.apply(
+      F.radar(seq: 2, takenMinutes: F.t0Minutes + 600, west: -97), to: &state, receivedAt: F.t0)
+    #expect(changes == [.futureTimeRejected(minutes: F.t0Minutes + 600)])
+    #expect(state.radarTiles.map(\.takenMinutes) == [F.t0Minutes - 10])
+  }
+
+  /// Dropping the warning would lose a warning; dropping the time loses only a line of copy.
+  @Test
+  func `a warning issued in the future is kept, without its issue time or its start`() throws {
+    var state = fresh()
+    let changes = WeatherStateReducer.apply(
+      F.warning(
+        seq: 1, expiresMinutes: F.t0Minutes + 900, issuedMinutes: F.t0Minutes + 600,
+        beginsMinutes: F.t0Minutes + 700),
+      to: &state, receivedAt: F.t0)
+    #expect(changes == [
+      .futureTimeRejected(minutes: F.t0Minutes + 600), .warningStored(F.svw42, replacedExisting: false)
+    ])
+    let stored = try #require(state.warnings[F.svw42])
+    #expect(stored.issuedAt == nil)
+    #expect(stored.beginsAt == nil)
+    #expect(stored.warning.issuedMinutes == nil)
+    #expect(stored.warning.beginsMinutes == nil)
+    #expect(stored.warning.expiresMinutes == F.t0Minutes + 900)
+  }
+
+  @Test
+  func `a forged issue time never erases the one already known`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, issuedMinutes: F.t0Minutes - 21), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 2, expiresMinutes: F.t0Minutes + 900, issuedMinutes: F.t0Minutes + 600), to: &state,
+      receivedAt: F.t0)
+    #expect(state.warnings[F.svw42]?.issuedAt == Date(unixMinutes: F.t0Minutes - 21))
+  }
+
+  @Test
+  func `an expiry past the horizon is clamped to it, and a watch that starts later keeps its start`() throws {
+    var state = fresh()
+    // Forty days out: inside what the wire's two issue-time bytes can say, past any real product.
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 1, expiresMinutes: F.t0Minutes + 40 * 1440, issuedMinutes: F.t0Minutes - 5), to: &state,
+      receivedAt: F.t0)
+    var stored = try #require(state.warnings[F.svw42])
+    #expect(stored.warning.expiresMinutes == F.t0Minutes + horizonMinutes)
+    #expect(stored.issuedAt == Date(unixMinutes: F.t0Minutes - 5), "a real issue time survives the clamp")
+    #expect(stored.warning.issuedMinutes == F.t0Minutes - 5, "the wire's relative field is re-stated against it")
+    // The far end of the wire: no issue time, an expiry thousands of years away.
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 2, identity: F.svw43, expiresMinutes: 0xFFFF_FFFF), to: &state, receivedAt: F.t0)
+    stored = try #require(state.warnings[F.svw43])
+    #expect(stored.warning.expiresMinutes == F.t0Minutes + horizonMinutes)
+    #expect(
+      stored.isExpired(at: F.t0.addingTimeInterval(minutes(Double(horizonMinutes)))),
+      "it ends at the horizon instead of in the year 10,000")
+
+    // A watch issued this morning for the day after tomorrow: in the future by design (spec §3).
+    _ = WeatherStateReducer.apply(
+      F.warning(
+        seq: 3, identity: F.wsw7, expiresMinutes: F.t0Minutes + 3 * 1440, issuedMinutes: F.t0Minutes - 60,
+        beginsMinutes: F.t0Minutes + 2 * 1440),
+      to: &state, receivedAt: F.t0)
+    stored = try #require(state.warnings[F.wsw7])
+    #expect(stored.beginsAt == Date(unixMinutes: F.t0Minutes + 2 * 1440))
+    #expect(stored.warning.expiresMinutes == F.t0Minutes + 3 * 1440)
+  }
+
+  /// Spec §3: a product in force until further notice is sent with an expiry the bot invents 12 h
+  /// ahead, under its original issue time. A cap counted from the issue time would end it.
+  @Test
+  func `until further notice still works: an old issue time with an invented expiry is not capped`() throws {
+    var state = fresh()
+    let issued = F.t0Minutes - 20 * 1440
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 1, expiresMinutes: F.t0Minutes + 12 * 60, issuedMinutes: issued), to: &state,
+      receivedAt: F.t0)
+    let stored = try #require(state.warnings[F.svw42])
+    #expect(stored.warning.expiresMinutes == F.t0Minutes + 12 * 60)
+    #expect(stored.issuedAt == Date(unixMinutes: issued))
+  }
+
+  @Test
+  func `a digest's expiry is clamped to the same horizon`() {
+    var state = fresh()
+    _ = WeatherStateReducer.apply(F.warning(seq: 1, expiresMinutes: F.t0Minutes + 45), to: &state, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(
+      F.digest(seq: 2, nowMinutes: F.t0Minutes + 10, entries: [(F.svw42, 0xFFFF)]), to: &state,
+      receivedAt: F.t0.addingTimeInterval(minutes(10)))
+    #expect(state.warnings[F.svw42]?.warning.expiresMinutes == F.t0Minutes + 10 + horizonMinutes)
+  }
+
+  @Test
+  func `state saved with times from the future is cleaned when it is read back`() throws {
+    var clean = fresh()
+    _ = WeatherStateReducer.apply(
+      F.warning(seq: 1, identity: F.svw42, issuedMinutes: F.t0Minutes - 21), to: &clean, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.observations(seq: 2, stations: [(202, 88), (860, 84)]), to: &clean, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.forecast(seq: 3, point: 102), to: &clean, receivedAt: F.t0)
+    _ = WeatherStateReducer.apply(F.radar(seq: 4), to: &clean, receivedAt: F.t0)
+    // What a phone that heard the forgeries before this rule would have saved.
+    var poisoned = clean
+    poisoned.digest = WeatherStoredDigest(
+      digest: digest(F.digest(seq: 5, nowMinutes: 0xFFFF_FF00, entries: [])), receivedAt: F.t0)
+    poisoned.missingFromDigest = [F.svw43]
+    poisoned.warnings[F.wsw7] = WeatherStoredWarning(
+      warning: warning(F.warning(seq: 6, identity: F.wsw7, expiresMinutes: 0xFFFF_FFFF, issuedMinutes: 0xFFFF_FFF0)),
+      receivedAt: F.t0, issuedAt: Date(unixMinutes: 0xFFFF_FFF0))
+    poisoned.observations[999] = WeatherStoredObservation(
+      observation: MeshWXStationObservation(stationIndex: 999, tempF: 120),
+      timestampMinutes: F.t0Minutes + 600, receivedAt: F.t0)
+    poisoned.observations[202]?.lastBatchMinutes = F.t0Minutes + 600
+    poisoned.forecasts[103] = WeatherStoredForecast(
+      forecast: forecast(F.forecast(seq: 8, point: 103, issuedMinutes: F.t0Minutes + 600)), receivedAt: F.t0)
+    poisoned.areaSweeps = [WeatherAreaSweepAssembly(
+      builtMinutes: F.t0Minutes + 600, group: 9, total: 1, firstReceivedAt: F.t0, lastReceivedAt: F.t0)]
+    let future = radar(F.radar(seq: 9, takenMinutes: F.t0Minutes + 600, west: -97))
+    poisoned.radarTiles.append(WeatherStoredRadarTile(tile: future.tile, radar: future, receivedAt: F.t0))
+
+    var read = poisoned
+    WeatherStateReducer.dropFutureTimes(&read, now: F.t0.addingTimeInterval(minutes(1)))
+    #expect(read.digest == nil)
+    #expect(read.missingFromDigest.isEmpty)
+    #expect(Set(read.observations.keys) == [202, 860])
+    #expect(read.observations[202]?.lastBatchMinutes == nil)
+    #expect(read.observations[860] == clean.observations[860])
+    #expect(Set(read.forecasts.keys) == [102])
+    #expect(read.areaSweeps.isEmpty)
+    #expect(read.radarTiles == clean.radarTiles)
+    #expect(read.warnings[F.svw42] == clean.warnings[F.svw42], "a clean warning is untouched")
+    let capped = try #require(read.warnings[F.wsw7])
+    #expect(capped.warning.expiresMinutes == F.t0Minutes + 1 + horizonMinutes)
+    #expect(capped.issuedAt == nil)
+    #expect(capped.warning.issuedMinutes == nil)
+
+    // Clean state comes back unchanged: nothing to write.
+    var untouched = clean
+    WeatherStateReducer.dropFutureTimes(&untouched, now: F.t0)
+    #expect(untouched == clean)
+  }
+}
+
+// MARK: - What a digest speaks for (spec §5, 17 October 2026)
+//
+// A bot answers a place-named `>w` nationwide (spec §8.2), but its digest lists only what is
+// active in its own coverage. WX-AUS's next digest used to end a Houston warning the phone had
+// fetched from it for a saved place.
+
+@Suite("WeatherStateReducer: a digest ends only what the bot covers")
+struct WeatherDigestCoverageTests {
+  private typealias F = WeatherFixture
+
+  /// Harris County, TX (Houston), about 230 km east of WX-AUS's centre.
+  private static let houston = MeshWXWarningIdentity(event: 3, office: 51, etn: 77)
+  private static let houstonPolygon = [
+    MeshWXCoordinate(latitude: 29.9, longitude: -95.6),
+    MeshWXCoordinate(latitude: 29.95, longitude: -95.2),
+    MeshWXCoordinate(latitude: 29.6, longitude: -95.3)
+  ]
+  private static let harris = MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 201, run: 1)
+  /// The bundle's centres for the counties these tests name.
+  private static let centres: [String: MeshWXCoordinate] = [
+    "42:C:453": MeshWXCoordinate(latitude: 30.3344, longitude: -97.781),
+    "42:C:201": MeshWXCoordinate(latitude: 29.8327, longitude: -95.3854),
+    "42:C:477": MeshWXCoordinate(latitude: 30.2216, longitude: -96.4288)
+  ]
+  private static let areaCentre: WeatherAreaCentre = { state, isCounty, number in
+    centres["\(state):\(isCounty ? "C" : "Z"):\(number)"]
+  }
+
+  private func tornadoWatch(_ etn: UInt16) -> MeshWXWarningIdentity {
+    MeshWXWarningIdentity(event: 1, office: 35, etn: etn)
+  }
+
+  private func minutes(_ value: Double) -> TimeInterval { value * 60 }
+
+  private func covered(by coverage: MeshWXCoverage? = F.austinCoverage) -> WeatherBotState {
+    var state = WeatherBotState(botID: F.botID)
+    if let coverage { apply(F.coverage(seq: 1, coverage), to: &state, at: F.t0) }
+    return state
+  }
+
+  @discardableResult
+  private func apply(_ message: MeshWXMessage, to state: inout WeatherBotState, at date: Date) -> [WeatherStateChange] {
+    WeatherStateReducer.apply(message, to: &state, receivedAt: date, areaCentre: Self.areaCentre)
+  }
+
+  private func houstonWarning(seq: UInt8) -> MeshWXMessage {
+    F.warning(seq: seq, identity: Self.houston, polygon: Self.houstonPolygon, areas: [Self.harris])
+  }
+
+  private func emptyDigest(seq: UInt8) -> MeshWXMessage {
+    F.digest(seq: seq, nowMinutes: F.t0Minutes + 10, entries: [])
+  }
+
+  @Test
+  func `a Houston warning fetched from WX-AUS survives WX-AUS's digest; Austin's does not`() {
+    var state = covered()
+    apply(houstonWarning(seq: 2), to: &state, at: F.t0)
+    apply(F.warning(seq: 3, identity: F.svw42), to: &state, at: F.t0)
+    let changes = apply(emptyDigest(seq: 4), to: &state, at: F.t0.addingTimeInterval(minutes(10)))
+    #expect(changes == [.digestApplied(missing: [], removed: [F.svw42])])
+    #expect(state.warnings[Self.houston] != nil, "outside the bot's area: the list says nothing about it")
+    // It still ends by its own expiry, or by a cancel.
+    #expect(
+      apply(F.cancel(seq: 5, identity: Self.houston), to: &state, at: F.t0.addingTimeInterval(minutes(11)))
+        == [.warningRemoved(Self.houston, reason: .expiredEarly)])
+  }
+
+  @Test
+  func `a zone product ends only inside the stated runs`() {
+    var state = covered()
+    let inside = MeshWXWarningIdentity(event: 24, office: 35, etn: 1)
+    let outside = MeshWXWarningIdentity(event: 24, office: 51, etn: 2)
+    apply(
+      F.warning(seq: 2, identity: inside, polygon: nil,
+                areas: [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 192, run: 1)]),
+      to: &state, at: F.t0)
+    apply(
+      F.warning(seq: 3, identity: outside, polygon: nil,
+                areas: [MeshWXAreaRun(stateIndex: 42, isCounty: false, start: 213, run: 1)]),
+      to: &state, at: F.t0)
+    let changes = apply(emptyDigest(seq: 4), to: &state, at: F.t0.addingTimeInterval(minutes(10)))
+    #expect(changes == [.digestApplied(missing: [], removed: [inside])])
+  }
+
+  /// A tornado watch names counties and has no polygon (spec §8.2): the bot covers every county
+  /// its circle reaches, and the phone judges one by the county's centre.
+  @Test
+  func `a county watch ends when its county reaches the stated circle`() {
+    var state = covered()
+    apply(F.warning(seq: 2, identity: tornadoWatch(1), polygon: nil, areas: [F.travisCounty]), to: &state, at: F.t0)
+    apply(F.warning(seq: 3, identity: tornadoWatch(2), polygon: nil, areas: [Self.harris]), to: &state, at: F.t0)
+    // Washington County: its centre 126 km out, inside the circle's reach.
+    apply(
+      F.warning(seq: 4, identity: tornadoWatch(3), polygon: nil,
+                areas: [MeshWXAreaRun(stateIndex: 42, isCounty: true, start: 477, run: 1)]),
+      to: &state, at: F.t0)
+    let changes = apply(emptyDigest(seq: 5), to: &state, at: F.t0.addingTimeInterval(minutes(10)))
+    #expect(changes == [.digestApplied(missing: [], removed: [tornadoWatch(1), tornadoWatch(3)])])
+  }
+
+  @Test
+  func `a cut statement, or none at all, leaves the digest speaking for everything`() {
+    var zonesCut = F.austinCoverage
+    zonesCut.areasCut = true
+    var officesCut = F.austinCoverage
+    officesCut.officesCut = true
+    for coverage in [nil, zonesCut, officesCut] {
+      var state = covered(by: coverage)
+      apply(houstonWarning(seq: 2), to: &state, at: F.t0)
+      let changes = apply(emptyDigest(seq: 3), to: &state, at: F.t0.addingTimeInterval(minutes(10)))
+      #expect(changes == [.digestApplied(missing: [], removed: [Self.houston])])
+    }
+  }
+
+  @Test
+  func `a statement with no area filter speaks for the whole country`() {
+    let everything = MeshWXCoverage(
+      latitude: 0, longitude: 0, radiusKilometres: 0, stationCap: 14, officeIndices: [], areas: [])
+    var state = covered(by: everything)
+    apply(houstonWarning(seq: 2), to: &state, at: F.t0)
+    let changes = apply(emptyDigest(seq: 3), to: &state, at: F.t0.addingTimeInterval(minutes(10)))
+    #expect(changes == [.digestApplied(missing: [], removed: [Self.houston])])
+  }
+
+  @Test
+  func `a statement with no circle reaches as far as the areas it names`() {
+    // An area of Travis County alone, stated as its county with no centre.
+    let travisOnly = MeshWXCoverage(
+      latitude: 0, longitude: 0, radiusKilometres: 0, stationCap: 14, officeIndices: [35],
+      areas: [F.travisCounty])
+    var state = covered(by: travisOnly)
+    let nearAustin = MeshWXWarningIdentity(event: 3, office: 35, etn: 50)
+    apply(F.warning(seq: 2, identity: nearAustin, areas: []), to: &state, at: F.t0)
+    apply(houstonWarning(seq: 3), to: &state, at: F.t0)
+    let changes = apply(emptyDigest(seq: 4), to: &state, at: F.t0.addingTimeInterval(minutes(10)))
+    #expect(changes == [.digestApplied(missing: [], removed: [nearAustin])])
+  }
+
+  @Test
+  func `an upgrade marker outside the bot's area is not the list's to settle`() {
+    var state = covered()
+    apply(houstonWarning(seq: 2), to: &state, at: F.t0)
+    apply(F.warning(seq: 3, identity: F.svw42), to: &state, at: F.t0)
+    apply(F.cancel(seq: 4, identity: Self.houston, reason: .upgraded), to: &state, at: F.t0)
+    apply(F.cancel(seq: 5, identity: F.svw42, reason: .upgraded), to: &state, at: F.t0)
+    apply(emptyDigest(seq: 6), to: &state, at: F.t0.addingTimeInterval(minutes(10)))
+    #expect(Array(state.pendingUpgrades.keys) == [Self.houston])
   }
 }

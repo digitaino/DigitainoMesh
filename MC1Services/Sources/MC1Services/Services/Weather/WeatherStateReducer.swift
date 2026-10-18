@@ -53,7 +53,24 @@ public enum WeatherStateChange: Sendable, Hashable {
   case radarIgnoredOlder(tile: MeshWXRadarTile, takenMinutes: UInt32)
   case notAvailable(MeshWXNotAvailable)
   case unknownType(rawType: UInt8)
+  /// The message's own time — a digest's `now`, a batch's `ts`, a forecast's issue, a sweep's
+  /// build, a picture's `taken`, a warning's issue — is more than
+  /// ``WeatherStateReducer/futureTolerance`` ahead of the phone's clock (spec §10.7). No bot sends
+  /// that honestly: every one of them is a time something already happened. A digest, batch,
+  /// forecast, sweep or picture is dropped whole, because kept it would stand as "newest" over
+  /// everything real until the clock caught up — one digest stamped `0xFFFFFF00` would make every
+  /// real digest "older", and its empty list would end every warning held. A warning is still
+  /// stored, without the issue time (it is still a warning), and the change comes before its
+  /// `warningStored`.
+  case futureTimeRejected(minutes: UInt32)
 }
+
+/// The bundle's centre of one county or zone, by the fields an area run carries, or nil for an
+/// area the bundle does not know: what the reducer judges a county against a bot's stated circle
+/// with (spec §5, 17 October 2026). The reducer reads no tables of its own; the service hands it
+/// this, built from them (`WeatherService.areaCentres`).
+public typealias WeatherAreaCentre =
+  @Sendable (_ stateIndex: UInt8, _ isCounty: Bool, _ number: UInt16) -> MeshWXCoordinate?
 
 /// Pure state transitions for one bot. No clock, no I/O, no tables: every input is in the
 /// arguments, which is what makes each spec rule a one-line test.
@@ -76,6 +93,27 @@ public enum WeatherStateReducer {
   static let digestMargin: TimeInterval = 2 * 60
   /// How long a cancel is remembered, so a late copy of the warning it ended is not stored again.
   static let recentCancelRetention: TimeInterval = 60 * 60
+  /// How far ahead of the phone's clock a time on the wire may be and still be a time (spec
+  /// §10.7, 17 October 2026). Every time a bot sends is something that already happened, so this
+  /// only absorbs a bot's clock and the phone's disagreeing — and the bot truncating to the minute.
+  static let futureTolerance: TimeInterval = 15 * 60
+  /// The furthest ahead an expiry is believed, from when the warning was heard (spec §10.7). A
+  /// product in force until further notice reaches the phone with an expiry the bot invented 12
+  /// hours ahead (spec §3), re-sent as it moves, and every real product ends well inside this; an
+  /// expiry past it is clamped here, so a forged or corrupt one cannot pin a warning to the screen
+  /// for years. Measured from receipt rather than from the issue time: the until-further-notice
+  /// flood warning keeps its original issue time, and a cap from that would end a warning the
+  /// bot still says is in force.
+  static let warningHorizon: TimeInterval = 14 * 24 * 60 * 60
+  /// How far past a bot's stated circle the centre of a county may lie and the county still reach
+  /// into it (``touchesCoverage(_:_:areaCentre:)``). The bot covers every county whose outline
+  /// meets the circle; the phone has only the county's centre, so the margin is half a county of
+  /// the plains. Where it is short the error is the safe one: a watch the list was not speaking
+  /// for ends by its cancel or its expiry instead of by the list.
+  static let countyReachKilometres: Double = 25
+  /// For a statement with no circle (an area made of states or offices): how near a warning must
+  /// come to the centre of a stated area to touch it (``touchesCoverage(_:_:areaCentre:)``).
+  static let areaReachKilometres: Double = 25
   /// How recently a held warning must have arrived for its `seq` to be compared with a late one:
   /// `seq` wraps, so an old copy's number says nothing about order.
   static let reorderRecency: TimeInterval = 10 * 60
@@ -112,7 +150,8 @@ public enum WeatherStateReducer {
   public static func apply(
     _ message: MeshWXMessage,
     to state: inout WeatherBotState,
-    receivedAt: Date
+    receivedAt: Date,
+    areaCentre: WeatherAreaCentre? = nil
   ) -> [WeatherStateChange] {
     let seq = message.header.seq
     let fingerprint = fingerprint(of: message)
@@ -160,15 +199,24 @@ public enum WeatherStateReducer {
     // carry it. `.unstated` for a bot older than revision 7, and for a Cancel always.
     let source = message.header.dataSource
 
+    // A message whose own time is in the future is not stored as the newest of anything (spec
+    // §10.7). A warning's is its issue time, and that one costs only the issue time.
+    if let minutes = ownMinutes(of: message.payload), isAhead(minutes, of: receivedAt) {
+      changes.append(.futureTimeRejected(minutes: minutes))
+      guard case .warning = message.payload else { return changes }
+    }
+
     switch message.payload {
     case let .warning(warning):
       if !(isOutOfOrder && wouldRollBack(warning, seq: seq, state: state, receivedAt: receivedAt)) {
-        changes.append(store(warning, in: &state, receivedAt: receivedAt, seq: seq, source: source))
+        changes.append(store(
+          cappedWarning(warning, receivedAt: receivedAt), in: &state, receivedAt: receivedAt, seq: seq,
+          source: source))
       }
     case let .cancel(cancel):
       changes.append(remove(cancel, from: &state, receivedAt: receivedAt, isOutOfOrder: isOutOfOrder))
     case let .digest(digest):
-      changes.append(applyDigest(digest, to: &state, receivedAt: receivedAt))
+      changes.append(applyDigest(digest, to: &state, receivedAt: receivedAt, areaCentre: areaCentre))
     case let .observations(batch):
       changes.append(store(batch, in: &state, receivedAt: receivedAt, source: source))
     case let .forecast(forecast):
@@ -228,6 +276,200 @@ public enum WeatherStateReducer {
   private static func markGap(_ state: inout WeatherBotState, at date: Date) {
     state.needsDigest = true
     state.gapDetectedAt = max(state.gapDetectedAt ?? date, date)
+  }
+
+  // MARK: - Times ahead of the phone's clock (spec §10.7)
+
+  /// The time a message states for itself, which a future one must not be: nil for a message
+  /// with none (Cancel, Text, Coverage, Not available) and for a warning without an issue time. A
+  /// warning's expiry is in the future by nature and is capped instead (``cappedWarning(_:receivedAt:)``).
+  private static func ownMinutes(of payload: MeshWXPayload) -> UInt32? {
+    switch payload {
+    case let .digest(digest): digest.nowMinutes
+    case let .observations(batch): batch.timestampMinutes
+    case let .forecast(forecast): forecast.issuedMinutes
+    case let .areaSweep(sweep): sweep.builtMinutes
+    case let .radar(radar): radar.takenMinutes
+    case let .warning(warning): warning.issuedMinutes
+    default: nil
+    }
+  }
+
+  /// Whether a wire time in Unix minutes is more than ``futureTolerance`` ahead of `now`.
+  static func isAhead(_ minutes: UInt32, of now: Date) -> Bool {
+    Date(unixMinutes: minutes) > now.addingTimeInterval(futureTolerance)
+  }
+
+  /// The latest expiry believed of a warning heard at `receivedAt`, in Unix minutes.
+  private static func expiryCeiling(heardAt receivedAt: Date) -> UInt32 {
+    let minutes = Int64((receivedAt.timeIntervalSince1970 / 60).rounded(.down)) + Int64(warningHorizon / 60)
+    return UInt32(clamping: minutes)
+  }
+
+  /// A warning as the phone may believe it, heard at `receivedAt`: an issue time ahead of the
+  /// clock is dropped, and the start with it, since both ride on the same expiry; an expiry past
+  /// ``warningHorizon`` is clamped to it; and a start that no longer falls before the expiry goes.
+  /// The wire's relative fields are re-stated against the clamped expiry, so the issue time and
+  /// the start read back as the same instants. Unchanged when nothing needed changing.
+  static func cappedWarning(_ warning: MeshWXWarning, receivedAt: Date) -> MeshWXWarning {
+    var issued = warning.issuedMinutes
+    var begins = warning.beginsMinutes
+    if let minutes = issued, isAhead(minutes, of: receivedAt) {
+      issued = nil
+      begins = nil
+    }
+    let expires = min(warning.expiresMinutes, expiryCeiling(heardAt: receivedAt))
+    if let minutes = begins, minutes >= expires { begins = nil }
+    guard expires != warning.expiresMinutes || issued != warning.issuedMinutes
+      || begins != warning.beginsMinutes
+    else { return warning }
+    var capped = warning
+    capped.expiresMinutes = expires
+    capped.issuedBeforeMinutes = issued.map { UInt16(clamping: Int64(expires) - Int64($0)) }
+    capped.beginsBeforeMinutes = issued == nil
+      ? nil : begins.map { UInt16(clamping: Int64(expires) - Int64($0)) }
+    return capped
+  }
+
+  /// Takes out of persisted state anything stamped ahead of `now`: state saved before the phone
+  /// checked (spec §10.7). A digest built in the future is forgotten with the list it named — or
+  /// it would go on turning every real digest away as older — and so are readings, forecasts,
+  /// sweeps and radar pictures from the future, which would go on standing as the newest. A held
+  /// warning keeps its place, capped as ``cappedWarning(_:receivedAt:)`` would have capped it on
+  /// arrival.
+  public static func dropFutureTimes(_ state: inout WeatherBotState, now: Date) {
+    func ahead(_ minutes: UInt32?) -> Bool { minutes.map { isAhead($0, of: now) } ?? false }
+    if let digest = state.digest, ahead(digest.digest.nowMinutes) {
+      state.digest = nil
+      state.missingFromDigest = []
+    }
+    for (index, stored) in state.observations {
+      if ahead(stored.timestampMinutes) {
+        state.observations.removeValue(forKey: index)
+      } else if ahead(stored.lastBatchMinutes) {
+        state.observations[index]?.lastBatchMinutes = nil
+      }
+    }
+    state.forecasts = state.forecasts.filter { !ahead($0.value.forecast.issuedMinutes) }
+    state.unbundledForecasts = state.unbundledForecasts.filter { !ahead($0.value.forecast.issuedMinutes) }
+    state.areaSweeps.removeAll { ahead($0.builtMinutes) }
+    state.radarTiles.removeAll { ahead($0.takenMinutes) }
+
+    let futureAt = now.addingTimeInterval(futureTolerance)
+    for (identity, stored) in state.warnings {
+      var next = stored
+      next.warning = cappedWarning(stored.warning, receivedAt: now)
+      // The start rides on the issue time (spec §3), so it goes with one from the future.
+      if let issuedAt = stored.issuedAt, issuedAt > futureAt {
+        next.issuedAt = nil
+        next.beginsAt = nil
+      }
+      if let beginsAt = next.beginsAt, beginsAt >= next.expiresAt { next.beginsAt = nil }
+      if next != stored { state.warnings[identity] = next }
+    }
+  }
+
+  // MARK: - What a digest speaks for (spec §5, 17 October 2026)
+
+  /// Whether this bot's digest speaks for a held warning, so that its absence from the list ends
+  /// it. A bot answers a place-named `>w` anywhere in the country (spec §8.2), but its digest lists
+  /// only what is active in its own coverage, so a warning the phone fetched from it for a place
+  /// outside that coverage is absent from every digest it will ever send — and is not over. With
+  /// the bot's own complete statement of its area held (Coverage, spec §7A), a digest ends only
+  /// what touches that area; a warning outside it ends by its expiry, its cancel, or a fresh
+  /// answer. Without a complete statement nothing says where the area stops, and the digest speaks
+  /// for everything, as it always did.
+  ///
+  /// Without `areaCentre` a county is judged by the stated runs alone.
+  static func digestSpeaksFor(
+    _ warning: MeshWXWarning, coverage: MeshWXCoverage?, areaCentre: WeatherAreaCentre?
+  ) -> Bool {
+    guard let coverage, coverage.isComplete else { return true }
+    return touchesCoverage(warning, coverage, areaCentre: areaCentre)
+  }
+
+  /// Whether a warning's area touches a bot's stated coverage, by the bot's own rule (its
+  /// `_in_coverage`): a zone it lists; for a product without a polygon (a watch by county), a
+  /// county it covers; for a storm-based warning, the polygon against the circle — the counties on
+  /// such a warning are only the ones its polygon crosses, so they do not count on their own.
+  ///
+  /// The statement lists zones, not the counties the bot derives from its circle, so a county is
+  /// judged by its centre against the circle, ``countyReachKilometres`` generous. A statement
+  /// without a circle is an area of states or offices, and there the warning must come within
+  /// ``areaReachKilometres`` of a stated area's centre. Nothing here ever reads an office: WX-AUS
+  /// lists HGX because a few Houston zones reach its circle, and Houston is not in its area.
+  static func touchesCoverage(
+    _ warning: MeshWXWarning, _ coverage: MeshWXCoverage, areaCentre: WeatherAreaCentre?
+  ) -> Bool {
+    if coverage.hasNoAreaFilter { return true }
+    let polygon = warning.polygon ?? []
+    let hasPolygon = polygon.count >= 3
+    let runs = warning.areas ?? []
+    for run in runs where !(run.isCounty && hasPolygon) {
+      if coverage.areas.contains(where: { runsOverlap(run, $0) }) { return true }
+    }
+    let counties = hasPolygon ? [] : centres(of: runs.filter(\.isCounty), areaCentre: areaCentre)
+    if let centre = coverage.centre, coverage.radiusKilometres > 0 {
+      if hasPolygon { return reaches(polygon, centre, within: Double(coverage.radiusKilometres)) }
+      let reach = Double(coverage.radiusKilometres) + countyReachKilometres
+      if counties.contains(where: { kilometres($0, centre) <= reach }) { return true }
+    }
+    if !hasPolygon, counties.isEmpty { return false }
+    let stated = centres(of: coverage.areas, areaCentre: areaCentre)
+    if hasPolygon { return stated.contains { reaches(polygon, $0, within: areaReachKilometres) } }
+    return counties.contains { county in stated.contains { kilometres(county, $0) <= areaReachKilometres } }
+  }
+
+  /// Two area runs of one kind in one state that share a number.
+  private static func runsOverlap(_ lhs: MeshWXAreaRun, _ rhs: MeshWXAreaRun) -> Bool {
+    lhs.stateIndex == rhs.stateIndex && lhs.isCounty == rhs.isCounty
+      && Int(lhs.start) < Int(rhs.start) + Int(rhs.run) && Int(rhs.start) < Int(lhs.start) + Int(lhs.run)
+  }
+
+  /// The bundle centres of every county or zone in `runs`, those it knows.
+  private static func centres(of runs: [MeshWXAreaRun], areaCentre: WeatherAreaCentre?) -> [MeshWXCoordinate] {
+    guard let areaCentre else { return [] }
+    return runs.flatMap { run in run.numbers.compactMap { areaCentre(run.stateIndex, run.isCounty, $0) } }
+  }
+
+  private static func kilometres(_ lhs: MeshWXCoordinate, _ rhs: MeshWXCoordinate) -> Double {
+    MeshWXGeo.distanceKilometres(
+      fromLat: lhs.latitude, lon: lhs.longitude, toLat: rhs.latitude, lon: rhs.longitude)
+  }
+
+  /// Whether a polygon comes within `radius` kilometres of a point: the point is inside it, or one
+  /// of its edges passes that close. On a flat projection around the point, which over a warning's
+  /// few tens of kilometres is far inside the margins used.
+  private static func reaches(
+    _ polygon: [MeshWXCoordinate], _ point: MeshWXCoordinate, within radius: Double
+  ) -> Bool {
+    let cosLatitude = cos(point.latitude * .pi / 180)
+    let planar: [(x: Double, y: Double)] = polygon.map { vertex in
+      var east = vertex.longitude - point.longitude
+      if east > 180 { east -= 360 } else if east < -180 { east += 360 }
+      return (x: east * 111.32 * cosLatitude, y: (vertex.latitude - point.latitude) * 110.574)
+    }
+    var inside = false
+    var previous = planar.count - 1
+    for index in planar.indices {
+      let a = planar[index]
+      let b = planar[previous]
+      if (a.y > 0) != (b.y > 0), a.x + (b.x - a.x) * -a.y / (b.y - a.y) > 0 { inside.toggle() }
+      previous = index
+    }
+    if inside { return true }
+    return planar.indices.contains { index in
+      segmentDistance(planar[index], planar[(index + 1) % planar.count]) <= radius
+    }
+  }
+
+  /// The distance from the origin to the segment `a`–`b`.
+  private static func segmentDistance(_ a: (x: Double, y: Double), _ b: (x: Double, y: Double)) -> Double {
+    let dx = b.x - a.x
+    let dy = b.y - a.y
+    let length = dx * dx + dy * dy
+    let along = length == 0 ? 0 : max(0, min(1, -(a.x * dx + a.y * dy) / length))
+    return hypot(a.x + along * dx, a.y + along * dy)
   }
 
   /// Drops warnings that expired before `cutoff`, returning what went. Expiry is judged at
@@ -427,7 +669,8 @@ public enum WeatherStateReducer {
   private static func applyDigest(
     _ digest: MeshWXDigest,
     to state: inout WeatherBotState,
-    receivedAt: Date
+    receivedAt: Date,
+    areaCentre: WeatherAreaCentre?
   ) -> WeatherStateChange {
     if let held = state.digest, digest.nowMinutes < held.digest.nowMinutes {
       return .digestIgnoredOlder(builtMinutes: digest.nowMinutes)
@@ -441,18 +684,28 @@ public enum WeatherStateReducer {
       ? digest.entries.map(\.expiresMinutes).max()
       : nil
 
+    // The list speaks only for the bot's own area (spec §5, 17 October 2026): what the bot stated
+    // about itself, when it stated all of it.
+    let coverage = state.coverage?.coverage
+    func speaksFor(_ warning: MeshWXWarning) -> Bool {
+      digestSpeaksFor(warning, coverage: coverage, areaCentre: areaCentre)
+    }
+
     // Spec §5: "an identity the app holds that is absent from the digest has ended" — for
     // identities the list could have known about.
     let removed = state.warnings.values
       .filter { stored in
         !listed.contains(stored.identity) && stored.receivedAt < speaksBefore
           && !(horizon.map { stored.warning.expiresMinutes >= $0 } ?? false)
+          && speaksFor(stored.warning)
       }
       .map(\.identity)
       .sorted(by: identityOrder)
     for identity in removed {
       state.warnings.removeValue(forKey: identity)
     }
+    // The list's expiries are believed no further ahead than a warning's own (`cappedWarning`).
+    let ceiling = expiryCeiling(heardAt: receivedAt)
 
     var missing: [MeshWXWarningIdentity] = []
     for entry in digest.entries {
@@ -462,15 +715,18 @@ public enum WeatherStateReducer {
       }
       // The digest's expiry is absolute (`now + rel`). It replaces the held one when the list
       // is newer than the warning message; otherwise it may only extend it.
+      let expires = min(entry.expiresMinutes, ceiling)
       let replaces = held.receivedAt < speaksBefore
-      if held.warning.expiresMinutes != entry.expiresMinutes,
-         replaces || entry.expiresMinutes > held.warning.expiresMinutes {
-        held.warning.expiresMinutes = entry.expiresMinutes
+      if held.warning.expiresMinutes != expires, replaces || expires > held.warning.expiresMinutes {
+        held.warning.expiresMinutes = expires
         state.warnings[entry.identity] = held
       }
     }
 
-    state.pendingUpgrades = state.pendingUpgrades.filter { $0.value.cancelledAt >= speaksBefore }
+    // A marker outside the bot's area is not the list's to settle, for the same reason.
+    state.pendingUpgrades = state.pendingUpgrades.filter {
+      $0.value.cancelledAt >= speaksBefore || !speaksFor($0.value.warning)
+    }
     if let gap = state.gapDetectedAt {
       if gap < speaksBefore {
         state.needsDigest = false
