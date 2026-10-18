@@ -1,3 +1,21 @@
+Beta Changes -- v1.5.2 (second build)
+
+Weather Alerts You Can Trust a Little More
+
+What is different from the first 1.5.2 build of 17 October.
+
+Times from the future are refused. Anyone on #meshwx can send a packet that claims to come from a weather radio. One such packet dated far ahead used to wipe every alert the phone held and make it ignore the real radio's updates afterwards. A time more than 15 minutes ahead of your phone's clock is now refused, and a phone already affected recovers when this build starts.
+
+Alerts outside a radio's area stay. If you looked up alerts for a saved place outside WX-AUS's area, the radio's next routine summary used to delete them and take their notification away. A summary now ends only alerts inside the area that radio covers; the others end at their own expiry or when you ask again. A notification is taken down only when no radio still holds that alert.
+
+On WX-AUS itself. Tornado and severe thunderstorm watches now reach the phone; they were being dropped at the radio. A flash flood warning that NWS cancels or narrows now ends or shrinks on time. Hurricane, tropical storm, storm surge, tsunami and air quality alerts are read, and a river flood warning "until further notice" says so instead of showing an end time it does not have. Several forecast offices' point forecasts were misread (a low of 3 instead of 39 in Montana; one Texas airport's low off by 9 degrees); those read correctly now.
+
+What to try. Next time a watch is issued for your area, check it appears with its counties. Save a place outside Austin, ask for its alerts, and see that they stay after the next summary from WX-AUS.
+
+Unchanged: everything in the first 1.5.2 build below.
+
+---
+
 Beta Changes -- v1.5.2
 
 Weather When the Feed Runs Late, One Node on Several Radios, and MeshCore One 1.5
