@@ -257,6 +257,29 @@ struct ChatViewModelConversationTests {
     #expect(!viewModel.channels[0].isFavorite)
   }
 
+  /// The channel info sheet runs on the open chat's own view model, whose list buffers are
+  /// empty, and keeps the channel it opened with. Both flips must still reach the store.
+  @Test
+  func `setFavorite saves an unlisted channel from a stale sheet copy`() async throws {
+    let container = try PersistenceStore.createContainer(inMemory: true)
+    let dataStore = PersistenceStore(modelContainer: container)
+    let channel = makeChannel(name: "General")
+    try await dataStore.saveChannel(channel)
+
+    let viewModel = ChatViewModel()
+    viewModel.configureForTesting(dependencies: .testDefaults(
+      dataStore: { dataStore },
+      connectionState: { .ready }
+    ))
+    let sheetCopy = Conversation.channel(channel)
+
+    await viewModel.setFavorite(sheetCopy, isFavorite: true)
+    #expect(try await dataStore.fetchChannel(id: channel.id)?.isFavorite == true)
+
+    await viewModel.setFavorite(sheetCopy, isFavorite: false)
+    #expect(try await dataStore.fetchChannel(id: channel.id)?.isFavorite == false)
+  }
+
   // MARK: - errorBannerMessage Tests
 
   @Test

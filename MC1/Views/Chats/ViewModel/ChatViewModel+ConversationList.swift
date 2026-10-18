@@ -87,14 +87,17 @@ extension ChatViewModel {
 
   // MARK: - Favorite
 
-  /// Sets favorite state for a conversation with optimistic UI update
+  /// Sets favorite state for a conversation with optimistic UI update.
+  ///
+  /// The channel and room info sheets call this on the open conversation's own view model,
+  /// whose list buffers are empty. An unlisted conversation therefore writes the requested
+  /// value as-is: the sheet's copy is stale after its first flip, so it can't be diffed against.
   func setFavorite(_ conversation: Conversation, isFavorite: Bool) async {
     guard connectionStateProvider() == .ready else { return }
-    guard let current = liveConversation(id: conversation.id) else { return }
-    guard current.isFavorite != isFavorite else { return }
+    let current = liveConversation(id: conversation.id)
+    guard current?.isFavorite != isFavorite else { return }
 
-    // Reuse existing toggle logic
-    await toggleFavorite(current)
+    await writeFavorite(current ?? conversation, isFavorite: isFavorite, disableAnimation: false)
   }
 
   /// Toggles favorite state for a conversation.
@@ -110,8 +113,12 @@ extension ChatViewModel {
   func toggleFavorite(_ conversation: Conversation, disableAnimation: Bool = false) async {
     guard connectionStateProvider() == .ready else { return }
     guard let current = liveConversation(id: conversation.id) else { return }
-    let originalState = current.isFavorite
-    let newState = !originalState
+    await writeFavorite(current, isFavorite: !current.isFavorite, disableAnimation: disableAnimation)
+  }
+
+  /// Saves `newState` and mirrors it into the list buffers; a no-op there for an unlisted row.
+  private func writeFavorite(_ current: Conversation, isFavorite newState: Bool, disableAnimation: Bool) async {
+    let originalState = !newState
 
     switch current {
     case let .direct(contact):
