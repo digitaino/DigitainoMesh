@@ -24,7 +24,7 @@ enum MeshWXVectors {
     (try? JSONSerialization.jsonObject(with: data) as? [Any])?.count
   }
 
-  /// `request_digest`, the revision 6 Request vector (spec §7B): `>d` to bot `0x041D` from the
+  /// `request_digest`, the revision 6 Request vector (spec §11): `>d` to bot `0x041D` from the
   /// sender `01 02 03 04 05 06` at `ts` 1789660000 with `seq` 1 — sixteen bytes.
   ///
   /// Quoted from the spec, and since revision 10 also in the publisher's file. It is kept here
@@ -93,14 +93,14 @@ enum MeshWXVectors {
     let feedHealth: UInt8?
     let entries: EntriesField?
 
-    // Area sweep (spec §7C). `group`, `idx` and `total` are shared with Text above; the build
+    // Area sweep (spec §12). `group`, `idx` and `total` are shared with Text above; the build
     // time is read under either spelling, because the wire field is `built` and every other time
     // in this file carries the `_min` suffix the bot's decoder adds.
     let built: UInt32?
     let builtMin: UInt32?
     let cut: Bool?
     let advisories: Bool?
-    /// Revision 10, §1.2: the reference JSON adds both to **every** decoded Area sweep, so a
+    /// Revision 10 (spec §12.3): the reference JSON adds both to **every** decoded Area sweep, so a
     /// national one reads `scoped: false, scope: []`. Optional here because the file this is a
     /// copy of held only revision 9 vectors when the fields were written; a revision 9 vector
     /// therefore reads as national, which is what it was.
@@ -138,12 +138,12 @@ enum MeshWXVectors {
     let request: String?
     let requestCode: UInt8?
 
-    // Request (spec §7B). `text` is shared with Text above; `sender` is the six-byte key prefix
+    // Request (spec §11). `text` is shared with Text above; `sender` is the six-byte key prefix
     // as lower-case hex and `ts` is Unix **seconds**, not the minutes every other time here is.
     let sender: String?
     let ts: UInt32?
 
-    // Radar (spec revision 11, §7D). `rows` is one string of the digits 0-3 per row, north row
+    // Radar (spec revision 11, §13). `rows` is one string of the digits 0-3 per row, north row
     // first, which is how the bot's decoder prints a grid — so a Swift cell array is compared
     // against the publisher's own characters rather than against another array this file built.
     let takenMin: UInt32?
@@ -228,7 +228,7 @@ enum MeshWXVectors {
       let run: UInt8
     }
 
-    /// One Area sweep entry: a Warning's area run with the event code in front of it (spec §7C).
+    /// One Area sweep entry: a Warning's area run with the event code in front of it (spec §12).
     struct SweepEntry: Decodable, Sendable {
       let event: UInt8
       let state: UInt8

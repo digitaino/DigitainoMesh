@@ -75,7 +75,7 @@ public enum MeshWXCompass: UInt8, Sendable, Hashable, Codable, CaseIterable {
   }
 }
 
-/// Sky condition code (spec §10.1, `protocol.json` `sky_codes`).
+/// Sky condition code (spec §18.6, `protocol.json` `sky_codes`).
 public enum MeshWXSky: UInt8, Sendable, Hashable, Codable, CaseIterable {
   case clear = 0
   case few = 1
@@ -116,7 +116,7 @@ public struct MeshWXCoordinate: Sendable, Hashable, Codable {
 
 // MARK: - Warning
 
-/// The key a warning is stored under (spec §2.3).
+/// The key a warning is stored under (spec §2.4).
 ///
 /// Not `seq`: the bot re-sends a warning whenever its expiry, tags or area change, with
 /// a fresh sequence number every time. An app that keys by anything else ends up with
@@ -370,7 +370,7 @@ public struct MeshWXWarning: Sendable, Hashable, Codable {
   ///
   /// This is the product's own header time, kept across continuations, so an SVS update does not
   /// restamp a warning as newly issued. It is never when the bot read the file and never when the
-  /// phone heard the packet (spec §10.5): a radio out of range for three hours must still say
+  /// phone heard the packet (spec §18.1): a radio out of range for three hours must still say
   /// *issued 1:29 PM*. With ``isIssueTimeSaturated`` the product was issued at or before this.
   public var issuedMinutes: UInt32? {
     issuedBeforeMinutes.map { expiresMinutes &- UInt32($0) }
@@ -499,7 +499,7 @@ public struct MeshWXDigest: Sendable, Hashable, Codable {
 
 // MARK: - Observations
 
-/// One METAR station's current conditions (spec §6, 11 bytes on the wire).
+/// One METAR station's current conditions (spec §6, 21 bytes on the wire).
 public struct MeshWXStationObservation: Sendable, Hashable, Codable {
   /// Index into `index.json` `stations` (the ICAO list).
   public var stationIndex: UInt16
@@ -673,7 +673,7 @@ public struct MeshWXForecast: Sendable, Hashable, Codable {
 
 // MARK: - Text
 
-/// What a text reply is about (spec §8.1).
+/// What a text reply is about (spec §8).
 ///
 /// These are the v5 subjects from `protocol.json` `v5.text_subjects`, which are *not*
 /// the legacy top-level `text_subjects` in the same file (that table is v3/v4 and its
@@ -730,7 +730,7 @@ public enum MeshWXTextSubject: Sendable, Hashable, Codable {
   }
 }
 
-/// One chunk of a narrative reply (type 6, spec §8.1).
+/// One chunk of a narrative reply (type 6, spec §8).
 ///
 /// Reassemble by `(bot, group)` in ``index`` order. A chunk that never arrives leaves a
 /// hole: show the partial text with a marker rather than nothing, because a warning
@@ -742,7 +742,7 @@ public struct MeshWXText: Sendable, Hashable, Codable {
   public var index: UInt8
   public var total: UInt8
   public var text: String
-  /// Flags bit 0 (spec §8.1, revision 7): the product ran past ``MeshWXWire/maxTextChunks``
+  /// Flags bit 0 (spec §8, revision 7): the product ran past ``MeshWXWire/maxTextChunks``
   /// chunks and the bot dropped the tail, cutting at a sentence boundary.
   ///
   /// Set on every chunk of a cut reply, so a phone that never received the last one still knows
@@ -770,7 +770,7 @@ public struct MeshWXText: Sendable, Hashable, Codable {
 
 // MARK: - Not available
 
-/// Why the bot could not serve a request (spec §8.3).
+/// Why the bot could not serve a request (spec §9).
 public enum MeshWXNotAvailableReason: Sendable, Hashable, Codable {
   case noData
   case unknownLocation
@@ -812,7 +812,7 @@ public enum MeshWXNotAvailableReason: Sendable, Hashable, Codable {
   }
 }
 
-/// The bot declining a request (type 7, spec §8.3).
+/// The bot declining a request (type 7, spec §9).
 public struct MeshWXNotAvailable: Sendable, Hashable, Codable {
   /// ASCII code of the request's first letter — `w`, `o`, `f`, `a`, `s`, `r`, `m`, `t`,
   /// `h`, `d`. Stored as the byte so the letter and the code can never disagree.
@@ -830,7 +830,7 @@ public struct MeshWXNotAvailable: Sendable, Hashable, Codable {
 
 // MARK: - Coverage
 
-/// What a bot carries, stated by the bot (type 8, spec §7A).
+/// What a bot carries, stated by the bot (type 8, spec §10).
 ///
 /// The only thing an app may read a bot's area from. Inferring it from the stations in the hourly
 /// batches and from the offices of whatever warnings happened to be active told a real phone that
@@ -910,7 +910,7 @@ public struct MeshWXCoverage: Sendable, Hashable, Codable {
   }
 
   /// `n` = 0 and `k` = 0 with neither list cut: the operator set no area filter at all, so the
-  /// bot carries every product its feed does and no place is outside it (spec §7A). That is an
+  /// bot carries every product its feed does and no place is outside it (spec §10). That is an
   /// answer, not an empty message.
   public var hasNoAreaFilter: Bool {
     officeIndices.isEmpty && areas.isEmpty && isComplete
@@ -922,7 +922,7 @@ public struct MeshWXCoverage: Sendable, Hashable, Codable {
 
 // MARK: - Request
 
-/// An app's `>` request, flooded on `#meshwx` as a datagram (type 9, spec §7B).
+/// An app's `>` request, flooded on `#meshwx` as a datagram (type 9, spec §11).
 ///
 /// The one v5 message this app transmits. A DM rides one stored route hop by hop and fails
 /// silently once that route has gone stale — the field record of 16 September lost seven
@@ -933,7 +933,7 @@ public struct MeshWXCoverage: Sendable, Hashable, Codable {
 /// builds and sends on its own (``encode()``), not only a body the decoder hands back. The two
 /// never disagree for a decoded message, and ``MeshWXEncoder/encode(_:)`` writes the header's.
 public struct MeshWXRequest: Sendable, Hashable, Codable {
-  /// The **sender's** counter, one more per new request and repeated on a resend (spec §7B).
+  /// The **sender's** counter, one more per new request and repeated on a resend (spec §11).
   /// Informational to the bot, which keys copies on ``timestamp``.
   public var seq: UInt8
   /// The bot asked, as in every message: the first two bytes of its public key. `0xFFFF` asks
@@ -945,10 +945,10 @@ public struct MeshWXRequest: Sendable, Hashable, Codable {
   /// Unix **seconds** (not minutes) on the sender's clock: the request's own time. A resend
   /// repeats it, and that is what makes it a copy rather than a second request.
   public var timestamp: UInt32
-  /// The request exactly as spec §8.2 writes it, starting with `>`.
+  /// The request exactly as spec §14 writes it, starting with `>`.
   public var text: String
 
-  /// Every bot on the channel, for an app that has not chosen one (spec §7B, §12).
+  /// Every bot on the channel, for an app that has not chosen one (spec §11, §20).
   public static let anyBot: UInt16 = 0xFFFF
 
   public init(seq: UInt8, botID: UInt16, senderPrefix: Data, timestamp: UInt32, text: String) {
@@ -967,7 +967,7 @@ public struct MeshWXRequest: Sendable, Hashable, Codable {
 
 // MARK: - Area sweep
 
-/// One packet of an area sweep (type 10, spec §7C).
+/// One packet of an area sweep (type 10, spec §12).
 ///
 /// The sweep is the answer to one question — *where is anything happening?* — and it is the most
 /// expensive answer on the channel: up to eight packets, broadcast to everyone listening. Nothing
@@ -978,13 +978,13 @@ public struct MeshWXRequest: Sendable, Hashable, Codable {
 /// everything". A scoped sweep is not a smaller national one: the states it does not name are
 /// **unknown**, never clear.
 ///
-/// Reassemble by `(bot, group)` in ``index`` order exactly as a Text reply is (spec §8.1). A
+/// Reassemble by `(bot, group)` in ``index`` order exactly as a Text reply is (spec §8). A
 /// packet that never arrives leaves a hole: draw the entries that did arrive and say the sweep is
 /// partial, because a map of forty states is still worth looking at. Since revision 10 the packets
 /// that never arrived can also be asked for by name (`>part`), which is the one repair that costs
 /// three packets instead of eight.
 public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
-  /// One run of consecutive UGC numbers in one state, under one event (spec §7C).
+  /// One run of consecutive UGC numbers in one state, under one event (spec §12).
   ///
   /// Four bytes for what a Warning spends four bytes on *without* the event, which is the whole
   /// point: the country's alerts fit in eight packets because a Winter Weather Advisory over
@@ -1053,7 +1053,7 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
   /// Flags bit 1: advisories are in the sweep, not only warnings and watches. Clear does not mean
   /// there are no advisories — it means the narrower scope was asked for.
   public var includesAdvisories: Bool
-  /// `total` bit 7 (spec revision 10, §7C): the sweep covers only the states its scope names, not
+  /// `total` bit 7 (spec revision 10, §12): the sweep covers only the states its scope names, not
   /// the country.
   ///
   /// The one field of this type carried on **every** packet that a phone must have before it can
@@ -1061,7 +1061,7 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
   /// state outside it was never asked about. Getting that backwards paints half the country clear
   /// on the strength of a question nobody asked.
   public var isScoped: Bool
-  /// The state indices this packet's scope entries name (spec revision 10, §7C), in the order the
+  /// The state indices this packet's scope entries name (spec revision 10, §12), in the order the
   /// bot sent them.
   ///
   /// Empty for a national sweep, and empty for the packets of a scoped sweep after the first: the
@@ -1097,7 +1097,7 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
     self.entries = entries
   }
 
-  /// A scope entry as the wire carries it (spec revision 10, §7C): `event 0`, kind zone,
+  /// A scope entry as the wire carries it (spec revision 10, §12): `event 0`, kind zone,
   /// `start 0`, `run 1`. One per state named, sorting before every alert entry.
   public static func scopeEntry(stateIndex: UInt8) -> Entry {
     Entry(
@@ -1107,7 +1107,7 @@ public struct MeshWXAreaSweep: Sendable, Hashable, Codable {
 
 // MARK: - Radar
 
-/// How hard it is raining (or snowing) in one cell (spec revision 11, §7D).
+/// How hard it is raining (or snowing) in one cell (spec revision 11, §13).
 ///
 /// Two bits, and the thresholds are the bundle's (`protocol.json` `v5.radar.levels_dbz`): 20 dBZ
 /// and up is light, 35 moderate, 50 heavy. A cell carries the **strongest** echo in it rather than
@@ -1131,7 +1131,7 @@ public enum MeshWXRadarLevel: UInt8, Sendable, Hashable, Codable, CaseIterable {
   public var isWet: Bool { self != .none }
 }
 
-/// The part of a tile a partial radar picture reaches (spec revision 11, §7D).
+/// The part of a tile a partial radar picture reaches (spec revision 11, §13).
 ///
 /// Inclusive rows and columns **in the packet's own grid**, so a coarse tile's bounds run 0-15 and
 /// a fine one's 0-31. The tile still covers the whole square of earth; these say which of its
@@ -1164,7 +1164,7 @@ public struct MeshWXRadarBounds: Sendable, Hashable, Codable {
   var wireBytes: [UInt8] { [row0, row1, col0, col1] }
 }
 
-/// A square of the earth a radar answer covers (spec revision 11, §7D).
+/// A square of the earth a radar answer covers (spec revision 11, §13).
 ///
 /// Tiles sit on a fixed lattice of half their span, so a tile one phone asked for is a tile every
 /// phone can use: two people a few kilometres apart ask about the same square and the second one
@@ -1174,7 +1174,7 @@ public struct MeshWXRadarBounds: Sendable, Hashable, Codable {
 ///
 /// The edges are `Double` and the zoom an `Int`, wider than the wire's whole degrees and two bits,
 /// for one reason: the first build of revision 13 had a detail level at zoom −1 with half-degree
-/// edges, and a state it saved on a phone must still load (docs/MESHWX_REV13.md §2). Such tiles
+/// edges, and a state it saved on a phone must still load (docs/MESHWX_UI.md §3.1 U-61). Such tiles
 /// are dropped when the state is read and by retention, so every tile anything draws is zoom 0 to
 /// 3 with whole-degree edges; a state written before revision 13 — integers in the JSON — decodes
 /// unchanged.
@@ -1232,7 +1232,7 @@ public struct MeshWXRadarTile: Sendable, Hashable, Codable {
   }
 
   /// The patch of earth one cell covers. Row 0 is the **northern** row and column 0 the western
-  /// one (spec revision 11, §7D), which is the picture's order and not the lattice's.
+  /// one (spec revision 11, §13), which is the picture's order and not the lattice's.
   public func cellBox(row: Int, col: Int, size: Int) -> (south: Double, west: Double, north: Double, east: Double) {
     let cell = cellDegrees(size: size)
     let top = north - Double(row) * cell
@@ -1254,7 +1254,7 @@ public struct MeshWXRadarTile: Sendable, Hashable, Codable {
   }
 }
 
-/// One tile of a radar picture (type 11, spec revision 11, §7D).
+/// One tile of a radar picture (type 11, spec revision 11, §13).
 ///
 /// **One packet, always.** Radar was in the v4 protocol and was taken out on 14 September because
 /// it pulled a four-megabyte composite off the internet for every answer; revision 11 brings it
@@ -1324,7 +1324,7 @@ public struct MeshWXRadar: Sendable, Hashable, Codable {
   }
 
   /// Whether a cell is outside the radar picture, so its level 0 means *unknown* rather than dry
-  /// (spec revision 11, §7D). Always false for a whole tile.
+  /// (spec revision 11, §13). Always false for a whole tile.
   public func isUnknown(row: Int, col: Int) -> Bool {
     guard let bounds else { return false }
     return !bounds.contains(row: row, col: col)
@@ -1370,12 +1370,12 @@ public enum MeshWXPayload: Sendable, Hashable {
   case text(MeshWXText)
   case notAvailable(MeshWXNotAvailable)
   case coverage(MeshWXCoverage)
-  /// An app's request (spec §7B). Only ever *heard* from another phone on the channel: this
+  /// An app's request (spec §11). Only ever *heard* from another phone on the channel: this
   /// app sends its own and never acts on somebody else's.
   case request(MeshWXRequest)
-  /// One packet of a national area sweep (spec §7C).
+  /// One packet of a national area sweep (spec §12).
   case areaSweep(MeshWXAreaSweep)
-  /// One tile of a radar picture (spec revision 11, §7D).
+  /// One tile of a radar picture (spec revision 11, §13).
   case radar(MeshWXRadar)
   /// A reserved or third-party type (spec §2.2, nibbles 12-15). Receivers ignore these,
   /// but the header still decoded, so `(bot, seq)` tracking keeps working.

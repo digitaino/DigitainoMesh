@@ -1,7 +1,7 @@
 import Foundation
 import MeshWX
 
-/// The user's choice of weather radio (docs/MESHWX_UI.md §3.1 U-63, spec §10.8).
+/// The user's choice of weather radio (docs/MESHWX_UI.md §3.1 U-63, spec §20).
 ///
 /// A pick used to be one bot id for every place and for good. Other cities run their own bots on
 /// the same `#meshwx`, so a pick made at home followed the phone to San Antonio and sent every
@@ -82,13 +82,13 @@ public struct WeatherBotPickStore: @unchecked Sendable {
 }
 
 /// Which bot a page asks when the user has not picked one for where it is (phase 2, 18 October
-/// 2026, spec §10.8).
+/// 2026, spec §20).
 ///
 /// Several cities' bots share `#meshwx`, meshes are bridged so a phone hears two bots and then
 /// loses one, and people travel. So the first question is **who can hear this phone now**: a bot
 /// heard live — any message, not drained from the radio's queue — in the last ``liveWindow``, and
 /// not silent since a request to it went unanswered. A bot with no advert counts as much as one
-/// with: a Request datagram names it by the two bytes its own packets carry (spec §7B). Only then
+/// with: a Request datagram names it by the two bytes its own packets carry (spec §11). Only then
 /// **who covers the place**, by the bot's own statement or its station footprint
 /// (``WeatherCoverage``): inside before unknown before outside. A statement with no area filter is
 /// unknown, never "covers everything" — it is the cheapest thing on the wire to forge.

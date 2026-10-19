@@ -1,10 +1,10 @@
 # MeshWX alert notifications: design
 
-Status: design only, 2026-09-29. Nothing here is built. Line references are to the committed
-trees: the app at `feature/meshwx` `824dd9eb`, the bot at `main` `e79b723`, and stock companion
-firmware at tag `companion-v1.17.1`. Spec revision 12 (a warning's start time,
-`docs/MESHWX_REV12.md`) was being written into both working trees while this was written; this
-design uses its names (`begins_before` on the wire, `MeshWXWarning.beginsMinutes`,
+Status: the design of 2026-09-29, since built; what the app does now is docs/MESHWX.md "Alert
+notifications" and the bot's spec §18.9 and §20.3. Line references are to the committed trees of
+that day: the app at `feature/meshwx` `824dd9eb`, the bot at `main` `e79b723`, and stock companion
+firmware at tag `companion-v1.17.1`. A warning's start time (spec §3.4) was being built into both
+trees while this was written; this design uses its names (`begins_before` on the wire, `MeshWXWarning.beginsMinutes`,
 `WeatherStoredWarning.beginsAt`, `WeatherFormatting.alertClock` and `alertWindow`) and changes
 nothing it decides.
 
@@ -50,7 +50,7 @@ APNs is not part of the plan.
 | 1 | The bot replays NWS products into per-zone VTEC state. An event is "active" while any zone's end time is ahead, **including zones whose start is days away**, so a watch for Wednesday is broadcast on Tuesday at issuance | `meshwx/meshcore_weather/protocol/vtec_events.py:50-51, 61-63, 117-119` |
 | 2 | Each warnings run sends a Warning (type 1) for every new or materially changed identity (expiry to the minute, tags, zone set, vertex count; revision 12 adds the start). Wording-only reissues (NWS `CON` statements) send nothing, and nothing is sent when a watch's start time arrives | `schedule/executor.py:47-90`, `protocol/v5_builders.py:345-360` |
 | 3 | New `TO.W`, `SV.W`, `FF.W`, `EW.W` go out once more, same content, new `seq`, 90 s later in code (the spec says "about two minutes"). A watch gets no repeat | `executor.py:24, 62-67, 76`; `v5_builders.py:30`; spec §3 |
-| 4 | Every packet the bot hears no repeater echo for is resent once, byte for byte, same `seq` | spec §2.3 |
+| 4 | Every packet the bot hears no repeater echo for is resent once, byte for byte, same `seq` | spec §2.4 |
 | 5 | A Cancel (type 2) only when an identity ends more than 5 minutes before its stored expiry; a Digest (type 3) every 3 hours and one minute after any cancel | `executor.py:79-88`; spec §4, §5 |
 | 6 | The phone's companion radio receives the `GRP_DATA` frame. With the phone connected it pushes `MSG_WAITING` over BLE; with the phone away it queues the frame. **Stock companion v1.17.1 holds 16 frames and, when full, drops the oldest channel frame (text or datagram, any channel) to make room** | DigitainoMeshCore `companion-v1.17.1`: `examples/companion_radio/MyMesh.h:62-63`, `MyMesh.cpp:214-241` |
 | 7 | The BLE notification wakes the app (`UIBackgroundModes` = `bluetooth-central`, `project.yml:125-126`), the session fetches the frame, and `WeatherService` stamps it live or backlog at arrival: backlog means `MessagePollingService.pollAllMessages` is draining the radio's queue, which is phase 3 of the connect-time sync | `WeatherService.swift:497-508`; `MessagePollingService.swift:63-70, 212-239`; `SyncCoordinator+Sync.swift:203` |
@@ -72,7 +72,7 @@ Taking the Flood Watch through those steps, with every gate as favourable as it 
 1. It arrived as a Warning at issuance (step 1: the bot sends watches that start later, because
    the zones' end times are ahead). Revision 11 carries no start time, so the app holds it as in
    effect from the moment it arrived; "from Wednesday evening" was only in the NWS text and the
-   bot's own text replies (v4 carried the start, v5 dropped it; `docs/MESHWX_REV12.md`).
+   bot's own text replies (v4 carried the start, and v5 carries it again: spec §3.4).
 2. It is zone-based, so placing Austin needs the outlines. If they were not loaded it was parked
    as `checking`, the outlines were parsed, and it was judged again (`WeatherAlertNotifier.swift:271-301`).
    So the notifier did real work for it.
@@ -245,7 +245,7 @@ refuses is never placed, so it never loads the outlines.
 
 ### 3.4 One alert, one notification
 
-**The key is the identity** `(event, office, etn)` (spec §2.3). The request identifier becomes
+**The key is the identity** `(event, office, etn)` (spec §2.4). The request identifier becomes
 `wx-<event>.<office>.<etn>`, for example `wx-FA.A.EWX.8`, with no bot and no place in it. The
 ledger (`WeatherAlertPost`, one defaults blob) keeps one row per identity with the watched places
 it was posted for and whether each was covered or near, so the per-place escalation (near becoming
@@ -272,7 +272,7 @@ start and `expires`, sent only when the product takes effect later than it was i
 from the earliest VTEC begin across the event's active zones (`vtec_events.py:61-63`). A moved
 start resends the warning, like a moved expiry.
 
-**What revision 12 already gives this design** (`docs/MESHWX_REV12.md` §1-§2): the start resolved
+**What revision 12 already gives this design** (spec §3.4; docs/MESHWX.md "Times"): the start resolved
 once at receipt into `WeatherStoredWarning.beginsAt`, so a digest that extends the expiry cannot
 walk it forward (the trap documented for the issue time, `WeatherBotState.swift:17-25`); a later
 copy without a start (an older bot) does not erase it; a value outside issuance-to-expiry is
@@ -704,13 +704,13 @@ recorder poster, which gains `schedule`, `pendingIdentifiers` and `removePending
 - The ledger written by today's build is read as one row per identity.
 
 The codec, the stored start (kept across a later copy without one, not walked by a digest) and
-the `alertWindow` words are revision 12's own tests (`docs/MESHWX_REV12.md` §4), not repeated here.
+the `alertWindow` words are tested in `WeatherFormattingTests`, not repeated here.
 
 ### 7.2 The simulator, without waiting for weather
 
 - **Seeded state**: `WeatherSeedScenarioTests` (in `WeatherSeedTrialTests.swift`) writes live-timed
   state files for the simulator, and revision 12 adds an `FA.A` watch that starts about 10 hours
-  after the seed's clock to its storm scenario (`docs/MESHWX_REV12.md` §4). That checks the
+  after the seed's clock to its storm scenario (`WeatherSeedTrialTests`). That checks the
   dashboard, the alert detail and the "gone" state. A state file produces no events, so it cannot
   make the notifier post.
 - **Presentation and taps**: `xcrun simctl push booted com.digitaino.PocketMesh payload.json` with

@@ -32,7 +32,7 @@ public enum MeshWXSeverity: String, Sendable, Hashable, Codable, CaseIterable, C
     }
   }
 
-  /// Sort order for a warning list: the thing that can kill you first (spec §10.2,
+  /// Sort order for a warning list: the thing that can kill you first (spec §18.2,
   /// "sort by severity then expiry").
   public var rank: Int {
     switch self {
@@ -52,7 +52,7 @@ public enum MeshWXSeverity: String, Sendable, Hashable, Codable, CaseIterable, C
 ///
 /// The palette belongs to the app's design system (and has to answer to dark mode and
 /// to accessibility contrast); this module only knows which NWS convention a product
-/// falls under, so it names it and stops. Spec §10.2.
+/// falls under, so it names it and stops. Spec §18.2.
 public enum MeshWXEventTint: String, Sendable, Hashable, Codable, CaseIterable {
   case red
   case yellow
@@ -236,11 +236,11 @@ public enum MeshWXFeedHealth: Sendable, Hashable {
   }
 }
 
-/// The pure half of spec §10 and §11: icons, tints, staleness and unit conversions,
+/// The pure half of spec §18 and §21: icons, tints, staleness and unit conversions,
 /// with no UI framework anywhere near them so every rule is a unit test.
 public enum MeshWXPresentation {
 
-  // MARK: - Sky and condition icons (spec §10.1)
+  // MARK: - Sky and condition icons (spec §18.6)
 
   /// SF Symbol for an observation's sky, or nil for sky 15, which in an observation means the
   /// report had no cloud or weather group (spec §6, revision 3): no icon rather than an
@@ -272,7 +272,7 @@ public enum MeshWXPresentation {
   }
 
   /// Icon for a forecast period: the `cond` flags override the base sky code (spec
-  /// §10.1).
+  /// §18.6).
   ///
   /// Order is by what the flag means for a person's day — a thunderstorm outranks the
   /// sleet that may follow it, both outrank fog, and wind is an accent on whatever else
@@ -294,7 +294,7 @@ public enum MeshWXPresentation {
     return MeshWXConditionIcon(symbolName: symbol, showsWindAccent: period.windy)
   }
 
-  // MARK: - Warning colour and icon (spec §10.2)
+  // MARK: - Warning colour and icon (spec §18.2)
 
   /// NWS colour convention for a VTEC code, falling back to the significance letter.
   ///
@@ -341,7 +341,7 @@ public enum MeshWXPresentation {
     }
   }
 
-  // MARK: - Warning tags (spec §10.2)
+  // MARK: - Warning tags (spec §18.2)
   //
   // The app renders "Hail 1.00 in"; this module hands over the 1.0. Unit systems,
   // decimal separators and the word for hail are all localisation, and a string built
@@ -357,7 +357,7 @@ public enum MeshWXPresentation {
     mph == 0 ? nil : mph
   }
 
-  /// The tags worth showing for a warning, in the order §10.2 lists them. Each case
+  /// The tags worth showing for a warning, in the order §18.2 lists them. Each case
   /// carries its number; the words are the app's.
   public enum Tag: Sendable, Hashable {
     case tornado(MeshWXTornadoTag)
@@ -383,7 +383,7 @@ public enum MeshWXPresentation {
     return tags
   }
 
-  // MARK: - Staleness (spec §10.3, §5)
+  // MARK: - Staleness (spec §18.3, §5)
 
   /// Observations older than this are stale: still shown, but with their age.
   public static let observationStaleAfterMinutes: UInt32 = 120

@@ -3,8 +3,8 @@ import Foundation
 import MeshWX
 import Testing
 
-/// Every rule in spec §2.3 (duplicates, gaps), §3–§5 (warnings, cancel, digest), §6–§7
-/// (newest wins) and §8.1 (text reassembly), one test each.
+/// Every rule in spec §2.4 (duplicates, gaps), §3–§5 (warnings, cancel, digest), §6–§7
+/// (newest wins) and §8 (text reassembly), one test each.
 @Suite("WeatherStateReducer")
 struct WeatherStateReducerTests {
   private typealias F = WeatherFixture
@@ -68,7 +68,7 @@ struct WeatherStateReducerTests {
     #expect(stored.receivedAt == F.t0.addingTimeInterval(60))
   }
 
-  /// Spec §3 and §10.5: a warning says when NWS issued it, and that is not when the packet
+  /// Spec §3 and §18.1: a warning says when NWS issued it, and that is not when the packet
   /// arrived. A replacement carries its own; one that carries none — an older bot — leaves the
   /// known time alone, since an identity's issuance never moves.
   @Test
@@ -601,7 +601,7 @@ struct WeatherStateReducerTests {
 /// Ordering on a shared, lossy channel: late copies, a bot that restarts its counter, lists
 /// drained from the radio's queue hours late, and upgrades whose replacement never arrives. Every
 /// case here is a way the phone could otherwise report calm while something is active.
-/// Spec §7A: the bot's own statement of what it carries, which has no time of its own.
+/// Spec §10: the bot's own statement of what it carries, which has no time of its own.
 @Suite("WeatherStateReducer coverage")
 struct WeatherStateReducerCoverageTests {
   private typealias F = WeatherFixture
@@ -1018,7 +1018,7 @@ struct WeatherStateReducerOrderingTests {
     strip("observations", "batchSize")
     strip("forecasts", "requestedHere")
     strip("texts", "request")
-    // Revision 7 (spec §2.2, §8.1): a file from Rafael's phone written before the app could read
+    // Revision 7 (spec §2.2, §8): a file from Rafael's phone written before the app could read
     // either of these decodes as "the radio didn't say", not as a failure to load the file.
     for collection in ["warnings", "observations", "forecasts", "texts"] {
       strip(collection, "source")
@@ -1157,7 +1157,7 @@ struct WeatherRetentionTests {
   }
 }
 
-/// Spec §7C: the area sweep — packets assembled by `group` the way Text chunks are, and two
+/// Spec §12: the area sweep — packets assembled by `group` the way Text chunks are, and two
 /// sweeps of the same ground never merged, because they are two pictures of it. Revision 10's
 /// several-sweeps-at-once rules are in `WeatherStateReducerScopedSweepTests` below.
 @Suite("WeatherStateReducer area sweep")
@@ -1335,7 +1335,7 @@ struct WeatherStateReducerAreaSweepTests {
   }
 }
 
-/// Spec revision 10 (§1.1, §1.2): scoped sweeps, several held at once, and the `>part` resend
+/// Spec §12.3 and §14.5: scoped sweeps, several held at once, and the `>part` resend
 /// that fills a hole in one of them.
 @Suite("WeatherStateReducer scoped sweeps")
 struct WeatherStateReducerScopedSweepTests {
@@ -1478,7 +1478,7 @@ struct WeatherStateReducerScopedSweepTests {
     #expect(state.areaSweeps.map(\.group) == [12, 11, 10, 9, 8, 7, 6, 5])
   }
 
-  // MARK: - `>part` (spec revision 10, §1.1)
+  // MARK: - `>part` (spec §14.5)
 
   /// The bot answers `>part` by sending the named packets again: identical bytes except a new
   /// `seq`. It must reach the assembly it belongs to — not be taken for a duplicate (the `seq`
@@ -1582,7 +1582,7 @@ struct WeatherStateReducerScopedSweepTests {
   }
 }
 
-/// Spec revision 10, §1.3: forecasts for a coordinate, which come back under point `0xFFFF`
+/// docs/MESHWX.md "State": forecasts for a coordinate, which come back under point `0xFFFF`
 /// because the bundle has no point where the bot found one.
 @Suite("WeatherStateReducer unbundled forecasts")
 struct WeatherStateReducerUnbundledForecastTests {
@@ -1639,7 +1639,7 @@ struct WeatherStateReducerUnbundledForecastTests {
   }
 }
 
-// MARK: - Times ahead of the phone's clock (spec §10.7, 17 October 2026)
+// MARK: - Times ahead of the phone's clock (spec §17.5, 17 October 2026)
 //
 // Every bot is two self-asserted bytes on the wire (spec §2.2), so anyone on the channel can send
 // a message in a bot's name. A time ahead of the phone's clock is never one a bot sends honestly,
@@ -1900,7 +1900,7 @@ struct WeatherFutureTimeTests {
 
 // MARK: - What a digest speaks for (spec §5, 17 October 2026)
 //
-// A bot answers a place-named `>w` nationwide (spec §8.2), but its digest lists only what is
+// A bot answers a place-named `>w` nationwide (spec §14), but its digest lists only what is
 // active in its own coverage. WX-AUS's next digest used to end a Houston warning the phone had
 // fetched from it for a saved place.
 
@@ -1982,7 +1982,7 @@ struct WeatherDigestCoverageTests {
     #expect(changes == [.digestApplied(missing: [], removed: [inside])])
   }
 
-  /// A tornado watch names counties and has no polygon (spec §8.2): the bot covers every county
+  /// A tornado watch names counties and has no polygon (spec §14): the bot covers every county
   /// its circle reaches, and the phone judges one by the county's centre.
   @Test
   func `a county watch ends when its county reaches the stated circle`() {

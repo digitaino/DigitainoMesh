@@ -224,7 +224,7 @@ struct MeshWXCodecTests {
   }
 
   @Test func expansionWithoutTheStateYieldsNothing() {
-    // The run is still decodable, it just cannot be named (spec §9, append-only tables).
+    // The run is still decodable, it just cannot be named (spec §16, append-only tables).
     let run = MeshWXAreaRun(stateIndex: 99, isCounty: true, start: 453, run: 1)
     #expect(run.ugcCodes(states: states).isEmpty)
     #expect(run.numbers == [453])
@@ -320,7 +320,7 @@ struct MeshWXCodecTests {
     }
   }
 
-  // MARK: - Request (type 9, spec §7B)
+  // MARK: - Request (type 9, spec §11)
 
   @Test func aRequestRefusesWhatTheBotCouldNotRead() {
     let sender = Data([0x01, 0x02, 0x03, 0x04, 0x05, 0x06])
@@ -336,7 +336,7 @@ struct MeshWXCodecTests {
     #expect(throws: MeshWXEncodeError.emptyRequest) {
       _ = try MeshWXEncoder.request(seq: 0, bot: 1, senderPrefix: sender, timestamp: 1, text: ">")
     }
-    // 41 bytes of text: one past what §7B allows.
+    // 41 bytes of text: one past what §11 allows.
     let long = ">f " + String(repeating: "x", count: 38)
     #expect(throws: MeshWXEncodeError.oversize(what: "request text", bytes: 41)) {
       _ = try MeshWXEncoder.request(seq: 0, bot: 1, senderPrefix: sender, timestamp: 1, text: long)
@@ -348,7 +348,7 @@ struct MeshWXCodecTests {
   }
 
   @Test func aRequestRoundTripsItsTextAndTimeWhoeverSentIt() throws {
-    // Another phone's request, as it arrives on the channel: the whole grammar of §8.2 at its
+    // Another phone's request, as it arrives on the channel: the whole grammar of §14 at its
     // longest, to a bot named `0xFFFF` — every bot on the channel.
     let request = MeshWXRequest(
       seq: 200, botID: MeshWXRequest.anyBot,
@@ -703,7 +703,7 @@ struct MeshWXCodecTests {
     #expect(unflagged.beginsBeforeMinutes == nil)
   }
 
-  // MARK: - Coverage (type 8, spec §7A)
+  // MARK: - Coverage (type 8, spec §10)
 
   private func coverageBody(_ data: Data) throws -> MeshWXCoverage? {
     guard case let .coverage(coverage) = try MeshWXDecoder.decode(data).payload else { return nil }
@@ -819,7 +819,7 @@ struct MeshWXCodecTests {
     }
   }
 
-  /// Spec §7A: the two caps are chosen so a full list never costs the other one.
+  /// Spec §10: the two caps are chosen so a full list never costs the other one.
   @Test func theFullestCoverageStillFitsOnePacket() throws {
     let offices = (0..<MeshWXWire.maxCoverageOffices).map { UInt8($0) }
     let runs = (0..<MeshWXWire.maxAreaRuns).map {
@@ -936,7 +936,7 @@ struct MeshWXCodecTests {
     }
   }
 
-  // MARK: - Text cut for the air (spec §8.1, revision 7)
+  // MARK: - Text cut for the air (spec §8, revision 7)
 
   /// Bit 0 of a Text's nibble: the product was longer than eight packets and the bot dropped the
   /// tail. It sits beside the source bits and survives a re-encode.
@@ -971,7 +971,7 @@ struct MeshWXCodecTests {
     }
   }
 
-  // MARK: - Area sweep (type 10, spec §7C)
+  // MARK: - Area sweep (type 10, spec §12)
 
   private func sweepBody(_ data: Data) throws -> MeshWXAreaSweep? {
     guard case let .areaSweep(sweep) = try MeshWXDecoder.decode(data).payload else { return nil }
@@ -1172,7 +1172,7 @@ struct MeshWXCodecTests {
     #expect(sweep.entries == [Self.texasZones])
   }
 
-  // MARK: - Scoped sweeps (spec revision 10, §1.2)
+  // MARK: - Scoped sweeps (spec §12.3)
 
   /// Oklahoma index 35, Texas 42, as `index.json` orders them.
   private static let oklahomaCounties = MeshWXAreaSweep.Entry(

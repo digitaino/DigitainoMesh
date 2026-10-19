@@ -63,7 +63,7 @@ enum WeatherPhoneFixture {
     return state
   }
 
-  /// WX-AUS's own statement of its area (spec §7A, the vector `coverage_wx_aus`).
+  /// WX-AUS's own statement of its area (spec §10, the vector `coverage_wx_aus`).
   static let statement = MeshWXCoverage(
     latitude: 30.2672, longitude: -97.7431, radiusKilometres: 120, stationCap: 14,
     officeIndices: [35, 40, 51, 113],
@@ -83,7 +83,7 @@ enum WeatherPhoneFixture {
     at receivedAt: Date = now
   ) -> WeatherBotState {
     var state = state
-    // Flags nibble: bit 0 the zones were cut, bit 1 the offices were (spec §7A).
+    // Flags nibble: bit 0 the zones were cut, bit 1 the offices were (spec §10).
     let flags: UInt8 = (coverage.areasCut ? 1 : 0) | (coverage.officesCut ? 2 : 0)
     _ = WeatherStateReducer.apply(
       MeshWXMessage(

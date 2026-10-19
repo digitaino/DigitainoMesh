@@ -104,7 +104,7 @@ public struct WeatherPlace: Sendable, Hashable {
     )
   }
 
-  /// The place for a searched ZIP: the ZIP's own point, not its town's, labelled by spec §9.1 as
+  /// The place for a searched ZIP: the ZIP's own point, not its town's, labelled by spec §16.2 as
   /// the weather bot labels it ("Austin, TX 78701"), with a town's radius.
   public static func zip(_ zip: MeshWXZip) -> WeatherPlace {
     WeatherPlace(
@@ -401,7 +401,7 @@ public enum WeatherPlaceSearch {
   /// Two rows that read the same word for word are one row.
   ///
   /// `places.json` carries San Juan, PR as both the municipio and its zona urbana, 7 km apart,
-  /// and spec §9.1 drops "ZONA URBANA" from the second: the search offered "San Juan, PR" twice,
+  /// and spec §16.2 drops "ZONA URBANA" from the second: the search offered "San Juan, PR" twice,
   /// with nothing on either row to choose by. The first is kept, so the table's own ranking —
   /// nearest, then biggest — still decides which coordinate a tap opens. Only a near neighbour is
   /// folded in: two towns of one name in one state that are genuinely apart are two places, and

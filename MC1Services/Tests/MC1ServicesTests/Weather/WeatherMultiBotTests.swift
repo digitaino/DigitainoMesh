@@ -4,7 +4,7 @@ import MeshCore
 import MeshWX
 import Testing
 
-/// Phase 2 (18 October 2026, spec §10.8): several cities' bots on one `#meshwx`. A bot is two
+/// Phase 2 (18 October 2026, spec §20): several cities' bots on one `#meshwx`. A bot is two
 /// self-asserted bytes on the wire until signing (wire revision 14), meshes are bridged so a phone
 /// hears two bots and then loses one, and people travel. These are the scenarios the review found,
 /// end to end through the service, the screen rules and the notifier. The web client's

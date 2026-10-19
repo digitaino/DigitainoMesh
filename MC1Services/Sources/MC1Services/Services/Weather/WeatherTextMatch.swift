@@ -3,13 +3,13 @@ import MeshWX
 
 /// Whether a text reply is the answer to one particular request.
 ///
-/// A text chunk carries its subject and nothing else (spec §8.1): somebody else's `>storm OK`, a
+/// A text chunk carries its subject and nothing else (spec §8): somebody else's `>storm OK`, a
 /// TAF when this phone asked for the METAR (both are subject 5), or another warning's narrative
 /// all arrive looking like the reply this phone is waiting for. The request's argument has to be
 /// read back out of the words, and a reply that does not show it neither settles the request nor
 /// becomes this phone's.
 ///
-/// The keys, per request, as the bot words its replies (spec §8.2, revision 3, and vector
+/// The keys, per request, as the bot words its replies (spec §14, revision 3, and vector
 /// `text_warning_narrative_chunk0`):
 /// - `>metar KAUS`: the first chunk opens `METAR KAUS` and names the station in its first words
 ///   (`SPECI`, or the station followed by a `DDHHMMZ` time, are accepted too). The bot never

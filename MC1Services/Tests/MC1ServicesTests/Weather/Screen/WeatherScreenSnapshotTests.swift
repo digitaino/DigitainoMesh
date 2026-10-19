@@ -113,7 +113,7 @@ struct WeatherScreenSnapshotTests {
   }
 
   /// Until 2026-09-21 this read "can be read but not asked". A Request datagram names the bot by
-  /// the two bytes its own packets carry (spec §7B), so the advert was only ever needed for the
+  /// the two bytes its own packets carry (spec §11), so the advert was only ever needed for the
   /// DM. The owner found the hole from the other side: a client on a radio that was itself named
   /// WX-AUS, which can never hear itself announce, with every ask blocked for a night.
   @Test

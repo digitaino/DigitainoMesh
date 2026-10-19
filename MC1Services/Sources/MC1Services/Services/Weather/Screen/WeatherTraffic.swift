@@ -135,7 +135,7 @@ public struct WeatherTrafficEntry: Sendable, Hashable, Codable, Identifiable {
       isDuplicate: isDuplicate)
   }
 
-  /// A Request datagram this phone flooded on the channel (spec §7B). The bytes are the ones the
+  /// A Request datagram this phone flooded on the channel (spec §11). The bytes are the ones the
   /// radio actually took, handed back by the transport, so the row shows what went out rather
   /// than a reconstruction of it.
   public static func sent(
@@ -230,15 +230,15 @@ public enum WeatherTrafficTitle: Sendable, Hashable {
   case observations
   case forecast
   case text(subject: MeshWXTextSubject)
-  /// The bot cannot serve a request (spec §8.3). The letter is the request's, echoed back.
+  /// The bot cannot serve a request (spec §9). The letter is the request's, echoed back.
   case notAvailable(letter: Character)
   case coverage
-  /// Somebody's `>` request, heard on the channel (spec §7B) or sent by this phone. `sender` is
+  /// Somebody's `>` request, heard on the channel (spec §11) or sent by this phone. `sender` is
   /// the six-byte key prefix the datagram carries, which is as much as anyone on the channel
   /// knows about who asked.
   case request(sender: Data)
   case alertMap
-  /// One tile of a radar picture (spec revision 11, §7D).
+  /// One tile of a radar picture (spec revision 11, §13).
   case radar
   /// Bytes on the weather slot the codec could not read at all.
   case undecodable
@@ -259,11 +259,11 @@ public enum WeatherTrafficDetail: Sendable, Hashable {
   case chunk(index: UInt8, of: UInt8)
   case point(UInt16)
   /// A forecast whose point is `0xFFFF` — the bot chose it, and no bundle index names it (spec
-  /// revision 10, §1.3). Without this the row for the very answer revision 10 exists for read as
+  /// §14.3). Without this the row for the very answer revision 10 exists for read as
   /// a bare "Forecast", which is the one thing it is not.
   case botPoint
   case station(UInt16)
-  /// How many Weather Service offices a coverage statement names (spec §7A). The row's only
+  /// How many Weather Service offices a coverage statement names (spec §10). The row's only
   /// number: the circle and the zone runs are what the radio page is for.
   case offices(Int)
   /// The `>` text a Request datagram carries, verbatim.
@@ -328,7 +328,7 @@ public struct WeatherTrafficSummary: Sendable, Hashable {
       return WeatherTrafficSummary(
         title: .forecast,
         // `0xFFFF` is not a point, it is "the bot picked one this bundle cannot name" (spec §7,
-        // revision 10 §1.3), so the row says *that* rather than naming a sentinel.
+        // §14.3), so the row says *that* rather than naming a sentinel.
         detail: forecast.isUnbundledPoint ? [.botPoint] : [.point(forecast.pointIndex)])
     case let .text(chunk):
       var detail: [WeatherTrafficDetail] = [.chunk(index: chunk.index, of: chunk.total)]

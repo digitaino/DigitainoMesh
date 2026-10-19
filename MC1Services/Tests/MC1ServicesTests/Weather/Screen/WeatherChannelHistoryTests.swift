@@ -70,7 +70,7 @@ struct WeatherChannelHistoryTests {
     let list = try #require(heard.first { $0.subject == .alertList(entries: 1) })
     #expect(list.contentAt == Date(unixMinutes: F.t0Minutes))
     #expect(list.receivedAt == F.t0.addingTimeInterval(-600))
-    // A warning, a text reply and a statement carry no time of their own (spec §3, §7A, §8.1).
+    // A warning, a text reply and a statement carry no time of their own (spec §3, §10, §8).
     #expect(heard.first { $0.subject == .warning(F.svw42) }?.contentAt == nil)
     #expect(heard.first { $0.subject == .coverage }?.contentAt == nil)
   }

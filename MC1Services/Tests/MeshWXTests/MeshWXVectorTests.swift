@@ -43,7 +43,7 @@ struct MeshWXVectorTests {
     #expect(MeshWXVectors.all.contains { $0.name == "request_radar_loop" })
   }
 
-  /// Spec revision 11, §7D, against the publisher's own bytes: the Dallas tile of 20 September
+  /// Spec revision 11, §13, against the publisher's own bytes: the Dallas tile of 20 September
   /// 2026, 23:38Z, cut from the Southern Plains mosaic — 131 bytes for 1,024 cells, which is what
   /// the quadtree is for.
   @Test func theRadarTileVectorIsTheSquallLineOverDallas() throws {
@@ -85,7 +85,7 @@ struct MeshWXVectorTests {
     #expect(packed.count < data.count)
   }
 
-  /// Spec revision 11, §7D: the coarse and partial form, whose four bounds bytes say which rows
+  /// Spec revision 11, §13: the coarse and partial form, whose four bounds bytes say which rows
   /// of its own 16 × 16 grid the mosaic reached. Every cell outside them is level 0 on the wire
   /// and **unknown** on screen, which is the one thing about this message a client can get wrong.
   @Test func theCoarsePartialVectorMarksTheRowsThePictureDoesNotReach() throws {
@@ -121,7 +121,7 @@ struct MeshWXVectorTests {
     }
   }
 
-  /// Spec revision 11, §7D: `>radar` is refused under the letter **`x`**, not `r`. `r` is
+  /// Spec revision 11, §13: `>radar` is refused under the letter **`x`**, not `r`. `r` is
   /// `>rain`, and a refusal that could mean either is a refusal nobody can act on.
   @Test func theRadarRefusalCarriesTheLetterThatIsNotItsOwnFirst() throws {
     let vector = try #require(MeshWXVectors.all.first { $0.name == "not_available_radar" })
@@ -140,7 +140,7 @@ struct MeshWXVectorTests {
       reason: .rateLimited) == data)
   }
 
-  /// Spec revision 10, §1.2, against the publisher's own bytes: `total` is `0x81` — bit 7 set and
+  /// Spec §12.3, against the publisher's own bytes: `total` is `0x81` — bit 7 set and
   /// the packet count 1 — and the two scope entries at the head of the packet are lifted out of
   /// `entries`, so the sweep reports four areas and not six.
   @Test func theScopedSweepVectorSplitsTheTotalByteAndLiftsItsScope() throws {
@@ -248,7 +248,7 @@ struct MeshWXVectorTests {
     }
   }
 
-  /// Spec §7A: WX-AUS's real message is 39 bytes — 14 fixed, four offices, five runs — and it
+  /// Spec §10: WX-AUS's real message is 39 bytes — 14 fixed, four offices, five runs — and it
   /// says the bot covers its own home county, which is what the app used to get wrong.
   @Test func theCoverageVectorIsTheMessageTheSpecDescribes() throws {
     let vector = try #require(MeshWXVectors.all.first { $0.name == "coverage_wx_aus" })
@@ -300,7 +300,7 @@ struct MeshWXVectorTests {
     }
     #expect(batch.carriesAges)
     #expect(batch.stations.map(\.ageMinutes) == [0, 20, 110])
-    // Each station's own time, which is what "as of" reads (spec §10.5). The newest is the
+    // Each station's own time, which is what "as of" reads (spec §18.1). The newest is the
     // batch time itself, and the oldest is nearly two hours behind it.
     #expect(batch.stations.map { batch.reportMinutes(for: $0) }
       == [29_823_893, 29_823_873, 29_823_783])
@@ -400,7 +400,7 @@ struct MeshWXVectorTests {
     }
   }
 
-  /// Spec §7B: the app's own `>d`, as the sixteen bytes the spec prints — the one message this
+  /// Spec §11: the app's own `>d`, as the sixteen bytes the spec prints — the one message this
   /// app transmits, so the encoder's output is checked against the publisher's hex byte for byte
   /// in both directions.
   @Test func theRequestVectorIsTheSixteenBytesTheSpecPrints() throws {
@@ -512,11 +512,11 @@ struct MeshWXVectorTests {
     }
   }
 
-  /// Spec §7C. The sweep's entries go under `entries`, the same key a Digest uses for a wholly
+  /// Spec §12. The sweep's entries go under `entries`, the same key a Digest uses for a wholly
   /// different shape, so the fixture tells them apart by what the JSON holds
   /// (`MeshWXVectors.Decoded.EntriesField`) — and `#require` here means a renamed key fails the
   /// suite instead of passing over a nil.
-  /// Spec §7B: the one message this app transmits. `ts` is Unix **seconds** here, not the minutes
+  /// Spec §11: the one message this app transmits. `ts` is Unix **seconds** here, not the minutes
   /// every other time in the protocol is carried in, which is worth reading off the publisher's
   /// own field rather than off an implementation that could be wrong by a factor of sixty.
   private func expectRequest(_ request: MeshWXRequest, matches want: MeshWXVectors.Decoded) {
@@ -535,7 +535,7 @@ struct MeshWXVectorTests {
     // The two flag bits, read twice: off the header above and out of the decoded body here.
     #expect(sweep.wasCut == (want.cut ?? false))
     #expect(sweep.includesAdvisories == (want.advisories ?? false))
-    // Revision 10, §1.2. `total` bit 7 is the scope flag, and the publisher prints it as its own
+    // Spec §12.3. `total` bit 7 is the scope flag, and the publisher prints it as its own
     // field rather than leaving it inside the count — which is exactly the reading that has to be
     // checked, since a decoder that never split the byte would report `total = 131` here.
     #expect(sweep.isScoped == (want.scoped ?? false))

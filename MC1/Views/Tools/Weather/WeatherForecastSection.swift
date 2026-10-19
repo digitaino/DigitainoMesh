@@ -78,8 +78,8 @@ struct WeatherForecastSection: View {
   /// "Austin Camp Mabry · 6 km", the distance left out when the point is the place, and
   /// "· heard on #meshwx" when somebody else on the channel asked for it.
   ///
-  /// A forecast the **bot** picked the point for has no bundled point to name (spec revision 10,
-  /// §1.3): the answer came back for a point this app's tables do not carry, which is the whole
+  /// A forecast the **bot** picked the point for has no bundled point to name (docs/MESHWX_UI.md
+  /// §9): the answer came back for a point this app's tables do not carry, which is the whole
   /// reason `>f <lat>,<lon>` exists. The card says so rather than leaving a forecast on screen
   /// with nothing to say what it is a forecast of (docs/MESHWX_UI.md §3.1 U-9).
   private func pointLine(_ summary: WeatherForecastCard.Summary) -> String {

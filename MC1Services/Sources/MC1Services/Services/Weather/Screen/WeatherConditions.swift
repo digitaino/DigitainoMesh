@@ -201,8 +201,8 @@ public struct WeatherEmptyPlace: Sendable, Hashable {
   public var pointName: String?
   public var pointKilometres: Double?
   /// A refresh would ask for a forecast, whether or not it can name a point: since revision 10
-  /// a place with no bundled point in reach is asked about by coordinate (spec revision 10,
-  /// §1.3), so "no point to name" is no longer "nothing to ask for".
+  /// a place with no bundled point in reach is asked about by coordinate (docs/MESHWX_UI.md
+  /// §9), so "no point to name" is no longer "nothing to ask for".
   public var canAskForecast: Bool
 
   public init(
@@ -243,7 +243,7 @@ public struct WeatherEmptyPlace: Sendable, Hashable {
       return nil
     case let .missing(point, kilometres):
       // Since revision 10 an empty card can have no bundled point to name and still have an ask:
-      // `>f <lat>,<lon>` goes out for the place's own coordinate (spec revision 10, §1.3). The
+      // `>f <lat>,<lon>` goes out for the place's own coordinate (docs/MESHWX_UI.md §9). The
       // card then names no point — there is none to name — but it is not nothing to ask for, so
       // ``hasNothingToAsk`` stops speaking for the forecast and the page keeps its Update.
       empty.pointName = point?.name

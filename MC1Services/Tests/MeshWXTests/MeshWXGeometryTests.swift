@@ -3,7 +3,7 @@ import Testing
 
 @testable import MeshWX
 
-/// The bundled zone and county outlines (spec §9).
+/// The bundled zone and county outlines (spec §16).
 @Suite("MeshWX geometry")
 struct MeshWXGeometryTests {
   let geometry = MeshWXGeometry.shared
@@ -41,7 +41,7 @@ struct MeshWXGeometryTests {
   }
 
   @Test func unknownCodesReturnNilSoTheAppFallsBackToTheCentroid() {
-    // Spec §9: bundling the polygons is not a promise every code has one.
+    // Spec §16: bundling the polygons is not a promise every code has one.
     #expect(geometry.rings(for: "TXC997") == nil)
     #expect(geometry.rings(for: "ZZZ001") == nil)
   }

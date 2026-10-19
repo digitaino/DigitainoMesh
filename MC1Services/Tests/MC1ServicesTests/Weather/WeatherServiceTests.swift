@@ -4,7 +4,7 @@ import MeshCore
 import MeshWX
 import Testing
 
-/// The service's contract with the radio and with the spec's etiquette (§8.2, §13): what it
+/// The service's contract with the radio and with the spec's etiquette (§14, §19): what it
 /// accepts, what it sends, what settles a request, and what it never sends twice.
 @Suite("WeatherService")
 struct WeatherServiceTests {
@@ -19,7 +19,7 @@ struct WeatherServiceTests {
   }
 
   /// - Parameter channelRequests: whether the fake radio can flood a Request datagram (spec
-  ///   §7B). **False by default**, so every test below that is about the DM ladder drives the
+  ///   §11). **False by default**, so every test below that is about the DM ladder drives the
   ///   ladder; the channel path is a section of its own and asks for it.
   private func makeHarness(
     answerTimeout: Duration = .seconds(15),
@@ -148,7 +148,7 @@ struct WeatherServiceTests {
     #expect(Set(loaded.warnings.keys) == [F.svw43])
   }
 
-  /// Spec §10.7: a digest stamped ahead of the clock is refused, and one saved before the phone
+  /// Spec §17.5: a digest stamped ahead of the clock is refused, and one saved before the phone
   /// refused them is dropped when the state is read back, or it would turn every real one away.
   @Test
   func `a digest from the future is neither applied nor saved, and a saved one is dropped on load`() async throws {
@@ -521,7 +521,7 @@ struct WeatherServiceTests {
     #expect(try await h.service.send(.observations, to: F.bot) != nil)
   }
 
-  /// Spec §8.1: a reply with a part missing may be asked for again after 20 s.
+  /// Spec §8: a reply with a part missing may be asked for again after 20 s.
   @Test
   func `a text request whose reply is incomplete is sent again inside the five minutes`() async throws {
     let h = makeHarness()
@@ -673,7 +673,7 @@ struct WeatherServiceTests {
     #expect(await h.transport.sent.count == 1)
   }
 
-  // MARK: - Requests on the channel (spec §7B)
+  // MARK: - Requests on the channel (spec §11)
 
   @Test
   func `a request goes out as a datagram flooded on the channel, not as a DM`() async throws {
@@ -693,7 +693,7 @@ struct WeatherServiceTests {
     #expect(!pending.botRadioReceived)
   }
 
-  /// Spec §7B: one more per **new** request, wrapping; the five-second spacing still applies.
+  /// Spec §11: one more per **new** request, wrapping; the five-second spacing still applies.
   @Test
   func `each new request takes the next seq`() async throws {
     let h = makeHarness(channelRequests: true)
@@ -716,7 +716,7 @@ struct WeatherServiceTests {
     let first = try #require(try await h.service.send(.spaceWeather, to: F.bot))
     #expect(await weatherWaitUntil { await h.transport.channelSent.count == 2 })
     let flooded = await h.transport.channelSent
-    // Spec §10.8 (phase 2, 18 October 2026): the same text and `ts`, which is what makes the
+    // Spec §20 (phase 2, 18 October 2026): the same text and `ts`, which is what makes the
     // resend a copy of one request to the bot (it keys copies on sender, `ts` and text), under the
     // next `seq`, so it is not the same bytes every repeater already carried and drops by hash.
     #expect(flooded.map(\.text) == [">space", ">space"])
@@ -760,7 +760,7 @@ struct WeatherServiceTests {
     #expect(await h.transport.resets.isEmpty)
   }
 
-  /// Spec §7B: "An app whose radio cannot send channel datagrams keeps using the DM."
+  /// Spec §11: "An app whose radio cannot send channel datagrams keeps using the DM."
   @Test
   func `a radio that cannot flood a datagram falls back to the DM ladder`() async throws {
     let h = makeHarness(answerTimeout: .milliseconds(40), channelRequests: false)
@@ -860,7 +860,7 @@ struct WeatherServiceTests {
   }
 
   /// The spec's own vector, produced by the transport: `>d` to bot `0x041D` from this phone's
-  /// key at `ts` 1789660000 with `seq` 1 is the sixteen bytes of §7B, flooded on the slot that
+  /// key at `ts` 1789660000 with `seq` 1 is the sixteen bytes of §11, flooded on the slot that
   /// holds `#meshwx` under data type 0xFF10.
   @Test
   func `the session transport floods the spec's request bytes on the meshwx slot`() async throws {
@@ -1000,7 +1000,7 @@ struct WeatherServiceTests {
     _ = await h.service.ingest(F.observations(seq: 1, stations: [(202, 88), (860, 84)]))
     for offset in 0..<70 {
       _ = await h.service.ingest(F.observations(
-        // Each an hour or so old, so none of them is ahead of the phone's clock (spec §10.7).
+        // Each an hour or so old, so none of them is ahead of the phone's clock (spec §17.5).
         seq: UInt8(2 + offset), timestampMinutes: F.t0Minutes - 70 + UInt32(offset),
         stations: [(UInt16(1000 + offset), 70)]))
     }

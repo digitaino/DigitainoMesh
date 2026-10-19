@@ -4,7 +4,7 @@ import MeshWX
 import Testing
 
 /// The request grammar is the one part of the protocol the app *sends*, so every line of the
-/// spec §8.2 table is pinned here byte for byte.
+/// spec §14 table is pinned here byte for byte.
 @Suite("WeatherRequest")
 struct WeatherRequestTests {
   @Test
@@ -31,12 +31,12 @@ struct WeatherRequestTests {
       (.coverage, ">cov"),
       (.areaSweep(includesAdvisories: false, states: []), ">wmap"),
       (.areaSweep(includesAdvisories: true, states: []), ">wmap all"),
-      // Spec revision 11, §7D: three decimals, the `>f` form, and no `z` word at zoom 0.
+      // Spec revision 11, §13: three decimals, the `>f` form, and no `z` word at zoom 0.
       (.radar(latitude: 30.27, longitude: -97.74, zoom: 0), ">radar 30.270,-97.740"),
       (.radar(latitude: 30.27, longitude: -97.74, zoom: 2), ">radar 30.270,-97.740 z2"),
       (.radar(latitude: 32.78, longitude: -96.80, zoom: 0), ">radar 32.780,-96.800"),
       (.radar(latitude: 32.78, longitude: -96.80, zoom: 3), ">radar 32.780,-96.800 z3"),
-      // Spec revision 13, §7D.4: `loop` after the zoom, and the held pictures as UTC `HHMM`, newest first — the
+      // Spec revision 13, §13.5: `loop` after the zoom, and the held pictures as UTC `HHMM`, newest first — the
       // `request_radar_loop` vector, whatever order the minutes were handed over in.
       (.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: []), ">radar 30.270,-97.740 loop"),
       (.radarLoop(latitude: 30.27, longitude: -97.74, zoom: 0, held: [Self.at2338, Self.at2353]),
@@ -57,7 +57,7 @@ struct WeatherRequestTests {
   static let at2338: UInt32 = 29_832_458
   static let at2353: UInt32 = 29_832_473
 
-  /// Spec revision 13, §7D.4: the held pictures go newest first and only as many as keep the
+  /// Spec revision 13, §13.5: the held pictures go newest first and only as many as keep the
   /// request within 40 bytes. `>radar 30.270,-97.740 loop` is 26 bytes, so two fit and a third
   /// would be 41; a zoom word still leaves room for exactly two; a coordinate that is southern and
   /// western both, at a zoom other than 0, leaves room for one. Never more than five, whatever
@@ -90,7 +90,7 @@ struct WeatherRequestTests {
     }
   }
 
-  /// Spec revision 13, §7D.4: a loop expects the same tile its single picture would, held
+  /// Spec revision 13, §13.5: a loop expects the same tile its single picture would, held
   /// pictures or none, and any bot's frame of that square is it.
   @Test
   func `a loop expects the tile its single picture would`() {
@@ -102,7 +102,7 @@ struct WeatherRequestTests {
       .acceptsAnswerFromAnyBot)
   }
 
-  /// Spec revision 11, §7D: the tile is decided by the lattice, so the request knows which square
+  /// Spec revision 11, §13: the tile is decided by the lattice, so the request knows which square
   /// of earth it is waiting for before the answer arrives — and any bot's tile of that square is
   /// it, because the lattice is the same arithmetic everywhere.
   @Test
@@ -119,7 +119,7 @@ struct WeatherRequestTests {
     #expect(request.acceptsAnswerFromAnyBot)
   }
 
-  /// Spec §8.3 lists the letters a Not-available reply can carry: w, o, f, a, s, r, m, t, h, d.
+  /// Spec §9 lists the letters a Not-available reply can carry: w, o, f, a, s, r, m, t, h, d.
   @Test
   func `request letters are the first letter after the prefix`() {
     #expect(WeatherRequest.digest.requestLetter == "d")
@@ -136,10 +136,10 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.hazardousOutlook.requestLetter == "h")
     #expect(WeatherRequest.coverage.requestLetter == "c")
     // The sweep rides on `w` like every other warning request, so a refusal for it comes back
-    // under the same letter (spec §8.3).
+    // under the same letter (spec §9).
     #expect(WeatherRequest.areaSweep(includesAdvisories: false, states: []).requestLetter == "w")
     #expect(WeatherRequest.areaSweep(includesAdvisories: true, states: []).requestLetter == "w")
-    // Spec revision 11, §7D: `>radar` is the one request whose letter is not its own first. `r`
+    // Spec revision 11, §13: `>radar` is the one request whose letter is not its own first. `r`
     // is `>rain`, and a refusal that could mean either is a refusal nobody can act on.
     #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 0).requestLetter == "x")
     #expect(WeatherRequest.radar(latitude: 30.27, longitude: -97.74, zoom: 2).requestLetter == "x")
@@ -149,14 +149,14 @@ struct WeatherRequestTests {
     #expect(WeatherRequest.rainfall(state: "TX").requestLetter == "r", "still the rain request")
   }
 
-  /// Spec §7A: a statement describes the bot that sent it, so another bot's — or another
+  /// Spec §10: a statement describes the bot that sent it, so another bot's — or another
   /// bot's answer to somebody else — says nothing about this one's area.
   @Test
   func `only the bot asked can answer for its own area`() {
     #expect(!WeatherRequest.coverage.acceptsAnswerFromAnyBot)
     #expect(!WeatherRequest.observations.acceptsAnswerFromAnyBot)
     #expect(WeatherRequest.observation(station: "KAUS").acceptsAnswerFromAnyBot)
-    // Spec §7C: a sweep is one bot's reading of the country, cut where its own feed runs out,
+    // Spec §12: a sweep is one bot's reading of the country, cut where its own feed runs out,
     // so another bot's sweep is not this request's answer.
     #expect(!WeatherRequest.areaSweep(includesAdvisories: false, states: []).acceptsAnswerFromAnyBot)
     #expect(!WeatherRequest.areaSweep(includesAdvisories: true, states: []).acceptsAnswerFromAnyBot)
@@ -200,7 +200,7 @@ struct WeatherRequestTests {
 
   // MARK: - Revision 10
 
-  /// Spec revision 10, §1.2. The compact form on purpose: upper case, run together, no
+  /// Spec §14.3. The compact form on purpose: upper case, run together, no
   /// separators, so fifteen states fit the forty-byte request text beside `>wmap all `.
   @Test
   func `a scoped map names its states run together and upper case`() {
@@ -219,14 +219,14 @@ struct WeatherRequestTests {
     #expect(widest.utf8.count <= MeshWXWire.maxRequestTextBytes)
   }
 
-  /// Spec revision 10, §1.1: `>part <group> <idx>[,<idx>…]`, decimal, no spaces after the commas.
+  /// Spec §14.5: `>part <group> <idx>[,<idx>…]`, decimal, no spaces after the commas.
   @Test
   func `a parts request names its group and its indexes in decimal`() {
     #expect(WeatherRequest.parts(group: 212, indexes: [1, 4, 6], of: .areaSweep).wireText
       == ">part 212 1,4,6")
     #expect(WeatherRequest.parts(group: 0, indexes: [0], of: .text(subject: 3)).wireText
       == ">part 0 0")
-    // `p`, its own letter in the §8.3 table, so a refusal for it cannot be read as a `>wmap` one.
+    // `p`, its own letter in the §9 table, so a refusal for it cannot be read as a `>wmap` one.
     #expect(WeatherRequest.parts(group: 212, indexes: [1], of: .areaSweep).requestLetter == "p")
     // The kind is for the log's wording; it is not on the wire and pairs nothing.
     #expect(WeatherRequest.parts(group: 212, indexes: [1], of: .areaSweep).expectedReply
@@ -237,7 +237,7 @@ struct WeatherRequestTests {
     #expect(!WeatherRequest.parts(group: 212, indexes: [1], of: .areaSweep).acceptsAnswerFromAnyBot)
   }
 
-  /// Spec revision 10, §1.3: three decimals, recognised by the comma, and the `f` letter the rest
+  /// Spec §14.2, §14.3: three decimals, recognised by the comma, and the `f` letter the rest
   /// of the forecast grammar uses.
   @Test
   func `a coordinate forecast is two signed decimals with three places`() {
@@ -318,8 +318,8 @@ struct WeatherRequestTests {
   }
 
   /// The first build of revision 13 logged detail asks at zoom −1. The detail level is gone
-  /// (docs/MESHWX_REV13.md): such a row still reads, and nothing it could ask again says `z-1` —
-  /// it is the Local ask, on the wire and in what it waits for.
+  /// (docs/MESHWX_UI.md §3.1 U-61): such a row still reads, and nothing it could ask again says
+  /// `z-1` — it is the Local ask, on the wire and in what it waits for.
   @Test
   func `a detail ask logged by the first revision 13 build reads as Local`() throws {
     let logged = Data(#"{"radar":{"latitude":30.27,"longitude":-97.74,"zoom":-1}}"#.utf8)

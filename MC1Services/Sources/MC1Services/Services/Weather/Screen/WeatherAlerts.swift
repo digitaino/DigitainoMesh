@@ -190,8 +190,8 @@ public enum WeatherAlertItems {
 
   /// Every alert held by any bot, one item per identity, placed against the place and sorted.
   ///
-  /// Two bots can hold different copies of one warning (spec §12). Which one is shown is
-  /// ``WeatherCrossBot/prefers(_:over:)`` (phase 2, spec §10.8): one still in force — not expired,
+  /// Two bots can hold different copies of one warning (spec §20). Which one is shown is
+  /// ``WeatherCrossBot/prefers(_:over:)`` (phase 2, spec §20): one still in force — not expired,
   /// and not ended by another bot's trusted cancel — over one that is not; then a copy from a bot
   /// heard live in the last two hours over a later expiry from one that has not been; then the
   /// later expiry, which is how a bot that heard the extension beats one that did not. A copy
@@ -367,7 +367,7 @@ public enum WeatherAlertFolding {
 /// Evaluated top to bottom; the first condition that holds wins.
 public enum WeatherAlertStatus: Sendable, Hashable {
   case noPlace
-  /// The place is outside every bot's area, on the bots' own complete statements (spec §7A) or,
+  /// The place is outside every bot's area, on the bots' own complete statements (spec §10) or,
   /// for a bot that has stated nothing, on its station footprint.
   case outOfCoverage
   /// No alert list from any bot covering the place.
@@ -420,7 +420,7 @@ public enum WeatherAlertStatus: Sendable, Hashable {
     sourceBotID: UInt16? = nil
   ) -> WeatherAlertStatus {
     guard let place else { return .noPlace }
-    // Only a bot's own complete statement (spec §7A), or its station footprint where it has
+    // Only a bot's own complete statement (spec §10), or its station footprint where it has
     // stated nothing, can put a place outside an area. A list the bot had to cut means "not
     // listed", which is `.unknown` and lands on `coverageUnknown` below.
     let verdict = coverage.verdict(for: place)

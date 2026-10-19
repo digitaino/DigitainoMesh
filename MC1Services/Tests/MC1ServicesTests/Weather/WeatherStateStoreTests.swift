@@ -121,7 +121,7 @@ struct WeatherStateStoreTests {
     #expect(decoded.warnings[warning.identity]?.warning.beginsBeforeMinutes == 30)
   }
 
-  /// Spec §7A. A file written before the bot could state its coverage is still the last picture
+  /// Spec §10. A file written before the bot could state its coverage is still the last picture
   /// it sent: the field decodes as absent, which falls back to the station footprint.
   @Test
   func `a coverage statement round-trips, and a file from before it decodes with it absent`() throws {
@@ -149,7 +149,7 @@ struct WeatherStateStoreTests {
 struct WeatherDigestMarginTests {
   private typealias F = WeatherFixture
 
-  /// The bot keeps no answer cache (spec §8.2, revision 2): a list is built when it is sent, so the
+  /// The bot keeps no answer cache (spec §14, revision 2): a list is built when it is sent, so the
   /// margin only absorbs the phone's and the bot's clocks disagreeing and the minute `now` is
   /// truncated to. A list built within two minutes of the gap could still, on those clocks, be
   /// from before it; the card keeps saying messages were missed until a later list clears it.

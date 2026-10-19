@@ -4,8 +4,8 @@ import Testing
 
 @testable import MeshWX
 
-/// US ZIP codes (spec §9 `zips.json`, §11): the bot's own table, looked up and labelled by the
-/// label rule of spec §9.1, so a ZIP resolves and reads the same texted to the bot as typed into the app.
+/// US ZIP codes (spec §16 `zips.json`, §21): the bot's own table, looked up and labelled by the
+/// label rule of spec §16.2, so a ZIP resolves and reads the same texted to the bot as typed into the app.
 ///
 /// Every expected label here is the bot's (`resolver.resolve(zip)['name']`, asserted by the same
 /// table in meshwx `tests/test_place_names.py`), not read off this implementation.
@@ -142,7 +142,7 @@ struct MeshWXZipTests {
     #expect(Self.hex(digest) == Self.botLabelsSHA256)
   }
 
-  /// The spec §9.1 cases, as meshwx `tests/test_place_names.py` asserts them for the bot.
+  /// The spec §16.2 cases, as meshwx `tests/test_place_names.py` asserts them for the bot.
   @Test(arguments: [
     ("HELL'S KITCHEN", "Hell's Kitchen"),
     ("CENTRAL 14TH STREET / SPRING ROAD", "Central 14th Street / Spring Road"),

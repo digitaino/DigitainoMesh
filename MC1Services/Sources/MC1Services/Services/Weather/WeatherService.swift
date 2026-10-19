@@ -33,7 +33,7 @@ public enum WeatherTransportLink: Sendable, Hashable {
 /// Why a request could not go out on the channel, so the service can fall back to the DM.
 ///
 /// Not a failure the user is told about: a radio that cannot flood a datagram can still send
-/// the DM of spec §8.2, and the fallback is silent (docs/MESHWX.md, "Requests").
+/// the DM of spec §14, and the fallback is silent (docs/MESHWX.md, "Requests").
 public enum WeatherTransportError: Error, Sendable, Hashable {
   /// This radio cannot put a Request datagram on `#meshwx`: firmware older than the command
   /// (v1.15.0), no slot carrying the channel, or no public key of its own to name a sender by.
@@ -41,7 +41,7 @@ public enum WeatherTransportError: Error, Sendable, Hashable {
   case channelRequestsUnavailable(String)
 }
 
-/// A Request datagram that went on the air: the bytes and the slot they went out on (spec §7B).
+/// A Request datagram that went on the air: the bytes and the slot they went out on (spec §11).
 ///
 /// Returned by ``WeatherTransport/sendChannelRequest(text:botID:timestamp:seq:)`` so the channel
 /// traffic log can show this phone's own requests beside everything it heard, in the form they
@@ -74,7 +74,7 @@ public protocol WeatherTransport: Sendable {
   /// first send's timestamp with the next attempt: the same message to the bot's radio, under a
   /// new code.
   func sendRequest(to publicKey: Data, text: String, timestamp: Date, attempt: UInt8) async throws -> Data
-  /// Sends the same `>` text as a **Request datagram**, flooded on `#meshwx` (spec §7B): the
+  /// Sends the same `>` text as a **Request datagram**, flooded on `#meshwx` (spec §11): the
   /// normal path since revision 6, because a flood needs no stored route.
   ///
   /// No *answer* comes back. A datagram has no acknowledgement — the answer on the channel is
@@ -184,7 +184,7 @@ public struct SessionWeatherTransport: WeatherTransport {
     try await session.sendMessage(to: publicKey, text: text, timestamp: timestamp, attempt: attempt).expectedAck
   }
 
-  /// The request as a datagram on the `#meshwx` slot, flooded (spec §7B).
+  /// The request as a datagram on the `#meshwx` slot, flooded (spec §11).
   ///
   /// Three things have to be true and each of them is a different "no": the firmware has the
   /// command, some slot on this radio carries the channel, and the radio has told the app its
@@ -213,7 +213,7 @@ public struct SessionWeatherTransport: WeatherTransport {
       timestamp: UInt32(truncatingIfNeeded: Int64(timestamp.timeIntervalSince1970)),
       text: text)
     // Flooded: every repeater in reach forwards it once, and no stored route can lose it —
-    // which is the whole reason the datagram replaced the DM (spec §7B).
+    // which is the whole reason the datagram replaced the DM (spec §11).
     let payload = try request.encode()
     try await session.sendChannelData(
       channelIndex: slot,
@@ -261,18 +261,18 @@ public struct SessionWeatherTransport: WeatherTransport {
 // MARK: - Service
 
 /// Listens to the MeshWX weather bots on `#meshwx`, keeps one `WeatherBotState` per bot, and
-/// sends the app's `>` requests with the spec's etiquette (docs/MESHWX.md, spec §13).
+/// sends the app's `>` requests with the spec's etiquette (docs/MESHWX.md, spec §19).
 ///
 /// Per connection, like every service in the container — the datagram stream belongs to the
 /// session — but the *state* is not: it is loaded from and saved to a store shared across
 /// connections, because a warning belongs to a place, not to the radio that heard it.
 public actor WeatherService {
-  /// Spec §8.2 / §13: one request per sender every five seconds.
+  /// Spec §14 / §19: one request per sender every five seconds.
   public static let requestSpacing: TimeInterval = 5
-  /// Spec §8.2: wait up to 15 s before retrying, once.
+  /// Spec §14: wait up to 15 s before retrying, once.
   public static let answerTimeout: Duration = .seconds(15)
-  /// Spec §7B / §13: a Request datagram is waited on for 10 s, then sent once more — the same
-  /// `ts` and text under the next `seq` (spec §10.8) — and never a third time. Shorter than the
+  /// Spec §11 / §19: a Request datagram is waited on for 10 s, then sent once more — the same
+  /// `ts` and text under the next `seq` (spec §20) — and never a third time. Shorter than the
   /// DM's 15 s because a flood needs no route: an answer that is coming arrives in one to three
   /// seconds.
   public static let channelAnswerTimeout: Duration = .seconds(10)
@@ -280,8 +280,8 @@ public actor WeatherService {
   /// ride the stored route, attempt 2 rides every repeater. Three sends, 45 s, then the request
   /// is settled as unanswered (docs/MESHWX.md, "Requests").
   public static let floodAttempt = 2
-  /// Spec §13: do not re-request something received in the last five minutes. Airtime etiquette
-  /// only: the bot keeps no cache and rebuilds every answer (spec §8.2, revision 2).
+  /// Spec §19: do not re-request something received in the last five minutes. Airtime etiquette
+  /// only: the bot keeps no cache and rebuilds every answer (spec §14, revision 2).
   public static let recentAnswerWindow: TimeInterval = 5 * 60
   /// The bot answers `>f <index>` with the forecast for that point's coordinates, which may come
   /// from a nearby point up to this far away.
@@ -368,9 +368,9 @@ public actor WeatherService {
 
   private var pending: [UUID: PendingEntry] = [:]
   private var lastSendAt: Date?
-  /// This phone's own request counter (spec §7B): one more for every channel datagram this phone
+  /// This phone's own request counter (spec §11): one more for every channel datagram this phone
   /// sends — a resend takes the next one too, so it is not the same bytes as the first send
-  /// (spec §10.8) — wrapping 255 to 0. Informational to the bot, which keys copies on the
+  /// (spec §20) — wrapping 255 to 0. Informational to the bot, which keys copies on the
   /// timestamp and the text.
   private var nextRequestSeq: UInt8 = 0
 
@@ -410,7 +410,7 @@ public actor WeatherService {
     /// Texas says nothing about Oklahoma, and refusing an Oklahoma tap because somebody asked
     /// about Texas two minutes ago would leave a map with a hole in it and no way to fill it.
     case areaSweep(states: [String])
-    /// `>radar`: the tile for a square of earth (spec revision 11, §7D). Keyed by the tile, so two
+    /// `>radar`: the tile for a square of earth (spec revision 11, §13). Keyed by the tile, so two
     /// places on one square share the slot — one answer for a town, not one per phone — and the
     /// bot's own rule is the mirror of this one: it refuses the same tile of the same picture for
     /// five minutes, reason 4.
@@ -584,7 +584,7 @@ public actor WeatherService {
       for botID in states.keys {
         WeatherStateReducer.pruneExpired(&states[botID]!, expiredBefore: now.addingTimeInterval(-Self.expiredWarningRetention))
         WeatherStateReducer.prunePendingUpgrades(&states[botID]!, olderThan: now.addingTimeInterval(-Self.pendingUpgradeRetention))
-        // Saved before the phone turned away times from the future (spec §10.7): a digest stamped
+        // Saved before the phone turned away times from the future (spec §17.5): a digest stamped
         // ahead of the clock would otherwise go on refusing every real one as older.
         WeatherStateReducer.dropFutureTimes(&states[botID]!, now: now)
       }
@@ -628,7 +628,7 @@ public actor WeatherService {
     await persistTraffic()
   }
 
-  /// Logs a Request datagram this phone put on the air (spec §7B). Nothing for a transport that
+  /// Logs a Request datagram this phone put on the air (spec §11). Nothing for a transport that
   /// sends no datagram — the DEBUG bridge — and nothing for the DM fallback, which is not a
   /// datagram on the channel and is not what the screen is about.
   private func recordSent(_ sent: WeatherChannelRequestSent?, botID: UInt16) async {
@@ -753,7 +753,7 @@ public actor WeatherService {
     }
     if case .request = message.payload {
       // Another phone asking the bot something, heard because requests are flooded on the
-      // channel now (spec §7B). It is not from a bot, so it is not the bot's `seq` and not the
+      // channel now (spec §11). It is not from a bot, so it is not the bot's `seq` and not the
       // bot being heard; its answer will arrive as a message of its own, for everyone. Dropped
       // here rather than in the reducer so nothing about it can reach state — but it is traffic
       // on the channel, and the traffic screen is where "who else is asking for things" lives.
@@ -793,7 +793,7 @@ public actor WeatherService {
   ///   now: it answers nothing for the five-minute rule and does not count as hearing the bot.
   @discardableResult
   public func ingest(_ message: MeshWXMessage, isBacklog: Bool = false) async -> [WeatherStateChange] {
-    // Somebody else's request (spec §7B). Not a bot, not an answer, not a `seq` of the bot's:
+    // Somebody else's request (spec §11). Not a bot, not an answer, not a `seq` of the bot's:
     // nothing about it is state, and the reducer must never see one.
     if case .request = message.payload { return [] }
     await loadIfNeeded()
@@ -812,7 +812,7 @@ public actor WeatherService {
       return false
     }
     // A cancel heard while its bot was in range may end other bots' copies of the warning too
-    // (`WeatherCrossBot`, spec §10.8); judged against the bot's state *before* this message, so a
+    // (`WeatherCrossBot`, spec §20); judged against the bot's state *before* this message, so a
     // cancel drained from the radio's queue does not vouch for itself.
     if !isDuplicate, case let .cancel(cancel) = message.payload,
       WeatherCrossBot.isLiveCancel(isBacklog: isBacklog, lastLiveHeardAt: state.lastLiveHeardAt, at: receivedAt) {
@@ -901,17 +901,17 @@ public actor WeatherService {
         // The sending bot's slot (phase 2), keyed by the square. `contentAsOf` is the time printed
         // on the radar image, which is what the screen then says the picture is from.
         //
-        // Only by the **newest** frame held of that square (revision 13, §7D.4): an older frame
+        // Only by the **newest** frame held of that square (revision 13, §13.5): an older frame
         // off somebody's loop is not "the newest picture the bot has", which is what a `>radar`
         // asks for, and filling the slot with it would answer the next ask with an hour-old map.
         guard isNewestRadarFrame(tile: tile, takenMinutes: takenMinutes, of: botID) else { break }
         fill(botID, .radar(tile: tile), asOf: Date(unixMinutes: takenMinutes))
       case (.coverageStored, .coverage):
-        // No content time: the statement describes the bot, not an hour (spec §7A), so the
+        // No content time: the statement describes the bot, not an hour (spec §10), so the
         // five-minute rule runs from receipt alone and nothing claims it is "as of" anything.
         fill(botID, .coverage)
       case let (.textChunkStored(group, _, _), .text):
-        // Complete, so a reply still missing a part can be asked for again (spec §8.1).
+        // Complete, so a reply still missing a part can be asked for again (spec §8).
         if let assembly = states[botID]?.texts[group], assembly.isComplete, let request = assembly.request {
           fill(botID, .text(request))
         }
@@ -947,9 +947,9 @@ public actor WeatherService {
 
   /// Sends a request to a bot, or answers it from what the channel already delivered.
   ///
-  /// **Channel first** (spec §7B): the request goes out as a datagram flooded on `#meshwx`,
+  /// **Channel first** (spec §11): the request goes out as a datagram flooded on `#meshwx`,
   /// because a DM rides one stored route and fails silently once that route has gone stale. The
-  /// DM ladder of §8.2 is the fallback, for a radio that cannot send a datagram at all — and only
+  /// DM ladder of §14 is the fallback, for a radio that cannot send a datagram at all — and only
   /// for a bot whose advert has been heard, a DM having nowhere to go without the whole key.
   ///
   /// - Returns: The pending request now on the air, or nil when this phone received the answer
@@ -989,7 +989,7 @@ public actor WeatherService {
 
     // One wire timestamp and one text for the request's life: the resend repeats both
     // (`handleTimeout`), which is what makes it a copy rather than a second request (the bot keys
-    // copies on sender, `ts` and text). The resend takes the next `seq` (spec §10.8).
+    // copies on sender, `ts` and text). The resend takes the next `seq` (spec §20).
     let seq = nextRequestSeq
     do {
       let sent = try await transport.sendChannelRequest(
@@ -1006,7 +1006,7 @@ public actor WeatherService {
       return pending[entry.id]?.request ?? entry
     } catch let WeatherTransportError.channelRequestsUnavailable(reason) {
       // This radio cannot flood a datagram: no v1.15.0 firmware, no `#meshwx` slot, or no key
-      // of its own. The DM still works, and the bot still answers it (spec §7B).
+      // of its own. The DM still works, and the bot still answers it (spec §11).
       // Unless the bot was only ever heard and never seen to advertise: a DM needs its whole
       // key, and two bytes of it are all its packets carry.
       guard bot.isAnnounced else {
@@ -1075,18 +1075,18 @@ public actor WeatherService {
     case .coverage: AnswerSlot(botID: botID, key: .coverage)
     case let .areaSweep(_, states):
       AnswerSlot(botID: botID, key: .areaSweep(states: WeatherRequest.sweepStates(states)))
-    // By the tile, from the bot asked (spec revision 11, §7D; phase 2). Pictures are made about
+    // By the tile, from the bot asked (spec revision 11, §13; phase 2). Pictures are made about
     // every fifteen minutes, so five minutes after one arrived there is nothing newer to fetch —
     // and the bot would refuse the ask anyway, reason 4, spending a packet on the refusal.
     case let .radar(latitude, longitude, zoom):
       AnswerSlot(botID: botID, key: .radar(tile: MeshWXRadarTile.containing(
         latitude: latitude, longitude: longitude, zoom: zoom)))
-    // A loop asks for the pictures this phone does **not** hold (spec revision 13, §7D.4), so a
+    // A loop asks for the pictures this phone does **not** hold (spec revision 13, §13.5), so a
     // tile received a minute ago says nothing about whether it is answered. The bot keeps its own
     // five-minute rule per frame and leaves out what everyone listening already has.
     case .radarLoop: nil
     // `>part` is the repair, not the answer, and the five-minute rule must never hold it back
-    // (spec revision 10, §1.1). The case it exists for is precisely an answer received in the
+    // (docs/MESHWX.md "Requests"). The case it exists for is precisely an answer received in the
     // last five minutes that arrived with holes in it: refusing the ask on the grounds that the
     // answer just came would leave "4 of 7 parts arrived" on screen with nothing to do about it,
     // which is the thing the owner asked to be able to fix.
@@ -1144,7 +1144,7 @@ public actor WeatherService {
   private func armTimer(for id: UUID) {
     pending[id]?.timer?.cancel()
     // A flood is answered in one to three seconds or not at all; a DM may still be finding its
-    // way along a route (spec §13: 10 s for a datagram, 15 s for a DM).
+    // way along a route (spec §19: 10 s for a datagram, 15 s for a DM).
     let timeout = pending[id]?.request.transportKind == .channel ? channelAnswerTimeout : answerTimeout
     pending[id]?.timer = Task { [weak self] in
       try? await Task.sleep(for: timeout)
@@ -1220,7 +1220,7 @@ public actor WeatherService {
     armTimer(for: id)
   }
 
-  /// The datagram's etiquette (spec §7B, §13, §10.8): send once, send it once more after 10 s,
+  /// The datagram's etiquette (spec §11, §19, §20): send once, send it once more after 10 s,
   /// never a third time.
   ///
   /// The resend repeats the first send's `ts` and text, so to the bot it is a copy of one request
@@ -1341,8 +1341,8 @@ public actor WeatherService {
       stationIndex: stationIndex, tables: tables)
     else { return false }
     switch request.request {
-    // `>part 212 1,4,6` settles the moment **any** of the indexes asked for lands (spec revision
-    // 10, §1.1). The other two are still on the air behind it, and a request that only settled on
+    // `>part 212 1,4,6` settles the moment **any** of the indexes asked for lands (docs/MESHWX.md
+    // "Requests"). The other two are still on the air behind it, and a request that only settled on
     // the last of them would time out every time one of the three was lost again — which is the
     // situation the ask exists for. A packet of group 212 the request did not name is the bot's
     // ordinary transmission, and settles nothing.
@@ -1352,7 +1352,7 @@ public actor WeatherService {
       case let .text(chunk): return indexes.contains(chunk.index)
       default: return false
       }
-    // `>f <lat>,<lon>`: the bot picks the point (spec revision 10, §1.3), so the check is
+    // `>f <lat>,<lon>`: the bot picks the point (docs/MESHWX.md "Requests"), so the check is
     // distance from what was asked about, not the index.
     case let .forecastAt(latitude, longitude):
       guard case let .forecast(forecast) = payload else { return false }
@@ -1365,7 +1365,7 @@ public actor WeatherService {
     return WeatherTextMatch.matches(request.request, assembly: assembly, states: states, tables: tables)
   }
 
-  /// Whether a forecast answers a `>f <lat>,<lon>` (spec revision 10, §1.3). Static and
+  /// Whether a forecast answers a `>f <lat>,<lon>` (docs/MESHWX.md "Requests"). Static and
   /// table-driven so the rule is testable without a service.
   ///
   /// Two ways it can:
@@ -1401,8 +1401,8 @@ public actor WeatherService {
         states[botID]?.forecasts[forecast.pointIndex]?.requestLabel = place
       }
       if case let .forecastAt(latitude, longitude) = request.request {
-        // The coordinate asked about is the only name this forecast has (spec revision 10,
-        // §1.3), so it moves out of the one slot for answers nobody here asked for and under
+        // The coordinate asked about is the only name this forecast has (docs/MESHWX.md
+        // "State"), so it moves out of the one slot for answers nobody here asked for and under
         // its own key. The reducer put it there because the reducer holds no requests and could
         // not know; this is the moment it becomes an answer to a question of this phone's.
         let key = WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude)
@@ -1472,7 +1472,7 @@ public actor WeatherService {
       // settles it instead.
       return WeatherAlertRequests.identity(from: identity, tables: tables) == warning.identity
     case let (.warningsTouching(ugc), .warning(warning)):
-      // The bot matches the code exactly against the product's own area list (spec §8.2), but cuts
+      // The bot matches the code exactly against the product's own area list (spec §14), but cuts
       // the list it sends to 30, 12 or 6 runs, or drops it, to fit one packet. From the bot asked,
       // a warning whose list may have been cut can be the answer without naming the code.
       if tables.namedAreas(for: warning).contains(where: { $0.ugc.caseInsensitiveCompare(ugc) == .orderedSame }) {
@@ -1530,7 +1530,7 @@ public actor WeatherService {
     case let (.parts(group), .text(chunk)):
       return fromAddressedBot && chunk.group == group
     case let (.radar(tile), .radar(radar)):
-      // The square of earth and nothing else (spec revision 11, §7D). Not the `taken`: whatever
+      // The square of earth and nothing else (spec revision 11, §13). Not the `taken`: whatever
       // the bot has is the answer to "show me the radar here", and a phone that held out for a
       // newer picture would time out on the only one there is. Not the bot either — the lattice
       // is fixed so that a tile is a tile, and another bot answering somebody else's `>radar` for

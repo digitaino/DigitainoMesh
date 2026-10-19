@@ -29,7 +29,7 @@ public struct WeatherAlertMapPicture: Sendable, Hashable {
     /// ``WeatherAlertMapPicture/Entry/part`` refers to.
     public var id: Int
     public var group: UInt8
-    /// On the bot's clock (spec §7C). The age on screen is measured from this and never from
+    /// On the bot's clock (spec §12). The age on screen is measured from this and never from
     /// receipt: a sweep drained from the radio's queue an hour late is an hour old.
     public var builtAt: Date
     public var includesAdvisories: Bool
@@ -74,7 +74,7 @@ public struct WeatherAlertMapPicture: Sendable, Hashable {
 
   /// Newest first. The status card lists one line per part.
   public var parts: [Part]
-  /// In part order, then in the order each bot sent them — most severe first (spec §7C), which
+  /// In part order, then in the order each bot sent them — most severe first (spec §12), which
   /// is also the order the map lays its tints down in.
   public var entries: [Entry]
   /// A national sweep is held, so the map speaks for the whole country. False means an unshaded
@@ -182,7 +182,7 @@ public struct WeatherAlertMapPicture: Sendable, Hashable {
 
 // MARK: - Which areas to ask about
 
-/// What the next map should cover (docs/MESHWX_UI.md §17, spec revision 10, §1.2).
+/// What the next map should cover (docs/MESHWX_UI.md §17, spec §12.3).
 ///
 /// The owner's third ask, in his words: *can we go from national alert map to just alert map, and
 /// have a way for the user to select which areas they want to request the warnings for. One, a
@@ -315,7 +315,7 @@ public enum WeatherAreaSweepCost {
       return max(1, (states.count + statesPerPacketWithoutASweep - 1) / statesPerPacketWithoutASweep)
     }
     // The alerts the phone believes are active in those states, plus one scope entry per state —
-    // the scope rides in the entry list and spends the same budget the areas do (spec §7C).
+    // the scope rides in the entry list and spends the same budget the areas do (spec §12).
     //
     // Counted off the resolved map rather than off the national sweep alone: where a newer
     // scoped sweep has already replaced a state's entries, those are the runs the bot would

@@ -18,8 +18,8 @@ struct WeatherServiceAnswerTests {
     let events: AsyncStream<WeatherEvent>
   }
 
-  /// The fake radio cannot flood a Request datagram here (spec §7B), so every request in this
-  /// suite goes out as the DM of §8.2 and the assertions on `transport.sent` still read the
+  /// The fake radio cannot flood a Request datagram here (spec §11), so every request in this
+  /// suite goes out as the DM of §14 and the assertions on `transport.sent` still read the
   /// send they were written for. The channel path has its own section in `WeatherServiceTests`.
   private func makeHarness(answerTimeout: Duration = .seconds(15)) -> Harness {
     let transport = FakeWeatherTransport(channelRequestsSupported: false)
@@ -190,7 +190,7 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.activeWarnings, to: other) != nil, "another bot's list is not this one's")
   }
 
-  /// `>w <area>` is keyed by the code asked (spec §8.2): one county's answer is not another's.
+  /// `>w <area>` is keyed by the code asked (spec §14): one county's answer is not another's.
   @Test
   func `a warning answers a request for the areas it names, and not for any other`() async throws {
     let h = makeHarness()
@@ -268,7 +268,7 @@ struct WeatherServiceAnswerTests {
 
   // MARK: - Coverage
 
-  /// Spec §7A, §8.2: `>cov` asks a bot what it carries. The statement carries no time of its
+  /// Spec §10, §14: `>cov` asks a bot what it carries. The statement carries no time of its
   /// own — it describes the bot, not an hour — so the five-minute rule runs from receipt and the
   /// answer names nothing it is "as of".
   @Test
@@ -309,7 +309,7 @@ struct WeatherServiceAnswerTests {
     #expect(try await h.service.send(.forecast(point: 102), to: F.bot) != nil)
   }
 
-  // MARK: - Area sweep (spec §7C)
+  // MARK: - Area sweep (spec §12)
 
   /// `>wmap` is answered by the sweep's **first** packet — the other seven are already on the
   /// air — and the slot it fills is what stops the next phone spending eight more.
@@ -339,7 +339,7 @@ struct WeatherServiceAnswerTests {
       == .alreadyReceived(receivedAt: F.t0.addingTimeInterval(2), contentAsOf: Date(unixMinutes: F.t0Minutes)))
   }
 
-  /// Spec §7C: a sweep is cut where the sending bot's own feed runs out, so another bot's is not
+  /// Spec §12: a sweep is cut where the sending bot's own feed runs out, so another bot's is not
   /// this request's answer.
   @Test
   func `another bot's sweep does not answer this bot's map request`() async throws {
@@ -516,7 +516,7 @@ struct WeatherServiceRevisionTenTests {
     return box
   }
 
-  // MARK: - `>part` (spec revision 10, §1.1)
+  // MARK: - `>part` (spec §14.5)
 
   /// "It settles as answered when any asked-for index arrives from the bot asked." The other two
   /// packets are still on the air behind it, and a request that only settled on the last of them
@@ -551,7 +551,7 @@ struct WeatherServiceRevisionTenTests {
     #expect(await h.service.pendingRequests().count == 1)
   }
 
-  /// A text reply's missing chunk is the same ask and the same pairing (spec §8.1, §7C).
+  /// A text reply's missing chunk is the same ask and the same pairing (spec §8, §12).
   @Test
   func `a parts request is answered by a text chunk of its group`() async throws {
     let h = makeHarness()
@@ -576,7 +576,7 @@ struct WeatherServiceRevisionTenTests {
     #expect(try await h.service.send(.parts(group: 7, indexes: [1, 2], of: .areaSweep), to: F.bot) != nil)
   }
 
-  // MARK: - Scoped sweeps (spec revision 10, §1.2)
+  // MARK: - Scoped sweeps (spec §12.3)
 
   /// A sweep of Texas says nothing about Oklahoma, so the two taps are two answer slots.
   @Test
@@ -627,7 +627,7 @@ struct WeatherServiceRevisionTenTests {
     #expect(await h.service.state(for: F.botID)?.newestAreaSweep?.request == request)
   }
 
-  // MARK: - `>f <lat>,<lon>` (spec revision 10, §1.3)
+  // MARK: - `>f <lat>,<lon>` (docs/MESHWX.md "Requests")
 
   /// The bot picks the point, so the check is distance from what was asked about. A forecast for
   /// a point the bundle does not carry answers it outright — that is the case the ask exists for.
@@ -724,7 +724,7 @@ struct WeatherServiceRevisionTenTests {
   }
 
   /// The resend of a Request datagram is its own row: a second transmission went on the air, and
-  /// a screen about airtime has to show both. Since phase 2 it is not the same bytes (spec §10.8):
+  /// a screen about airtime has to show both. Since phase 2 it is not the same bytes (spec §20):
   /// the same `ts` and text under the next `seq`, so repeaters do not drop it as already carried.
   @Test
   func `the resend of a request is a second row`() async throws {

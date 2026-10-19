@@ -115,8 +115,8 @@ struct WeatherTrafficTests {
     #expect(WeatherTrafficSummary.make(
       entry: try entry(F.forecast(seq: 4, point: 102)), tables: tables)
       == WeatherTrafficSummary(title: .forecast, detail: [.point(102)]))
-    // `0xFFFF` is not a point, it is "the bot picked one this bundle cannot name" (spec revision
-    // 10, §1.3). The row says that rather than naming the sentinel or saying nothing at all —
+    // `0xFFFF` is not a point, it is "the bot picked one this bundle cannot name" (spec
+    // §14.3). The row says that rather than naming the sentinel or saying nothing at all —
     // a bare "Forecast" is the one thing the revision 10 answer is not.
     #expect(WeatherTrafficSummary.make(
       entry: try entry(F.forecast(seq: 5, point: 0xFFFF)), tables: tables)

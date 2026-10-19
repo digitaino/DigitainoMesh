@@ -13,7 +13,7 @@ public struct WeatherRequestLogEntry: Sendable, Hashable, Codable, Identifiable 
     case answered
     /// Nothing came back through the one retry.
     case noAnswer
-    /// The bot said it cannot serve this (spec §8.3).
+    /// The bot said it cannot serve this (spec §9).
     case notAvailable
     /// Your own radio would not send it.
     case refused

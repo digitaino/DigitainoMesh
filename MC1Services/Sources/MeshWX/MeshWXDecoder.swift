@@ -11,7 +11,7 @@ public enum MeshWXDecodeError: Error, Sendable, Hashable {
   /// A Text chunk's body was not valid UTF-8 (a chunk boundary in the wrong place, or
   /// a corrupted packet that still passed the frame MAC).
   case badUTF8
-  /// A Radar tile's quadtree asked for more bits than the packet had (spec revision 11, §7D).
+  /// A Radar tile's quadtree asked for more bits than the packet had (spec revision 11, §13).
   /// The tree is self-describing, so a packet that ends early describes a grid nobody can draw —
   /// half of it would be silently dry, which on a radar picture is the worst possible lie.
   case radarTreeTruncated(bits: Int)
@@ -314,7 +314,7 @@ public enum MeshWXDecoder {
       pointIndex: point, issuedMinutes: issued, firstPeriod: first, periods: periods)
   }
 
-  // MARK: - Text (type 6, spec §8.1)
+  // MARK: - Text (type 6, spec §8)
 
   static func decodeText(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXText {
     try need(bytes, MeshWXWire.textFixedSize, "text")
@@ -328,13 +328,13 @@ public enum MeshWXDecoder {
       index: bytes[6],
       total: bytes[7],
       text: text,
-      // Revision 7 (spec §8.1): the bot ran out of packets and dropped the tail. A decoder
+      // Revision 7 (spec §8): the bot ran out of packets and dropped the tail. A decoder
       // written before the flag reads the same chunk it always did, one bit poorer.
       wasCut: header.flags & MeshWXWire.flagTextCut != 0
     )
   }
 
-  // MARK: - Not available (type 7, spec §8.3)
+  // MARK: - Not available (type 7, spec §9)
 
   static func decodeNotAvailable(_ bytes: [UInt8]) throws -> MeshWXNotAvailable {
     try need(bytes, MeshWXWire.notAvailableSize, "not_available")
@@ -344,7 +344,7 @@ public enum MeshWXDecoder {
     )
   }
 
-  // MARK: - Coverage (type 8, spec §7A)
+  // MARK: - Coverage (type 8, spec §10)
 
   static func decodeCoverage(_ bytes: [UInt8], header: MeshWXHeader) throws -> MeshWXCoverage {
     try need(bytes, MeshWXWire.coverageFixedSize, "coverage")
@@ -367,7 +367,7 @@ public enum MeshWXDecoder {
     )
   }
 
-  // MARK: - Request (type 9, spec §7B)
+  // MARK: - Request (type 9, spec §11)
 
   /// Another phone's `>` request, heard because requests are flooded on the channel now.
   ///
@@ -390,7 +390,7 @@ public enum MeshWXDecoder {
     )
   }
 
-  // MARK: - Area sweep (type 10, spec §7C)
+  // MARK: - Area sweep (type 10, spec §12)
 
   /// The entries run to the end of the packet: there is no count byte, because a count would
   /// cost the byte that the 38th entry is made of.
@@ -400,7 +400,7 @@ public enum MeshWXDecoder {
   /// appending a field to the end must not cost this phone the thirty-seven entries it can read.
   ///
   /// Two things are unpacked here that the bytes carry in place rather than in fields of their
-  /// own (spec revision 10, §7C):
+  /// own (spec revision 10, §12):
   ///
   /// - The `total` byte's **bit 7** is the scope flag and its low nibble the packet count. A
   ///   revision 9 decoder reading a scoped sweep would see `total = 0x83` and believe the sweep
@@ -450,7 +450,7 @@ public enum MeshWXDecoder {
     )
   }
 
-  // MARK: - Radar (type 11, spec revision 11, §7D)
+  // MARK: - Radar (type 11, spec revision 11, §13)
 
   /// One tile of a radar picture: twelve fixed bytes, four more when the picture is partial, then
   /// a quadtree of two-bit levels most significant bit first.
@@ -556,7 +556,7 @@ public enum MeshWXDecoder {
 
   // MARK: - Primitives
   //
-  // Little-endian everywhere (spec §2.4), two's complement for signed. Hand-rolled
+  // Little-endian everywhere (spec §1.3), two's complement for signed. Hand-rolled
   // rather than `withUnsafeBytes(loadUnaligned:)` because these run on arbitrary
   // offsets into a received buffer and the byte order must be the wire's, not the CPU's.
 

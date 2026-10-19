@@ -4,7 +4,7 @@ import MeshCore
 import MeshWX
 import Testing
 
-/// Radar (spec revision 11, §7D) through the non-drawing layers: what the reducer keeps, what
+/// Radar (spec revision 11, §13) through the non-drawing layers: what the reducer keeps, what
 /// settles a `>radar`, what the five-minute rule counts as an answer, and what the channel
 /// traffic row says a tile was.
 @Suite("WeatherRadar state and pairing")
@@ -182,7 +182,7 @@ struct WeatherRadarTests {
   }
 
   /// A state saved by the first build of revision 13 may hold a detail frame: zoom −1, half-degree
-  /// edges. The detail level was removed the same day (docs/MESHWX_REV13.md §2) and the owner's
+  /// edges. The detail level was removed the same day (docs/MESHWX_UI.md §3.1 U-61) and the owner's
   /// phone has such a state, so it must still load: the detail frame is dropped when the state is
   /// read, and every other frame is kept.
   @Test
@@ -330,7 +330,7 @@ struct WeatherRadarTests {
     #expect(await h.service.pendingRequests().count == 1)
   }
 
-  /// Spec revision 11, §7D: the refusal comes back under `x`, and it has to reach the `>radar`
+  /// Spec revision 11, §13: the refusal comes back under `x`, and it has to reach the `>radar`
   /// button rather than a `>rain` one.
   @Test
   func `a refusal under x settles the radar request and not the rain one`() async throws {
@@ -345,7 +345,7 @@ struct WeatherRadarTests {
     #expect(settled.value.first?.1 == .notAvailable(.unsupported))
   }
 
-  /// The three refusals the screen says different things for (spec revision 11, §3), each
+  /// The three refusals the screen says different things for (docs/MESHWX_UI.md §18.3), each
   /// reaching the button as its own reason.
   @Test
   func `the radar refusal reasons arrive distinctly`() async throws {
@@ -402,7 +402,7 @@ struct WeatherRadarTests {
   }
 
   /// A copy of a packet already applied changes nothing and settles nothing, exactly as every
-  /// other type's does (spec §2.3).
+  /// other type's does (spec §2.4).
   @Test
   func `a duplicate tile is a duplicate`() async throws {
     let h = makeHarness()
@@ -428,7 +428,7 @@ struct WeatherRadarTests {
 
   // MARK: - Revision 13: loops through the service
 
-  /// Spec revision 13, §7D.4: a loop lists the pictures held and is settled by the first frame
+  /// Spec revision 13, §13.5: a loop lists the pictures held and is settled by the first frame
   /// that comes back; the rest keep landing as frames of their own. A tile received a minute ago
   /// does not hold a loop back — the loop asks for what the phone does not have.
   @Test
@@ -532,7 +532,7 @@ struct WeatherRadarTests {
     #expect(heard.filter { if case .radar = $0.subject { true } else { false } }.count == 2)
   }
 
-  /// Spec revision 13, §3: still one row per square, at its newest picture, with the count of
+  /// docs/MESHWX_UI.md §18.4: still one row per square, at its newest picture, with the count of
   /// pictures held; the channel history lists every frame with its own time.
   @Test
   func `a square with several frames is one cached row that counts them`() {

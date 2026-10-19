@@ -197,7 +197,7 @@ struct WeatherCopyTests {
   }
 
   /// Out of range, one request per sender every five seconds, and 60 answers an hour all end in
-  /// silence (spec §8.3): the copy allows for all three.
+  /// silence (spec §9): the copy allows for all three.
   @Test
   func `timeouts allow for range and a busy radio, and name the time`() {
     let at = Self.now.addingTimeInterval(6 * 60)
@@ -438,10 +438,11 @@ struct WeatherCopyTests {
     #expect(WeatherCopy.temperatures(highF: nil, lowF: nil, locale: F.locale) == nil)
   }
 
-  /// Revision 10, §1.3: "No forecast point near Albuquerque." is gone. `pfm_points.json` version 1
-  /// had no point at all for nine offices, so the app said that and offered nothing while the bot
-  /// held a forecast fifteen kilometres away — the owner's fourth ask. A place with no bundled
-  /// point in reach says only that there is no forecast yet, and Update sends `>f <lat>,<lon>`.
+  /// docs/MESHWX_UI.md §9: "No forecast point near Albuquerque." is gone. `pfm_points.json`
+  /// version 1 had no point at all for nine offices, so the app said that and offered nothing
+  /// while the bot held a forecast fifteen kilometres away — the owner's fourth ask. A place
+  /// with no bundled point in reach says only that there is no forecast yet, and Update sends
+  /// `>f <lat>,<lon>`.
   @Test
   func `a missing forecast names a far point, and with no point at all says only that`() throws {
     let point = try #require(MeshWXTables.shared.point(at: 103))
@@ -456,8 +457,8 @@ struct WeatherCopyTests {
       == "No forecast for Santa Fe yet.")
   }
 
-  /// A forecast the **bot** picked the point for has no bundled point to name (revision 10,
-  /// §1.3), so the card says who picked it rather than leaving the rows unattributed.
+  /// A forecast the **bot** picked the point for has no bundled point to name (docs/MESHWX_UI.md
+  /// §9), so the card says who picked it rather than leaving the rows unattributed.
   @Test
   func `a bot-chosen forecast point is labelled as the radio's choice`() {
     #expect(L10n.Weather.Weather.Forecast.chosenByBot("WX-AUS") == "Forecast point chosen by WX-AUS")

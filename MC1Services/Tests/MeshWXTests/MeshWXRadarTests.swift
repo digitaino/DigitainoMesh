@@ -3,7 +3,7 @@ import Testing
 
 @testable import MeshWX
 
-/// Radar (type 11, spec revision 11, §7D): the lattice, the quadtree, and the two ways a tile
+/// Radar (type 11, spec revision 11, §13): the lattice, the quadtree, and the two ways a tile
 /// stops being the whole picture — coarse and partial.
 ///
 /// The lattice cases are the reference's own (`meshwx/tests/test_radar.py`), coordinate for
@@ -336,9 +336,9 @@ struct MeshWXRadarTests {
     }
   }
 
-  /// Type 12 is free again (docs/MESHWX_REV13.md): the detail tile the first build of revision 13
-  /// sent under it is gone from the bot and both clients, and a packet of that nibble is ignored
-  /// like any unknown type — its header still decoded, for `(bot, seq)` tracking.
+  /// Type 12 is free again (docs/MESHWX_UI.md §3.1 U-61): the detail tile the first build of
+  /// revision 13 sent under it is gone from the bot and both clients, and a packet of that nibble
+  /// is ignored like any unknown type — its header still decoded, for `(bot, seq)` tracking.
   @Test func `type 12 is an unknown type again`() throws {
     #expect(MeshWXMessageType(rawValue: 12) == nil)
     // A type 12 header (source GOES) and the body that build would have put behind it.

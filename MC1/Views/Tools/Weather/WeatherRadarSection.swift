@@ -141,7 +141,7 @@ struct WeatherRadarSection: View {
 
   /// The ask, its cost above it and the footnotes under it — the shape every ask in the tool has
   /// (§11). **Always one packet**, whatever is held and whatever the width: a radar answer is one
-  /// packet or a coarser packet, never two (spec revision 11, §1.1).
+  /// packet or a coarser packet, never two (spec §13.2).
   ///
   /// The place page's one inline ask, so it is kept to the cost and the button: "Pictures are
   /// made about every 15 minutes" and the public note are the radar screen's, where the question

@@ -3,7 +3,7 @@ import Testing
 
 @testable import MeshWX
 
-/// The preload bundle (spec §9) and the search rules (spec §11).
+/// The preload bundle (spec §16) and the search rules (spec §21).
 ///
 /// The expected values are read off the kit's own `client_data` files, not off this
 /// implementation: if a future bundle renumbers something, these fail loudly instead of
@@ -14,7 +14,7 @@ struct MeshWXTablesTests {
 
   @Test func bundleLoads() {
     #expect(tables.protocolVersion == 17, "protocol.json version is 17 for v5.0 revision 13")
-    #expect(tables.offices.count == 127, "125 WFOs, then NHC and WNS (spec rev 3 §9)")
+    #expect(tables.offices.count == 127, "125 WFOs, then NHC and WNS (spec §16)")
     #expect(tables.stations.count == 2237)
     #expect(tables.states.count == 78)
     #expect(tables.points.count == 1958) // 1873 until revision 10 appended the offices the first build missed
@@ -44,7 +44,7 @@ struct MeshWXTablesTests {
     #expect(tables.stationIndex(forICAO: "kaus") == 202)
   }
 
-  /// Spec revision 11, §7D: the two radar tables a client reads words and numbers from. The
+  /// Spec revision 11, §13: the two radar tables a client reads words and numbers from. The
   /// thresholds are here rather than in the code because a legend that disagreed with the bot's
   /// own classification would label the picture wrong rather than leave it unlabelled.
   @Test func radarTablesComeFromTheBundle() {
@@ -141,7 +141,7 @@ struct MeshWXTablesTests {
   }
 
   @Test func placeSearchRanksByDistanceThenPopulation() {
-    // Spec §11's own example: Round Rock exists in TX and AZ. Asked from Austin, the
+    // Spec §21's own example: Round Rock exists in TX and AZ. Asked from Austin, the
     // one 20 miles up the road has to come first, even though ranking by population
     // alone would also get it right — so the AZ one must be present to prove the
     // search is not just filtering by state.

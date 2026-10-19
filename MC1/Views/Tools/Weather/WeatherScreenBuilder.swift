@@ -104,7 +104,7 @@ struct WeatherScreenContext: Sendable {
   /// The county the place is in, once outlines have loaded.
   var placeCounty: WeatherAreaName?
   /// The forecast zone it is in ("TXZ192"): zones carry the watches and advisories a county
-  /// request never finds (spec §8.2).
+  /// request never finds (spec §14).
   var placeZoneUGC: String?
   /// The source bot's state: its missed-messages and missing-warnings requests are chosen from it
   /// alone (`WeatherAlertRequests`).
@@ -112,7 +112,7 @@ struct WeatherScreenContext: Sendable {
   /// The state of the bot whose missed messages the alert status names, when that is not the
   /// source (phase 2): what its Ask is built from.
   var gapState: WeatherBotState?
-  /// Every bot's radar tiles in one list (spec revision 11, §7D). Not the source bot's alone: the
+  /// Every bot's radar tiles in one list (spec revision 11, §13). Not the source bot's alone: the
   /// lattice is shared, so a tile of this square from the radio next door is a picture of the same
   /// storm, and the radar screen's width control has to see all of them to say what is held for a
   /// width. The snapshot's own card is built from exactly this list.

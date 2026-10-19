@@ -23,7 +23,7 @@ enum WeatherRadarPalette {
   static let heavy = UIColor(red: 0.85, green: 0.17, blue: 0.20, alpha: 1)
   /// Inside the tile, outside the radar picture. Deliberately colourless and deliberately
   /// **not** absent: a cell the mosaic never covered drawn as dry claims clear weather over
-  /// ground nobody looked at (spec revision 11, §7D).
+  /// ground nobody looked at (spec revision 11, §13).
   static let unknown = UIColor(white: 0.55, alpha: 1)
 
   /// How solid a cell reads. 0.55 leaves the state and county lines under it legible, which is
@@ -48,7 +48,7 @@ enum WeatherRadarPalette {
 }
 
 /// What a loop's frames are drawn from: everything a single picture's key holds but the picture,
-/// and the frames' pictures oldest first (spec revision 13, §7D.4).
+/// and the frames' pictures oldest first (spec revision 13, §13.5).
 struct WeatherRadarLoopKey: Hashable {
   var base: WeatherRadarMapKey
   var radars: [MeshWXRadar]
@@ -83,7 +83,7 @@ enum WeatherRadarDrawing {
     drawing(cells: key.radar, over: furniture(key, tables: tables, geometry: geometry))
   }
 
-  /// Every frame of a loop, each drawn **once** (spec revision 13, §3): the player steps through
+  /// Every frame of a loop, each drawn **once** (docs/MESHWX_UI.md §18.5): the player steps through
   /// these and never builds a drawing on a step. The alerts, the place and the camera are the
   /// same on every frame, so they are gathered once and laid over each frame's own cells.
   static func loop(

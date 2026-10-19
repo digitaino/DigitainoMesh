@@ -89,7 +89,7 @@ struct WeatherTrafficCopyTests {
   }
 
   /// "Not available · f · unknown location": the request letter the refusal echoes back is what
-  /// says which of this phone's asks it answers (spec §8.3).
+  /// says which of this phone's asks it answers (spec §9).
   @Test
   func `a refusal names the letter it answers and the reason it gives`() {
     func line(_ reason: MeshWXNotAvailableReason) -> String {
@@ -120,7 +120,7 @@ struct WeatherTrafficCopyTests {
     #expect(detail(.offices(1)) == "1 office")
   }
 
-  /// Packet numbers are zero-based on the wire (spec §7C, §8.1) and one-based for a reader:
+  /// Packet numbers are zero-based on the wire (spec §12, §8) and one-based for a reader:
   /// nobody counting packets on a screen starts at nought.
   @Test
   func `a part or a chunk counts from one`() {
@@ -205,7 +205,7 @@ struct WeatherTrafficCopyTests {
     #expect(WeatherTrafficCopy.decibels(-0.75, locale: F.locale) == "-0.8")
   }
 
-  /// As much as anyone on the channel knows about who asked (spec §7B): the first three bytes of
+  /// As much as anyone on the channel knows about who asked (spec §11): the first three bytes of
   /// their public key.
   @Test
   func `a sender is the first three bytes of their key`() {

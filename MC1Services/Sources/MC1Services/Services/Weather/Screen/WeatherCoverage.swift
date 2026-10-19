@@ -22,13 +22,13 @@ public enum WeatherCoverageVerdict: Sendable, Hashable {
   /// nothing stated — its station footprint.
   case outside
   /// Nothing said yet, a list the bot had to cut, or outlines that have not loaded. A cut list
-  /// means "not listed", never "not covered" (spec §7A), and unknown is where that lands.
+  /// means "not listed", never "not covered" (spec §10), and unknown is where that lands.
   case unknown
 }
 
 /// Whether a place is in a bot's area, and from what evidence.
 ///
-/// First the bot's own statement (Coverage, spec §7A): its circle and the zones it lists. That is
+/// First the bot's own statement (Coverage, spec §10): its circle and the zones it lists. That is
 /// the only thing that describes coverage, and the reason the message exists — guessing from the
 /// hourly stations and from the offices of whatever warnings were active told a real phone that
 /// WX-AUS "may not carry alerts for Travis County", the bot's own home county
@@ -63,7 +63,7 @@ public struct WeatherCoverage: Sendable, Hashable {
     }
   }
 
-  /// One bot's own statement of its area (spec §7A), and when it arrived.
+  /// One bot's own statement of its area (spec §10), and when it arrived.
   public struct Stated: Sendable, Hashable {
     public var botID: UInt16
     public var coverage: MeshWXCoverage
@@ -208,18 +208,18 @@ public struct WeatherCoverage: Sendable, Hashable {
     return Self.footprint(footprint, covers: point) ? .inside : .outside
   }
 
-  /// What one statement says about a point (spec §7A).
+  /// What one statement says about a point (spec §10).
   ///
   /// Inside on the stated circle or on a stated run. Outside only when both lists are whole, the
   /// bot listed zones to test against, and the place resolved to UGCs that none of the runs
   /// covers. Everything else is unknown: a cut list says "not listed", and a place the outlines
   /// cannot place is not a place outside the area.
   ///
-  /// So is a statement with **no area filter at all** (`n` = 0, `k` = 0). Spec §7A reads that as
+  /// So is a statement with **no area filter at all** (`n` = 0, `k` = 0). Spec §10 reads that as
   /// "no place is outside it", and an honest bot that sends it does carry everything; but it is
   /// also the cheapest statement there is to forge (wire revision 13 signs nothing), and read as
   /// covering every place it made a chattering spoof every phone's choice of bot (phase 2,
-  /// 18 October 2026, spec §10.8). It says nothing about any one place, so it is evidence of
+  /// 18 October 2026, spec §20). It says nothing about any one place, so it is evidence of
   /// nothing.
   func verdict(
     _ statement: MeshWXCoverage, covering point: MeshWXCoordinate, withinKilometres radius: Double
@@ -245,7 +245,7 @@ public struct WeatherCoverage: Sendable, Hashable {
   // MARK: - Offices
 
   /// The place's forecast office when no bot answering for it says it carries that office
-  /// (spec §7A, docs/MESHWX_UI.md §3.1 I-B18 and §7.4).
+  /// (spec §10, docs/MESHWX_UI.md §3.1 I-B18 and §7.4).
   ///
   /// The bot's own word and nothing weaker: every bot that could answer for the place must have
   /// stated its offices with the office-cut flag clear, and none of them may list the place's

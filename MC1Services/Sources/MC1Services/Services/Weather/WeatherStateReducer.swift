@@ -2,7 +2,7 @@ import Foundation
 import MeshWX
 
 /// What applying one message did to a bot's state. The UI re-reads state on any change; the
-/// cases exist so tests can pin every rule in spec §2.3 and §3–§8 individually.
+/// cases exist so tests can pin every rule in spec §2.4 and §3–§8 individually.
 public enum WeatherStateChange: Sendable, Hashable {
   /// A copy of a message already accepted — the same `seq` and the same content: the bot's
   /// second transmission of an unechoed packet, or a copy delivered late. Nothing else in the
@@ -34,19 +34,19 @@ public enum WeatherStateChange: Sendable, Hashable {
   /// The held forecast for that point was issued later than this one; kept the held one.
   case forecastIgnoredOlder(point: UInt16)
   case textChunkStored(group: UInt8, index: UInt8, isComplete: Bool)
-  /// The bot stated what it carries (spec §7A); it replaces any statement held.
+  /// The bot stated what it carries (spec §10); it replaces any statement held.
   case coverageStored
   /// A statement that arrived out of order behind one already held: the held one came in a
   /// message the bot sent later, so it stands.
   case coverageIgnoredOlder
-  /// One packet of a national area sweep landed (spec §7C).
+  /// One packet of a national area sweep landed (spec §12).
   case areaSweepStored(group: UInt8, index: UInt8, isComplete: Bool)
   /// The sweep was built before something already held that speaks for everything it would say
   /// — a newer national sweep, or a newer scoped one whose scope contains this one's — so it
   /// changed nothing. Usually a backlog drained from the radio's queue at connect.
   case areaSweepIgnoredOlder(builtMinutes: UInt32)
   /// A radar frame landed: a picture of that square of earth at that minute, older or newer than
-  /// what was held (spec revision 11, §7D; revision 13, §7D.4).
+  /// what was held (spec revision 11, §13; revision 13, §13.5).
   case radarStored(tile: MeshWXRadarTile, takenMinutes: UInt32)
   /// A radar frame that changed nothing: the phone already holds that minute of that square at
   /// the same or a finer detail, or the frame is older than everything retention keeps.
@@ -55,7 +55,7 @@ public enum WeatherStateChange: Sendable, Hashable {
   case unknownType(rawType: UInt8)
   /// The message's own time — a digest's `now`, a batch's `ts`, a forecast's issue, a sweep's
   /// build, a picture's `taken`, a warning's issue — is more than
-  /// ``WeatherStateReducer/futureTolerance`` ahead of the phone's clock (spec §10.7). No bot sends
+  /// ``WeatherStateReducer/futureTolerance`` ahead of the phone's clock (spec §17.5). No bot sends
   /// that honestly: every one of them is a time something already happened. A digest, batch,
   /// forecast, sweep or picture is dropped whole, because kept it would stand as "newest" over
   /// everything real until the clock caught up — one digest stamped `0xFFFFFF00` would make every
@@ -89,15 +89,15 @@ public enum WeatherStateReducer {
   /// A digest speaks only for warnings that arrived before it was built. Arrival is on the
   /// phone's clock and building on the bot's, so a margin absorbs the difference between the two
   /// clocks and the minute the bot truncates `now` to. Nothing else: the bot keeps no answer
-  /// cache (spec §8.2, revision 2), so a digest is built when it is sent.
+  /// cache (spec §14, revision 2), so a digest is built when it is sent.
   static let digestMargin: TimeInterval = 2 * 60
   /// How long a cancel is remembered, so a late copy of the warning it ended is not stored again.
   static let recentCancelRetention: TimeInterval = 60 * 60
   /// How far ahead of the phone's clock a time on the wire may be and still be a time (spec
-  /// §10.7, 17 October 2026). Every time a bot sends is something that already happened, so this
+  /// §17.5, 17 October 2026). Every time a bot sends is something that already happened, so this
   /// only absorbs a bot's clock and the phone's disagreeing — and the bot truncating to the minute.
   static let futureTolerance: TimeInterval = 15 * 60
-  /// The furthest ahead an expiry is believed, from when the warning was heard (spec §10.7). A
+  /// The furthest ahead an expiry is believed, from when the warning was heard (spec §17.5). A
   /// product in force until further notice reaches the phone with an expiry the bot invented 12
   /// hours ahead (spec §3), re-sent as it moves, and every real product ends well inside this; an
   /// expiry past it is clamped here, so a forged or corrupt one cannot pin a warning to the screen
@@ -200,7 +200,7 @@ public enum WeatherStateReducer {
     let source = message.header.dataSource
 
     // A message whose own time is in the future is not stored as the newest of anything (spec
-    // §10.7). A warning's is its issue time, and that one costs only the issue time.
+    // §17.5). A warning's is its issue time, and that one costs only the issue time.
     if let minutes = ownMinutes(of: message.payload), isAhead(minutes, of: receivedAt) {
       changes.append(.futureTimeRejected(minutes: minutes))
       guard case .warning = message.payload else { return changes }
@@ -233,7 +233,7 @@ public enum WeatherStateReducer {
       changes.append(.notAvailable(notAvailable))
     case .request:
       // Another phone's `>` request, heard because requests are flooded on `#meshwx` now (spec
-      // §7B). `WeatherService.ingest` drops one before it ever reaches here: it is somebody
+      // §11). `WeatherService.ingest` drops one before it ever reaches here: it is somebody
       // else's question, it is not the bot, and nothing in it is this bot's state.
       break
     case .unknown:
@@ -278,7 +278,7 @@ public enum WeatherStateReducer {
     state.gapDetectedAt = max(state.gapDetectedAt ?? date, date)
   }
 
-  // MARK: - Times ahead of the phone's clock (spec §10.7)
+  // MARK: - Times ahead of the phone's clock (spec §17.5)
 
   /// The time a message states for itself, which a future one must not be: nil for a message
   /// with none (Cancel, Text, Coverage, Not available) and for a warning without an issue time. A
@@ -332,7 +332,7 @@ public enum WeatherStateReducer {
   }
 
   /// Takes out of persisted state anything stamped ahead of `now`: state saved before the phone
-  /// checked (spec §10.7). A digest built in the future is forgotten with the list it named — or
+  /// checked (spec §17.5). A digest built in the future is forgotten with the list it named — or
   /// it would go on turning every real digest away as older — and so are readings, forecasts,
   /// sweeps and radar pictures from the future, which would go on standing as the newest. A held
   /// warning keeps its place, capped as ``cappedWarning(_:receivedAt:)`` would have capped it on
@@ -372,10 +372,10 @@ public enum WeatherStateReducer {
   // MARK: - What a digest speaks for (spec §5, 17 October 2026)
 
   /// Whether this bot's digest speaks for a held warning, so that its absence from the list ends
-  /// it. A bot answers a place-named `>w` anywhere in the country (spec §8.2), but its digest lists
+  /// it. A bot answers a place-named `>w` anywhere in the country (spec §14), but its digest lists
   /// only what is active in its own coverage, so a warning the phone fetched from it for a place
   /// outside that coverage is absent from every digest it will ever send — and is not over. With
-  /// the bot's own complete statement of its area held (Coverage, spec §7A), a digest ends only
+  /// the bot's own complete statement of its area held (Coverage, spec §10), a digest ends only
   /// what touches that area; a warning outside it ends by its expiry, its cancel, or a fresh
   /// answer. Without a complete statement nothing says where the area stops, and the digest speaks
   /// for everything, as it always did.
@@ -585,7 +585,7 @@ public enum WeatherStateReducer {
     seq: UInt8,
     source: MeshWXDataSource
   ) -> WeatherStateChange {
-    // Spec §2.3: keyed by identity, not by seq — a known identity is replaced either way,
+    // Spec §2.4: keyed by identity, not by seq — a known identity is replaced either way,
     // whether or not the bot set the update flag.
     let existing = state.warnings[warning.identity]
     state.warnings[warning.identity] = WeatherStoredWarning(
@@ -797,7 +797,7 @@ public enum WeatherStateReducer {
     // point index is. `0xFFFF` is not a place: it is "somewhere the bundle has no point for", and
     // Santa Fe's 14:00 forecast followed by Taos's 13:00 one is two answers, not a stale copy of
     // one. Applying the check there would have made the second `>f <lat>,<lon>` of a session
-    // silently do nothing (spec revision 10, §1.3).
+    // silently do nothing (docs/MESHWX.md "State").
     if let held, !forecast.isUnbundledPoint, held.forecast.issuedMinutes > forecast.issuedMinutes {
       return .forecastIgnoredOlder(point: forecast.pointIndex)
     }
@@ -867,7 +867,7 @@ public enum WeatherStateReducer {
     }
     assembly.chunks[chunk.index] = chunk.text
     assembly.lastReceivedAt = receivedAt
-    // Spec §8.1, revision 7: the bot sets the cut flag on *every* chunk of a cut reply, so any
+    // Spec §8, revision 7: the bot sets the cut flag on *every* chunk of a cut reply, so any
     // chunk saying so is the reply saying so — which is what makes the mark survive the one chunk
     // that never arrived.
     assembly.wasCut = assembly.wasCut || chunk.wasCut
@@ -881,7 +881,7 @@ public enum WeatherStateReducer {
 
   // MARK: - Coverage
 
-  /// Spec §7A: what the bot says about itself, newest first. The message carries no time of its
+  /// Spec §10: what the bot says about itself, newest first. The message carries no time of its
   /// own — it describes the bot at the moment it is sent — so receipt is the only order there is,
   /// and out of order the statement already held came in a message the bot sent later.
   private static func store(
@@ -897,7 +897,7 @@ public enum WeatherStateReducer {
 
   // MARK: - Area sweep
 
-  /// Spec §7C, as revision 10 left it: the packets of one sweep share a `group` and assemble like
+  /// Spec §12, as revision 10 left it: the packets of one sweep share a `group` and assemble like
   /// Text chunks, and several sweeps can be held at once because a scoped one covers only the
   /// states it names.
   ///
@@ -905,7 +905,7 @@ public enum WeatherStateReducer {
   ///
   /// - A packet of a sweep **already held** — same `group`, same build time, same `total` —
   ///   merges into it, whatever else has arrived since. This is what makes a `>part` resend land:
-  ///   it is the same bytes under a new `seq` (spec revision 10, §1.1), so it is not a duplicate,
+  ///   it is the same bytes under a new `seq` (spec §14.5), so it is not a duplicate,
   ///   and it fills the hole in the assembly it belongs to rather than starting a new one or
   ///   being turned away as old.
   /// - A sweep built **before** something already held that speaks for everything it would say
@@ -926,7 +926,7 @@ public enum WeatherStateReducer {
     func merge(into assembly: inout WeatherAreaSweepAssembly) {
       assembly.packets[sweep.index] = sweep.entries
       assembly.lastReceivedAt = receivedAt
-      // Set on every packet of a cut sweep (spec §7C), so any packet saying so is the sweep
+      // Set on every packet of a cut sweep (spec §12), so any packet saying so is the sweep
       // saying so — which is what makes the mark survive the packet that never arrived.
       assembly.wasCut = assembly.wasCut || sweep.wasCut
       // One sweep's breadth, so the packets agree; a packet that says advisories are in it is
@@ -1017,7 +1017,7 @@ public enum WeatherStateReducer {
     return Set(heldScope) == Set(sweep.scope)
   }
 
-  /// The sweeps worth keeping, newest first (spec revision 10, design §2 "State").
+  /// The sweeps worth keeping, newest first (docs/MESHWX.md "State").
   ///
   /// Three rules and nothing else:
   ///
@@ -1067,7 +1067,7 @@ public enum WeatherStateReducer {
   /// at half the detail — so the whole rule is which pictures to keep. Three parts:
   ///
   /// - A **different** `taken` is another frame, older or newer, and is kept beside the others:
-  ///   the loop plays them (§7D.4). Until revision 13 an older one changed nothing.
+  ///   the loop plays them (§13.5). Until revision 13 an older one changed nothing.
   /// - The **same** `taken` follows revision 11: it replaces what is held, because the bot
   ///   re-sends a packet nothing echoed and a tile that arrives partial and then whole is the
   ///   same minute twice with more in it the second time — except that a **coarse** picture never
@@ -1113,7 +1113,7 @@ public enum WeatherStateReducer {
     return !(arriving.isCoarse && !held.isCoarse)
   }
 
-  /// The frames worth keeping, newest `taken` first (spec revision 11, design §2 "State"):
+  /// The frames worth keeping, newest `taken` first (docs/MESHWX.md "State"):
   /// nothing more than ``WeatherBotState/radarTileRetentionMinutes`` behind the bot's own clock,
   /// and at most `limit`, the oldest `taken` dropped.
   ///

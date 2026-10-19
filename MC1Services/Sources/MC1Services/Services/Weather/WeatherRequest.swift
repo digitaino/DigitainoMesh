@@ -1,12 +1,12 @@
 import Foundation
 import MeshWX
 
-/// The MeshWX v5 request grammar (spec §8.2), one case per line of the table, with the text
+/// The MeshWX v5 request grammar (spec §14), one case per line of the table, with the text
 /// the bot parses and the answer the app should wait for.
 ///
 /// Requests are plain text starting with `>`. The bot takes them as a DM or as text on
 /// `#meshwx`; the app sends a DM, which only the addressed bot can read, so exactly one bot
-/// answers (spec §8.2, §12, revision 2). The same words without the prefix are what people type
+/// answers (spec §14, §20, revision 2). The same words without the prefix are what people type
 /// in the bot's chat and get a text reply for; the prefix is what turns the answer into v5
 /// messages on `#meshwx` for every listening app. Identities
 /// and codes are carried as the strings the bot expects (`SV.W.EWX.42`, `TXC453`, `KAUS`,
@@ -22,7 +22,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   case warning(identity: String)
   /// `>w TXC453` / `>w TXZ192` — every active warning whose area list names that county or zone
   /// exactly (at most 6). No digest follows. Storm-based warnings carry county codes, most other
-  /// products zone codes, so a county finds no watch or advisory (spec §8.2).
+  /// products zone codes, so a county finds no watch or advisory (spec §14).
   case warningsTouching(ugc: String)
   /// `>wt SV.W.EWX.42` — a warning's narrative as text, subject 0.
   case warningText(identity: String)
@@ -41,7 +41,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// be `0xFFFF`, in which case the request itself is the label).
   case forecastForPlace(String)
   /// `>f 35.687,-105.938` — the forecast for a coordinate, from the nearest point the **bot**
-  /// holds one for (spec revision 10, §1.3). Three decimals, recognised by the comma.
+  /// holds one for (spec §14.2, §14.3). Three decimals, recognised by the comma.
   ///
   /// The ask that exists because the bundle was not the authority it was being treated as.
   /// `pfm_points.json` version 1 was built from one day's products and has no point at all for
@@ -65,13 +65,13 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   case taf(station: String)
   /// `>hwo` — the hazardous weather outlook, text subject 6.
   case hazardousOutlook
-  /// `>cov` — what the bot carries, stated by the bot (spec §7A, §8.2). The statement otherwise
+  /// `>cov` — what the bot carries, stated by the bot (spec §10, §14). The statement otherwise
   /// arrives only on the three-hourly broadcast, so a phone that has just opened the tool cannot
   /// tell "outside the area" from "nothing said yet" until one does — and withholds both the
   /// check and the out-of-area requests meanwhile (docs/MESHWX_UI.md §6, §11.1).
   case coverage
   /// `>wmap` / `>wmap all` / `>wmap TXOK` / `>wmap all TXOK` — every area under an alert, as an
-  /// Area sweep of at most eight packets (spec §7C).
+  /// Area sweep of at most eight packets (spec §12).
   ///
   /// The most expensive request in the grammar, and the only one whose cost is stated on the
   /// button before it is spent (docs/MESHWX_UI.md §17). `includesAdvisories` sends `>wmap all`,
@@ -85,7 +85,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// the array by hand.
   case areaSweep(includesAdvisories: Bool, states: [String])
   /// `>part 212 1,4,6` — the packets of a multi-packet answer that never arrived, sent again
-  /// (spec revision 10, §1.1).
+  /// (spec §14.5).
   ///
   /// The owner's first ask of revision 10, looking at "4 of 7 parts arrived": *should allow me to
   /// re-request the missing data.* Three packets instead of eight, and the bot resends the bytes
@@ -97,7 +97,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// it.
   case parts(group: UInt8, indexes: [UInt8], of: WeatherPartsKind)
   /// `>radar 30.270,-97.740` / `>radar 30.270,-97.740 z2` — the radar tile around a coordinate,
-  /// as one Radar packet (spec revision 11, §7D).
+  /// as one Radar packet (spec revision 11, §13).
   ///
   /// The coordinate rather than a place name, always: the tile is decided by the lattice
   /// (``MeshWXRadarTile/containing(latitude:longitude:zoom:)``), and a phone that knows which tile
@@ -109,7 +109,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   /// Wide). Zoom 0 sends no `z` word at all, which is the form the bot's own vector carries.
   case radar(latitude: Double, longitude: Double, zoom: Int)
   /// `>radar 30.270,-97.740 loop 2353 2338` — the last hour of the tile at that width, as up to
-  /// five ordinary Radar packets, oldest first (spec revision 13, §7D.4).
+  /// five ordinary Radar packets, oldest first (spec revision 13, §13.5).
   ///
   /// `held` is the `taken` minutes of the frames this phone already holds for that tile
   /// (`WeatherRadarLoop.held`). They go on the wire as UTC `HHMM` after `loop`, **newest first,
@@ -142,7 +142,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case .hazardousOutlook: ">hwo"
     case .coverage: ">cov"
     case let .areaSweep(includesAdvisories, states):
-      // The compact form on purpose (spec revision 10, §1.2): upper case, run together, no
+      // The compact form on purpose (spec §14.3): upper case, run together, no
       // separators. Fifteen states are then 30 characters, which is what makes the widest
       // selection fit `maxRequestTextBytes` beside `>wmap all `.
       switch (includesAdvisories, Self.sweepStates(states).joined()) {
@@ -162,7 +162,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
 
   /// `>radar 30.270,-97.740`, with ` z<n>` after it for any zoom but 0. Zoom 0 sends nothing
   /// after the place: it is the default, and "anything else after the place is part of the place"
-  /// (spec revision 11, §7D) — so a bare `z0` would be read as a request for the place "z0" by
+  /// (spec revision 11, §13) — so a bare `z0` would be read as a request for the place "z0" by
   /// nothing, but it costs three bytes and says nothing.
   ///
   /// The zoom is clamped to the wire's 0 to 3, as the lattice clamps it (``expectedReply``): a
@@ -174,7 +174,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     return level == 0 ? base : "\(base) z\(level)"
   }
 
-  /// `>radar 30.270,-97.740 [z<n>] loop [HHMM …]` (spec revision 13, §7D.4): the held pictures'
+  /// `>radar 30.270,-97.740 [z<n>] loop [HHMM …]` (spec revision 13, §13.5): the held pictures'
   /// UTC hour and minute, newest first, as many as fit the 40-byte request and never more than
   /// ``MeshWXWire/radarLoopHeldMax``. `>radar 30.270,-97.740 loop` is 26 bytes, so two always
   /// fit; a southern, western coordinate at a zoom other than 0 leaves room for one.
@@ -217,15 +217,15 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     "\(degrees(latitude)),\(degrees(longitude))"
   }
 
-  /// The letter a Not-available reply echoes back (spec §8.3): the ASCII code of the
+  /// The letter a Not-available reply echoes back (spec §9): the ASCII code of the
   /// request's first letter after `>`. Revision 10 adds `p`, for `>part`.
   ///
   /// `>radar` is the one exception, and revision 11 made it deliberately: it is refused under
   /// **`x`**, because `r` is already `>rain` and a refusal that could mean either is a refusal
-  /// nobody can act on (spec revision 11, §7D).
+  /// nobody can act on (spec revision 11, §13).
   public var requestLetter: Character {
     switch self {
-    // A loop is a `>radar` too (spec revision 13, §7D.4), and is refused under the same letter.
+    // A loop is a `>radar` too (spec revision 13, §13.5), and is refused under the same letter.
     case .radar, .radarLoop:
       return MeshWXWire.radarRequestLetter
     default:
@@ -247,7 +247,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case .homeForecast: .forecast(point: nil)
     case let .forecast(point): .forecast(point: point)
     case .forecastForPlace: .forecast(point: nil)
-    // The bot picks the point (spec revision 10, §1.3), so no index can be checked against the
+    // The bot picks the point (docs/MESHWX.md "Requests"), so no index can be checked against the
     // answer here. What the coordinate is for is the *distance* check the service makes on top
     // of this: any point, but only from the bot asked, and only within
     // `WeatherService.forecastSubstituteKilometres` of what was asked about.
@@ -262,10 +262,10 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case .areaSweep: .areaSweep
     case let .parts(group, _, _): .parts(group: group)
     // The tile, not the coordinate: the lattice is what turns a place into a square of earth
-    // (spec revision 11, §7D), and the answer names that square and never the question.
+    // (spec revision 11, §13), and the answer names that square and never the question.
     //
     // A loop is settled by the first of its frames, like `>w` by its first warning; the rest keep
-    // flowing into state (spec revision 13, §7D.4).
+    // flowing into state (spec revision 13, §13.5).
     case let .radar(latitude, longitude, zoom), let .radarLoop(latitude, longitude, zoom, _):
       .radar(tile: MeshWXRadarTile.containing(latitude: latitude, longitude: longitude, zoom: zoom))
     }
@@ -273,7 +273,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
 
   /// Whether another bot's message carrying exactly what was asked for settles it.
   ///
-  /// Only the addressed bot answers a DM (spec §12, revision 2), so this is not about who
+  /// Only the addressed bot answers a DM (spec §20, revision 2), so this is not about who
   /// answers: another bot's broadcast, or its answer to somebody else, can carry the very thing
   /// asked for — the forecast for point 102, the reading for KAUS, warning SV.W.EWX.42, the
   /// discussion for EWX — and then there is nothing left to wait for. What describes one bot's
@@ -284,7 +284,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
     case .forecast, .forecastDiscussion, .stormReports, .rainfall, .metar, .taf, .observation, .warning, .spaceWeather:
       true
     // A radar tile is a square of the earth on a lattice every client shares, cut from a mosaic
-    // every bot with a dish receives (spec revision 11, §7D). Two bots' tiles of the same square
+    // every bot with a dish receives (spec revision 11, §13). Two bots' tiles of the same square
     // are pictures of the same weather, so a second bot's answer to somebody else settles this —
     // which is the whole reason the lattice is fixed rather than centred on the asker.
     case .radar, .radarLoop:
@@ -307,7 +307,7 @@ public enum WeatherRequest: Sendable, Hashable, Codable {
   }
 }
 
-/// Which kind of multi-packet answer a `>part` request is repairing (spec revision 10, §1.1).
+/// Which kind of multi-packet answer a `>part` request is repairing (spec §14.5).
 ///
 /// The wire carries a `group` byte and nothing else, so this is never used to pair an answer: it
 /// is what lets the request log say "the alert map" or "the storm reports" rather than "group
@@ -453,7 +453,7 @@ public enum WeatherReplyKind: Sendable, Hashable {
   case digest
   /// `>w`: warning messages followed by a digest; either settles.
   case warnings
-  /// `>w SV.W.EWX.42`: that warning. No digest follows (spec §8.2).
+  /// `>w SV.W.EWX.42`: that warning. No digest follows (spec §14).
   case warning(identity: String)
   /// `>w TXC453`: a warning whose area list names that county or zone. No digest follows.
   case warningsTouching(ugc: String)
@@ -474,7 +474,7 @@ public enum WeatherReplyKind: Sendable, Hashable {
   /// text reply's words are (`WeatherService.answers`).
   case parts(group: UInt8)
   /// `>radar <lat>,<lon> [zN] [loop …]`: the Radar tile for that square of earth (spec revision
-  /// 11, §7D), or any frame of it for a loop (revision 13, §7D.4).
+  /// 11, §13), or any frame of it for a loop (revision 13, §13.5).
   ///
   /// The tile, not the coordinate, and whatever its `taken`: the lattice is shared, so the answer
   /// to this phone's question and the answer to somebody else's a kilometre away are the same
@@ -482,7 +482,7 @@ public enum WeatherReplyKind: Sendable, Hashable {
   case radar(tile: MeshWXRadarTile)
 }
 
-/// Text subjects on the wire (spec §8.1), kept as raw codes here so this file needs no
+/// Text subjects on the wire (spec §8), kept as raw codes here so this file needs no
 /// table; the MeshWX codec's enum is the typed form.
 public enum WeatherTextSubjectCode {
   public static let warningNarrative: UInt8 = 0

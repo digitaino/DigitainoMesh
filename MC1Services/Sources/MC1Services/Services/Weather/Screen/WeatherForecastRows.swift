@@ -174,8 +174,8 @@ public enum WeatherForecastCard: Sendable, Hashable {
       case placePoint
       /// Another point's forecast, already held, close enough to stand in.
       case nearbyPoint(kilometres: Double)
-      /// A point the **bot** chose, answering a `>f <lat>,<lon>` for this place (spec revision
-      /// 10, §1.3). `kilometres` is from the place to the coordinate that was asked about, which
+      /// A point the **bot** chose, answering a `>f <lat>,<lon>` for this place (docs/MESHWX_UI.md
+      /// §9). `kilometres` is from the place to the coordinate that was asked about, which
       /// is the only coordinate the phone knows: the point the bot forecast for is not in this
       /// bundle, which is the whole reason the ask exists.
       ///
@@ -219,13 +219,13 @@ public enum WeatherForecastCard: Sendable, Hashable {
   /// Albuquerque" and offered nothing while the bot held a forecast fifteen kilometres away —
   /// which is what the owner saw: "Forecast works in chat (`forecast santa fe nm`) but not in the
   /// app. I thought we were using the same engine." Whenever the place has a coordinate there is
-  /// something to ask (spec revision 10, §1.3), so this is the only empty card there is.
+  /// something to ask (docs/MESHWX_UI.md §3.1 U-38), so this is the only empty card there is.
   case missing(point: MeshWXPoint?, kilometres: Double?)
   case forecast(Summary)
 
   public static let nearbyPointKilometres = 10.0
   /// How far the coordinate a `>f <lat>,<lon>` asked about may be from a place and still be that
-  /// place's forecast (spec revision 10, §1.3).
+  /// place's forecast (docs/MESHWX_UI.md §9).
   ///
   /// Much tighter than ``nearbyPointKilometres`` is generous, and deliberately so: what is held
   /// under a coordinate is a forecast for a point *the phone cannot see*, somewhere near that
@@ -240,7 +240,7 @@ public enum WeatherForecastCard: Sendable, Hashable {
   /// (Hawaii, American Samoa, Guam and the Northern Marianas had none), the distance was 23 km at
   /// the median, 68 km at p95 and 114 km at p99. The cutoff is that p99, rounded up.
   ///
-  /// `pfm_points.json` version 2 (spec revision 10, §1.3) appended eighty-five points for the
+  /// `pfm_points.json` version 2 (spec §16) appended eighty-five points for the
   /// nine offices the first cut had none for, and the same measurement now reads 22.5 km at the
   /// median, 62.6 km at p95 and 90.2 km at p99, with 109 of 34,909 places beyond this cutoff.
   /// The number is left where it is: what it decides is not "is there a point" but "is that
@@ -305,8 +305,8 @@ public enum WeatherForecastCard: Sendable, Hashable {
       return summary(point, entry, .nearbyPoint(kilometres: distance), distance)
     }
 
-    // A forecast held under the coordinate somebody asked about from this phone (spec revision
-    // 10, §1.3). It has no point of its own that this bundle can name, so the place's own
+    // A forecast held under the coordinate somebody asked about from this phone (docs/MESHWX_UI.md
+    // §9). It has no point of its own that this bundle can name, so the place's own
     // distance from the *question* is what is checked, and the card says the bot chose the point.
     if let asked = nearestAskedCoordinate(states: states, place: place) {
       return summary(nil, (asked.stored, asked.botID), .botChosenPoint(kilometres: asked.kilometres), asked.kilometres)
@@ -318,7 +318,7 @@ public enum WeatherForecastCard: Sendable, Hashable {
   }
 
   /// The nearest coordinate-keyed forecast within ``askedCoordinateKilometres`` of the place, and
-  /// how far away the question it answers was asked (spec revision 10, §1.3).
+  /// how far away the question it answers was asked (docs/MESHWX_UI.md §9).
   ///
   /// Only keys that parse as a coordinate: the one slot for an answer nobody here asked for
   /// (``WeatherBotState/unbundledAskKey``) is somebody else's question and is never a place's

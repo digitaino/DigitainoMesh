@@ -214,7 +214,7 @@ struct WeatherMapDrawing: @unchecked Sendable, Equatable {
 /// ``MeshWXPresentation/tint(forVTEC:)`` for the colour — laid down through
 /// ``WeatherMapDrawing/overlays(_:)`` so the two maps cannot drift apart.
 ///
-/// **Areas are deduplicated, first entry wins.** Entries arrive most severe first (spec §7C), so
+/// **Areas are deduplicated, first entry wins.** Entries arrive most severe first (spec §12), so
 /// a county under both a Tornado Warning and a Flood Advisory draws red, once. That is also what
 /// bounds the work: whatever the sweep says, the map never draws more shapes than the bundle has
 /// outlines.

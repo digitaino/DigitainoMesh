@@ -644,7 +644,7 @@ extension WeatherRequestStatus {
 
 // MARK: - Level
 
-/// How much of a state's weather the next map should carry (spec §7C). The *breadth* of the ask;
+/// How much of a state's weather the next map should carry (spec §12). The *breadth* of the ask;
 /// ``WeatherAreaSelection`` is its reach.
 enum WeatherAreaMapScope: Hashable, CaseIterable {
   /// The default. Warnings and watches only — what people open a map during a storm to see.
@@ -695,7 +695,7 @@ enum WeatherAreaMapCopy {
   static let maxNamedStates = 3
 
   /// "Map as of 8:02 PM · 3 h old": when the radio built it, and how long ago that was. The build
-  /// time is the radio's own (spec §7C), never when this phone happened to hear the packets.
+  /// time is the radio's own (spec §12), never when this phone happened to hear the packets.
   ///
   /// The alerts list's row still leads with the newest sweep this way; the map's own card names
   /// each part separately (``partLine(_:picture:now:calendar:locale:tables:)``).
@@ -742,7 +742,7 @@ enum WeatherAreaMapCopy {
     let codes = scopeCodes(part, tables: tables)
     guard let codes, !codes.isEmpty else {
       // Scoped, and the packet carrying the scope never arrived. Its entries are real and are
-      // drawn; which states it was asked for is not in what came (spec revision 10, §1.2).
+      // drawn; which states it was asked for is not in what came (spec §12.3).
       return L10n.Weather.Weather.AreaMap.partStatesUnknown
     }
     return stateList(codes)
@@ -818,7 +818,7 @@ enum WeatherAreaMapCopy {
       : L10n.Weather.Weather.AreaMap.askStates(stateList(selection.askedStates))
   }
 
-  /// "Ask for the 3 missing parts" (spec revision 10, §1.1).
+  /// "Ask for the 3 missing parts" (docs/MESHWX_UI.md §3.1 U-35).
   static func askPartsTitle(_ request: WeatherRequest, isReport: Bool = false) -> String {
     let count = packetCount(request)
     if isReport {

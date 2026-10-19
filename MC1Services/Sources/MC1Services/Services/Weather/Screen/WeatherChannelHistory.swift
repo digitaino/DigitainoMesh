@@ -24,9 +24,9 @@ public enum WeatherChannelSubject: Sendable, Hashable {
   /// chunk carries only its subject, so a reply with no request is one nobody here asked for —
   /// which is not the same as knowing who did.
   case text(subject: MeshWXTextSubject, request: WeatherRequest?)
-  /// The bot's statement of what it carries (spec §7A).
+  /// The bot's statement of what it carries (spec §10).
   case coverage
-  /// One radar tile (spec revision 11, §7D). The tile is the subject: a picture of a square of
+  /// One radar tile (spec revision 11, §13). The tile is the subject: a picture of a square of
   /// earth, named by its width and its centre rather than by anybody's question — nothing on the
   /// wire says who asked for it, and the lattice means several people may have.
   ///
@@ -136,7 +136,7 @@ public enum WeatherCacheGroup: Sendable, Hashable, CaseIterable {
   case warningNarratives
   /// Warnings the phone holds for somewhere other than the place on screen.
   case warningsElsewhere
-  /// The radar tiles the phone is holding (spec revision 11, §7D), one row per square of earth
+  /// The radar tiles the phone is holding (spec revision 11, §13), one row per square of earth
   /// however many frames of it are held (revision 13).
   case radarPictures
 }
@@ -241,7 +241,7 @@ public struct WeatherCache: Sendable, Hashable {
           receivedAt: assembly.lastReceivedAt,
           destination: destination(of: assembly.request, tables: tables)))
       }
-      // One row per square of earth held, whatever its width (spec revision 11, §3), however
+      // One row per square of earth held, whatever its width (docs/MESHWX_UI.md §18.4), however
       // many frames of it (revision 13): the newest frame's times, and the count when there is
       // more than one. No destination: the radar screen is reached from the place page's card,
       // which knows which place it is about; a cached row knows only a tile.

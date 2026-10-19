@@ -144,7 +144,7 @@ struct WeatherReportProductView: View {
           }
         }
         // A reply with a chunk missing gets the cheap ask **above** the expensive one (spec
-        // revision 10, §1.1; docs/MESHWX_UI.md §3.1 U-35): the bot resends the bytes it
+        // §14.5; docs/MESHWX_UI.md §3.1 U-35): the bot resends the bytes it
         // transmitted, so one packet fills the hole in the text already on screen, where
         // "Ask for latest" rebuilds the whole reply.
         // It comes and goes on its own rules — fifteen seconds after the last chunk, gone once
@@ -183,7 +183,7 @@ struct WeatherReportProductView: View {
             .font(.system(.footnote, design: .monospaced))
             .textSelection(.enabled)
           // Where the bot got the product, and whether it had to drop its tail (spec §2.2 and
-          // §8.1, revision 7). Under the text, in the footnote voice the point line and the
+          // §8, revision 7). Under the text, in the footnote voice the point line and the
           // overheard note already use: it is provenance, not a warning, and a radio that has
           // said neither leaves the card exactly as it was.
           if let footnote = WeatherCopy.reportFootnote(

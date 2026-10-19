@@ -3,7 +3,7 @@ import Foundation
 import MeshWX
 import Testing
 
-/// The map, the selection, the cost and the parts offer: spec revision 10 (§1.1, §1.2) and
+/// The map, the selection, the cost and the parts offer: spec §12.3 and §19.5, and
 /// docs/MESHWX_UI.md §17.
 @Suite("Weather alert map")
 struct WeatherAlertMapTests {
@@ -16,7 +16,7 @@ struct WeatherAlertMapTests {
     var state = WeatherBotState(botID: F.botID)
     for (step, packet) in packets.enumerated() {
       // Heard no earlier than it was built: a sweep built more than 15 minutes ahead of the
-      // phone's clock is refused (spec §10.7).
+      // phone's clock is refused (spec §17.5).
       var heardAt = F.t0
       if case let .areaSweep(sweep) = packet.payload { heardAt = max(heardAt, Date(unixMinutes: sweep.builtMinutes)) }
       _ = WeatherStateReducer.apply(packet, to: &state, receivedAt: heardAt.addingTimeInterval(Double(step)))
@@ -141,7 +141,7 @@ struct WeatherAlertMapTests {
   }
 }
 
-/// Spec revision 10, §1.1: offered, never automatic, and only inside the window in which the bot
+/// Spec §19.5: offered, never automatic, and only inside the window in which the bot
 /// still holds the bytes.
 @Suite("Weather parts offer")
 struct WeatherPartsOfferTests {
@@ -175,7 +175,7 @@ struct WeatherPartsOfferTests {
       assembly: sweep(missing: []), now: F.t0.addingTimeInterval(60)) == nil)
   }
 
-  /// The bot resends a packet nothing echoed, 8–10 s later, of its own accord (spec §2.3).
+  /// The bot resends a packet nothing echoed, 8–10 s later, of its own accord (spec §2.4).
   /// Offering inside that window asks for a packet that is already on the air.
   @Test
   func `nothing is offered until the bot's own resend has had its chance`() {
@@ -198,7 +198,7 @@ struct WeatherPartsOfferTests {
       assembly: sweep(missing: [1]), now: F.t0.addingTimeInterval(601)) == nil)
   }
 
-  /// The same rule and the same wire request for a text reply with a hole in it (spec §8.1): the
+  /// The same rule and the same wire request for a text reply with a hole in it (spec §8): the
   /// kind comes off the assembly's own subject, for the log's wording.
   @Test
   func `a text reply missing a chunk is offered the same way`() {

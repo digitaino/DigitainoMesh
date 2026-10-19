@@ -120,7 +120,7 @@ public struct WeatherStoredDigest: Sendable, Hashable, Codable {
   public var feed: MeshWXFeedHealth { MeshWXFeedHealth(feedHealth: digest.feedHealth) }
 }
 
-/// The bot's own statement of what it carries (spec §7A), and when it arrived.
+/// The bot's own statement of what it carries (spec §10), and when it arrived.
 ///
 /// The message carries no time of its own: it says what the bot covers at the moment it is sent,
 /// so its age is receipt. It does not go stale either — it is broadcast every three hours, and a
@@ -199,7 +199,7 @@ public struct WeatherStoredObservation: Sendable, Hashable, Codable {
     source = try container.decodeIfPresent(MeshWXDataSource.self, forKey: .source) ?? .unstated
   }
 
-  /// When this station measured what it reported — the *as of* time (spec §10.5), never when the
+  /// When this station measured what it reported — the *as of* time (spec §18.1), never when the
   /// packet arrived.
   public var observedAt: Date { Date(unixMinutes: timestampMinutes) }
 
@@ -273,7 +273,7 @@ public struct WeatherStoredForecast: Sendable, Hashable, Codable {
   }
 }
 
-/// A text reply being reassembled by `(bot, group)` in `idx` order (spec §8.1).
+/// A text reply being reassembled by `(bot, group)` in `idx` order (spec §8).
 ///
 /// A chunk the bot transmits a second time — the same bytes, when no repeater echoed the first —
 /// carries the *original* group byte, so it merges into the same assembly and fills the hole.
@@ -295,7 +295,7 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
   /// value, and a chunk that states nothing never erases one that did.
   public var source: MeshWXDataSource
   /// Any chunk said the product was longer than 8 packets and the bot dropped the tail (spec
-  /// §8.1, revision 7).
+  /// §8, revision 7).
   ///
   /// Not the same claim as a hole in ``orderedChunks``: a hole is a chunk the air ate, and asking
   /// again may fill it. This is the whole reply the bot will ever send for that request, cut at a
@@ -357,7 +357,7 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
   }
 }
 
-/// An area sweep being reassembled by `(bot, group)` in `idx` order (spec §7C).
+/// An area sweep being reassembled by `(bot, group)` in `idx` order (spec §12).
 ///
 /// One sweep is one picture, built at one minute, of the states it covers. Packets of *this*
 /// sweep merge into it; a newer sweep is a second picture and gets an assembly of its own
@@ -369,7 +369,7 @@ public struct WeatherTextAssembly: Sendable, Hashable, Codable {
 /// map — so a partial one is kept, drawn, and labelled as partial. Since revision 10 the missing
 /// packets can also be asked for by name (``WeatherPartsOffer``).
 public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
-  /// When the bot built the sweep, in Unix minutes (spec §7C). The age on screen is from this,
+  /// When the bot built the sweep, in Unix minutes (spec §12). The age on screen is from this,
   /// never from receipt.
   public var builtMinutes: UInt32
   /// Shared by every packet of this sweep: the `seq` of its first.
@@ -385,7 +385,7 @@ public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
   /// The sweep carries advisories as well as warnings and watches. Clear means the narrower scope
   /// was asked for, not that no advisory is active.
   public var includesAdvisories: Bool
-  /// The sweep covers only the states ``scope`` names, not the country (spec revision 10, §7C).
+  /// The sweep covers only the states ``scope`` names, not the country (spec revision 10, §12).
   ///
   /// Read off `total` bit 7, which every packet of a scoped sweep carries — so this is known from
   /// whichever packet arrived first, packet 0 or not.
@@ -483,14 +483,14 @@ public struct WeatherAreaSweepAssembly: Sendable, Hashable, Codable {
   public var receivedPacketCount: Int { packets.count }
 
   /// Every entry received, in packet order then in the order the bot sent them — most severe
-  /// first (spec §7C), which is also the order the map lays its tints down in.
+  /// first (spec §12), which is also the order the map lays its tints down in.
   public var entries: [MeshWXAreaSweep.Entry] {
     packets.keys.sorted().flatMap { packets[$0] ?? [] }
   }
 }
 
 /// One radar picture the phone is holding: one **frame** of a square of earth (spec revision 11,
-/// §7D; revision 13, §7D.4).
+/// §13; revision 13, §13.5).
 ///
 /// Since revision 13 a tile has a history: the loop plays the last hour of it, so an older
 /// picture is no longer something that has merely been replaced. A frame is identified by
@@ -529,7 +529,7 @@ public struct WeatherStoredRadarTile: Sendable, Hashable, Codable {
   /// whole-degree edges.
   ///
   /// False only for a frame saved by the first build of revision 13, which had a detail level at
-  /// zoom −1 with half-degree edges (docs/MESHWX_REV13.md §2). Such a frame is dropped when the
+  /// zoom −1 with half-degree edges (docs/MESHWX_UI.md §3.1 U-61). Such a frame is dropped when the
   /// state is read and by retention, so nothing that draws, pairs or asks ever sees one.
   public var isOnWireLattice: Bool {
     (0...MeshWXWire.maxRadarZoom).contains(tile.zoom)
@@ -565,10 +565,10 @@ public struct WeatherSeenMessage: Sendable, Hashable, Codable {
   }
 }
 
-/// Everything the app holds for one bot (spec §12: "keep separate state per bot").
+/// Everything the app holds for one bot (spec §20: "keep separate state per bot").
 public struct WeatherBotState: Sendable, Hashable, Codable {
   public var botID: UInt16
-  /// The newest `seq` accepted, for gap detection (spec §2.3).
+  /// The newest `seq` accepted, for gap detection (spec §2.4).
   public var lastSeq: UInt8?
   /// The last few accepted messages, newest last. A copy of any of them is a duplicate however
   /// late it arrives; comparing against `lastSeq` alone let a late copy through as a gap and
@@ -609,7 +609,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// By point index; `0xFFFF` holds the last place-resolved forecast.
   public var forecasts: [UInt16: WeatherStoredForecast]
   /// Forecasts the bot resolved for itself, by **the coordinate that was asked for**, written
-  /// exactly as the wire wrote it: `"35.687,-105.938"` (spec revision 10, §1.3).
+  /// exactly as the wire wrote it: `"35.687,-105.938"` (docs/MESHWX.md "State").
   ///
   /// A `>f <lat>,<lon>` answer comes back under point `0xFFFF` when the point the bot chose is
   /// not in this bundle, and `0xFFFF` is one slot for the whole protocol: two coordinates asked
@@ -624,10 +624,10 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   public var unbundledForecasts: [String: WeatherStoredForecast]
   /// By group.
   public var texts: [UInt8: WeatherTextAssembly]
-  /// What the bot says it carries (spec §7A). Nil until it has said: the station footprint is
+  /// What the bot says it carries (spec §10). Nil until it has said: the station footprint is
   /// the fallback then, and nothing the bot has not stated may put a place outside its area.
   public var coverage: WeatherStoredCoverage?
-  /// The area sweeps this bot sent (spec §7C), complete or partial, **newest first**. Empty until
+  /// The area sweeps this bot sent (spec §12), complete or partial, **newest first**. Empty until
   /// one has been heard — and it never is until somebody on the channel taps for it.
   ///
   /// More than one since revision 10, because a scoped sweep of Texas and a national sweep from
@@ -636,7 +636,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// list from growing — a national sweep drops everything older than it, a scoped one drops
   /// older scoped sweeps it fully contains, and ``areaSweepLimit`` is the ceiling.
   public var areaSweeps: [WeatherAreaSweepAssembly]
-  /// The radar frames this bot sent (spec revision 11, §7D; revision 13), **newest `taken`
+  /// The radar frames this bot sent (spec revision 11, §13; revision 13), **newest `taken`
   /// first**. Empty until somebody on the channel asks for one: radar is request-only, and nothing
   /// is ever broadcast on a schedule.
   ///
@@ -726,16 +726,16 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
     missingFromDigest = try container.decode([MeshWXWarningIdentity].self, forKey: .missingFromDigest)
     observations = try container.decode([UInt16: WeatherStoredObservation].self, forKey: .observations)
     forecasts = try container.decode([UInt16: WeatherStoredForecast].self, forKey: .forecasts)
-    // Revision 10, §1.3. A file written before it holds whatever `0xFFFF` was holding, which
-    // stays where it is: this dictionary is the coordinate-keyed cache, and nothing was ever
-    // asked for by coordinate before it existed.
+    // Revision 10 (docs/MESHWX.md "State"). A file written before it holds whatever `0xFFFF` was
+    // holding, which stays where it is: this dictionary is the coordinate-keyed cache, and nothing
+    // was ever asked for by coordinate before it existed.
     unbundledForecasts = try container.decodeIfPresent(
       [String: WeatherStoredForecast].self, forKey: .unbundledForecasts) ?? [:]
     texts = try container.decode([UInt8: WeatherTextAssembly].self, forKey: .texts)
     // A file written before the bot stated anything, or before the app could read it: absent is
     // "has not said", which falls back to the station footprint rather than failing the file.
     coverage = try container.decodeIfPresent(WeatherStoredCoverage.self, forKey: .coverage)
-    // Revision 8, §7C, then revision 10's list of them. A file written before the app could read
+    // Revision 8, §12, then revision 10's list of them. A file written before the app could read
     // a sweep decodes as having none, which is exactly right: nobody had asked for one. One
     // written between the two holds a single sweep under `areaSweep`, which was national — there
     // was no other kind — and is lifted into the list rather than thrown away, so the map a
@@ -747,7 +747,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
       areaSweeps = (try legacy.decodeIfPresent(WeatherAreaSweepAssembly.self, forKey: .areaSweep))
         .map { [$0] } ?? []
     }
-    // Revision 11, §7D. Absent is empty, which is exactly right for a file written before radar:
+    // Revision 11, §13. Absent is empty, which is exactly right for a file written before radar:
     // nobody had asked for a tile, so there is nothing to lift. A frame off the wire's lattice —
     // zoom −1, saved by the build that had a detail level — is dropped here and the rest kept.
     radarTiles = (try container.decodeIfPresent([WeatherStoredRadarTile].self, forKey: .radarTiles) ?? [])
@@ -759,7 +759,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
   /// The map itself reads all of them (``WeatherAlertMapPicture``).
   public var newestAreaSweep: WeatherAreaSweepAssembly? { areaSweeps.first }
 
-  /// Warnings not yet expired at `now`, in the spec's display order (§10.2): the most severe
+  /// Warnings not yet expired at `now`, in the spec's display order (§18.2): the most severe
   /// first (`MeshWXSeverity.rank`, warnings above watches above advisories), then the soonest
   /// expiry. An event the tables cannot rank sorts last.
   public func activeWarnings(at now: Date, severity: (UInt8) -> MeshWXSeverity?) -> [WeatherStoredWarning] {
@@ -783,7 +783,7 @@ public struct WeatherBotState: Sendable, Hashable, Codable {
 // MARK: - Unix minutes
 
 extension Date {
-  /// The wire's clock: Unix minutes (`seconds / 60`) as u32 (spec §2.4).
+  /// The wire's clock: Unix minutes (`seconds / 60`) as u32 (spec §1.3).
   public init(unixMinutes: UInt32) {
     self.init(timeIntervalSince1970: TimeInterval(unixMinutes) * 60)
   }

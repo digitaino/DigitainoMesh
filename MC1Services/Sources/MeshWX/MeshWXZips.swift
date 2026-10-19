@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import Synchronization
 
-// MARK: - ZIP codes (spec §9 `zips.json`, §11)
+// MARK: - ZIP codes (spec §16 `zips.json`, §21)
 
 /// A US ZIP code from `zips.json`: the Census ZCTA's internal point, and the bundled place
 /// nearest it, which names it.
@@ -18,7 +18,7 @@ public struct MeshWXZip: Sendable, Hashable {
   public let placeIndex: Int
   public let place: MeshWXPlace
 
-  /// `"San Juan, PR 00901"`: the place's label with the ZIP after it (spec §9.1), the same
+  /// `"San Juan, PR 00901"`: the place's label with the ZIP after it (spec §16.2), the same
   /// characters as the weather bot's reply and as the app's row for the town.
   public var label: String {
     MeshWXPlaceNames.label(name: place.name, state: place.state, zip: code)
@@ -51,7 +51,7 @@ extension MeshWXTables {
     return String(code)
   }
 
-  /// The ZIP a query names, looked up exactly and never by prefix (spec §9, §11). Nil for a
+  /// The ZIP a query names, looked up exactly and never by prefix (spec §16, §21). Nil for a
   /// query that is not a ZIP, and for a ZIP the table does not have.
   ///
   /// The first query that is a ZIP reads `zips.json` (1.1 MB, 33,144 rows); nothing pays for

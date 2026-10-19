@@ -2,7 +2,7 @@ import Foundation
 import MeshWX
 
 /// What one bot's word means for another bot's copy of the same warning (phase 2, 18 October
-/// 2026; spec §10.8).
+/// 2026; spec §20).
 ///
 /// Several cities' bots share `#meshwx`, meshes are bridged, and every bot is two self-asserted
 /// bytes on the wire until messages are signed (wire revision 14). So one bot's word ends another
@@ -11,7 +11,7 @@ import MeshWX
 ///
 /// - **A Cancel ends every bot's copy** when the cancelling bot was heard live within
 ///   ``liveWindow`` of the cancel (``isLiveCancel(isBacklog:lastLiveHeardAt:at:)``, recorded in its
-///   `endings`) and its own **complete** statement of its area (Coverage, spec §7A) touches the
+///   `endings`) and its own **complete** statement of its area (Coverage, spec §10) touches the
 ///   warning, by the rule a digest is judged by (`WeatherStateReducer.touchesCoverage`). A
 ///   statement with no area filter at all is not evidence of covering anything. A copy issued
 ///   before the cancel is then ended, however long after it arrives: WX-AUS's feed running five
@@ -28,7 +28,7 @@ public enum WeatherCrossBot {
   /// Heard live this recently is "in range" (phase 2).
   public static let liveWindow: TimeInterval = 2 * 60 * 60
   /// How long an ending is remembered: the furthest ahead a warning's expiry is believed (spec
-  /// §10.7), so no copy of the warning can outlive the memory of its cancel.
+  /// §17.5), so no copy of the warning can outlive the memory of its cancel.
   public static let endingRetention: TimeInterval = WeatherStateReducer.warningHorizon
   /// At most this many endings per bot, newest kept.
   public static let maxEndings = 64

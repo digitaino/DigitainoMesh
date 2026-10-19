@@ -15,7 +15,7 @@ import SwiftUI
 /// what is held for **its own square**, or that nobody has asked for it yet, which is a different
 /// thing from a picture that does not reach the place.
 ///
-/// Since revision 13 (docs/MESHWX_REV13.md §3) every width can play the last hour of its square as
+/// Since revision 13 (docs/MESHWX_UI.md §18.5) every width can play the last hour of its square as
 /// a loop. Nothing plays and nothing asks by itself.
 struct WeatherRadarView: View {
   @Environment(\.appTheme) private var theme
@@ -41,7 +41,7 @@ struct WeatherRadarView: View {
   /// first. Nil is the ordinary still of the newest picture.
   @State private var frameIndex: Int?
   /// Each frame's drawing, made once when the player starts and kept for as long as the frames
-  /// are the same ones (spec revision 13, §3): a step swaps a drawing and builds nothing.
+  /// are the same ones (docs/MESHWX_UI.md §18.5): a step swaps a drawing and builds nothing.
   @State private var frameDrawings: [WeatherMapDrawing] = []
   @State private var frameDrawingsKey: WeatherRadarLoopKey?
 
@@ -50,12 +50,13 @@ struct WeatherRadarView: View {
     _zoom = State(initialValue: min(max(zoom, 0), Self.widestOffered))
   }
 
-  /// Zoom 3 exists on the wire and is not offered (spec revision 11, §3): a 16° tile is a picture
-  /// of eight states, drawn 50 km to a cell, and nothing anybody opens a radar screen to ask.
+  /// Zoom 3 exists on the wire and is not offered (docs/MESHWX_UI.md §3.1 U-44): a 16° tile is a
+  /// picture of eight states, drawn 50 km to a cell, and nothing anybody opens a radar screen to
+  /// ask.
   static let widestOffered = 2
   static let offeredZooms = [0, 1, 2]
   /// How long a frame of the loop stays up, and the newest: long enough to read where the line
-  /// was, and a beat on the newest so the loop reads as arriving at now (spec revision 13, §3).
+  /// was, and a beat on the newest so the loop reads as arriving at now (docs/MESHWX_UI.md §18.5).
   static let frameSeconds = 0.8
   static let newestFrameSeconds = 2.0
 
@@ -174,8 +175,8 @@ struct WeatherRadarView: View {
 
   // MARK: - The loop
 
-  /// Play and Pause, what is missing, and the ask for the rest of the hour (spec revision 13, §3).
-  /// Absent while there is nothing to play and nothing to ask.
+  /// Play and Pause, what is missing, and the ask for the rest of the hour (docs/MESHWX_UI.md
+  /// §18.5). Absent while there is nothing to play and nothing to ask.
   @ViewBuilder
   private func loopSection(_ loop: WeatherRadarLoop, request: WeatherRequest?) -> some View {
     let asks = !loop.isFull && request != nil
@@ -227,7 +228,7 @@ struct WeatherRadarView: View {
   }
 
   /// The loop's ask lists the frames on screen as held, so the radio leaves them out (spec
-  /// revision 13, §7D.4).
+  /// revision 13, §13.5).
   private func loopAsk(_ loop: WeatherRadarLoop) -> WeatherRequest? {
     guard let place = screen.place else { return nil }
     return loop.ask(
@@ -303,7 +304,7 @@ struct WeatherRadarView: View {
       }
       // What the bar's Ask is doing, beside the picture it will change. One packet, whatever the
       // width and whatever is held: a radar answer is one packet or a coarser packet, never two
-      // (spec revision 11, §1.1). Said before the tap, like every other cost in the tool.
+      // (spec §13.2). Said before the tap, like every other cost in the tool.
       if let request {
         WeatherAskStatusRow(
           screen: screen, request: request, cost: WeatherAreaMapCopy.packets(1),
@@ -324,7 +325,7 @@ struct WeatherRadarView: View {
           .font(.subheadline)
           .foregroundStyle(.secondary)
       case let .held(picture):
-        // Always the newest picture's, whatever frame is on screen (spec revision 13, §3).
+        // Always the newest picture's, whatever frame is on screen (docs/MESHWX_UI.md §18.5).
         Text(WeatherCopy.radarSummary(picture.summary, placeName: screen.placeName ?? "")
           .joined(separator: " "))
           .font(.subheadline)
@@ -360,7 +361,7 @@ struct WeatherRadarView: View {
 
   /// The newest picture's time line, or — while the loop plays, or is paused on an older frame —
   /// that frame's own time and its place in the loop, "6:08 PM · 2 of 5", in the caution tone
-  /// whenever the frame is old enough to be (spec revision 13, §3).
+  /// whenever the frame is old enough to be (docs/MESHWX_UI.md §18.5).
   @ViewBuilder
   private func timeLine(_ picture: WeatherRadarPicture, loop: WeatherRadarLoop) -> some View {
     if let index = frameIndex, loop.frames.indices.contains(index),

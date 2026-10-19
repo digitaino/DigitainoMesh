@@ -28,7 +28,7 @@ public enum MeshWXEncodeError: Error, Sendable, Hashable {
   /// A not-available request string had no letter after the `>` prefix.
   case emptyRequest
   /// A partial radar tile carried an echo where the picture does not reach (spec revision 11,
-  /// §7D). Outside the bounds the wire's level 0 means *unknown*, so a cell there with a level in
+  /// §13). Outside the bounds the wire's level 0 means *unknown*, so a cell there with a level in
   /// it would arrive as unknown and the reading would be lost.
   case radarCellOutsideBounds(row: Int, col: Int)
   /// A radar tile's `bounds` were not a rectangle of its own grid.
@@ -198,7 +198,7 @@ public enum MeshWXEncoder {
 
   /// The counted run list of spec §3. A warning sets the tag bit only when it has runs, so an
   /// empty list has no encoding there; a Coverage message counts them the same way but may
-  /// legitimately carry none (`k` = 0, spec §7A), hence `allowingEmpty`.
+  /// legitimately carry none (`k` = 0, spec §10), hence `allowingEmpty`.
   private static func encodeAreas(
     _ areas: [MeshWXAreaRun], what: String = "area runs", allowingEmpty: Bool = false
   ) throws -> Data {
@@ -410,10 +410,10 @@ public enum MeshWXEncoder {
       firstPeriod: forecast.firstPeriod, periods: forecast.periods, source: source)
   }
 
-  // MARK: - Text (type 6, spec §8.1)
+  // MARK: - Text (type 6, spec §8)
 
   /// - Parameter wasCut: the reply ran past ``MeshWXWire/maxTextChunks`` and the bot dropped the
-  ///   tail (spec §8.1, revision 7). Every chunk of a cut reply carries it, not only the last.
+  ///   tail (spec §8, revision 7). Every chunk of a cut reply carries it, not only the last.
   public static func text(
     seq: UInt8, bot: UInt16, subject: MeshWXTextSubject, group: UInt8, index: UInt8, total: UInt8,
     text: String, wasCut: Bool = false, source: MeshWXDataSource = .unstated
@@ -455,7 +455,7 @@ public enum MeshWXEncoder {
   /// `group = seqStart`, and take consecutive sequence numbers wrapping 255 → 0.
   ///
   /// - Parameter wasCut: the caller already dropped the product's tail to make it fit (spec
-  ///   §8.1, revision 7). Marked on every chunk, because a reader missing the last one still
+  ///   §8, revision 7). Marked on every chunk, because a reader missing the last one still
   ///   has to know the reply is short of the product. The cutting itself is the bot's, at a
   ///   sentence boundary; this never truncates on its own — past
   ///   ``MeshWXWire/maxTextChunks`` it still throws.
@@ -493,7 +493,7 @@ public enum MeshWXEncoder {
     }
   }
 
-  // MARK: - Not available (type 7, spec §8.3)
+  // MARK: - Not available (type 7, spec §9)
 
   /// `request` is the request string (`">f round rock tx"`) or just its first letter;
   /// only the ASCII code of that letter goes on the wire.
@@ -523,7 +523,7 @@ public enum MeshWXEncoder {
       seq: seq, bot: bot, requestCode: message.requestCode, reason: message.reason)
   }
 
-  // MARK: - Coverage (type 8, spec §7A)
+  // MARK: - Coverage (type 8, spec §10)
 
   /// The app never sends this — only a bot states its own coverage — but the vector round trip
   /// and the coverage tests both need the bytes, and a codec exercised in one direction drifts.
@@ -577,7 +577,7 @@ public enum MeshWXEncoder {
     )
   }
 
-  // MARK: - Request (type 9, spec §7B)
+  // MARK: - Request (type 9, spec §11)
 
   /// The app's own `>` request, as the datagram it is flooded on `#meshwx` as.
   ///
@@ -591,7 +591,7 @@ public enum MeshWXEncoder {
   ///   - bot: the bot asked; ``MeshWXRequest/anyBot`` asks them all.
   ///   - senderPrefix: the first six bytes of this phone's public key, in key order.
   ///   - timestamp: Unix seconds on the sender's clock; a resend repeats it.
-  ///   - text: the §8.2 request, starting with `>`.
+  ///   - text: the §14 request, starting with `>`.
   public static func request(
     seq: UInt8, bot: UInt16, senderPrefix: Data, timestamp: UInt32, text: String
   ) throws -> Data {
@@ -620,7 +620,7 @@ public enum MeshWXEncoder {
       text: request.text)
   }
 
-  // MARK: - Area sweep (type 10, spec §7C)
+  // MARK: - Area sweep (type 10, spec §12)
 
   /// One packet of a national sweep. The app never sends one — only a bot builds them — but the
   /// shared vectors are a round trip, and the map's tests need a sweep of Montana without waiting
@@ -630,7 +630,7 @@ public enum MeshWXEncoder {
   /// puts the state one bit from the kind, and a state index of 128 silently truncated would
   /// move every area in the packet to another state's outlines.
   /// - Parameters:
-  ///   - isScoped: the sweep covers only the states `scope` names (spec revision 10, §7C). It
+  ///   - isScoped: the sweep covers only the states `scope` names (spec revision 10, §12). It
   ///     rides in `total` bit 7 and goes on **every** packet of a scoped sweep, including the
   ///     ones that carry no scope entries.
   ///   - scope: the state indices this packet names, written out first as scope entries — `event
@@ -723,7 +723,7 @@ public enum MeshWXEncoder {
     )
   }
 
-  // MARK: - Radar (type 11, spec revision 11, §7D)
+  // MARK: - Radar (type 11, spec revision 11, §13)
 
   /// One tile of a radar picture. The app never sends one — only a bot cuts a tile out of a
   /// mosaic — but the vector round trip runs through here, and the radar screen's tests need a
@@ -927,7 +927,7 @@ public enum MeshWXEncoder {
   }
 }
 
-// Little-endian appenders (spec §2.4). Private to the module: nothing outside builds
+// Little-endian appenders (spec §1.3). Private to the module: nothing outside builds
 // v5 bytes by hand.
 extension Data {
   mutating func appendU16(_ value: UInt16) {

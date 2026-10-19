@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import Synchronization
 
-/// Zone and county outlines, keyed by UGC code (spec §9, `zones.geojson` and
+/// Zone and county outlines, keyed by UGC code (spec §16, `zones.geojson` and
 /// `counties.geojson`).
 ///
 /// A warning either carries a polygon or names areas. Storm-based products (tornado,
@@ -13,7 +13,7 @@ import Synchronization
 ///
 /// **Not every code has a ring.** The bundle is a cut in time and the UGC tables grow,
 /// so ``rings(for:)`` returning nil is a normal outcome, not a failure: fall back to the
-/// centroid that `zones.json` / `counties.json` carry (spec §9).
+/// centroid that `zones.json` / `counties.json` carry (spec §16).
 ///
 /// Loading is lazy and per-file, because the two files together take roughly half a
 /// second to parse and an app that never shows a zone-based warning should never pay for

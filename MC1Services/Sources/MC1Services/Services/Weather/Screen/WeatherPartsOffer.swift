@@ -2,7 +2,7 @@ import Foundation
 import MeshWX
 
 /// Whether to offer "Ask for the 3 missing parts", and what that ask is
-/// (spec revision 10, §1.1; docs/MESHWX_UI.md §17).
+/// (spec §19.5; docs/MESHWX_UI.md §17).
 ///
 /// The owner's first ask of revision 10, looking at a map that said "4 of 7 parts arrived":
 /// *should allow me to re-request the missing data.* Three packets instead of eight, and the bot
@@ -15,7 +15,7 @@ import MeshWX
 ///
 /// - The assembly is **incomplete**. Nothing to ask for otherwise.
 /// - Its newest packet arrived at least ``settleSeconds`` ago. The bot resends a packet nothing
-///   echoed, 8–10 s later, of its own accord (spec §2.3): offering inside that window asks for a
+///   echoed, 8–10 s later, of its own accord (spec §2.4): offering inside that window asks for a
 ///   packet that is already on the air.
 /// - Its first packet arrived no more than ``window`` ago. Past that the bot no longer holds the
 ///   bytes (`PARTS_CACHE_S`), so the ask can only come back Not available — and the ordinary
@@ -23,7 +23,7 @@ import MeshWX
 public enum WeatherPartsOffer {
   /// How long to let the bot's own resend have its chance.
   public static let settleSeconds: TimeInterval = 15
-  /// How long the bot keeps the bytes (spec revision 10, §1.1: `PARTS_CACHE_S = 600`).
+  /// How long the bot keeps the bytes (spec §14.5; the bot's `PARTS_CACHE_S = 600`).
   public static let window = TimeInterval(MeshWXWire.partsCacheSeconds)
 
   /// The ask for a sweep missing packets, or nil when it is not offered.
@@ -40,7 +40,7 @@ public enum WeatherPartsOffer {
   }
 
   /// The ask for a text reply missing a chunk, or nil when it is not offered. The same rule and
-  /// the same wire request: a `group` is a `group` (spec §8.1, §7C).
+  /// the same wire request: a `group` is a `group` (spec §8, §12).
   public static func make(
     assembly: WeatherTextAssembly, kind: WeatherPartsKind? = nil, now: Date
   ) -> WeatherRequest? {

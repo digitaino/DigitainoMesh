@@ -143,7 +143,7 @@ struct WeatherPageScreen {
   /// all, and so no way to reach the screen that would send this.
   ///
   /// **Always one packet**, whatever the width: a radar answer is one packet or a coarser one
-  /// (spec revision 11, §1.1). That is the whole reason the cost line can be a constant rather
+  /// (spec §13.2). That is the whole reason the cost line can be a constant rather
   /// than the estimate the alert map has to make.
   func radarRequest(zoom: Int) -> WeatherRequest? {
     WeatherRadarCard.ask(place: place, zoom: zoom)
@@ -156,7 +156,7 @@ struct WeatherPageScreen {
   }
 
   /// The last hour held of one exact square, every radio's frames together (spec revision 13,
-  /// §7D.4).
+  /// §13.5).
   func radarLoop(tile: MeshWXRadarTile) -> WeatherRadarLoop {
     WeatherRadarLoop.make(tile: tile, tiles: context.radarTiles, now: now)
   }
@@ -391,7 +391,7 @@ final class WeatherToolModel {
   }
 
   /// A complete reply to this very request, owned by this phone and under five minutes old: asking
-  /// again would have the bot rebuild the same reply on everyone's airtime (spec §13), so the
+  /// again would have the bot rebuild the same reply on everyone's airtime (spec §19), so the
   /// answer stands in for the button.
   func freshOwnedReply(for request: WeatherRequest) -> WeatherTextItem? {
     guard case .text = request.expectedReply else { return nil }
@@ -1505,7 +1505,7 @@ final class WeatherToolModel {
     defer { updateRuns.end(pageID: pageID) }
     for (offset, request) in plan.requests.enumerated() {
       if offset > 0 {
-        // The service refuses a second request inside the window (spec §8.2, §13): the steps are
+        // The service refuses a second request inside the window (spec §14, §19): the steps are
         // queued rather than fired together.
         try? await Task.sleep(for: .seconds(WeatherService.requestSpacing))
         guard !Task.isCancelled else { return }

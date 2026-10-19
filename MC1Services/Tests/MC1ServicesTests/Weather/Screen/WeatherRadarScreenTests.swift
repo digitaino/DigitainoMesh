@@ -3,7 +3,7 @@ import Foundation
 import MeshWX
 import Testing
 
-/// The radar screen rules (spec revision 11, §3; docs/MESHWX_UI.md §18): which held tile answers
+/// The radar screen rules (docs/MESHWX_UI.md §18): which held tile answers
 /// for a place, how old it is, what it says in words, and how its cells reach a map.
 @Suite("WeatherRadar screen rules")
 struct WeatherRadarScreenTests {
@@ -91,8 +91,8 @@ struct WeatherRadarScreenTests {
     #expect(!WeatherRadarPick.reaches(partial, coordinate: Self.austin))
   }
 
-  /// Two hours of weather is not this weather (spec revision 11, §3), so past that nothing is
-  /// drawn at all.
+  /// Two hours of weather is not this weather (docs/MESHWX_UI.md §3.1 U-45), so past that nothing
+  /// is drawn at all.
   @Test
   func `a picture over two hours old is not offered`() {
     let tile = Self.tile()
@@ -301,7 +301,7 @@ struct WeatherRadarScreenTests {
   }
 
   /// The ask is the coordinate and never the place's name: the lattice turns the coordinate into
-  /// a tile this phone can name before the answer arrives (spec revision 11, §7D).
+  /// a tile this phone can name before the answer arrives (spec revision 11, §13).
   @Test
   func `the ask names the coordinate and the width`() {
     #expect(WeatherRadarCard.ask(place: nil) == nil)

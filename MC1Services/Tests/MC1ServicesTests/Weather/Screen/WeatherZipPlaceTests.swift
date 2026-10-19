@@ -6,7 +6,7 @@ import Testing
 @testable import MC1Services
 
 /// A searched ZIP as the place the screen answers for, and town rows named as the weather bot
-/// names places (spec §9.1).
+/// names places (spec §16.2).
 @Suite("Weather ZIP place")
 struct WeatherZipPlaceTests {
   @Test func aZipIsASearchedPlaceAtItsOwnPointWithTheBotsLabel() throws {
@@ -18,7 +18,7 @@ struct WeatherZipPlaceTests {
     #expect(place.uncertaintyKilometres == WeatherPlace.searched(zip.place).uncertaintyKilometres)
   }
 
-  /// A ZIP reads as its town's row does, with the ZIP after it: one rule (spec §9.1) for both.
+  /// A ZIP reads as its town's row does, with the ZIP after it: one rule (spec §16.2) for both.
   @Test func theZipLabelIsTheTownRowWithTheZip() throws {
     let tables = MeshWXTables.shared
     let kitchen = try #require(tables.zip("10019"))
@@ -82,7 +82,7 @@ struct WeatherZipPlaceTests {
 /// an order they can see (docs/MESHWX_UI.md §3.1 U-22, U-23).
 @Suite("Weather place search")
 struct WeatherPlaceSearchTests {
-  /// The bundle's own San Juan, PR: the municipio and its zona urbana, which spec §9.1 strips, so
+  /// The bundle's own San Juan, PR: the municipio and its zona urbana, which spec §16.2 strips, so
   /// both rows read "San Juan, PR" — 7 km apart, and the live search showed both.
   @Test func aTownTheTableHoldsTwiceIsOneRow() throws {
     let tables = MeshWXTables.shared

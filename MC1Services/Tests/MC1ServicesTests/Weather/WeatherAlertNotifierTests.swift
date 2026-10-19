@@ -270,7 +270,7 @@ struct WeatherAlertNotifierTests {
   }
 
   /// Revision 12: a warning that has not started says so, from its start until its end, and a
-  /// notification never counts down (docs/MESHWX_REV12.md §2).
+  /// notification never counts down (docs/MESHWX_UI.md §3.1 U-49).
   @Test("a warning that has not started is posted from its start until its end")
   func postsUpcomingWarningFromUntil() async throws {
     let harness = makeHarness(watch: WeatherAlertWatch(places: [Self.here()]))
@@ -497,7 +497,7 @@ struct WeatherAlertNotifierTests {
     #expect(harness.ledger.value[identifier]?.withdrawnAt == harness.clock.now)
   }
 
-  /// Phase 2 (spec §10.8): a copy arriving after the notification was taken down — another bot's,
+  /// Phase 2 (spec §20): a copy arriving after the notification was taken down — another bot's,
   /// its feed hours behind — is a repeat of something over. It never sounds and never comes back.
   @Test("a second bot's copy after the warning ended neither posts nor sounds")
   func secondBotCopyAfterEnd() async {

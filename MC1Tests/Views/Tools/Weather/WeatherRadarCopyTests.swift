@@ -5,7 +5,7 @@ import Testing
 
 @testable import MC1
 
-/// The sentences a radar picture is read out in (docs/MESHWX_UI.md §18, spec revision 11, §3).
+/// The sentences a radar picture is read out in (docs/MESHWX_UI.md §18.3).
 ///
 /// The screens are two lists and a map; what they *say* is all here, and every rule the owner
 /// decided on is a sentence rather than a pixel: "precipitation", not "rain", because radar sees
@@ -208,7 +208,7 @@ struct WeatherRadarCopyTests {
   // MARK: - Revision 13: loops
 
   /// One row per square, its newest time, and how many pictures of it are held when there is more
-  /// than one (docs/MESHWX_REV13.md §3).
+  /// than one (docs/MESHWX_UI.md §18.4).
   @Test
   func `a cached row with several frames counts its pictures`() {
     #expect(WeatherCopy.channelSubject(.radar(tile: Self.tile, frames: 5))
@@ -232,7 +232,7 @@ struct WeatherRadarCopyTests {
     #expect(loop == "WX-AUS has no recent radar picture for this area.")
   }
 
-  /// The English is fixed by the contract (docs/MESHWX_REV13.md §3.1), so both clients say the
+  /// The English is fixed by docs/MESHWX_UI.md §18.5, so both clients say the
   /// same thing.
   @Test
   func `the revision 13 sentences are the contract's`() {

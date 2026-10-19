@@ -3,7 +3,7 @@ import MeshWX
 
 // MARK: - Picking a tile
 
-/// Which held tile answers for a coordinate (spec revision 11, §7D; docs/MESHWX_UI.md §18).
+/// Which held tile answers for a coordinate (spec revision 11, §13; docs/MESHWX_UI.md §18).
 ///
 /// Every bot's tiles together, because the lattice is shared: a tile of this square from the bot
 /// next door is a picture of the same storm, taken from the same mosaic, and refusing it would
@@ -14,8 +14,8 @@ import MeshWX
 /// minute apart do not swap places; then the **lowest zoom**, because a 2° tile of the place is a
 /// better picture of the place than a 16° tile it is a dot in; then **fine before coarse**.
 public enum WeatherRadarPick {
-  /// Past this, a tile is not drawn at all (spec revision 11, §3): two hours of weather is not
-  /// this weather, and a radar picture with an old time on it is read as current far more often
+  /// Past this, a tile is not drawn at all (docs/MESHWX_UI.md §3.1 U-45): two hours of weather is
+  /// not this weather, and a radar picture with an old time on it is read as current far more often
   /// than it is read as old.
   public static let maximumAgeMinutes = 120
   /// How coarsely the picture's own time is compared. The mosaics are made about every fifteen
@@ -53,7 +53,7 @@ public enum WeatherRadarPick {
   /// The picture held for one **exact** square, whether or not it reaches the place: the newest
   /// of its frames (spec revision 13).
   ///
-  /// This is the radar screen's width control (spec revision 11, §3): each width shows the tile
+  /// This is the radar screen's width control (docs/MESHWX_UI.md §18.2): each width shows the tile
   /// held for it, and a partial tile whose bounds stop short of the place is still the tile held
   /// for that width — the screen says "This picture does not reach Austin", which is an answer,
   /// and a very different one from "Not asked for yet". ``best(for:zoom:tiles:now:)`` is for the
@@ -116,8 +116,8 @@ public struct WeatherRadarAge: Sendable, Hashable {
   /// was half an hour ago is worth more than no picture at all.
   public var isOld: Bool
 
-  /// From here the picture is stale (spec revision 11, §3). Two mosaics have been made since, so
-  /// either the bot missed them or the phone did.
+  /// From here the picture is stale (docs/MESHWX_UI.md §3.1 U-45). Two mosaics have been made
+  /// since, so either the bot missed them or the phone did.
   public static let oldFromMinutes = 30
 
   public init(minutes: Int, isOld: Bool) {
@@ -139,7 +139,7 @@ public struct WeatherRadarAge: Sendable, Hashable {
 // MARK: - What the picture says
 
 /// What a radar tile says about one place, in the three sentences the card is built from
-/// (spec revision 11, §3).
+/// (docs/MESHWX_UI.md §18.3).
 public struct WeatherRadarSummary: Sendable, Hashable {
   /// Precipitation somewhere other than the place, and where it is.
   public struct Reach: Sendable, Hashable {
@@ -272,7 +272,7 @@ public struct WeatherRadarPicture: Sendable, Hashable {
   public var isPartial: Bool { stored.radar.bounds != nil }
 }
 
-/// The Radar section of a place page (spec revision 11, §3).
+/// The Radar section of a place page (docs/MESHWX_UI.md §18.1).
 ///
 /// Three states and no fourth. A place with no coordinate has no section at all — the tile is
 /// decided by a coordinate and nothing else — which is why ``noCoordinate`` is a case rather than
@@ -305,8 +305,8 @@ public enum WeatherRadarCard: Sendable, Hashable {
       isWiderThanAsked: stored.tile.zoom > pageZoom))
   }
 
-  /// One width of the radar screen's control (spec revision 11, §3): the tile held for the square
-  /// this place's ask at that width would name, or ``missing`` — "Not asked for yet".
+  /// One width of the radar screen's control (docs/MESHWX_UI.md §18.2): the tile held for the
+  /// square this place's ask at that width would name, or ``missing`` — "Not asked for yet".
   ///
   /// Not ``make(place:tiles:now:)`` with a zoom, because the two answer different questions. The
   /// card asks *which picture is this place's*, and a partial tile whose bounds stop short of the
@@ -341,7 +341,7 @@ public enum WeatherRadarCard: Sendable, Hashable {
   ///
   /// The coordinate, never the place's name: the lattice turns the coordinate into a tile this
   /// phone can name before the answer arrives, and a place the bot resolves for itself would come
-  /// back as a square nobody here chose (spec revision 11, §7D).
+  /// back as a square nobody here chose (spec revision 11, §13).
   public static func ask(place: WeatherPlace?, zoom: Int = pageZoom) -> WeatherRequest? {
     guard let place else { return nil }
     return .radar(
@@ -363,7 +363,7 @@ public enum WeatherRadarCard: Sendable, Hashable {
 
 // MARK: - The loop
 
-/// The last hour of one square, as the radar screen plays it (spec revision 13, §7D.4, §3).
+/// The last hour of one square, as the radar screen plays it (spec §13.5; docs/MESHWX_UI.md §18.5).
 ///
 /// Built from the frames held of that **exact** tile, from every bot: a frame is a picture of a
 /// square at a minute, and two bots' copies of the same minute are one frame — the finer copy, by
@@ -434,13 +434,13 @@ public struct WeatherRadarLoop: Sendable, Hashable {
   }
 
   /// The ask for the rest of the hour at one width, listing what this loop already holds so the
-  /// bot leaves those pictures out (spec revision 13, §7D.4). The coordinate is the place's.
+  /// bot leaves those pictures out (spec revision 13, §13.5). The coordinate is the place's.
   public func ask(latitude: Double, longitude: Double, zoom: Int) -> WeatherRequest {
     .radarLoop(latitude: latitude, longitude: longitude, zoom: zoom, held: held)
   }
 }
 
-/// Why the bot would not send a radar tile (spec revision 11, §3).
+/// Why the bot would not send a radar tile (docs/MESHWX_UI.md §18.3).
 ///
 /// The reasons are the wire's, split into the four the screen says different things for. Radar is
 /// the one request where the refusal carries most of the information: "no recent picture for this
@@ -511,7 +511,7 @@ public enum WeatherRadarCells {
   }
 
   /// The cells outside a partial tile's bounds, as rectangles, so the map can hatch or grey them
-  /// (spec revision 11, §3).
+  /// (docs/MESHWX_UI.md §3.1 U-46).
   ///
   /// Separate from ``rectangles(radar:)`` and never merged into it, because they are the one part
   /// of a radar picture that says nothing: drawn in the dry colour they would claim clear weather

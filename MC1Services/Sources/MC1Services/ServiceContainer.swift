@@ -369,7 +369,7 @@ public final class ServiceContainer {
       // Weather drained from the firmware queue at connect is backlog, not proof the bot
       // is in range now.
       isDrainingBacklog: { await messagePollingService.isDrainingBacklog },
-      // Whether a `>` request can go out as a flooded datagram at all (spec §7B): the same
+      // Whether a `>` request can go out as a flooded datagram at all (spec §11): the same
       // firmware gate the screen reads as `firmwareSupportsWeather`. Older radios have no
       // send-channel-data command and keep the DM.
       supportsChannelData: { [dataStore] in

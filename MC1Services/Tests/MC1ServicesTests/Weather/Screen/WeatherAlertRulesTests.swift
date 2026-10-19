@@ -115,7 +115,7 @@ struct WeatherAlertRulesTests {
 
   /// Spec §3, revision 12: an alert carries its start from the stored copy, and a copy from a bot
   /// that said nothing about the start does not make a watch read as begun. The start changes
-  /// nothing about where it sorts or whether it covers the place (docs/MESHWX_REV12.md §3).
+  /// nothing about where it sorts or whether it covers the place (docs/MESHWX_UI.md §3.1 U-49).
   @Test
   func `an alert carries its start, from another bot's copy when the shown one has none`() throws {
     let begins = P.now.addingTimeInterval(10 * 3600)
@@ -306,7 +306,7 @@ struct WeatherAlertRulesTests {
   /// thousands of kilometres from the nearest point, which is what this test needs.
   static let pagoPago = MeshWXCoordinate(latitude: -14.2756, longitude: -170.7020)
 
-  /// Spec revision 10, §1.3, and the case the whole ask exists for. The card used to be
+  /// docs/MESHWX_UI.md §3.1 U-38, and the case the whole ask exists for. The card used to be
   /// `.noPointNearby` with **no ask at all** — "No forecast point near Albuquerque" — which is
   /// what the owner saw as "forecast works in chat but not in the app". A place with a coordinate
   /// always has something to ask for now.
@@ -332,7 +332,7 @@ struct WeatherAlertRulesTests {
   ///
   /// It was about one in a hundred when 115 km was chosen, and `pfm_points.json` version 2 is why
   /// it is not any more: eighty-five points were appended for the nine offices the first cut had
-  /// none for (spec revision 10, §1.3). Over the whole bundle the distance from a place to its
+  /// none for (spec §16). Over the whole bundle the distance from a place to its
   /// nearest point is now 22.5 km at the median, 62.6 km at p95 and 90.2 km at p99, with 109 of
   /// 34,909 places beyond 115 km — so the cutoff has quietly moved from p99 to about p99.7.
   ///

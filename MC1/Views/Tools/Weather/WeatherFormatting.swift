@@ -64,13 +64,13 @@ enum WeatherFormatting {
       : L10n.Weather.Weather.Unit.hours(minutes / 60)
   }
 
-  // MARK: - When an alert applies (spec §10.2, revision 12)
+  // MARK: - When an alert applies (spec §18.2, revision 12)
 
   /// The longest an alert can have left and still count down: twelve hours. Past it, the day and
   /// the time say when it ends and a count of hours says nothing more.
   static let alertCountdownMinutes = 12 * 60
 
-  /// A moment an alert starts or ends (docs/MESHWX_REV12.md §2): "19:00" / "7:00 PM" today or
+  /// A moment an alert starts or ends (docs/MESHWX_UI.md §3.1 U-49): "19:00" / "7:00 PM" today or
   /// within twelve hours ahead; "Fri 19:00" / "Fri 7:00 PM" within the week ahead; "Oct 9 at
   /// 19:00" beyond, as ``clockTime`` names a date. Always the phone's own 12- or 24-hour clock,
   /// from the locale — never a pattern written here.
@@ -93,7 +93,7 @@ enum WeatherFormatting {
     return date.formatted(base.month(.abbreviated).day().hour().minute())
   }
 
-  /// When an alert applies, everywhere an alert says so (docs/MESHWX_REV12.md §2–3):
+  /// When an alert applies, everywhere an alert says so (docs/MESHWX_UI.md §3.1 U-49):
   ///
   /// - not in effect yet — a start later than now: "from Wed 19:00 until Fri 19:00". Nothing
   ///   counts down to an end that has not begun;

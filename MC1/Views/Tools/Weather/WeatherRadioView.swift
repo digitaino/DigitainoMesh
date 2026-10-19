@@ -201,7 +201,7 @@ struct WeatherRadioView: View {
 
   // MARK: - What it covers
 
-  /// The source bot's own statement of its area (spec §7A), and nothing weaker: the stations it
+  /// The source bot's own statement of its area (spec §10), and nothing weaker: the stations it
   /// happens to report this hour describe the weather, not the coverage (§3.1 I-B18).
   private var statement: WeatherCoverage.Stated? {
     guard let botID = screen.snapshot.source?.botID else { return nil }
@@ -274,7 +274,7 @@ struct WeatherRadioView: View {
   }
 
   /// How many zones the statement lists. A list the bot had to cut says "and more it didn't
-  /// list", never that the rest are uncovered (spec §7A).
+  /// list", never that the rest are uncovered (spec §10).
   private var zones: String? {
     guard let coverage = statement?.coverage, !coverage.areas.isEmpty else { return nil }
     let count = coverage.areas.reduce(0) { $0 + Int($1.run) }

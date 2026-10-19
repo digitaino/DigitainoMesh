@@ -13,7 +13,7 @@ import MeshWX
 /// ``apply(botID:changes:isBacklog:)``: no warning in the message, or nothing watched, and the
 /// evaluator reads no state at all.
 ///
-/// ## Several bots (phase 2, 18 October 2026, spec §10.8)
+/// ## Several bots (phase 2, 18 October 2026, spec §20)
 ///
 /// The copy a warning is judged by is the one the alerts list shows
 /// (``WeatherCrossBot/preferred(_:in:areaCentre:now:excluding:)``): in force over not, a bot in

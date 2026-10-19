@@ -3,7 +3,7 @@ import Foundation
 import MeshWX
 import Testing
 
-/// The bot's own coverage statement (spec §7A) deciding in, out and unknown, the station
+/// The bot's own coverage statement (spec §10) deciding in, out and unknown, the station
 /// footprint still deciding for a bot that has not stated one, and the single office claim the
 /// statement supports (docs/MESHWX_UI.md §3.1 I-B18, §7.4).
 @Suite("Weather stated coverage")
@@ -78,8 +78,8 @@ struct WeatherStatedCoverageTests {
     #expect(status(listening(P.statement), place: sanSaba) == listAsOf)
   }
 
-  /// Phase 2 (18 October 2026, spec §10.8): `n` = 0 and `k` = 0 is no area filter at all. Spec
-  /// §7A reads it as "no place is outside it", but it is also the cheapest statement to forge, and
+  /// Phase 2 (18 October 2026, spec §20): `n` = 0 and `k` = 0 is no area filter at all. Spec
+  /// §10 reads it as "no place is outside it", but it is also the cheapest statement to forge, and
   /// read as covering every place it made a chattering spoof every phone's bot. It places nothing:
   /// unknown, never inside — and never outside either.
   @Test

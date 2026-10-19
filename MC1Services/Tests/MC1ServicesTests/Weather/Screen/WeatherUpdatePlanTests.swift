@@ -89,7 +89,7 @@ struct WeatherUpdatePlanTests {
     #expect(old.steps.map(\.request) == [.digest])
   }
 
-  /// Airtime etiquette (spec §13): the channel delivered it a minute ago, so the bot would only
+  /// Airtime etiquette (spec §19): the channel delivered it a minute ago, so the bot would only
   /// rebuild the same answer. Not current either, so nothing claims it is.
   @Test
   func `an old list the channel delivered a minute ago is held back, not called current`() {
@@ -594,7 +594,7 @@ struct WeatherUpdatePlanCoverageTests {
       == [.warningsTouching(ugc: "TXZ103"), .warningsTouching(ugc: "TXC113")])
   }
 
-  /// A zone list the bot had to cut says "not listed", never "not covered" (spec §7A). Unknown
+  /// A zone list the bot had to cut says "not listed", never "not covered" (spec §10). Unknown
   /// spends no airtime: two nationwide requests for a place that is very likely inside the area
   /// is exactly what "no bot says inside" used to buy.
   @Test
@@ -615,7 +615,7 @@ struct WeatherUpdatePlanCoverageTests {
   }
 }
 
-/// Spec revision 10, §1.3: the forecast card and the Update plan for a place the bundle has no
+/// docs/MESHWX_UI.md §9: the forecast card and the Update plan for a place the bundle has no
 /// point for, and for a forecast the bot chose the point for.
 @Suite("Weather forecast by coordinate")
 struct WeatherForecastAtTests {

@@ -284,8 +284,8 @@ enum WeatherCopy {
         if case .rateLimited = reason, case .areaSweep? = request {
           return L10n.Weather.Weather.AreaMap.busy(source)
         }
-        // Radar refuses under its own letter and says four different things (spec revision 11,
-        // §3): "no recent picture here", "this radio has no dish", "it sent this picture minutes
+        // Radar refuses under its own letter and says four different things (docs/MESHWX_UI.md
+        // §18.3): "no recent picture here", "this radio has no dish", "it sent this picture minutes
         // ago and has nothing newer". A generic "not available" for all three is a reader tapping
         // again for ever.
         switch request {
@@ -369,8 +369,8 @@ enum WeatherCopy {
   /// "No forecast for Austin yet."; with the point more than 10 km off, "No forecast for Big
   /// Spring yet. The nearest forecast point is Midland, 60 km."
   ///
-  /// **There is no "No forecast point near Albuquerque" any more** (spec revision 10, §1.3;
-  /// docs/MESHWX_UI.md §3.1 U-38). `pfm_points.json` version 1 had no point at all for nine
+  /// **There is no "No forecast point near Albuquerque" any more** (docs/MESHWX_UI.md §9,
+  /// §3.1 U-38). `pfm_points.json` version 1 had no point at all for nine
   /// offices, so the app said that sentence and offered nothing while the bot held a forecast
   /// fifteen kilometres away — which is what the owner saw: *Forecast works in chat (`forecast
   /// santa fe nm`) but not in the app. I thought we were using the same engine.* A place with a
@@ -406,7 +406,7 @@ enum WeatherCopy {
   ///
   /// The cut is worth its own sentence rather than a marker in the body: a hole in the text is a
   /// chunk the air ate and asking again may fill it, while this is the whole reply that bot will
-  /// ever send for that request (spec §8.1, revision 7).
+  /// ever send for that request (spec §8, revision 7).
   static func reportFootnote(source: MeshWXDataSource, wasCut: Bool) -> String? {
     let parts = [dataSource(source), wasCut ? L10n.Weather.Weather.Reports.cut : nil]
       .compactMap { $0 }
@@ -475,7 +475,7 @@ enum WeatherCopy {
   }
 
   /// Nothing to ask for because the channel just delivered it — which is not the same as
-  /// everything being current (spec §13).
+  /// everything being current (spec §19).
   static func updateJustReceived(source: String) -> String {
     L10n.Weather.Weather.Update.justReceived(WeatherFormatting.sentenceStart(source))
   }
@@ -708,7 +708,7 @@ enum WeatherCopy {
       return L10n.Weather.Weather.RequestName.coverage
     case let .areaSweep(includesAdvisories, states):
       // A scoped ask names its states, because the log is where somebody works out what those
-      // packets were spent on and "Alert map" twice over answers nothing (revision 10, §1.2).
+      // packets were spent on and "Alert map" twice over answers nothing (docs/MESHWX_UI.md §12).
       guard !states.isEmpty else {
         return includesAdvisories
           ? L10n.Weather.Weather.RequestName.areaMapAll
@@ -722,21 +722,21 @@ enum WeatherCopy {
         : L10n.Weather.Weather.RequestName.areaMapStates(named)
     case let .parts(_, _, kind):
       // The kind is carried for exactly this: the wire says only `>part 212 1,4,6`, and a log row
-      // reading "Missing parts" with no subject is a row nobody can act on (revision 10, §1.1).
+      // reading "Missing parts" with no subject is a row nobody can act on (docs/MESHWX_UI.md §12).
       return partsName(kind)
     case let .forecastAt(latitude, longitude):
       // The coordinate is the only name such a forecast has: the bot picks the point, and this
-      // bundle may hold no index for it at all (revision 10, §1.3).
+      // bundle may hold no index for it at all (docs/MESHWX_UI.md §12).
       return L10n.Weather.Weather.RequestName.forecastAt(
         WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude))
     case let .radar(latitude, longitude, _):
       // The coordinate, which is what the request carries; the lattice turns it into the tile
-      // (revision 11, §7D).
+      // (revision 11, §13).
       return withSubject(
         L10n.Weather.Weather.Radar.Request.title,
         WeatherRequest.coordinateKey(latitude: latitude, longitude: longitude))
     case let .radarLoop(latitude, longitude, _, _):
-      // "Radar, last hour · 30.267,-97.743" (revision 13, §7D.4). The pictures it listed as held
+      // "Radar, last hour · 30.267,-97.743" (revision 13, §13.5). The pictures it listed as held
       // are the wire's business, not the row's.
       return withSubject(
         L10n.Weather.Weather.Radar.Loop.Request.title,
@@ -811,7 +811,7 @@ enum WeatherCopy {
       // The square of earth, named the way the radar screen names it: the width, then the centre
       // in degrees. Nothing on the wire says who asked for a tile and the lattice means several
       // people may have, so the row names the picture and claims nothing about the question
-      // (spec revision 11, §7D). Several frames of it held: "5 pictures" (revision 13).
+      // (spec revision 11, §13). Several frames of it held: "5 pictures" (revision 13).
       return [
         L10n.Weather.Weather.Radar.Request.title, radarWidthName(tile.zoom), radarCentre(tile),
         frames > 1 ? L10n.Weather.Weather.Radar.Cached.frames(frames) : nil
@@ -859,7 +859,7 @@ enum WeatherCopy {
   // MARK: - Radar (§18)
 
   /// "Local", "Regional", "Wide" — and **nil** for zoom 3, which exists on the wire and is not
-  /// offered (spec revision 11, §3).
+  /// offered (docs/MESHWX_UI.md §3.1 U-44).
   ///
   /// Not kilometres, which is the whole of the owner's decision: a tile is two degrees, 222 km
   /// tall everywhere and a different width at every latitude, so a number on the control would be
@@ -901,7 +901,7 @@ enum WeatherCopy {
     return parts.joined(separator: " · ")
   }
 
-  /// What the picture says about the place, in the sentences of spec revision 11, §3.
+  /// What the picture says about the place, in the sentences of docs/MESHWX_UI.md §18.3.
   ///
   /// "Nearest precipitation" is named only when it is **not** raining on the place: standing in
   /// the rain, the nearest other wet cell is seven kilometres away and means nothing. A separate
@@ -938,7 +938,7 @@ enum WeatherCopy {
     return lines
   }
 
-  /// Why the radio would not send a tile (spec revision 11, §3).
+  /// Why the radio would not send a tile (docs/MESHWX_UI.md §18.3).
   ///
   /// Radar is the request whose refusal carries most of the information: "no recent picture for
   /// this area" and "this radio has no dish at all" ask the reader to do entirely different

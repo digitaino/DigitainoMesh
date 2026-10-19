@@ -127,7 +127,7 @@ public enum MeshWXGeo {
 
 // MARK: - Tables
 
-/// The preload bundle of spec §9: everything the wire refers to by index.
+/// The preload bundle of spec §16: everything the wire refers to by index.
 ///
 /// The protocol's first design rule is "the mesh carries identifiers and numbers, the
 /// phone carries tables and words", so this type is not a convenience — without it a
@@ -410,7 +410,7 @@ public final class MeshWXTables: Sendable {
   public func office(_ code: String) -> MeshWXOffice? { officesByCode[code.uppercased()] }
 
   /// Nearest forecast point by great-circle distance — the "forecast for my location"
-  /// lookup of spec §11. Send `>f <index>` for what comes back and label the answer
+  /// lookup of spec §21. Send `>f <index>` for what comes back and label the answer
   /// with the point's name and its distance, because it is not the user's coordinate.
   public func nearestPoint(toLat lat: Double, lon: Double) -> MeshWXPoint? {
     var best: MeshWXPoint?
@@ -446,7 +446,7 @@ public final class MeshWXTables: Sendable {
     return best?.station
   }
 
-  // MARK: - Search (spec §11)
+  // MARK: - Search (spec §21)
 
   /// The place to name a coordinate by ("Austin"), within `radiusKilometres`.
   ///
@@ -473,9 +473,9 @@ public final class MeshWXTables: Sendable {
   }
 
   /// Place search: prefix match on the name, then nearest to `near` if given, then the
-  /// biggest (spec §11).
+  /// biggest (spec §21).
   ///
-  /// Distance before population is deliberate. 207 names exist in more than one state —
+  /// Distance before population is deliberate. 4,292 names exist in more than one state —
   /// Round Rock is in TX and AZ — and the one the user means is almost always the one
   /// they can drive to, not the one with more people in it.
   public func searchPlaces(
@@ -505,7 +505,7 @@ public final class MeshWXTables: Sendable {
     return ranked.prefix(limit).map(\.place)
   }
 
-  /// Station search by ICAO prefix or name substring (spec §11), nearest first when a
+  /// Station search by ICAO prefix or name substring (spec §21), nearest first when a
   /// location is given.
   public func searchStations(
     query: String, nearLat lat: Double? = nil, lon: Double? = nil, limit: Int = 25
@@ -533,7 +533,7 @@ public final class MeshWXTables: Sendable {
 
   // MARK: - Areas
 
-  /// Resolve a warning's area runs to named places with pins (spec §9).
+  /// Resolve a warning's area runs to named places with pins (spec §16).
   ///
   /// Runs whose state index is unknown are dropped — there is no UGC to build without
   /// the state code — but a UGC the bundle has no row for is kept, name nil, so the app

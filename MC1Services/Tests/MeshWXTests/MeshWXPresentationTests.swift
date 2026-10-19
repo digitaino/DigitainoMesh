@@ -3,7 +3,7 @@ import Testing
 
 @testable import MeshWX
 
-/// The rendering rules of spec §10, kept testable by never returning a colour or a
+/// The rendering rules of spec §18, kept testable by never returning a colour or a
 /// localised string — only a name, a symbol and a number.
 @Suite("MeshWX presentation")
 struct MeshWXPresentationTests {
@@ -60,7 +60,7 @@ struct MeshWXPresentationTests {
   }
 
   @Test func unlistedEventsFallBackToSignificance() {
-    // Nothing in §10.2 covers a dust storm warning or a rip current statement; the
+    // Nothing in §18.2 covers a dust storm warning or a rip current statement; the
     // letter after the dot still ranks and colours them.
     #expect(MeshWXPresentation.tint(forVTEC: "DS.W") == .red)
     #expect(MeshWXPresentation.tint(forVTEC: "SQ.A") == .yellow)
@@ -87,7 +87,7 @@ struct MeshWXPresentationTests {
   }
 
   @Test func tagsAreReturnedAsNumbersNotSentences() {
-    // §10.2 renders "Hail 1.00 in" and "Wind 60 mph"; the module hands over 1.0 and 60
+    // §18.2 renders "Hail 1.00 in" and "Wind 60 mph"; the module hands over 1.0 and 60
     // so the app can translate the words and choose the unit.
     #expect(MeshWXPresentation.hailInches(quarterInches: 4) == 1.0)
     #expect(MeshWXPresentation.hailInches(quarterInches: 7) == 1.75)

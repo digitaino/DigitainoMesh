@@ -152,7 +152,7 @@ public actor RemoteBotWeatherTransport: WeatherTransport {
     return code
   }
 
-  /// The same POST, for a request the app would have flooded on `#meshwx` (spec §7B).
+  /// The same POST, for a request the app would have flooded on `#meshwx` (spec §11).
   ///
   /// The bridge is an HTTP connection to one bot: there is no channel between here and it and
   /// nothing to address, so `botID` and `seq` ride along only in the log, and the answer comes

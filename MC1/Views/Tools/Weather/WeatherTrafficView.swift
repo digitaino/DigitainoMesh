@@ -306,7 +306,7 @@ enum WeatherTrafficCopy {
     case let .warning(identity), let .cancel(identity):
       parts.append(WeatherFormatting.eventName(identity.event, tables: tables))
     case let .notAvailable(letter):
-      // The request letter the refusal echoes back (spec §8.3), which is what says *which* of
+      // The request letter the refusal echoes back (spec §9), which is what says *which* of
       // this phone's asks it answers.
       parts.append(String(letter))
     default:
@@ -335,7 +335,7 @@ enum WeatherTrafficCopy {
         ? L10n.Weather.Weather.Traffic.Detail.officesOne
         : L10n.Weather.Weather.Traffic.Detail.offices(count)
     case let .part(index, total), let .chunk(index, total):
-      // Zero-based on the wire (spec §7C, §8.1) and one-based for a reader: "part 1 of 7" is the
+      // Zero-based on the wire (spec §12, §8) and one-based for a reader: "part 1 of 7" is the
       // first packet, and nobody counting packets on a screen starts at nought.
       return L10n.Weather.Weather.Traffic.Detail.part(Int(index) + 1, Int(total))
     case let .point(index):
@@ -362,7 +362,7 @@ enum WeatherTrafficCopy {
       return L10n.Weather.Weather.Traffic.Detail.cut
     case .includesAdvisories:
       return L10n.Weather.Weather.Traffic.Detail.advisories
-    // The width the screens name this square (revision 11, §7D), and for the zoom the wire has
+    // The width the screens name this square (revision 11, §13), and for the zoom the wire has
     // but the screens do not offer, the square's own centre — a row that said nothing at all
     // about where a packet was a picture of would be a row worth less than its bytes.
     case let .tile(south, west, zoom):
@@ -435,7 +435,7 @@ enum WeatherTrafficCopy {
   }
 
   /// The first three bytes of somebody's public key, upper case — as much as anyone on the
-  /// channel knows about who asked (spec §7B).
+  /// channel knows about who asked (spec §11).
   static func senderPrefix(_ data: Data, bytes: Int = 3) -> String {
     data.prefix(bytes).map { String(format: "%02X", $0) }.joined()
   }

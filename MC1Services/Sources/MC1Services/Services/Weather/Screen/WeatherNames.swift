@@ -5,7 +5,7 @@ import MeshWX
 ///
 /// The tables are NOAA's: station names in capitals with aviation abbreviations
 /// ("DRAUGHON-MILLER CNTRL TX RGNL ARPT"), forecast points with a county and state stuck on
-/// the end ("Austin Camp Mabry-Travis TX"), census places in capitals. Places follow spec §9.1
+/// the end ("Austin Camp Mabry-Travis TX"), census places in capitals. Places follow spec §16.2
 /// (``MeshWXPlaceNames``), the weather bot's rule; station names add state codes and abbreviations.
 public enum WeatherNames {
   static let stateCodes: Set<String> = [
@@ -30,7 +30,7 @@ public enum WeatherNames {
     return MeshWXPlaceNames.titleCased(raw, keepingUpper: stateCodes, expanding: abbreviations)
   }
 
-  /// A `places.json` name as shown (spec §9.1): "ADJUNTAS ZONA URBANA" → "Adjuntas".
+  /// A `places.json` name as shown (spec §16.2): "ADJUNTAS ZONA URBANA" → "Adjuntas".
   public static func placeName(_ raw: String) -> String {
     MeshWXPlaceNames.placeName(raw)
   }
@@ -106,7 +106,7 @@ public enum WeatherNames {
     return head
   }
 
-  /// "ROUND ROCK", "TX" → "Round Rock, TX"; "HELL'S KITCHEN", "NY" → "Hell's Kitchen, NY" (spec §9.1).
+  /// "ROUND ROCK", "TX" → "Round Rock, TX"; "HELL'S KITCHEN", "NY" → "Hell's Kitchen, NY" (spec §16.2).
   public static func placeLabel(name: String, state: String) -> String {
     MeshWXPlaceNames.label(name: name, state: state)
   }

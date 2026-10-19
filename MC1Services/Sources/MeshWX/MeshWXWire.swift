@@ -51,20 +51,20 @@ public enum MeshWXWire {
   static let textFixedSize = 8
   static let notAvailableSize = 6
   /// Header, centre, radius, station cap and the office count, before the offices themselves
-  /// and the counted run list (spec §7A).
+  /// and the counted run list (spec §10).
   static let coverageFixedSize = 14
-  /// Header, the sender's key prefix and the request's own time, before the text (spec §7B).
+  /// Header, the sender's key prefix and the request's own time, before the text (spec §11).
   static let requestFixedSize = 14
-  /// Header, the build time, and the three assembly bytes, before the entries (spec §7C).
+  /// Header, the build time, and the three assembly bytes, before the entries (spec §12).
   static let areaSweepFixedSize = 11
   static let areaSweepEntrySize = 4
   /// Header, the picture's time, the tile's south-west corner and the shape byte, before the
-  /// optional bounds and the quadtree (spec revision 11, §7D).
+  /// optional bounds and the quadtree (spec revision 11, §13).
   static let radarFixedSize = 12
   /// The four inclusive row and column bounds a partial tile carries after the fixed fields.
   static let radarBoundsSize = 4
 
-  // MARK: Counts and limits (spec §3, §5, §6, §7, §8.1)
+  // MARK: Counts and limits (spec §3, §5, §6, §7, §8)
 
   /// Text bytes one chunk can carry: the packet budget minus the 8-byte text header. A bot since
   /// 1 October 2026 sends at most `maxSend - textFixedSize`, 149.
@@ -90,35 +90,35 @@ public enum MeshWXWire {
   /// one that says nothing. Not enforced separately; the packet budget is what refuses the 14th.
   public static let maxStationsWithAges = 13  // 12 from a bot since 1 October 2026
   public static let maxPeriods = 14
-  /// Offices one Coverage message may list (spec §7A). 24 offices and 30 runs together are 159
+  /// Offices one Coverage message may list (spec §10). 24 offices and 30 runs together are 159
   /// bytes, so a full list of either never costs the other one; past it the bot cuts and says so.
   /// A bot since 1 October 2026 lists at most 22, to stay inside ``maxSend``.
   public static let maxCoverageOffices = 24
   /// Bytes of the sender's public key a Request carries: the same six-byte prefix a DM
-  /// identifies the phone by, so one phone's DM and its datagram are one sender (spec §7B).
+  /// identifies the phone by, so one phone's DM and its datagram are one sender (spec §11).
   public static let requestSenderPrefixSize = 6
-  /// UTF-8 bytes a Request's text may take (spec §7B). Well under the packet budget: the whole
-  /// §8.2 grammar fits, and a request is not the place to spend airtime.
+  /// UTF-8 bytes a Request's text may take (spec §11). Well under the packet budget: the whole
+  /// §14 grammar fits, and a request is not the place to spend airtime.
   public static let maxRequestTextBytes = 40
-  /// Entries one Area sweep packet carries (spec §7C): `(165 − 11) / 4` is 38, and the packet
+  /// Entries one Area sweep packet carries (spec §12): `(165 − 11) / 4` is 38, and the packet
   /// budget is what the cap is made of. What a decoder reads; see ``areaSweepEntriesSent``.
   public static let maxAreaSweepEntries = 38
   /// Entries a bot puts in one sweep packet since 1 October 2026: `(157 − 11) / 4` is 36. What
   /// the cost of the next sweep is counted in.
   public static let areaSweepEntriesSent = 36
-  /// Packets one sweep may be split into (spec §7C), the same ceiling a Text reply has. Eight
+  /// Packets one sweep may be split into (spec §12), the same ceiling a Text reply has. Eight
   /// packets is the whole country's worth of airtime, which is why the screen never asks by itself.
   public static let maxAreaSweepPackets = 8
-  /// States one `>wmap` may name (spec revision 10, §7C). Fifteen two-letter codes run together
+  /// States one `>wmap` may name (spec revision 10, §12). Fifteen two-letter codes run together
   /// are 30 characters, which is what makes the compact form fit ``maxRequestTextBytes`` beside
   /// `>wmap all `. Past it the screen asks for the whole country and says so before the tap.
   public static let maxSweepScopeStates = 15
   /// How long the bot keeps the transmitted bytes of a multi-packet answer, so `>part` can send
-  /// the named packets again (spec revision 10, §7C/§8.1). Ten minutes, eight answers. The app
+  /// the named packets again (spec revision 10, §12/§8). Ten minutes, eight answers. The app
   /// offers the ask only inside this window: past it the ordinary request is the only honest
   /// offer, because the bot no longer holds the bytes.
   public static let partsCacheSeconds = 600
-  /// Cells along one side of a radar tile (spec revision 11, §7D). 32 × 32 over a tile of 2° at
+  /// Cells along one side of a radar tile (spec revision 11, §13). 32 × 32 over a tile of 2° at
   /// zoom 0 is a cell of 1/16°, about 7 km — a thunderstorm core is several cells across, and a
   /// finer grid would cost more packets than the picture is worth.
   public static let radarGrid = 32
@@ -128,7 +128,7 @@ public enum MeshWXWire {
   /// The widest tile on the wire: `zoom` is two bits of the shape byte, and a tile spans
   /// `2 ^ (zoom + 1)` degrees, so 0 to 3 is 2°, 4°, 8° and 16°.
   public static let maxRadarZoom = 3
-  /// The most frames one `>radar … loop` answer sends (spec revision 13, §7D.4): the newest
+  /// The most frames one `>radar … loop` answer sends (spec revision 13, §13.5): the newest
   /// picture and the older ones of the same product, an hour at 15-minute steps.
   public static let radarLoopMaxFrames = 5
   /// How far back a loop reaches, from the newest picture.
@@ -144,7 +144,7 @@ public enum MeshWXWire {
   /// Bytes of quadtree a Radar packet can carry: the packet budget less the fixed fields. A
   /// partial tile spends four of them on its bounds, which is what makes it the tighter fit.
   public static let maxRadarCellsBytes = maxData - radarFixedSize  // 153; 145 from a bot since 1 October 2026
-  /// The Not-available letter of `>radar` (spec revision 11, §7D). **Not** `r`: that is `>rain`,
+  /// The Not-available letter of `>radar` (spec revision 11, §13). **Not** `r`: that is `>rain`,
   /// and a refusal has to say which of the two it refuses. It is the one request in the grammar
   /// whose letter is not its own first letter.
   public static let radarRequestLetter: Character = "x"
@@ -205,7 +205,7 @@ public enum MeshWXWire {
   /// Bit 0: the per-station ages follow the station records.
   static let flagObservationAges: UInt8 = 0x1
 
-  // MARK: Coverage flags nibble (spec §7A)
+  // MARK: Coverage flags nibble (spec §10)
   //
   // Both mean "this list is incomplete", never "this place is not covered". They are the reason
   // the message can be read as a denial at all: with them clear the lists are the whole area.
@@ -215,10 +215,10 @@ public enum MeshWXWire {
   /// Bit 1: the office list was cut.
   static let flagCoverageOfficesCut: UInt8 = 0x2
 
-  // MARK: Text flags nibble (spec §8.1)
+  // MARK: Text flags nibble (spec §8)
 
   /// Bit 0: the product was longer than ``maxTextChunks`` chunks of ``maxTextBytes`` and the bot
-  /// dropped the tail (spec §8.1, revision 7). The bot sets it on *every* chunk of a cut reply,
+  /// dropped the tail (spec §8, revision 7). The bot sets it on *every* chunk of a cut reply,
   /// not only the last: a phone missing the last chunk would otherwise be the one phone that
   /// cannot tell a reply with a hole in it from one that ends early on purpose.
   static let flagTextCut: UInt8 = 0x1
@@ -237,7 +237,7 @@ public enum MeshWXWire {
   /// Area run state byte, bit 7: the run numbers counties, not forecast zones.
   static let areaCountyBit: UInt8 = 0x80
 
-  // MARK: Area sweep entry (spec §7C)
+  // MARK: Area sweep entry (spec §12)
   //
   // A sweep entry is a Warning's area run squeezed from four bytes of state-plus-u16-plus-run
   // into four bytes that also carry the event, which is what lets one packet name 38 runs
@@ -254,7 +254,7 @@ public enum MeshWXWire {
   /// Bits 10-15 of a sweep entry's u16: the run length, less one.
   static let sweepRunShift: UInt16 = 10
 
-  // MARK: Area sweep flags nibble (spec §7C)
+  // MARK: Area sweep flags nibble (spec §12)
 
   /// Bit 0: entries were dropped to fit, so an area absent from the sweep may still be under
   /// an alert. Never read a gap in a cut sweep as clear weather.
@@ -263,7 +263,7 @@ public enum MeshWXWire {
   /// scope was not asked for, **not** that no advisory is active anywhere.
   static let flagSweepAdvisories: UInt8 = 0x2
 
-  // MARK: Area sweep scope (spec revision 10, §7C)
+  // MARK: Area sweep scope (spec revision 10, §12)
   //
   // Revision 10 splits the `total` byte, which never used more than four of its bits, so a scoped
   // sweep says *on every packet* that it is not the country. The owner's reason for the whole
@@ -278,7 +278,7 @@ public enum MeshWXWire {
   public static let sweepScopedBit: UInt8 = 0x80
   /// `total` byte, bits 0-3: the packet count, 1 to ``maxAreaSweepPackets``.
   public static let sweepTotalMask: UInt8 = 0x0F
-  /// The event code of a scope entry (spec revision 10, §7C): no real event has code 0, which is
+  /// The event code of a scope entry (spec revision 10, §12): no real event has code 0, which is
   /// what lets the scope ride in the entry list instead of costing a field of its own.
   ///
   /// A scope entry is `event 0`, kind zone, `start 0`, `run 1` — `XXZ000`, the Weather Service's
@@ -286,7 +286,7 @@ public enum MeshWXWire {
   /// and into ``MeshWXAreaSweep/scope``; the encoder puts them back, first.
   public static let sweepScopeEvent: UInt8 = 0
 
-  // MARK: Radar flags nibble and shape byte (spec revision 11, §7D)
+  // MARK: Radar flags nibble and shape byte (spec revision 11, §13)
 
   /// Bit 0: the grid is 16 × 16 rather than 32 × 32, because the finer picture did not fit one
   /// packet. Each coarse cell is the **highest** of the four it replaces, so a small core is
@@ -315,15 +315,15 @@ public enum MeshWXMessageType: UInt8, Sendable, Hashable, Codable, CaseIterable 
   case forecast = 5
   case text = 6
   case notAvailable = 7
-  /// Spec revision 4, §7A: what the bot carries, stated by the bot.
+  /// Spec revision 4, §10: what the bot carries, stated by the bot.
   case coverage = 8
-  /// Spec revision 6, §7B: an app's `>` request, flooded on `#meshwx` as a datagram. The one
+  /// Spec revision 6, §11: an app's `>` request, flooded on `#meshwx` as a datagram. The one
   /// type this app *sends*; another phone's, heard on the channel, is not ours to act on.
   case request = 9
-  /// Spec revision 8, §7C: every area in the country under an alert, in one sweep of at most
+  /// Spec revision 8, §12: every area in the country under an alert, in one sweep of at most
   /// eight packets.
   case areaSweep = 10
-  /// Spec revision 11, §7D: one tile of a radar picture, as a quadtree of two-bit levels. The
+  /// Spec revision 11, §13: one tile of a radar picture, as a quadtree of two-bit levels. The
   /// number revision 2 reserved "for a future structured product".
   case radar = 11
 }
@@ -360,9 +360,9 @@ public enum MeshWXDataSource: UInt8, Sendable, Hashable, Codable, CaseIterable {
 /// The decoded 4-byte common header (spec §2.2).
 ///
 /// `bot` is the first two bytes of the bot's public key, which is how an app keeps
-/// state per bot when two of them cover the same place (spec §12). `seq` is per-bot and
+/// state per bot when two of them cover the same place (spec §20). `seq` is per-bot and
 /// wraps; a gap in it is the cue to ask for a digest, and a repeat of `(bot, seq)` is
-/// the bot's own "nobody repeated me" retransmission and must be dropped (spec §2.3).
+/// the bot's own "nobody repeated me" retransmission and must be dropped (spec §2.4).
 public struct MeshWXHeader: Sendable, Hashable, Codable {
   public var seq: UInt8
   public var bot: UInt16

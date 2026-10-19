@@ -148,7 +148,7 @@ enum WeatherFixture {
     )
   }
 
-  /// `wasCut` puts the chunk into the revision 7 form (spec §8.1): flags nibble bit 0, which the
+  /// `wasCut` puts the chunk into the revision 7 form (spec §8): flags nibble bit 0, which the
   /// bot sets on every chunk of a reply whose tail it had to drop.
   static func text(
     seq: UInt8,
@@ -169,11 +169,11 @@ enum WeatherFixture {
     )
   }
 
-  /// One packet of an area sweep (spec §7C). The flags nibble is built by hand here, so the
+  /// One packet of an area sweep (spec §12). The flags nibble is built by hand here, so the
   /// header and the body cannot disagree about the cut and the breadth.
   ///
   /// - Parameters:
-  ///   - isScoped: `total` bit 7 (spec revision 10, §1.2), which every packet of a scoped sweep
+  ///   - isScoped: `total` bit 7 (spec §12.3), which every packet of a scoped sweep
   ///     carries. Defaults to whether `scope` names anything, so a caller that gives a scope gets
   ///     a scoped sweep and one that gives none gets the country.
   ///   - scope: the state indices this packet's scope entries name — packet 0's, normally.
@@ -217,7 +217,7 @@ enum WeatherFixture {
   static let oklahomaState: UInt8 = 35
   static let montanaState: UInt8 = 25
 
-  /// WX-AUS's real statement (spec §7A, the vector `coverage_wx_aus`): 120 km around Austin, the
+  /// WX-AUS's real statement (spec §10, the vector `coverage_wx_aus`): 120 km around Austin, the
   /// offices EWX/FWD/HGX/SJT, and its 36 zones as five runs, neither list cut.
   static let austinCoverage = MeshWXCoverage(
     latitude: 30.2672, longitude: -97.7431, radiusKilometres: 120, stationCap: 14,
@@ -231,7 +231,7 @@ enum WeatherFixture {
     ])
 
   static func coverage(seq: UInt8, _ coverage: MeshWXCoverage = austinCoverage, bot: UInt16 = botID) -> MeshWXMessage {
-    // Flags nibble: bit 0 the zones were cut, bit 1 the offices were (spec §7A). Set here so the
+    // Flags nibble: bit 0 the zones were cut, bit 1 the offices were (spec §10). Set here so the
     // header and the body cannot disagree.
     let flags: UInt8 = (coverage.areasCut ? 1 : 0) | (coverage.officesCut ? 2 : 0)
     return MeshWXMessage(
@@ -240,7 +240,7 @@ enum WeatherFixture {
     )
   }
 
-  /// One radar tile (spec revision 11, §7D). The flags nibble is built by hand so the header and
+  /// One radar tile (spec revision 11, §13). The flags nibble is built by hand so the header and
   /// the body cannot disagree about the grid or the bounds — the two things the decoder reads off
   /// the nibble rather than out of the body.
   ///
@@ -290,7 +290,7 @@ enum WeatherFixture {
     )
   }
 
-  /// Another phone's `>` request, flooded on the channel (spec §7B). Not this phone's: the
+  /// Another phone's `>` request, flooded on the channel (spec §11). Not this phone's: the
   /// sender prefix and the seq are somebody else's, which is the whole point of the fixture.
   static func request(
     seq: UInt8 = 7,
@@ -335,7 +335,7 @@ enum WeatherFixture {
 /// recorded with the ACK code the radio would expect back.
 actor FakeWeatherTransport: WeatherTransport {
   private(set) var sent: [(publicKey: Data, text: String, timestamp: Date, attempt: UInt8, ackCode: Data)] = []
-  /// The Request datagrams the service flooded on `#meshwx`, in order (spec §7B).
+  /// The Request datagrams the service flooded on `#meshwx`, in order (spec §11).
   private(set) var channelSent: [(text: String, botID: UInt16, timestamp: Date, seq: UInt8)] = []
   /// Whether this radio can send a channel datagram at all. False is the old firmware, or a
   /// radio with no `#meshwx` slot: `sendChannelRequest` then refuses and the service falls back
@@ -443,7 +443,7 @@ actor FakeWeatherTransport: WeatherTransport {
     }
     channelSent.append((text, botID, timestamp, seq))
     // The bytes the radio would have taken, on slot 3 — the slot fixture datagrams arrive on —
-    // so the channel traffic log gets a real Request datagram to show (spec §7B).
+    // so the channel traffic log gets a real Request datagram to show (spec §11).
     let request = MeshWXRequest(
       seq: seq,
       botID: botID,

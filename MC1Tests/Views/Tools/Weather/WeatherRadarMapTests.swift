@@ -142,7 +142,7 @@ struct WeatherRadarMapTests {
 
   // MARK: - Revision 13: the loop
 
-  /// Each frame's drawing is made once (spec revision 13, §3): one drawing per frame, each with
+  /// Each frame's drawing is made once (docs/MESHWX_UI.md §18.5): one drawing per frame, each with
   /// its own cells and the same alerts, place and camera, so a step swaps a drawing and never
   /// moves the camera.
   @Test
@@ -217,7 +217,7 @@ struct WeatherRadarMapTests {
 }
 
 /// What the radar screens ask for, and what they must never make Update ask for
-/// (docs/MESHWX_UI.md §18, spec revision 11, §3).
+/// (docs/MESHWX_UI.md §18).
 @Suite("Weather radar requests")
 @MainActor
 struct WeatherRadarRequestTests {
@@ -256,7 +256,7 @@ struct WeatherRadarRequestTests {
       geometry: MeshWXGeometry.shared, tables: .shared)
   }
 
-  /// **Radar is not part of Update** (spec revision 11, §4: request-only). Update is the one tap
+  /// **Radar is not part of Update** (docs/MESHWX_UI.md §18: request-only). Update is the one tap
   /// that spends several packets without naming each of them, and a picture that arrives because
   /// somebody pulled to refresh is a packet nobody asked for.
   @Test
